@@ -4,24 +4,26 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Hardware Management Console</title>
+    
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    
+    <link rel="stylesheet" href="css/style.css">
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
-    <div id="access-denied">
+    <div id="access-denied" style="display: none;">
         <span class="material-icons" style="font-size: 80px; color: #e52d2d; margin-bottom: 20px;">lock_person</span>
         <h1 class="slds-text-heading_large" style="font-weight: 800;">Access Restricted</h1>
         <p id="denied-reason" style="font-size: 1.1rem; color: #5c7089;"></p>
         <button class="slds-button slds-button_neutral slds-m-top_large" onclick="location.reload()">Return to Safety</button>
     </div>
 
-    <div id="login-ui">
+    <div id="login-ui" style="display: none;">
         <div style="text-align:center; margin-bottom: 35px;">
             <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:40px; margin-bottom: 10px;">
             <h2 style="font-size: 1.5rem; color: var(--pp-blue); font-weight: 800; letter-spacing: -0.5px;">Staff Portal</h2>
@@ -38,7 +40,7 @@
         <button class="slds-button slds-button_brand slds-size_1-of-1 login-btn" onclick="handleManualLogin()">AUTHENTICATE</button>
     </div>
 
-    <div id="page-curtain">
+    <div id="page-curtain" style="display: none;">
         <div class="brand-header">
             <div class="header-top-bar">
                 <div id="user-greeting">System Authorizing...</div>
@@ -86,6 +88,6 @@
         </div>
     </div>
 
-    <script src="script.js"></script>
+    <script src="js/script.js"></script>
 </body>
 </html>
