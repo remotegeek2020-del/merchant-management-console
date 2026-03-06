@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>System Activity Logs</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); min-height: 100vh; font-family: 'Inter', sans-serif; padding: 20px; }
+        .log-container { max-width: 1200px; margin: 40px auto; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05); }
+        .status-success { color: #2e7d32; font-weight: bold; }
+        .status-failure { color: #d32f2f; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div id="page-content" class="log-container" style="display:none;">
+        <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_large" style="justify-content: space-between;">
+            <h1 class="slds-text-heading_large" style="color:#004990; font-weight:800;">Activity Audit Trail</h1>
+            <button class="slds-button slds-button_neutral" style="border-radius: 50px;" onclick="window.location.href='index.html'">🏠 HOME</button>
+        </div>
+
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+            <thead>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">Timestamp</th>
+                    <th scope="col">User</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">IP Address</th>
+                </tr>
+            </thead>
+            <tbody id="log-list">
+                <tr><td colspan="5" style="text-align:center;">Loading audit trail...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        async function fetchLogs() {
+            const response = await fetch('/api/logs');
+            const result = await response.json();
+            if (result.success) {
+                const tbody = document.getElementById('log-list');
+                tbody.innerHTML = result.data.map(log => `
+                    <tr>
+                        <td>${new Date(log.created_at).toLocaleString()}</td>
+                        <td><strong>${log.email}</strong></td>
+                        <td><code>${log.action}</code></td>
+                        <td class="status-${log.status.toLowerCase()}">${log.status}</td>
+                        <td>${log.ip_address}</td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        window.onload = () => {
+            const role = (sessionStorage.getItem('pp_role') || "").toLowerCase();
+            if (role.includes('admin')) {
+                document.getElementById('page-content').style.display = 'block';
+                fetchLogs();
+            } else {
+                window.location.href = 'index.html';
+            }
+        };
+    </script>
+</body>
+</html>
