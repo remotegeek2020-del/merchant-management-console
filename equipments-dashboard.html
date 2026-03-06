@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Equipment Management - Dashboard</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        :root { 
+            --pp-blue: #004990; 
+            --pp-accent: #00a1e0; 
+            --glass: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(255, 255, 255, 0.4);
+        }
+        body { 
+            background: radial-gradient(circle at top right, #f8fafc, #e2e8f0);
+            padding: 30px; 
+            font-family: 'Inter', sans-serif; 
+            min-height: 100vh;
+            color: #2b3d51;
+        }
+        @keyframes fadeInUp {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modern-header {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            animation: fadeInUp 0.5s ease-out;
+        }
+        .header-controls { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+        .btn-back {
+            display: flex; align-items: center; gap: 6px; background: white; padding: 6px 14px;
+            border-radius: 50px; font-size: 0.7rem; font-weight: 700; color: var(--pp-blue);
+            text-transform: uppercase; text-decoration: none !important; border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        .btn-back:hover { background: var(--pp-blue); color: white; transform: translateX(-3px); }
+        .user-pill { background: rgba(0, 73, 144, 0.1); padding: 6px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 700; color: var(--pp-blue); text-transform: uppercase; }
+        .slds-card { border-radius: 20px !important; background: var(--glass) !important; backdrop-filter: blur(10px); box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important; animation: fadeInUp 0.7s ease-out; }
+        .type-tag { display: inline-block; padding: 2px 10px; background: white; border: 1px solid #e0e5ee; border-radius: 6px; font-size: 11px; font-weight: 600; }
+        .search-input-modern { border-radius: 12px !important; padding-left: 35px !important; }
+        .btn-modern { border-radius: 12px !important; font-weight: 600 !important; }
+        #debugLog { background: #1a202c; color: #a0aec0; padding: 15px; font-family: monospace; font-size: 11px; height: 100px; overflow-y: auto; margin-top: 30px; border-radius: 15px; }
+        .slds-modal__header { background: var(--pp-blue) !important; color: white !important; border-radius: 20px 20px 0 0 !important; }
+    </style>
+</head>
+<body>
+
+    <div class="modern-header">
+        <div>
+            <div class="header-controls">
+                <a href="index.html" class="btn-back">
+                    <span class="material-icons" style="font-size: 14px;">arrow_back</span> Home
+                </a>
+                <div id="user-greeting" class="user-pill">Loading Session...</div>
+            </div>
+            <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--pp-dark); margin-top: 5px;">Equipments Dashboard</h1>
+        </div>
+        
+        <div class="slds-grid slds-grid_vertical-align-center">
+            <div class="slds-form-element slds-m-right_small" style="width: 280px; position: relative;">
+                <span class="material-icons" style="position: absolute; left: 10px; top: 10px; font-size: 18px; color: #a0aec0; z-index: 5;">search</span>
+                <input type="text" id="searchInput" placeholder="Search serial or ID..." class="slds-input search-input-modern" onkeypress="if(event.key==='Enter') resetAndFetch()" />
+            </div>
+            
+            <select id="viewFilter" class="slds-select slds-m-right_small" style="width: 180px; border-radius: 12px;" onchange="resetAndFetch()">
+                <option value="all">View All</option>
+                <option value="createdAt">Recently Created</option>
+                <option value="updatedAt">Recently Updated</option>
+                <option value="Warsaw Office / Inventory">Warsaw Inventory</option>
+                <option value="Warsaw Repairs">Warsaw Repairs</option>
+            </select>
+
+            <button class="slds-button slds-button_brand btn-modern" onclick="window.location.href='equipments-form.html'">+ New Activity</button>
+        </div>
+    </div>
+
+    <article class="slds-card">
+        <div class="slds-card__header slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+            <h2 class="slds-text-heading_small" style="font-weight: 700; color: var(--pp-blue);">Recent Hardware Activity</h2>
+            <div class="slds-button-group">
+                <button class="slds-button slds-button_neutral btn-modern" onclick="resetAndFetch()">Refresh</button>
+            </div>
+        </div>
+        <div class="slds-card__body">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
+                <thead>
+                    <tr class="slds-line-height_reset">
+                        <th scope="col">Equipment #</th>
+                        <th scope="col">Type</th>
+                        <th scope="col">Serial #</th>
+                        <th scope="col">Merchant Account</th>
+                        <th scope="col">Received Date</th> 
+                        <th scope="col" id="dateColHeader">Date Created</th>
+                    </tr>
+                </thead>
+                <tbody id="dashboardBody"></tbody>
+            </table>
+        </div>
+        <footer class="slds-p-around_medium slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
+            <span id="pageInfo" style="font-size: 12px; font-weight: 600; color: #718096;">Page 1</span>
+            <div class="slds-button-group" role="group">
+                <button id="prevBtn" class="slds-button slds-button_neutral btn-modern" onclick="changePage(-1)" disabled>Previous</button>
+                <button id="nextBtn" class="slds-button slds-button_neutral btn-modern" onclick="changePage(1)">Next</button>
+            </div>
+        </footer>
+    </article>
+
+    <section id="detailModal" role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-hide" aria-modal="true">
+        <div class="slds-modal__container">
+            <header class="slds-modal__header">
+                <h2 class="slds-modal__title slds-hyphenate" id="modalHeader" style="font-weight: 800;">Equipment Details</h2>
+                <button class="slds-button slds-button_icon slds-modal__close" onclick="closeModal()" style="color: white;">✕</button>
+            </header>
+            <div class="slds-modal__content slds-p-around_large" id="modalBody" style="background: #f8fafc;"></div>
+            <footer class="slds-modal__footer slds-grid slds-grid_align-spread">
+                <button class="slds-button slds-button_destructive btn-modern" onclick="handleDelete()">Delete Record</button>
+                <div>
+                    <button class="slds-button slds-button_neutral btn-modern" onclick="closeModal()">Close</button>
+                    <button class="slds-button slds-button_brand btn-modern" onclick="handleUpdate()">Edit / Update</button>
+                </div>
+            </footer>
+        </div>
+    </section>
+    <div id="modalBackdrop" class="slds-backdrop slds-backdrop_open slds-hide"></div>
+
+    <div id="debugLog"><div>[System] Secure Dashboard Initialized.</div></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        // Use our new Vercel API endpoint
+        const API_URL = "/api/equipments";
+        let currentPage = 1;
+        const recordsPerPage = 15;
+        let selectedRecord = null;
+
+        function logDebug(title, data) {
+            const consoleBox = document.getElementById('debugLog');
+            const entry = document.createElement('div');
+            entry.innerText = `[${new Date().toLocaleTimeString()}] ${title}: ${JSON.stringify(data).substring(0, 80)}...`;
+            consoleBox.prepend(entry);
+        }
+
+        async function fetchDashboardData() {
+            const viewValue = document.getElementById('viewFilter').value;
+            const searchQuery = document.getElementById('searchInput').value;
+            const tbody = document.getElementById('dashboardBody');
+            
+            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>Loading...</td></tr>";
+
+            try {
+                // Prepare request for our Vercel API
+                const requestBody = { 
+                    action: 'list', 
+                    page: currentPage, 
+                    limit: recordsPerPage,
+                    view: viewValue,
+                    query: searchQuery
+                };
+
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await res.json();
+                tbody.innerHTML = "";
+                
+                if (!data.records || data.records.length === 0) {
+                    tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>No results.</td></tr>";
+                    return;
+                }
+
+                data.records.forEach(record => {
+                    const p = record.properties || {};
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td><a href="javascript:void(0);" class="equipment-link" onclick='openDetails(${JSON.stringify(record)})'>${p.equipment_id || record.name || '---'}</a></td>
+                        <td><span class="type-tag">${p.terminal_type || '---'}</span></td>
+                        <td>${p.serial_number || '---'}</td>
+                        <td>${p.merchant_account || '---'}</td>
+                        <td>${p.deployment_date || '---'}</td>
+                        <td>${new Date(record.createdAt).toLocaleDateString()}</td>
+                    `;
+                });
+                
+                document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
+                document.getElementById('prevBtn').disabled = (currentPage === 1);
+                document.getElementById('nextBtn').disabled = (data.records.length < recordsPerPage);
+
+            } catch (err) {
+                logDebug("Fetch Error", err.message);
+                tbody.innerHTML = `<tr><td colspan='6' style='color:red;'>System error connecting to API.</td></tr>`;
+            }
+        }
+
+        function openDetails(record) {
+            selectedRecord = record;
+            const p = record.properties || {};
+            const body = document.getElementById('modalBody');
+            document.getElementById('modalHeader').innerText = `Equipment: ${p.equipment_id || 'Details'}`;
+            
+            let html = '<div class="slds-grid slds-wrap">';
+            for (const [key, value] of Object.entries(p)) {
+                const label = key.replace('custom_objects.equipments.', '').replace(/_/g, ' ');
+                html += `<div class="slds-col slds-size_1-of-2 slds-p-bottom_medium">
+                    <span class="slds-text-title_caps" style="font-size:10px; font-weight:700;">${label}</span>
+                    <p style="font-weight:600;">${value || '---'}</p>
+                </div>`;
+            }
+            html += '</div>';
+            body.innerHTML = html;
+            document.getElementById('detailModal').classList.remove('slds-hide');
+            document.getElementById('modalBackdrop').classList.remove('slds-hide');
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.add('slds-hide');
+            document.getElementById('modalBackdrop').classList.add('slds-hide');
+        }
+
+        async function handleDelete() {
+            if (!confirm("Delete this record permanently?")) return;
+            try {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: 'delete', id: selectedRecord.id })
+                });
+                if (res.ok) { closeModal(); fetchDashboardData(); }
+            } catch (err) { alert(err.message); }
+        }
+
+        function handleUpdate() {
+            const p = selectedRecord.properties;
+            const params = new URLSearchParams({ id: selectedRecord.id, eq_id: p.equipment_id || '' });
+            window.location.href = `equipments-update.html?${params.toString()}`;
+        }
+
+        function changePage(step) { currentPage += step; fetchDashboardData(); }
+        function resetAndFetch() { currentPage = 1; fetchDashboardData(); }
+
+        window.onload = () => {
+            const user = sessionStorage.getItem('pp_userid');
+            if (!user) window.location.href = 'index.html';
+            document.getElementById('user-greeting').innerText = `Staff: ${user}`;
+            fetchDashboardData();
+        };
+    </script>
+</body>
+</html>
