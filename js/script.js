@@ -7,7 +7,7 @@ const parseBool = (val) => {
     if (val === true || val === "true" || val === "TRUE") return true;
     return false;
 };
-
+document.getElementById('initial-loader').style.display = 'none';
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
     const urlUserId = params.get('userid');
@@ -102,7 +102,7 @@ async function handleManualLogin() {
         Swal.fire('Error', 'Connection to security server failed.', 'error');
     }
 }
-
+document.getElementById('initial-loader').style.display = 'none';
 function authorizeUser(user) {
     const isIframe = (window.self !== window.top);
     
@@ -148,3 +148,4 @@ function handleLogout() {
 }
 
 window.onload = initGatekeeper;
+
