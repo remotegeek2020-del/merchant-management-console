@@ -104,6 +104,12 @@ async function handleManualLogin() {
 }
 document.getElementById('initial-loader').style.display = 'none';
 function authorizeUser(user) {
+
+    // Add this line inside authorizeUser(user)
+if (role.includes('admin')) {
+    document.getElementById('card-cms').style.display = 'flex';
+    document.getElementById('card-logs').style.display = 'flex'; // Show logs for admins
+}
     const isIframe = (window.self !== window.top);
     
     sessionStorage.setItem('pp_userid', user.userid);
@@ -148,4 +154,5 @@ function handleLogout() {
 }
 
 window.onload = initGatekeeper;
+
 
