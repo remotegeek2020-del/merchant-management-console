@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>User Management CMS</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        body { transition: background 0.2s ease; font-family: 'Inter', sans-serif; margin: 0; }
+        #page-content { display: none; padding: 20px; }
+        body.ui-modern { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); min-height: 100vh; }
+        .cms-container { max-width: 1200px; margin: 40px auto; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 73, 144, 0.08); }
+        .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .save-banner { background: #fff9e6; border: 1px solid #ffcc00; padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; text-align: center; font-weight: bold; }
+        .swal-grid { display: grid; grid-template-columns: 100px 1fr; gap: 15px; align-items: center; text-align: left; padding: 10px; }
+    </style>
+</head>
+<body class="ui-modern"> 
+    <div id="page-content" class="cms-container">
+        <div class="header-flex">
+            <div>
+                <h1 class="slds-text-heading_medium" style="color:#004990; font-weight:bold;">User Management CMS</h1>
+            </div>
+            <div class="slds-grid slds-grid_vertical-align-center" style="gap: 12px;">
+                <button class="slds-button slds-button_neutral" style="border-radius: 50px;" onclick="window.location.href='index.html'">🏠 HOME</button>
+                <button id="save-all-btn" class="slds-button slds-button_success" style="display:none; border-radius: 50px;" onclick="saveAllChanges()">💾 SAVE ALL</button>
+                <button class="slds-button slds-button_brand" style="border-radius: 50px;" onclick="addUser()">+ Enroll User</button>
+            </div>
+        </div>
+        <div id="unsaved-warning" class="save-banner">⚠️ UN-SAVED CHANGES: Click "SAVE ALL" to update the database.</div>
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-table_fixed-layout">
+            <thead>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">First Name</th>
+                    <th scope="col">Email</th>
+                    <th scope="col">Passkey</th>
+                    <th scope="col" style="text-align:center; width:60px;">Inv</th>
+                    <th scope="col" style="text-align:center; width:60px;">Dep</th>
+                    <th scope="col" style="text-align:center; width:60px;">Ret</th>
+                    <th scope="col" style="text-align:center; width:60px;">Mer</th>
+                    <th scope="col">Role</th>
+                    <th scope="col" style="text-align:center;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="user-list">
+                <tr><td colspan="9" style="text-align:center;">Loading users...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <script src="js/cms-logic.js"></script>
+</body>
+</html>
