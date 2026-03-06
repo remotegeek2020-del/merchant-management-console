@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hardware Management Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+    <div id="access-denied">
+        <span class="material-icons" style="font-size: 80px; color: #e52d2d; margin-bottom: 20px;">lock_person</span>
+        <h1 class="slds-text-heading_large" style="font-weight: 800;">Access Restricted</h1>
+        <p id="denied-reason" style="font-size: 1.1rem; color: #5c7089;"></p>
+        <button class="slds-button slds-button_neutral slds-m-top_large" onclick="location.reload()">Return to Safety</button>
+    </div>
+
+    <div id="login-ui">
+        <div style="text-align:center; margin-bottom: 35px;">
+            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:40px; margin-bottom: 10px;">
+            <h2 style="font-size: 1.5rem; color: var(--pp-blue); font-weight: 800; letter-spacing: -0.5px;">Staff Portal</h2>
+            <p style="color: #6e7e91; font-size: 0.9rem;">Secure Hardware Management Access</p>
+        </div>
+        <div class="slds-form-element slds-m-bottom_medium">
+            <label class="slds-form-element__label">Email Address</label>
+            <input type="email" id="login-email" class="slds-input" placeholder="name@payprotec.com" style="border-radius: 8px;">
+        </div>
+        <div class="slds-form-element slds-m-bottom_large">
+            <label class="slds-form-element__label">Passkey</label>
+            <input type="password" id="login-pass" class="slds-input" placeholder="••••••••" style="border-radius: 8px;">
+        </div>
+        <button class="slds-button slds-button_brand slds-size_1-of-1 login-btn" onclick="handleManualLogin()">AUTHENTICATE</button>
+    </div>
+
+    <div id="page-curtain">
+        <div class="brand-header">
+            <div class="header-top-bar">
+                <div id="user-greeting">System Authorizing...</div>
+                <button id="logout-btn" class="slds-button slds-button_destructive" style="display:none; border-radius: 50px; padding: 0 15px;" onclick="handleLogout()">
+                    Logout
+                </button>
+            </div>
+            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProtec" class="logo-img">
+            <h1 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -1px;">Hardware Management</h1>
+            <p style="opacity: 0.8; font-weight: 300;">Central Operations Console</p>
+        </div>
+
+        <div class="main-container">
+            <div class="card-grid">
+                <a href="https://connect.payprotec.com/equipments-dashboard" class="console-card" id="card-inventory">
+                    <div class="card-icon-header"><span class="material-icons">inventory_2</span></div>
+                    <div class="card-title">Inventory</div>
+                    <p class="card-desc">Manage warehouse stock, terminal models, and available serials.</p>
+                </a>
+
+                <a href="https://connect.payprotec.com/deployment-dashboard" class="console-card" id="card-deployments">
+                    <div class="card-icon-header"><span class="material-icons">local_shipping</span></div>
+                    <div class="card-title">Deployments</div>
+                    <p class="card-desc">Track merchant installs, TIDs, and live shipping status.</p>
+                </a>
+
+                <a href="https://connect.payprotec.com/returns-dashboard" class="console-card" id="card-returns">
+                    <div class="card-icon-header"><span class="material-icons">assignment_return</span></div>
+                    <div class="card-title">Returns</div>
+                    <p class="card-desc">Monitor RMAs, damage assessments, and stock reintegration.</p>
+                </a>
+
+                <a href="https://connect.payprotec.com/merchants-dashboard-page" class="console-card" id="card-merchants">
+                    <div class="card-icon-header"><span class="material-icons">storefront</span></div>
+                    <div class="card-title">Merchants</div>
+                    <p class="card-desc">View and manage HighLevel Merchant profiles and hardware history.</p>
+                </a>
+
+                <a href="https://connect.payprotec.com/user-management" class="console-card" id="card-cms" style="display:none; border-bottom: 4px solid #ff9800;">
+                    <div class="card-icon-header" style="background: #fff4e5; color: #ff9800;"><span class="material-icons">admin_panel_settings</span></div>
+                    <div class="card-title">User Management</div>
+                    <p class="card-desc">Enroll new users, edit permissions, and manage roles.</p>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

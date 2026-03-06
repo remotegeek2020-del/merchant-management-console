@@ -1,0 +1,133 @@
+:root { 
+    --pp-blue: #004990; 
+    --pp-dark: #002d5a; 
+    --pp-accent: #00a1e0; 
+    --glass: rgba(255, 255, 255, 0.85);
+    --glass-border: rgba(255, 255, 255, 0.3);
+}
+
+body { 
+    background: radial-gradient(circle at top right, #f4f7fa, #e9eff5);
+    margin: 0; padding: 0; 
+    font-family: 'Inter', sans-serif; 
+    min-height: 100vh;
+    color: #2b3d51;
+}
+
+/* Modern Login UI */
+#login-ui { 
+    display: none; 
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 100%; max-width: 420px; 
+    padding: 40px; 
+    background: var(--glass);
+    backdrop-filter: blur(15px);
+    border-radius: 24px; 
+    border: 1px solid var(--glass-border);
+    box-shadow: 0 20px 50px rgba(0, 45, 90, 0.15);
+    z-index: 1000;
+}
+
+/* Branding & Header */
+.brand-header { 
+    background: linear-gradient(135deg, var(--pp-dark) 0%, var(--pp-blue) 100%); 
+    padding: 60px 20px 120px 20px; 
+    color: white; text-align: center; 
+    position: relative;
+    overflow: hidden;
+}
+
+.brand-header::after {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    background: url('https://www.transparenttextures.com/patterns/cubes.png');
+    opacity: 0.05;
+}
+
+.header-top-bar {
+    position: absolute; top: 20px; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    max-width: 1100px; margin: 0 auto; padding: 0 20px;
+    z-index: 10;
+}
+
+#user-greeting { 
+    background: rgba(255, 255, 255, 0.1); 
+    backdrop-filter: blur(5px);
+    padding: 8px 20px; border-radius: 50px; 
+    font-size: 0.8rem; font-weight: 600;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    letter-spacing: 0.5px;
+}
+
+.logo-img { height: 55px; margin-bottom: 20px; filter: brightness(0) invert(1); position: relative; z-index: 2; }
+
+/* Main Grid & Cards */
+.main-container { max-width: 1200px; margin: -70px auto 60px auto; padding: 0 25px; position: relative; z-index: 5; }
+
+.card-grid { 
+    display: grid; 
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); 
+    gap: 25px; 
+    animation: fadeInUp 0.8s ease-out;
+}
+
+.console-card { 
+    background: var(--glass);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--glass-border);
+    border-radius: 20px; 
+    transition: all 0.4s cubic-bezier(0.165, 0.84, 0.44, 1);
+    display: flex; flex-direction: column;
+    padding: 30px;
+    text-decoration: none !important;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.03);
+}
+
+.console-card:hover { 
+    transform: translateY(-8px); 
+    background: white;
+    box-shadow: 0 20px 40px rgba(0,73,144,0.12); 
+    border-color: var(--pp-accent); 
+}
+
+.card-icon-header { 
+    width: 60px; height: 60px;
+    background: #f0f7ff;
+    border-radius: 15px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--pp-blue); margin-bottom: 20px;
+    transition: all 0.3s ease;
+}
+
+.console-card:hover .card-icon-header {
+    background: var(--pp-blue); color: white;
+    transform: scale(1.1) rotate(-5deg);
+}
+
+.card-title { font-size: 1.3rem; font-weight: 700; color: var(--pp-dark); margin-bottom: 12px; }
+.card-desc { color: #5c7089; font-size: 0.95rem; line-height: 1.6; font-weight: 400; }
+
+/* Animations */
+@keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(30px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+#page-curtain { display: none; animation: fadeIn 0.5s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Access Denied Stylings */
+#access-denied { 
+    display: none; text-align: center; padding: 120px 20px;
+    background: white; height: 100vh;
+}
+
+.login-btn {
+    background: var(--pp-blue) !important;
+    border-radius: 12px !important;
+    height: 50px !important;
+    font-weight: 700 !important;
+    letter-spacing: 1px;
+    transition: all 0.3s ease;
+}
+.login-btn:hover { background: var(--pp-dark) !important; transform: scale(1.02); }
