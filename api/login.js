@@ -1,50 +1,38 @@
 import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
-  // Only allow POST requests for security
-  if (req.method !== 'POST') {
-    return res.status(405).json({ message: 'Method not allowed' });
-  }
+  if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
   const { email, passkey, userId, action } = req.body;
-
-  // Initialize Supabase using secure Server-Side environment variables
-  const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_SERVICE_ROLE_KEY
-  );
+  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   try {
     let query = supabase.from('app_users').select('*');
 
-    // Route logic based on the action sent by script.js
-    switch (action) {
-      case 'login':
-        // Manual login: check both email and passkey
-        query = query.eq('email', email).eq('passkey', passkey);
-        break;
-      
-      case 'validate':
-        // Gatekeeper check: check the unique User ID
-        if (!userId) return res.status(400).json({ success: false, message: 'Missing User ID' });
-        query = query.eq('userid', userId);
-        break;
-
-      default:
-        return res.status(400).json({ success: false, message: 'Invalid action' });
+    if (action === 'login') {
+      query = query.eq('email', email).eq('passkey', passkey);
+    } else if (action === 'validate') {
+      query = query.eq('userid', userId);
     }
 
     const { data: user, error } = await query.single();
+
+    // Log the attempt (Success or Failure)
+    await supabase.from('activity_logs').insert([{
+      email: email || (user ? user.email : 'Unknown'),
+      action: action,
+      status: (!error && user) ? 'SUCCESS' : 'FAILURE',
+      user_agent: req.headers['user-agent'],
+      ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress
+    }]);
 
     if (error || !user) {
       return res.status(401).json({ success: false, message: 'Authentication failed' });
     }
 
-    // Success: Return the user data (Vercel secures the transit)
     return res.status(200).json({ success: true, user });
-    
+
   } catch (err) {
-    console.error("Server Error:", err);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+    return res.status(500).json({ success: false, message: 'Server error' });
   }
 }
