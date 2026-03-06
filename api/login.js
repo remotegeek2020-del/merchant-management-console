@@ -4,7 +4,12 @@ export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
   const { email, passkey, userId, action } = req.body;
-  const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+  
+  // These are your secure Vercel environment variables
+  const supabase = createClient(
+    process.env.SUPABASE_URL, 
+    process.env.SUPABASE_SERVICE_ROLE_KEY
+  );
 
   try {
     let query = supabase.from('app_users').select('*');
@@ -17,13 +22,13 @@ export default async function handler(req, res) {
 
     const { data: user, error } = await query.single();
 
-    // Log the attempt (Success or Failure)
+    // Securely log the attempt to your activity_logs table
     await supabase.from('activity_logs').insert([{
       email: email || (user ? user.email : 'Unknown'),
       action: action,
       status: (!error && user) ? 'SUCCESS' : 'FAILURE',
       user_agent: req.headers['user-agent'],
-      ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress
+      ip_address: req.headers['x-forwarded-for'] || 'Internal'
     }]);
 
     if (error || !user) {
@@ -33,6 +38,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ success: true, user });
 
   } catch (err) {
+    console.error(err);
     return res.status(500).json({ success: false, message: 'Server error' });
   }
 }
