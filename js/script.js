@@ -104,31 +104,32 @@ async function handleManualLogin() {
 }
 document.getElementById('initial-loader').style.display = 'none';
 function authorizeUser(user) {
-
-    // Add this line inside authorizeUser(user)
-if (role.includes('admin')) {
-    document.getElementById('card-cms').style.display = 'flex';
-    document.getElementById('card-logs').style.display = 'flex'; // Show logs for admins
-}
     const isIframe = (window.self !== window.top);
+    const role = (user.role || "").toLowerCase();
     
+    // 1. Store session data
     sessionStorage.setItem('pp_userid', user.userid);
     sessionStorage.setItem('pp_role', user.role);
 
+    // 2. UI Reset
     if (!isIframe) {
         document.getElementById('logout-btn').style.display = 'inline-block';
     }
-
     document.getElementById('login-ui').style.display = 'none';
     document.getElementById('page-curtain').style.display = 'block';
     document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
 
-    const role = (user.role || "").toLowerCase();
-
-    if (role.includes('admin')) {
+    // 3. ADMIN & SUPER_ADMIN ONLY: Show Management Cards
+    const isAdmin = role.includes('admin') || role.includes('super');
+    if (isAdmin) {
         document.getElementById('card-cms').style.display = 'flex';
-    } 
+        document.getElementById('card-logs').style.display = 'flex';
+    } else {
+        document.getElementById('card-cms').style.display = 'none';
+        document.getElementById('card-logs').style.display = 'none';
+    }
 
+    // 4. Standard Permission Checks (for standard Users)
     if (!parseBool(user.access_inventory)) document.getElementById('card-inventory').style.display = 'none';
     if (!parseBool(user.access_deployments)) document.getElementById('card-deployments').style.display = 'none';
     if (!parseBool(user.access_returns)) document.getElementById('card-returns').style.display = 'none';
@@ -154,5 +155,6 @@ function handleLogout() {
 }
 
 window.onload = initGatekeeper;
+
 
 
