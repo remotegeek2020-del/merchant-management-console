@@ -1,6 +1,7 @@
-const SUPABASE_URL = "https://zuzwljjrppyrzngmhdru.supabase.co";
-const SUPABASE_KEY = "sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO";
-const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+/**
+ * SECURITY NOTE: Supabase keys have been removed from the frontend.
+ * All database communication now happens via the /api/login endpoint.
+ */
 
 const parseBool = (val) => {
     if (val === true || val === "true" || val === "TRUE") return true;
@@ -13,6 +14,7 @@ async function initGatekeeper() {
     const cachedUserId = sessionStorage.getItem('pp_userid');
     const isIframe = (window.self !== window.top);
 
+    // 1. Initial Access Check
     if (!urlUserId && !cachedUserId) {
         document.getElementById('login-ui').style.display = 'block';
         return;
@@ -24,36 +26,48 @@ async function initGatekeeper() {
 
     const userId = urlUserId || cachedUserId;
 
-    const { data: user, error } = await _supabase
-        .from('app_users')
-        .select('*')
-        .eq('userid', userId)
-        .single();
-
-    if (error || !user) {
-        document.getElementById('access-denied').style.display = 'block';
-        document.getElementById('denied-reason').innerText = "User not enrolled in registry.";
-        return;
-    }
-
-    if (!isIframe && !sessionStorage.getItem('pp_verified')) {
-        const { value: enteredPass } = await Swal.fire({
-            title: `Verify Identity`,
-            text: `Please enter your passkey to access outside HighLevel.`,
-            input: 'password',
-            confirmButtonText: 'Verify Identity',
-            confirmButtonColor: '#004990',
-            allowOutsideClick: false
+    // 2. Validate session via the Secure API
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: userId, action: 'validate' })
         });
 
-        if (enteredPass !== user.passkey) {
-            Swal.fire('Access Denied', 'Invalid passkey code.', 'error').then(() => location.reload());
+        const result = await response.json();
+
+        if (!result.success || !result.user) {
+            document.getElementById('access-denied').style.display = 'block';
+            document.getElementById('denied-reason').innerText = "User not enrolled in registry.";
             return;
         }
-        sessionStorage.setItem('pp_verified', 'true');
-    }
 
-    authorizeUser(user);
+        const user = result.user;
+
+        // 3. Handle External Passkey Verification
+        if (!isIframe && !sessionStorage.getItem('pp_verified')) {
+            const { value: enteredPass } = await Swal.fire({
+                title: `Verify Identity`,
+                text: `Please enter your passkey to access outside HighLevel.`,
+                input: 'password',
+                confirmButtonText: 'Verify Identity',
+                confirmButtonColor: '#004990',
+                allowOutsideClick: false
+            });
+
+            if (enteredPass !== user.passkey) {
+                Swal.fire('Access Denied', 'Invalid passkey code.', 'error').then(() => location.reload());
+                return;
+            }
+            sessionStorage.setItem('pp_verified', 'true');
+        }
+
+        authorizeUser(user);
+
+    } catch (err) {
+        console.error("Gatekeeper error:", err);
+        Swal.fire('System Error', 'Could not connect to security server.', 'error');
+    }
 }
 
 async function handleManualLogin() {
@@ -67,20 +81,26 @@ async function handleManualLogin() {
 
     Swal.fire({ title: 'Authenticating...', didOpen: () => Swal.showLoading() });
 
-    const { data: user, error } = await _supabase
-        .from('app_users')
-        .select('*')
-        .eq('email', email)
-        .eq('passkey', pass)
-        .single();
+    try {
+        // We fetch our OWN Vercel API route now
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, passkey: pass, action: 'login' })
+        });
 
-    if (error || !user) {
-        Swal.fire('Login Failed', 'Invalid email address or passkey.', 'error');
-        return;
+        const result = await response.json();
+
+        if (result.success) {
+            sessionStorage.setItem('pp_verified', 'true');
+            authorizeUser(result.user);
+        } else {
+            Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
+        }
+    } catch (error) {
+        console.error("Login error:", error);
+        Swal.fire('Error', 'Connection to security server failed.', 'error');
     }
-
-    sessionStorage.setItem('pp_verified', 'true');
-    authorizeUser(user);
 }
 
 function authorizeUser(user) {
