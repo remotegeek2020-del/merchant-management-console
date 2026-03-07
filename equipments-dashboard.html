@@ -152,60 +152,91 @@
             consoleBox.prepend(entry);
         }
 
-        async function fetchDashboardData() {
-            const viewValue = document.getElementById('viewFilter').value;
-            const searchQuery = document.getElementById('searchInput').value;
-            const tbody = document.getElementById('dashboardBody');
-            
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>Loading...</td></tr>";
+       // --- UPDATED JAVASCRIPT FOR EQUIPMENTS-DASHBOARD.HTML ---
 
-            try {
-                // Prepare request for our Vercel API
-                const requestBody = { 
-                    action: 'list', 
-                    page: currentPage, 
-                    limit: recordsPerPage,
-                    view: viewValue,
-                    query: searchQuery
-                };
+async function fetchDashboardData() {
+    const viewValue = document.getElementById('viewFilter').value;
+    const searchQuery = document.getElementById('searchInput').value;
+    const tbody = document.getElementById('dashboardBody');
+    const dateHeader = document.getElementById('dateColHeader');
+    
+    tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>Loading Hardware Data...</td></tr>";
+    dateHeader.innerText = (viewValue === 'all' || viewValue === 'createdAt') ? "Created Date" : "Updated Date";
 
-                const res = await fetch(API_URL, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(requestBody)
-                });
+    try {
+        const res = await fetch('/api/equipments', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                action: 'list',
+                page: currentPage,
+                limit: recordsPerPage,
+                view: viewValue,
+                query: searchQuery
+            })
+        });
 
-                const data = await res.json();
-                tbody.innerHTML = "";
-                
-                if (!data.records || data.records.length === 0) {
-                    tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>No results.</td></tr>";
-                    return;
-                }
+        const data = await res.json();
+        tbody.innerHTML = "";
+        
+        // Restore Pagination UI
+        document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
+        document.getElementById('prevBtn').disabled = (currentPage === 1);
+        document.getElementById('nextBtn').disabled = (!data.records || data.records.length < recordsPerPage);
 
-                data.records.forEach(record => {
-                    const p = record.properties || {};
-                    const row = tbody.insertRow();
-                    row.innerHTML = `
-                        <td><a href="javascript:void(0);" class="equipment-link" onclick='openDetails(${JSON.stringify(record)})'>${p.equipment_id || record.name || '---'}</a></td>
-                        <td><span class="type-tag">${p.terminal_type || '---'}</span></td>
-                        <td>${p.serial_number || '---'}</td>
-                        <td>${p.merchant_account || '---'}</td>
-                        <td>${p.deployment_date || '---'}</td>
-                        <td>${new Date(record.createdAt).toLocaleDateString()}</td>
-                    `;
-                });
-                
-                document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
-                document.getElementById('prevBtn').disabled = (currentPage === 1);
-                document.getElementById('nextBtn').disabled = (data.records.length < recordsPerPage);
-
-            } catch (err) {
-                logDebug("Fetch Error", err.message);
-                tbody.innerHTML = `<tr><td colspan='6' style='color:red;'>System error connecting to API.</td></tr>`;
-            }
+        if (!data.records || data.records.length === 0) {
+            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>No results found.</td></tr>";
+            return;
         }
 
+        data.records.forEach(record => {
+            const p = record.properties || {};
+            const row = tbody.insertRow();
+            // Restoring your exact date formatting logic
+            const rawDate = p["deployment_date"] || p["custom_objects.equipments.deployment_date"] || '---';
+            const dateRaw = (viewValue === 'all' || viewValue === 'createdAt') ? record.createdAt : (record.updatedAt || record.createdAt);
+            
+            row.innerHTML = `
+                <td><a href="javascript:void(0);" class="equipment-link" onclick='openDetails(${JSON.stringify(record)})'>${p.equipment_id || record.name || '---'}</a></td>
+                <td><span class="type-tag">${p.terminal_type || '---'}</span></td>
+                <td>${p.serial_number || '---'}</td>
+                <td>${p.merchant_account || '---'}</td>
+                <td>${rawDate}</td>
+                <td>${new Date(dateRaw).toLocaleDateString()}</td>
+            `;
+        });
+    } catch (err) {
+        logDebug("Fetch Error", err.message);
+    }
+}
+
+async function exportToCSV() {
+    const viewValue = document.getElementById('viewFilter').value;
+    const searchQuery = document.getElementById('searchInput').value;
+    Swal.fire({ title: 'Generating Export...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const res = await fetch('/api/equipments', {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: 'list', page: 1, limit: 100, view: viewValue, query: searchQuery })
+        });
+        const data = await res.json();
+        
+        let csvContent = "Equipment #,Type,Serial #,Merchant Account,Received Date,Created Date\n";
+        data.records.forEach(record => {
+            const p = record.properties || {};
+            csvContent += `"${p.equipment_id || record.name || '---'}","${p.terminal_type || '---'}","${p.serial_number || '---'}","${p.merchant_account || '---'}","${p.deployment_date || '---'}","${new Date(record.createdAt).toLocaleDateString()}"\n`;
+        });
+        
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement("a");
+        link.setAttribute("href", URL.createObjectURL(blob));
+        link.setAttribute("download", `Equip_Export.csv`);
+        link.click();
+        Swal.close();
+    } catch (err) { Swal.fire('Export Error', err.message, 'error'); }
+}
         function openDetails(record) {
             selectedRecord = record;
             const p = record.properties || {};
@@ -260,4 +291,5 @@
         };
     </script>
 </body>
+
 </html>
