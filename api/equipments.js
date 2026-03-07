@@ -1,11 +1,10 @@
-// Remove the unused Supabase import to prevent potential build errors
+// api/equipments.js
 export default async function handler(req, res) {
     const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
     const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
     const SCHEMA_KEY = "custom_objects.equipments";
     const ASSOC_ID = "6728643af1853631d21b97af";
     
-    // Ensure we are getting a POST request
     if (req.method !== 'POST') {
         return res.status(405).json({ success: false, message: "Method Not Allowed" });
     }
@@ -13,7 +12,6 @@ export default async function handler(req, res) {
     const { action, id, payload, query, view, page, limit } = req.body;
 
     try {
-        // --- ACTION: LIST ---
         if (action === 'list') {
             const requestParams = { 
                 locationId: LOCATION_ID, 
@@ -42,31 +40,23 @@ export default async function handler(req, res) {
                 body: JSON.stringify(requestParams)
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                return res.status(response.status).json({ success: false, message: errorText });
-            }
-
             const data = await response.json();
-            // Ensure we always return an object even if records are empty
-            return res.status(200).json(data || { records: [] });
+            // IMPORTANT: Dashboard needs {success: true} to display records
+            return res.status(200).json({ success: true, ...data });
         }
 
-        // --- ACTION: UPDATE SURGICAL ---
         if (action === 'updateSurgical') {
             const accountIds = {
                 "Warsaw Office / Inventory": "6993793b3572dc52847e4fe0",
                 "Warsaw Repairs": "6999c33007a6e56e436c0e84"
             };
 
-            // 1. Get Relations
             const relRes = await fetch(`${PROXY_URL}relations/${id}?locationId=${LOCATION_ID}&skip=0&limit=10`, {
                 headers: { "Schema-Id": SCHEMA_KEY }
             });
             const relData = await relRes.json();
 
-            // 2. Delete Merchant Relations
-            if (relData.relations && relData.relations.length > 0) {
+            if (relData.relations) {
                 for (const rel of relData.relations) {
                     const isMerchant = rel.firstObjectKey?.includes("merchants") || rel.secondObjectKey?.includes("merchants");
                     if (isMerchant) {
@@ -77,14 +67,12 @@ export default async function handler(req, res) {
                 }
             }
 
-            // 3. Update Properties
             await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json", "Schema-Id": SCHEMA_KEY },
                 body: JSON.stringify({ properties: payload })
             });
 
-            // 4. Create New Relation
             const targetMerchantId = accountIds[payload.merchant_account];
             if (targetMerchantId) {
                 await fetch(PROXY_URL, {
@@ -101,7 +89,6 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: DELETE ---
         if (action === 'delete') {
             await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
                 method: "DELETE",
@@ -111,7 +98,6 @@ export default async function handler(req, res) {
         }
 
     } catch (err) {
-        console.error("Server Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
