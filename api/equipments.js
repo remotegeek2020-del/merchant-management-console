@@ -20,8 +20,10 @@ export default async function handler(req, res) {
     };
 
     try {
-        // --- 1. CREATE RETURN (Optimized with Fallback) ---
+        // --- 1. CREATE RETURN (Redesigned for Stability) ---
         if (action === 'createReturn') {
+            if (!gearID) throw new Error("Hardware reference (gearID) is missing from the request.");
+
             const resRet = await fetch(PROXY_URL, { 
                 method: "POST", 
                 headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, 
@@ -31,27 +33,22 @@ export default async function handler(req, res) {
             const newRetId = newRet.id || newRet.record?.id;
 
             if (newRetId) {
+                // We use a separate try/catch for linking so a link failure doesn't crash the save
                 try {
-                    // Attempt to link Physical Gear to this Return record
                     await fetch(PROXY_URL, { 
                         method: "POST", 
                         headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
                         body: JSON.stringify({ 
-                            locationId: LOCATION_ID, 
-                            associationId: RETURN_ASSOC_ID, 
-                            firstRecordId: gearID, 
-                            secondRecordId: newRetId 
+                            locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, 
+                            firstRecordId: gearID, secondRecordId: newRetId 
                         }) 
                     });
-                } catch (linkError) {
-                    console.error("Soft Link Failure:", linkError);
-                    // We continue even if link fails so the form doesn't hang
-                }
+                } catch (e) { console.error("Relationship Link Failed:", e.message); }
                 
-                await logAction(`Return Created: ${payload.return_id} (Hardware: ${gearID})`);
-                return res.status(200).json({ success: true, id: newRetId });
+                await logAction(`Return Logged: ${payload.return_id}`);
+                return res.status(200).json({ success: true }); // Success signal to close the form
             }
-            throw new Error("GHL rejected return record creation");
+            throw new Error("GoHighLevel rejected the Return record.");
         }
 
         // --- 2. UPDATE DEPLOYMENT ---
@@ -60,11 +57,11 @@ export default async function handler(req, res) {
                 method: "PUT", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA },
                 body: JSON.stringify({ properties: payload })
             });
-            await logAction(`Logistics Edit: Deployment ${id}`);
+            await logAction(`Deployment Update: ${id}`);
             return res.status(200).json({ success: true });
         }
 
-        // --- 3. UPDATE SURGICAL (Inventory) ---
+        // --- 3. UPDATE SURGICAL ---
         if (action === 'updateSurgical') {
             await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
                 method: "PUT", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA },
@@ -74,7 +71,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- 4. LISTING ACTION ---
+        // --- 4. LIST (Standard Search) ---
         if (action === 'list') {
             const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
             const resData = await fetch(PROXY_URL, {
