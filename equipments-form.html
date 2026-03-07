@@ -10,33 +10,30 @@
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
-        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; position: relative; }
+        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; }
         .activity-header-box { background: rgba(0, 73, 144, 0.03); padding: 30px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
-        .home-pill { background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
-        .lookup-input { border-radius: 12px !important; border: 1px solid #d1d9e6 !important; background-color: white !important; cursor: pointer; transition: all 0.2s; }
         .btn-modern { border-radius: 12px !important; font-weight: 600 !important; padding: 0 25px !important; height: 45px !important; }
         .hidden-field { display: none !important; }
         .show-flex { display: flex !important; }
         #saveOverlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
-        #debugConsole { max-width: 1000px; margin: 30px auto; background: #1a202c; color: #a0aec0; padding: 20px; border-radius: 20px; font-family: monospace; font-size: 11px; height: 150px; overflow-y: auto; }
+        #debugConsole { max-width: 1000px; margin: 30px auto; background: #1a202c; color: #a0aec0; padding: 20px; border-radius: 20px; font-family: monospace; font-size: 11px; height: 180px; overflow-y: auto; }
         .custom-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; max-width: 850px; background: white; z-index: 9001; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.25); overflow: hidden; }
         .custom-modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); z-index: 9000; }
-        .readonly-lock { background-color: #f1f5f9 !important; cursor: not-allowed !important; font-weight: 600; color: #64748b; }
     </style>
 </head>
 <body>
 
 <div class="ghl-container">
     <div id="saveOverlay">
-        <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Executing Secure Transfer...</p>
+        <div class="slds-spinner_container" style="background: transparent;">
+            <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
+        </div>
+        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing with Global Ledger...</p>
     </div>
 
     <div class="activity-header-box">
-        <div>
-            <a href="index.html" class="home-pill"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
-            <div id="user-greeting" style="font-size: 11px; font-weight: 700; color: var(--pp-blue); margin-top: 5px;">Loading...</div>
-        </div>
+        <a href="index.html" style="background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none; border: 1px solid #e2e8f0;"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
+        <div id="user-greeting" style="font-weight:700">Staff: Loading...</div>
         <select id="activityType" style="width: 250px; border-radius: 12px; height: 45px; font-weight: 700; border: 1px solid #d1d9e6;" onchange="toggleFields(this.value)">
             <option value="">-- Choose Activity --</option>
             <option value="receiving_inventory">1. New Equipment</option>
@@ -48,52 +45,61 @@
     <div id="mainFormArea" class="slds-p-around_xx-large hidden-field">
         <div class="slds-grid slds-wrap slds-gutters">
             <div class="slds-col slds-size_1-of-2 f-genID hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" id="idLabel" style="font-weight: 700;">Reference ID</label>
+                <label class="slds-form-element__label" style="font-weight: 700;">Reference ID</label>
                 <input type="text" id="generatedTag" class="slds-input" style="background:#f0f7ff; font-weight:800; border-radius:12px;" readonly value="ASSIGNED ON SAVE">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-account hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Account / Location</label>
-                <input type="text" id="accountDisplay" class="slds-input lookup-input" readonly placeholder="Search Accounts..." onclick="openModal('account')">
+                <input type="text" id="accountDisplay" class="slds-input" readonly placeholder="Search Accounts..." onclick="openModal('account')" style="border-radius:12px; cursor:pointer;">
                 <input type="hidden" id="accountID">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-equipmentLookup hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Hardware Lookup</label>
-                <input type="text" id="equipmentDisplay" class="slds-input lookup-input" readonly placeholder="Select existing inventory..." onclick="openModal('equipment')">
+                <input type="text" id="equipmentDisplay" class="slds-input" readonly placeholder="Select existing inventory..." onclick="openModal('equipment')" style="border-radius:12px; cursor:pointer;">
                 <input type="hidden" id="equipmentID">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
                 <select id="type" class="slds-select" style="border-radius:12px;">
-                    <option value="">-- Select Model --</option>
-                    <option value="z11_terminal">Z11 Terminal</option>
-                    <option value="z9__4g">Z9 - 4G</option>
-                    <option value="z9">Z9</option>
-                    <option value="z8_terminal">Z8 Terminal</option>
+                    <option value="">-- Select --</option>
                     <option value="pax_a920">Pax A920</option>
                     <option value="clover_mini">Clover Mini</option>
-                    <option value="valor_vl100">Valor VL100</option>
+                    <option value="z11_terminal">Z11 Terminal</option>
+                    <option value="z9__4g">Z9 - 4G</option>
+                    <option value="ict_220">ICT 220</option>
+                    <option value="pax_s300_pin_pad">Pax S300 Pin Pad</option>
+                    <option value="pax_a920_pro">Pax A920 PRO</option>
                     </select>
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
                 <input type="text" id="serial" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-tid hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">TID</label>
                 <input type="text" id="tid" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-tracking hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Tracking ID</label>
                 <input type="text" id="tracking" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-date hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" id="dateLabel" style="font-weight: 700;">Date</label>
+                <label class="slds-form-element__label" style="font-weight: 700;">Date</label>
                 <input type="date" id="depDate" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-returnReason hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Return Reason</label>
                 <input type="text" id="returnReason" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-condition hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Condition</label>
                 <select id="returnCondition" class="slds-select" style="border-radius: 12px;">
@@ -101,6 +107,7 @@
                     <option value="broken">Broken</option>
                 </select>
             </div>
+
             <div class="slds-col slds-size_1-of-1 f-returnDestination hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Destination</label>
                 <select id="returnDestination" class="slds-select" style="border-radius: 12px;">
@@ -120,7 +127,7 @@
 <div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
 <div id="lookupModal" class="custom-modal">
     <div class="slds-modal__header slds-p-around_large" style="background: var(--pp-blue); color: white; border:none;">
-        <h2 id="modalTitle" style="font-weight: 800;">Search Database</h2>
+        <h2 style="font-weight: 800;">Search Database</h2>
     </div>
     <div class="slds-p-around_large">
         <input type="text" id="modalSearch" class="slds-input" style="border-radius: 12px; margin-bottom:15px;" placeholder="Type to search..." onkeyup="handleSearchInput(this.value)">
@@ -135,13 +142,10 @@
 </div>
 
 <script>
-    const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
     const API_URL = "/api/equipments";
-    const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
     const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
-    const DEPLOYMENT_SCHEMA = "69a19c2a7134dc2f8d6988ef";
-    const RETURN_SCHEMA = "69a314e9fe810d7f8614e1ce";
-    const RETURN_ASSOC_ID = "69a3151e5767c05d16488ab9";
+    const MERCHANT_SCHEMA = "6713847a517aa62ab429e204";
+    let currentLookupType = '';
 
     function logDebug(msg) {
         const console = document.getElementById('debugConsole');
@@ -154,96 +158,68 @@
     function toggleFields(val) {
         document.getElementById('mainFormArea').classList.toggle('hidden-field', !val);
         document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
-        const modelSelect = document.getElementById('type');
-        const serialInput = document.getElementById('serial');
-        modelSelect.disabled = false; serialInput.readOnly = false;
-
-        if (val === 'receiving_inventory') {
-            document.getElementById('dateLabel').innerText = "Receive Date";
-            showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
-        } else if (val === 'deployment') {
-            document.getElementById('dateLabel').innerText = "Deployment Date";
-            modelSelect.disabled = true; serialInput.readOnly = true;
-            showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-tid', '.f-tracking', '.f-date']);
-        } else if (val === 'process_return') {
-            modelSelect.disabled = true; serialInput.readOnly = true;
-            showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-returnReason', '.f-condition', '.f-returnDestination']);
-        }
+        if (val === 'receiving_inventory') showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
+        else if (val === 'deployment') showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-tid', '.f-tracking', '.f-date']);
+        else if (val === 'process_return') showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-returnReason', '.f-condition', '.f-returnDestination']);
     }
 
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
 
-    async function fetchFreshNextID(schema, prefix) {
-        const res = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schema }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
-        const data = await res.json();
-        let max = 0;
-        (data.records || []).forEach(r => {
-            const p = r.properties || {};
-            const idVal = p.equipment_id || p.deployment_id || p["custom_objects.returns.return_id"] || "";
-            const num = parseInt(idVal.replace(/\D/g, ''));
-            if (!isNaN(num) && num > max) max = num;
-        });
-        if (max === 0 && prefix === 'Equip-') max = 108039;
-        return `${prefix}${(max + 1).toString().padStart(7, '0')}`;
-    }
-
     async function saveData() {
+        const overlay = document.getElementById('saveOverlay');
+        const status = document.getElementById('saveStatus');
         const type = document.getElementById('activityType').value;
-        const gearRecordID = document.getElementById('equipmentID').value;
-        document.getElementById('saveOverlay').classList.add('show-flex');
+        const user = sessionStorage.getItem('pp_userid');
+        overlay.classList.add('show-flex');
 
         try {
-            logDebug("Syncing next available ID...");
-            const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: DEPLOYMENT_SCHEMA, process_return: RETURN_SCHEMA };
+            const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: "69a19c2a7134dc2f8d6988ef", process_return: "69a314e9fe810d7f8614e1ce" };
             const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
-            const nextID = await fetchFreshNextID(schemaMap[type], prefixMap[type]);
 
-            let body = { action: '', userEmail: sessionStorage.getItem('pp_userid'), payload: {} };
-            
+            logDebug("Requesting unique ID...");
+            const idRes = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'getNextID', schemaType: schemaMap[type], prefix: prefixMap[type] }) });
+            const { nextID } = await idRes.json();
+
+            status.innerText = "Processing record creation...";
+            logDebug(`New ID assigned: ${nextID}`);
+
+            let body = { action: '', userEmail: user, payload: {} };
             if (type === 'receiving_inventory') {
                 body.action = 'createEquipment';
                 body.merchantID = document.getElementById('accountID').value;
-                body.payload = { 
-                    equipment_id: nextID, 
-                    merchant_account: document.getElementById('accountDisplay').value, 
-                    terminal_type: document.getElementById('type').value, 
-                    serial_number: document.getElementById('serial').value,
-                    receive_date: document.getElementById('depDate').value // Fixed: Now saves Receive Date
-                };
+                body.payload = { equipment_id: nextID, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value };
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
-                body.gearID = gearRecordID;
+                body.gearID = document.getElementById('equipmentID').value;
                 body.merchantID = document.getElementById('accountID').value;
                 body.merchantName = document.getElementById('accountDisplay').value;
-                body.payload = { deployment_id: nextID, tid: document.getElementById('tid').value, tracking_id: document.getElementById('tracking').value, target_deployment_date: document.getElementById('depDate').value };
+                body.payload = { deployment_id: nextID, tid: document.getElementById('tid').value, tracking_id: document.getElementById('tracking').value };
             } else if (type === 'process_return') {
                 body.action = 'createReturn';
-                body.gearID = gearRecordID;
+                body.gearID = document.getElementById('equipmentID').value;
                 body.payload = { 
-                    "custom_objects.returns.return_id": nextID, 
-                    "custom_objects.returns.return_reason": document.getElementById('returnReason').value, 
-                    "custom_objects.returns.condition": document.getElementById('returnCondition').value, 
-                    "custom_objects.returns.return_destination": document.getElementById('returnDestination').value,
-                    "custom_objects.returns.return_status": "open"
+                    return_id: nextID, 
+                    return_reason: document.getElementById('returnReason').value, 
+                    condition: document.getElementById('returnCondition').value, // Strict key: "good"/"broken"
+                    return_destination: document.getElementById('returnDestination').value // Strict key: "warsaw_office..."
                 };
             }
 
             const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
             if (res.ok) {
                 Swal.fire('Success', `${nextID} saved.`, 'success').then(() => location.reload());
-            } else { throw new Error("Sync Rejected"); }
-        } catch (e) { 
-            document.getElementById('saveOverlay').classList.remove('show-flex');
-            Swal.fire('Error', e.message, 'error'); 
-        }
+            } else {
+                const err = await res.json();
+                throw new Error(err.message || "Failed to write to database.");
+            }
+        } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); logDebug(`FAULT: ${e.message}`); }
     }
 
-    // Direct Proxy Search (Proven fast in old code)
     async function fetchLookup(q) {
-        const schema = currentLookupType === 'account' ? "6713847a517aa62ab429e204" : EQUIPMENT_SCHEMA;
+        const schema = currentLookupType === 'account' ? MERCHANT_SCHEMA : EQUIPMENT_SCHEMA;
         const tbody = document.getElementById('lookupResults');
-        document.getElementById('modalHead').innerHTML = currentLookupType === 'account' ? '<th>Merchant</th><th>MID</th>' : '<th>ID</th><th>Type</th><th>Serial</th>';
-        const res = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schema, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, query: q }) });
+        document.getElementById('modalHead').innerHTML = currentLookupType === 'account' ? '<th>Merchant</th><th>MID</th>' : '<th>ID</th><th>Model</th><th>Serial</th>';
+        const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'list', schemaId: schema, query: q, page: 1 }) });
         const data = await res.json();
         tbody.innerHTML = "";
         (data.records || []).forEach(r => {
@@ -261,7 +237,7 @@
     }
 
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; document.getElementById('backdrop').style.display = 'block'; if (type === 'account' && document.getElementById('activityType').value === 'receiving_inventory') renderDefaultMerchants(); else fetchLookup(""); }
-    function renderDefaultMerchants() { const tbody = document.getElementById('lookupResults'); tbody.innerHTML = `<tr onclick="selectDef('Warsaw Office', '6993793b3572dc52847e4fe0')"><td><b>Warsaw Office</b></td><td>STOCK_PRIMARY</td></tr><tr onclick="selectDef('Warsaw Repairs', '6999c33007a6e56e436c0e84')"><td><b>Warsaw Repairs</b></td><td>STOCK_REPAIR</td></tr>`; }
+    function renderDefaultMerchants() { const tbody = document.getElementById('lookupResults'); tbody.innerHTML = `<tr onclick="selectDef('Warsaw Office / Inventory', '6993793b3572dc52847e4fe0')"><td><b>Warsaw Office</b></td><td>STOCK_PRIMARY</td></tr><tr onclick="selectDef('Warsaw Repairs', '6999c33007a6e56e436c0e84')"><td><b>Warsaw Repairs</b></td><td>STOCK_REPAIR</td></tr>`; }
     function selectDef(n, id) { document.getElementById('accountDisplay').value = n; document.getElementById('accountID').value = id; closeModal(); }
     function closeModal() { document.getElementById('lookupModal').style.display = 'none'; document.getElementById('backdrop').style.display = 'none'; }
     function handleSearchInput(v) { clearTimeout(window.sT); window.sT = setTimeout(() => fetchLookup(v), 500); }
