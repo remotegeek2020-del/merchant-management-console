@@ -19,6 +19,39 @@ export default async function handler(req, res) {
     };
 
     try {
+        // --- ACTION: LIST DEPLOYMENTS (With Hardware Hydration) ---
+        if (action === 'listDeployments') {
+            const response = await fetch(PROXY_URL, {
+                method: "POST",
+                headers: { "Schema-Id": DEPLOYMENT_SCHEMA, "Content-Type": "application/json", "Version": "2021-07-28" },
+                body: JSON.stringify({ 
+                    locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15, query: query,
+                    sort: [{ field: view || "createdAt", direction: "desc" }] 
+                })
+            });
+            const data = await response.json();
+
+            // Fetch linked hardware for each deployment record found
+            const hydratedRecords = await Promise.all((data.records || []).map(async (record) => {
+                try {
+                    const relRes = await fetch(`${PROXY_URL}relations/${record.id}?locationId=${LOCATION_ID}`);
+                    const relData = await relRes.json();
+                    const equipmentRel = relData.relations?.find(r => r.secondObjectKey.includes('equipments') || r.firstObjectKey.includes('equipments'));
+                    
+                    if (equipmentRel) {
+                        const eqID = equipmentRel.firstRecordId === record.id ? equipmentRel.secondRecordId : equipmentRel.firstRecordId;
+                        const eqRes = await fetch(`${PROXY_URL}${EQUIPMENT_SCHEMA}/records/${eqID}?locationId=${LOCATION_ID}`);
+                        const eqData = await eqRes.json();
+                        return { ...record, hardware: eqData.record?.properties || eqData.properties || {} };
+                    }
+                } catch (e) { console.error("Hydration failed", record.id); }
+                return { ...record, hardware: {} };
+            }));
+
+            return res.status(200).json({ success: true, records: hydratedRecords });
+        }
+
+        // --- ACTION: LIST (General Lookups) ---
         if (action === 'list') {
             const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
             const resData = await fetch(PROXY_URL, {
@@ -30,6 +63,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, ...data });
         }
 
+        // --- ACTION: GET NEXT ID ---
         if (action === 'getNextID') {
             const resID = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schemaType }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
             const data = await resID.json();
@@ -45,6 +79,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ nextID: finalID });
         }
 
+        // --- ACTION: CREATE EQUIPMENT ---
         if (action === 'createEquipment') {
             const resEq = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const newEq = await resEq.json();
@@ -53,6 +88,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: CREATE DEPLOYMENT ---
         if (action === 'createDeployment') {
             const rels = await fetch(`${PROXY_URL}relations/${req.body.gearID}?locationId=${LOCATION_ID}`).then(r => r.json());
             for (const rel of (rels.relations || [])) await fetch(`${PROXY_URL}relations/${rel.id}?locationId=${LOCATION_ID}`, { method: "DELETE" });
@@ -65,6 +101,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: CREATE RETURN ---
         if (action === 'createReturn') {
             const resRet = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const newRet = await resRet.json();
@@ -73,11 +110,31 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: UPDATE SURGICAL ---
         if (action === 'updateSurgical') {
-            // ... Logic remains secure for manual dashboard edits
+            // Re-fetch relations to clear old merchant links
+            const relRes = await fetch(`${PROXY_URL}relations/${id}?locationId=${LOCATION_ID}`);
+            const relData = await relRes.json();
+            if (relData.relations) {
+                for (const rel of relData.relations) {
+                    if (rel.firstObjectKey?.includes("merchants") || rel.secondObjectKey?.includes("merchants")) {
+                        await fetch(`${PROXY_URL}relations/${rel.id}?locationId=${LOCATION_ID}`, { method: "DELETE" });
+                    }
+                }
+            }
+            // Update properties and log
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: payload }) });
             await logAction(`Manual Surgical Edit on Gear ${payload.equipment_id}`);
             return res.status(200).json({ success: true });
         }
+
+        // --- ACTION: DELETE ---
+        if (action === 'delete') {
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "DELETE", headers: { "Version": "2021-07-28" } });
+            await logAction(`Deleted Record ID: ${id}`);
+            return res.status(200).json({ success: true });
+        }
+
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
