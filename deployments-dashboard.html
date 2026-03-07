@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Deployment Tracking | Hardware Suite</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deployment Management | Hardware Suite</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -10,15 +11,20 @@
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); --teal: #008a8a; }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
         .modern-header { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
-        .home-pill { background: white; padding: 6px 12px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 5px; }
+        .home-pill { background: white; padding: 6px 12px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 5px; transition: all 0.2s; }
+        .home-pill:hover { background: var(--pp-blue); color: white; transform: translateX(-3px); }
         .slds-card { border-radius: 24px !important; background: var(--glass) !important; backdrop-filter: blur(12px); box-shadow: 0 15px 40px rgba(0,0,0,0.06) !important; overflow: hidden; }
         .status-pill { padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
         .status-open { background: #e0f5f5; color: var(--teal); border: 1px solid rgba(0, 138, 138, 0.2); }
         .status-close { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
         .clickable-id { color: var(--pp-blue); font-weight: 700; cursor: pointer; text-decoration: none; }
+        .clickable-id:hover { color: var(--pp-accent); }
         .custom-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); align-items: center; justify-content: center; }
-        .custom-modal-content { background: white; width: 95%; max-width: 550px; border-radius: 24px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.2); }
+        .custom-modal-content { background: white; width: 95%; max-width: 550px; border-radius: 24px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.2); animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        @keyframes modalPop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
         .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+        .detail-label { font-weight: 700; color: #64748b; font-size: 0.85rem; }
+        .btn-modern { border-radius: 12px !important; font-weight: 600 !important; transition: all 0.2s; }
     </style>
 </head>
 <body>
@@ -35,13 +41,13 @@
         <div class="slds-grid slds-grid_vertical-align-center">
             <div style="position: relative; margin-right: 12px;">
                 <span class="material-icons" style="position: absolute; left: 10px; top: 10px; font-size: 18px; color: #94a3b8; z-index: 5;">search</span>
-                <input type="text" id="searchInput" placeholder="Search tracking or TID..." class="slds-input" style="width:240px; border-radius: 12px; padding-left: 35px;" onkeypress="if(event.key==='Enter') resetAndFetch()" />
+                <input type="text" id="searchInput" placeholder="Search tracking or TID..." class="slds-input" style="width:240px; border-radius: 12px; padding-left: 35px;" onkeypress="handleSearch(event)" />
             </div>
             <select id="sortOrder" class="slds-select" style="width: 170px; border-radius: 12px; margin-right:12px;" onchange="resetAndFetch()">
                 <option value="createdAt">Newest First</option>
                 <option value="updatedAt">Recently Updated</option>
             </select>
-            <button class="slds-button slds-button_brand" style="border-radius:12px; height:40px;" onclick="window.location.href='equipments-form.html'">+ New Record</button>
+            <button class="slds-button slds-button_brand btn-modern" style="height:40px;" onclick="window.location.href='equipments-form.html'">+ New Record</button>
         </div>
     </div>
 
@@ -61,22 +67,25 @@
             <tbody id="dashboardBody"></tbody>
         </table>
         <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.4);">
-            <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)">Previous</button>
+            <button class="slds-button slds-button_neutral btn-modern" id="prevBtn" onclick="changePage(-1)">Previous</button>
             <span style="font-size: 13px; font-weight: 700; color: #64748b;" id="pageInfo">Page 1</span>
-            <button class="slds-button slds-button_neutral" id="nextBtn" onclick="changePage(1)">Next</button>
+            <button class="slds-button slds-button_neutral btn-modern" id="nextBtn" onclick="changePage(1)">Next</button>
         </div>
     </article>
 
     <div id="recordModal" class="custom-modal" onclick="if(event.target == this) closeModal()">
         <div class="custom-modal-content">
-            <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between;">
+            <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between; align-items: center;">
                 <h2 style="font-weight: 800; font-size: 1.2rem;">Deployment Profile</h2>
                 <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
             </div>
             <div style="padding: 30px;" id="modalBody"></div>
             <div style="padding: 20px 30px; background: #f8fafc; display: flex; justify-content: space-between;">
-                <button class="slds-button slds-button_brand" style="border-radius:12px;" id="updateBtn">Edit Record</button>
-                <button class="slds-button slds-button_neutral" style="border-radius:12px;" onclick="closeModal()">Close</button>
+                <div>
+                    <button class="slds-button slds-button_brand btn-modern" id="updateBtn">Edit Record</button>
+                    <button class="slds-button slds-button_destructive btn-modern" id="deleteBtn">Delete</button>
+                </div>
+                <button class="slds-button slds-button_neutral btn-modern" onclick="closeModal()">Close</button>
             </div>
         </div>
     </div>
@@ -86,6 +95,8 @@
         const API_URL = "/api/equipments";
         let currentPage = 1;
         let currentRecords = [];
+
+        function handleSearch(e) { if (e.key === 'Enter') resetAndFetch(); }
 
         async function fetchDashboardData() {
             const tbody = document.getElementById('dashboardBody');
@@ -99,7 +110,8 @@
                         action: 'listDeployments', 
                         page: currentPage, 
                         query: document.getElementById('searchInput').value,
-                        view: document.getElementById('sortOrder').value 
+                        view: document.getElementById('sortOrder').value,
+                        userEmail: sessionStorage.getItem('pp_userid')
                     })
                 });
                 const data = await res.json();
@@ -108,7 +120,7 @@
                 
                 currentRecords.forEach(record => {
                     const p = record.properties || {};
-                    const h = record.hardware || {}; // Hydrated hardware data
+                    const h = record.hardware || {}; 
                     const status = p.deployment_status || 'Open';
                     const row = tbody.insertRow();
                     row.innerHTML = `
@@ -129,19 +141,51 @@
 
         function openRecordModal(id) {
             const record = currentRecords.find(r => r.id === id);
+            if(!record) return;
             const p = record.properties;
             const h = record.hardware || {};
             document.getElementById('modalBody').innerHTML = `
-                <div class="detail-row"><span class="detail-label">Deployment ID</span> <span style="font-weight:800">${p.deployment_id}</span></div>
-                <div class="detail-row"><span class="detail-label">Status</span> <span>${p.deployment_status}</span></div>
-                <div class="detail-row"><span class="detail-label">TID</span> <span>${p.tid}</span></div>
-                <div class="detail-row"><span class="detail-label">Tracking #</span> <span>${p.tracking_id}</span></div>
+                <div class="detail-row"><span class="detail-label">Deployment ID</span> <span style="font-weight:800">${p.deployment_id || '---'}</span></div>
+                <div class="detail-row"><span class="detail-label">Status</span> <span>${p.deployment_status || 'Open'}</span></div>
+                <div class="detail-row"><span class="detail-label">TID</span> <span>${p.tid || '---'}</span></div>
+                <div class="detail-row"><span class="detail-label">Tracking #</span> <span>${p.tracking_id || '---'}</span></div>
                 <div style="margin:20px 0; border-top: 1px dashed #cbd5e1;"></div>
                 <div class="detail-row"><span class="detail-label">Linked Hardware</span> <span>${h.equipment_id || 'None'}</span></div>
                 <div class="detail-row"><span class="detail-label">Serial Number</span> <span>${h.serial_number || 'None'}</span></div>
             `;
             document.getElementById('updateBtn').onclick = () => window.location.href = `deployment-update.html?id=${id}`;
+            document.getElementById('deleteBtn').onclick = () => deleteRecord(id);
             document.getElementById('recordModal').style.display = 'flex';
+        }
+
+        async function deleteRecord(id) {
+            const result = await Swal.fire({
+                title: 'Are you sure?',
+                text: "This deployment record will be permanently removed.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Yes, delete it!'
+            });
+
+            if (result.isConfirmed) {
+                try {
+                    const res = await fetch(API_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ 
+                            action: 'delete', 
+                            id: id, 
+                            userEmail: sessionStorage.getItem('pp_userid') 
+                        })
+                    });
+                    if (res.ok) {
+                        Swal.fire('Deleted!', 'Record has been removed.', 'success');
+                        closeModal();
+                        resetAndFetch();
+                    }
+                } catch (e) { Swal.fire('Error', 'Deletion failed.', 'error'); }
+            }
         }
 
         function changePage(dir) { currentPage += dir; fetchDashboardData(); }
