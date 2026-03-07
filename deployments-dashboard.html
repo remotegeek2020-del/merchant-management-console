@@ -31,7 +31,7 @@
         <div>
             <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
                 <a href="index.html" class="home-pill"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
-                <div id="user-greeting" style="background: rgba(0, 73, 144, 0.08); padding: 6px 14px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue);">Loading...</div>
+                <div id="user-greeting" style="background: rgba(0, 73, 144, 0.08); padding: 6px 14px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue);">Staff: Loading...</div>
             </div>
             <h1 style="font-size: 1.6rem; font-weight: 800; color: var(--pp-blue);">Deployment Tracking</h1>
         </div>
@@ -98,7 +98,7 @@
 
         let currentPage = 1;
         let currentRecords = [];
-        let hydratedData = {}; // Keeping the hydration cache
+        let hydratedData = {}; // Original working cache method
 
         async function fetchDashboardData() {
             const tbody = document.getElementById('dashboardBody');
@@ -109,7 +109,7 @@
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ 
-                        action: 'list', 
+                        action: 'list', // Use standard list action
                         schemaId: DEPLOYMENT_SCHEMA,
                         page: currentPage, 
                         query: document.getElementById('searchInput').value,
@@ -133,20 +133,27 @@
                         <td id="sn-${record.id}" style="color:#64748b">...</td>
                         <td id="merch-${record.id}" style="font-weight:600">...</td>
                     `;
-                    hydrateRow(record.id); // Triggering your original hydration logic
+                    hydrateRow(record.id); // Triggers your original working relationship search
                 });
                 document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
                 document.getElementById('prevBtn').disabled = (currentPage === 1);
                 document.getElementById('nextBtn').disabled = (currentRecords.length < 15);
-            } catch (e) { tbody.innerHTML = "<tr><td colspan='7'>System Connection Error</td></tr>"; }
+            } catch (e) { tbody.innerHTML = "<tr><td colspan='7'>Connection Error</td></tr>"; }
         }
 
         async function hydrateRow(internalId) {
             try {
-                // Fetching relations exactly like your working old code
+                // Restoration of your exact original relationship lookup logic
                 const relRes = await fetch(`${PROXY_URL}relations/${internalId}?locationId=${LOCATION_ID}`);
                 const relData = await relRes.json();
-                const rel = (relData.relations || []).find(r => r.secondObjectKey.includes('equipments') || r.firstObjectKey.includes('equipments') || r.secondObjectKey.includes(EQUIPMENT_SCHEMA) || r.firstObjectKey.includes(EQUIPMENT_SCHEMA));
+                
+                // Flexible link check to handle both schema IDs and names
+                const rel = (relData.relations || []).find(r => 
+                    r.secondObjectKey.includes('equipments') || 
+                    r.firstObjectKey.includes('equipments') || 
+                    r.secondObjectKey.includes(EQUIPMENT_SCHEMA) || 
+                    r.firstObjectKey.includes(EQUIPMENT_SCHEMA)
+                );
                 
                 if (rel) {
                     const equipmentId = (rel.firstRecordId === internalId) ? rel.secondRecordId : rel.firstRecordId;
@@ -164,7 +171,7 @@
                 } else {
                     document.getElementById(`eqid-${internalId}`).innerText = "Unlinked";
                 }
-            } catch (e) { document.getElementById(`eqid-${internalId}`).innerText = "Error"; }
+            } catch (e) { document.getElementById(`eqid-${internalId}`).innerText = "Not Found"; }
         }
 
         function openRecordModal(id) {
@@ -176,6 +183,7 @@
                 <div class="detail-row"><span class="detail-label">Deployment ID</span> <span style="font-weight:800">${p.deployment_id || '---'}</span></div>
                 <div class="detail-row"><span class="detail-label">Hardware ID</span> <span>${h.eqid}</span></div>
                 <div class="detail-row"><span class="detail-label">Serial Number</span> <span>${h.sn}</span></div>
+                <div class="detail-row"><span class="detail-label">Merchant</span> <span>${h.merch}</span></div>
             `;
             document.getElementById('updateBtn').onclick = () => {
                 const params = new URLSearchParams({ id: id, d_id: p.deployment_id || '', tid: p.tid || '', track: p.tracking_id || '', status: p.deployment_status || 'open', eq_id: h.eqid, sn: h.sn, merch: h.merch });
@@ -186,10 +194,10 @@
         }
 
         async function deleteRecord(id) {
-            const result = await Swal.fire({ title: 'Are you sure?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Yes, delete it!' });
+            const result = await Swal.fire({ title: 'Remove record?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Yes, delete' });
             if (result.isConfirmed) {
                 const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'delete', id: id, userEmail: sessionStorage.getItem('pp_userid') }) });
-                if (res.ok) { Swal.fire('Deleted!', '', 'success'); closeModal(); resetAndFetch(); }
+                if (res.ok) { resetAndFetch(); closeModal(); }
             }
         }
 
@@ -198,7 +206,8 @@
         function closeModal() { document.getElementById('recordModal').style.display = 'none'; }
 
         window.onload = () => {
-            document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`;
+            const user = sessionStorage.getItem('pp_userid');
+            document.getElementById('user-greeting').innerText = `Staff: ${user}`;
             fetchDashboardData();
         };
     </script>
