@@ -16,71 +16,20 @@
             --success: #22c55e;
             --danger: #ef4444;
         }
-
-        body { 
-            background: radial-gradient(circle at top right, #f8fafc, #e2e8f0);
-            padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51;
-        }
-
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-
-        #status-bar { 
-            max-width: 1000px; margin: 0 auto 15px auto; padding: 10px 20px;
-            border-radius: 50px; font-weight: 800; font-size: 0.75rem; text-align: center;
-            letter-spacing: 1px; color: white; background: var(--danger); 
-            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2); transition: all 0.3s ease;
-        }
-
-        .slds-form-container { 
-            max-width: 1000px; margin: auto; 
-            background: var(--glass); backdrop-filter: blur(12px);
-            border: 1px solid var(--glass-border); border-radius: 24px; 
-            box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); 
-            overflow: hidden; animation: fadeInUp 0.6s ease-out;
-        }
-
-        .header-box { 
-            background: rgba(0, 73, 144, 0.03); padding: 25px 35px; 
-            border-bottom: 1px solid rgba(0,0,0,0.05); 
-            display: flex; justify-content: space-between; align-items: center;
-        }
-
-        .home-pill {
-            background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; 
-            font-weight: 800; color: var(--pp-blue); text-decoration: none !important;
-            border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; transition: all 0.2s;
-        }
+        #status-bar { max-width: 1000px; margin: 0 auto 15px auto; padding: 10px 20px; border-radius: 50px; font-weight: 800; font-size: 0.75rem; text-align: center; letter-spacing: 1px; color: white; background: var(--danger); box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2); transition: all 0.3s ease; }
+        .slds-form-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; animation: fadeInUp 0.6s ease-out; }
+        .header-box { background: rgba(0, 73, 144, 0.03); padding: 25px 35px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .home-pill { background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
         .home-pill:hover { background: var(--pp-blue); color: white; transform: translateX(-3px); }
-
         .form-body { padding: 40px; }
-
-        .slds-input, .slds-select { 
-            border-radius: 12px !important; border: 1px solid #d1d9e6 !important; 
-            height: 42px !important; transition: all 0.2s; 
-        }
-
-        .readonly-display { 
-            background: #f0f7ff !important; border: 2px dashed var(--pp-accent) !important; 
-            color: var(--pp-blue) !important; font-weight: 800 !important; text-align: center;
-        }
-
-        .footer-action { 
-            background: rgba(255,255,255,0.4); padding: 25px 40px; 
-            border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: flex-end; 
-        }
-
-        .btn-modern { 
-            border-radius: 12px !important; font-weight: 700 !important; 
-            padding: 0 35px !important; height: 50px !important; transition: all 0.2s; 
-        }
+        .slds-input, .slds-select { border-radius: 12px !important; border: 1px solid #d1d9e6 !important; height: 42px !important; transition: all 0.2s; }
+        .readonly-display { background: #f0f7ff !important; border: 2px dashed var(--pp-accent) !important; color: var(--pp-blue) !important; font-weight: 800 !important; text-align: center; }
+        .footer-action { background: rgba(255,255,255,0.4); padding: 25px 40px; border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: flex-end; }
+        .btn-modern { border-radius: 12px !important; font-weight: 700 !important; padding: 0 35px !important; height: 50px !important; transition: all 0.2s; }
         .btn-modern:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0, 73, 144, 0.2); }
-
-        #debug-monitor { 
-            max-width: 1000px; margin: 30px auto; 
-            background: #1a202c; color: #a0aec0; padding: 25px; 
-            border-radius: 20px; font-family: 'Courier New', monospace; 
-            font-size: 11px; height: 220px; overflow-y: auto; border: 1px solid #2d3748; 
-        }
+        #debug-monitor { max-width: 1000px; margin: 30px auto; background: #1a202c; color: #a0aec0; padding: 25px; border-radius: 20px; font-family: 'Courier New', monospace; font-size: 11px; height: 220px; overflow-y: auto; border: 1px solid #2d3748; }
         .debug-entry { border-bottom: 1px solid #2d3748; padding: 6px 0; }
         .debug-timestamp { color: #4a5568; font-weight: bold; margin-right: 10px; }
         .debug-success { color: #48bb78; font-weight: 800; }
@@ -188,7 +137,7 @@
     </div>
 
     <div id="debug-monitor">
-        <div class="debug-entry">DEBUG MONITOR: Initialized. Ready for secure update.</div>
+        <div class="debug-entry">DEBUG MONITOR: Initialized. Ready for secure audit-logged update.</div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -237,44 +186,44 @@
         async function updateRecord() {
             const btn = document.getElementById('saveBtn');
             const status = document.getElementById('status-bar');
-            const params = new URLSearchParams(window.location.search);
-            const recordId = params.get('id');
+            const recordId = new URLSearchParams(window.location.search).get('id');
 
             btn.disabled = true;
             status.innerText = "STATUS: PROCESSING SURGICAL UPDATE...";
-            status.style.background = "#f59e0b"; // Warning Orange
+            status.style.background = "#f59e0b";
             
-            addLog(">>> INITIATING SECURE UPDATE via VERCEL API <<<");
+            addLog(">>> INITIATING SECURE UPDATE via VERCEL API (LOGS ENABLED) <<<");
 
             try {
                 const payload = {
+                    equipment_id: document.getElementById('equipment_id').value,
                     terminal_type: document.getElementById('terminal_type').value,
                     serial_number: document.getElementById('serial_number').value,
                     merchant_account: document.getElementById('merchant_account').value,
                     deployment_date: document.getElementById('receive_date').value
                 };
 
-                // Calling the secure Vercel endpoint
                 const response = await fetch('/api/equipments', {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         action: 'updateSurgical',
                         id: recordId,
-                        payload: payload
+                        payload: payload,
+                        userEmail: sessionStorage.getItem('pp_userid') // Passing email for Activity Logs
                     })
                 });
 
                 const result = await response.json();
 
                 if (result.success) {
-                    addLog(">>> ALL SYSTEMS COMPLETE <<<", "success");
+                    addLog(">>> ALL SYSTEMS COMPLETE - AUDIT LOG CREATED <<<", "success");
                     status.innerText = "STATUS: UPDATE SUCCESSFUL";
-                    status.style.background = "#10b981"; // Success Green
+                    status.style.background = "#10b981";
                     
                     Swal.fire({
                         title: 'Success!',
-                        text: 'Equipment record and Merchant Relationship updated.',
+                        text: 'Equipment updated and action recorded in Activity Logs.',
                         icon: 'success',
                         confirmButtonColor: '#004990'
                     }).then(() => {
