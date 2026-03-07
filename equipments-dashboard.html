@@ -216,29 +216,57 @@ async function fetchDashboardData() {
 async function exportToCSV() {
     const viewValue = document.getElementById('viewFilter').value;
     const searchQuery = document.getElementById('searchInput').value;
-    Swal.fire({ title: 'Generating Export...', didOpen: () => Swal.showLoading() });
+    
+    // Show loading state so user knows it's working
+    Swal.fire({ 
+        title: 'Generating Export...', 
+        text: 'Fetching records from secure server',
+        didOpen: () => Swal.showLoading() 
+    });
 
     try {
         const res = await fetch('/api/equipments', {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: 'list', page: 1, limit: 100, view: viewValue, query: searchQuery })
+            body: JSON.stringify({ 
+                action: 'list', 
+                page: 1, 
+                limit: 200, // Exporting a larger batch
+                view: viewValue, 
+                query: searchQuery 
+            })
         });
+        
         const data = await res.json();
         
+        if (!data.records || data.records.length === 0) {
+            Swal.fire('Empty', 'No data found to export.', 'info');
+            return;
+        }
+
         let csvContent = "Equipment #,Type,Serial #,Merchant Account,Received Date,Created Date\n";
         data.records.forEach(record => {
             const p = record.properties || {};
-            csvContent += `"${p.equipment_id || record.name || '---'}","${p.terminal_type || '---'}","${p.serial_number || '---'}","${p.merchant_account || '---'}","${p.deployment_date || '---'}","${new Date(record.createdAt).toLocaleDateString()}"\n`;
+            const equipId = p.equipment_id || record.name || '---';
+            const type = p.terminal_type || '---';
+            const sn = p.serial_number || '---';
+            const merchant = p.merchant_account || '---';
+            const received = p.deployment_date || '---';
+            const created = new Date(record.createdAt).toLocaleDateString();
+
+            csvContent += `"${equipId}","${type}","${sn}","${merchant}","${received}","${created}"\n`;
         });
         
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement("a");
         link.setAttribute("href", URL.createObjectURL(blob));
-        link.setAttribute("download", `Equip_Export.csv`);
+        link.setAttribute("download", `Hardware_Export_${new Date().toISOString().split('T')[0]}.csv`);
         link.click();
-        Swal.close();
-    } catch (err) { Swal.fire('Export Error', err.message, 'error'); }
+        
+        Swal.fire('Success', 'CSV downloaded successfully.', 'success');
+    } catch (err) { 
+        Swal.fire('Export Error', 'Could not generate file.', 'error'); 
+    }
 }
         function openDetails(record) {
             selectedRecord = record;
@@ -296,4 +324,5 @@ async function exportToCSV() {
 </body>
 
 </html>
+
 
