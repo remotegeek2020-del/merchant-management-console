@@ -5,13 +5,11 @@ export default async function handler(req, res) {
     const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
     const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
     const DEPLOYMENT_SCHEMA = "69a19c2a7134dc2f8d6988ef";
-    const RETURN_SCHEMA = "69a314e9fe810d7f8614e1ce";
     const ASSOC_ID = "6728643af1853631d21b97af"; 
     const DEPLOY_TO_GEAR_ASSOC = "69a19ca47e855c2e654a44f7"; 
-    const RETURN_ASSOC_ID = "69a3151e5767c05d16488ab9";
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, query, view, page, limit, userEmail, schemaType, prefix, gearID, merchantID, merchantName } = req.body;
+    const { action, id, payload, query, view, page, limit, userEmail, gearID, merchantID, merchantName, schemaType, prefix } = req.body;
 
     const logAction = async (msg, status = 'SUCCESS') => {
         await supabase.from('activity_logs').insert([{
@@ -20,7 +18,29 @@ export default async function handler(req, res) {
     };
 
     try {
-        // --- ACTION: LIST (Unified for ALL Dashboards) ---
+        // --- 1. UPDATE DEPLOYMENT (Fixes "Stuck" Update Deployment) ---
+        if (action === 'updateDeployment') {
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA },
+                body: JSON.stringify({ properties: payload })
+            });
+            await logAction(`Logistics Update: Deployment ${id}`);
+            return res.status(200).json({ success: true });
+        }
+
+        // --- 2. UPDATE SURGICAL (Fixes "Stuck" Update Equipments) ---
+        if (action === 'updateSurgical') {
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
+                method: "PUT",
+                headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA },
+                body: JSON.stringify({ properties: payload })
+            });
+            await logAction(`Hardware Edit: Equipment ${payload.equipment_id || id}`);
+            return res.status(200).json({ success: true });
+        }
+
+        // --- 3. LIST (Standard listing for all dashboards) ---
         if (action === 'list') {
             const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
             const resData = await fetch(PROXY_URL, {
@@ -32,7 +52,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, ...data });
         }
 
-        // --- ACTION: CREATE DEPLOYMENT (Clean linking) ---
+        // --- 4. CREATE DEPLOYMENT (Maintains Linking) ---
         if (action === 'createDeployment') {
             const resDep = await fetch(PROXY_URL, {
                 method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA },
@@ -50,7 +70,7 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- ACTION: GET NEXT ID ---
+        // --- 5. GET NEXT ID ---
         if (action === 'getNextID') {
             const resID = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schemaType }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
             const d = await resID.json();
@@ -60,10 +80,11 @@ export default async function handler(req, res) {
                 const num = parseInt(idVal.replace(/\D/g, ''));
                 if (!isNaN(num) && num > max) max = num;
             });
+            if (max === 0 && prefix === 'Equip-') max = 108039;
             return res.status(200).json({ nextID: `${prefix}${(max + 1).toString().padStart(7, '0')}` });
         }
 
-        // --- ACTION: DELETE ---
+        // --- 6. DELETE ---
         if (action === 'delete') {
             await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "DELETE" });
             await logAction(`Deleted Record: ${id}`);
