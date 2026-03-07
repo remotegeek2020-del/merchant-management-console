@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     const RETURN_ASSOC_ID = "69a3151e5767c05d16488ab9"; 
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, userEmail, gearID, merchantID, merchantName, schemaType, prefix } = req.body;
+    const { action, id, payload, query, view, page, limit, userEmail, gearID, merchantID, merchantName, schemaType, prefix } = req.body;
 
     const logAction = async (msg, status = 'SUCCESS') => {
         await supabase.from('activity_logs').insert([{
@@ -20,51 +20,63 @@ export default async function handler(req, res) {
     };
 
     try {
-        // --- 1. VERIFIED SAVING: NEW EQUIPMENT ---
-        if (action === 'createEquipment') {
-            const resEq = await fetch(PROXY_URL, { 
+        // --- 1. CREATE RETURN (Fixed for Dropdown Compliance) ---
+        if (action === 'createReturn') {
+            // Force values to match GHL Dropdown labels exactly
+            const formattedPayload = {
+                ...payload,
+                condition: payload.condition === 'good' ? 'Good' : 'Broken',
+                return_status: 'open'
+            };
+
+            const resRet = await fetch(PROXY_URL, { 
                 method: "POST", 
-                headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, 
-                body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
+                headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, 
+                body: JSON.stringify({ locationId: LOCATION_ID, properties: formattedPayload }) 
             });
-            const d = await resEq.json();
-            const nId = d.id || d.record?.id;
             
-            if (nId) {
+            const newRet = await resRet.json();
+            const newRetId = newRet.id || newRet.record?.id;
+
+            if (newRetId) {
+                // Link Gear to Return
                 await fetch(PROXY_URL, { 
                     method: "POST", 
                     headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
-                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: nId, secondRecordId: merchantID }) 
+                    body: JSON.stringify({ 
+                        locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, 
+                        firstRecordId: gearID, secondRecordId: newRetId 
+                    }) 
                 });
-                await logAction(`Hardware In-take: ${payload.equipment_id}`);
-                return res.status(200).json({ success: true }); // Verified save signal
+                
+                await logAction(`Return Logged: ${formattedPayload.return_id}`);
+                return res.status(200).json({ success: true });
             }
-            throw new Error("GHL failed to create hardware record.");
+            return res.status(400).json({ success: false, message: "GoHighLevel rejected the Return record." });
         }
 
-        // --- 2. UPDATE ACTIONS: FIXES "STUCK" UPDATES ---
-        if (action === 'updateSurgical' || action === 'updateDeployment') {
-            const schema = action === 'updateSurgical' ? EQUIPMENT_SCHEMA : DEPLOYMENT_SCHEMA;
-            const resUpd = await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json", "Schema-Id": schema },
-                body: JSON.stringify({ properties: payload })
+        // --- 2. GET NEXT ID ---
+        if (action === 'getNextID') {
+            const resID = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schemaType }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
+            const d = await resID.json();
+            let max = 0;
+            (d.records || []).forEach(r => {
+                const p = r.properties || {};
+                const idVal = p.equipment_id || p.deployment_id || p.return_id || "";
+                const num = parseInt(idVal.replace(/\D/g, ''));
+                if (!isNaN(num) && num > max) max = num;
             });
-            if (resUpd.ok) {
-                await logAction(`Record Update: ${id}`);
-                return res.status(200).json({ success: true }); // Ends the "Writing to Ledger" hang
-            }
-            throw new Error("Ledger update failed.");
+            return res.status(200).json({ nextID: `${prefix}${(max + 1).toString().padStart(7, '0')}` });
         }
 
-        // --- 3. CREATE DEPLOYMENT & RETURNS ---
+        // --- 3. CREATE DEPLOYMENT ---
         if (action === 'createDeployment') {
             const resDep = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
-            const d = await resDep.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
+            const newDep = await resDep.json();
+            const newId = newDep.id || newDep.record?.id;
+            if (newId) {
                 await Promise.all([
-                    fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: nId, secondRecordId: gearID }) }),
+                    fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: newId, secondRecordId: gearID }) }),
                     fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: gearID, secondRecordId: merchantID }) }),
                     fetch(`${PROXY_URL}${gearID}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: { merchant_account: merchantName } }) })
                 ]);
@@ -72,35 +84,22 @@ export default async function handler(req, res) {
             }
         }
 
-        if (action === 'createReturn') {
-            const resRet = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
-            const d = await resRet.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
-                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, firstRecordId: gearID, secondRecordId: nId }) });
+        // --- 4. CREATE EQUIPMENT ---
+        if (action === 'createEquipment') {
+            const resEq = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
+            const newEq = await resEq.json();
+            const newEqId = newEq.id || newEq.record?.id;
+            if (newEqId) {
+                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: newEqId, secondRecordId: merchantID }) });
                 return res.status(200).json({ success: true });
             }
         }
 
-        // --- 4. LISTING & ID GENERATION (Universal) ---
+        // --- 5. LIST & DELETE ---
         if (action === 'list') {
-            const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
-            const resData = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schema, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, pageLimit: 15, query: req.body.query }) });
-            const data = await resData.json();
-            return res.status(200).json({ success: true, ...data });
-        }
-
-        if (action === 'getNextID') {
-            const resID = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schemaType }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
-            const d = await resID.json();
-            let max = 0;
-            (d.records || []).forEach(r => {
-                const p = r.properties || {};
-                const idVal = p["custom_objects.returns.return_id"] || p.return_id || p.equipment_id || p.deployment_id || "";
-                const num = parseInt(idVal.replace(/\D/g, ''));
-                if (!isNaN(num) && num > max) max = num;
-            });
-            return res.status(200).json({ nextID: `${prefix}${(max + 1).toString().padStart(7, '0')}` });
+            const resData = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": req.body.schemaId || EQUIPMENT_SCHEMA, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15, query: query }) });
+            const d = await resData.json();
+            return res.status(200).json({ success: true, ...d });
         }
 
         if (action === 'delete') {
