@@ -10,35 +10,28 @@
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
-        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; position: relative; animation: fadeInUp 0.6s ease-out; }
+        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; position: relative; }
         .activity-header-box { background: rgba(0, 73, 144, 0.03); padding: 30px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
-        .home-pill { background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
-        .lookup-input { border-radius: 12px !important; border: 1px solid #d1d9e6 !important; background-color: white !important; cursor: pointer; transition: all 0.2s; }
-        .btn-modern { border-radius: 12px !important; font-weight: 600 !important; padding: 0 25px !important; height: 45px !important; transition: all 0.2s; }
+        .home-pill { background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; }
+        .lookup-input { border-radius: 12px !important; border: 1px solid #d1d9e6 !important; background-color: white !important; cursor: pointer; }
+        .btn-modern { border-radius: 12px !important; font-weight: 600 !important; padding: 0 25px !important; height: 45px !important; }
         .hidden-field { display: none !important; }
         .show-flex { display: flex !important; }
         #saveOverlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
-        #debugConsole { max-width: 1000px; margin: 30px auto; background: #1a202c; color: #a0aec0; padding: 20px; border-radius: 20px; font-family: monospace; font-size: 11px; height: 180px; overflow-y: auto; }
         .custom-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; max-width: 850px; background: white; z-index: 9001; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.25); overflow: hidden; }
         .custom-modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); z-index: 9000; }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
 <div class="ghl-container">
     <div id="saveOverlay">
-        <div class="slds-spinner_container" style="background: transparent;">
-            <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        </div>
+        <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
         <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Executing Secure Transfer...</p>
     </div>
 
     <div class="activity-header-box">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <a href="index.html" class="home-pill"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
-            <div id="user-greeting" style="background: rgba(0, 73, 144, 0.08); padding: 8px 16px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue);">Loading Staff...</div>
-        </div>
+        <a href="index.html" class="home-pill"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
         <select id="activityType" style="width: 250px; border-radius: 12px; height: 45px; font-weight: 700; border: 1px solid #d1d9e6;" onchange="toggleFields(this.value)">
             <option value="">-- Choose Activity --</option>
             <option value="receiving_inventory">1. New Equipment</option>
@@ -138,8 +131,6 @@
     </div>
 </div>
 
-<div id="debugConsole"><div>SYSTEM MONITOR: STANDBY...</div></div>
-
 <div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
 <div id="lookupModal" class="custom-modal">
     <div class="slds-modal__header slds-p-around_large" style="background: var(--pp-blue); color: white; border:none;">
@@ -210,7 +201,7 @@
             if (type === 'receiving_inventory') {
                 body.action = 'createEquipment';
                 body.merchantID = document.getElementById('accountID').value;
-                body.payload = { equipment_id: nextID, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value, receive_date: document.getElementById('depDate').value };
+                body.payload = { equipment_id: nextID, merchant_account: document.getElementById('accountDisplay').value, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value, receive_date: document.getElementById('depDate').value };
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
                 body.gearID = gearRecordID;
@@ -231,7 +222,7 @@
 
             const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
             if (res.ok) {
-                Swal.fire('Success', `${nextID} saved.`, 'success').then(() => location.reload());
+                Swal.fire('Success', `${nextID} saved successfully.`, 'success').then(() => location.reload());
             } else { throw new Error("Sync Rejected by Ledger"); }
         } catch (e) { 
             document.getElementById('saveOverlay').classList.remove('show-flex');
@@ -265,7 +256,7 @@
     function selectDef(n, id) { document.getElementById('accountDisplay').value = n; document.getElementById('accountID').value = id; closeModal(); }
     function closeModal() { document.getElementById('lookupModal').style.display = 'none'; document.getElementById('backdrop').style.display = 'none'; }
     function handleSearchInput(v) { clearTimeout(window.sT); window.sT = setTimeout(() => fetchLookup(v), 500); }
-    window.onload = () => { document.getElementById('user-greeting').innerText = sessionStorage.getItem('pp_userid'); };
+    window.onload = () => { document.getElementById('user-greeting').innerText = `Staff Member: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
 </html>
