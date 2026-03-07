@@ -90,7 +90,10 @@
         <div class="slds-card__header slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
             <h2 class="slds-text-heading_small" style="font-weight: 700; color: var(--pp-blue);">Recent Hardware Activity</h2>
             <div class="slds-button-group">
+                
                 <button class="slds-button slds-button_neutral btn-modern" onclick="resetAndFetch()">Refresh</button>
+    <button class="slds-button slds-button_neutral btn-modern" onclick="exportToCSV()">Export CSV</button>
+            
             </div>
         </div>
         <div class="slds-card__body">
@@ -293,3 +296,4 @@ async function exportToCSV() {
 </body>
 
 </html>
+
