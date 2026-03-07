@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     };
 
     try {
-        // --- ACTION: LIST DEPLOYMENTS (With Hardware Hydration) ---
+        // --- ACTION: LIST DEPLOYMENTS (Enhanced Hydration) ---
         if (action === 'listDeployments') {
             const response = await fetch(PROXY_URL, {
                 method: "POST",
@@ -31,21 +31,33 @@ export default async function handler(req, res) {
             });
             const data = await response.json();
 
-            // Fetch linked hardware for each deployment record found
             const hydratedRecords = await Promise.all((data.records || []).map(async (record) => {
                 try {
-                    const relRes = await fetch(`${PROXY_URL}relations/${record.id}?locationId=${LOCATION_ID}`);
+                    // Fetch relations using the specific deployment record ID
+                    const relRes = await fetch(`${PROXY_URL}relations/${record.id}?locationId=${LOCATION_ID}`, {
+                        headers: { "Schema-Id": DEPLOYMENT_SCHEMA }
+                    });
                     const relData = await relRes.json();
-                    const equipmentRel = relData.relations?.find(r => r.secondObjectKey.includes('equipments') || r.firstObjectKey.includes('equipments'));
+                    
+                    // Look for ANY relation that links to the Equipment Schema or generic "equipments" key
+                    const equipmentRel = (relData.relations || []).find(r => 
+                        r.firstObjectKey === `custom_objects.${EQUIPMENT_SCHEMA}` || 
+                        r.secondObjectKey === `custom_objects.${EQUIPMENT_SCHEMA}` ||
+                        r.firstObjectKey.includes("equipments") ||
+                        r.secondObjectKey.includes("equipments")
+                    );
                     
                     if (equipmentRel) {
-                        const eqID = equipmentRel.firstRecordId === record.id ? equipmentRel.secondRecordId : equipmentRel.firstRecordId;
-                        const eqRes = await fetch(`${PROXY_URL}${EQUIPMENT_SCHEMA}/records/${eqID}?locationId=${LOCATION_ID}`);
+                        const eqID = (equipmentRel.firstRecordId === record.id) ? equipmentRel.secondRecordId : equipmentRel.firstRecordId;
+                        const eqRes = await fetch(`${PROXY_URL}${EQUIPMENT_SCHEMA}/records/${eqID}?locationId=${LOCATION_ID}`, {
+                            headers: { "Schema-Id": EQUIPMENT_SCHEMA }
+                        });
                         const eqData = await eqRes.json();
-                        return { ...record, hardware: eqData.record?.properties || eqData.properties || {} };
+                        const finalHardware = eqData.record?.properties || eqData.properties || {};
+                        return { ...record, hardware: finalHardware };
                     }
-                } catch (e) { console.error("Hydration failed", record.id); }
-                return { ...record, hardware: {} };
+                } catch (e) { console.error("Hydration fail:", record.id); }
+                return { ...record, hardware: null }; 
             }));
 
             return res.status(200).json({ success: true, records: hydratedRecords });
@@ -112,7 +124,6 @@ export default async function handler(req, res) {
 
         // --- ACTION: UPDATE SURGICAL ---
         if (action === 'updateSurgical') {
-            // Re-fetch relations to clear old merchant links
             const relRes = await fetch(`${PROXY_URL}relations/${id}?locationId=${LOCATION_ID}`);
             const relData = await relRes.json();
             if (relData.relations) {
@@ -122,7 +133,6 @@ export default async function handler(req, res) {
                     }
                 }
             }
-            // Update properties and log
             await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: payload }) });
             await logAction(`Manual Surgical Edit on Gear ${payload.equipment_id}`);
             return res.status(200).json({ success: true });
