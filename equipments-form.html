@@ -204,56 +204,73 @@
 
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
 
-    async function saveData() {
-        const overlay = document.getElementById('saveOverlay');
-        const status = document.getElementById('saveStatus');
-        const type = document.getElementById('activityType').value;
-        const user = sessionStorage.getItem('pp_userid');
-        overlay.classList.add('show-flex');
+   async function saveData() {
+    const statusEl = document.getElementById('saveStatus');
+    document.getElementById('saveOverlay').classList.add('show-flex');
+    let finalIDForAlert = ""; 
 
-        try {
-            const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: "69a19c2a7134dc2f8d6988ef", process_return: "69a314e9fe810d7f8614e1ce" };
-            const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
+    try {
+        const actType = document.getElementById('activityType').value;
+        const gearRecordID = document.getElementById('equipmentID').value;
+        const userEmail = sessionStorage.getItem('pp_userid');
 
-            logDebug("Requesting unique record ID...");
-            const idRes = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'getNextID', schemaType: schemaMap[type], prefix: prefixMap[type] }) });
-            const { nextID } = await idRes.json();
+        // 1. Fetch the Next Sequential ID
+        const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
+        const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: DEPLOYMENT_SCHEMA, process_return: RETURN_SCHEMA };
+        
+        const idRes = await fetch(API_URL, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ action: 'getNextID', schemaType: schemaMap[actType], prefix: prefixMap[actType] }) 
+        });
+        const { nextID } = await idRes.json();
+        finalIDForAlert = nextID;
 
-            status.innerText = "Syncing with global ledger...";
-            logDebug(`ID generated: ${nextID}`);
+        let body = { action: '', userEmail: userEmail, payload: {} };
 
-            let body = { action: '', userEmail: user, payload: {} };
-            if (type === 'receiving_inventory') {
-                body.action = 'createEquipment';
-                body.merchantID = document.getElementById('accountID').value;
-                body.payload = { equipment_id: nextID, merchant_account: document.getElementById('accountDisplay').value, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value };
-            } else if (type === 'deployment') {
-                body.action = 'createDeployment';
-                body.gearID = document.getElementById('equipmentID').value;
-                body.merchantID = document.getElementById('accountID').value;
-                body.merchantName = document.getElementById('accountDisplay').value;
-                body.payload = { deployment_id: nextID, tid: document.getElementById('tid').value, tracking_id: document.getElementById('tracking').value };
-            } else if (type === 'process_return') {
-                body.action = 'createReturn';
-                body.gearID = document.getElementById('equipmentID').value;
-                body.payload = { 
-                    return_id: nextID, 
-                    return_reason: document.getElementById('returnReason').value, 
-                    condition: document.getElementById('returnCondition').value, // Correct key: "good" or "broken"
-                    return_destination: document.getElementById('returnDestination').value // Correct key: "warsaw_office..."
-                };
-            }
+        if (actType === 'receiving_inventory') {
+            body.action = 'createEquipment';
+            body.merchantID = document.getElementById('accountID').value;
+            body.payload = { 
+                equipment_id: nextID, 
+                merchant_account: document.getElementById('accountDisplay').value, 
+                terminal_type: document.getElementById('type').value, 
+                serial_number: document.getElementById('serial').value,
+                receive_date: document.getElementById('depDate').value // SURGICAL FIX: Captures the date
+            };
+        } else if (actType === 'deployment') {
+            body.action = 'createDeployment';
+            body.gearID = gearRecordID;
+            body.merchantID = document.getElementById('accountID').value;
+            body.merchantName = document.getElementById('accountDisplay').value;
+            body.payload = { deployment_id: nextID, tid: document.getElementById('tid').value, tracking_id: document.getElementById('tracking').value };
+        } else if (actType === 'process_return') {
+            body.action = 'createReturn';
+            body.gearID = gearRecordID;
+            body.payload = { 
+                "custom_objects.returns.return_id": nextID, 
+                "custom_objects.returns.return_reason": document.getElementById('returnReason').value, 
+                "custom_objects.returns.condition": document.getElementById('returnCondition').value, 
+                "custom_objects.returns.return_destination": document.getElementById('returnDestination').value,
+                "custom_objects.returns.return_status": "open",
+                "custom_objects.returns.last_activity_by": userEmail
+            };
+        }
 
-            const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-            if (res.ok) {
-                Swal.fire('Success', `${nextID} has been successfully logged.`, 'success').then(() => location.reload());
-            } else {
-                const err = await res.json();
-                throw new Error(err.message || "Communication with GHL rejected.");
-            }
-        } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); logDebug(`FAULT: ${e.message}`); }
+        // 2. Verified Save to GHL
+        const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+        if (res.ok) {
+            Swal.fire('Success', `${finalIDForAlert} saved successfully.`, 'success').then(() => location.reload());
+        } else {
+            const err = await res.json();
+            throw new Error(err.message || "Ledger sync failed.");
+        }
+
+    } catch (err) { 
+        document.getElementById('saveOverlay').classList.remove('show-flex');
+        Swal.fire('Error', err.message, 'error'); 
     }
-
+}
     async function fetchLookup(q) {
         const schema = currentLookupType === 'account' ? MERCHANT_SCHEMA : EQUIPMENT_SCHEMA;
         const tbody = document.getElementById('lookupResults');
