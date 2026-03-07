@@ -28,7 +28,7 @@
 <div class="ghl-container">
     <div id="saveOverlay">
         <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing with Global Ledger...</p>
+        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing Global Data Ledger...</p>
     </div>
 
     <div class="activity-header-box">
@@ -50,45 +50,79 @@
                 <label class="slds-form-element__label" style="font-weight: 700;">Reference ID</label>
                 <input type="text" id="generatedTag" class="slds-input" style="background:#f0f7ff; font-weight:800; border-radius:12px;" readonly value="ASSIGNED ON SAVE">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-account hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Account / Location</label>
                 <input type="text" id="accountDisplay" class="slds-input lookup-input" readonly placeholder="Search Accounts..." onclick="openModal('account')">
                 <input type="hidden" id="accountID">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-equipmentLookup hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Hardware Lookup</label>
-                <input type="text" id="equipmentDisplay" class="slds-input lookup-input" readonly placeholder="Select existing inventory..." onclick="openModal('equipment')">
+                <input type="text" id="equipmentDisplay" class="slds-input lookup-input" readonly placeholder="Select hardware ID..." onclick="openModal('equipment')">
                 <input type="hidden" id="equipmentID">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
                 <select id="type" class="slds-select" style="border-radius:12px;">
-                    <option value="">-- None --</option>
-                    <option value="pax_a920">Pax A920</option>
-                    <option value="clover_mini">Clover Mini</option>
+                    <option value="">-- Select Model --</option>
                     <option value="z11_terminal">Z11 Terminal</option>
-                    </select>
+                    <option value="z9__4g">Z9 - 4G</option>
+                    <option value="z9">Z9</option>
+                    <option value="z8_epx_dualcomm_only_no_wifi">Z8 EPX Dual-Comm Only No Wifi</option>
+                    <option value="z8_terminal">Z8 Terminal</option>
+                    <option value="z6__pin_pad">Z6 - Pin Pad</option>
+                    <option value="z3__pin_pad">Z3 - Pin Pad</option>
+                    <option value="ict_220">ICT 220</option>
+                    <option value="fd_130">FD 130</option>
+                    <option value="fd_100">FD 100</option>
+                    <option value="pax_s300_pin_pad">Pax S300 Pin Pad</option>
+                    <option value="clover_go">Clover Go</option>
+                    <option value="clover_mini">Clover Mini</option>
+                    <option value="clover_mini_station">Clover Mini Station</option>
+                    <option value="z9_base_station">Z9 Base Station</option>
+                    <option value="z8_tri_con">Z8 Tri-Con</option>
+                    <option value="pax_a920">Pax A920</option>
+                    <option value="pax_e600">Pax E600</option>
+                    <option value="2_in_1_reader">2-in-1 Reader</option>
+                    <option value="ingenico_desk_3500">Ingenico Desk 3500</option>
+                    <option value="pax_a920_pro">Pax A920 PRO</option>
+                    <option value="valor_vl100">Valor VL100</option>
+                    <option value="valor_vl110">Valor VL110</option>
+                    <option value="valor_vl500">Valor VL500</option>
+                    <option value="qd2">QD2</option>
+                    <option value="qd3">QD3</option>
+                    <option value="qd4">QD4</option>
+                    <option value="valor_vl300">Valor VL300</option>
+                </select>
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
                 <input type="text" id="serial" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-tid hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">TID</label>
                 <input type="text" id="tid" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-tracking hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Tracking ID</label>
                 <input type="text" id="tracking" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-date hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Date</label>
                 <input type="date" id="depDate" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-returnReason hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Return Reason</label>
                 <input type="text" id="returnReason" class="slds-input" style="border-radius: 12px;">
             </div>
+
             <div class="slds-col slds-size_1-of-2 f-condition hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Condition</label>
                 <select id="returnCondition" class="slds-select" style="border-radius: 12px;">
@@ -96,6 +130,7 @@
                     <option value="broken">Broken</option>
                 </select>
             </div>
+
             <div class="slds-col slds-size_1-of-1 f-returnDestination hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Destination</label>
                 <select id="returnDestination" class="slds-select" style="border-radius: 12px;">
@@ -128,7 +163,7 @@
 </div>
 
 <script>
-    const API_URL = "/api/equipments"; // All requests route here
+    const API_URL = "/api/equipments";
     const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
     const MERCHANT_SCHEMA = "6713847a517aa62ab429e204";
     let currentLookupType = '';
@@ -159,23 +194,21 @@
         const overlay = document.getElementById('saveOverlay');
         const status = document.getElementById('saveStatus');
         const type = document.getElementById('activityType').value;
-        const userEmail = sessionStorage.getItem('pp_userid'); // Security trace
+        const userEmail = sessionStorage.getItem('pp_userid');
         overlay.classList.add('show-flex');
 
         try {
             const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
             const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: "69a19c2a7134dc2f8d6988ef", process_return: "69a314e9fe810d7f8614e1ce" };
             
-            // 1. Get next ID via secure backend
-            status.innerText = "Generating next unique ID...";
+            status.innerText = "Generating unique record ID...";
             const idRes = await fetch(API_URL, { 
                 method: "POST", headers: { "Content-Type": "application/json" }, 
                 body: JSON.stringify({ action: 'getNextID', schemaType: schemaMap[type], prefix: prefixMap[type] }) 
             });
             const { nextID } = await idRes.json();
 
-            // 2. Prepare Payload
-            status.innerText = "Syncing logs and linking records...";
+            status.innerText = "Syncing activities & linking hardware...";
             let body = { action: '', userEmail: userEmail, payload: {} };
             
             if (type === 'receiving_inventory') {
@@ -189,22 +222,21 @@
                 body.merchantName = document.getElementById('accountDisplay').value;
                 body.payload = { deployment_id: nextID, tid: document.getElementById('tid').value, tracking_id: document.getElementById('tracking').value, target_deployment_date: document.getElementById('depDate').value, deployment_status: "Open" };
             } else if (type === 'process_return') {
-                body.action = 'createReturn'; // Corrected action name
+                body.action = 'createReturn';
                 body.gearID = document.getElementById('equipmentID').value;
                 body.payload = { return_id: nextID, return_reason: document.getElementById('returnReason').value, condition: document.getElementById('returnCondition').value, return_destination: document.getElementById('returnDestination').value, return_status: "open" };
             }
 
-            // 3. Execute save via secure backend
             const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
             if (res.ok) {
-                Swal.fire('Success', `${nextID} has been successfully registered.`, 'success').then(() => location.reload());
+                Swal.fire('Success', `${nextID} registered successfully.`, 'success').then(() => location.reload());
             } else {
                 const errorData = await res.json();
-                throw new Error(errorData.message || "Database Write Failed.");
+                throw new Error(errorData.message || "Ledger sync failed.");
             }
         } catch (e) { 
             overlay.classList.remove('show-flex'); 
-            Swal.fire('System Fault', e.message, 'error'); 
+            Swal.fire('Form Fault', e.message, 'error'); 
         }
     }
 
@@ -212,7 +244,7 @@
         const schema = currentLookupType === 'account' ? MERCHANT_SCHEMA : EQUIPMENT_SCHEMA;
         const tbody = document.getElementById('lookupResults');
         const head = document.getElementById('modalHead');
-        head.innerHTML = currentLookupType === 'account' ? '<th>Legal Name</th><th>MID</th>' : '<th>ID</th><th>Type</th><th>Serial #</th><th>Status</th>';
+        head.innerHTML = currentLookupType === 'account' ? '<th>Legal Name</th><th>MID</th>' : '<th>ID</th><th>Type</th><th>Serial #</th><th>Account</th>';
         tbody.innerHTML = "<tr><td colspan='4'>Searching...</td></tr>";
 
         const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'list', schemaId: schema, query: q, page: 1 }) });
@@ -258,7 +290,8 @@
     function handleSearchInput(v) { clearTimeout(window.sT); window.sT = setTimeout(() => fetchLookup(v), 500); }
 
     window.onload = () => {
-        document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`;
+        const user = sessionStorage.getItem('pp_userid');
+        document.getElementById('user-greeting').innerText = user ? `Staff Member: ${user}` : "Logistics Console";
     };
 </script>
 </body>
