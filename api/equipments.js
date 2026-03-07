@@ -11,53 +11,19 @@ export default async function handler(req, res) {
     const RETURN_ASSOC_ID = "69a3151e5767c05d16488ab9"; 
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, userEmail, gearID, merchantID, merchantName, schemaType, prefix } = req.body;
-
-    const logAction = async (msg, status = 'SUCCESS') => {
-        await supabase.from('activity_logs').insert([{
-            email: userEmail || 'System', action: msg, status: status, ip_address: req.headers['x-forwarded-for'] || '127.0.0.1'
-        }]);
-    };
+    const { action, id, payload, userEmail, gearID, merchantID, merchantName } = req.body;
 
     try {
-        // --- 1. VERIFIED SAVING: NEW EQUIPMENT ---
         if (action === 'createEquipment') {
-            const resEq = await fetch(PROXY_URL, { 
-                method: "POST", 
-                headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, 
-                body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
-            });
+            const resEq = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const d = await resEq.json();
             const nId = d.id || d.record?.id;
-            
             if (nId) {
-                await fetch(PROXY_URL, { 
-                    method: "POST", 
-                    headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
-                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: nId, secondRecordId: merchantID }) 
-                });
-                await logAction(`Hardware In-take: ${payload.equipment_id}`);
-                return res.status(200).json({ success: true }); // Verified save signal
+                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: nId, secondRecordId: merchantID }) });
+                return res.status(200).json({ success: true });
             }
-            throw new Error("GHL failed to create hardware record.");
         }
 
-        // --- 2. UPDATE ACTIONS: FIXES "STUCK" UPDATES ---
-        if (action === 'updateSurgical' || action === 'updateDeployment') {
-            const schema = action === 'updateSurgical' ? EQUIPMENT_SCHEMA : DEPLOYMENT_SCHEMA;
-            const resUpd = await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json", "Schema-Id": schema },
-                body: JSON.stringify({ properties: payload })
-            });
-            if (resUpd.ok) {
-                await logAction(`Record Update: ${id}`);
-                return res.status(200).json({ success: true }); // Ends the "Writing to Ledger" hang
-            }
-            throw new Error("Ledger update failed.");
-        }
-
-        // --- 3. CREATE DEPLOYMENT & RETURNS ---
         if (action === 'createDeployment') {
             const resDep = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const d = await resDep.json();
@@ -82,25 +48,16 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- 4. LISTING & ID GENERATION (Universal) ---
-        if (action === 'list') {
-            const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
-            const resData = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schema, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, pageLimit: 15, query: req.body.query }) });
-            const data = await resData.json();
-            return res.status(200).json({ success: true, ...data });
+        if (action === 'updateSurgical' || action === 'updateDeployment') {
+            const schema = action === 'updateSurgical' ? EQUIPMENT_SCHEMA : DEPLOYMENT_SCHEMA;
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Content-Type": "application/json", "Schema-Id": schema }, body: JSON.stringify({ properties: payload }) });
+            return res.status(200).json({ success: true });
         }
 
-        if (action === 'getNextID') {
-            const resID = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schemaType }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
-            const d = await resID.json();
-            let max = 0;
-            (d.records || []).forEach(r => {
-                const p = r.properties || {};
-                const idVal = p["custom_objects.returns.return_id"] || p.return_id || p.equipment_id || p.deployment_id || "";
-                const num = parseInt(idVal.replace(/\D/g, ''));
-                if (!isNaN(num) && num > max) max = num;
-            });
-            return res.status(200).json({ nextID: `${prefix}${(max + 1).toString().padStart(7, '0')}` });
+        if (action === 'list') {
+            const resData = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": req.body.schemaId || EQUIPMENT_SCHEMA, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, pageLimit: 15, query: req.body.query }) });
+            const d = await resData.json();
+            return res.status(200).json({ success: true, ...d });
         }
 
         if (action === 'delete') {
@@ -108,7 +65,5 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
 }
