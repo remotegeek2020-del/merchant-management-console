@@ -13,43 +13,58 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, userEmail, gearID, merchantID, merchantName, schemaType, prefix } = req.body;
 
-    try {
-        // --- UNIVERSAL LISTING (Fixes all Dashboard loading issues) ---
-        if (action === 'list') {
-            const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
-            const resData = await fetch(PROXY_URL, {
-                method: "POST",
-                headers: { "Schema-Id": schema, "Content-Type": "application/json" },
-                body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, pageLimit: 15, query: req.body.query })
-            });
-            const data = await resData.json();
-            return res.status(200).json({ success: true, ...data });
-        }
+    const logAction = async (msg, status = 'SUCCESS') => {
+        await supabase.from('activity_logs').insert([{
+            email: userEmail || 'System', action: msg, status: status, ip_address: req.headers['x-forwarded-for'] || '127.0.0.1'
+        }]);
+    };
 
-        // --- CREATE RETURN (Strict Postman Keys) ---
+    try {
+        // --- 1. CREATE RETURN (Postman-Aligned Keys) ---
         if (action === 'createReturn') {
+            // Map labels to strict Schema Keys from Postman
+            const mappedPayload = {
+                "custom_objects.returns.return_id": payload.return_id,
+                "custom_objects.returns.return_reason": payload.return_reason,
+                "custom_objects.returns.condition": payload.condition, // uses "good" or "broken"
+                "custom_objects.returns.return_status": "open",
+                "custom_objects.returns.last_activity_by": userEmail || "System",
+                "custom_objects.returns.return_destination": payload.return_destination // uses "warsaw_office..."
+            };
+
             const resRet = await fetch(PROXY_URL, { 
                 method: "POST", 
                 headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, 
-                body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
+                body: JSON.stringify({ locationId: LOCATION_ID, properties: mappedPayload }) 
             });
-            const d = await resRet.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
-                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, firstRecordId: gearID, secondRecordId: nId }) });
+            const newRet = await resRet.json();
+            const newRetId = newRet.id || newRet.record?.id;
+
+            if (newRetId) {
+                // Link Equipment to Return
+                await fetch(PROXY_URL, { 
+                    method: "POST", 
+                    headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
+                    body: JSON.stringify({ 
+                        locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, 
+                        firstRecordId: gearID, secondRecordId: newRetId 
+                    }) 
+                });
+                await logAction(`Return Processed: ${payload.return_id}`);
                 return res.status(200).json({ success: true });
             }
+            throw new Error("GHL rejected return creation. Verify schema keys.");
         }
 
-        // --- DYNAMIC ID GENERATOR (Works for all Schemas) ---
+        // --- 2. GET NEXT ID ---
         if (action === 'getNextID') {
             const resID = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schemaType }, body: JSON.stringify({ locationId: LOCATION_ID, page: 1, pageLimit: 20 }) });
             const d = await resID.json();
             let max = 0;
             (d.records || []).forEach(r => {
                 const p = r.properties || {};
-                // Checks every possible ID field name to find the current maximum
-                const idVal = p["custom_objects.returns.return_id"] || p.return_id || p.equipment_id || p.deployment_id || "";
+                // Handle different schema property formats
+                const idVal = p.equipment_id || p.deployment_id || p["custom_objects.returns.return_id"] || p.return_id || "";
                 const num = parseInt(idVal.replace(/\D/g, ''));
                 if (!isNaN(num) && num > max) max = num;
             });
@@ -57,25 +72,34 @@ export default async function handler(req, res) {
             return res.status(200).json({ nextID: `${prefix}${(max + 1).toString().padStart(7, '0')}` });
         }
 
-        // --- OTHER ACTIONS (Deployment, Equipment, Delete) ---
-        if (action === 'createDeployment') {
-            const resDep = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
-            const d = await resDep.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
-                await Promise.all([
-                    fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: nId, secondRecordId: gearID }) }),
-                    fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: gearID, secondRecordId: merchantID }) }),
-                    fetch(`${PROXY_URL}${gearID}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: { merchant_account: merchantName } }) })
-                ]);
-                return res.status(200).json({ success: true });
-            }
+        // --- 3. STANDARD ACTIONS (List/Create/Update) ---
+        if (action === 'list') {
+            const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
+            const resData = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": schema, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, pageLimit: 15, query: req.body.query }) });
+            const data = await resData.json();
+            return res.status(200).json({ success: true, ...data });
         }
 
         if (action === 'createEquipment') {
             const resEq = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const d = await resEq.json();
-            if (d.id || d.record?.id) return res.status(200).json({ success: true });
+            const nId = d.id || d.record?.id;
+            if (nId) {
+                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: nId, secondRecordId: merchantID }) });
+                return res.status(200).json({ success: true });
+            }
+        }
+
+        if (action === 'createDeployment') {
+            const resDep = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
+            const d = await resDep.json();
+            const nId = d.id || d.record?.id;
+            if (nId) {
+                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: nId, secondRecordId: gearID }) });
+                await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: gearID, secondRecordId: merchantID }) });
+                await fetch(`${PROXY_URL}${gearID}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: { merchant_account: merchantName } }) });
+                return res.status(200).json({ success: true });
+            }
         }
 
         if (action === 'delete') {
