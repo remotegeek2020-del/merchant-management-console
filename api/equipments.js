@@ -1,52 +1,53 @@
-import { createClient } from '@supabase/supabase-js'
-
-export default async function handler(req, res) {
+// Add this to your existing api/equipments.js on GitHub
+if (action === 'updateSurgical') {
     const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
     const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
-    const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
+    const SCHEMA_KEY = "custom_objects.equipments";
+    const ASSOC_ID = "6728643af1853631d21b97af";
+    const accountIds = {
+        "Warsaw Office / Inventory": "6993793b3572dc52847e4fe0",
+        "Warsaw Repairs": "6999c33007a6e56e436c0e84"
+    };
 
-    const { action, query, view, page, limit, id } = req.body;
+    // 1. Fetch Relations
+    const relRes = await fetch(`${PROXY_URL}relations/${id}?locationId=${LOCATION_ID}&skip=0&limit=10`, {
+        headers: { "Schema-Id": SCHEMA_KEY }
+    });
+    const relData = await relRes.json();
 
-    try {
-        let fetchUrl = PROXY_URL;
-        let options = {
-            headers: { 
-                "Schema-Id": EQUIPMENT_SCHEMA, 
-                "Content-Type": "application/json",
-                "Version": "2021-07-28"
+    // 2. Delete existing Merchant Relations
+    if (relData.relations) {
+        for (const rel of relData.relations) {
+            const isMerchant = rel.firstObjectKey.includes("merchants") || rel.secondObjectKey.includes("merchants");
+            if (isMerchant) {
+                await fetch(`${PROXY_URL}relations/${rel.id}?locationId=${LOCATION_ID}`, { 
+                    method: "DELETE", headers: { "Schema-Id": SCHEMA_KEY } 
+                });
             }
-        };
-
-        if (req.method === 'POST') {
-            options.method = "POST";
-            
-            // Build the complex query parameters for GHL
-            const requestParams = { locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15 };
-
-            // Handle View Filters (Warsaw Office, Repairs, etc)
-            if (view === "Warsaw Office / Inventory" || view === "Warsaw Repairs") {
-                requestParams.query = view;
-                requestParams.sort = [{ field: "updatedAt", direction: "desc" }];
-            } else if (view && view !== 'all') {
-                requestParams.sort = [{ field: view, direction: "desc" }];
-            }
-
-            // Handle Search String
-            if (query && query.trim() !== "") {
-                requestParams.query = (requestParams.query ? requestParams.query + " " : "") + query.trim();
-            }
-
-            options.body = JSON.stringify(requestParams);
-        } else if (req.method === 'DELETE') {
-            options.method = "DELETE";
-            fetchUrl = `${PROXY_URL}${id}?locationId=${LOCATION_ID}`;
         }
-
-        const ghlRes = await fetch(fetchUrl, options);
-        const data = await ghlRes.json();
-        return res.status(200).json(data);
-
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
     }
+
+    // 3. Update Equipment Properties
+    await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Schema-Id": SCHEMA_KEY },
+        body: JSON.stringify({ properties: payload })
+    });
+
+    // 4. Create New Relation
+    const targetMerchantId = accountIds[payload.merchant_account];
+    if (targetMerchantId) {
+        await fetch(PROXY_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Link-Relation": "true" },
+            body: JSON.stringify({
+                locationId: LOCATION_ID,
+                associationId: ASSOC_ID,
+                firstRecordId: id,
+                secondRecordId: targetMerchantId
+            })
+        });
+    }
+
+    return res.status(200).json({ success: true });
 }
