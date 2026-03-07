@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Returns Management | Hardware Suite</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); --teal: #008a8a; }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
+        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
+        .home-pill { background: white; padding: 6px 12px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 5px; transition: all 0.2s ease; }
+        .slds-card { border-radius: 24px !important; background: var(--glass) !important; backdrop-filter: blur(12px); box-shadow: 0 15px 40px rgba(0,0,0,0.06) !important; overflow: hidden; }
+        .status-pill { padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
+        .status-open { background: #e0f5f5; color: var(--teal); border: 1px solid rgba(0, 138, 138, 0.2); }
+        .status-close { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+        .cond-pill { background: #fff; border: 1px solid #e2e8f0; padding: 2px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; }
+        .clickable-id { color: var(--pp-blue); font-weight: 700; cursor: pointer; text-decoration: none; }
+        .custom-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); align-items: center; justify-content: center; }
+        .custom-modal-content { background: white; width: 95%; max-width: 550px; border-radius: 24px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.2); animation: modalPop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+        .btn-modern { border-radius: 12px !important; font-weight: 600 !important; transition: all 0.2s; height: 40px !important; }
+    </style>
+</head>
+<body>
+
+    <div class="modern-header">
+        <div>
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 8px;">
+                <a href="index.html" class="home-pill"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
+                <div id="user-greeting" style="background: rgba(0, 73, 144, 0.08); padding: 6px 14px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue);">Loading...</div>
+            </div>
+            <h1 style="font-size: 1.6rem; font-weight: 800; color: var(--pp-blue);">Returns Center</h1>
+        </div>
+        
+        <div class="slds-grid slds-grid_vertical-align-center">
+            <div style="position: relative; margin-right: 12px;">
+                <span class="material-icons" style="position: absolute; left: 10px; top: 10px; font-size: 18px; color: #94a3b8; z-index: 5;">search</span>
+                <input type="text" id="searchInput" placeholder="Search Return ID..." class="slds-input" style="width:220px; border-radius: 12px; padding-left: 35px;" onkeypress="if(event.key==='Enter') resetAndFetch()" />
+            </div>
+            <button class="slds-button slds-button_brand btn-modern" onclick="window.location.href='equipments-form.html'">+ New Return</button>
+        </div>
+    </div>
+
+    <article class="slds-card">
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+            <thead>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">Return ID</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Condition</th>
+                    <th scope="col">Destination</th>
+                    <th scope="col">Equip ID</th>
+                    <th scope="col">Serial #</th>
+                    <th scope="col">Merchant</th>
+                </tr>
+            </thead>
+            <tbody id="dashboardBody"></tbody>
+        </table>
+        <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.4);">
+            <button class="slds-button slds-button_neutral btn-modern" id="prevBtn" onclick="changePage(-1)">Previous</button>
+            <span style="font-size: 13px; font-weight: 700; color: #64748b;" id="pageInfo">Page 1</span>
+            <button class="slds-button slds-button_neutral btn-modern" id="nextBtn" onclick="changePage(1)">Next</button>
+        </div>
+    </article>
+
+    <div id="recordModal" class="custom-modal" onclick="if(event.target == this) closeModal()">
+        <div class="custom-modal-content">
+            <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="font-weight: 800; font-size: 1.2rem;">Return Details</h2>
+                <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
+            </div>
+            <div style="padding: 30px;" id="modalBody"></div>
+            <div style="padding: 20px 30px; background: #f8fafc; display: flex; justify-content: space-between;">
+                <div>
+                    <button class="slds-button slds-button_brand btn-modern" id="updateBtn">Update Record</button>
+                    <button class="slds-button slds-button_destructive btn-modern" id="deleteBtn">Delete</button>
+                </div>
+                <button class="slds-button slds-button_neutral btn-modern" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        const API_URL = "/api/equipments";
+        const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
+        const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
+        const RETURNS_SCHEMA = "69a314e9fe810d7f8614e1ce";
+        const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
+        const EQUIPMENT_KEY = "custom_objects.equipments";
+
+        let currentPage = 1;
+        let currentRecords = [];
+        let hydratedData = {};
+
+        async function fetchDashboardData() {
+            const tbody = document.getElementById('dashboardBody');
+            tbody.innerHTML = "<tr><td colspan='7' style='text-align:center; padding: 40px;'>Syncing Returns Ledger...</td></tr>";
+            
+            try {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        action: 'list', 
+                        schemaId: RETURNS_SCHEMA,
+                        page: currentPage, 
+                        query: document.getElementById('searchInput').value 
+                    })
+                });
+                const data = await res.json();
+                currentRecords = data.records || [];
+                tbody.innerHTML = "";
+                
+                currentRecords.forEach(record => {
+                    const p = record.properties || {};
+                    const status = p.return_status || 'open';
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td><a class="clickable-id" onclick="openRecordModal('${record.id}')">${p.return_id || '---'}</a></td>
+                        <td><span class="status-pill ${status === 'close' ? 'status-close' : 'status-open'}">${status}</span></td>
+                        <td><span class="cond-pill">${p.condition || '---'}</span></td>
+                        <td style="font-size: 11px; color: #64748b;">${p.return_destination || '---'}</td>
+                        <td id="eqid-${record.id}" style="color: #94a3b8">...</td>
+                        <td id="sn-${record.id}" style="color: #94a3b8">...</td>
+                        <td id="merch-${record.id}" style="font-weight: 600;">...</td>
+                    `;
+                    hydrateRow(record.id); // Maintains your working Client-Side Hydration
+                });
+
+                document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
+                document.getElementById('prevBtn').disabled = (currentPage === 1);
+                document.getElementById('nextBtn').disabled = (currentRecords.length < 15);
+            } catch (e) { tbody.innerHTML = "<tr><td colspan='7'>System Error</td></tr>"; }
+        }
+
+        async function hydrateRow(internalId) {
+            try {
+                const relRes = await fetch(`${PROXY_URL}relations/${internalId}?locationId=${LOCATION_ID}`);
+                const relData = await relRes.json();
+                const rel = (relData.relations || []).find(r => r.secondObjectKey === EQUIPMENT_KEY || r.firstObjectKey === EQUIPMENT_KEY);
+                
+                if (rel) {
+                    const eqId = (rel.firstRecordId === internalId) ? rel.secondRecordId : rel.firstRecordId;
+                    const eqRes = await fetch(`${PROXY_URL}${EQUIPMENT_KEY}/records/${eqId}?locationId=${LOCATION_ID}`, {
+                        headers: { "Schema-Id": EQUIPMENT_SCHEMA }
+                    });
+                    const eqData = await eqRes.json();
+                    const ep = (eqData.record || eqData).properties || {};
+                    
+                    document.getElementById(`eqid-${internalId}`).innerText = ep.equipment_id || '---';
+                    document.getElementById(`sn-${internalId}`).innerText = ep.serial_number || '---';
+                    document.getElementById(`merch-${internalId}`).innerText = ep.merchant_account || '---';
+                    hydratedData[internalId] = { eqid: ep.equipment_id, sn: ep.serial_number, merch: ep.merchant_account };
+                } else {
+                    document.getElementById(`eqid-${internalId}`).innerText = "Unlinked";
+                }
+            } catch (e) { }
+        }
+
+        function openRecordModal(id) {
+            const record = currentRecords.find(r => r.id === id);
+            if(!record) return;
+            const p = record.properties;
+            const h = hydratedData[id] || { eqid: '---', sn: '---', merch: '---' };
+            
+            document.getElementById('modalBody').innerHTML = `
+                <div class="detail-row"><span class="detail-label">Return ID</span> <span>${p.return_id || '---'}</span></div>
+                <div class="detail-row"><span class="detail-label">Condition</span> <span class="cond-pill">${p.condition || '---'}</span></div>
+                <div class="detail-row"><span class="detail-label">Reason</span> <span>${p.return_reason || '---'}</span></div>
+                <div style="margin:15px 0; border-top: 1px dashed #cbd5e1;"></div>
+                <div class="detail-row"><span class="detail-label">Hardware ID</span> <span>${h.eqid}</span></div>
+                <div class="detail-row"><span class="detail-label">Serial Number</span> <span>${h.sn}</span></div>
+                <div class="detail-row"><span class="detail-label">Merchant</span> <span>${h.merch}</span></div>
+            `;
+
+            document.getElementById('updateBtn').onclick = () => {
+                const params = new URLSearchParams({ id, r_id: p.return_id, status: p.return_status, cond: p.condition, dest: p.return_destination, reason: p.return_reason, eq_id: h.eqid, sn: h.sn, merch: h.merch });
+                window.location.href = `returns-update.html?${params.toString()}`;
+            };
+            document.getElementById('deleteBtn').onclick = () => deleteRecord(id);
+            document.getElementById('recordModal').style.display = 'flex';
+        }
+
+        async function deleteRecord(id) {
+            const result = await Swal.fire({ title: 'Delete Return?', icon: 'warning', showCancelButton: true });
+            if (result.isConfirmed) {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: 'delete', id: id, userEmail: sessionStorage.getItem('pp_userid') })
+                });
+                if (res.ok) { Swal.fire('Deleted!', '', 'success'); closeModal(); resetAndFetch(); }
+            }
+        }
+
+        function changePage(dir) { currentPage += dir; fetchDashboardData(); }
+        function resetAndFetch() { currentPage = 1; fetchDashboardData(); }
+        function closeModal() { document.getElementById('recordModal').style.display = 'none'; }
+
+        window.onload = () => {
+            const user = sessionStorage.getItem('pp_userid');
+            document.getElementById('user-greeting').innerText = `Staff: ${user}`;
+            fetchDashboardData();
+        };
+    </script>
+</body>
+</html>
