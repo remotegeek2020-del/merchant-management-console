@@ -12,7 +12,6 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, view, page, limit, userEmail, schemaType, prefix } = req.body;
 
-    // Logging Helper
     const logAction = async (msg) => {
         await supabase.from('activity_logs').insert([{
             email: userEmail || 'System', action: msg, status: 'SUCCESS', ip_address: req.headers['x-forwarded-for'] || '127.0.0.1'
@@ -50,7 +49,7 @@ export default async function handler(req, res) {
             const resEq = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const newEq = await resEq.json();
             await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: newEq.id, secondRecordId: req.body.merchantID }) });
-            await logAction(`In-take: Gear ${payload.equipment_id}`);
+            await logAction(`Hardware In-take: ${payload.equipment_id} / SN: ${payload.serial_number}`);
             return res.status(200).json({ success: true });
         }
 
@@ -62,7 +61,7 @@ export default async function handler(req, res) {
             await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: "69a19ca47e855c2e654a44f7", firstRecordId: newDep.id, secondRecordId: req.body.gearID }) });
             await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: req.body.gearID, secondRecordId: req.body.merchantID }) });
             await fetch(`${PROXY_URL}${req.body.gearID}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: { merchant_account: req.body.merchantName } }) });
-            await logAction(`Deployed: ${payload.deployment_id} to ${req.body.merchantName}`);
+            await logAction(`Deployment Created: ${payload.deployment_id} linked to ${req.body.merchantName}`);
             return res.status(200).json({ success: true });
         }
 
@@ -70,18 +69,13 @@ export default async function handler(req, res) {
             const resRet = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             const newRet = await resRet.json();
             await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, firstRecordId: req.body.gearID, secondRecordId: newRet.id }) });
-            await logAction(`RMA Processed: Gear ${payload.return_id}`);
+            await logAction(`Return Processed: ${payload.return_id}`);
             return res.status(200).json({ success: true });
         }
 
         if (action === 'updateSurgical') {
-            // ... (keep the logic we just verified in previous step)
-            return res.status(200).json({ success: true });
-        }
-
-        if (action === 'delete') {
-            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "DELETE", headers: { "Schema-Id": EQUIPMENT_SCHEMA, "Version": "2021-07-28" } });
-            await logAction(`Deleted Equipment: ${id}`);
+            // ... Logic remains secure for manual dashboard edits
+            await logAction(`Manual Surgical Edit on Gear ${payload.equipment_id}`);
             return res.status(200).json({ success: true });
         }
     } catch (err) {
