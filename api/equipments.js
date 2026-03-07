@@ -1,17 +1,25 @@
-import { createClient } from '@supabase/supabase-js'
-
+// Remove the unused Supabase import to prevent potential build errors
 export default async function handler(req, res) {
     const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
     const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
     const SCHEMA_KEY = "custom_objects.equipments";
     const ASSOC_ID = "6728643af1853631d21b97af";
     
+    // Ensure we are getting a POST request
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, message: "Method Not Allowed" });
+    }
+
     const { action, id, payload, query, view, page, limit } = req.body;
 
     try {
-        // --- ACTION: LIST (Used by equipments-dashboard.html) ---
+        // --- ACTION: LIST ---
         if (action === 'list') {
-            const requestParams = { locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15 };
+            const requestParams = { 
+                locationId: LOCATION_ID, 
+                page: page || 1, 
+                pageLimit: limit || 15 
+            };
 
             if (view === "Warsaw Office / Inventory" || view === "Warsaw Repairs") {
                 requestParams.query = view;
@@ -33,11 +41,18 @@ export default async function handler(req, res) {
                 },
                 body: JSON.stringify(requestParams)
             });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                return res.status(response.status).json({ success: false, message: errorText });
+            }
+
             const data = await response.json();
-            return res.status(200).json(data);
+            // Ensure we always return an object even if records are empty
+            return res.status(200).json(data || { records: [] });
         }
 
-        // --- ACTION: UPDATE SURGICAL (Used by equipments-update.html) ---
+        // --- ACTION: UPDATE SURGICAL ---
         if (action === 'updateSurgical') {
             const accountIds = {
                 "Warsaw Office / Inventory": "6993793b3572dc52847e4fe0",
@@ -51,9 +66,9 @@ export default async function handler(req, res) {
             const relData = await relRes.json();
 
             // 2. Delete Merchant Relations
-            if (relData.relations) {
+            if (relData.relations && relData.relations.length > 0) {
                 for (const rel of relData.relations) {
-                    const isMerchant = rel.firstObjectKey.includes("merchants") || rel.secondObjectKey.includes("merchants");
+                    const isMerchant = rel.firstObjectKey?.includes("merchants") || rel.secondObjectKey?.includes("merchants");
                     if (isMerchant) {
                         await fetch(`${PROXY_URL}relations/${rel.id}?locationId=${LOCATION_ID}`, { 
                             method: "DELETE", headers: { "Schema-Id": SCHEMA_KEY } 
@@ -88,7 +103,7 @@ export default async function handler(req, res) {
 
         // --- ACTION: DELETE ---
         if (action === 'delete') {
-            const response = await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
                 method: "DELETE",
                 headers: { "Schema-Id": SCHEMA_KEY, "Version": "2021-07-28" }
             });
@@ -96,6 +111,7 @@ export default async function handler(req, res) {
         }
 
     } catch (err) {
+        console.error("Server Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
