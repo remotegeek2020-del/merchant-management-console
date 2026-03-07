@@ -11,7 +11,7 @@
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); --teal: #008a8a; }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
         .modern-header { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
-        .home-pill { background: white; padding: 6px 12px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 5px; transition: all 0.2s; }
+        .home-pill { background: white; padding: 6px 12px; border-radius: 50px; font-size: 0.65rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 5px; transition: all 0.2s ease; }
         .home-pill:hover { background: var(--pp-blue); color: white; transform: translateX(-3px); }
         .slds-card { border-radius: 24px !important; background: var(--glass) !important; backdrop-filter: blur(12px); box-shadow: 0 15px 40px rgba(0,0,0,0.06) !important; overflow: hidden; }
         .status-pill { padding: 4px 12px; border-radius: 50px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
@@ -120,7 +120,7 @@
                 
                 currentRecords.forEach(record => {
                     const p = record.properties || {};
-                    const h = record.hardware || {}; 
+                    const h = record.hardware || {}; // Hydrated hardware data from server
                     const status = p.deployment_status || 'Open';
                     const row = tbody.insertRow();
                     row.innerHTML = `
@@ -128,7 +128,7 @@
                         <td style="font-weight:600">${p.tid || '---'}</td>
                         <td><code style="background:#f1f5f9; padding:2px 5px; border-radius:4px;">${p.tracking_id || '---'}</code></td>
                         <td><span class="status-pill ${status.toLowerCase().includes('close') ? 'status-close' : 'status-open'}">${status}</span></td>
-                        <td style="color:#64748b">${h.equipment_id || 'Unlinked'}</td>
+                        <td style="color:#64748b">${h.equipment_id || 'None'}</td>
                         <td style="color:#64748b">${h.serial_number || '---'}</td>
                         <td style="font-weight:600">${h.merchant_account || '---'}</td>
                     `;
@@ -150,8 +150,9 @@
                 <div class="detail-row"><span class="detail-label">TID</span> <span>${p.tid || '---'}</span></div>
                 <div class="detail-row"><span class="detail-label">Tracking #</span> <span>${p.tracking_id || '---'}</span></div>
                 <div style="margin:20px 0; border-top: 1px dashed #cbd5e1;"></div>
-                <div class="detail-row"><span class="detail-label">Linked Hardware</span> <span>${h.equipment_id || 'None'}</span></div>
+                <div class="detail-row"><span class="detail-label">Hardware ID</span> <span>${h.equipment_id || 'None'}</span></div>
                 <div class="detail-row"><span class="detail-label">Serial Number</span> <span>${h.serial_number || 'None'}</span></div>
+                <div class="detail-row"><span class="detail-label">Current Location</span> <span>${h.merchant_account || '---'}</span></div>
             `;
             document.getElementById('updateBtn').onclick = () => window.location.href = `deployment-update.html?id=${id}`;
             document.getElementById('deleteBtn').onclick = () => deleteRecord(id);
@@ -161,7 +162,7 @@
         async function deleteRecord(id) {
             const result = await Swal.fire({
                 title: 'Are you sure?',
-                text: "This deployment record will be permanently removed.",
+                text: "Removing this record will create an entry in the Activity Logs.",
                 icon: 'warning',
                 showCancelButton: true,
                 confirmButtonColor: '#d33',
@@ -180,7 +181,7 @@
                         })
                     });
                     if (res.ok) {
-                        Swal.fire('Deleted!', 'Record has been removed.', 'success');
+                        Swal.fire('Deleted!', 'Deployment tracking removed.', 'success');
                         closeModal();
                         resetAndFetch();
                     }
