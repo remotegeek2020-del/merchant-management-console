@@ -14,7 +14,11 @@
         .header-controls { display: flex; align-items: center; gap: 12px; }
         .btn-back { display: flex; align-items: center; gap: 6px; background: white; padding: 6px 14px; border-radius: 50px; font-size: 0.7rem; font-weight: 700; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; }
         .slds-card { border: 1px solid var(--glass-border) !important; border-radius: 20px !important; background: var(--glass) !important; box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important; overflow: hidden; }
+        .type-tag { display: inline-block; padding: 2px 10px; background: white; border: 1px solid #e0e5ee; border-radius: 6px; font-size: 11px; font-weight: 600; }
+        .equipment-link { color: var(--pp-blue); font-weight: 700; text-decoration: none; }
+        .equipment-link:hover { color: var(--pp-accent); }
         #debugLog { background: #1a202c; color: #a0aec0; padding: 15px; font-family: monospace; font-size: 11px; height: 100px; overflow-y: auto; margin-top: 30px; border-radius: 15px; }
+        .slds-modal__header { background: var(--pp-blue) !important; color: white !important; border-radius: 20px 20px 0 0 !important; }
     </style>
 </head>
 <body>
@@ -35,9 +39,11 @@
             </div>
             
             <select id="viewFilter" class="slds-select slds-m-right_small" style="width: 180px; border-radius: 12px;" onchange="resetAndFetch()">
-               <option value="all">View All</option>
-    <option value="createdAt">Recently Created</option> <option value="updatedAt">Recently Updated</option> <option value="Warsaw Office / Inventory">Warsaw Inventory</option>
-    <option value="Warsaw Repairs">Warsaw Repairs</option>
+                <option value="all">View All</option>
+                <option value="createdAt">Recently Created</option> 
+                <option value="updatedAt">Recently Updated</option> 
+                <option value="Warsaw Office / Inventory">Warsaw Inventory</option>
+                <option value="Warsaw Repairs">Warsaw Repairs</option>
             </select>
 
             <button class="slds-button slds-button_brand" style="border-radius: 12px;" onclick="window.location.href='equipments-form.html'">+ New Activity</button>
@@ -76,29 +82,48 @@
         </footer>
     </article>
 
-    <div id="debugLog"><div>[System] Dashboard Secure Mode Active.</div></div>
+    <section id="detailModal" role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-hide" aria-modal="true">
+        <div class="slds-modal__container">
+            <header class="slds-modal__header">
+                <h2 class="slds-modal__title slds-hyphenate" id="modalHeader" style="font-weight: 800;">Equipment Details</h2>
+                <button class="slds-button slds-button_icon slds-modal__close" onclick="closeModal()" style="color: white;">✕</button>
+            </header>
+            <div class="slds-modal__content slds-p-around_large" id="modalBody" style="background: #f8fafc;"></div>
+            <footer class="slds-modal__footer slds-grid slds-grid_align-spread">
+                <button class="slds-button slds-button_destructive" style="border-radius:12px;" onclick="handleDelete()">Delete Record</button>
+                <div>
+                    <button class="slds-button slds-button_neutral" style="border-radius:12px;" onclick="closeModal()">Close</button>
+                    <button class="slds-button slds-button_brand" style="border-radius:12px;" onclick="handleUpdate()">Edit / Update</button>
+                </div>
+            </footer>
+        </div>
+    </section>
+    <div id="modalBackdrop" class="slds-backdrop slds-backdrop_open slds-hide" style="background: rgba(0, 45, 90, 0.4); backdrop-filter: blur(4px);"></div>
 
-    <div id="modalBackdrop" class="slds-backdrop slds-backdrop_open slds-hide"></div>
+    <div id="debugLog"><div>[System] Secure Dashboard Restored.</div></div>
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const API_URL = "/api/equipments";
         let currentPage = 1;
         const recordsPerPage = 15;
+        let selectedRecord = null; // Stores the clicked record for the update page
 
         function logDebug(title, data) {
-            const console = document.getElementById('debugLog');
+            const consoleBox = document.getElementById('debugLog');
             const entry = document.createElement('div');
             entry.innerText = `[${new Date().toLocaleTimeString()}] ${title}: ${JSON.stringify(data).substring(0, 80)}...`;
-            console.prepend(entry);
+            consoleBox.prepend(entry);
         }
 
         async function fetchDashboardData() {
             const viewValue = document.getElementById('viewFilter').value;
             const searchQuery = document.getElementById('searchInput').value;
             const tbody = document.getElementById('dashboardBody');
+            const dateHeader = document.getElementById('dateColHeader');
             
             tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>LOADING...</td></tr>";
+            dateHeader.innerText = (viewValue === 'all' || viewValue === 'createdAt') ? "Created Date" : "Updated Date";
 
             try {
                 const res = await fetch(API_URL, {
@@ -107,8 +132,6 @@
                     body: JSON.stringify({ action: 'list', page: currentPage, limit: recordsPerPage, view: viewValue, query: searchQuery })
                 });
 
-                if (res.status === 404) throw new Error("API Route Not Found (404). Check Vercel Functions tab.");
-                
                 const data = await res.json();
                 tbody.innerHTML = "";
                 
@@ -120,24 +143,78 @@
                 data.records.forEach(record => {
                     const p = record.properties || {};
                     const row = tbody.insertRow();
+                    const dateRaw = (viewValue === 'all' || viewValue === 'createdAt') ? record.createdAt : (record.updatedAt || record.createdAt);
+                    
                     row.innerHTML = `
-                        <td><a href="#" onclick='alert("ID: " + "${record.id}")'>${p.equipment_id || record.name || '---'}</a></td>
-                        <td>${p.terminal_type || '---'}</td>
+                        <td><a href="javascript:void(0);" class="equipment-link" onclick='openDetails(${JSON.stringify(record)})'>${p.equipment_id || record.name || '---'}</a></td>
+                        <td><span class="type-tag">${p.terminal_type || '---'}</span></td>
                         <td>${p.serial_number || '---'}</td>
                         <td>${p.merchant_account || '---'}</td>
                         <td>${p.deployment_date || '---'}</td>
-                        <td>${new Date(record.createdAt).toLocaleDateString()}</td>
+                        <td>${new Date(dateRaw).toLocaleDateString()}</td>
                     `;
                 });
 
                 document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
                 document.getElementById('prevBtn').disabled = (currentPage === 1);
                 document.getElementById('nextBtn').disabled = (data.records.length < recordsPerPage);
-                logDebug("Fetch", "Success");
             } catch (err) {
                 logDebug("Error", err.message);
                 tbody.innerHTML = `<tr><td colspan='6' style='color:red; text-align:center; padding:20px;'>${err.message}</td></tr>`;
             }
+        }
+
+        // Restores Modal Popup
+        function openDetails(record) {
+            selectedRecord = record;
+            const p = record.properties || {};
+            const body = document.getElementById('modalBody');
+            document.getElementById('modalHeader').innerText = `Equipment: ${p.equipment_id || 'Details'}`;
+            
+            let html = '<div class="slds-grid slds-wrap">';
+            for (const [key, value] of Object.entries(p)) {
+                const label = key.replace('custom_objects.equipments.', '').replace(/_/g, ' ');
+                html += `<div class="slds-col slds-size_1-of-2 slds-p-bottom_medium">
+                    <span class="slds-text-title_caps" style="font-size:10px; font-weight:700; color:#64748b;">${label}</span>
+                    <p style="font-weight:600; color:#1e293b;">${value || '---'}</p>
+                </div>`;
+            }
+            html += '</div>';
+            body.innerHTML = html;
+            document.getElementById('detailModal').classList.remove('slds-hide');
+            document.getElementById('modalBackdrop').classList.remove('slds-hide');
+        }
+
+        function closeModal() {
+            document.getElementById('detailModal').classList.add('slds-hide');
+            document.getElementById('modalBackdrop').classList.add('slds-hide');
+        }
+
+        // Handles redirection to Update page with parameters
+        function handleUpdate() {
+            if (!selectedRecord) return;
+            const p = selectedRecord.properties;
+            const params = new URLSearchParams({ 
+                id: selectedRecord.id, 
+                eq_id: p.equipment_id || '',
+                type: p.terminal_type || '',
+                sn: p.serial_number || '',
+                acc: p.merchant_account || '',
+                date: p.deployment_date || ''
+            });
+            window.location.href = `equipments-update.html?${params.toString()}`;
+        }
+
+        async function handleDelete() {
+            if (!confirm("Delete this record permanently?")) return;
+            try {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: 'delete', id: selectedRecord.id })
+                });
+                if (res.ok) { closeModal(); fetchDashboardData(); }
+            } catch (err) { alert(err.message); }
         }
 
         async function exportToCSV() {
@@ -148,18 +225,18 @@
                 const res = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: 'list', page: 1, limit: 100, view: viewValue, query: searchQuery })
+                    body: JSON.stringify({ action: 'list', page: 1, limit: 150, view: viewValue, query: searchQuery })
                 });
                 const data = await res.json();
-                let csv = "ID,Serial,Type,Account\n";
+                let csv = "Equipment ID,Type,Serial,Merchant Account,Received Date\n";
                 data.records.forEach(r => {
                     const p = r.properties;
-                    csv += `"${p.equipment_id}","${p.serial_number}","${p.terminal_type}","${p.merchant_account}"\n`;
+                    csv += `"${p.equipment_id}","${p.terminal_type}","${p.serial_number}","${p.merchant_account}","${p.deployment_date}"\n`;
                 });
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(blob);
-                link.download = "export.csv";
+                link.download = `Hardware_Audit_${new Date().toISOString().split('T')[0]}.csv`;
                 link.click();
                 Swal.close();
             } catch (e) { Swal.fire("Error", e.message, "error"); }
@@ -176,4 +253,3 @@
     </script>
 </body>
 </html>
-
