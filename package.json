@@ -1,7 +1,7 @@
 {
   "name": "merchant-management-console",
   "version": "1.1.0",
-  "type": "module",
+  "type": "module", 
   "dependencies": {
     "@supabase/supabase-js": "^2.49.1"
   }
