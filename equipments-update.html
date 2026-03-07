@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Update Equipment | Surgical Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    
+    <style>
+        :root { 
+            --pp-blue: #004990; 
+            --pp-accent: #00a1e0; 
+            --glass: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --success: #22c55e;
+            --danger: #ef4444;
+        }
+
+        body { 
+            background: radial-gradient(circle at top right, #f8fafc, #e2e8f0);
+            padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51;
+        }
+
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+        #status-bar { 
+            max-width: 1000px; margin: 0 auto 15px auto; padding: 10px 20px;
+            border-radius: 50px; font-weight: 800; font-size: 0.75rem; text-align: center;
+            letter-spacing: 1px; color: white; background: var(--danger); 
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.2); transition: all 0.3s ease;
+        }
+
+        .slds-form-container { 
+            max-width: 1000px; margin: auto; 
+            background: var(--glass); backdrop-filter: blur(12px);
+            border: 1px solid var(--glass-border); border-radius: 24px; 
+            box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); 
+            overflow: hidden; animation: fadeInUp 0.6s ease-out;
+        }
+
+        .header-box { 
+            background: rgba(0, 73, 144, 0.03); padding: 25px 35px; 
+            border-bottom: 1px solid rgba(0,0,0,0.05); 
+            display: flex; justify-content: space-between; align-items: center;
+        }
+
+        .home-pill {
+            background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; 
+            font-weight: 800; color: var(--pp-blue); text-decoration: none !important;
+            border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; transition: all 0.2s;
+        }
+        .home-pill:hover { background: var(--pp-blue); color: white; transform: translateX(-3px); }
+
+        .form-body { padding: 40px; }
+
+        .slds-input, .slds-select { 
+            border-radius: 12px !important; border: 1px solid #d1d9e6 !important; 
+            height: 42px !important; transition: all 0.2s; 
+        }
+
+        .readonly-display { 
+            background: #f0f7ff !important; border: 2px dashed var(--pp-accent) !important; 
+            color: var(--pp-blue) !important; font-weight: 800 !important; text-align: center;
+        }
+
+        .footer-action { 
+            background: rgba(255,255,255,0.4); padding: 25px 40px; 
+            border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: flex-end; 
+        }
+
+        .btn-modern { 
+            border-radius: 12px !important; font-weight: 700 !important; 
+            padding: 0 35px !important; height: 50px !important; transition: all 0.2s; 
+        }
+        .btn-modern:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0, 73, 144, 0.2); }
+
+        #debug-monitor { 
+            max-width: 1000px; margin: 30px auto; 
+            background: #1a202c; color: #a0aec0; padding: 25px; 
+            border-radius: 20px; font-family: 'Courier New', monospace; 
+            font-size: 11px; height: 220px; overflow-y: auto; border: 1px solid #2d3748; 
+        }
+        .debug-entry { border-bottom: 1px solid #2d3748; padding: 6px 0; }
+        .debug-timestamp { color: #4a5568; font-weight: bold; margin-right: 10px; }
+        .debug-success { color: #48bb78; font-weight: 800; }
+        .debug-error { color: #f56565; font-weight: 800; }
+    </style>
+
+    <script>
+        (function() {
+            const userId = sessionStorage.getItem('pp_userid');
+            const isVerified = sessionStorage.getItem('pp_verified') === 'true';
+            if (!userId || !isVerified) {
+                document.documentElement.style.display = 'none';
+                window.location.replace("index.html");
+            }
+        })();
+    </script>
+</head>
+<body>
+
+    <div id="status-bar">STATUS: SCRIPT NOT LOADED</div>
+
+    <div class="slds-form-container">
+        <div class="header-box">
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <a href="index.html" class="home-pill">
+                    <span class="material-icons" style="font-size: 14px;">arrow_back</span> Home
+                </a>
+                <h1 style="font-size: 1.2rem; font-weight: 800; color: var(--pp-blue);">Update Record Console</h1>
+            </div>
+            <div style="background: #e2e8f0; padding: 6px 14px; border-radius: 8px; font-size: 10px; font-weight: 800; color: #475569;">
+                MODE: SECURE SURGICAL UPDATE
+            </div>
+        </div>
+
+        <div class="form-body">
+            <div class="slds-grid slds-wrap slds-gutters">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                    <div class="slds-form-element slds-m-bottom_large">
+                        <label class="slds-form-element__label" style="font-weight: 700;">Equipment ID</label>
+                        <input type="text" id="equipment_id" class="slds-input readonly-display" readonly value="Waiting..." />
+                    </div>
+
+                    <div class="slds-form-element slds-m-bottom_large">
+                        <label class="slds-form-element__label" style="font-weight: 700;">Terminal Type</label>
+                        <select id="terminal_type" class="slds-select">
+                            <option value="">-- None --</option>
+                            <option value="z11_terminal">Z11 Terminal</option>
+                            <option value="z9__4g">Z9 - 4G</option>
+                            <option value="z9">Z9</option>
+                            <option value="z8_epx_dualcomm_only_no_wifi">Z8 EPX Dual-Comm Only No Wifi</option>
+                            <option value="z8_terminal">Z8 Terminal</option>
+                            <option value="z6__pin_pad">Z6 - Pin Pad</option>
+                            <option value="z3__pin_pad">Z3 - Pin Pad</option>
+                            <option value="ict_220">ICT 220</option>
+                            <option value="fd_130">FD 130</option>
+                            <option value="fd_100">FD 100</option>
+                            <option value="pax_s300_pin_pad">Pax S300 Pin Pad</option>
+                            <option value="clover_go">Clover Go</option>
+                            <option value="clover_mini">Clover Mini</option>
+                            <option value="clover_mini_station">Clover Mini Station</option>
+                            <option value="z9_base_station">Z9 Base Station</option>
+                            <option value="z8_tri_con">Z8 Tri-Con</option>
+                            <option value="pax_a920">Pax A920</option>
+                            <option value="pax_e600">Pax E600</option>
+                            <option value="2_in_1_reader">2-in-1 Reader</option>
+                            <option value="ingenico_desk_3500">Ingenico Desk 3500</option>
+                            <option value="pax_a920_pro">Pax A920 PRO</option>
+                            <option value="valor_vl100">Valor VL100</option>
+                            <option value="valor_vl110">Valor VL110</option>
+                            <option value="valor_vl500">Valor VL500</option>
+                            <option value="qd2">QD2</option>
+                            <option value="qd3">QD3</option>
+                            <option value="qd4">QD4</option>
+                            <option value="valor_vl300">Valor VL300</option>
+                        </select>
+                    </div>
+
+                    <div class="slds-form-element">
+                        <label class="slds-form-element__label" style="font-weight: 700;">Equipment Received Date</label>
+                        <input type="date" id="receive_date" class="slds-input" />
+                    </div>
+                </div>
+
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_1-of-2">
+                    <div class="slds-form-element slds-m-bottom_large">
+                        <label class="slds-form-element__label" style="font-weight: 700;">Account (Location Update)</label>
+                        <select id="merchant_account" class="slds-select">
+                            <option value="">-- Select Location --</option>
+                            <option value="Warsaw Office / Inventory">Warsaw Office / Inventory</option>
+                            <option value="Warsaw Repairs">Warsaw Repairs</option>
+                        </select>
+                    </div>
+
+                    <div class="slds-form-element">
+                        <label class="slds-form-element__label" style="font-weight: 700;">Serial #</label>
+                        <input type="text" id="serial_number" class="slds-input" />
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-action">
+            <button class="slds-button slds-button_brand btn-modern" id="saveBtn" onclick="updateRecord()" disabled>Save Record</button>
+        </div>
+    </div>
+
+    <div id="debug-monitor">
+        <div class="debug-entry">DEBUG MONITOR: Initialized. Ready for secure update.</div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        function addLog(message, type = 'normal') {
+            const monitor = document.getElementById('debug-monitor');
+            const entry = document.createElement('div');
+            entry.className = 'debug-entry';
+            const timestamp = new Date().toLocaleTimeString();
+            let colorClass = '';
+            if (type === 'success') colorClass = 'debug-success';
+            if (type === 'error') colorClass = 'debug-error';
+            entry.innerHTML = `<span class="debug-timestamp">[${timestamp}]</span> <span class="${colorClass}">${message}</span>`;
+            monitor.prepend(entry);
+        }
+
+        window.onload = function() {
+            const status = document.getElementById('status-bar');
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const recordId = params.get('id');
+                if (!recordId) {
+                    addLog("Record ID missing from URL", "error");
+                    return;
+                }
+
+                document.getElementById('equipment_id').value = params.get('eq_id') || '---';
+                document.getElementById('terminal_type').value = params.get('type') || '';
+                document.getElementById('serial_number').value = params.get('sn') || '';
+                document.getElementById('merchant_account').value = params.get('acc') || '';
+                
+                const rawDate = params.get('date');
+                if (rawDate && rawDate !== '---') {
+                    const d = new Date(rawDate);
+                    if (!isNaN(d.getTime())) {
+                        document.getElementById('receive_date').value = d.toISOString().split('T')[0];
+                    }
+                }
+                document.getElementById('saveBtn').disabled = false;
+                status.innerText = "STATUS: READY";
+                status.style.background = "green";
+                addLog(`Initialized for Record: ${recordId}`, "success");
+            } catch (err) { addLog("Init Error: " + err.message, "error"); }
+        };
+
+        async function updateRecord() {
+            const btn = document.getElementById('saveBtn');
+            const status = document.getElementById('status-bar');
+            const params = new URLSearchParams(window.location.search);
+            const recordId = params.get('id');
+
+            btn.disabled = true;
+            status.innerText = "STATUS: PROCESSING SURGICAL UPDATE...";
+            status.style.background = "#f59e0b"; // Warning Orange
+            
+            addLog(">>> INITIATING SECURE UPDATE via VERCEL API <<<");
+
+            try {
+                const payload = {
+                    terminal_type: document.getElementById('terminal_type').value,
+                    serial_number: document.getElementById('serial_number').value,
+                    merchant_account: document.getElementById('merchant_account').value,
+                    deployment_date: document.getElementById('receive_date').value
+                };
+
+                // Calling the secure Vercel endpoint
+                const response = await fetch('/api/equipments', {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        action: 'updateSurgical',
+                        id: recordId,
+                        payload: payload
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    addLog(">>> ALL SYSTEMS COMPLETE <<<", "success");
+                    status.innerText = "STATUS: UPDATE SUCCESSFUL";
+                    status.style.background = "#10b981"; // Success Green
+                    
+                    Swal.fire({
+                        title: 'Success!',
+                        text: 'Equipment record and Merchant Relationship updated.',
+                        icon: 'success',
+                        confirmButtonColor: '#004990'
+                    }).then(() => {
+                        window.location.href = "equipments-dashboard.html";
+                    });
+                } else {
+                    throw new Error(result.message || 'Server failed to update record');
+                }
+
+            } catch (e) {
+                addLog("FATAL ERROR: " + e.message, "error");
+                status.innerText = "STATUS: UPDATE FAILED";
+                status.style.background = "var(--danger)";
+                Swal.fire('Error', e.message, 'error');
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
