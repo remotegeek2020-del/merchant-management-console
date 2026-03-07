@@ -5,6 +5,7 @@ export default async function handler(req, res) {
     const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
     const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
     const DEPLOYMENT_SCHEMA = "69a19c2a7134dc2f8d6988ef";
+    const RETURN_SCHEMA = "69a314e9fe810d7f8614e1ce";
     const ASSOC_ID = "6728643af1853631d21b97af"; 
     const DEPLOY_TO_GEAR_ASSOC = "69a19ca47e855c2e654a44f7"; 
 
@@ -18,18 +19,31 @@ export default async function handler(req, res) {
     };
 
     try {
-        // --- 1. UPDATE DEPLOYMENT (Fixes "Stuck" Update Deployment) ---
-        if (action === 'updateDeployment') {
-            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
-                method: "PUT",
-                headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA },
-                body: JSON.stringify({ properties: payload })
+        // --- 1. CREATE EQUIPMENT (Fixes the "Stuck" Add Equipment Form) ---
+        if (action === 'createEquipment') {
+            const resEq = await fetch(PROXY_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, 
+                body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
             });
-            await logAction(`Logistics Update: Deployment ${id}`);
-            return res.status(200).json({ success: true });
+            const newEq = await resEq.json();
+            const newEqId = newEq.id || newEq.record?.id;
+
+            if (newEqId) {
+                // Link to the Merchant immediately
+                await fetch(PROXY_URL, { 
+                    method: "POST", 
+                    headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
+                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: newEqId, secondRecordId: merchantID }) 
+                });
+                
+                await logAction(`Hardware In-take: ${payload.equipment_id} / SN: ${payload.serial_number}`);
+                return res.status(200).json({ success: true }); // Critical: Sends signal back to frontend
+            }
+            throw new Error("Hardware record creation failed");
         }
 
-        // --- 2. UPDATE SURGICAL (Fixes "Stuck" Update Equipments) ---
+        // --- 2. UPDATE SURGICAL (Inventory Edits) ---
         if (action === 'updateSurgical') {
             await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
                 method: "PUT",
@@ -40,19 +54,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- 3. LIST (Standard listing for all dashboards) ---
-        if (action === 'list') {
-            const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
-            const resData = await fetch(PROXY_URL, {
-                method: "POST",
-                headers: { "Schema-Id": schema, "Content-Type": "application/json", "Version": "2021-07-28" },
-                body: JSON.stringify({ locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15, query: query })
-            });
-            const data = await resData.json();
-            return res.status(200).json({ success: true, ...data });
-        }
-
-        // --- 4. CREATE DEPLOYMENT (Maintains Linking) ---
+        // --- 3. CREATE DEPLOYMENT (Linking Gear to Merchant) ---
         if (action === 'createDeployment') {
             const resDep = await fetch(PROXY_URL, {
                 method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA },
@@ -68,6 +70,19 @@ export default async function handler(req, res) {
                 await logAction(`Deployed Gear to ${merchantName}`);
                 return res.status(200).json({ success: true });
             }
+            throw new Error("Deployment creation failed");
+        }
+
+        // --- 4. LIST (Standard listing for all dashboards) ---
+        if (action === 'list') {
+            const schema = req.body.schemaId || EQUIPMENT_SCHEMA;
+            const resData = await fetch(PROXY_URL, {
+                method: "POST",
+                headers: { "Schema-Id": schema, "Content-Type": "application/json", "Version": "2021-07-28" },
+                body: JSON.stringify({ locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15, query: query })
+            });
+            const data = await resData.json();
+            return res.status(200).json({ success: true, ...data });
         }
 
         // --- 5. GET NEXT ID ---
@@ -76,7 +91,7 @@ export default async function handler(req, res) {
             const d = await resID.json();
             let max = 0;
             (d.records || []).forEach(r => {
-                const idVal = r.properties?.equipment_id || r.properties?.deployment_id || "";
+                const idVal = r.properties?.equipment_id || r.properties?.deployment_id || r.properties?.return_id || "";
                 const num = parseInt(idVal.replace(/\D/g, ''));
                 if (!isNaN(num) && num > max) max = num;
             });
