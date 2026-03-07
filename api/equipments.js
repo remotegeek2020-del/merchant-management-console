@@ -19,7 +19,7 @@ export default async function handler(req, res) {
     };
 
     try {
-        // --- ACTION: LIST DEPLOYMENTS (Enhanced Hydration) ---
+        // --- ACTION: LIST DEPLOYMENTS (Enhanced Hydration for Linked Hardware) ---
         if (action === 'listDeployments') {
             const response = await fetch(PROXY_URL, {
                 method: "POST",
@@ -33,13 +33,12 @@ export default async function handler(req, res) {
 
             const hydratedRecords = await Promise.all((data.records || []).map(async (record) => {
                 try {
-                    // Fetch relations using the specific deployment record ID
                     const relRes = await fetch(`${PROXY_URL}relations/${record.id}?locationId=${LOCATION_ID}`, {
                         headers: { "Schema-Id": DEPLOYMENT_SCHEMA }
                     });
                     const relData = await relRes.json();
                     
-                    // Look for ANY relation that links to the Equipment Schema or generic "equipments" key
+                    // Specific check for relationship keys matching Equipment Schema
                     const equipmentRel = (relData.relations || []).find(r => 
                         r.firstObjectKey === `custom_objects.${EQUIPMENT_SCHEMA}` || 
                         r.secondObjectKey === `custom_objects.${EQUIPMENT_SCHEMA}` ||
