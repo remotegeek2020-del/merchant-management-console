@@ -10,7 +10,7 @@
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
-        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; }
+        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; position: relative; }
         .activity-header-box { background: rgba(0, 73, 144, 0.03); padding: 30px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
         .btn-modern { border-radius: 12px !important; font-weight: 600 !important; padding: 0 25px !important; height: 45px !important; }
         .hidden-field { display: none !important; }
@@ -19,21 +19,22 @@
         #debugConsole { max-width: 1000px; margin: 30px auto; background: #1a202c; color: #a0aec0; padding: 20px; border-radius: 20px; font-family: monospace; font-size: 11px; height: 180px; overflow-y: auto; }
         .custom-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; max-width: 850px; background: white; z-index: 9001; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.25); overflow: hidden; }
         .custom-modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); z-index: 9000; }
+        .readonly-lock { background-color: #f1f5f9 !important; cursor: not-allowed !important; font-weight: 600; color: #64748b; }
     </style>
 </head>
 <body>
 
 <div class="ghl-container">
     <div id="saveOverlay">
-        <div class="slds-spinner_container" style="background: transparent;">
-            <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        </div>
-        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing with Global Ledger...</p>
+        <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
+        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing Global Data Ledger...</p>
     </div>
 
     <div class="activity-header-box">
-        <a href="index.html" style="background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none; border: 1px solid #e2e8f0;"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
-        <div id="user-greeting" style="font-weight:700">Staff: Loading...</div>
+        <div>
+            <a href="index.html" style="background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px;"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
+            <div id="user-greeting" style="font-size: 11px; font-weight: 700; color: var(--pp-blue); margin-top: 5px;">Staff Member: Loading...</div>
+        </div>
         <select id="activityType" style="width: 250px; border-radius: 12px; height: 45px; font-weight: 700; border: 1px solid #d1d9e6;" onchange="toggleFields(this.value)">
             <option value="">-- Choose Activity --</option>
             <option value="receiving_inventory">1. New Equipment</option>
@@ -64,15 +65,36 @@
             <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
                 <select id="type" class="slds-select" style="border-radius:12px;">
-                    <option value="">-- Select --</option>
-                    <option value="pax_a920">Pax A920</option>
-                    <option value="clover_mini">Clover Mini</option>
+                    <option value="">-- Select Model --</option>
                     <option value="z11_terminal">Z11 Terminal</option>
                     <option value="z9__4g">Z9 - 4G</option>
+                    <option value="z9">Z9</option>
+                    <option value="z8_epx_dualcomm_only_no_wifi">Z8 EPX Dual-Comm Only No Wifi</option>
+                    <option value="z8_terminal">Z8 Terminal</option>
+                    <option value="z6__pin_pad">Z6 - Pin Pad</option>
+                    <option value="z3__pin_pad">Z3 - Pin Pad</option>
                     <option value="ict_220">ICT 220</option>
+                    <option value="fd_130">FD 130</option>
+                    <option value="fd_100">FD 100</option>
                     <option value="pax_s300_pin_pad">Pax S300 Pin Pad</option>
+                    <option value="clover_go">Clover Go</option>
+                    <option value="clover_mini">Clover Mini</option>
+                    <option value="clover_mini_station">Clover Mini Station</option>
+                    <option value="z9_base_station">Z9 Base Station</option>
+                    <option value="z8_tri_con">Z8 Tri-Con</option>
+                    <option value="pax_a920">Pax A920</option>
+                    <option value="pax_e600">Pax E600</option>
+                    <option value="2_in_1_reader">2-in-1 Reader</option>
+                    <option value="ingenico_desk_3500">Ingenico Desk 3500</option>
                     <option value="pax_a920_pro">Pax A920 PRO</option>
-                    </select>
+                    <option value="valor_vl100">Valor VL100</option>
+                    <option value="valor_vl110">Valor VL110</option>
+                    <option value="valor_vl500">Valor VL500</option>
+                    <option value="qd2">QD2</option>
+                    <option value="qd3">QD3</option>
+                    <option value="qd4">QD4</option>
+                    <option value="valor_vl300">Valor VL300</option>
+                </select>
             </div>
 
             <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
@@ -91,7 +113,7 @@
             </div>
 
             <div class="slds-col slds-size_1-of-2 f-date hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Date</label>
+                <label class="slds-form-element__label" id="dateLabel" style="font-weight: 700;">Date</label>
                 <input type="date" id="depDate" class="slds-input" style="border-radius: 12px;">
             </div>
 
@@ -103,13 +125,14 @@
             <div class="slds-col slds-size_1-of-2 f-condition hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Condition</label>
                 <select id="returnCondition" class="slds-select" style="border-radius: 12px;">
+                    <option value="">-- Assessment --</option>
                     <option value="good">Good</option>
                     <option value="broken">Broken</option>
                 </select>
             </div>
 
             <div class="slds-col slds-size_1-of-1 f-returnDestination hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Destination</label>
+                <label class="slds-form-element__label" style="font-weight: 700;">Warehouse Destination</label>
                 <select id="returnDestination" class="slds-select" style="border-radius: 12px;">
                     <option value="warsaw_office__inventory_back_to_stock">Warsaw Office / Inventory (Back to Stock)</option>
                     <option value="warsaw_repairs_sent_to_service_center">Warsaw Repairs (Sent To Service Center)</option>
@@ -127,7 +150,7 @@
 <div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
 <div id="lookupModal" class="custom-modal">
     <div class="slds-modal__header slds-p-around_large" style="background: var(--pp-blue); color: white; border:none;">
-        <h2 style="font-weight: 800;">Search Database</h2>
+        <h2 style="font-weight: 800; font-size: 1.1rem;">Search Database</h2>
     </div>
     <div class="slds-p-around_large">
         <input type="text" id="modalSearch" class="slds-input" style="border-radius: 12px; margin-bottom:15px;" placeholder="Type to search..." onkeyup="handleSearchInput(this.value)">
@@ -158,9 +181,25 @@
     function toggleFields(val) {
         document.getElementById('mainFormArea').classList.toggle('hidden-field', !val);
         document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
-        if (val === 'receiving_inventory') showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
-        else if (val === 'deployment') showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-tid', '.f-tracking', '.f-date']);
-        else if (val === 'process_return') showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-returnReason', '.f-condition', '.f-returnDestination']);
+        const modelSelect = document.getElementById('type');
+        const serialInput = document.getElementById('serial');
+        modelSelect.disabled = false; modelSelect.classList.remove('readonly-lock');
+        serialInput.readOnly = false; serialInput.classList.remove('readonly-lock');
+
+        if (val === 'receiving_inventory') {
+            document.getElementById('idLabel')?.innerText && (document.getElementById('idLabel').innerText = "Equipment ID");
+            showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
+        } else if (val === 'deployment') {
+            document.getElementById('idLabel')?.innerText && (document.getElementById('idLabel').innerText = "Deployment ID");
+            modelSelect.disabled = true; modelSelect.classList.add('readonly-lock');
+            serialInput.readOnly = true; serialInput.classList.add('readonly-lock');
+            showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-tid', '.f-tracking', '.f-date']);
+        } else if (val === 'process_return') {
+            document.getElementById('idLabel')?.innerText && (document.getElementById('idLabel').innerText = "Return ID");
+            modelSelect.disabled = true; modelSelect.classList.add('readonly-lock');
+            serialInput.readOnly = true; serialInput.classList.add('readonly-lock');
+            showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-returnReason', '.f-condition', '.f-returnDestination']);
+        }
     }
 
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
@@ -176,18 +215,18 @@
             const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: "69a19c2a7134dc2f8d6988ef", process_return: "69a314e9fe810d7f8614e1ce" };
             const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
 
-            logDebug("Requesting unique ID...");
+            logDebug("Requesting unique record ID...");
             const idRes = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'getNextID', schemaType: schemaMap[type], prefix: prefixMap[type] }) });
             const { nextID } = await idRes.json();
 
-            status.innerText = "Processing record creation...";
-            logDebug(`New ID assigned: ${nextID}`);
+            status.innerText = "Syncing with global ledger...";
+            logDebug(`ID generated: ${nextID}`);
 
             let body = { action: '', userEmail: user, payload: {} };
             if (type === 'receiving_inventory') {
                 body.action = 'createEquipment';
                 body.merchantID = document.getElementById('accountID').value;
-                body.payload = { equipment_id: nextID, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value };
+                body.payload = { equipment_id: nextID, merchant_account: document.getElementById('accountDisplay').value, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value };
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
                 body.gearID = document.getElementById('equipmentID').value;
@@ -200,17 +239,17 @@
                 body.payload = { 
                     return_id: nextID, 
                     return_reason: document.getElementById('returnReason').value, 
-                    condition: document.getElementById('returnCondition').value, // Strict key: "good"/"broken"
-                    return_destination: document.getElementById('returnDestination').value // Strict key: "warsaw_office..."
+                    condition: document.getElementById('returnCondition').value, // Correct key: "good" or "broken"
+                    return_destination: document.getElementById('returnDestination').value // Correct key: "warsaw_office..."
                 };
             }
 
             const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
             if (res.ok) {
-                Swal.fire('Success', `${nextID} saved.`, 'success').then(() => location.reload());
+                Swal.fire('Success', `${nextID} has been successfully logged.`, 'success').then(() => location.reload());
             } else {
                 const err = await res.json();
-                throw new Error(err.message || "Failed to write to database.");
+                throw new Error(err.message || "Communication with GHL rejected.");
             }
         } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); logDebug(`FAULT: ${e.message}`); }
     }
@@ -241,7 +280,7 @@
     function selectDef(n, id) { document.getElementById('accountDisplay').value = n; document.getElementById('accountID').value = id; closeModal(); }
     function closeModal() { document.getElementById('lookupModal').style.display = 'none'; document.getElementById('backdrop').style.display = 'none'; }
     function handleSearchInput(v) { clearTimeout(window.sT); window.sT = setTimeout(() => fetchLookup(v), 500); }
-    window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`; };
+    window.onload = () => { document.getElementById('user-greeting').innerText = `Staff Member: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
 </html>
