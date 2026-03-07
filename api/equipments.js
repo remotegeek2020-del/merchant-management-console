@@ -20,6 +20,20 @@ export default async function handler(req, res) {
     };
 
     try {
+
+        // Add this inside equipments.js handler
+if (action === 'updateDeployment') {
+    const response = await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA },
+        body: JSON.stringify({ properties: payload })
+    });
+    
+    // Log the specific edit for the audit trail
+    await logAction(`Updated Deployment ${id}: Set Status to ${payload.deployment_status}`);
+    
+    return res.status(200).json({ success: true });
+}
         // --- ACTION: CREATE DEPLOYMENT (Fixed Linking Sequence) ---
         if (action === 'createDeployment') {
             // 1. Clear old relations from hardware first
@@ -141,3 +155,4 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
