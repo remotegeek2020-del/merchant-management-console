@@ -1,49 +1,52 @@
-// api/equipments.js
+import { createClient } from '@supabase/supabase-js'
+
 export default async function handler(req, res) {
-  if (req.method !== 'POST') return res.status(405).json({ message: 'Method Not Allowed' });
+    const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
+    const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
+    const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
 
-  // Keep these IDs on the server only!
-  const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
-  const SCHEMA_ID = "6717da1c4a74233fa104889f";
-  const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
+    const { action, query, view, page, limit, id } = req.body;
 
-  const { action, id, page, limit, view, query } = req.body;
+    try {
+        let fetchUrl = PROXY_URL;
+        let options = {
+            headers: { 
+                "Schema-Id": EQUIPMENT_SCHEMA, 
+                "Content-Type": "application/json",
+                "Version": "2021-07-28"
+            }
+        };
 
-  try {
-    let fetchUrl = PROXY_URL;
-    let fetchOptions = {
-      headers: {
-        "Schema-Id": SCHEMA_ID,
-        "Content-Type": "application/json",
-        "Version": "2021-07-28"
-      }
-    };
+        if (req.method === 'POST') {
+            options.method = "POST";
+            
+            // Build the complex query parameters for GHL
+            const requestParams = { locationId: LOCATION_ID, page: page || 1, pageLimit: limit || 15 };
 
-    if (action === 'list') {
-      fetchOptions.method = "POST";
-      const params = { locationId: LOCATION_ID, page, pageLimit: limit };
-      
-      if (view && view !== 'all') {
-        if (view.includes('Warsaw')) params.query = view;
-        else params.sort = [{ field: view, direction: "desc" }];
-      }
-      
-      if (query) {
-        params.query = (params.query ? params.query + " " : "") + query.trim();
-      }
-      
-      fetchOptions.body = JSON.stringify(params);
-    } 
-    else if (action === 'delete') {
-      fetchOptions.method = "DELETE";
-      fetchUrl = `${PROXY_URL}${id}?locationId=${LOCATION_ID}`;
+            // Handle View Filters (Warsaw Office, Repairs, etc)
+            if (view === "Warsaw Office / Inventory" || view === "Warsaw Repairs") {
+                requestParams.query = view;
+                requestParams.sort = [{ field: "updatedAt", direction: "desc" }];
+            } else if (view && view !== 'all') {
+                requestParams.sort = [{ field: view, direction: "desc" }];
+            }
+
+            // Handle Search String
+            if (query && query.trim() !== "") {
+                requestParams.query = (requestParams.query ? requestParams.query + " " : "") + query.trim();
+            }
+
+            options.body = JSON.stringify(requestParams);
+        } else if (req.method === 'DELETE') {
+            options.method = "DELETE";
+            fetchUrl = `${PROXY_URL}${id}?locationId=${LOCATION_ID}`;
+        }
+
+        const ghlRes = await fetch(fetchUrl, options);
+        const data = await ghlRes.json();
+        return res.status(200).json(data);
+
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
     }
-
-    const response = await fetch(fetchUrl, fetchOptions);
-    const data = await response.json();
-    return res.status(200).json(data);
-
-  } catch (err) {
-    return res.status(500).json({ success: false, message: err.message });
-  }
 }
