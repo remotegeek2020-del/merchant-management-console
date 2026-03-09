@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     const { action, id, payload, userEmail, gearID, merchantID, merchantName } = req.body;
 
     try {
-        // --- 1. NEW EQUIPMENT (Restores Date Saving) ---
+        // --- 1. NEW EQUIPMENT (Verified) ---
         if (action === 'createEquipment') {
             const resEq = await fetch(PROXY_URL, { 
                 method: "POST", 
@@ -22,18 +22,17 @@ export default async function handler(req, res) {
                 body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
             });
             const d = await resEq.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
+            if (d.id || d.record?.id) {
                 await fetch(PROXY_URL, { 
                     method: "POST", 
                     headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
-                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: nId, secondRecordId: merchantID }) 
+                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: d.id || d.record.id, secondRecordId: merchantID }) 
                 });
                 return res.status(200).json({ success: true });
             }
         }
 
-        // --- 2. NEW DEPLOYMENT (Proven Fast Logic) ---
+        // --- 2. NEW DEPLOYMENT ---
         if (action === 'createDeployment') {
             const resDep = await fetch(PROXY_URL, { 
                 method: "POST", 
@@ -41,10 +40,10 @@ export default async function handler(req, res) {
                 body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
             });
             const d = await resDep.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
+            if (d.id || d.record?.id) {
+                const depId = d.id || d.record.id;
                 await Promise.all([
-                    fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: nId, secondRecordId: gearID }) }),
+                    fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: depId, secondRecordId: gearID }) }),
                     fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: gearID, secondRecordId: merchantID }) }),
                     fetch(`${PROXY_URL}${gearID}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ properties: { merchant_account: merchantName } }) })
                 ]);
@@ -52,7 +51,7 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- 3. PROCESS RETURN (Postman-Aligned Keys) ---
+        // --- 3. PROCESS RETURN (Matches Postman Keys) ---
         if (action === 'createReturn') {
             const resRet = await fetch(PROXY_URL, { 
                 method: "POST", 
@@ -60,41 +59,26 @@ export default async function handler(req, res) {
                 body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
             });
             const d = await resRet.json();
-            const nId = d.id || d.record?.id;
-            if (nId) {
+            if (d.id || d.record?.id) {
                 await fetch(PROXY_URL, { 
                     method: "POST", 
                     headers: { "Content-Type": "application/json", "Link-Relation": "true" }, 
-                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, firstRecordId: gearID, secondRecordId: nId }) 
+                    body: JSON.stringify({ locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, firstRecordId: gearID, secondRecordId: d.id || d.record.id }) 
                 });
                 return res.status(200).json({ success: true });
             }
         }
 
-        // --- 4. DASHBOARD UPDATES (Ends "Stuck" Spinner) ---
+        // --- 4. LIST & UPDATES ---
+        if (action === 'list') {
+            const resData = await fetch(PROXY_URL, { method: "POST", headers: { "Schema-Id": req.body.schemaId || EQUIPMENT_SCHEMA, "Content-Type": "application/json" }, body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, query: req.body.query }) });
+            const data = await resData.json();
+            return res.status(200).json({ success: true, ...data });
+        }
+
         if (action === 'updateSurgical' || action === 'updateDeployment') {
             const schema = action === 'updateSurgical' ? EQUIPMENT_SCHEMA : DEPLOYMENT_SCHEMA;
-            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { 
-                method: "PUT", 
-                headers: { "Content-Type": "application/json", "Schema-Id": schema }, 
-                body: JSON.stringify({ properties: payload }) 
-            });
-            return res.status(200).json({ success: true });
-        }
-
-        // --- 5. UNIVERSAL LISTING (Restores all Tables) ---
-        if (action === 'list') {
-            const resData = await fetch(PROXY_URL, { 
-                method: "POST", 
-                headers: { "Schema-Id": req.body.schemaId || EQUIPMENT_SCHEMA, "Content-Type": "application/json" }, 
-                body: JSON.stringify({ locationId: LOCATION_ID, page: req.body.page || 1, pageLimit: 15, query: req.body.query }) 
-            });
-            const d = await resData.json();
-            return res.status(200).json({ success: true, ...d });
-        }
-
-        if (action === 'delete') {
-            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "DELETE" });
+            await fetch(`${PROXY_URL}${id}?locationId=${LOCATION_ID}`, { method: "PUT", headers: { "Content-Type": "application/json", "Schema-Id": schema }, body: JSON.stringify({ properties: payload }) });
             return res.status(200).json({ success: true });
         }
 
