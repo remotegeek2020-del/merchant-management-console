@@ -104,15 +104,25 @@
     }
 
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
-
-  async function saveData() {
+async function saveData() {
     const overlay = document.getElementById('saveOverlay');
     const type = document.getElementById('activityType').value;
-    const dateInput = document.getElementById('depDate').value;
+    
+    // 1. Capture the raw date from the picker (usually YYYY-MM-DD by default in modern browsers)
+    let rawDate = document.getElementById('depDate').value;
+    let formattedDate = null;
+
+    // 2. Format validation: Ensure it is exactly YYYY-MM-DD
+    if (rawDate) {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+            formattedDate = d.toISOString().split('T')[0]; // Guarantees YYYY-MM-DD
+        }
+    }
+
     overlay.classList.add('show-flex');
 
     try {
-        // 1. Get ID
         const idRes = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -120,49 +130,47 @@
         });
         const { nextID } = await idRes.json();
 
-        // 2. Build Payload (Strict Schema Mapping)
-        const payload = {
+        // 3. Construct payload with the clean date
+        let properties = {
             "custom_objects.equipments.equipment_id": nextID,
-            "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value || "Manual Entry",
+            "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
             "custom_objects.equipments.terminal_type": document.getElementById('type').value,
-            "custom_objects.equipments.serial_number": document.getElementById('serial').value,
-            "custom_objects.equipments.received_date": dateInput // Must be YYYY-MM-DD
+            "custom_objects.equipments.serial_number": document.getElementById('serial').value
         };
 
-        // DEBUG: See exactly what is being sent
-        console.log("SENDING TO GHL:", JSON.stringify(payload, null, 2));
+        // Only add the property if the date is valid to prevent GHL rejection
+        if (formattedDate) {
+            properties["custom_objects.equipments.received_date"] = formattedDate;
+        }
 
-        // 3. Save
         const res = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
             body: JSON.stringify({ 
                 action: 'createEquipment', 
-                payload: payload, 
+                payload: properties, 
                 merchantID: document.getElementById('accountID').value 
             }) 
         });
 
-        const result = await res.json();
-        console.log("GHL RESPONSE:", result);
-
         if (res.ok) {
-            Swal.fire('Success', `Logged as ${nextID}`, 'success').then(() => location.reload());
+            Swal.fire('Success', 'Record saved with valid date format.', 'success').then(() => location.reload());
         } else {
-            throw new Error(result.message || "HighLevel rejected the data.");
+            throw new Error("HighLevel API rejected the request.");
         }
     } catch (e) { 
         overlay.classList.remove('show-flex'); 
-        console.error("SAVE ERROR:", e);
         Swal.fire('Error', e.message, 'error'); 
     }
 }
+ 
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; }
     function closeModal() { document.getElementById('lookupModal').style.display = 'none'; }
     window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
 </html>
+
 
 
 
