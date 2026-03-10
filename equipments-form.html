@@ -166,8 +166,6 @@
 
 <script>
     const API_URL = "/api/equipments";
-    const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
-    const MERCHANT_SCHEMA = "6713847a517aa62ab429e204";
     let currentLookupType = '';
 
     function logDebug(msg) {
@@ -212,11 +210,17 @@
         overlay.classList.add('show-flex');
 
         try {
-            const schemaMap = { receiving_inventory: EQUIPMENT_SCHEMA, deployment: "69a19c2a7134dc2f8d6988ef", process_return: "69a314e9fe810d7f8614e1ce" };
             const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
 
             logDebug("Requesting unique record ID...");
-            const idRes = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'getNextID', schemaType: schemaMap[type], prefix: prefixMap[type] }) });
+            const idRes = await fetch(API_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({ 
+                    action: 'getNextID', 
+                    prefix: prefixMap[type] 
+                }) 
+            });
             const { nextID } = await idRes.json();
 
             status.innerText = "Syncing with global ledger...";
@@ -239,8 +243,8 @@
                 body.payload = { 
                     return_id: nextID, 
                     return_reason: document.getElementById('returnReason').value, 
-                    condition: document.getElementById('returnCondition').value, // Correct key: "good" or "broken"
-                    return_destination: document.getElementById('returnDestination').value // Correct key: "warsaw_office..."
+                    condition: document.getElementById('returnCondition').value,
+                    return_destination: document.getElementById('returnDestination').value
                 };
             }
 
@@ -249,16 +253,26 @@
                 Swal.fire('Success', `${nextID} has been successfully logged.`, 'success').then(() => location.reload());
             } else {
                 const err = await res.json();
-                throw new Error(err.message || "Communication with GHL rejected.");
+                throw new Error(err.message || "Communication rejected.");
             }
         } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); logDebug(`FAULT: ${e.message}`); }
     }
 
     async function fetchLookup(q) {
-        const schema = currentLookupType === 'account' ? MERCHANT_SCHEMA : EQUIPMENT_SCHEMA;
         const tbody = document.getElementById('lookupResults');
         document.getElementById('modalHead').innerHTML = currentLookupType === 'account' ? '<th>Merchant</th><th>MID</th>' : '<th>ID</th><th>Model</th><th>Serial</th>';
-        const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'list', schemaId: schema, query: q, page: 1 }) });
+        
+        // Let the backend handle which schema to use based on lookup type
+        const res = await fetch(API_URL, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ 
+                action: 'list', 
+                schemaId: currentLookupType === 'account' ? '6713847a517aa62ab429e204' : '6717da1c4a74233fa104889f',
+                query: q, 
+                page: 1 
+            }) 
+        });
         const data = await res.json();
         tbody.innerHTML = "";
         (data.records || []).forEach(r => {
