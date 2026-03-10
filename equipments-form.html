@@ -227,10 +227,15 @@
             logDebug(`ID generated: ${nextID}`);
 
             let body = { action: '', userEmail: user, payload: {} };
-            if (type === 'receiving_inventory') {
-                body.action = 'createEquipment';
-                body.merchantID = document.getElementById('accountID').value;
-                body.payload = { equipment_id: nextID, merchant_account: document.getElementById('accountDisplay').value, terminal_type: document.getElementById('type').value, serial_number: document.getElementById('serial').value };
+           if (type === 'receiving_inventory') {
+    body.action = 'createEquipment';
+    body.merchantID = document.getElementById('accountID').value;
+    body.payload = { 
+        equipment_id: nextID, 
+        merchant_account: document.getElementById('accountDisplay').value, 
+        terminal_type: document.getElementById('type').value, 
+        serial_number: document.getElementById('serial').value,
+        deployment_date: document.getElementById('depDate').value // This maps to the column on your dashboard
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
                 body.gearID = document.getElementById('equipmentID').value;
@@ -311,4 +316,5 @@
 </script>
 </body>
 </html>
+
 
