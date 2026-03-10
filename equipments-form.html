@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Hardware Console | New Activity</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
@@ -75,10 +75,10 @@
                     <option value="clover_mini">Clover Mini</option>
                     <option value="clover_mini_station">Clover Mini Station</option>
                     <option value="z9_base_station">Z9 Base Station</option>
-                    <option value="z8_tri_con">Z8 Tri-Con</option>
+                    <option value="z8_tricon">Z8 Tri-Con</option>
                     <option value="pax_a920">Pax A920</option>
                     <option value="pax_e600">Pax E600</option>
-                    <option value="2_in_1_reader">2-in-1 Reader</option>
+                    <option value="2in1_reader">2-in-1 Reader</option>
                     <option value="ingenico_desk_3500">Ingenico Desk 3500</option>
                     <option value="pax_a920_pro">Pax A920 PRO</option>
                     <option value="valor_vl100">Valor VL100</option>
@@ -166,7 +166,7 @@
         modelSelect.disabled = false; modelSelect.classList.remove('readonly-lock');
         serialInput.readOnly = false; serialInput.classList.remove('readonly-lock');
         if (val === 'receiving_inventory') {
-            document.getElementById('dateLabel').innerText = "Equipment Received Date";
+            document.getElementById('dateLabel').innerText = "Equipment Date Received";
             showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
         } else if (val === 'deployment') {
             document.getElementById('dateLabel').innerText = "Deployment Date";
@@ -199,11 +199,11 @@
                 body.action = 'createEquipment';
                 body.merchantID = document.getElementById('accountID').value;
                 body.payload = { 
-                    equipment_id: nextID, 
-                    merchant_account: document.getElementById('accountDisplay').value, 
-                    terminal_type: document.getElementById('type').value, 
-                    serial_number: document.getElementById('serial').value,
-                    deployment_date: document.getElementById('depDate').value // This maps to your Dashboard column
+                    "custom_objects.equipments.equipment_id": nextID, 
+                    "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value, 
+                    "custom_objects.equipments.terminal_type": document.getElementById('type').value, 
+                    "custom_objects.equipments.serial_number": document.getElementById('serial').value,
+                    "custom_objects.equipments.equipment_date_received": document.getElementById('depDate').value // Updated field key
                 };
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
@@ -214,7 +214,7 @@
                     deployment_id: nextID, 
                     tid: document.getElementById('tid').value, 
                     tracking_id: document.getElementById('tracking').value,
-                    deployment_date: document.getElementById('depDate').value 
+                    equipment_date_received: document.getElementById('depDate').value 
                 };
             } else if (type === 'process_return') {
                 body.action = 'createReturn';
@@ -257,8 +257,8 @@
                 row.innerHTML = `<td><b>${p.merchant_name || r.name}</b></td><td>${p.mid || "---"}</td>`;
                 row.onclick = () => { document.getElementById('accountDisplay').value = p.merchant_name || r.name; document.getElementById('accountID').value = r.id; closeModal(); };
             } else {
-                row.innerHTML = `<td><b>${p.equipment_id}</b></td><td>${p.terminal_type}</td><td>${p.serial_number}</td>`;
-                row.onclick = () => { document.getElementById('equipmentDisplay').value = p.equipment_id; document.getElementById('equipmentID').value = r.id; document.getElementById('serial').value = p.serial_number; document.getElementById('type').value = p.terminal_type; closeModal(); };
+                row.innerHTML = `<td><b>${p["custom_objects.equipments.equipment_id"] || p.equipment_id}</b></td><td>${p["custom_objects.equipments.terminal_type"] || p.terminal_type}</td><td>${p["custom_objects.equipments.serial_number"] || p.serial_number}</td>`;
+                row.onclick = () => { document.getElementById('equipmentDisplay').value = p["custom_objects.equipments.equipment_id"] || p.equipment_id; document.getElementById('equipmentID').value = r.id; document.getElementById('serial').value = p["custom_objects.equipments.serial_number"] || p.serial_number; document.getElementById('type').value = p["custom_objects.equipments.terminal_type"] || p.terminal_type; closeModal(); };
             }
             tbody.appendChild(row);
         });
