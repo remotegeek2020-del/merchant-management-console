@@ -2,120 +2,68 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Equipment Management - Dashboard</title>
+    <title>Equipment Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
-    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
-        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
-        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); display: flex; justify-content: space-between; align-items: center; }
-        .header-controls { display: flex; align-items: center; gap: 12px; }
-        .btn-back { display: flex; align-items: center; gap: 6px; background: white; padding: 6px 14px; border-radius: 50px; font-size: 0.7rem; font-weight: 700; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; }
-        .slds-card { border: 1px solid var(--glass-border) !important; border-radius: 20px !important; background: var(--glass) !important; box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important; overflow: hidden; }
-        #debugLog { background: #1a202c; color: #a0aec0; padding: 15px; font-family: monospace; font-size: 11px; height: 100px; overflow-y: auto; margin-top: 30px; border-radius: 15px; }
+        body { background: #f8fafc; padding: 30px; font-family: 'Inter', sans-serif; }
+        .slds-card { border-radius: 15px; overflow: hidden; box-shadow: 0 10px 25px rgba(0,0,0,0.05); }
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; }
+        .btn-new { background: #004990; color: white; padding: 10px 20px; border-radius: 8px; font-weight: 700; text-decoration: none; }
     </style>
 </head>
 <body>
-    <div class="modern-header">
-        <div>
-            <div class="header-controls">
-                <a href="index.html" class="btn-back"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
-                <div id="user-greeting" style="background: rgba(0,73,144,0.1); padding: 6px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 700; color: var(--pp-blue);">Loading...</div>
-            </div>
-            <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--pp-blue); margin-top: 5px;">Equipments Dashboard</h1>
-        </div>
-        <div class="slds-grid slds-grid_vertical-align-center">
-            <div class="slds-form-element slds-m-right_small" style="width: 280px; position: relative;">
-                <span class="material-icons" style="position: absolute; left: 10px; top: 10px; font-size: 18px; color: #a0aec0; z-index: 5;">search</span>
-                <input type="text" id="searchInput" placeholder="Search serial or ID..." class="slds-input" style="border-radius: 12px; padding-left: 35px;" onkeypress="if(event.key==='Enter') resetAndFetch()" />
-            </div>
-            <select id="viewFilter" class="slds-select slds-m-right_small" style="width: 180px; border-radius: 12px;" onchange="resetAndFetch()">
-                <option value="all">View All</option>
-                <option value="Warsaw Office / Inventory">Warsaw Inventory</option>
-                <option value="Warsaw Repairs">Warsaw Repairs</option>
-            </select>
-            <button class="slds-button slds-button_brand" style="border-radius: 12px;" onclick="window.location.href='equipments-form.html'">+ New Activity</button>
-        </div>
+    <div class="header">
+        <h1 style="font-size: 1.5rem; font-weight: 800; color: #004990;">Recent Hardware Activity</h1>
+        <a href="equipments-form.html" class="btn-new">+ New Activity</a>
     </div>
 
     <article class="slds-card">
-        <div class="slds-card__header slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
-            <h2 class="slds-text-heading_small" style="font-weight: 700; color: var(--pp-blue);">Recent Hardware Activity</h2>
-            <div class="slds-button-group">
-                <button class="slds-button slds-button_neutral" onclick="resetAndFetch()">Refresh</button>
-                <button class="slds-button slds-button_neutral" onclick="exportToCSV()">Export CSV</button>
-            </div>
-        </div>
-        <div class="slds-card__body">
-            <table class="slds-table slds-table_bordered slds-table_cell-buffer">
-                <thead>
-                    <tr class="slds-line-height_reset">
-                        <th scope="col">Equipment #</th>
-                        <th scope="col">Type</th>
-                        <th scope="col">Serial #</th>
-                        <th scope="col">Merchant Account</th>
-                        <th scope="col">Received Date</th> 
-                        <th scope="col">Date Created</th>
-                    </tr>
-                </thead>
-                <tbody id="dashboardBody"></tbody>
-            </table>
-        </div>
-        <footer class="slds-p-around_medium slds-grid slds-grid_align-spread">
-            <span id="pageInfo" style="font-size: 12px; font-weight: 600; color: #718096;">Page 1</span>
-            <div class="slds-button-group">
-                <button id="prevBtn" class="slds-button slds-button_neutral" onclick="changePage(-1)" disabled>Previous</button>
-                <button id="nextBtn" class="slds-button slds-button_neutral" onclick="changePage(1)">Next</button>
-            </div>
-        </footer>
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+            <thead>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">Equipment #</th>
+                    <th scope="col">Type</th>
+                    <th scope="col">Serial #</th>
+                    <th scope="col">Merchant Account</th>
+                    <th scope="col">Received Date</th>
+                    <th scope="col">Date Created</th>
+                </tr>
+            </thead>
+            <tbody id="dashboardBody"></tbody>
+        </table>
     </article>
 
-    <div id="debugLog"><div>[System] Dashboard Secure Mode Active.</div></div>
-
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const API_URL = "/api/equipments";
-        let currentPage = 1;
-        const recordsPerPage = 15;
 
         async function fetchDashboardData() {
             const tbody = document.getElementById('dashboardBody');
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>LOADING...</td></tr>";
+            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Syncing...</td></tr>";
 
             try {
                 const res = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        action: 'list', 
-                        schemaId: '6717da1c4a74233fa104889f',
-                        page: currentPage, 
-                        query: document.getElementById('searchInput').value 
-                    })
+                    body: JSON.stringify({ action: 'list', schemaId: '6717da1c4a74233fa104889f' })
                 });
 
                 const data = await res.json();
                 tbody.innerHTML = "";
                 
-                if (!data.records || data.records.length === 0) {
-                    tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>No results.</td></tr>";
-                    return;
-                }
-
-                data.records.forEach(record => {
+                (data.records || []).forEach(record => {
                     const p = record.properties || {};
                     const row = tbody.insertRow();
                     
-                    // FIXED: Using the full path key from your HighLevel Schema
+                    // FIXED: Pulling from the specific HighLevel key
                     const eqID = p["custom_objects.equipments.equipment_id"] || p.equipment_id || '---';
                     const type = p["custom_objects.equipments.terminal_type"] || p.terminal_type || '---';
                     const serial = p["custom_objects.equipments.serial_number"] || p.serial_number || '---';
                     const merchant = p["custom_objects.equipments.merchant_account"] || p.merchant_account || '---';
-                    const receivedDate = p["custom_objects.equipments.equipment_date_received"] || '---';
+                    const receivedDate = p["custom_objects.equipments.received_date"] || '---';
 
                     row.innerHTML = `
-                        <td><a href="#" class="slds-text-link_reset" style="color:#004990; font-weight:700;">${eqID}</a></td>
+                        <td style="font-weight:700; color:#004990;">${eqID}</td>
                         <td>${type}</td>
                         <td>${serial}</td>
                         <td>${merchant}</td>
@@ -123,23 +71,12 @@
                         <td>${new Date(record.createdAt).toLocaleDateString()}</td>
                     `;
                 });
-
-                document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
-                document.getElementById('prevBtn').disabled = (currentPage === 1);
-                document.getElementById('nextBtn').disabled = (data.records.length < recordsPerPage);
             } catch (err) {
-                tbody.innerHTML = `<tr><td colspan='6' style='color:red; text-align:center; padding:20px;'>${err.message}</td></tr>`;
+                tbody.innerHTML = "<tr><td colspan='6'>Fetch Error</td></tr>";
             }
         }
 
-        function changePage(step) { currentPage += step; fetchDashboardData(); }
-        function resetAndFetch() { currentPage = 1; fetchDashboardData(); }
-
-        window.onload = () => {
-            const userId = sessionStorage.getItem('pp_userid');
-            document.getElementById('user-greeting').innerText = userId ? `Staff: ${userId}` : "Hardware Console";
-            fetchDashboardData();
-        };
+        window.onload = fetchDashboardData;
     </script>
 </body>
 </html>
