@@ -86,11 +86,7 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const API_URL = "/api/equipments";
-        const PROXY_URL = "https://ghl-merchants-proxy.nmanahan.workers.dev/";
-        const LOCATION_ID = "dfg08aPdtlQ1RhIKkCnN";
         const RETURNS_SCHEMA = "69a314e9fe810d7f8614e1ce";
-        const EQUIPMENT_SCHEMA = "6717da1c4a74233fa104889f";
-        const EQUIPMENT_KEY = "custom_objects.equipments";
 
         let currentPage = 1;
         let currentRecords = [];
@@ -128,7 +124,7 @@
                         <td id="sn-${record.id}" style="color: #94a3b8">...</td>
                         <td id="merch-${record.id}" style="font-weight: 600;">...</td>
                     `;
-                    hydrateRow(record.id); // Maintains your working Client-Side Hydration
+                    hydrateRow(record.id); 
                 });
 
                 document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
@@ -139,18 +135,18 @@
 
         async function hydrateRow(internalId) {
             try {
-                const relRes = await fetch(`${PROXY_URL}relations/${internalId}?locationId=${LOCATION_ID}`);
-                const relData = await relRes.json();
-                const rel = (relData.relations || []).find(r => r.secondObjectKey === EQUIPMENT_KEY || r.firstObjectKey === EQUIPMENT_KEY);
+                const res = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'getHydratedData', 
+                        internalId: internalId 
+                    })
+                });
+                const result = await res.json();
                 
-                if (rel) {
-                    const eqId = (rel.firstRecordId === internalId) ? rel.secondRecordId : rel.firstRecordId;
-                    const eqRes = await fetch(`${PROXY_URL}${EQUIPMENT_KEY}/records/${eqId}?locationId=${LOCATION_ID}`, {
-                        headers: { "Schema-Id": EQUIPMENT_SCHEMA }
-                    });
-                    const eqData = await eqRes.json();
-                    const ep = (eqData.record || eqData).properties || {};
-                    
+                if (result.success) {
+                    const ep = result.data;
                     document.getElementById(`eqid-${internalId}`).innerText = ep.equipment_id || '---';
                     document.getElementById(`sn-${internalId}`).innerText = ep.serial_number || '---';
                     document.getElementById(`merch-${internalId}`).innerText = ep.merchant_account || '---';
@@ -158,7 +154,9 @@
                 } else {
                     document.getElementById(`eqid-${internalId}`).innerText = "Unlinked";
                 }
-            } catch (e) { }
+            } catch (e) { 
+                document.getElementById(`eqid-${internalId}`).innerText = "---";
+            }
         }
 
         function openRecordModal(id) {
