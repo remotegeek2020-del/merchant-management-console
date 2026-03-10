@@ -29,12 +29,18 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, records: data.records || [] });
         }
 
-        if (action === 'createEquipment') {
-            const resEq = await fetch(PROXY_URL, { 
-                method: "POST", 
-                headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, 
-                body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
-            });
+      if (action === 'createEquipment') {
+    const resEq = await fetch(PROXY_URL, { 
+        method: "POST", 
+        headers: { 
+            "Content-Type": "application/json", 
+            "Schema-Id": EQUIPMENT_SCHEMA 
+        }, 
+        body: JSON.stringify({ 
+            locationId: LOCATION_ID, 
+            properties: payload  // This sends the properties exactly as built in the form
+        }) 
+    });
             const d = await resEq.json();
             if ((d.id || d.record?.id) && merchantID) {
                 // Link to Merchant logic here if needed
@@ -48,3 +54,4 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
