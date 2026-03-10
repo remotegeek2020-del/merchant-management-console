@@ -105,15 +105,15 @@
 
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
 
-   async function saveData() {
+  async function saveData() {
     const overlay = document.getElementById('saveOverlay');
     const type = document.getElementById('activityType').value;
-    const dateValue = document.getElementById('depDate').value;
+    const dateInput = document.getElementById('depDate').value; // Get YYYY-MM-DD from picker
     
     overlay.classList.add('show-flex');
 
     try {
-        // 1. Get the next ID
+        logDebug("Fetching next Equipment ID...");
         const idRes = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -121,8 +121,7 @@
         });
         const { nextID } = await idRes.json();
 
-        // 2. Build the properties exactly as GHL needs them
-        // Note: Using the exact full keys from your Postman schema
+        // Build properties using the EXACT keys from your Postman schema
         let properties = {
             "custom_objects.equipments.equipment_id": nextID,
             "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
@@ -130,12 +129,13 @@
             "custom_objects.equipments.serial_number": document.getElementById('serial').value
         };
 
-        // Only add the date if a value was actually selected to avoid GHL rejection
-        if (dateValue) {
-            properties["custom_objects.equipments.received_date"] = dateValue;
+        // Only attach date if it actually has a value to prevent API rejection
+        if (dateInput) {
+            properties["custom_objects.equipments.received_date"] = dateInput;
         }
 
-        // 3. Send to Vercel
+        logDebug(`Saving ${nextID} to HighLevel...`);
+
         const res = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -147,20 +147,21 @@
         });
 
         if (res.ok) {
-            Swal.fire('Success', 'Record created in HighLevel!', 'success').then(() => location.reload());
+            Swal.fire('Success', `${nextID} created!`, 'success').then(() => location.reload());
         } else {
-            throw new Error("HighLevel rejected the record. Check field keys.");
+            throw new Error("HighLevel rejected the properties. Check Schema mapping.");
         }
     } catch (e) { 
         overlay.classList.remove('show-flex'); 
         Swal.fire('Error', e.message, 'error'); 
+        logDebug(`ERROR: ${e.message}`);
     }
 }
-
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; }
     function closeModal() { document.getElementById('lookupModal').style.display = 'none'; }
     window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
 </html>
+
 
