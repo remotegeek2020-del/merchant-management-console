@@ -23,13 +23,11 @@
     </style>
 </head>
 <body>
-
 <div class="ghl-container">
     <div id="saveOverlay">
         <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
         <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing Global Data Ledger...</p>
     </div>
-
     <div class="activity-header-box">
         <div>
             <a href="index.html" style="background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px;"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
@@ -42,26 +40,22 @@
             <option value="process_return">3. Process Return</option>
         </select>
     </div>
-
     <div id="mainFormArea" class="slds-p-around_xx-large hidden-field">
         <div class="slds-grid slds-wrap slds-gutters">
             <div class="slds-col slds-size_1-of-2 f-genID hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Reference ID</label>
                 <input type="text" id="generatedTag" class="slds-input" style="background:#f0f7ff; font-weight:800; border-radius:12px;" readonly value="ASSIGNED ON SAVE">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-account hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Account / Location</label>
                 <input type="text" id="accountDisplay" class="slds-input" readonly placeholder="Search Accounts..." onclick="openModal('account')" style="border-radius:12px; cursor:pointer;">
                 <input type="hidden" id="accountID">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-equipmentLookup hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Hardware Lookup</label>
                 <input type="text" id="equipmentDisplay" class="slds-input" readonly placeholder="Select existing inventory..." onclick="openModal('equipment')" style="border-radius:12px; cursor:pointer;">
                 <input type="hidden" id="equipmentID">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
                 <select id="type" class="slds-select" style="border-radius:12px;">
@@ -96,32 +90,26 @@
                     <option value="valor_vl300">Valor VL300</option>
                 </select>
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
                 <input type="text" id="serial" class="slds-input" style="border-radius: 12px;">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-tid hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">TID</label>
                 <input type="text" id="tid" class="slds-input" style="border-radius: 12px;">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-tracking hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Tracking ID</label>
                 <input type="text" id="tracking" class="slds-input" style="border-radius: 12px;">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-date hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" id="dateLabel" style="font-weight: 700;">Date</label>
                 <input type="date" id="depDate" class="slds-input" style="border-radius: 12px;">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-returnReason hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Return Reason</label>
                 <input type="text" id="returnReason" class="slds-input" style="border-radius: 12px;">
             </div>
-
             <div class="slds-col slds-size_1-of-2 f-condition hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Condition</label>
                 <select id="returnCondition" class="slds-select" style="border-radius: 12px;">
@@ -130,7 +118,6 @@
                     <option value="broken">Broken</option>
                 </select>
             </div>
-
             <div class="slds-col slds-size_1-of-1 f-returnDestination hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Warehouse Destination</label>
                 <select id="returnDestination" class="slds-select" style="border-radius: 12px;">
@@ -144,9 +131,7 @@
         </div>
     </div>
 </div>
-
 <div id="debugConsole"><div>SYSTEM MONITOR: STANDBY...</div></div>
-
 <div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
 <div id="lookupModal" class="custom-modal">
     <div class="slds-modal__header slds-p-around_large" style="background: var(--pp-blue); color: white; border:none;">
@@ -163,11 +148,9 @@
     </div>
     <div class="slds-modal__footer"><button class="slds-button slds-button_neutral" onclick="closeModal()">Close</button></div>
 </div>
-
 <script>
     const API_URL = "/api/equipments";
     let currentLookupType = '';
-
     function logDebug(msg) {
         const console = document.getElementById('debugConsole');
         const entry = document.createElement('div');
@@ -175,7 +158,6 @@
         console.appendChild(entry);
         console.scrollTop = console.scrollHeight;
     }
-
     function toggleFields(val) {
         document.getElementById('mainFormArea').classList.toggle('hidden-field', !val);
         document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
@@ -183,35 +165,27 @@
         const serialInput = document.getElementById('serial');
         modelSelect.disabled = false; modelSelect.classList.remove('readonly-lock');
         serialInput.readOnly = false; serialInput.classList.remove('readonly-lock');
-
         if (val === 'receiving_inventory') {
-            document.getElementById('idLabel')?.innerText && (document.getElementById('idLabel').innerText = "Equipment ID");
+            document.getElementById('dateLabel').innerText = "Equipment Received Date";
             showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
         } else if (val === 'deployment') {
-            document.getElementById('idLabel')?.innerText && (document.getElementById('idLabel').innerText = "Deployment ID");
+            document.getElementById('dateLabel').innerText = "Deployment Date";
             modelSelect.disabled = true; modelSelect.classList.add('readonly-lock');
             serialInput.readOnly = true; serialInput.classList.add('readonly-lock');
             showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-tid', '.f-tracking', '.f-date']);
         } else if (val === 'process_return') {
-            document.getElementById('idLabel')?.innerText && (document.getElementById('idLabel').innerText = "Return ID");
-            modelSelect.disabled = true; modelSelect.classList.add('readonly-lock');
-            serialInput.readOnly = true; serialInput.classList.add('readonly-lock');
             showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-returnReason', '.f-condition', '.f-returnDestination']);
         }
     }
-
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
-
     async function saveData() {
         const overlay = document.getElementById('saveOverlay');
         const status = document.getElementById('saveStatus');
         const type = document.getElementById('activityType').value;
         const user = sessionStorage.getItem('pp_userid');
         overlay.classList.add('show-flex');
-
         try {
             const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
-
             logDebug("Requesting unique record ID...");
             const idRes = await fetch(API_URL, { 
                 method: "POST", 
@@ -219,12 +193,8 @@
                 body: JSON.stringify({ action: 'getNextID', prefix: prefixMap[type] }) 
             });
             const { nextID } = await idRes.json();
-
             status.innerText = "Syncing with global ledger...";
-            logDebug(`ID generated: ${nextID}`);
-
             let body = { action: '', userEmail: user, payload: {} };
-            
             if (type === 'receiving_inventory') {
                 body.action = 'createEquipment';
                 body.merchantID = document.getElementById('accountID').value;
@@ -233,7 +203,7 @@
                     merchant_account: document.getElementById('accountDisplay').value, 
                     terminal_type: document.getElementById('type').value, 
                     serial_number: document.getElementById('serial').value,
-                    deployment_date: document.getElementById('depDate').value // Fixed: maps to Received Date column
+                    deployment_date: document.getElementById('depDate').value // This maps to your Dashboard column
                 };
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
@@ -244,7 +214,7 @@
                     deployment_id: nextID, 
                     tid: document.getElementById('tid').value, 
                     tracking_id: document.getElementById('tracking').value,
-                    deployment_date: document.getElementById('depDate').value // Ensure consistency
+                    deployment_date: document.getElementById('depDate').value 
                 };
             } else if (type === 'process_return') {
                 body.action = 'createReturn';
@@ -256,7 +226,6 @@
                     return_destination: document.getElementById('returnDestination').value
                 };
             }
-
             const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
             if (res.ok) {
                 Swal.fire('Success', `${nextID} has been successfully logged.`, 'success').then(() => location.reload());
@@ -264,13 +233,11 @@
                 const err = await res.json();
                 throw new Error(err.message || "Communication rejected.");
             }
-        } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); logDebug(`FAULT: ${e.message}`); }
+        } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); }
     }
-
     async function fetchLookup(q) {
         const tbody = document.getElementById('lookupResults');
         document.getElementById('modalHead').innerHTML = currentLookupType === 'account' ? '<th>Merchant</th><th>MID</th>' : '<th>ID</th><th>Model</th><th>Serial</th>';
-        
         const res = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -296,7 +263,6 @@
             tbody.appendChild(row);
         });
     }
-
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; document.getElementById('backdrop').style.display = 'block'; if (type === 'account' && document.getElementById('activityType').value === 'receiving_inventory') renderDefaultMerchants(); else fetchLookup(""); }
     function renderDefaultMerchants() { const tbody = document.getElementById('lookupResults'); tbody.innerHTML = `<tr onclick="selectDef('Warsaw Office / Inventory', '6993793b3572dc52847e4fe0')"><td><b>Warsaw Office</b></td><td>STOCK_PRIMARY</td></tr><tr onclick="selectDef('Warsaw Repairs', '6999c33007a6e56e436c0e84')"><td><b>Warsaw Repairs</b></td><td>STOCK_REPAIR</td></tr>`; }
     function selectDef(n, id) { document.getElementById('accountDisplay').value = n; document.getElementById('accountID').value = id; closeModal(); }
