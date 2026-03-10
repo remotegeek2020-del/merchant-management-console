@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Equipment Management - Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
@@ -38,6 +38,7 @@
             <button class="slds-button slds-button_brand" style="border-radius: 12px;" onclick="window.location.href='equipments-form.html'">+ New Activity</button>
         </div>
     </div>
+
     <article class="slds-card">
         <div class="slds-card__header slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
             <h2 class="slds-text-heading_small" style="font-weight: 700; color: var(--pp-blue);">Recent Hardware Activity</h2>
@@ -55,7 +56,7 @@
                         <th scope="col">Serial #</th>
                         <th scope="col">Merchant Account</th>
                         <th scope="col">Received Date</th> 
-                        <th scope="col" id="dateColHeader">Date Created</th>
+                        <th scope="col">Date Created</th>
                     </tr>
                 </thead>
                 <tbody id="dashboardBody"></tbody>
@@ -69,87 +70,71 @@
             </div>
         </footer>
     </article>
+
     <div id="debugLog"><div>[System] Dashboard Secure Mode Active.</div></div>
+
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const API_URL = "/api/equipments";
         let currentPage = 1;
         const recordsPerPage = 15;
-        function logDebug(title, data) {
-            const console = document.getElementById('debugLog');
-            const entry = document.createElement('div');
-            entry.innerText = `[${new Date().toLocaleTimeString()}] ${title}: ${JSON.stringify(data).substring(0, 80)}...`;
-            console.prepend(entry);
-        }
+
         async function fetchDashboardData() {
-            const viewValue = document.getElementById('viewFilter').value;
-            const searchQuery = document.getElementById('searchInput').value;
             const tbody = document.getElementById('dashboardBody');
             tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>LOADING...</td></tr>";
+
             try {
                 const res = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: 'list', page: currentPage, limit: recordsPerPage, view: viewValue, query: searchQuery })
+                    body: JSON.stringify({ 
+                        action: 'list', 
+                        schemaId: '6717da1c4a74233fa104889f',
+                        page: currentPage, 
+                        query: document.getElementById('searchInput').value 
+                    })
                 });
+
                 const data = await res.json();
                 tbody.innerHTML = "";
+                
                 if (!data.records || data.records.length === 0) {
                     tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>No results.</td></tr>";
                     return;
                 }
+
                 data.records.forEach(record => {
                     const p = record.properties || {};
                     const row = tbody.insertRow();
                     
-                    // Updated mapping: use the new equipment_date_received key
-                    const receivedDate = p["custom_objects.equipments.equipment_date_received"] || p.equipment_date_received || '---';
+                    // FIXED: Using the full path key from your HighLevel Schema
+                    const eqID = p["custom_objects.equipments.equipment_id"] || p.equipment_id || '---';
+                    const type = p["custom_objects.equipments.terminal_type"] || p.terminal_type || '---';
+                    const serial = p["custom_objects.equipments.serial_number"] || p.serial_number || '---';
+                    const merchant = p["custom_objects.equipments.merchant_account"] || p.merchant_account || '---';
+                    const receivedDate = p["custom_objects.equipments.equipment_date_received"] || '---';
 
                     row.innerHTML = `
-                        <td><a href="#" onclick='alert("ID: " + "${record.id}")'>${p["custom_objects.equipments.equipment_id"] || p.equipment_id || record.name || '---'}</a></td>
-                        <td>${p["custom_objects.equipments.terminal_type"] || p.terminal_type || '---'}</td>
-                        <td>${p["custom_objects.equipments.serial_number"] || p.serial_number || '---'}</td>
-                        <td>${p["custom_objects.equipments.merchant_account"] || p.merchant_account || '---'}</td>
+                        <td><a href="#" class="slds-text-link_reset" style="color:#004990; font-weight:700;">${eqID}</a></td>
+                        <td>${type}</td>
+                        <td>${serial}</td>
+                        <td>${merchant}</td>
                         <td>${receivedDate}</td>
                         <td>${new Date(record.createdAt).toLocaleDateString()}</td>
                     `;
                 });
+
                 document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
                 document.getElementById('prevBtn').disabled = (currentPage === 1);
                 document.getElementById('nextBtn').disabled = (data.records.length < recordsPerPage);
-                logDebug("Fetch", "Success");
             } catch (err) {
-                logDebug("Error", err.message);
                 tbody.innerHTML = `<tr><td colspan='6' style='color:red; text-align:center; padding:20px;'>${err.message}</td></tr>`;
             }
         }
-        async function exportToCSV() {
-            Swal.fire({ title: 'Exporting...', didOpen: () => Swal.showLoading() });
-            const viewValue = document.getElementById('viewFilter').value;
-            const searchQuery = document.getElementById('searchInput').value;
-            try {
-                const res = await fetch(API_URL, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: 'list', page: 1, limit: 100, view: viewValue, query: searchQuery })
-                });
-                const data = await res.json();
-                let csv = "ID,Serial,Type,Account,ReceivedDate\n";
-                data.records.forEach(r => {
-                    const p = r.properties;
-                    const date = p["custom_objects.equipments.equipment_date_received"] || p.equipment_date_received || '---';
-                    csv += `"${p.equipment_id}","${p.serial_number}","${p.terminal_type}","${p.merchant_account}","${date}"\n`;
-                });
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(blob);
-                link.download = "export.csv";
-                link.click();
-                Swal.close();
-            } catch (e) { Swal.fire("Error", e.message, "error"); }
-        }
+
         function changePage(step) { currentPage += step; fetchDashboardData(); }
         function resetAndFetch() { currentPage = 1; fetchDashboardData(); }
+
         window.onload = () => {
             const userId = sessionStorage.getItem('pp_userid');
             document.getElementById('user-greeting').innerText = userId ? `Staff: ${userId}` : "Hardware Console";
