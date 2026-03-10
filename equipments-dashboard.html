@@ -78,8 +78,6 @@
 
     <div id="debugLog"><div>[System] Dashboard Secure Mode Active.</div></div>
 
-    <div id="modalBackdrop" class="slds-backdrop slds-backdrop_open slds-hide"></div>
-
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const API_URL = "/api/equipments";
@@ -104,11 +102,15 @@
                 const res = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: 'list', page: currentPage, limit: recordsPerPage, view: viewValue, query: searchQuery })
+                    body: JSON.stringify({ 
+                        action: 'list', 
+                        page: currentPage, 
+                        limit: recordsPerPage, 
+                        view: viewValue, 
+                        query: searchQuery 
+                    })
                 });
 
-                if (res.status === 404) throw new Error("API Route Not Found (404). Check Vercel Functions tab.");
-                
                 const data = await res.json();
                 tbody.innerHTML = "";
                 
@@ -120,12 +122,16 @@
                 data.records.forEach(record => {
                     const p = record.properties || {};
                     const row = tbody.insertRow();
+                    
+                    // Fixed mapping: explicitly use 'deployment_date'
+                    const receivedDate = p.deployment_date || '---';
+
                     row.innerHTML = `
                         <td><a href="#" onclick='alert("ID: " + "${record.id}")'>${p.equipment_id || record.name || '---'}</a></td>
                         <td>${p.terminal_type || '---'}</td>
                         <td>${p.serial_number || '---'}</td>
                         <td>${p.merchant_account || '---'}</td>
-                        <td>${p.deployment_date || '---'}</td>
+                        <td>${receivedDate}</td>
                         <td>${new Date(record.createdAt).toLocaleDateString()}</td>
                     `;
                 });
@@ -151,10 +157,10 @@
                     body: JSON.stringify({ action: 'list', page: 1, limit: 100, view: viewValue, query: searchQuery })
                 });
                 const data = await res.json();
-                let csv = "ID,Serial,Type,Account\n";
+                let csv = "ID,Serial,Type,Account,ReceivedDate\n";
                 data.records.forEach(r => {
                     const p = r.properties;
-                    csv += `"${p.equipment_id}","${p.serial_number}","${p.terminal_type}","${p.merchant_account}"\n`;
+                    csv += `"${p.equipment_id}","${p.serial_number}","${p.terminal_type}","${p.merchant_account}","${p.deployment_date}"\n`;
                 });
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const link = document.createElement('a');
