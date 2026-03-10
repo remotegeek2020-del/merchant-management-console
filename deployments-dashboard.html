@@ -144,30 +144,30 @@
             } catch (e) { tbody.innerHTML = "<tr><td colspan='7'>Fetch Error.</td></tr>"; }
         }
 
-        async function hydrateRow(internalId) {
-            try {
-                // Restoration of working relationship lookup logic
-                const relRes = await fetch(`${PROXY_URL}relations/${internalId}?locationId=${LOCATION_ID}`);
-                const relData = await relRes.json();
-                const rel = (relData.relations || []).find(r => r.secondObjectKey.includes('equipments') || r.firstObjectKey.includes('equipments') || r.secondObjectKey.includes(EQUIPMENT_SCHEMA));
-                
-                if (rel) {
-                    const equipmentId = (rel.firstRecordId === internalId) ? rel.secondRecordId : rel.firstRecordId;
-                    const eqRes = await fetch(`${PROXY_URL}custom_objects.equipments/records/${equipmentId}?locationId=${LOCATION_ID}`, {
-                        headers: { "Schema-Id": EQUIPMENT_SCHEMA }
-                    });
-                    const eqData = await eqRes.json();
-                    const ep = (eqData.record?.properties || eqData.properties || {});
-                    
-                    document.getElementById(`eqid-${internalId}`).innerText = ep.equipment_id || '---';
-                    document.getElementById(`sn-${internalId}`).innerText = ep.serial_number || '---';
-                    document.getElementById(`merch-${internalId}`).innerText = ep.merchant_account || '---';
-                    hydratedData[internalId] = { eqid: ep.equipment_id, sn: ep.serial_number, merch: ep.merchant_account };
-                } else {
-                    document.getElementById(`eqid-${internalId}`).innerText = "Unlinked";
-                }
-            } catch (e) { document.getElementById(`eqid-${internalId}`).innerText = "---"; }
+       async function hydrateRow(internalId) {
+    try {
+        // Talk to YOUR API, not the external proxy
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'getHydratedData', 
+                internalId: internalId 
+            })
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            const ep = result.data;
+            document.getElementById(`eqid-${internalId}`).innerText = ep.equipment_id || '---';
+            document.getElementById(`sn-${internalId}`).innerText = ep.serial_number || '---';
+            document.getElementById(`merch-${internalId}`).innerText = ep.merchant_account || '---';
+            hydratedData[internalId] = { eqid: ep.equipment_id, sn: ep.serial_number, merch: ep.merchant_account };
         }
+    } catch (e) { 
+        console.error("Hydration failed", e);
+    }
+}
 
         function openRecordModal(id) {
             const record = currentRecords.find(r => r.id === id);
@@ -205,3 +205,4 @@
     </script>
 </body>
 </html>
+
