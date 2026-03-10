@@ -4,9 +4,8 @@
     <meta charset="UTF-8">
     <title>Equipment Management - Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
@@ -18,7 +17,6 @@
     </style>
 </head>
 <body>
-
     <div class="modern-header">
         <div>
             <div class="header-controls">
@@ -27,23 +25,19 @@
             </div>
             <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--pp-blue); margin-top: 5px;">Equipments Dashboard</h1>
         </div>
-        
         <div class="slds-grid slds-grid_vertical-align-center">
             <div class="slds-form-element slds-m-right_small" style="width: 280px; position: relative;">
                 <span class="material-icons" style="position: absolute; left: 10px; top: 10px; font-size: 18px; color: #a0aec0; z-index: 5;">search</span>
                 <input type="text" id="searchInput" placeholder="Search serial or ID..." class="slds-input" style="border-radius: 12px; padding-left: 35px;" onkeypress="if(event.key==='Enter') resetAndFetch()" />
             </div>
-            
             <select id="viewFilter" class="slds-select slds-m-right_small" style="width: 180px; border-radius: 12px;" onchange="resetAndFetch()">
                 <option value="all">View All</option>
                 <option value="Warsaw Office / Inventory">Warsaw Inventory</option>
                 <option value="Warsaw Repairs">Warsaw Repairs</option>
             </select>
-
             <button class="slds-button slds-button_brand" style="border-radius: 12px;" onclick="window.location.href='equipments-form.html'">+ New Activity</button>
         </div>
     </div>
-
     <article class="slds-card">
         <div class="slds-card__header slds-grid slds-grid_align-spread slds-grid_vertical-align-center">
             <h2 class="slds-text-heading_small" style="font-weight: 700; color: var(--pp-blue);">Recent Hardware Activity</h2>
@@ -75,67 +69,51 @@
             </div>
         </footer>
     </article>
-
     <div id="debugLog"><div>[System] Dashboard Secure Mode Active.</div></div>
-
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         const API_URL = "/api/equipments";
         let currentPage = 1;
         const recordsPerPage = 15;
-
         function logDebug(title, data) {
             const console = document.getElementById('debugLog');
             const entry = document.createElement('div');
             entry.innerText = `[${new Date().toLocaleTimeString()}] ${title}: ${JSON.stringify(data).substring(0, 80)}...`;
             console.prepend(entry);
         }
-
         async function fetchDashboardData() {
             const viewValue = document.getElementById('viewFilter').value;
             const searchQuery = document.getElementById('searchInput').value;
             const tbody = document.getElementById('dashboardBody');
-            
             tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>LOADING...</td></tr>";
-
             try {
                 const res = await fetch(API_URL, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ 
-                        action: 'list', 
-                        page: currentPage, 
-                        limit: recordsPerPage, 
-                        view: viewValue, 
-                        query: searchQuery 
-                    })
+                    body: JSON.stringify({ action: 'list', page: currentPage, limit: recordsPerPage, view: viewValue, query: searchQuery })
                 });
-
                 const data = await res.json();
                 tbody.innerHTML = "";
-                
                 if (!data.records || data.records.length === 0) {
                     tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>No results.</td></tr>";
                     return;
                 }
-
                 data.records.forEach(record => {
                     const p = record.properties || {};
                     const row = tbody.insertRow();
                     
-                    // Fixed mapping: explicitly use 'deployment_date'
-                    const receivedDate = p.deployment_date || '---';
+                    // Updated mapping: use the new equipment_date_received key
+                    const receivedDate = p["custom_objects.equipments.equipment_date_received"] || p.equipment_date_received || '---';
 
                     row.innerHTML = `
-                        <td><a href="#" onclick='alert("ID: " + "${record.id}")'>${p.equipment_id || record.name || '---'}</a></td>
-                        <td>${p.terminal_type || '---'}</td>
-                        <td>${p.serial_number || '---'}</td>
-                        <td>${p.merchant_account || '---'}</td>
+                        <td><a href="#" onclick='alert("ID: " + "${record.id}")'>${p["custom_objects.equipments.equipment_id"] || p.equipment_id || record.name || '---'}</a></td>
+                        <td>${p["custom_objects.equipments.terminal_type"] || p.terminal_type || '---'}</td>
+                        <td>${p["custom_objects.equipments.serial_number"] || p.serial_number || '---'}</td>
+                        <td>${p["custom_objects.equipments.merchant_account"] || p.merchant_account || '---'}</td>
                         <td>${receivedDate}</td>
                         <td>${new Date(record.createdAt).toLocaleDateString()}</td>
                     `;
                 });
-
                 document.getElementById('pageInfo').innerText = `Page ${currentPage}`;
                 document.getElementById('prevBtn').disabled = (currentPage === 1);
                 document.getElementById('nextBtn').disabled = (data.records.length < recordsPerPage);
@@ -145,7 +123,6 @@
                 tbody.innerHTML = `<tr><td colspan='6' style='color:red; text-align:center; padding:20px;'>${err.message}</td></tr>`;
             }
         }
-
         async function exportToCSV() {
             Swal.fire({ title: 'Exporting...', didOpen: () => Swal.showLoading() });
             const viewValue = document.getElementById('viewFilter').value;
@@ -160,7 +137,8 @@
                 let csv = "ID,Serial,Type,Account,ReceivedDate\n";
                 data.records.forEach(r => {
                     const p = r.properties;
-                    csv += `"${p.equipment_id}","${p.serial_number}","${p.terminal_type}","${p.merchant_account}","${p.deployment_date}"\n`;
+                    const date = p["custom_objects.equipments.equipment_date_received"] || p.equipment_date_received || '---';
+                    csv += `"${p.equipment_id}","${p.serial_number}","${p.terminal_type}","${p.merchant_account}","${date}"\n`;
                 });
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const link = document.createElement('a');
@@ -170,10 +148,8 @@
                 Swal.close();
             } catch (e) { Swal.fire("Error", e.message, "error"); }
         }
-
         function changePage(step) { currentPage += step; fetchDashboardData(); }
         function resetAndFetch() { currentPage = 1; fetchDashboardData(); }
-
         window.onload = () => {
             const userId = sessionStorage.getItem('pp_userid');
             document.getElementById('user-greeting').innerText = userId ? `Staff: ${userId}` : "Hardware Console";
