@@ -2,20 +2,22 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Hardware Dashboard</title>
+    <title>Equipment Management - Dashboard</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
-        body { background: #f8fafc; padding: 20px; font-family: 'Inter', sans-serif; }
-        .slds-card { border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .received-col { font-weight: 800; color: #004990; background: #f0f7ff; }
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
+        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border: 1px solid var(--glass-border); border-radius: 20px; padding: 25px; margin-bottom: 25px; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); display: flex; justify-content: space-between; align-items: center; }
+        .slds-card { border: 1px solid var(--glass-border) !important; border-radius: 20px !important; background: var(--glass) !important; box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important; overflow: hidden; }
+        .btn-modern { background: var(--pp-blue); color: white; padding: 10px 20px; border-radius: 12px; font-weight: 700; text-decoration: none; }
     </style>
 </head>
 <body>
-
-    <div class="slds-grid slds-grid_align-spread slds-m-bottom_large">
-        <h1 style="font-size: 1.5rem; font-weight: 700; color: #004990;">Equipments Dashboard</h1>
-        <button class="slds-button slds-button_brand" onclick="window.location.href='equipments-form.html'">+ New Entry</button>
+    <div class="modern-header">
+        <h1 style="font-size: 1.5rem; font-weight: 800; color: var(--pp-blue);">Equipments Dashboard</h1>
+        <a href="equipments-form.html" class="btn-modern">+ New Entry</a>
     </div>
 
     <article class="slds-card">
@@ -26,7 +28,7 @@
                     <th scope="col">Type</th>
                     <th scope="col">Serial</th>
                     <th scope="col">Account</th>
-                    <th scope="col">Received Date (YYYY-MM-DD)</th>
+                    <th scope="col">Received Date</th>
                     <th scope="col">Created</th>
                 </tr>
             </thead>
@@ -35,43 +37,28 @@
     </article>
 
     <script>
-        const API_URL = "/api/equipments";
-
-        async function loadData() {
+        async function fetchDashboardData() {
             const tbody = document.getElementById('dashboardBody');
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center;'>Loading Ledger...</td></tr>";
-
+            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding: 40px;'>Syncing Ledger...</td></tr>";
             try {
-                const res = await fetch(API_URL, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ action: 'list' })
-                });
+                const res = await fetch("/api/equipments", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'list' }) });
                 const data = await res.json();
                 tbody.innerHTML = "";
-
-                data.records.forEach(r => {
-                    const p = r.properties || {};
+                data.records.forEach(record => {
+                    const p = record.properties || {};
                     const row = tbody.insertRow();
-                    
-                    // Match the key from equipments-form.html
-                    const dateReceived = p["custom_objects.equipments.received_date"] || p.received_date || '---';
-
                     row.innerHTML = `
-                        <td style="font-weight:700;">${p["custom_objects.equipments.equipment_id"] || '---'}</td>
+                        <td style="font-weight:700; color:#004990;">${p["custom_objects.equipments.equipment_id"] || '---'}</td>
                         <td>${p["custom_objects.equipments.terminal_type"] || '---'}</td>
                         <td>${p["custom_objects.equipments.serial_number"] || '---'}</td>
                         <td>${p["custom_objects.equipments.merchant_account"] || '---'}</td>
-                        <td class="received-col">${dateReceived}</td>
-                        <td>${new Date(r.createdAt).toLocaleDateString()}</td>
+                        <td style="font-weight:700;">${p["custom_objects.equipments.received_date"] || '---'}</td>
+                        <td>${new Date(record.createdAt).toLocaleDateString()}</td>
                     `;
                 });
-            } catch (e) {
-                tbody.innerHTML = "<tr><td colspan='6' style='color:red;'>Connection Error</td></tr>";
-            }
+            } catch (err) { tbody.innerHTML = "<tr><td colspan='6'>Fetch Error</td></tr>"; }
         }
-
-        window.onload = loadData;
+        window.onload = fetchDashboardData;
     </script>
 </body>
 </html>
