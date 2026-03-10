@@ -15,9 +15,9 @@
         .hidden-field { display: none !important; }
         .show-flex { display: flex !important; }
         #saveOverlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
-        .custom-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; max-width: 850px; background: white; z-index: 9001; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.25); }
+        .custom-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; max-width: 850px; background: white; z-index: 9001; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.25); overflow: hidden; }
         .custom-modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); z-index: 9000; }
-        .date-input-fix { border: 2px solid var(--pp-blue) !important; font-weight: 700 !important; color: var(--pp-blue) !important; text-align: center; }
+        .date-input-fix { border: 2px solid var(--pp-blue) !important; font-weight: 700 !important; color: var(--pp-blue) !important; text-align: center; font-family: monospace; }
     </style>
 </head>
 <body>
@@ -43,29 +43,31 @@
     <div id="mainFormArea" class="slds-p-around_xx-large hidden-field">
         <div class="slds-grid slds-wrap slds-gutters">
             <div class="slds-col slds-size_1-of-2 f-genID hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Reference ID</label>
+                <label class="slds-form-element__label">Reference ID</label>
                 <input type="text" id="generatedTag" class="slds-input" readonly value="ASSIGNED ON SAVE">
             </div>
             <div class="slds-col slds-size_1-of-2 f-account hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Account / Location</label>
+                <label class="slds-form-element__label">Account / Location</label>
                 <input type="text" id="accountDisplay" class="slds-input" readonly onclick="openModal('account')" placeholder="Search Accounts...">
                 <input type="hidden" id="accountID">
             </div>
             <div class="slds-col slds-size_1-of-2 f-equipmentLookup hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Hardware Lookup</label>
+                <label class="slds-form-element__label">Hardware Lookup</label>
                 <input type="text" id="equipmentDisplay" class="slds-input" readonly onclick="openModal('equipment')" placeholder="Search Inventory...">
                 <input type="hidden" id="equipmentID">
             </div>
             <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
+                <label class="slds-form-element__label">Terminal Model</label>
                 <select id="type" class="slds-select">
-                    <option value="z3__pin_pad">Z3 - Pin Pad</option>
-                    <option value="z8_terminal">Z8 Terminal</option>
                     <option value="z11_terminal">Z11 Terminal</option>
+                    <option value="z9">Z9</option>
+                    <option value="z8_terminal">Z8 Terminal</option>
+                    <option value="z3__pin_pad">Z3 - Pin Pad</option>
+                    <option value="valor_vl500">Valor VL500</option>
                 </select>
             </div>
             <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
+                <label class="slds-form-element__label">Serial Number</label>
                 <input type="text" id="serial" class="slds-input">
             </div>
             <div class="slds-col slds-size_1-of-1 f-date hidden-field slds-m-bottom_large">
@@ -73,15 +75,19 @@
                 <input type="text" id="receivedDateInput" class="slds-input date-input-fix" placeholder="2026-03-10" maxlength="10">
             </div>
         </div>
-        <button class="slds-button slds-button_brand slds-size_1-of-1" onclick="saveData()">SAVE RECORD</button>
+        <button class="slds-button slds-button_brand slds-size_1-of-1 slds-m-top_large" onclick="saveData()" style="height: 50px;">CONFIRM & SAVE RECORD</button>
     </div>
 </div>
 
 <div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
 <div id="lookupModal" class="custom-modal">
     <div class="slds-p-around_large">
-        <input type="text" id="modalSearch" class="slds-input" placeholder="Search..." onkeyup="handleSearchInput(this.value)">
-        <div style="max-height: 400px; overflow-y: auto;"><table class="slds-table"><tbody id="lookupResults"></tbody></table></div>
+        <input type="text" id="modalSearch" class="slds-input slds-m-bottom_medium" placeholder="Search..." onkeyup="handleSearchInput(this.value)">
+        <div style="max-height: 400px; overflow-y: auto;">
+            <table class="slds-table slds-table_bordered">
+                <tbody id="lookupResults"></tbody>
+            </table>
+        </div>
     </div>
 </div>
 
@@ -89,6 +95,7 @@
     const API_URL = "/api/equipments";
     let currentLookupType = '';
 
+    // MASK SCRIPT
     document.getElementById('receivedDateInput').addEventListener('input', function (e) {
         let v = e.target.value.replace(/\D/g, '');
         if (v.length > 4 && v.length <= 6) v = v.slice(0, 4) + '-' + v.slice(4);
@@ -101,12 +108,14 @@
         document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
         if (val === 'receiving_inventory') showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
         if (val === 'deployment') showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-serial', '.f-date']);
+        if (val === 'process_return') showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial']);
     }
     function showFields(sel) { sel.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
 
     async function saveData() {
         const dateStr = document.getElementById('receivedDateInput').value;
-        if (document.getElementById('activityType').value === 'receiving_inventory' && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+        const type = document.getElementById('activityType').value;
+        if (type === 'receiving_inventory' && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
             Swal.fire("Error", "Date must be YYYY-MM-DD", "error"); return;
         }
         document.getElementById('saveOverlay').classList.add('show-flex');
@@ -125,8 +134,27 @@
         } catch (e) { document.getElementById('saveOverlay').classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); }
     }
 
-    function openModal(t) { currentLookupType = t; document.getElementById('lookupModal').style.display='block'; document.getElementById('backdrop').style.display='block'; }
+    async function fetchLookup(q) {
+        const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'list', schemaId: currentLookupType === 'account' ? '6713847a517aa62ab429e204' : '6717da1c4a74233fa104889f', query: q }) });
+        const data = await res.json();
+        const tbody = document.getElementById('lookupResults');
+        tbody.innerHTML = "";
+        data.records.forEach(r => {
+            const row = document.createElement('tr'); row.style.cursor = "pointer";
+            const p = r.properties;
+            row.innerHTML = `<td><b>${p.merchant_name || p.equipment_id || r.name}</b></td>`;
+            row.onclick = () => {
+                if (currentLookupType === 'account') { document.getElementById('accountDisplay').value = p.merchant_name || r.name; document.getElementById('accountID').value = r.id; }
+                else { document.getElementById('equipmentDisplay').value = p.equipment_id; document.getElementById('equipmentID').value = r.id; document.getElementById('serial').value = p.serial_number; }
+                closeModal();
+            };
+            tbody.appendChild(row);
+        });
+    }
+
+    function openModal(t) { currentLookupType = t; document.getElementById('lookupModal').style.display='block'; document.getElementById('backdrop').style.display='block'; fetchLookup(""); }
     function closeModal() { document.getElementById('lookupModal').style.display='none'; document.getElementById('backdrop').style.display='none'; }
+    function handleSearchInput(v) { clearTimeout(window.sT); window.sT = setTimeout(() => fetchLookup(v), 500); }
     window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
