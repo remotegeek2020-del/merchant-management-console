@@ -11,7 +11,7 @@ export default async function handler(req, res) {
     const RETURN_ASSOC_ID = "69a3151e5767c05d16488ab9"; 
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, userEmail, gearID, merchantID, merchantName, prefix, internalId, query } = req.body;
+    const { action, id, payload, userEmail, gearID, merchantID, prefix, internalId, query } = req.body;
 
     const logAction = async (msg) => {
         try {
@@ -44,36 +44,28 @@ export default async function handler(req, res) {
         }
 
         if (action === 'createEquipment') {
-            const resEq = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
+            // Send the payload exactly as received from the form
+            const resEq = await fetch(PROXY_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json", "Schema-Id": EQUIPMENT_SCHEMA }, 
+                body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) 
+            });
             const d = await resEq.json();
-            if ((d.id || d.record?.id) && merchantID) {
-                await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: d.id || d.record.id, secondRecordId: merchantID }) });
+            const newId = d.id || d.record?.id;
+            if (newId && merchantID) {
+                await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: ASSOC_ID, firstRecordId: newId, secondRecordId: merchantID }) });
             }
             await logAction(`Equipment Created: ${payload["custom_objects.equipments.equipment_id"]}`);
             return res.status(200).json({ success: true });
         }
 
-        if (action === 'createDeployment') {
-            const resDep = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": DEPLOYMENT_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
-            const d = await resDep.json();
-            if (d.id || d.record?.id) {
-                await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: DEPLOY_TO_GEAR_ASSOC, firstRecordId: d.id || d.record.id, secondRecordId: gearID }) });
-            }
-            await logAction(`Deployment Created: ${payload["custom_objects.deployments.deployment_id"]}`);
+        // Deployment and Return actions...
+        if (action === 'createDeployment' || action === 'createReturn') {
+            const schema = action === 'createDeployment' ? DEPLOYMENT_SCHEMA : RETURN_SCHEMA;
+            const res = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": schema }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
             return res.status(200).json({ success: true });
         }
 
-        if (action === 'createReturn') {
-            const resRet = await fetch(PROXY_URL, { method: "POST", headers: { "Content-Type": "application/json", "Schema-Id": RETURN_SCHEMA }, body: JSON.stringify({ locationId: LOCATION_ID, properties: payload }) });
-            const d = await resRet.json();
-            if (d.id || d.record?.id) {
-                await fetch(PROXY_URL, { method: "POST", headers: { "Link-Relation": "true" }, body: JSON.stringify({ locationId: LOCATION_ID, associationId: RETURN_ASSOC_ID, firstRecordId: gearID, secondRecordId: d.id || d.record.id }) });
-            }
-            await logAction(`Return Logged: ${payload["custom_objects.returns.return_id"]}`);
-            return res.status(200).json({ success: true });
-        }
-
-        // Action for Dashboard Hydration
         if (action === 'getHydratedData') {
             const relRes = await fetch(`${PROXY_URL}relations/${internalId}?locationId=${LOCATION_ID}`);
             const relData = await relRes.json();
