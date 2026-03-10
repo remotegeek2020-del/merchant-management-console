@@ -19,158 +19,113 @@
     </style>
 </head>
 <body>
+
 <div class="ghl-container">
     <div id="saveOverlay">
         <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        <p id="saveStatus" style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing Global Data Ledger...</p>
+        <p style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing Global Data Ledger...</p>
     </div>
+
     <div class="activity-header-box">
         <div>
             <a href="index.html" style="background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px;"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
-            <div id="user-greeting" style="font-size: 11px; font-weight: 700; color: var(--pp-blue); margin-top: 5px;">Staff Member: Loading...</div>
+            <div id="user-greeting" style="font-size: 11px; font-weight: 700; color: var(--pp-blue); margin-top: 5px;">Hardware Console</div>
         </div>
         <select id="activityType" style="width: 250px; border-radius: 12px; height: 45px; font-weight: 700; border: 1px solid #d1d9e6;" onchange="toggleFields(this.value)">
             <option value="">-- Choose Activity --</option>
             <option value="receiving_inventory">1. New Equipment</option>
-            <option value="deployment">2. New Deployment</option>
-            <option value="process_return">3. Process Return</option>
         </select>
     </div>
+
     <div id="mainFormArea" class="slds-p-around_xx-large hidden-field">
         <div class="slds-grid slds-wrap slds-gutters">
-            <div class="slds-col slds-size_1-of-2 f-genID hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Reference ID</label>
-                <input type="text" id="generatedTag" class="slds-input" style="background:#f0f7ff; font-weight:800; border-radius:12px;" readonly value="ASSIGNED ON SAVE">
-            </div>
-            <div class="slds-col slds-size_1-of-2 f-account hidden-field slds-m-bottom_large">
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Account / Location</label>
-                <input type="text" id="accountDisplay" class="slds-input" readonly placeholder="Search Accounts..." onclick="openModal('account')" style="border-radius:12px; cursor:pointer;">
-                <input type="hidden" id="accountID">
+                <input type="text" id="accountDisplay" class="slds-input" readonly placeholder="Warsaw Office / Inventory" style="border-radius:12px;">
+                <input type="hidden" id="accountID" value="6993793b3572dc52847e4fe0">
             </div>
-            <div class="slds-col slds-size_1-of-2 f-equipmentLookup hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" style="font-weight: 700;">Hardware Lookup</label>
-                <input type="text" id="equipmentDisplay" class="slds-input" readonly placeholder="Select existing inventory..." onclick="openModal('equipment')" style="border-radius:12px; cursor:pointer;">
-                <input type="hidden" id="equipmentID">
-            </div>
-            <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
+
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
                 <select id="type" class="slds-select" style="border-radius:12px;">
-                    <option value="">-- Select Model --</option>
                     <option value="z11_terminal">Z11 Terminal</option>
-                    <option value="z9">Z9</option>
                     <option value="z8_terminal">Z8 Terminal</option>
                     <option value="valor_vl500">Valor VL500</option>
-                    <option value="pax_a920">Pax A920</option>
                 </select>
             </div>
-            <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
+
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
                 <input type="text" id="serial" class="slds-input" style="border-radius: 12px;">
             </div>
-            <div class="slds-col slds-size_1-of-2 f-date hidden-field slds-m-bottom_large">
-                <label class="slds-form-element__label" id="dateLabel" style="font-weight: 700;">Date Received</label>
-                <input type="date" id="depDate" class="slds-input" style="border-radius: 12px;">
+
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+                <label class="slds-form-element__label" style="font-weight: 700;">Received Date (YYYY-MM-DD)</label>
+                <input type="date" id="receivedDateInput" class="slds-input" style="border-radius: 12px;">
             </div>
         </div>
         <div class="slds-m-top_large slds-grid slds-grid_align-end">
-            <button class="slds-button slds-button_brand btn-modern" onclick="saveData()">CONFIRM & SAVE RECORD</button>
+            <button class="slds-button slds-button_brand btn-modern" onclick="saveData()">CONFIRM & SAVE</button>
         </div>
     </div>
-</div>
-
-<div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
-<div id="lookupModal" class="custom-modal" style="display:none; position:fixed; top:50%; left:50%; transform:translate(-50%,-50%); width:80%; background:white; z-index:9001; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.1);">
-    <div class="slds-p-around_large">
-        <input type="text" id="modalSearch" class="slds-input" style="margin-bottom:15px;" placeholder="Type to search..." onkeyup="handleSearchInput(this.value)">
-        <div style="max-height: 300px; overflow-y: auto;">
-            <table class="slds-table slds-table_bordered">
-                <tbody id="lookupResults"></tbody>
-            </table>
-        </div>
-    </div>
-    <div class="slds-modal__footer"><button class="slds-button slds-button_neutral" onclick="closeModal()">Close</button></div>
 </div>
 
 <script>
     const API_URL = "/api/equipments";
-    let currentLookupType = '';
 
     function toggleFields(val) {
         document.getElementById('mainFormArea').classList.toggle('hidden-field', !val);
-        document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
-        if (val === 'receiving_inventory') {
-            showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
-        }
     }
 
-    function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
-async function saveData() {
-    const overlay = document.getElementById('saveOverlay');
-    const type = document.getElementById('activityType').value;
-    
-    // 1. Capture the raw date from the picker (usually YYYY-MM-DD by default in modern browsers)
-    let rawDate = document.getElementById('depDate').value;
-    let formattedDate = null;
+    async function saveData() {
+        const overlay = document.getElementById('saveOverlay');
+        const dateVal = document.getElementById('receivedDateInput').value; // This is natively YYYY-MM-DD
+        
+        if(!dateVal) {
+            Swal.fire("Error", "Please select a date", "error");
+            return;
+        }
 
-    // 2. Format validation: Ensure it is exactly YYYY-MM-DD
-    if (rawDate) {
-        const d = new Date(rawDate);
-        if (!isNaN(d.getTime())) {
-            formattedDate = d.toISOString().split('T')[0]; // Guarantees YYYY-MM-DD
+        overlay.classList.add('show-flex');
+
+        try {
+            // Get ID
+            const idRes = await fetch(API_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({ action: 'getNextID', prefix: 'Equip-' }) 
+            });
+            const { nextID } = await idRes.json();
+
+            // Build Payload with EXACT HighLevel Key
+            const payload = {
+                "custom_objects.equipments.equipment_id": nextID,
+                "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value || "Warsaw Office / Inventory",
+                "custom_objects.equipments.terminal_type": document.getElementById('type').value,
+                "custom_objects.equipments.serial_number": document.getElementById('serial').value,
+                "custom_objects.equipments.received_date": dateVal // SENT DIRECTLY AS YYYY-MM-DD
+            };
+
+            const res = await fetch(API_URL, { 
+                method: "POST", 
+                headers: { "Content-Type": "application/json" }, 
+                body: JSON.stringify({ 
+                    action: 'createEquipment', 
+                    payload: payload, 
+                    merchantID: document.getElementById('accountID').value 
+                }) 
+            });
+
+            if (res.ok) {
+                Swal.fire('Success', `Saved ${nextID}`, 'success').then(() => location.reload());
+            } else {
+                throw new Error("GHL Error");
+            }
+        } catch (e) {
+            overlay.classList.remove('show-flex');
+            Swal.fire('Error', e.message, 'error');
         }
     }
-
-    overlay.classList.add('show-flex');
-
-    try {
-        const idRes = await fetch(API_URL, { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify({ action: 'getNextID', prefix: 'Equip-' }) 
-        });
-        const { nextID } = await idRes.json();
-
-        // 3. Construct payload with the clean date
-        let properties = {
-            "custom_objects.equipments.equipment_id": nextID,
-            "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
-            "custom_objects.equipments.terminal_type": document.getElementById('type').value,
-            "custom_objects.equipments.serial_number": document.getElementById('serial').value
-        };
-
-        // Only add the property if the date is valid to prevent GHL rejection
-        if (formattedDate) {
-            properties["custom_objects.equipments.received_date"] = formattedDate;
-        }
-
-        const res = await fetch(API_URL, { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify({ 
-                action: 'createEquipment', 
-                payload: properties, 
-                merchantID: document.getElementById('accountID').value 
-            }) 
-        });
-
-        if (res.ok) {
-            Swal.fire('Success', 'Record saved with valid date format.', 'success').then(() => location.reload());
-        } else {
-            throw new Error("HighLevel API rejected the request.");
-        }
-    } catch (e) { 
-        overlay.classList.remove('show-flex'); 
-        Swal.fire('Error', e.message, 'error'); 
-    }
-}
- 
-    function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; }
-    function closeModal() { document.getElementById('lookupModal').style.display = 'none'; }
-    window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
 </html>
-
-
-
-
