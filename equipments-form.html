@@ -105,37 +105,57 @@
 
     function showFields(selectors) { selectors.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
 
-    async function saveData() {
-        const overlay = document.getElementById('saveOverlay');
-        const type = document.getElementById('activityType').value;
-        overlay.classList.add('show-flex');
-        try {
-            const idRes = await fetch(API_URL, { 
-                method: "POST", 
-                headers: { "Content-Type": "application/json" }, 
-                body: JSON.stringify({ action: 'getNextID', prefix: 'Equip-' }) 
-            });
-            const { nextID } = await idRes.json();
+   async function saveData() {
+    const overlay = document.getElementById('saveOverlay');
+    const type = document.getElementById('activityType').value;
+    const dateValue = document.getElementById('depDate').value;
+    
+    overlay.classList.add('show-flex');
 
-            let payload = {
-                "custom_objects.equipments.equipment_id": nextID,
-                "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
-                "custom_objects.equipments.terminal_type": document.getElementById('type').value,
-                "custom_objects.equipments.serial_number": document.getElementById('serial').value,
-                "custom_objects.equipments.received_date": document.getElementById('depDate').value // PRIMARY KEY
-            };
+    try {
+        // 1. Get the next ID
+        const idRes = await fetch(API_URL, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ action: 'getNextID', prefix: 'Equip-' }) 
+        });
+        const { nextID } = await idRes.json();
 
-            const res = await fetch(API_URL, { 
-                method: "POST", 
-                headers: { "Content-Type": "application/json" }, 
-                body: JSON.stringify({ action: 'createEquipment', payload, merchantID: document.getElementById('accountID').value }) 
-            });
+        // 2. Build the properties exactly as GHL needs them
+        // Note: Using the exact full keys from your Postman schema
+        let properties = {
+            "custom_objects.equipments.equipment_id": nextID,
+            "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
+            "custom_objects.equipments.terminal_type": document.getElementById('type').value,
+            "custom_objects.equipments.serial_number": document.getElementById('serial').value
+        };
 
-            if (res.ok) {
-                Swal.fire('Success', 'Record logged to HighLevel.', 'success').then(() => location.reload());
-            } else { throw new Error("Save failed"); }
-        } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); }
+        // Only add the date if a value was actually selected to avoid GHL rejection
+        if (dateValue) {
+            properties["custom_objects.equipments.received_date"] = dateValue;
+        }
+
+        // 3. Send to Vercel
+        const res = await fetch(API_URL, { 
+            method: "POST", 
+            headers: { "Content-Type": "application/json" }, 
+            body: JSON.stringify({ 
+                action: 'createEquipment', 
+                payload: properties, 
+                merchantID: document.getElementById('accountID').value 
+            }) 
+        });
+
+        if (res.ok) {
+            Swal.fire('Success', 'Record created in HighLevel!', 'success').then(() => location.reload());
+        } else {
+            throw new Error("HighLevel rejected the record. Check field keys.");
+        }
+    } catch (e) { 
+        overlay.classList.remove('show-flex'); 
+        Swal.fire('Error', e.message, 'error'); 
     }
+}
 
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; }
     function closeModal() { document.getElementById('lookupModal').style.display = 'none'; }
@@ -143,3 +163,4 @@
 </script>
 </body>
 </html>
+
