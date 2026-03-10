@@ -258,36 +258,49 @@
         } catch (e) { overlay.classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); logDebug(`FAULT: ${e.message}`); }
     }
 
-    async function fetchLookup(q) {
-        const tbody = document.getElementById('lookupResults');
-        document.getElementById('modalHead').innerHTML = currentLookupType === 'account' ? '<th>Merchant</th><th>MID</th>' : '<th>ID</th><th>Model</th><th>Serial</th>';
-        
-        // Let the backend handle which schema to use based on lookup type
-        const res = await fetch(API_URL, { 
-            method: "POST", 
-            headers: { "Content-Type": "application/json" }, 
-            body: JSON.stringify({ 
-                action: 'list', 
-                schemaId: currentLookupType === 'account' ? '6713847a517aa62ab429e204' : '6717da1c4a74233fa104889f',
-                query: q, 
-                page: 1 
-            }) 
-        });
-        const data = await res.json();
-        tbody.innerHTML = "";
-        (data.records || []).forEach(r => {
-            const row = document.createElement('tr'); row.style.cursor = "pointer";
-            const p = r.properties;
-            if (currentLookupType === 'account') {
-                row.innerHTML = `<td><b>${p.merchant_name || r.name}</b></td><td>${p.mid || "---"}</td>`;
-                row.onclick = () => { document.getElementById('accountDisplay').value = p.merchant_name || r.name; document.getElementById('accountID').value = r.id; closeModal(); };
-            } else {
-                row.innerHTML = `<td><b>${p.equipment_id}</b></td><td>${p.terminal_type}</td><td>${p.serial_number}</td>`;
-                row.onclick = () => { document.getElementById('equipmentDisplay').value = p.equipment_id; document.getElementById('equipmentID').value = r.id; document.getElementById('serial').value = p.serial_number; document.getElementById('type').value = p.terminal_type; closeModal(); };
-            }
-            tbody.appendChild(row);
-        });
-    }
+   async function fetchLookup(q) {
+    const tbody = document.getElementById('lookupResults');
+    document.getElementById('modalHead').innerHTML = currentLookupType === 'account' ? '<th>Merchant</th><th>MID</th>' : '<th>ID</th><th>Model</th><th>Serial</th>';
+    
+    // Determine the Schema ID based on what we are looking for
+    const schema = currentLookupType === 'account' ? '6713847a517aa62ab429e204' : '6717da1c4a74233fa104889f';
+
+    const res = await fetch(API_URL, { 
+        method: "POST", 
+        headers: { "Content-Type": "application/json" }, 
+        body: JSON.stringify({ 
+            action: 'list', 
+            schemaId: schema, 
+            query: q 
+        }) 
+    });
+    const data = await res.json();
+    tbody.innerHTML = "";
+    
+    (data.records || []).forEach(r => {
+        const row = document.createElement('tr'); 
+        row.style.cursor = "pointer";
+        const p = r.properties;
+        if (currentLookupType === 'account') {
+            row.innerHTML = `<td><b>${p.merchant_name || r.name}</b></td><td>${p.mid || "---"}</td>`;
+            row.onclick = () => { 
+                document.getElementById('accountDisplay').value = p.merchant_name || r.name; 
+                document.getElementById('accountID').value = r.id; 
+                closeModal(); 
+            };
+        } else {
+            row.innerHTML = `<td><b>${p.equipment_id}</b></td><td>${p.terminal_type}</td><td>${p.serial_number}</td>`;
+            row.onclick = () => { 
+                document.getElementById('equipmentDisplay').value = p.equipment_id; 
+                document.getElementById('equipmentID').value = r.id; 
+                document.getElementById('serial').value = p.serial_number; 
+                document.getElementById('type').value = p.terminal_type; 
+                closeModal(); 
+            };
+        }
+        tbody.appendChild(row);
+    });
+}
 
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; document.getElementById('backdrop').style.display = 'block'; if (type === 'account' && document.getElementById('activityType').value === 'receiving_inventory') renderDefaultMerchants(); else fetchLookup(""); }
     function renderDefaultMerchants() { const tbody = document.getElementById('lookupResults'); tbody.innerHTML = `<tr onclick="selectDef('Warsaw Office / Inventory', '6993793b3572dc52847e4fe0')"><td><b>Warsaw Office</b></td><td>STOCK_PRIMARY</td></tr><tr onclick="selectDef('Warsaw Repairs', '6999c33007a6e56e436c0e84')"><td><b>Warsaw Repairs</b></td><td>STOCK_REPAIR</td></tr>`; }
@@ -298,3 +311,4 @@
 </script>
 </body>
 </html>
+
