@@ -15,15 +15,16 @@
         .hidden-field { display: none !important; }
         .show-flex { display: flex !important; }
         #saveOverlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
-        /* Custom styling for the YYYY-MM-DD field */
-        .date-input-fix { border: 2px solid var(--pp-blue) !important; font-weight: 700 !important; color: var(--pp-blue) !important; text-align: center; letter-spacing: 1px; }
+        .custom-modal { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); width: 95%; max-width: 850px; background: white; z-index: 9001; border-radius: 24px; box-shadow: 0 30px 70px rgba(0,0,0,0.25); }
+        .custom-modal-backdrop { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); z-index: 9000; }
+        .date-input-fix { border: 2px solid var(--pp-blue) !important; font-weight: 700 !important; color: var(--pp-blue) !important; text-align: center; }
     </style>
 </head>
 <body>
 <div class="ghl-container">
     <div id="saveOverlay">
         <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        <p style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Pushing YYYY-MM-DD to HighLevel...</p>
+        <p style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Pushing Data to HighLevel Ledger...</p>
     </div>
 
     <div class="activity-header-box">
@@ -34,45 +35,60 @@
         <select id="activityType" style="width: 250px; border-radius: 12px; height: 45px; font-weight: 700; border: 1px solid #d1d9e6;" onchange="toggleFields(this.value)">
             <option value="">-- Choose Activity --</option>
             <option value="receiving_inventory">1. New Equipment</option>
+            <option value="deployment">2. New Deployment</option>
+            <option value="process_return">3. Process Return</option>
         </select>
     </div>
 
     <div id="mainFormArea" class="slds-p-around_xx-large hidden-field">
         <div class="slds-grid slds-wrap slds-gutters">
-            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+            <div class="slds-col slds-size_1-of-2 f-genID hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Reference ID</label>
-                <input type="text" id="generatedTag" class="slds-input" style="background:#f0f7ff; font-weight:800; border-radius:12px;" readonly value="ASSIGNED ON SAVE">
+                <input type="text" id="generatedTag" class="slds-input" readonly value="ASSIGNED ON SAVE">
             </div>
-            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+            <div class="slds-col slds-size_1-of-2 f-account hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Account / Location</label>
-                <input type="text" id="accountDisplay" class="slds-input" value="Warsaw Office / Inventory" style="border-radius:12px;">
-                <input type="hidden" id="accountID" value="6993793b3572dc52847e4fe0">
+                <input type="text" id="accountDisplay" class="slds-input" readonly onclick="openModal('account')" placeholder="Search Accounts...">
+                <input type="hidden" id="accountID">
             </div>
-            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+            <div class="slds-col slds-size_1-of-2 f-equipmentLookup hidden-field slds-m-bottom_large">
+                <label class="slds-form-element__label" style="font-weight: 700;">Hardware Lookup</label>
+                <input type="text" id="equipmentDisplay" class="slds-input" readonly onclick="openModal('equipment')" placeholder="Search Inventory...">
+                <input type="hidden" id="equipmentID">
+            </div>
+            <div class="slds-col slds-size_1-of-2 f-type hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
-                <select id="type" class="slds-select" style="border-radius:12px;">
+                <select id="type" class="slds-select">
                     <option value="z3__pin_pad">Z3 - Pin Pad</option>
                     <option value="z8_terminal">Z8 Terminal</option>
                     <option value="z11_terminal">Z11 Terminal</option>
                 </select>
             </div>
-            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+            <div class="slds-col slds-size_1-of-2 f-serial hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
-                <input type="text" id="serial" class="slds-input" style="border-radius: 12px;">
+                <input type="text" id="serial" class="slds-input">
             </div>
-            <div class="slds-col slds-size_1-of-1 slds-m-bottom_large">
+            <div class="slds-col slds-size_1-of-1 f-date hidden-field slds-m-bottom_large">
                 <label class="slds-form-element__label" style="font-weight: 700; color: #e11d48;">Received Date (YYYY-MM-DD)</label>
                 <input type="text" id="receivedDateInput" class="slds-input date-input-fix" placeholder="2026-03-10" maxlength="10">
             </div>
         </div>
-        <div class="slds-m-top_large slds-grid slds-grid_align-end">
-            <button class="slds-button slds-button_brand" style="border-radius:12px; height:45px; padding:0 30px;" onclick="saveData()">CONFIRM & SAVE RECORD</button>
-        </div>
+        <button class="slds-button slds-button_brand slds-size_1-of-1" onclick="saveData()">SAVE RECORD</button>
+    </div>
+</div>
+
+<div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
+<div id="lookupModal" class="custom-modal">
+    <div class="slds-p-around_large">
+        <input type="text" id="modalSearch" class="slds-input" placeholder="Search..." onkeyup="handleSearchInput(this.value)">
+        <div style="max-height: 400px; overflow-y: auto;"><table class="slds-table"><tbody id="lookupResults"></tbody></table></div>
     </div>
 </div>
 
 <script>
-    // Force YYYY-MM-DD format logic
+    const API_URL = "/api/equipments";
+    let currentLookupType = '';
+
     document.getElementById('receivedDateInput').addEventListener('input', function (e) {
         let v = e.target.value.replace(/\D/g, '');
         if (v.length > 4 && v.length <= 6) v = v.slice(0, 4) + '-' + v.slice(4);
@@ -82,40 +98,36 @@
 
     function toggleFields(val) {
         document.getElementById('mainFormArea').classList.toggle('hidden-field', !val);
+        document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
+        if (val === 'receiving_inventory') showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
+        if (val === 'deployment') showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-serial', '.f-date']);
     }
+    function showFields(sel) { sel.forEach(s => document.querySelector(s)?.classList.remove('hidden-field')); }
 
     async function saveData() {
         const dateStr = document.getElementById('receivedDateInput').value;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-            Swal.fire("Format Error", "Date must be YYYY-MM-DD", "error");
-            return;
+        if (document.getElementById('activityType').value === 'receiving_inventory' && !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            Swal.fire("Error", "Date must be YYYY-MM-DD", "error"); return;
         }
-
         document.getElementById('saveOverlay').classList.add('show-flex');
-
         try {
-            const idRes = await fetch("/api/equipments", { method: "POST", body: JSON.stringify({ action: 'getNextID', prefix: 'Equip-' }), headers: {'Content-Type': 'application/json'} });
+            const idRes = await fetch(API_URL, { method: "POST", body: JSON.stringify({ action: 'getNextID', prefix: 'Equip-' }), headers: {'Content-Type': 'application/json'} });
             const { nextID } = await idRes.json();
-
             const payload = {
                 "custom_objects.equipments.equipment_id": nextID,
                 "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
                 "custom_objects.equipments.terminal_type": document.getElementById('type').value,
                 "custom_objects.equipments.serial_number": document.getElementById('serial').value,
-                "custom_objects.equipments.received_date": dateStr 
+                "custom_objects.equipments.received_date": dateStr
             };
-
-            const res = await fetch("/api/equipments", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ action: 'createEquipment', payload, merchantID: document.getElementById('accountID').value })
-            });
-
-            if (res.ok) {
-                Swal.fire('Saved!', 'Record created in HighLevel.', 'success').then(() => location.reload());
-            }
-        } catch (e) { Swal.fire("Error", e.message, "error"); }
+            const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: 'createEquipment', payload, merchantID: document.getElementById('accountID').value }) });
+            if (res.ok) Swal.fire('Saved!', '', 'success').then(() => location.reload());
+        } catch (e) { document.getElementById('saveOverlay').classList.remove('show-flex'); Swal.fire('Error', e.message, 'error'); }
     }
+
+    function openModal(t) { currentLookupType = t; document.getElementById('lookupModal').style.display='block'; document.getElementById('backdrop').style.display='block'; }
+    function closeModal() { document.getElementById('lookupModal').style.display='none'; document.getElementById('backdrop').style.display='none'; }
+    window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid')}`; };
 </script>
 </body>
 </html>
