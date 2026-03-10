@@ -108,12 +108,11 @@
   async function saveData() {
     const overlay = document.getElementById('saveOverlay');
     const type = document.getElementById('activityType').value;
-    const dateInput = document.getElementById('depDate').value; // Get YYYY-MM-DD from picker
-    
+    const dateInput = document.getElementById('depDate').value;
     overlay.classList.add('show-flex');
 
     try {
-        logDebug("Fetching next Equipment ID...");
+        // 1. Get ID
         const idRes = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
@@ -121,40 +120,41 @@
         });
         const { nextID } = await idRes.json();
 
-        // Build properties using the EXACT keys from your Postman schema
-        let properties = {
+        // 2. Build Payload (Strict Schema Mapping)
+        const payload = {
             "custom_objects.equipments.equipment_id": nextID,
-            "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
+            "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value || "Manual Entry",
             "custom_objects.equipments.terminal_type": document.getElementById('type').value,
-            "custom_objects.equipments.serial_number": document.getElementById('serial').value
+            "custom_objects.equipments.serial_number": document.getElementById('serial').value,
+            "custom_objects.equipments.received_date": dateInput // Must be YYYY-MM-DD
         };
 
-        // Only attach date if it actually has a value to prevent API rejection
-        if (dateInput) {
-            properties["custom_objects.equipments.received_date"] = dateInput;
-        }
+        // DEBUG: See exactly what is being sent
+        console.log("SENDING TO GHL:", JSON.stringify(payload, null, 2));
 
-        logDebug(`Saving ${nextID} to HighLevel...`);
-
+        // 3. Save
         const res = await fetch(API_URL, { 
             method: "POST", 
             headers: { "Content-Type": "application/json" }, 
             body: JSON.stringify({ 
                 action: 'createEquipment', 
-                payload: properties, 
+                payload: payload, 
                 merchantID: document.getElementById('accountID').value 
             }) 
         });
 
+        const result = await res.json();
+        console.log("GHL RESPONSE:", result);
+
         if (res.ok) {
-            Swal.fire('Success', `${nextID} created!`, 'success').then(() => location.reload());
+            Swal.fire('Success', `Logged as ${nextID}`, 'success').then(() => location.reload());
         } else {
-            throw new Error("HighLevel rejected the properties. Check Schema mapping.");
+            throw new Error(result.message || "HighLevel rejected the data.");
         }
     } catch (e) { 
         overlay.classList.remove('show-flex'); 
+        console.error("SAVE ERROR:", e);
         Swal.fire('Error', e.message, 'error'); 
-        logDebug(`ERROR: ${e.message}`);
     }
 }
     function openModal(type) { currentLookupType = type; document.getElementById('lookupModal').style.display = 'block'; }
@@ -163,5 +163,6 @@
 </script>
 </body>
 </html>
+
 
 
