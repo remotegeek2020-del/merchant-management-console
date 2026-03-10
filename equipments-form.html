@@ -4,90 +4,90 @@
     <meta charset="UTF-8">
     <title>Hardware Console | New Activity</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
-        :root { --pp-blue: #004990; --glass: rgba(255, 255, 255, 0.9); }
-        body { background: #f1f5f9; padding: 30px; font-family: 'Inter', sans-serif; }
-        .ghl-container { max-width: 800px; margin: auto; background: var(--glass); border-radius: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.05); overflow: hidden; }
-        .form-header { background: #004990; color: white; padding: 25px; display: flex; justify-content: space-between; align-items: center; }
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
+        .ghl-container { max-width: 1000px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; position: relative; }
+        .activity-header-box { background: rgba(0, 73, 144, 0.03); padding: 30px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .btn-modern { border-radius: 12px !important; font-weight: 600 !important; padding: 0 25px !important; height: 45px !important; }
         .hidden-field { display: none !important; }
         .show-flex { display: flex !important; }
-        #saveOverlay { display: none; position: fixed; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.9); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
-        .date-instruction { color: #e11d48; font-weight: 700; font-size: 11px; margin-bottom: 4px; display: block; }
+        #saveOverlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background: rgba(255,255,255,0.85); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; flex-direction: column; }
+        .date-input-fix { border: 2px solid var(--pp-blue) !important; font-weight: 700 !important; text-align: center !important; letter-spacing: 1px; color: var(--pp-blue); }
     </style>
 </head>
 <body>
-
 <div class="ghl-container">
     <div id="saveOverlay">
         <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div>
-        <p style="margin-top: 50px; font-weight: 700; color: #004990;">Pushing YYYY-MM-DD Data to HighLevel...</p>
+        <p style="margin-top: 60px; font-weight: 700; color: var(--pp-blue);">Syncing Global Data Ledger...</p>
     </div>
 
-    <div class="form-header">
-        <h1 style="font-size: 1.2rem; font-weight: 700;">New Equipment Entry</h1>
-        <select id="activityType" style="color: black; border-radius: 8px; padding: 5px;" onchange="toggleFields(this.value)">
-            <option value="">-- Select --</option>
-            <option value="receiving_inventory">Receiving Inventory</option>
+    <div class="activity-header-box">
+        <div>
+            <a href="index.html" style="background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px;"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Home</a>
+            <div id="user-greeting" style="font-size: 11px; font-weight: 700; color: var(--pp-blue); margin-top: 5px;">Staff Member: Hardware Console</div>
+        </div>
+        <select id="activityType" style="width: 250px; border-radius: 12px; height: 45px; font-weight: 700; border: 1px solid #d1d9e6;" onchange="toggleFields(this.value)">
+            <option value="">-- Choose Activity --</option>
+            <option value="receiving_inventory">1. New Equipment</option>
         </select>
     </div>
 
     <div id="mainFormArea" class="slds-p-around_xx-large hidden-field">
         <div class="slds-grid slds-wrap slds-gutters">
-            <div class="slds-col slds-size_1-of-1 slds-m-bottom_medium">
-                <label class="slds-form-element__label">Merchant Account</label>
-                <input type="text" id="accountDisplay" class="slds-input" value="Warsaw Office / Inventory" readonly>
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+                <label class="slds-form-element__label" style="font-weight: 700;">Merchant Account</label>
+                <input type="text" id="accountDisplay" class="slds-input" readonly value="Warsaw Office / Inventory" style="border-radius:12px;">
                 <input type="hidden" id="accountID" value="6993793b3572dc52847e4fe0">
             </div>
 
-            <div class="slds-col slds-size_1-of-2 slds-m-bottom_medium">
-                <label class="slds-form-element__label">Terminal Model</label>
-                <select id="type" class="slds-select">
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+                <label class="slds-form-element__label" style="font-weight: 700;">Terminal Model</label>
+                <select id="type" class="slds-select" style="border-radius:12px;">
                     <option value="z11_terminal">Z11 Terminal</option>
+                    <option value="z9">Z9</option>
                     <option value="z8_terminal">Z8 Terminal</option>
-                    <option value="valor_vl500">Valor VL500</option>
                 </select>
             </div>
 
-            <div class="slds-col slds-size_1-of-2 slds-m-bottom_medium">
-                <label class="slds-form-element__label">Serial Number</label>
-                <input type="text" id="serial" class="slds-input" placeholder="Enter Serial">
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+                <label class="slds-form-element__label" style="font-weight: 700;">Serial Number</label>
+                <input type="text" id="serial" class="slds-input" style="border-radius: 12px;" placeholder="Enter Serial #">
             </div>
 
-            <div class="slds-col slds-size_1-of-1 slds-m-bottom_medium">
-                <span class="date-instruction">FORMAT REQUIRED: YYYY-MM-DD</span>
-                <input type="text" id="receivedDateInput" class="slds-input" 
-                       placeholder="2026-03-10" 
-                       maxlength="10" 
-                       style="font-family: monospace; font-weight: 700; font-size: 1.2rem; text-align: center; border: 2px solid #004990;">
+            <div class="slds-col slds-size_1-of-2 slds-m-bottom_large">
+                <label class="slds-form-element__label" style="font-weight: 700; color: #e11d48;">Received Date (YYYY-MM-DD)</label>
+                <input type="text" id="manualDateInput" class="slds-input date-input-fix" placeholder="2026-03-10" maxlength="10">
             </div>
         </div>
-        
-        <button class="slds-button slds-button_brand slds-size_1-of-1 slds-m-top_large" onclick="saveData()" style="height: 50px;">CONFIRM & SAVE RECORD</button>
+        <div class="slds-m-top_large slds-grid slds-grid_align-end">
+            <button class="slds-button slds-button_brand btn-modern" onclick="saveData()">CONFIRM & SAVE RECORD</button>
+        </div>
     </div>
 </div>
 
 <script>
     const API_URL = "/api/equipments";
 
-    // AUTO-MASK SCRIPT: Forces dashes as they type
-    document.getElementById('receivedDateInput').addEventListener('input', function (e) {
+    function toggleFields(val) {
+        document.getElementById('mainFormArea').classList.toggle('hidden-field', val !== 'receiving_inventory');
+    }
+
+    document.getElementById('manualDateInput').addEventListener('input', function (e) {
         let v = e.target.value.replace(/\D/g, '');
         if (v.length > 4 && v.length <= 6) v = v.slice(0, 4) + '-' + v.slice(4);
         if (v.length > 6) v = v.slice(0, 4) + '-' + v.slice(4, 6) + '-' + v.slice(6, 8);
         e.target.value = v;
     });
 
-    function toggleFields(val) {
-        document.getElementById('mainFormArea').classList.toggle('hidden-field', val !== 'receiving_inventory');
-    }
-
     async function saveData() {
-        const dateVal = document.getElementById('receivedDateInput').value;
-        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateVal)) {
-            Swal.fire("Date Error", "Please enter date as YYYY-MM-DD", "error");
+        const dateStr = document.getElementById('manualDateInput').value;
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            Swal.fire("Format Error", "Date must be YYYY-MM-DD", "error");
             return;
         }
 
@@ -102,7 +102,7 @@
                 "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value,
                 "custom_objects.equipments.terminal_type": document.getElementById('type').value,
                 "custom_objects.equipments.serial_number": document.getElementById('serial').value,
-                "custom_objects.equipments.received_date": dateVal // SENDS RAW STRING
+                "custom_objects.equipments.received_date": dateStr
             };
 
             const res = await fetch(API_URL, {
@@ -112,8 +112,8 @@
             });
 
             if (res.ok) {
-                Swal.fire('Success', 'Record Saved: ' + dateVal, 'success').then(() => location.reload());
-            } else { throw new Error("GHL Rejection"); }
+                Swal.fire('Success', 'Logged to HighLevel', 'success').then(() => location.reload());
+            }
         } catch (e) {
             document.getElementById('saveOverlay').classList.remove('show-flex');
             Swal.fire('Error', e.message, 'error');
