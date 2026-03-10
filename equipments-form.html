@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <title>Hardware Console | New Activity</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
@@ -161,17 +161,11 @@
     function toggleFields(val) {
         document.getElementById('mainFormArea').classList.toggle('hidden-field', !val);
         document.querySelectorAll('.slds-col').forEach(c => c.classList.add('hidden-field'));
-        const modelSelect = document.getElementById('type');
-        const serialInput = document.getElementById('serial');
-        modelSelect.disabled = false; modelSelect.classList.remove('readonly-lock');
-        serialInput.readOnly = false; serialInput.classList.remove('readonly-lock');
         if (val === 'receiving_inventory') {
             document.getElementById('dateLabel').innerText = "Equipment Date Received";
             showFields(['.f-genID', '.f-account', '.f-type', '.f-serial', '.f-date']);
         } else if (val === 'deployment') {
             document.getElementById('dateLabel').innerText = "Deployment Date";
-            modelSelect.disabled = true; modelSelect.classList.add('readonly-lock');
-            serialInput.readOnly = true; serialInput.classList.add('readonly-lock');
             showFields(['.f-genID', '.f-account', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-tid', '.f-tracking', '.f-date']);
         } else if (val === 'process_return') {
             showFields(['.f-genID', '.f-equipmentLookup', '.f-type', '.f-serial', '.f-returnReason', '.f-condition', '.f-returnDestination']);
@@ -186,7 +180,6 @@
         overlay.classList.add('show-flex');
         try {
             const prefixMap = { receiving_inventory: 'Equip-', deployment: 'DPL-', process_return: 'RTR-' };
-            logDebug("Requesting unique record ID...");
             const idRes = await fetch(API_URL, { 
                 method: "POST", 
                 headers: { "Content-Type": "application/json" }, 
@@ -203,7 +196,7 @@
                     "custom_objects.equipments.merchant_account": document.getElementById('accountDisplay').value, 
                     "custom_objects.equipments.terminal_type": document.getElementById('type').value, 
                     "custom_objects.equipments.serial_number": document.getElementById('serial').value,
-                    "custom_objects.equipments.equipment_date_received": document.getElementById('depDate').value // Updated field key
+                    "custom_objects.equipments.equipment_date_received": document.getElementById('depDate').value 
                 };
             } else if (type === 'deployment') {
                 body.action = 'createDeployment';
@@ -211,19 +204,18 @@
                 body.merchantID = document.getElementById('accountID').value;
                 body.merchantName = document.getElementById('accountDisplay').value;
                 body.payload = { 
-                    deployment_id: nextID, 
-                    tid: document.getElementById('tid').value, 
-                    tracking_id: document.getElementById('tracking').value,
-                    equipment_date_received: document.getElementById('depDate').value 
+                    "custom_objects.deployments.deployment_id": nextID, 
+                    "custom_objects.deployments.tid": document.getElementById('tid').value, 
+                    "custom_objects.deployments.tracking_id": document.getElementById('tracking').value
                 };
             } else if (type === 'process_return') {
                 body.action = 'createReturn';
                 body.gearID = document.getElementById('equipmentID').value;
                 body.payload = { 
-                    return_id: nextID, 
-                    return_reason: document.getElementById('returnReason').value, 
-                    condition: document.getElementById('returnCondition').value,
-                    return_destination: document.getElementById('returnDestination').value
+                    "custom_objects.returns.return_id": nextID, 
+                    "custom_objects.returns.return_reason": document.getElementById('returnReason').value, 
+                    "custom_objects.returns.condition": document.getElementById('returnCondition').value,
+                    "custom_objects.returns.return_destination": document.getElementById('returnDestination').value
                 };
             }
             const res = await fetch(API_URL, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
