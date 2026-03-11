@@ -1,58 +1,137 @@
-<script>
-    let currentPage = 0;
-    const PAGE_SIZE = 15;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Merchant Portfolio | Secure Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    <style>
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; }
+        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
+        .btn-export { background: #2e7d32 !important; color: white !important; border-radius: 12px !important; height: 40px !important; margin-left: 8px; border: none; cursor: pointer; display: flex; align-items: center; padding: 0 15px; }
+        .slds-select { border-radius: 12px !important; height: 40px !important; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div class="modern-header">
+        <div>
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
+                <a href="index.html" style="background:white; border:1px solid #e2e8f0; padding:6px 14px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.7rem; text-decoration:none;">HOME</a>
+                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:var(--pp-blue);">Staff Member</div>
+            </div>
+            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
+        </div>
+        <div class="slds-grid slds-grid_vertical-align-center">
+            <select id="filterBy" class="slds-select" style="width: 170px;">
+                <option value="">-- nothing selected --</option>
+                <option value="dba_name">DBA Name</option>
+                <option value="merchant_id">Merchant ID (MID)</option>
+                <option value="agent_id">Partner ID</option>
+                <option value="partner_name">Partner Name</option>
+            </select>
+            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius: 12px; margin-right: 8px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
+            <select id="sortOrder" class="slds-select" style="width: 160px;" onchange="resetAndFetch()">
+                <option value="created_at">Recently Created</option>
+                <option value="updated_at">Recently Updated</option>
+            </select>
+            <button class="slds-button slds-button_brand" style="border-radius:12px; height: 40px;" onclick="resetAndFetch()">Search</button>
+            <button class="btn-export" onclick="exportToCSV()"><span class="material-icons" style="font-size:18px;">download</span></button>
+        </div>
+    </div>
 
-    async function fetchMerchants() {
-        const tbody = document.getElementById('merchantTableBody');
-        const pageInfo = document.getElementById('pageInfo'); //
-        const query = document.getElementById('searchInput').value; //
-        const filterBy = document.getElementById('filterBy').value; //
-        const sortBy = document.getElementById('sortOrder').value; //
-        
-        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:40px;'>Processing Search...</td></tr>";
+    <article class="slds-card" style="border-radius: 20px; overflow: hidden;">
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+            <thead>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">DBA Name</th>
+                    <th scope="col">Merchant ID</th>
+                    <th scope="col">Partner ID</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Partner Name</th>
+                    <th scope="col">Status</th>
+                </tr>
+            </thead>
+            <tbody id="merchantTableBody"></tbody>
+        </table>
+        <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center;">
+            <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)" disabled>Previous</button>
+            <span id="pageInfo" style="font-weight:700;">Page 1</span>
+            <button class="slds-button slds-button_neutral" id="nextBtn" onclick="changePage(1)">Next</button>
+        </div>
+    </article>
 
-        try {
-            const response = await fetch('/api/merchants', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'list', 
-                    page: currentPage, 
-                    query: query, 
-                    filterBy: filterBy,
-                    sortBy: sortBy 
-                })
-            });
-            const result = await response.json();
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let currentPage = 0;
+        const PAGE_SIZE = 15;
+
+        async function fetchMerchants() {
+            const tbody = document.getElementById('merchantTableBody');
+            const pageInfo = document.getElementById('pageInfo');
+            const query = document.getElementById('searchInput').value;
+            const filterBy = document.getElementById('filterBy').value;
+            const sortBy = document.getElementById('sortOrder').value;
             
-            if (!result.success) throw new Error(result.message);
+            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:40px;'>Loading Ledger...</td></tr>";
 
-            tbody.innerHTML = "";
-            
-            // Render rows
-            result.data.forEach(m => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
-                    <td><b style="color:var(--pp-blue);">${m.dba_name || '---'}</b></td>
-                    <td><code>${m.merchant_id || '---'}</code></td>
-                    <td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:11px;">${m.agent_id || '---'}</span></td>
-                    <td style="font-size:11px; font-weight:600;">${m.company_name}</td>
-                    <td style="font-size:11px; color:var(--pp-accent);">${m.partner_name}</td>
-                    <td><span style="color:#008a8a; font-weight:800; font-size:10px;">ACTIVE</span></td>
-                `;
-            });
+            try {
+                const response = await fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'list', page: currentPage, query: query, filterBy: filterBy, sortBy: sortBy })
+                });
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
 
-            // UPDATE: Show total count next to page info
-            const totalCount = result.count || 0;
-            pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total Records: ${totalCount})</span>`;
-            
-            // Update button states
-            document.getElementById('nextBtn').disabled = ((currentPage + 1) * PAGE_SIZE) >= totalCount;
-            document.getElementById('prevBtn').disabled = (currentPage === 0);
-
-        } catch (e) { 
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; color:red;'>System Error</td></tr>"; 
+                tbody.innerHTML = "";
+                result.data.forEach(m => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td><b style="color:var(--pp-blue);">${m.dba_name || '---'}</b></td>
+                        <td><code>${m.merchant_id || '---'}</code></td>
+                        <td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:11px;">${m.agent_id || '---'}</span></td>
+                        <td style="font-size:11px; font-weight:600;">${m.company_name}</td>
+                        <td style="font-size:11px; color:var(--pp-accent);">${m.partner_name}</td>
+                        <td><span style="color:#008a8a; font-weight:800; font-size:10px;">ACTIVE</span></td>
+                    `;
+                });
+                pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total: ${result.count || 0})</span>`;
+                document.getElementById('nextBtn').disabled = ((currentPage + 1) * PAGE_SIZE) >= (result.count || 0);
+                document.getElementById('prevBtn').disabled = (currentPage === 0);
+            } catch (e) { tbody.innerHTML = `<tr><td colspan='6' style='text-align:center; color:red; padding:20px;'>Error: ${e.message}</td></tr>`; }
         }
-    }
-    // ... rest of scripts ...
-</script>
+
+        async function exportToCSV() {
+            Swal.fire({ title: 'Exporting...', didOpen: () => Swal.showLoading() });
+            try {
+                const response = await fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'list', page: 0, limit: 1000, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value })
+                });
+                const result = await response.json();
+                let csv = "DBA,MID,PartnerID,Company,PartnerName\n";
+                result.data.forEach(m => {
+                    csv += `"${m.dba_name}","${m.merchant_id}","${m.agent_id}","${m.company_name}","${m.partner_name}"\n`;
+                });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+                link.download = "Merchants_Export.csv";
+                link.click();
+                Swal.close();
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
+        }
+
+        function changePage(dir) { currentPage += dir; fetchMerchants(); }
+        function resetAndFetch() { currentPage = 0; fetchMerchants(); }
+        window.onload = () => {
+            const user = sessionStorage.getItem('pp_userid');
+            if (document.getElementById('user-greeting')) document.getElementById('user-greeting').innerText = `Staff: ${user || 'Console'}`;
+            fetchMerchants();
+        };
+    </script>
+</body>
+</html>
