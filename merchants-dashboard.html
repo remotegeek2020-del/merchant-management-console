@@ -25,18 +25,17 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
         </div>
         <div class="slds-grid slds-grid_vertical-align-center">
-            <select id="filterBy" class="slds-select" style="width: 170px;">
-                <option value="">-- nothing selected --</option>
+            
+            <select id="filterBy" class="slds-select" style="width: 200px;">
+                <option value="">Select what to search</option>
                 <option value="dba_name">DBA Name</option>
                 <option value="merchant_id">Merchant ID (MID)</option>
                 <option value="agent_id">Partner ID</option>
                 <option value="partner_name">Partner Name</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius: 12px; margin-right: 8px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
-            <select id="sortOrder" class="slds-select" style="width: 160px;" onchange="resetAndFetch()">
-                <option value="created_at">Recently Created</option>
-                <option value="updated_at">Recently Updated</option>
-            </select>
+
+            <input type="text" id="searchInput" placeholder="Enter search term..." class="slds-input" style="width:250px; border-radius: 12px; margin-right: 8px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
+            
             <button class="slds-button slds-button_brand" style="border-radius:12px; height: 40px;" onclick="resetAndFetch()">Search</button>
             <button class="btn-export" onclick="exportToCSV()"><span class="material-icons" style="font-size:18px;">download</span></button>
         </div>
@@ -73,7 +72,6 @@
             const pageInfo = document.getElementById('pageInfo');
             const query = document.getElementById('searchInput').value;
             const filterBy = document.getElementById('filterBy').value;
-            const sortBy = document.getElementById('sortOrder').value;
             
             tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:40px;'>Loading Ledger...</td></tr>";
 
@@ -81,7 +79,7 @@
                 const response = await fetch('/api/merchants', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'list', page: currentPage, query: query, filterBy: filterBy, sortBy: sortBy })
+                    body: JSON.stringify({ action: 'list', page: currentPage, query: query, filterBy: filterBy })
                 });
                 const result = await response.json();
                 if (!result.success) throw new Error(result.message);
@@ -98,7 +96,7 @@
                         <td><span style="color:#008a8a; font-weight:800; font-size:10px;">ACTIVE</span></td>
                     `;
                 });
-                pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total: ${result.count || 0})</span>`;
+                pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total Records: ${result.count || 0})</span>`;
                 document.getElementById('nextBtn').disabled = ((currentPage + 1) * PAGE_SIZE) >= (result.count || 0);
                 document.getElementById('prevBtn').disabled = (currentPage === 0);
             } catch (e) { tbody.innerHTML = `<tr><td colspan='6' style='text-align:center; color:red; padding:20px;'>Error: ${e.message}</td></tr>`; }
