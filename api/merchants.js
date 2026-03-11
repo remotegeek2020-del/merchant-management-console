@@ -10,23 +10,48 @@ export default async function handler(req, res) {
         if (action === 'list') {
             let request = supabase
                 .from('merchants')
-                .select('*', { count: 'exact' })
+                .select(`
+                    *,
+                    agent_identifiers!agent_id (
+                        agents (
+                            agent_name,
+                            companies (
+                                company_name,
+                                company_person_mapping (
+                                    persons (
+                                        full_name
+                                    )
+                                )
+                            )
+                        )
+                    )
+                `, { count: 'exact' })
                 .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
                 .order('created_at', { ascending: false });
 
-            // Search logic for DBA Name or Agent ID
             if (query) {
                 request = request.or(`dba_name.ilike.%${query}%,agent_id.ilike.%${query}%`);
             }
 
             const { data, count, error } = await request;
             if (error) throw error;
-            return res.status(200).json({ success: true, data, count });
+
+            // Simplify the nested join data for the frontend table
+            const simplifiedData = data.map(m => {
+                const agentInfo = m.agent_identifiers?.agents;
+                const companyInfo = agentInfo?.companies;
+                const personInfo = companyInfo?.company_person_mapping?.[0]?.persons;
+
+                return {
+                    ...m,
+                    company_name: companyInfo?.company_name || 'Legacy/Unassigned',
+                    partner_name: personInfo?.full_name || 'System'
+                };
+            });
+
+            return res.status(200).json({ success: true, data: simplifiedData, count });
         }
-        
-        // Add more actions here (like 'update' or 'delete') as you grow
     } catch (err) {
-        console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
