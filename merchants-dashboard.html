@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merchant Management | Supabase Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+    
+    <style>
+        :root { 
+            --pp-blue: #004990; 
+            --pp-accent: #00a1e0; 
+            --glass: rgba(255, 255, 255, 0.9);
+            --glass-border: rgba(255, 255, 255, 0.4);
+            --teal: #008a8a;
+        }
+
+        body { 
+            background: radial-gradient(circle at top right, #f8fafc, #e2e8f0);
+            padding: 30px; 
+            font-family: 'Inter', sans-serif; 
+            min-height: 100vh;
+            color: #2b3d51;
+        }
+
+        .modern-header {
+            background: var(--glass);
+            backdrop-filter: blur(10px);
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 25px;
+            box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .btn-back {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: white;
+            padding: 6px 14px;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--pp-blue);
+            text-transform: uppercase;
+            text-decoration: none !important;
+            border: 1px solid #e2e8f0;
+            transition: all 0.2s ease;
+        }
+        .btn-back:hover {
+            background: var(--pp-blue);
+            color: white;
+            transform: translateX(-3px);
+        }
+
+        .user-pill {
+            background: rgba(0, 73, 144, 0.08);
+            padding: 6px 16px;
+            border-radius: 50px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            color: var(--pp-blue);
+            text-transform: uppercase;
+            border: 1px solid rgba(0, 73, 144, 0.1);
+        }
+
+        .slds-card { 
+            border: 1px solid var(--glass-border) !important;
+            border-radius: 20px !important;
+            background: var(--glass) !important;
+            backdrop-filter: blur(10px);
+            box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important;
+            overflow: hidden;
+        }
+
+        .status-pill {
+            padding: 4px 12px;
+            border-radius: 50px;
+            font-size: 10px;
+            font-weight: 800;
+            text-transform: uppercase;
+        }
+        .status-active { background: #e0f5f5; color: var(--teal); border: 1px solid rgba(0, 138, 138, 0.2); }
+        .status-inactive { background: #f1f5f9; color: #64748b; border: 1px solid #e2e8f0; }
+
+        .custom-modal { 
+            display: none; position: fixed; z-index: 9999; 
+            left: 0; top: 0; width: 100%; height: 100%; 
+            background: rgba(0, 25, 50, 0.4); 
+            backdrop-filter: blur(5px);
+            align-items: center; justify-content: center; 
+        }
+        .custom-modal-content { 
+            background: white; width: 95%; max-width: 550px; 
+            border-radius: 24px; box-shadow: 0 25px 60px rgba(0,0,0,0.2); 
+            overflow: hidden;
+        }
+
+        .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
+        .detail-label { font-weight: 700; color: #64748b; font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+
+    <div class="modern-header">
+        <div>
+            <div class="header-controls">
+                <a href="index.html" class="btn-back">
+                    <span class="material-icons" style="font-size: 14px;">arrow_back</span> Home
+                </a>
+                <div id="user-greeting" class="user-pill">Staff Member: Loading...</div>
+            </div>
+            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
+        </div>
+        
+        <div class="slds-grid slds-grid_vertical-align-center">
+            <div style="position: relative; margin-right: 12px;">
+                <span class="material-icons" style="position: absolute; left: 10px; top: 10px; font-size: 18px; color: #94a3b8; z-index: 5;">search</span>
+                <input type="text" id="searchInput" placeholder="Search DBA or Agent ID..." class="slds-input" style="width:240px; border-radius: 12px; padding-left: 35px;" onkeypress="if(event.key==='Enter') resetAndFetch()" />
+            </div>
+            <button class="slds-button slds-button_brand" style="border-radius: 12px; height: 40px;" onclick="resetAndFetch()">Search</button>
+        </div>
+    </div>
+
+    <article class="slds-card">
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
+            <thead>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">DBA Name</th>
+                    <th scope="col">Merchant ID</th>
+                    <th scope="col">Agent ID</th>
+                    <th scope="col">Status</th>
+                    <th scope="col">Enrollment Date</th>
+                </tr>
+            </thead>
+            <tbody id="merchantTableBody"></tbody>
+        </table>
+        <div class="slds-p-around_medium slds-grid slds-grid_align-spread slds-grid_vertical-align-center" style="background: rgba(255,255,255,0.4);">
+            <span style="font-size: 13px; font-weight: 700; color: #64748b;" id="pageInfo">Page 1</span>
+            <div class="slds-button-group">
+                <button id="prevBtn" class="slds-button slds-button_neutral" onclick="changePage(-1)" disabled>Previous</button>
+                <button id="nextBtn" class="slds-button slds-button_neutral" onclick="changePage(1)">Next</button>
+            </div>
+        </div>
+    </article>
+
+    <div id="merchantModal" class="custom-modal" onclick="if(event.target == this) closeModal()">
+        <div class="custom-modal-content">
+            <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between; align-items: center;">
+                <h2 style="font-weight: 800; font-size: 1.2rem;">Merchant Profile</h2>
+                <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
+            </div>
+            <div class="slds-p-around_xx-large" id="modalBody"></div>
+            <div class="slds-p-around_medium" style="background: #f8fafc; text-align: right;">
+                <button class="slds-button slds-button_neutral" style="border-radius: 8px;" onclick="closeModal()">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        let currentPage = 0;
+        const PAGE_SIZE = 15;
+        let currentRecords = [];
+
+        async function fetchMerchants() {
+            const tbody = document.getElementById('merchantTableBody');
+            const query = document.getElementById('searchInput').value;
+            tbody.innerHTML = "<tr><td colspan='5' style='text-align:center; padding: 40px;'>Syncing Supabase Ledger...</td></tr>";
+
+            try {
+                // Pointing to your new Vercel API route instead of the old proxy
+                const response = await fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'list', 
+                        page: currentPage, 
+                        query: query 
+                    })
+                });
+
+                const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+
+                currentRecords = result.data;
+                const count = result.count;
+
+                tbody.innerHTML = "";
+                currentRecords.forEach(m => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td><a style="font-weight:700; color:var(--pp-blue); cursor:pointer;" onclick="openMerchantModal('${m.id}')">${m.dba_name || '---'}</a></td>
+                        <td><code>${m.merchant_id || '---'}</code></td>
+                        <td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size: 11px;">${m.agent_id || '---'}</span></td>
+                        <td><span class="status-pill status-active">ACTIVE</span></td>
+                        <td style="font-size:11px; color:#64748b;">${new Date(m.created_at).toLocaleDateString()}</td>
+                    `;
+                });
+
+                document.getElementById('pageInfo').innerText = `Page ${currentPage + 1}`;
+                document.getElementById('nextBtn').disabled = (currentPage + 1) * PAGE_SIZE >= count;
+                document.getElementById('prevBtn').disabled = (currentPage === 0);
+
+            } catch (e) {
+                tbody.innerHTML = `<tr><td colspan='5' style='text-align:center; color:red; padding: 20px;'>System Error: ${e.message}</td></tr>`;
+            }
+        }
+
+        function openMerchantModal(id) {
+            const m = currentRecords.find(record => record.id === id);
+            if(!m) return;
+            
+            document.getElementById('modalBody').innerHTML = `
+                <div class="detail-row"><span class="detail-label">DBA Name</span> <span>${m.dba_name}</span></div>
+                <div class="detail-row"><span class="detail-label">Merchant ID</span> <span>${m.merchant_id}</span></div>
+                <div class="detail-row"><span class="detail-label">Agent ID</span> <span>${m.agent_id}</span></div>
+                <div class="detail-row"><span class="detail-label">Onboarding Date</span> <span>${new Date(m.created_at).toLocaleString()}</span></div>
+            `;
+            document.getElementById('merchantModal').style.display = 'flex';
+        }
+
+        function closeModal() { document.getElementById('merchantModal').style.display = 'none'; }
+        function changePage(dir) { currentPage += dir; fetchMerchants(); }
+        function resetAndFetch() { currentPage = 0; fetchMerchants(); }
+
+        window.onload = () => {
+            const userId = sessionStorage.getItem('pp_userid');
+            document.getElementById('user-greeting').innerText = userId ? `Staff: ${userId}` : "Hardware Console";
+            fetchMerchants();
+        };
+    </script>
+</body>
+</html>
