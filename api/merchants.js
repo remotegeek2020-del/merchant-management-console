@@ -26,7 +26,7 @@ export default async function handler(req, res) {
                 `, { count: 'exact' });
 
             request = request.range(page * limit, (page + 1) * limit - 1);
-            request = request.order('created_at', { ascending: false }); // Default Sort
+            request = request.order('created_at', { ascending: false });
 
             if (query && filterBy) {
                 if (filterBy === 'dba_name') request = request.ilike('dba_name', `%${query}%`);
@@ -54,7 +54,7 @@ export default async function handler(req, res) {
                 };
             });
 
-            return res.status(200).json({ success: true, data: simplifiedData, count });
+            return res.status(200).json({ success: true, data: simplifiedData, count: count });
         }
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
