@@ -2,8 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Merchant Management | Portfolio</title>
+    <title>Merchant Portfolio | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -12,9 +11,8 @@
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); }
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; }
         .modern-header { background: var(--glass); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
-        .user-pill { background: rgba(0, 73, 144, 0.08); padding: 6px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 700; color: var(--pp-blue); }
-        .btn-export { background: #2e7d32 !important; color: white !important; border-radius: 12px !important; height: 40px !important; margin-left: 8px; }
-        .slds-card { border-radius: 20px !important; background: var(--glass) !important; box-shadow: 0 15px 35px rgba(0,0,0,0.05) !important; }
+        .btn-export { background: #2e7d32 !important; color: white !important; border-radius: 12px !important; height: 40px !important; margin-left: 8px; border: none; cursor: pointer; display: flex; align-items: center; padding: 0 15px; }
+        .slds-select { border-radius: 12px !important; height: 40px !important; }
     </style>
 </head>
 <body>
@@ -22,22 +20,27 @@
         <div>
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
                 <a href="index.html" style="background:white; border:1px solid #e2e8f0; padding:6px 14px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.7rem; text-decoration:none;">HOME</a>
-                <div id="user-greeting" class="user-pill">Loading...</div>
+                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:var(--pp-blue);">Staff Member</div>
             </div>
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
         </div>
         <div class="slds-grid slds-grid_vertical-align-center">
             <input type="text" id="searchInput" placeholder="Search DBA, MID, Partner..." class="slds-input" style="width:260px; border-radius: 12px; margin-right: 8px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
-            <select id="sortOrder" class="slds-select" style="width: 170px; border-radius: 12px; margin-right: 8px;" onchange="resetAndFetch()">
+            
+            <select id="sortOrder" class="slds-select" style="width: 170px; margin-right: 8px;" onchange="resetAndFetch()">
                 <option value="created_at">Recently Created</option>
                 <option value="updated_at">Recently Updated</option>
             </select>
+
             <button class="slds-button slds-button_brand" style="border-radius:12px; height: 40px;" onclick="resetAndFetch()">Search</button>
-            <button class="slds-button btn-export" onclick="exportToCSV()"><span class="material-icons" style="font-size:16px;">download</span></button>
+            
+            <button class="btn-export" onclick="exportToCSV()">
+                <span class="material-icons" style="font-size:18px; margin-right:5px;">download</span> Export
+            </button>
         </div>
     </div>
 
-    <article class="slds-card">
+    <article class="slds-card" style="border-radius: 20px; overflow: hidden;">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer">
             <thead>
                 <tr class="slds-line-height_reset">
@@ -111,7 +114,7 @@
                 });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-                link.download = "Merchants_Export.csv";
+                link.download = `Merchant_Export_${new Date().toISOString().split('T')[0]}.csv`;
                 link.click();
                 Swal.close();
             } catch (e) { Swal.fire('Error', e.message, 'error'); }
@@ -120,7 +123,8 @@
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
         window.onload = () => {
-            document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid') || 'Console'}`;
+            const user = sessionStorage.getItem('pp_userid');
+            document.getElementById('user-greeting').innerText = `Staff: ${user || 'Console'}`;
             fetchMerchants();
         };
     </script>
