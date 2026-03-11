@@ -28,14 +28,23 @@ export default async function handler(req, res) {
             request = request.range(page * limit, (page + 1) * limit - 1);
             request = request.order('created_at', { ascending: false });
 
+            // Targeted Filter Logic
             if (query && filterBy) {
-                if (filterBy === 'dba_name') request = request.ilike('dba_name', `%${query}%`);
-                else if (filterBy === 'merchant_id') request = request.eq('merchant_id', query);
-                else if (filterBy === 'agent_id') request = request.eq('agent_id', query);
-                else if (filterBy === 'partner_name') {
+                if (filterBy === 'dba_name') {
+                    request = request.ilike('dba_name', `%${query}%`);
+                } else if (filterBy === 'merchant_id') {
+                    request = request.eq('merchant_id', query);
+                } else if (filterBy === 'agent_id') {
+                    request = request.eq('agent_id', query);
+                } else if (filterBy === 'company_name') {
+                    // NEW: Filter by Company Name through the join
+                    request = request.filter('agent_identifiers.agents.companies.company_name', 'ilike', `%${query}%`);
+                } else if (filterBy === 'partner_name') {
+                    // FIXED: More robust path for Partner Name search
                     request = request.filter('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', 'ilike', `%${query}%`);
                 }
             } else if (query) {
+                // Default fallback: Search primary merchant fields
                 request = request.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%,agent_id.ilike.%${query}%`);
             }
 
@@ -54,9 +63,10 @@ export default async function handler(req, res) {
                 };
             });
 
-            return res.status(200).json({ success: true, data: simplifiedData, count: count });
+            return res.status(200).json({ success: true, data: simplifiedData, count });
         }
     } catch (err) {
+        console.error("Merchant API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
