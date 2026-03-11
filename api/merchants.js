@@ -6,45 +6,80 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // 1. FETCH THE TOTAL VOLUME (GLOBAL - NO LIMITS)
-            // We call the RPC function we just created in Step 1
-            const { data: globalVol, error: volError } = await supabase
-                .rpc('get_total_merchant_volume', { 
-                    search_query: query || '', 
-                    filter_column: filterBy || '' 
-                });
+            // 1. DEFINE THE JOIN STRUCTURE
+            let selectString = `
+                *,
+                agent_identifiers!agent_id (
+                    agents (
+                        agent_name,
+                        companies (
+                            company_name,
+                            company_person_mapping (
+                                persons (
+                                    full_name
+                                )
+                            )
+                        )
+                    )
+                )
+            `;
 
-            if (volError) console.error("Volume Error:", volError);
-
-            // 2. FETCH THE PAGINATED TABLE DATA
-            let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
-            
+            // 2. APPLY INNER JOINS IF SEARCHING BY PARTNER/COMPANY
             if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
                 selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
             }
 
-            let request = supabase.from('merchants').select(selectString, { count: 'exact' });
+            // --- QUERY A: TOTAL GLOBAL VOLUME (FOR THE KPI CARD) ---
+            // We fetch the volume column for EVERY record matching the filter, ignoring pagination
+            let volQuery = supabase.from('merchants').select(`
+                volume_mtd,
+                agent_identifiers!agent_id (
+                    agents (
+                        companies (
+                            company_name,
+                            company_person_mapping (
+                                persons (
+                                    full_name
+                                )
+                            )
+                        )
+                    )
+                )
+            `);
+
+            // --- QUERY B: TABLE DATA (PAGINATED) ---
+            let dataQuery = supabase.from('merchants').select(selectString, { count: 'exact' });
             const pageSize = parseInt(limit) || 20;
-            request = request.range(page * pageSize, (page + 1) * pageSize - 1);
-            request = request.order('created_at', { ascending: false });
+            dataQuery = dataQuery.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false });
 
-            // Apply filters to the table view
-            if (query && filterBy) {
-                if (filterBy === 'dba_name') request.ilike('dba_name', `%${query}%`);
-                else if (filterBy === 'merchant_id') request.eq('merchant_id', query);
-                else if (filterBy === 'agent_id') request.eq('agent_id', query);
-                else if (filterBy === 'company_name') request.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                else if (filterBy === 'partner_name') request.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-            }
+            // 3. APPLY FILTERS TO BOTH QUERIES SIMULTANEOUSLY
+            [volQuery, dataQuery].forEach(q => {
+                if (query && filterBy) {
+                    if (filterBy === 'dba_name') q.ilike('dba_name', `%${query}%`);
+                    else if (filterBy === 'merchant_id') q.eq('merchant_id', query);
+                    else if (filterBy === 'agent_id') q.eq('agent_id', query);
+                    else if (filterBy === 'company_name') q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+                    else if (filterBy === 'partner_name') q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+                }
+            });
 
-            const { data, count, error } = await request;
+            // Execute both queries
+            const [{ data: volData }, { data: tableData, count, error }] = await Promise.all([volQuery, dataQuery]);
+            
             if (error) throw error;
 
-            const simplifiedData = (data || []).map(m => {
-                const person = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons;
+            // Calculate the true global sum from the volQuery results
+            const totalVolumeMTD = (volData || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
+
+            // Defensive Data Mapping for the table
+            const simplifiedData = (tableData || []).map(m => {
+                const agent = m.agent_identifiers?.agents;
+                const company = agent?.companies;
+                const person = company?.company_person_mapping?.[0]?.persons;
+
                 return {
                     ...m,
-                    company_name: m.agent_identifiers?.agents?.companies?.company_name || '---',
+                    company_name: company?.company_name || '---',
                     partner_name: person?.full_name || '---'
                 };
             });
@@ -53,11 +88,16 @@ export default async function handler(req, res) {
                 success: true, 
                 data: simplifiedData, 
                 count: count,
-                totalVolumeMTD: globalVol // Truly global from the database sum function
+                totalVolumeMTD: totalVolumeMTD 
             });
         }
-        
-        // ... (Keep Update/Delete logic)
+
+        if (action === 'update') {
+            const { error } = await supabase.from('merchants').update(payload).eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
