@@ -6,16 +6,16 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // Updated select string with !inner for filtering joined tables
+            // Updated select string with !inner for strict filtering on joins
             let selectString = `
                 *,
-                agent_identifiers!agent_id !inner (
-                    agents !inner (
+                agent_identifiers!agent_id (
+                    agents (
                         agent_name,
-                        companies !inner (
+                        companies (
                             company_name,
-                            company_person_mapping !inner (
-                                persons !inner (
+                            company_person_mapping (
+                                persons (
                                     full_name
                                 )
                             )
@@ -24,17 +24,22 @@ export default async function handler(req, res) {
                 )
             `;
 
-            // If no specific filter is selected, we use the standard left join
-            if (!query || !filterBy || filterBy === 'dba_name' || filterBy === 'merchant_id' || filterBy === 'agent_id') {
-                selectString = selectString.replace(/!inner/g, ''); 
+            // Apply !inner only if searching by joined fields
+            if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
+                selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
+                selectString = selectString.replace(/agents \(/g, 'agents !inner (');
+                selectString = selectString.replace(/companies \(/g, 'companies !inner (');
+                selectString = selectString.replace(/company_person_mapping \(/g, 'company_person_mapping !inner (');
+                selectString = selectString.replace(/persons \(/g, 'persons !inner (');
             }
 
             let request = supabase.from('merchants').select(selectString, { count: 'exact' });
 
-            request = request.range(page * limit, (page + 1) * limit - 1);
+            // Dynamic Range based on user-selected limit
+            const pageSize = parseInt(limit);
+            request = request.range(page * pageSize, (page + 1) * pageSize - 1);
             request = request.order('created_at', { ascending: false });
 
-            // Apply specific filters
             if (query && filterBy) {
                 if (filterBy === 'dba_name') request = request.ilike('dba_name', `%${query}%`);
                 else if (filterBy === 'merchant_id') request = request.eq('merchant_id', query);
@@ -44,14 +49,12 @@ export default async function handler(req, res) {
                 } else if (filterBy === 'partner_name') {
                     request = request.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
                 }
-            } else if (query) {
-                request = request.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%,agent_id.ilike.%${query}%`);
             }
 
             const { data, count, error } = await request;
             if (error) throw error;
 
-            const simplifiedData = data.map(m => {
+            const simplifiedData = (data || []).map(m => {
                 const agent = m.agent_identifiers?.agents;
                 const company = agent?.companies;
                 const person = company?.company_person_mapping?.[0]?.persons;
