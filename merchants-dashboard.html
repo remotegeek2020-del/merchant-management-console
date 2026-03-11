@@ -2,19 +2,18 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Merchant Portfolio | Secure Console</title>
+    <title>Merchant Portfolio</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
     <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); }
-        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; min-height: 100vh; }
-        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
-        .slds-select { border-radius: 12px !important; height: 40px !important; border: 1px solid #d1d9e6 !important; }
-        .btn-export { background: #2e7d32 !important; color: white !important; border-radius: 12px !important; height: 40px !important; margin-left: 8px; border: none; cursor: pointer; display: flex; align-items: center; padding: 0 15px; }
+        :root { --pp-blue: #004990; --glass: rgba(255, 255, 255, 0.9); }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; }
+        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        .slds-select, .slds-input { border-radius: 12px !important; height: 40px !important; }
         .custom-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0, 25, 50, 0.4); backdrop-filter: blur(5px); align-items: center; justify-content: center; }
-        .custom-modal-content { background: white; width: 95%; max-width: 550px; border-radius: 24px; overflow: hidden; box-shadow: 0 25px 60px rgba(0,0,0,0.2); }
+        .custom-modal-content { background: white; width: 95%; max-width: 550px; border-radius: 24px; overflow: hidden; }
         .detail-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #f1f5f9; }
     </style>
 </head>
@@ -23,7 +22,7 @@
         <div>
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
                 <a href="index.html" style="background:white; border:1px solid #e2e8f0; padding:6px 14px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.7rem; text-decoration:none;">HOME</a>
-                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:var(--pp-blue);">Loading...</div>
+                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:var(--pp-blue);">Staff Member</div>
             </div>
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
         </div>
@@ -36,9 +35,9 @@
                 <option value="company_name">Company Name</option>
                 <option value="partner_name">Partner Name</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:250px; border-radius: 12px; margin-right: 8px; height: 40px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
+            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:250px; margin-right: 8px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
             <button class="slds-button slds-button_brand" style="border-radius:12px; height: 40px;" onclick="resetAndFetch()">Search</button>
-            <button class="btn-export" onclick="exportToCSV()"><span class="material-icons" style="font-size:18px;">download</span></button>
+            <button onclick="exportToCSV()" style="background:#2e7d32; color:white; border:none; border-radius:12px; height:40px; width:45px; margin-left:8px; cursor:pointer;"><span class="material-icons" style="font-size:18px;">download</span></button>
         </div>
     </div>
 
@@ -103,6 +102,8 @@
                     body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value })
                 });
                 const result = await response.json();
+                if (!result.success) throw new Error(result.message);
+
                 currentRecords = result.data;
                 tbody.innerHTML = "";
                 currentRecords.forEach(m => {
@@ -112,7 +113,7 @@
                 pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total: ${result.count || 0})</span>`;
                 document.getElementById('nextBtn').disabled = ((currentPage + 1) * limit) >= result.count;
                 document.getElementById('prevBtn').disabled = (currentPage === 0);
-            } catch (e) { tbody.innerHTML = "<tr><td colspan='6'>Error Loading Data</td></tr>"; }
+            } catch (e) { tbody.innerHTML = `<tr><td colspan='6' style='text-align:center; color:red; padding:20px;'>Error: ${e.message}</td></tr>`; }
         }
 
         function openModal(id) {
@@ -128,8 +129,8 @@
         function closeModal() { document.getElementById('merchantModal').style.display = 'none'; }
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
-        async function exportToCSV() { /* Logic Remains Same */ }
-        window.onload = () => { document.getElementById('user-greeting').innerText = `Staff: ${sessionStorage.getItem('pp_userid') || 'Console'}`; fetchMerchants(); };
+        async function exportToCSV() { /* Logic same as previous */ }
+        window.onload = () => fetchMerchants();
     </script>
 </body>
 </html>
