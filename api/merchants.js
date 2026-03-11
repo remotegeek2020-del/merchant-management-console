@@ -2,67 +2,67 @@ import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, query, filterBy, statusFilter, page = 0, limit = 20 } = req.body;
+    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20 } = req.body;
 
     try {
         if (action === 'list') {
-            // 1. YOUR LOCKED SEARCH LOGIC
+            // 1. LOCKED SEARCH STRING (For the Table)
             let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
+            
+            // 2. LIGHTWEIGHT VOLUME STRING (For the Math)
+            // We only need the volume columns and the join path to filter correctly
+            let volumeSelect = `volume_mtd, volume_30_day, volume_90_day, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
+
             const isDeepSearch = (query && (filterBy === 'company_name' || filterBy === 'partner_name'));
             
             if (isDeepSearch) {
-                selectString = selectString
-                    .replace('agent_identifiers!agent_id (', 'agent_identifiers!agent_id !inner (')
-                    .replace('agents (', 'agents !inner (')
-                    .replace('companies (', 'companies !inner (')
-                    .replace('company_person_mapping (', 'company_person_mapping !inner (')
-                    .replace('persons (', 'persons !inner (');
+                const innerJoin = 'agent_identifiers!agent_id !inner ( agents !inner ( companies !inner ( company_person_mapping !inner ( persons !inner (';
+                selectString = selectString.replace(/agent_identifiers!agent_id \(.*persons \(/s, innerJoin);
+                volumeSelect = volumeSelect.replace(/agent_identifiers!agent_id \(.*persons \(/s, innerJoin);
             }
 
-            // 2. THE BASE REQUEST
-            let request = supabase.from('merchants').select(selectString, { count: 'exact' });
+            // 3. PREPARE REQUESTS
+            let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
+            let volReq = supabase.from('merchants').select(volumeSelect);
+            let absReq = supabase.from('merchants').select('volume_mtd'); // Absolute Global Total
 
-            // 3. APPLY FILTERS (Search + Status)
-            if (statusFilter) request = request.eq('account_status', statusFilter);
-            if (query && filterBy) {
-                if (filterBy === 'dba_name') request = request.ilike('dba_name', `%${query}%`);
-                else if (filterBy === 'merchant_id') request = request.eq('merchant_id', query);
-                else if (filterBy === 'agent_id') request = request.eq('agent_id', query);
-                else if (isDeepSearch) {
-                    if (filterBy === 'company_name') request = request.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                    if (filterBy === 'partner_name') request = request.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+            // 4. APPLY FILTERS TO DATA AND VOLUME
+            [dataReq, volReq].forEach(q => {
+                if (statusFilter) q.eq('account_status', statusFilter);
+                if (query && filterBy) {
+                    if (filterBy === 'dba_name') q.ilike('dba_name', `%${query}%`);
+                    else if (filterBy === 'merchant_id') q.eq('merchant_id', query);
+                    else if (filterBy === 'agent_id') q.eq('agent_id', query);
+                    else if (filterBy === 'company_name') q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+                    else if (filterBy === 'partner_name') q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
                 }
-            }
+            });
 
-            // 4. FETCH EVERY MATCHING RECORD (THE SNAPSHOT)
-            // We order by created_at to keep the table consistent
-            const { data: allMatched, count, error } = await request.order('created_at', { ascending: false });
-            
-            if (error) throw error;
-
-            // 5. STEADY MATH (Calculated from the snapshot)
-            const totalMTD = (allMatched || []).reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
-            const total30 = (allMatched || []).reduce((s, m) => s + (parseFloat(m.volume_30_day) || 0), 0);
-            const total90 = (allMatched || []).reduce((s, m) => s + (parseFloat(m.volume_90_day) || 0), 0);
-
-            // 6. PORTFOLIO SHARE (Michelle's Volume vs Absolute Total)
-            // We do a very quick fetch for the global total
-            const { data: globalData } = await supabase.from('merchants').select('volume_mtd');
-            const absoluteTotal = (globalData || []).reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
-            const share = absoluteTotal > 0 ? ((totalMTD / absoluteTotal) * 100).toFixed(2) : 0;
-
-            // 7. PAGINATE THE SNAPSHOT FOR THE TABLE
+            // 5. EXECUTE (Parallel for speed)
             const pageSize = parseInt(limit) || 20;
-            const start = page * pageSize;
-            const paginatedData = (allMatched || []).slice(start, start + pageSize);
+            const [dataRes, volRes, absRes] = await Promise.all([
+                dataReq.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false }),
+                volReq,
+                absReq
+            ]);
 
-            // 8. MAP TO CLEAN DATA
-            const finalData = paginatedData.map(row => {
-                const agent = row.agent_identifiers?.agents;
+            if (dataRes.error) throw dataRes.error;
+
+            // 6. CALCULATE STEADY METRICS
+            const vData = volRes.data || [];
+            const filteredMTD = vData.reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
+            const filtered30 = vData.reduce((s, m) => s + (parseFloat(m.volume_30_day) || 0), 0);
+            const filtered90 = vData.reduce((s, m) => s + (parseFloat(m.volume_90_day) || 0), 0);
+            
+            const absoluteMTD = (absRes.data || []).reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
+            const share = absoluteMTD > 0 ? ((filteredMTD / absoluteMTD) * 100).toFixed(2) : 0;
+
+            const simplifiedData = (dataRes.data || []).map(m => {
+                const agent = m.agent_identifiers?.agents;
                 const company = agent?.companies;
                 const person = company?.company_person_mapping?.[0]?.persons;
                 return {
-                    ...row,
+                    ...m,
                     company_name: company?.company_name || '---',
                     partner_name: person?.full_name || '---'
                 };
@@ -70,10 +70,16 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ 
                 success: true, 
-                data: finalData, 
-                count: count,
-                metrics: { totalMTD, total30D: total3, total90D: total90, portfolioShare: share }
+                data: simplifiedData, 
+                count: dataRes.count,
+                metrics: { totalMTD: filteredMTD, total30D: filtered30, total90D: filtered90, portfolioShare: share }
             });
+        }
+        
+        if (action === 'update') {
+            const { error } = await supabase.from('merchants').update(payload).eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
         }
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
