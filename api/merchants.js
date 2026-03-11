@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // 1. DEFINE THE JOIN STRUCTURE
+            // Restore the exact join path that was working for Company/Partner search
             let selectString = `
                 *,
                 agent_identifiers!agent_id (
@@ -24,55 +24,38 @@ export default async function handler(req, res) {
                 )
             `;
 
-            // 2. APPLY INNER JOINS IF SEARCHING BY PARTNER/COMPANY
+            // THE FIX: Only use strict filtering (!inner) when a specific search is active
             if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
                 selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
             }
 
-            // --- QUERY A: TOTAL GLOBAL VOLUME (FOR THE KPI CARD) ---
-            // We fetch the volume column for EVERY record matching the filter, ignoring pagination
-            let volQuery = supabase.from('merchants').select(`
-                volume_mtd,
-                agent_identifiers!agent_id (
-                    agents (
-                        companies (
-                            company_name,
-                            company_person_mapping (
-                                persons (
-                                    full_name
-                                )
-                            )
-                        )
-                    )
-                )
-            `);
+            let request = supabase.from('merchants').select(selectString, { count: 'exact' });
 
-            // --- QUERY B: TABLE DATA (PAGINATED) ---
-            let dataQuery = supabase.from('merchants').select(selectString, { count: 'exact' });
+            // Apply specific filters
+            if (query && filterBy) {
+                if (filterBy === 'dba_name') request = request.ilike('dba_name', `%${query}%`);
+                else if (filterBy === 'merchant_id') request = request.eq('merchant_id', query);
+                else if (filterBy === 'agent_id') request = request.eq('agent_id', query);
+                else if (filterBy === 'company_name') request = request.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+                else if (filterBy === 'partner_name') request = request.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+            }
+
+            // Order and Range
             const pageSize = parseInt(limit) || 20;
-            dataQuery = dataQuery.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false });
-
-            // 3. APPLY FILTERS TO BOTH QUERIES SIMULTANEOUSLY
-            [volQuery, dataQuery].forEach(q => {
-                if (query && filterBy) {
-                    if (filterBy === 'dba_name') q.ilike('dba_name', `%${query}%`);
-                    else if (filterBy === 'merchant_id') q.eq('merchant_id', query);
-                    else if (filterBy === 'agent_id') q.eq('agent_id', query);
-                    else if (filterBy === 'company_name') q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                    else if (filterBy === 'partner_name') q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-                }
-            });
-
-            // Execute both queries
-            const [{ data: volData }, { data: tableData, count, error }] = await Promise.all([volQuery, dataQuery]);
+            request = request.order('created_at', { ascending: false });
             
+            // Note: We are fetching the data for the sum before we apply the range
+            const { data: allData, count, error } = await request;
             if (error) throw error;
 
-            // Calculate the true global sum from the volQuery results
-            const totalVolumeMTD = (volData || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
+            // Calculate the Total Volume from the filtered result set
+            const totalVolumeMTD = (allData || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
 
-            // Defensive Data Mapping for the table
-            const simplifiedData = (tableData || []).map(m => {
+            // Now slice the data for the specific page being viewed
+            const start = page * pageSize;
+            const paginatedData = allData.slice(start, start + pageSize);
+
+            const simplifiedData = paginatedData.map(m => {
                 const agent = m.agent_identifiers?.agents;
                 const company = agent?.companies;
                 const person = company?.company_person_mapping?.[0]?.persons;
@@ -97,7 +80,6 @@ export default async function handler(req, res) {
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
-
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
