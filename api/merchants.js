@@ -1,18 +1,19 @@
 import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
-    // Vercel automatically injects these from your Environment Variables
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, query, page = 0 } = req.body;
-    const PAGE_SIZE = 15;
+    const { action, query, page = 0, limit = 15, sortBy = 'created_at' } = req.body;
 
     try {
         if (action === 'list') {
+            // We use a join-heavy select to allow filtering by Partner Name later if needed,
+            // though for global text search, Supabase works best on the main table columns.
             let request = supabase
                 .from('merchants')
                 .select(`
                     *,
                     agent_identifiers!agent_id (
+                        id_string,
                         agents (
                             agent_name,
                             companies (
@@ -25,18 +26,22 @@ export default async function handler(req, res) {
                             )
                         )
                     )
-                `, { count: 'exact' })
-                .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
-                .order('created_at', { ascending: false });
+                `, { count: 'exact' });
 
+            // Handle Pagination
+            request = request.range(page * limit, (page + 1) * limit - 1);
+
+            // Handle Sorting: Recently Created vs Recently Updated
+            request = request.order(sortBy, { ascending: false });
+
+            // Handle Advanced Search (DBA, MerchantID, AgentID)
             if (query) {
-                request = request.or(`dba_name.ilike.%${query}%,agent_id.ilike.%${query}%`);
+                request = request.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%,agent_id.ilike.%${query}%`);
             }
 
             const { data, count, error } = await request;
             if (error) throw error;
 
-            // Simplify the nested join data for the frontend table
             const simplifiedData = data.map(m => {
                 const agentInfo = m.agent_identifiers?.agents;
                 const companyInfo = agentInfo?.companies;
@@ -45,7 +50,8 @@ export default async function handler(req, res) {
                 return {
                     ...m,
                     company_name: companyInfo?.company_name || 'Legacy/Unassigned',
-                    partner_name: personInfo?.full_name || 'System'
+                    partner_name: personInfo?.full_name || 'System',
+                    partner_id: m.agent_id // Correlating Partner ID to Agent ID for this view
                 };
             });
 
