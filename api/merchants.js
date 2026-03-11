@@ -6,21 +6,21 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // 1. SELECT STRING SETUP
+            // 1. LOCKED SEARCH STRING
             let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
+            const isDeepSearch = (query && (filterBy === 'company_name' || filterBy === 'partner_name'));
             
-            if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
+            if (isDeepSearch) {
                 selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
             }
 
-            // 2. DATA & VOLUME REQUESTS
+            // 2. PREPARE THE THREE REQUESTS
             let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
             let volReq = supabase.from('merchants').select(`volume_mtd, volume_30_day, volume_90_day, account_status, ${selectString.split('*,')[1]}`);
-            let absReq = supabase.from('merchants').select('volume_mtd').eq('account_status', 'Approved');
+            let absReq = supabase.from('merchants').select('volume_mtd'); // Absolute Total (No filters)
 
-            // 3. APPLY FILTERS (Search + Status)
+            // 3. APPLY FILTERS (SEARCH + STATUS)
             [dataReq, volReq].forEach(q => {
-                // Apply Search Filter
                 if (query && filterBy) {
                     if (filterBy === 'dba_name') q.ilike('dba_name', `%${query}%`);
                     else if (filterBy === 'merchant_id') q.eq('merchant_id', query);
@@ -28,28 +28,27 @@ export default async function handler(req, res) {
                     else if (filterBy === 'company_name') q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
                     else if (filterBy === 'partner_name') q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
                 }
-                // Apply Status Filter (The new requirement)
-                if (statusFilter) {
-                    q.eq('account_status', statusFilter);
-                }
+                if (statusFilter) q.eq('account_status', statusFilter);
             });
 
+            // 4. EXECUTE
+            const pageSize = parseInt(limit) || 20;
             const [dataRes, volRes, absRes] = await Promise.all([
-                dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
+                dataReq.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false }),
                 volReq,
                 absReq
             ]);
 
             if (dataRes.error) throw dataRes.error;
 
-            // 4. CALCULATE SUMS
+            // 5. CALCULATE SUMS FOR FILTERED SET (e.g. Partner 33343)
             const filteredMTD = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
             const filtered30 = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
             const filtered90 = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_90_day) || 0), 0);
             
-            // 5. PORTFOLIO SHARE (Michelle's Approved Volume vs Total Approved Volume)
+            // 6. PORTFOLIO SHARE (Filtered Volume / Total Database Volume)
             const absoluteMTD = (absRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
-            const portfolioShare = absoluteMTD > 0 ? ((filteredMTD / absoluteMTD) * 100).toFixed(2) : 0;
+            const share = absoluteMTD > 0 ? ((filteredMTD / absoluteMTD) * 100).toFixed(2) : 0;
 
             const simplifiedData = (dataRes.data || []).map(m => {
                 const person = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons;
@@ -64,9 +63,9 @@ export default async function handler(req, res) {
                 success: true, 
                 data: simplifiedData, 
                 count: dataRes.count,
-                metrics: { totalMTD: filteredMTD, total30D: filtered30, total90D: filtered90, portfolioShare }
+                metrics: { totalMTD: filteredMTD, total30D: filtered30, total90D: filtered90, portfolioShare: share }
             });
         }
-        // ... update logic
+        // ... (Update/Delete logic remains same)
     } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
 }
