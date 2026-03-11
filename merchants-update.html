@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Edit Merchant | Portfolio Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    
+    <style>
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); --glass-border: rgba(255, 255, 255, 0.4); }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 30px; font-family: 'Inter', sans-serif; min-height: 100vh; color: #2b3d51; }
+        .slds-form-container { max-width: 1100px; margin: auto; background: var(--glass); backdrop-filter: blur(12px); border: 1px solid var(--glass-border); border-radius: 24px; box-shadow: 0 20px 50px rgba(0, 45, 90, 0.08); overflow: hidden; }
+        .header-box { background: rgba(0, 73, 144, 0.03); padding: 25px 35px; border-bottom: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        .home-pill { background: white; padding: 8px 16px; border-radius: 50px; font-size: 0.7rem; font-weight: 800; color: var(--pp-blue); text-decoration: none !important; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+        .form-section-title { font-size: 0.75rem; font-weight: 800; color: var(--pp-accent); text-transform: uppercase; letter-spacing: 1px; margin: 25px 0 15px 0; padding-bottom: 5px; border-bottom: 1px solid #e2e8f0; }
+        .form-body { padding: 40px; }
+        .slds-input, .slds-select, .slds-textarea { border-radius: 10px !important; border: 1px solid #d1d9e6 !important; height: 40px; }
+        .footer-action { background: rgba(255,255,255,0.4); padding: 25px 40px; border-top: 1px solid rgba(0,0,0,0.05); display: flex; justify-content: space-between; align-items: center; }
+        #debug-monitor { max-width: 1100px; margin: 30px auto; background: #1a202c; color: #a0aec0; padding: 25px; border-radius: 20px; font-family: monospace; font-size: 11px; height: 100px; overflow-y: auto; }
+    </style>
+
+    <script>
+        (function() {
+            const userId = sessionStorage.getItem('pp_userid');
+            if (!userId || sessionStorage.getItem('pp_verified') !== 'true') {
+                window.location.replace("index.html");
+            }
+        })();
+    </script>
+</head>
+<body>
+
+    <div class="slds-form-container">
+        <div class="header-box">
+            <div style="display:flex; align-items:center; gap:15px;">
+                <a href="merchants-dashboard.html" class="home-pill"><span class="material-icons" style="font-size: 14px;">arrow_back</span> Dashboard</a>
+                <h1 style="font-size: 1.2rem; font-weight: 800; color: var(--pp-blue);" id="m-name">Edit Merchant</h1>
+            </div>
+            <div style="background:#e2e8f0; padding:6px 14px; border-radius:8px; font-size:10px; font-weight:800;">SECURE LEDGER SYNC ACTIVE</div>
+        </div>
+
+        <div class="form-body">
+            <div class="slds-grid slds-wrap slds-gutters">
+                <div class="slds-col slds-size_1-of-1"><h2 class="form-section-title">Core Identity</h2></div>
+                <div class="slds-col slds-size_1-of-2">
+                    <div class="slds-form-element slds-m-bottom_small"><label class="slds-form-element__label">DBA Name</label><input type="text" id="dba_name" class="slds-input" /></div>
+                    <div class="slds-form-element slds-m-bottom_small"><label class="slds-form-element__label">Merchant ID (MID)</label><input type="text" id="merchant_id" class="slds-input" /></div>
+                </div>
+                <div class="slds-col slds-size_1-of-2">
+                    <div class="slds-form-element slds-m-bottom_small"><label class="slds-form-element__label">Partner ID (Agent ID)</label><input type="text" id="agent_id" class="slds-input" /></div>
+                    <div class="slds-form-element slds-m-bottom_small"><label class="slds-form-element__label">Account Status</label>
+                        <select id="account_status" class="slds-select">
+                            <option value="ACTIVE">ACTIVE</option>
+                            <option value="INACTIVE">INACTIVE</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer-action">
+            <button class="slds-button slds-button_destructive" style="border-radius:10px;" onclick="deleteMerchant()">Delete Merchant</button>
+            <div style="display:flex; gap:10px;">
+                <button class="slds-button slds-button_neutral" style="border-radius:10px;" onclick="window.history.back()">Cancel</button>
+                <button class="slds-button slds-button_brand" id="saveBtn" style="border-radius:10px; font-weight:700;" onclick="updateMerchant()">COMMIT PROFILE UPDATE</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="debug-monitor"><div>[System] Ready for secure update...</div></div>
+
+    <script>
+        const API_URL = "/api/merchants";
+        const params = new URLSearchParams(window.location.search);
+        const recordId = params.get('id');
+
+        window.onload = function() {
+            if (!recordId) {
+                Swal.fire('Error', 'No record ID found', 'error');
+                return;
+            }
+            
+            // Hydrate fields from URL params
+            document.getElementById('dba_name').value = params.get('dba') || '';
+            document.getElementById('merchant_id').value = params.get('mid') || '';
+            document.getElementById('agent_id').value = params.get('aid') || '';
+            
+            document.getElementById('m-name').innerText = `Edit: ${params.get('dba') || 'Merchant'}`;
+        };
+
+        async function updateMerchant() {
+            Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+            
+            const payload = {
+                dba_name: document.getElementById('dba_name').value,
+                merchant_id: document.getElementById('merchant_id').value,
+                agent_id: document.getElementById('agent_id').value,
+                account_status: document.getElementById('account_status').value
+            };
+
+            try {
+                const res = await fetch(API_URL, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ 
+                        action: 'update', 
+                        id: recordId, 
+                        payload: payload,
+                        userEmail: sessionStorage.getItem('pp_userid')
+                    })
+                });
+                
+                if (res.ok) {
+                    Swal.fire('Success', 'Merchant profile updated.', 'success').then(() => {
+                        window.location.href = "merchants-dashboard.html";
+                    });
+                }
+            } catch (e) { Swal.fire('Error', e.message, 'error'); }
+        }
+
+        async function deleteMerchant() {
+            const confirm = await Swal.fire({
+                title: 'Are you sure?',
+                text: "This will permanently delete this merchant from the database.",
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#d33',
+                confirmButtonText: 'Yes, Delete it'
+            });
+
+            if (confirm.isConfirmed) {
+                try {
+                    const res = await fetch(API_URL, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ action: 'delete', id: recordId, userEmail: sessionStorage.getItem('pp_userid') })
+                    });
+                    if (res.ok) {
+                        Swal.fire('Deleted!', 'Merchant removed.', 'success').then(() => {
+                            window.location.href = "merchants-dashboard.html";
+                        });
+                    }
+                } catch (e) { Swal.fire('Error', e.message, 'error'); }
+            }
+        }
+    </script>
+</body>
+</html>
