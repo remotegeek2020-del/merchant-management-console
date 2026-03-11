@@ -6,14 +6,11 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // We use a join-heavy select to allow filtering by Partner Name later if needed,
-            // though for global text search, Supabase works best on the main table columns.
             let request = supabase
                 .from('merchants')
                 .select(`
                     *,
                     agent_identifiers!agent_id (
-                        id_string,
                         agents (
                             agent_name,
                             companies (
@@ -28,13 +25,9 @@ export default async function handler(req, res) {
                     )
                 `, { count: 'exact' });
 
-            // Handle Pagination
             request = request.range(page * limit, (page + 1) * limit - 1);
-
-            // Handle Sorting: Recently Created vs Recently Updated
             request = request.order(sortBy, { ascending: false });
 
-            // Handle Advanced Search (DBA, MerchantID, AgentID)
             if (query) {
                 request = request.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%,agent_id.ilike.%${query}%`);
             }
@@ -50,8 +43,7 @@ export default async function handler(req, res) {
                 return {
                     ...m,
                     company_name: companyInfo?.company_name || 'Legacy/Unassigned',
-                    partner_name: personInfo?.full_name || 'System',
-                    partner_id: m.agent_id // Correlating Partner ID to Agent ID for this view
+                    partner_name: personInfo?.full_name || 'System'
                 };
             });
 
