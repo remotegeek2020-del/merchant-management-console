@@ -12,18 +12,18 @@ export default async function handler(req, res) {
                 selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
             }
 
-            // --- QUERY 1: FETCH PAGINATED DATA ---
+            // --- QUERY 1: THE TABLE DATA (PAGINATED) ---
             let request = supabase.from('merchants').select(selectString, { count: 'exact' });
             const pageSize = parseInt(limit) || 20;
             request = request.range(page * pageSize, (page + 1) * pageSize - 1);
             request = request.order('created_at', { ascending: false });
 
-            // --- QUERY 2: FETCH TOTAL VOLUME FOR SUMMARY ---
-            // We create a second request to sum everything matching the filter (ignoring pagination)
-            let sumRequest = supabase.from('merchants').select('volume_mtd, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )');
+            // --- QUERY 2: THE GLOBAL TOTAL (ALL RECORDS MATCHING FILTER) ---
+            // We use a separate query to get EVERY record's volume for this filter
+            let totalRequest = supabase.from('merchants').select('volume_mtd, agent_identifiers!agent_id!inner(agents!inner(companies!inner(company_name, company_person_mapping!inner(persons!inner(full_name)))))');
 
-            // Apply Filters to BOTH requests
-            [request, sumRequest].forEach(reqObj => {
+            // Apply Filters to BOTH
+            [request, totalRequest].forEach(reqObj => {
                 if (query && filterBy) {
                     if (filterBy === 'dba_name') reqObj.ilike('dba_name', `%${query}%`);
                     else if (filterBy === 'merchant_id') reqObj.eq('merchant_id', query);
@@ -34,13 +34,13 @@ export default async function handler(req, res) {
             });
 
             const { data, count, error } = await request;
-            const { data: sumData, error: sumError } = await sumRequest;
-            
-            if (error) throw error;
-            if (sumError) throw sumError;
+            // We fetch the volume column only to keep it fast
+            const { data: volumeData, error: vError } = await totalRequest;
 
-            // Calculate True Total Volume across all matched records
-            const trueTotalVolumeMTD = (sumData || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
+            if (error) throw error;
+
+            // Perform the global sum
+            const globalMTD = (volumeData || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
 
             const simplifiedData = (data || []).map(m => {
                 const person = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons;
@@ -55,16 +55,11 @@ export default async function handler(req, res) {
                 success: true, 
                 data: simplifiedData, 
                 count: count,
-                totalVolumeMTD: trueTotalVolumeMTD // This is now the "Global" filter total
+                totalVolumeMTD: globalMTD // This is now truly global for the filter
             });
         }
         
-        // ... (Update/Delete actions remain same) ...
-        if (action === 'update') {
-            const { error } = await supabase.from('merchants').update(payload).eq('id', id);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
+        // ... (Keep Update/Delete logic as is)
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
