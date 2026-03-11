@@ -123,22 +123,28 @@
         </div>
     </article>
 
-    <div id="merchantModal" class="custom-modal" onclick="if(event.target == this) closeModal()">
-        <div class="custom-modal-content">
-            <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">Detailed Merchant Profile</h2>
-                <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
-            </div>
-            <div class="modal-scroll">
-                <div id="modalVolumeSummary" style="background:#f1f5f9; padding:20px; border-radius:15px; margin-bottom:25px; display:grid; grid-template-columns:repeat(3, 1fr); gap:15px;"></div>
-                <div id="modalDetailsGrid" class="detail-grid"></div>
-            </div>
-            <div style="padding: 20px 30px; background: #f8fafc; border-top:1px solid #e2e8f0; display: flex; justify-content: space-between;">
-                <button class="slds-button slds-button_brand" id="editBtn" style="border-radius:10px; padding: 0 30px;">Edit Full Profile</button>
-                <button class="slds-button slds-button_neutral" onclick="closeModal()" style="border-radius:10px;">Close</button>
+ <div id="merchantModal" class="custom-modal" onclick="if(event.target == this) closeModal()">
+    <div class="custom-modal-content">
+        <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between; align-items: center;">
+            <h2 style="font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">Detailed Merchant Profile</h2>
+            <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
+        </div>
+
+        <div class="modal-scroll">
+            <div id="modalVolumeSummary" style="background:#f1f5f9; padding:20px; border-radius:15px; margin-bottom:25px; display:grid; grid-template-columns:repeat(3, 1fr); gap:15px;"></div>
+            <div id="modalDetailsGrid" class="detail-grid"></div>
+        </div>
+
+        <div style="padding: 20px 30px; background: #f8fafc; border-top:1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 10px;">
+            <button class="slds-button slds-button_neutral" onclick="closeModal()" style="border-radius:10px;">Cancel</button>
+            
+            <div style="display: flex; gap: 10px;">
+                <button class="slds-button slds-button_brand" id="saveChangeBtn" style="border-radius:10px; padding: 0 30px;">Save Changes</button>
+                <button class="slds-button slds-button_outline-brand" id="editBtn" style="border-radius:10px; display: none;">Edit Full Profile</button>
             </div>
         </div>
     </div>
+</div>
 
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
@@ -204,35 +210,25 @@
             }
         }
 
-        function openModal(id) {
-            const m = currentRecords.find(r => r.id === id);
-            if (!m) return;
-            const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+       function openModal(id) {
+    const m = currentRecords.find(r => r.id === id);
+    if (!m) return;
+    
+    const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 
-            // Volume Summary in Modal
-            document.getElementById('modalVolumeSummary').innerHTML = `
-                <div><span class="detail-label">MTD Volume</span><b style="display:block; font-size:1.1rem;">${cur.format(m.volume_mtd || 0)}</b></div>
-                <div><span class="detail-label">30 Day Volume</span><b style="display:block; font-size:1.1rem;">${cur.format(m.volume_30_day || 0)}</b></div>
-                <div><span class="detail-label">90 Day Volume</span><b style="display:block; font-size:1.1rem;">${cur.format(m.volume_90_day || 0)}</b></div>
-            `;
+    // 1. Fill the Modal with inputs instead of just text so you can edit them
+    document.getElementById('modalDetailsGrid').innerHTML = ALL_FIELDS.map(f => `
+        <div class="detail-item">
+            <span class="detail-label">${f.replace(/_/g, ' ')}</span>
+            <input type="text" id="edit-${f}" class="slds-input" style="width: 60%; height: 28px; font-size: 11px;" value="${m[f] || ''}">
+        </div>
+    `).join('');
 
-            // All 38 Fields
-            document.getElementById('modalDetailsGrid').innerHTML = ALL_FIELDS.map(f => `
-                <div class="detail-item">
-                    <span class="detail-label">${f.replace(/_/g, ' ')}</span>
-                    <b style="text-align:right;">${m[f] || '---'}</b>
-                </div>
-            `).join('');
+    // 2. Attach the "Save" logic to the button for THIS specific merchant ID
+    document.getElementById('saveChangeBtn').onclick = () => saveMerchantChanges(m.id);
 
-            // Edit Link
-            document.getElementById('editBtn').onclick = () => {
-                const p = new URLSearchParams({ id: m.id });
-                ALL_FIELDS.forEach(f => { if(m[f]) p.append(f, m[f]); });
-                window.location.href = `merchants-update.html?${p.toString()}`;
-            };
-
-            document.getElementById('merchantModal').style.display = 'flex';
-        }
+    document.getElementById('merchantModal').style.display = 'flex';
+}
 
         function closeModal() { document.getElementById('merchantModal').style.display = 'none'; }
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
@@ -246,3 +242,4 @@
     </script>
 </body>
 </html>
+
