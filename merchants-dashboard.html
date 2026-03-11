@@ -7,26 +7,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/style.css">
-    <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); }
-        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; }
-        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0, 45, 90, 0.05); }
-        .btn-export { background: #2e7d32 !important; color: white !important; border-radius: 12px !important; height: 40px !important; margin-left: 8px; border: none; cursor: pointer; display: flex; align-items: center; padding: 0 15px; }
-        .slds-select { border-radius: 12px !important; height: 40px !important; margin-right: 8px; }
-    </style>
 </head>
-<body>
-    <div class="modern-header">
+<body style="background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px;">
+    <div class="modern-header" style="background: rgba(255,255,255,0.9); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05);">
         <div>
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                <a href="index.html" style="background:white; border:1px solid #e2e8f0; padding:6px 14px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.7rem; text-decoration:none;">HOME</a>
-                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:var(--pp-blue);">Staff Member</div>
+                <a href="index.html" style="background:white; border:1px solid #e2e8f0; padding:6px 14px; border-radius:50px; color:#004990; font-weight:700; font-size:0.7rem; text-decoration:none;">HOME</a>
+                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:#004990;">Staff Member</div>
             </div>
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
         </div>
         <div class="slds-grid slds-grid_vertical-align-center">
-            
-            <select id="filterBy" class="slds-select" style="width: 200px;">
+            <select id="filterBy" class="slds-select" style="width: 200px; border-radius: 12px; height: 40px; margin-right: 8px;">
                 <option value="">Select what to search</option>
                 <option value="dba_name">DBA Name</option>
                 <option value="merchant_id">Merchant ID (MID)</option>
@@ -34,14 +26,14 @@
                 <option value="partner_name">Partner Name</option>
             </select>
 
-            <input type="text" id="searchInput" placeholder="Enter search term..." class="slds-input" style="width:250px; border-radius: 12px; margin-right: 8px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
+            <input type="text" id="searchInput" placeholder="Enter search term..." class="slds-input" style="width:250px; border-radius: 12px; margin-right: 8px; height: 40px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
             
             <button class="slds-button slds-button_brand" style="border-radius:12px; height: 40px;" onclick="resetAndFetch()">Search</button>
-            <button class="btn-export" onclick="exportToCSV()"><span class="material-icons" style="font-size:18px;">download</span></button>
+            <button onclick="exportToCSV()" style="background:#2e7d32; color:white; border:none; border-radius:12px; height:40px; width:45px; margin-left:8px; cursor:pointer;"><span class="material-icons" style="font-size:18px;">download</span></button>
         </div>
     </div>
 
-    <article class="slds-card" style="border-radius: 20px; overflow: hidden;">
+    <article class="slds-card" style="border-radius: 20px; overflow: hidden; background:white;">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer">
             <thead>
                 <tr class="slds-line-height_reset">
@@ -82,24 +74,27 @@
                     body: JSON.stringify({ action: 'list', page: currentPage, query: query, filterBy: filterBy })
                 });
                 const result = await response.json();
-                if (!result.success) throw new Error(result.message);
-
+                
                 tbody.innerHTML = "";
                 result.data.forEach(m => {
                     const row = tbody.insertRow();
                     row.innerHTML = `
-                        <td><b style="color:var(--pp-blue);">${m.dba_name || '---'}</b></td>
+                        <td><b style="color:#004990;">${m.dba_name || '---'}</b></td>
                         <td><code>${m.merchant_id || '---'}</code></td>
                         <td><span style="background:#f1f5f9; padding:2px 8px; border-radius:4px; font-size:11px;">${m.agent_id || '---'}</span></td>
                         <td style="font-size:11px; font-weight:600;">${m.company_name}</td>
-                        <td style="font-size:11px; color:var(--pp-accent);">${m.partner_name}</td>
+                        <td style="font-size:11px; color:#00a1e0;">${m.partner_name}</td>
                         <td><span style="color:#008a8a; font-weight:800; font-size:10px;">ACTIVE</span></td>
                     `;
                 });
-                pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total Records: ${result.count || 0})</span>`;
-                document.getElementById('nextBtn').disabled = ((currentPage + 1) * PAGE_SIZE) >= (result.count || 0);
+                
+                // Show Total Count
+                const total = result.count || 0;
+                pageInfo.innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:10px;">(Total: ${total})</span>`;
+                
+                document.getElementById('nextBtn').disabled = ((currentPage + 1) * PAGE_SIZE) >= total;
                 document.getElementById('prevBtn').disabled = (currentPage === 0);
-            } catch (e) { tbody.innerHTML = `<tr><td colspan='6' style='text-align:center; color:red; padding:20px;'>Error: ${e.message}</td></tr>`; }
+            } catch (e) { tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; color:red;'>Error Loading Data</td></tr>"; }
         }
 
         async function exportToCSV() {
@@ -112,22 +107,20 @@
                 });
                 const result = await response.json();
                 let csv = "DBA,MID,PartnerID,Company,PartnerName\n";
-                result.data.forEach(m => {
-                    csv += `"${m.dba_name}","${m.merchant_id}","${m.agent_id}","${m.company_name}","${m.partner_name}"\n`;
-                });
+                result.data.forEach(m => { csv += `"${m.dba_name}","${m.merchant_id}","${m.agent_id}","${m.company_name}","${m.partner_name}"\n`; });
                 const link = document.createElement('a');
                 link.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
                 link.download = "Merchants_Export.csv";
                 link.click();
                 Swal.close();
-            } catch (e) { Swal.fire('Error', e.message, 'error'); }
+            } catch (e) { Swal.fire('Error', 'Export Failed', 'error'); }
         }
 
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
         window.onload = () => {
             const user = sessionStorage.getItem('pp_userid');
-            if (document.getElementById('user-greeting')) document.getElementById('user-greeting').innerText = `Staff: ${user || 'Console'}`;
+            document.getElementById('user-greeting').innerText = `Staff: ${user || 'Console'}`;
             fetchMerchants();
         };
     </script>
