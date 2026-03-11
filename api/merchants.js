@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // 1. SELECT STRING SETUP (LOCKED SEARCH LOGIC)
+            // --- 1. YOUR PERFECT SEARCH LOGIC (LOCKED) ---
             let selectString = `
                 *,
                 agent_identifiers!agent_id (
@@ -24,7 +24,6 @@ export default async function handler(req, res) {
                 )
             `;
 
-            // Apply !inner join IF searching by Company or Partner Name
             const isDeepSearch = (query && (filterBy === 'company_name' || filterBy === 'partner_name'));
             if (isDeepSearch) {
                 selectString = selectString
@@ -35,33 +34,30 @@ export default async function handler(req, res) {
                     .replace('persons (', 'persons !inner (');
             }
 
-            // 2. INITIALIZE REQUESTS
+            // --- 2. INITIALIZE REQUESTS ---
             let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
-            let volReq = supabase.from('merchants').select(`volume_mtd, volume_30_day, volume_90_day, account_status, ${selectString.split('*,')[1]}`);
-            let absReq = supabase.from('merchants').select('volume_mtd'); // Global for Portfolio Share
+            
+            // MATH FIX: We only select the columns needed for math to prevent data-heavy timeouts
+            let volReq = supabase.from('merchants').select(`volume_mtd, volume_30_day, volume_90_day, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`);
+            if (isDeepSearch) {
+                volReq = volReq.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
+            }
 
-            // 3. APPLY COMBINED FILTERS (The "AND" Logic)
+            let absReq = supabase.from('merchants').select('volume_mtd'); // Global total for Share
+
+            // --- 3. APPLY FILTERS (SEARCH + STATUS) ---
             [dataReq, volReq].forEach(q => {
-                // A. Apply Status Filter first (if exists)
-                if (statusFilter) {
-                    q.eq('account_status', statusFilter);
-                }
-
-                // B. Apply Search Filter second (if exists)
+                if (statusFilter) q.eq('account_status', statusFilter);
                 if (query && filterBy) {
                     if (filterBy === 'dba_name') q.ilike('dba_name', `%${query}%`);
                     else if (filterBy === 'merchant_id') q.eq('merchant_id', query);
                     else if (filterBy === 'agent_id') q.eq('agent_id', query);
-                    else if (filterBy === 'company_name') {
-                        q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                    } 
-                    else if (filterBy === 'partner_name') {
-                        q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-                    }
+                    else if (filterBy === 'company_name') q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+                    else if (filterBy === 'partner_name') q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
                 }
             });
 
-            // 4. EXECUTE ALL QUERIES
+            // --- 4. EXECUTE ---
             const pageSize = parseInt(limit) || 20;
             const [dataRes, volRes, absRes] = await Promise.all([
                 dataReq.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false }),
@@ -71,16 +67,18 @@ export default async function handler(req, res) {
 
             if (dataRes.error) throw dataRes.error;
 
-            // 5. CALCULATE METRICS (Filtered Set)
-            const filteredMTD = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
-            const filtered30 = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-            const filtered90 = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_90_day) || 0), 0);
+            // --- 5. CALCULATE METRICS (STABLE MATH) ---
+            // Use parseFloat and handle nulls to ensure the sum never breaks
+            const metricsData = volRes.data || [];
+            const filteredMTD = metricsData.reduce((sum, m) => sum + (Number(m.volume_mtd) || 0), 0);
+            const filtered30 = metricsData.reduce((sum, m) => sum + (Number(m.volume_30_day) || 0), 0);
+            const filtered90 = metricsData.reduce((sum, m) => sum + (Number(m.volume_90_day) || 0), 0);
             
-            // 6. PORTFOLIO SHARE (Michelle's Volume vs Entire DB Total)
-            const absoluteMTD = (absRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
+            // Portfolio Share logic
+            const absoluteMTD = (absRes.data || []).reduce((sum, m) => sum + (Number(m.volume_mtd) || 0), 0);
             const share = absoluteMTD > 0 ? ((filteredMTD / absoluteMTD) * 100).toFixed(2) : 0;
 
-            // 7. MAPPING FOR DASHBOARD
+            // --- 6. MAPPING ---
             const simplifiedData = (dataRes.data || []).map(m => {
                 const agent = m.agent_identifiers?.agents;
                 const company = agent?.companies;
@@ -96,11 +94,15 @@ export default async function handler(req, res) {
                 success: true, 
                 data: simplifiedData, 
                 count: dataRes.count,
-                metrics: { totalMTD: filteredMTD, total30D: filtered30, total90D: filtered90, portfolioShare: share }
+                metrics: { 
+                    totalMTD: filteredMTD, 
+                    total30D: filtered30, 
+                    total90D: filtered90, 
+                    portfolioShare: share 
+                }
             });
         }
 
-        // --- UPDATE ACTION ---
         if (action === 'update') {
             const { error } = await supabase.from('merchants').update(payload).eq('id', id);
             if (error) throw error;
