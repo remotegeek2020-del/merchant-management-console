@@ -6,7 +6,6 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // Fetch all merchant fields plus the joined partner/company data
             let request = supabase
                 .from('merchants')
                 .select(`
@@ -53,8 +52,21 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: simplifiedData, count });
         }
 
+        // FIXED: Explicitly handles the payload for account_status updates
         if (action === 'update') {
-            const { error } = await supabase.from('merchants').update(payload).eq('id', id);
+            const { error } = await supabase
+                .from('merchants')
+                .update({
+                    dba_name: payload.dba_name,
+                    account_status: payload.account_status,
+                    merchant_primary_contact: payload.merchant_primary_contact,
+                    email: payload.email,
+                    merchant_phone: payload.merchant_phone,
+                    underwriting_decision_note: payload.underwriting_decision_note,
+                    // Add other fields from your list as needed here
+                })
+                .eq('id', id);
+
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
