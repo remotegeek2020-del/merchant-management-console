@@ -29,6 +29,7 @@ export default async function handler(req, res) {
             request = request.order(sortBy, { ascending: false });
 
             if (query) {
+                // This searches DBA, MID, and the Agent/Partner ID
                 request = request.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%,agent_id.ilike.%${query}%`);
             }
 
@@ -42,7 +43,7 @@ export default async function handler(req, res) {
 
                 return {
                     ...m,
-                    company_name: companyInfo?.company_name || 'Legacy/Unassigned',
+                    company_name: companyInfo?.company_name || 'Unassigned',
                     partner_name: personInfo?.full_name || 'System'
                 };
             });
