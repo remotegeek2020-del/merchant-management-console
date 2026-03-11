@@ -2,78 +2,56 @@ import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, userEmail, query, filterBy, page = 0, limit = 20 } = req.body;
+    const { action, id, payload, query, filterBy, page = 0, limit = 20 } = req.body;
 
     try {
         if (action === 'list') {
-            let selectString = `
-                *,
-                agent_identifiers!agent_id (
-                    agents (
-                        agent_name,
-                        companies (
-                            company_name,
-                            company_person_mapping (
-                                persons (
-                                    full_name
-                                )
-                            )
-                        )
-                    )
-                )
-            `;
-
+            // 1. LOCKED SEARCH LOGIC
+            let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
             if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
-                selectString = selectString
-                    .replace('agent_identifiers!agent_id (', 'agent_identifiers!agent_id !inner (')
-                    .replace('agents (', 'agents !inner (')
-                    .replace('companies (', 'companies !inner (')
-                    .replace('company_person_mapping (', 'company_person_mapping !inner (')
-                    .replace('persons (', 'persons !inner (');
+                selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
             }
 
-            // --- QUERY A: PAGINATED TABLE DATA ---
-            let dataRequest = supabase.from('merchants').select(selectString, { count: 'exact' });
+            // 2. QUERY A: PAGINATED TABLE DATA
+            let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
             const pageSize = parseInt(limit) || 20;
-            dataRequest = dataRequest.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false });
+            dataReq = dataReq.range(page * pageSize, (page + 1) * pageSize - 1).order('created_at', { ascending: false });
 
-            // --- QUERY B: FILTERED GLOBAL VOLUME (FOR KPI CARDS) ---
-            let volRequest = supabase.from('merchants').select('volume_mtd, volume_30_day, volume_90_day, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )');
+            // 3. QUERY B: FILTERED GLOBAL METRICS
+            let volReq = supabase.from('merchants').select('volume_mtd, volume_30_day, volume_90_day, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )');
+            if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
+                volReq = volReq.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (');
+            }
 
-            // --- QUERY C: ABSOLUTE TOTAL VOLUME (FOR PERCENTAGE CALCULATION) ---
-            let absoluteRequest = supabase.from('merchants').select('volume_mtd');
+            // 4. QUERY C: ABSOLUTE DATABASE TOTAL (FOR %)
+            let absReq = supabase.from('merchants').select('volume_mtd');
 
-            // Apply Filters to Data and Filtered Volume queries
-            [dataRequest, volRequest].forEach(reqObj => {
+            // Apply filters to A and B
+            [dataReq, volReq].forEach(q => {
                 if (query && filterBy) {
-                    if (filterBy === 'dba_name') reqObj.ilike('dba_name', `%${query}%`);
-                    else if (filterBy === 'merchant_id') reqObj.eq('merchant_id', query);
-                    else if (filterBy === 'agent_id') reqObj.eq('agent_id', query);
-                    else if (filterBy === 'company_name') reqObj.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                    else if (filterBy === 'partner_name') reqObj.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+                    if (filterBy === 'dba_name') q.ilike('dba_name', `%${query}%`);
+                    else if (filterBy === 'merchant_id') q.eq('merchant_id', query);
+                    else if (filterBy === 'agent_id') q.eq('agent_id', query);
+                    else if (filterBy === 'company_name') q.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+                    else if (filterBy === 'partner_name') q.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
                 }
             });
 
-            const [dataRes, volRes, absRes] = await Promise.all([dataRequest, volRequest, absoluteRequest]);
-            
+            const [dataRes, volRes, absRes] = await Promise.all([dataReq, volReq, absReq]);
             if (dataRes.error) throw dataRes.error;
 
-            // Calculate Metrics for Filtered Set
+            // Calculations
             const filteredMTD = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
-            const filtered30D = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-            const filtered90D = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_90_day) || 0), 0);
-
-            // Calculate Global Percentage (Filtered MTD vs Absolute Database MTD)
+            const filtered30 = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+            const filtered90 = (volRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_90_day) || 0), 0);
             const absoluteMTD = (absRes.data || []).reduce((sum, m) => sum + (parseFloat(m.volume_mtd) || 0), 0);
-            const portfolioPercentage = absoluteMTD > 0 ? ((filteredMTD / absoluteMTD) * 100).toFixed(2) : 0;
+            const portfolioShare = absoluteMTD > 0 ? ((filteredMTD / absoluteMTD) * 100).toFixed(2) : 0;
 
             const simplifiedData = (dataRes.data || []).map(m => {
-                const agent = m.agent_identifiers?.agents;
-                const company = agent?.companies;
-                const person = company?.company_person_mapping?.[0]?.persons;
+                const person = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons;
                 return {
                     ...m,
-                    company_name: company?.company_name || '---',
+                    company_name: m.agent_identifiers?.agents?.companies?.company_name || '---',
                     partner_name: person?.full_name || '---'
                 };
             });
@@ -82,21 +60,13 @@ export default async function handler(req, res) {
                 success: true, 
                 data: simplifiedData, 
                 count: dataRes.count,
-                metrics: {
-                    totalMTD: filteredMTD,
-                    total30D: filtered30D,
-                    total90D: filtered90D,
-                    portfolioShare: portfolioPercentage
-                }
+                metrics: { totalMTD: filteredMTD, total30D: filtered30, total90D: filtered90, portfolioShare }
             });
         }
-
         if (action === 'update') {
             const { error } = await supabase.from('merchants').update(payload).eq('id', id);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
+    } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
 }
