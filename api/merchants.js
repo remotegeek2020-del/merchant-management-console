@@ -76,12 +76,35 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
         
-        // --- ACTION: ADD NOTE ---
+       // --- ACTION: ADD NOTE ---
 if (action === 'add_note') {
     const { merchant_uuid, title, body, user } = req.body;
+    // We insert 'user' into 'created_by'
     const { error } = await supabase
         .from('merchant_notes')
-        .insert([{ merchant_id: merchant_uuid, title, body, created_by: user }]);
+        .insert([{ 
+            merchant_id: merchant_uuid, 
+            title: title, 
+            body: body, 
+            created_by: user 
+        }]);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true });
+}
+
+// --- ACTION: UPDATE EXISTING NOTE ---
+if (action === 'update_note') {
+    const { note_id, title, body, user } = req.body;
+    // We update the body AND record who did the edit
+    const { error } = await supabase
+        .from('merchant_notes')
+        .update({ 
+            title: title, 
+            body: body, 
+            created_by: user + ' (Edited)' 
+        })
+        .eq('id', note_id);
 
     if (error) throw error;
     return res.status(200).json({ success: true });
@@ -105,5 +128,6 @@ if (action === 'get_notes') {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
 
 
