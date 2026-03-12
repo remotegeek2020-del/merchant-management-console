@@ -69,9 +69,33 @@ export default async function handler(req, res) {
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
+        // --- ACTION: ADD NOTE ---
+if (action === 'add_note') {
+    const { merchant_uuid, title, body, user } = req.body;
+    const { error } = await supabase
+        .from('merchant_notes')
+        .insert([{ merchant_id: merchant_uuid, title, body, created_by: user }]);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true });
+}
+
+// --- ACTION: GET NOTES ---
+if (action === 'get_notes') {
+    const { merchant_uuid } = req.body;
+    const { data, error } = await supabase
+        .from('merchant_notes')
+        .select('*')
+        .eq('merchant_id', merchant_uuid)
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
 
     } catch (err) {
         console.error("API Crash:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
