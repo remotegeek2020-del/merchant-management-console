@@ -26,10 +26,11 @@
         .status-approved { background: #dcfce7; color: #166534; }
         .status-closed { background: #fee2e2; color: #991b1b; }
         .status-pending { background: #fef9c3; color: #854d0e; }
-        .note-card { background: white; border: 1px solid #e2e8f0; padding: 12px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid var(--pp-blue); transition: all 0.2s; }
+        .note-card { background: white; border: 1px solid #e2e8f0; padding: 12px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid var(--pp-blue); }
         
+        /* Tabs Styling */
         .modal-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 0 30px; }
-        .modal-tab-btn { padding: 15px 25px; font-weight: 700; font-size: 11px; color: #64748b; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; transition: all 0.3s; }
+        .modal-tab-btn { padding: 15px 25px; font-weight: 700; font-size: 11px; color: #64748b; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; }
         .modal-tab-btn.active { color: var(--pp-blue); border-bottom-color: var(--pp-blue); }
     </style>
 </head>
@@ -122,7 +123,7 @@
     <div id="merchantModal" class="custom-modal" onclick="if(event.target == this) closeModal()">
         <div class="custom-modal-content">
             <div style="padding: 25px; background: var(--pp-blue); color: white; display: flex; justify-content: space-between; align-items: center;">
-                <h2 style="font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">Detailed Merchant Profile</h2>
+                <h2 style="font-weight: 800; font-size: 1.1rem; letter-spacing: 0.5px;">Merchant Ledger</h2>
                 <span class="material-icons" style="cursor:pointer" onclick="closeModal()">close</span>
             </div>
 
@@ -140,18 +141,16 @@
 
                 <div id="view-notes" style="display: none;">
                     <div style="background: #f8fafc; padding: 20px; border-radius: 12px; margin-bottom: 25px; border: 1px solid #e2e8f0;">
-                        <h3 style="font-weight: 800; color: var(--pp-blue); margin-bottom: 12px; font-size: 0.9rem;">Internal Ledger Entry</h3>
-                        <input type="text" id="noteTitle" class="slds-input" placeholder="Subject / Title" style="margin-bottom: 8px; border-radius: 8px;">
-                        <textarea id="noteBody" class="slds-textarea" placeholder="Write your note here..." style="margin-bottom: 8px; border-radius: 8px; min-height: 80px;"></textarea>
+                        <h3 style="font-weight: 800; color: var(--pp-blue); margin-bottom: 12px; font-size: 0.9rem;">New Internal Entry</h3>
+                        <input type="text" id="noteTitle" class="slds-input" placeholder="Subject" style="margin-bottom: 8px; border-radius: 8px;">
+                        <textarea id="noteBody" class="slds-textarea" placeholder="Write your note..." style="margin-bottom: 8px; border-radius: 8px; min-height: 80px;"></textarea>
                         <button class="slds-button slds-button_brand" id="addNoteBtn" onclick="submitNote()" style="border-radius: 8px; width: 100%;">Add Note</button>
                     </div>
                     <div id="notesContainer"></div>
                 </div>
 
                 <div id="view-history" style="display: none;">
-                    <div style="margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #fffbeb; border: 1px solid #fde68a; font-size: 11px; color: #92400e;">
-                        <span class="material-icons" style="font-size: 14px; vertical-align: middle;">info</span> Automated logs of profile changes.
-                    </div>
+                    <h3 style="font-weight: 800; color: #64748b; margin-bottom: 15px; font-size: 0.9rem; text-transform: uppercase;">Automated Profile Updates</h3>
                     <div id="historyContainer"></div>
                 </div>
             </div>
@@ -252,7 +251,7 @@
 
         async function fetchNotes(uuid, type) {
             const container = (type === 'manual') ? document.getElementById('notesContainer') : document.getElementById('historyContainer');
-            container.innerHTML = "<p style='font-size:11px; color:#64748b; text-align:center;'>Syncing logs...</p>";
+            container.innerHTML = "<p style='font-size:11px; color:#64748b; text-align:center;'>Fetching data...</p>";
             try {
                 const res = await fetch('/api/merchants', { 
                     method: 'POST', 
@@ -288,8 +287,7 @@
         async function submitNote() {
             const title = document.getElementById('noteTitle').value;
             const body = document.getElementById('noteBody').value;
-            const userGreeting = document.getElementById('user-greeting').innerText;
-            const userName = userGreeting.replace('Staff: ', '').trim() || 'Unknown Staff';
+            const userName = document.getElementById('user-greeting').innerText.replace('Staff: ', '').trim() || 'Unknown Staff';
 
             if (!title || !body) return Swal.fire('Error', 'Subject and Body are required', 'warning');
             const action = editingNoteId ? 'update_note' : 'add_note';
