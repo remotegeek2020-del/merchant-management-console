@@ -214,23 +214,81 @@
     const m = currentRecords.find(r => r.id === id);
     if (!m) return;
     
-    const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+    const statusOptions = [
+        "Approved", "Approved - Collections", "Closed", "Closed - Collections", 
+        "Closed - Risk", "Collections", "Declined", "Enrollment", "Fraud", "Pending", "Withdrawn"
+    ];
 
-    // 1. Fill the Modal with inputs instead of just text so you can edit them
-    document.getElementById('modalDetailsGrid').innerHTML = ALL_FIELDS.map(f => `
-        <div class="detail-item">
-            <span class="detail-label">${f.replace(/_/g, ' ')}</span>
-            <input type="text" id="edit-${f}" class="slds-input" style="width: 60%; height: 28px; font-size: 11px;" value="${m[f] || ''}">
-        </div>
-    `).join('');
+    document.getElementById('modalDetailsGrid').innerHTML = ALL_FIELDS.map(f => {
+        const label = f.replace(/_/g, ' ').toUpperCase();
+        let inputHtml = '';
 
-    // 2. Attach the "Save" logic to the button for THIS specific merchant ID
+        // 1. ACCOUNT STATUS DROPDOWN
+        if (f === 'account_status') {
+            inputHtml = `
+                <select id="edit-${f}" class="slds-select" style="width: 60%; height: 32px; font-size: 11px;">
+                    ${statusOptions.map(opt => `<option value="${opt}" ${m[f] === opt ? 'selected' : ''}>${opt}</option>`).join('')}
+                </select>`;
+        }
+        // 2. ENROLLMENT DATE PICKER
+        else if (f === 'enrollment_date') {
+            // Format YYYY-MM-DD for the date input
+            const dateVal = m[f] ? new Date(m[f]).toISOString().split('T')[0] : '';
+            inputHtml = `<input type="date" id="edit-${f}" class="slds-input" style="width: 60%; height: 32px; font-size: 11px;" value="${dateVal}">`;
+        }
+        // 3. GREYED OUT READ-ONLY FIELDS
+        else if (f === 'merchant_id' || f === 'agent_id') {
+            inputHtml = `<input type="text" id="edit-${f}" class="slds-input" style="width: 60%; height: 28px; font-size: 11px; background: #f1f5f9; cursor: not-allowed;" value="${m[f] || ''}" readonly>`;
+        }
+        // 4. REGULAR TEXT FIELDS
+        else {
+            inputHtml = `<input type="text" id="edit-${f}" class="slds-input" style="width: 60%; height: 28px; font-size: 11px;" value="${m[f] || ''}">`;
+        }
+
+        return `
+            <div class="detail-item">
+                <span class="detail-label">${label}</span>
+                ${inputHtml}
+            </div>
+        `;
+    }).join('');
+
     document.getElementById('saveChangeBtn').onclick = () => saveMerchantChanges(m.id);
-
     document.getElementById('merchantModal').style.display = 'flex';
 }
-
         function closeModal() { document.getElementById('merchantModal').style.display = 'none'; }
+        async function saveMerchantChanges(merchantId) {
+    const payload = {};
+    ALL_FIELDS.forEach(f => {
+        const input = document.getElementById(`edit-${f}`);
+        if (input) payload[f] = input.value;
+    });
+
+    Swal.fire({
+        title: 'Synchronizing...',
+        text: 'Updating master ledger',
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update', id: merchantId, payload })
+        });
+
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire('Saved!', 'Merchant record updated.', 'success');
+            closeModal();
+            fetchMerchants(); // Refresh table
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        Swal.fire('Update Failed', err.message, 'error');
+    }
+}
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
         
@@ -242,3 +300,4 @@
     </script>
 </body>
 </html>
+
