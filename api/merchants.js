@@ -73,11 +73,21 @@ export default async function handler(req, res) {
         }
 
         // --- NOTE ACTIONS ---
-        if (action === 'get_notes') {
-            const { data, error } = await supabase.from('merchant_notes').select('*').eq('merchant_id', id || req.body.merchant_uuid).order('created_at', { ascending: false });
-            if (error) throw error;
-            return res.status(200).json({ success: true, data });
-        }
+       if (action === 'get_notes') {
+    const { merchant_uuid, type } = req.body;
+    let query = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
+
+    // Filter based on the tab being viewed
+    if (type === 'manual') {
+        query = query.neq('title', 'System Update');
+    } else if (type === 'system') {
+        query = query.eq('title', 'System Update');
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
 
         if (action === 'add_note') {
             const { error } = await supabase.from('merchant_notes').insert([{ merchant_id: req.body.merchant_uuid, title: req.body.title, body: req.body.body, created_by: req.body.user }]);
@@ -90,3 +100,4 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
