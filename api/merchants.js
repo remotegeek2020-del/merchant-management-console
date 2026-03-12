@@ -2,9 +2,10 @@ import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20 } = req.body;
+    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
+        // --- ACTION: LIST MERCHANTS ---
         if (action === 'list') {
             let dataReq = supabase.from('merchants').select(`
                 *,
@@ -31,21 +32,35 @@ export default async function handler(req, res) {
 
             if (dataRes.error) throw dataRes.error;
             const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
-            const share = stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00";
-
             return res.status(200).json({ 
                 success: true, 
-                data: (dataRes.data || []).map(m => ({
-                    ...m,
-                    company_name: m.agent_identifiers?.agents?.companies?.company_name || '---',
-                    partner_name: m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---'
-                })),
+                data: dataRes.data,
                 count: dataRes.count,
-                metrics: { totalMTD: stats.out_mtd, total30D: stats.out_30d, total90D: stats.out_90d, portfolioShare: share }
+                metrics: { totalMTD: stats.out_mtd, total30D: stats.out_30d, total90D: stats.out_90d, portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" }
             });
         }
 
-        // --- NEW ACTION: GLOBAL LOGS FOR AUDIT PAGE ---
+        // --- ACTION: UPDATE MERCHANT (Fixes the "Loading Only" issue) ---
+        if (action === 'update') {
+            const { error: updateError } = await supabase
+                .from('merchants')
+                .update(payload)
+                .eq('id', id);
+
+            if (updateError) throw updateError;
+
+            // Log the update in the audit trail
+            await supabase.from('merchant_notes').insert([{
+                merchant_id: id,
+                title: "System Update",
+                body: `Profile details updated by ${user || 'Staff'}`,
+                created_by: user || 'System'
+            }]);
+
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: GLOBAL LOGS ---
         if (action === 'global_logs') {
             const { data, error } = await supabase
                 .from('merchant_notes')
@@ -57,38 +72,21 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-        if (action === 'add_note') {
-            const { merchant_uuid, title, body, user } = req.body;
-            const { error } = await supabase
-                .from('merchant_notes')
-                .insert([{ merchant_id: merchant_uuid, title, body, created_by: user }]);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-
-        if (action === 'update_note') {
-            const { note_id, title, body, user } = req.body;
-            const { error } = await supabase
-                .from('merchant_notes')
-                .update({ title, body, created_by: user + ' (Edited)' })
-                .eq('id', note_id);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-
+        // --- NOTE ACTIONS ---
         if (action === 'get_notes') {
-            const { merchant_uuid } = req.body;
-            const { data, error } = await supabase
-                .from('merchant_notes')
-                .select('*')
-                .eq('merchant_id', merchant_uuid)
-                .order('created_at', { ascending: false });
+            const { data, error } = await supabase.from('merchant_notes').select('*').eq('merchant_id', id || req.body.merchant_uuid).order('created_at', { ascending: false });
             if (error) throw error;
             return res.status(200).json({ success: true, data });
         }
 
+        if (action === 'add_note') {
+            const { error } = await supabase.from('merchant_notes').insert([{ merchant_id: req.body.merchant_uuid, title: req.body.title, body: req.body.body, created_by: req.body.user }]);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
     } catch (err) {
-        console.error("API Crash:", err.message);
+        console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
