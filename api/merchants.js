@@ -1,57 +1,38 @@
-if (action === 'list') {
-            // 1. SELECT STRING (LOCKED)
-            let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
-            const isDeepSearch = (query && (filterBy === 'company_name' || filterBy === 'partner_name'));
-            
-            if (isDeepSearch) {
-                const inner = (str) => str.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (')
-                                          .replace(/agents \(/g, 'agents !inner (')
-                                          .replace(/companies \(/g, 'companies !inner (')
-                                          .replace(/company_person_mapping \(/g, 'company_person_mapping !inner (')
-                                          .replace(/persons \(/g, 'persons !inner (');
-                selectString = inner(selectString);
-            }
-
-            // 2. DATA REQUEST (PAGINATED)
-            let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
-            
-            if (statusFilter) dataReq.eq('account_status', statusFilter);
-            if (query && filterBy) {
-                if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
-                else if (filterBy === 'merchant_id') dataReq.eq('merchant_id', query);
-                else if (filterBy === 'agent_id') dataReq.eq('agent_id', query);
-                else if (filterBy === 'company_name') dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                else if (filterBy === 'partner_name') dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-            }
-
-            // 3. EXECUTE BOTH
-            const [dataRes, metricsRes, globalRes] = await Promise.all([
-                dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
-                supabase.rpc('get_portfolio_metrics', { status_filter: statusFilter || null }),
-                supabase.from('merchants').select('volume_mtd') // Still needed for Share %
-            ]);
-
-            if (dataRes.error) throw dataRes.error;
-
-            // 4. STABLE MATH
-            const metrics = metricsRes.data?.[0] || { total_mtd: 0, total_30d: 0, total_90d: 0 };
-            const absoluteMTD = (globalRes.data || []).reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
-            
-            const share = absoluteMTD > 0 ? ((metrics.total_mtd / absoluteMTD) * 100).toFixed(2) : 0;
-
-            return res.status(200).json({ 
-                success: true, 
-                data: (dataRes.data || []).map(m => ({
-                    ...m,
-                    company_name: m.agent_identifiers?.agents?.companies?.company_name || '---',
-                    partner_name: m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---'
-                })),
-                count: dataRes.count,
-                metrics: { 
-                    totalMTD: metrics.total_mtd, 
-                    total30D: metrics.total_30d, 
-                    total90D: metrics.total_90d, 
-                    portfolioShare: share 
-                }
-            });
-        }
+CREATE OR REPLACE FUNCTION get_merchant_stats(
+    p_status_filter TEXT DEFAULT NULL,
+    p_query TEXT DEFAULT NULL,
+    p_filter_by TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+    total_mtd NUMERIC,
+    total_30d NUMERIC,
+    total_90d NUMERIC,
+    absolute_total_mtd NUMERIC
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH filtered_stats AS (
+        SELECT 
+            SUM(COALESCE(volume_mtd, 0)) as f_mtd,
+            SUM(COALESCE(volume_30_day, 0)) as f_30,
+            SUM(COALESCE(volume_90_day, 0)) as f_90
+        FROM merchants
+        WHERE (p_status_filter IS NULL OR p_status_filter = '' OR account_status = p_status_filter)
+          AND (
+            p_query IS NULL OR p_query = '' OR
+            CASE 
+                WHEN p_filter_by = 'dba_name' THEN dba_name ILIKE '%' || p_query || '%'
+                WHEN p_filter_by = 'merchant_id' THEN merchant_id = p_query
+                WHEN p_filter_by = 'agent_id' THEN agent_id = p_query
+                ELSE TRUE
+            END
+          )
+    ),
+    global_stats AS (
+        SELECT SUM(COALESCE(volume_mtd, 0)) as abs_mtd FROM merchants
+    )
+    SELECT 
+        fs.f_mtd, fs.f_30, fs.f_90, gs.abs_mtd
+    FROM filtered_stats fs, global_stats gs;
+END;
+$$ LANGUAGE plpgsql;
