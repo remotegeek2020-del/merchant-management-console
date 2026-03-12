@@ -1,62 +1,77 @@
-if (action === 'list') {
-    // 1. DATA FETCH (For the Table)
-    let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
-    
-    // Check if we need inner joins for deep searching
-    const isDeepSearch = (query && (filterBy === 'company_name' || filterBy === 'partner_name'));
-    if (isDeepSearch) {
-        selectString = selectString.replace(/agent_identifiers!agent_id \(/g, 'agent_identifiers!agent_id !inner (')
-                                   .replace(/agents \(/g, 'agents !inner (')
-                                   .replace(/companies \(/g, 'companies !inner (')
-                                   .replace(/company_person_mapping \(/g, 'company_person_mapping !inner (')
-                                   .replace(/persons \(/g, 'persons !inner (');
-    }
+import { createClient } from '@supabase/supabase-js'
 
-    let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
+export default async function handler(req, res) {
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20 } = req.body;
 
-    // Apply Standard Filters
-    if (statusFilter) dataReq.eq('account_status', statusFilter);
-    if (query && filterBy) {
-        if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
-        else if (filterBy === 'merchant_id') dataReq.eq('merchant_id', query);
-        else if (filterBy === 'agent_id') dataReq.eq('agent_id', query);
-        else if (filterBy === 'company_name') dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-        else if (filterBy === 'partner_name') dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-    }
+    try {
+        if (action === 'list') {
+            // 1. Fetch Table Data (Simplest Query)
+            let dataReq = supabase
+                .from('merchants')
+                .select(`
+                    *,
+                    agent_identifiers!agent_id (
+                        agents (
+                            companies (
+                                company_name,
+                                company_person_mapping (
+                                    persons ( full_name )
+                                )
+                            )
+                        )
+                    )
+                `, { count: 'exact' });
 
-    // 2. MATH FETCH (Using the RPC we just fixed)
-    const [dataRes, mathRes] = await Promise.all([
-        dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
-        supabase.rpc('get_merchant_metrics', { 
-            p_status_filter: statusFilter || null, 
-            p_query: query || null, 
-            p_filter_by: filterBy || null 
-        })
-    ]);
+            // Apply Filters
+            if (statusFilter) dataReq.eq('account_status', statusFilter);
+            if (query && filterBy) {
+                if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
+                else if (filterBy === 'merchant_id') dataReq.eq('merchant_id', query);
+                else if (filterBy === 'agent_id') dataReq.eq('agent_id', query);
+            }
 
-    // Handle Data Errors
-    if (dataRes.error) {
-        console.error("Data Fetch Error:", dataRes.error);
-        return res.status(500).json({ success: false, message: dataRes.error.message });
-    }
+            // 2. Run Data and Math in parallel
+            const [dataRes, mathRes] = await Promise.all([
+                dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
+                supabase.rpc('get_merchant_metrics', { 
+                    p_status_filter: statusFilter || null, 
+                    p_query: query || null, 
+                    p_filter_by: filterBy || null 
+                })
+            ]);
 
-    // Process Metrics Safely
-    const stats = (mathRes.data && mathRes.data[0]) ? mathRes.data[0] : { f_mtd: 0, f_30d: 0, f_90d: 0, g_mtd: 0 };
-    const share = stats.g_mtd > 0 ? ((stats.f_mtd / stats.g_mtd) * 100).toFixed(2) : "0.00";
+            if (dataRes.error) throw dataRes.error;
 
-    return res.status(200).json({ 
-        success: true, 
-        data: (dataRes.data || []).map(m => ({
-            ...m,
-            company_name: m.agent_identifiers?.agents?.companies?.company_name || '---',
-            partner_name: m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---'
-        })),
-        count: dataRes.count,
-        metrics: { 
-            totalMTD: stats.f_mtd || 0, 
-            total30D: stats.f_30d || 0, 
-            total90D: stats.f_90d || 0, 
-            portfolioShare: share 
+            // 3. Process Numbers
+            const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
+            const share = stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00";
+
+            return res.status(200).json({ 
+                success: true, 
+                data: (dataRes.data || []).map(m => ({
+                    ...m,
+                    company_name: m.agent_identifiers?.agents?.companies?.company_name || '---',
+                    partner_name: m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---'
+                })),
+                count: dataRes.count,
+                metrics: { 
+                    totalMTD: stats.out_mtd, 
+                    total30D: stats.out_30d, 
+                    total90D: stats.out_90d, 
+                    portfolioShare: share 
+                }
+            });
         }
-    });
+
+        if (action === 'update') {
+            const { error } = await supabase.from('merchants').update(payload).eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+    } catch (err) {
+        console.error("API Crash:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
+    }
 }
