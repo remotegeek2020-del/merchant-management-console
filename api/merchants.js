@@ -64,11 +64,18 @@ export default async function handler(req, res) {
             });
         }
 
-        if (action === 'update') {
-            const { error } = await supabase.from('merchants').update(payload).eq('id', id);
+    
+      if (action === 'update_note') {
+            const { note_id, title, body } = req.body;
+            const { error } = await supabase
+                .from('merchant_notes')
+                .update({ title, body })
+                .eq('id', note_id);
+
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
+        
         // --- ACTION: ADD NOTE ---
 if (action === 'add_note') {
     const { merchant_uuid, title, body, user } = req.body;
@@ -98,4 +105,5 @@ if (action === 'get_notes') {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
 
