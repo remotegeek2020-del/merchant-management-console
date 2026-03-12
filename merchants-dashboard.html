@@ -133,6 +133,17 @@
         <div class="modal-scroll">
             <div id="modalVolumeSummary" style="background:#f1f5f9; padding:20px; border-radius:15px; margin-bottom:25px; display:grid; grid-template-columns:repeat(3, 1fr); gap:15px;"></div>
             <div id="modalDetailsGrid" class="detail-grid"></div>
+            <div style="margin-top: 30px; border-top: 2px solid #f1f5f9; padding-top: 20px;">
+    <h3 style="font-weight: 800; color: var(--pp-blue); margin-bottom: 15px; font-size: 1rem;">Merchant Notes</h3>
+    
+    <div style="background: #f8fafc; padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #e2e8f0;">
+        <input type="text" id="noteTitle" class="slds-input" placeholder="Note Title" style="margin-bottom: 8px; border-radius: 8px;">
+        <textarea id="noteBody" class="slds-textarea" placeholder="Write your note here..." style="margin-bottom: 8px; border-radius: 8px; min-height: 80px;"></textarea>
+        <button class="slds-button slds-button_brand" onclick="submitNote()" style="border-radius: 8px; width: 100%;">Add Note</button>
+    </div>
+
+    <div id="notesContainer" style="max-height: 300px; overflow-y: auto;"></div>
+</div>
         </div>
 
         <div style="padding: 20px 30px; background: #f8fafc; border-top:1px solid #e2e8f0; display: flex; justify-content: space-between; gap: 10px;">
@@ -300,4 +311,5 @@
     </script>
 </body>
 </html>
+
 
