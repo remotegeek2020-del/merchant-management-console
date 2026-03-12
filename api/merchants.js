@@ -6,7 +6,7 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // 1. DATA REQUEST (Fast & Paginated)
+            // 1. DATA SELECT (LOCKED SEARCH LOGIC)
             let selectString = `*, agent_identifiers!agent_id ( agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) ) )`;
             const isDeepSearch = (query && (filterBy === 'company_name' || filterBy === 'partner_name'));
             
@@ -21,6 +21,7 @@ export default async function handler(req, res) {
 
             let dataReq = supabase.from('merchants').select(selectString, { count: 'exact' });
 
+            // Apply Filters to the List
             if (statusFilter) dataReq.eq('account_status', statusFilter);
             if (query && filterBy) {
                 if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
@@ -30,11 +31,10 @@ export default async function handler(req, res) {
                 else if (filterBy === 'partner_name') dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
             }
 
-            // 2. EXECUTE DATA & STATS IN PARALLEL
-            // We use the RPC for math because it handles 400k rows instantly
-            const [dataRes, statsRes] = await Promise.all([
+            // 2. EXECUTE DATA & MATH SIMULTANEOUSLY
+            const [dataRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
-                supabase.rpc('get_merchant_stats', { 
+                supabase.rpc('get_merchant_metrics', { 
                     p_status_filter: statusFilter || null, 
                     p_query: query || null, 
                     p_filter_by: filterBy || null 
@@ -42,9 +42,10 @@ export default async function handler(req, res) {
             ]);
 
             if (dataRes.error) throw dataRes.error;
-            
-            const stats = statsRes.data?.[0] || { total_mtd: 0, total_30d: 0, total_90d: 0, absolute_total_mtd: 0 };
-            const share = stats.absolute_total_mtd > 0 ? ((stats.total_mtd / stats.absolute_total_mtd) * 100).toFixed(2) : 0;
+
+            // 3. EXTRACT NUMBERS FROM THE CALCULATOR
+            const stats = mathRes.data?.[0] || { filtered_mtd: 0, filtered_30d: 0, filtered_90d: 0, global_mtd: 0 };
+            const share = stats.global_mtd > 0 ? ((stats.filtered_mtd / stats.global_mtd) * 100).toFixed(2) : 0;
 
             return res.status(200).json({ 
                 success: true, 
@@ -55,9 +56,9 @@ export default async function handler(req, res) {
                 })),
                 count: dataRes.count,
                 metrics: { 
-                    totalMTD: stats.total_mtd, 
-                    total30D: stats.total_30d, 
-                    total90D: stats.total_90d, 
+                    totalMTD: stats.filtered_mtd, 
+                    total30D: stats.filtered_30d, 
+                    total90D: stats.filtered_90d, 
                     portfolioShare: share 
                 }
             });
