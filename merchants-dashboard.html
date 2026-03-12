@@ -262,21 +262,11 @@
                 if (result.success) {
                     container.innerHTML = result.data.map(n => {
                         const isSystem = n.title === 'System Update';
-                        if (isSystem) {
-                            return `
-                            <div class="note-card" style="border-left-color: #cbd5e1; background: #fcfcfc; padding: 15px;">
-                                <div style="font-weight: 800; font-size: 10px; color: #64748b; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px;">
-                                    <span class="material-icons" style="font-size: 12px; vertical-align: middle;">settings</span> ${n.title}
-                                </div>
-                                <div style="font-size: 11px; color: #334155; line-height: 1.6; white-space: pre-wrap; font-family: 'Courier New', monospace; background: #f1f5f9; padding: 10px; border-radius: 6px; border: 1px solid #e2e8f0;">${n.body}</div>
-                                <div style="font-size: 9px; color: #94a3b8; margin-top: 10px; font-weight: 600;">PROCESSED BY: ${n.created_by.toUpperCase()} • ${new Date(n.created_at).toLocaleString()}</div>
-                            </div>`;
-                        }
                         return `
-                        <div class="note-card">
+                        <div class="note-card" style="${isSystem ? 'border-left-color: #cbd5e1; background: #fcfcfc;' : ''}">
                             <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                                <div style="font-weight: 700; font-size: 11px; color: #002d5a; margin-bottom: 4px;">${n.title}</div>
-                                <button onclick="prepareEditNote('${n.id}', \`${n.title.replace(/'/g, "\\'")}\`, \`${n.body.replace(/'/g, "\\'")}\`)" style="background:none; border:none; color:var(--pp-blue); cursor:pointer; font-size:10px; font-weight:700;">EDIT</button>
+                                <div style="font-weight: 700; font-size: 11px; color: ${isSystem ? '#64748b' : '#002d5a'}; margin-bottom: 4px;">${n.title}</div>
+                                ${!isSystem ? `<button onclick="prepareEditNote('${n.id}', \`${n.title.replace(/'/g, "\\'")}\`, \`${n.body.replace(/'/g, "\\'")}\`)" style="background:none; border:none; color:var(--pp-blue); cursor:pointer; font-size:10px; font-weight:700;">EDIT</button>` : ''}
                             </div>
                             <div style="font-size: 11px; color: #475569; line-height: 1.4; white-space: pre-wrap;">${n.body}</div>
                             <div style="font-size: 9px; color: #94a3b8; margin-top: 8px; font-weight: 600;">BY ${n.created_by.toUpperCase()} • ${new Date(n.created_at).toLocaleString()}</div>
