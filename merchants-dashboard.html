@@ -303,15 +303,38 @@
     }
 }
         async function saveMerchantChanges(merchantId) {
-            const payload = {};
-            ALL_FIELDS.forEach(f => { const input = document.getElementById(`edit-${f}`); if (input) payload[f] = input.value; });
-            Swal.fire({ title: 'Synchronizing...', text: 'Updating master ledger', didOpen: () => { Swal.showLoading(); } });
-            try {
-                const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: merchantId, payload }) });
-                const result = await res.json();
-                if (result.success) { Swal.fire('Saved!', 'Merchant record updated.', 'success'); closeModal(); fetchMerchants(); } else { throw new Error(result.message); }
-            } catch (err) { Swal.fire('Update Failed', err.message, 'error'); }
+    const payload = {};
+    // Grab the staff name from the header
+    const userName = document.getElementById('user-greeting').innerText.replace('Staff: ', '').trim();
+
+    ALL_FIELDS.forEach(f => {
+        const input = document.getElementById(`edit-${f}`);
+        if (input) payload[f] = input.value;
+    });
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'update', 
+                id: merchantId, 
+                payload: payload,
+                user: userName // CRITICAL: This allows the log to be created
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire('Success', 'Record Updated', 'success');
+            closeModal();
+            fetchMerchants();
+        } else {
+            throw new Error(result.message);
         }
+    } catch (err) {
+        Swal.fire('Error', err.message, 'error');
+    }
+}
 
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
