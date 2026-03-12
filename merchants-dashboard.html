@@ -266,25 +266,42 @@
             document.getElementById('noteTitle').focus();
         }
 
-        async function submitNote() {
-            const title = document.getElementById('noteTitle').value;
-            const body = document.getElementById('noteBody').value;
-            const user = document.getElementById('user-greeting').innerText.replace('Staff: ', '') || 'System User';
-            if (!title || !body) return Swal.fire('Error', 'Subject and Body are required', 'warning');
-            const action = editingNoteId ? 'update_note' : 'add_note';
-            const payload = editingNoteId ? { action, note_id: editingNoteId, title, body } : { action, merchant_uuid: activeMerchantUuid, title, body, user };
-            try {
-                const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-                if ((await res.json()).success) {
-                    editingNoteId = null;
-                    document.getElementById('noteTitle').value = '';
-                    document.getElementById('noteBody').value = '';
-                    document.getElementById('addNoteBtn').innerText = "Add Note";
-                    fetchNotes(activeMerchantUuid);
-                }
-            } catch (err) { Swal.fire('Error', 'Action failed', 'error'); }
-        }
+       async function submitNote() {
+    const title = document.getElementById('noteTitle').value;
+    const body = document.getElementById('noteBody').value;
+    
+    // GRAB THE REAL NAME:
+    // We look at the 'user-greeting' div and strip out the "Staff: " part
+    const userGreeting = document.getElementById('user-greeting').innerText;
+    const userName = userGreeting.replace('Staff: ', '').trim() || 'Unknown Staff';
 
+    if (!title || !body) return Swal.fire('Error', 'Subject and Body are required', 'warning');
+    
+    const action = editingNoteId ? 'update_note' : 'add_note';
+    
+    // Pass the userName into the payload
+    const payload = editingNoteId 
+        ? { action, note_id: editingNoteId, title, body, user: userName } 
+        : { action, merchant_uuid: activeMerchantUuid, title, body, user: userName };
+
+    try {
+        const res = await fetch('/api/merchants', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify(payload) 
+        });
+        
+        if ((await res.json()).success) {
+            editingNoteId = null;
+            document.getElementById('noteTitle').value = '';
+            document.getElementById('noteBody').value = '';
+            document.getElementById('addNoteBtn').innerText = "Add Note";
+            fetchNotes(activeMerchantUuid); // Refresh the list to show the name
+        }
+    } catch (err) { 
+        Swal.fire('Error', 'Action failed', 'error'); 
+    }
+}
         async function saveMerchantChanges(merchantId) {
             const payload = {};
             ALL_FIELDS.forEach(f => { const input = document.getElementById(`edit-${f}`); if (input) payload[f] = input.value; });
