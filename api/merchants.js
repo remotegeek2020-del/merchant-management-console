@@ -40,25 +40,48 @@ export default async function handler(req, res) {
             });
         }
 
-        // --- ACTION: UPDATE MERCHANT (Fixes the "Loading Only" issue) ---
-        if (action === 'update') {
-            const { error: updateError } = await supabase
-                .from('merchants')
-                .update(payload)
-                .eq('id', id);
+       // --- ACTION: UPDATE MERCHANT WITH DETAILED LOGGING ---
+if (action === 'update') {
+    const { id, payload, user } = req.body;
 
-            if (updateError) throw updateError;
+    // 1. Fetch current data to compare
+    const { data: oldData, error: fetchError } = await supabase
+        .from('merchants')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-            // Log the update in the audit trail
-            await supabase.from('merchant_notes').insert([{
-                merchant_id: id,
-                title: "System Update",
-                body: `Profile details updated by ${user || 'Staff'}`,
-                created_by: user || 'System'
-            }]);
+    if (fetchError) throw fetchError;
 
-            return res.status(200).json({ success: true });
+    // 2. Identify exactly what changed
+    let changes = [];
+    for (let key in payload) {
+        let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
+        let newVal = payload[key] ? String(payload[key]).trim() : "empty";
+
+        if (oldVal !== newVal) {
+            // Format labels for readability (e.g., account_status -> Account Status)
+            const label = key.replace(/_/g, ' ').toUpperCase();
+            changes.push(`${label}: "${oldVal}" → "${newVal}"`);
         }
+    }
+
+    // 3. Perform the update
+    const { error: updateError } = await supabase.from('merchants').update(payload).eq('id', id);
+    if (updateError) throw updateError;
+
+    // 4. Record the Detailed Audit Log
+    if (changes.length > 0) {
+        await supabase.from('merchant_notes').insert([{
+            merchant_id: id,
+            title: "System Update",
+            body: `Field Changes:\n${changes.join('\n')}`,
+            created_by: user || 'System'
+        }]);
+    }
+
+    return res.status(200).json({ success: true });
+}
 
         // --- ACTION: GLOBAL LOGS ---
         if (action === 'global_logs') {
@@ -100,4 +123,5 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+
 
