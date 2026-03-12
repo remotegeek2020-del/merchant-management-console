@@ -6,24 +6,13 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
-            // 1. Fetch Table Data (Simplest Query)
-            let dataReq = supabase
-                .from('merchants')
-                .select(`
-                    *,
-                    agent_identifiers!agent_id (
-                        agents (
-                            companies (
-                                company_name,
-                                company_person_mapping (
-                                    persons ( full_name )
-                                )
-                            )
-                        )
-                    )
-                `, { count: 'exact' });
+            let dataReq = supabase.from('merchants').select(`
+                *,
+                agent_identifiers!agent_id (
+                    agents ( companies ( company_name, company_person_mapping ( persons ( full_name ) ) ) )
+                )
+            `, { count: 'exact' });
 
-            // Apply Filters
             if (statusFilter) dataReq.eq('account_status', statusFilter);
             if (query && filterBy) {
                 if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
@@ -31,7 +20,6 @@ export default async function handler(req, res) {
                 else if (filterBy === 'agent_id') dataReq.eq('agent_id', query);
             }
 
-            // 2. Run Data and Math in parallel
             const [dataRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
                 supabase.rpc('get_merchant_metrics', { 
@@ -42,8 +30,6 @@ export default async function handler(req, res) {
             ]);
 
             if (dataRes.error) throw dataRes.error;
-
-            // 3. Process Numbers
             const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
             const share = stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00";
 
@@ -55,79 +41,54 @@ export default async function handler(req, res) {
                     partner_name: m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---'
                 })),
                 count: dataRes.count,
-                metrics: { 
-                    totalMTD: stats.out_mtd, 
-                    total30D: stats.out_30d, 
-                    total90D: stats.out_90d, 
-                    portfolioShare: share 
-                }
+                metrics: { totalMTD: stats.out_mtd, total30D: stats.out_30d, total90D: stats.out_90d, portfolioShare: share }
             });
         }
 
-    
-      if (action === 'update_note') {
-            const { note_id, title, body } = req.body;
+        // --- NEW ACTION: GLOBAL LOGS FOR AUDIT PAGE ---
+        if (action === 'global_logs') {
+            const { data, error } = await supabase
+                .from('merchant_notes')
+                .select(`*, merchants(dba_name)`)
+                .order('created_at', { ascending: false })
+                .limit(100);
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'add_note') {
+            const { merchant_uuid, title, body, user } = req.body;
             const { error } = await supabase
                 .from('merchant_notes')
-                .update({ title, body })
-                .eq('id', note_id);
-
+                .insert([{ merchant_id: merchant_uuid, title, body, created_by: user }]);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
-        
-       // --- ACTION: ADD NOTE ---
-if (action === 'add_note') {
-    const { merchant_uuid, title, body, user } = req.body;
-    // We insert 'user' into 'created_by'
-    const { error } = await supabase
-        .from('merchant_notes')
-        .insert([{ 
-            merchant_id: merchant_uuid, 
-            title: title, 
-            body: body, 
-            created_by: user 
-        }]);
 
-    if (error) throw error;
-    return res.status(200).json({ success: true });
-}
+        if (action === 'update_note') {
+            const { note_id, title, body, user } = req.body;
+            const { error } = await supabase
+                .from('merchant_notes')
+                .update({ title, body, created_by: user + ' (Edited)' })
+                .eq('id', note_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
 
-// --- ACTION: UPDATE EXISTING NOTE ---
-if (action === 'update_note') {
-    const { note_id, title, body, user } = req.body;
-    // We update the body AND record who did the edit
-    const { error } = await supabase
-        .from('merchant_notes')
-        .update({ 
-            title: title, 
-            body: body, 
-            created_by: user + ' (Edited)' 
-        })
-        .eq('id', note_id);
-
-    if (error) throw error;
-    return res.status(200).json({ success: true });
-}
-
-// --- ACTION: GET NOTES ---
-if (action === 'get_notes') {
-    const { merchant_uuid } = req.body;
-    const { data, error } = await supabase
-        .from('merchant_notes')
-        .select('*')
-        .eq('merchant_id', merchant_uuid)
-        .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data });
-}
+        if (action === 'get_notes') {
+            const { merchant_uuid } = req.body;
+            const { data, error } = await supabase
+                .from('merchant_notes')
+                .select('*')
+                .eq('merchant_id', merchant_uuid)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+        }
 
     } catch (err) {
         console.error("API Crash:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
-
-
-
