@@ -2,37 +2,23 @@ import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
+    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20 } = req.body;
 
     try {
         if (action === 'list') {
-            // Simplified select to ensure we grab the nested data correctly
-            let dataReq = supabase.from('merchants').select(`
-                *,
-                agent_identifiers (
-                    agents (
-                        companies (
-                            company_name,
-                            company_person_mapping (
-                                persons ( full_name )
-                            )
-                        )
-                    )
-                )
-            `, { count: 'exact' });
+            // We grab merchants and a flat list of agents to match manually
+            let dataReq = supabase.from('merchants').select('*', { count: 'exact' });
 
             if (statusFilter) dataReq.eq('account_status', statusFilter);
-            
             if (query && filterBy) {
                 if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
                 else if (filterBy === 'merchant_id') dataReq.eq('merchant_id', query);
                 else if (filterBy === 'agent_id') dataReq.eq('agent_id', query);
-                else if (filterBy === 'company_name') dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                else if (filterBy === 'partner_name') dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
             }
 
-            const [dataRes, mathRes] = await Promise.all([
+            const [dataRes, agentsRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
+                supabase.from('agents').select('*, companies(company_name)'),
                 supabase.rpc('get_merchant_metrics', { 
                     p_status_filter: statusFilter || null, 
                     p_query: query || null, 
@@ -42,20 +28,18 @@ export default async function handler(req, res) {
 
             if (dataRes.error) throw dataRes.error;
 
+            // MANUAL MAPPING: We match the agent by name since IDs are mismatched types
             const formattedData = (dataRes.data || []).map(m => {
-                // Digging through the relationship levels safely
-                const ident = Array.isArray(m.agent_identifiers) ? m.agent_identifiers[0] : m.agent_identifiers;
-                const company = ident?.agents?.companies?.company_name || '---';
-                const partner = ident?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
-
+                const matchedAgent = agentsRes.data?.find(a => a.full_name === m.agent_name);
                 return {
                     ...m,
-                    company_name: company,
-                    partner_name: partner
+                    company_name: matchedAgent?.companies?.company_name || m.agent_name || '---',
+                    partner_name: matchedAgent?.full_name || '---'
                 };
             });
 
             const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
+
             return res.status(200).json({ 
                 success: true, 
                 data: formattedData,
@@ -68,26 +52,6 @@ export default async function handler(req, res) {
                 }
             });
         }
-
-        // Add Note Action
-        if (action === 'add_note') {
-            const { error } = await supabase.from('merchant_notes').insert([{ 
-                merchant_id: req.body.merchant_uuid, 
-                title: req.body.title, 
-                body: req.body.body, 
-                created_by: req.body.user 
-            }]);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-
-        // Get Notes Action
-        if (action === 'get_notes') {
-            const { data, error } = await supabase.from('merchant_notes').select('*').eq('merchant_id', req.body.merchant_uuid).order('created_at', { ascending: false });
-            if (error) throw error;
-            return res.status(200).json({ success: true, data });
-        }
-
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
