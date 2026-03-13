@@ -14,11 +14,22 @@ export default async function handler(req, res) {
             `, { count: 'exact' });
 
             if (statusFilter) dataReq.eq('account_status', statusFilter);
+            
+            // --- SURGICAL SEARCH FIX START ---
             if (query && filterBy) {
-                if (filterBy === 'dba_name') dataReq.ilike('dba_name', `%${query}%`);
-                else if (filterBy === 'merchant_id') dataReq.eq('merchant_id', query);
-                else if (filterBy === 'agent_id') dataReq.eq('agent_id', query);
+                if (filterBy === 'dba_name') {
+                    dataReq.ilike('dba_name', `%${query}%`);
+                } else if (filterBy === 'merchant_id') {
+                    dataReq.eq('merchant_id', query);
+                } else if (filterBy === 'agent_id') {
+                    dataReq.eq('agent_id', query);
+                } else if (filterBy === 'company_name') {
+                    dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+                } else if (filterBy === 'partner_name') {
+                    dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+                }
             }
+            // --- SURGICAL SEARCH FIX END ---
 
             const [dataRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
