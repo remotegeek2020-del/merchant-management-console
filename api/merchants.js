@@ -2,20 +2,21 @@ import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20 } = req.body;
+    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
         if (action === 'list') {
+            // Simplified select to ensure we grab the nested data correctly
             let dataReq = supabase.from('merchants').select(`
                 *,
-                agent_identifiers!agent_id (
-                    agents ( 
-                        companies ( 
-                            company_name, 
-                            company_person_mapping ( 
-                                persons ( full_name ) 
-                            ) 
-                        ) 
+                agent_identifiers (
+                    agents (
+                        companies (
+                            company_name,
+                            company_person_mapping (
+                                persons ( full_name )
+                            )
+                        )
                     )
                 )
             `, { count: 'exact' });
@@ -40,12 +41,13 @@ export default async function handler(req, res) {
             ]);
 
             if (dataRes.error) throw dataRes.error;
-            const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
 
-            // CRITICAL: This is the part that was missing in your console log
             const formattedData = (dataRes.data || []).map(m => {
-                const company = m.agent_identifiers?.agents?.companies?.company_name || '---';
-                const partner = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
+                // Digging through the relationship levels safely
+                const ident = Array.isArray(m.agent_identifiers) ? m.agent_identifiers[0] : m.agent_identifiers;
+                const company = ident?.agents?.companies?.company_name || '---';
+                const partner = ident?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
+
                 return {
                     ...m,
                     company_name: company,
@@ -53,6 +55,7 @@ export default async function handler(req, res) {
                 };
             });
 
+            const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
             return res.status(200).json({ 
                 success: true, 
                 data: formattedData,
@@ -65,10 +68,23 @@ export default async function handler(req, res) {
                 }
             });
         }
-        
-        // ... (Keep your other actions: update, get_notes, etc.)
+
+        // Add Note Action
+        if (action === 'add_note') {
+            const { error } = await supabase.from('merchant_notes').insert([{ 
+                merchant_id: req.body.merchant_uuid, 
+                title: req.body.title, 
+                body: req.body.body, 
+                created_by: req.body.user 
+            }]);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // Get Notes Action
         if (action === 'get_notes') {
             const { data, error } = await supabase.from('merchant_notes').select('*').eq('merchant_id', req.body.merchant_uuid).order('created_at', { ascending: false });
+            if (error) throw error;
             return res.status(200).json({ success: true, data });
         }
 
