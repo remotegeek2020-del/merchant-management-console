@@ -132,23 +132,46 @@ body {
 }
 .login-btn:hover { background: var(--pp-dark) !important; transform: scale(1.02); }
 .modal-tab-btn {
-        padding: 10px 20px;
+        padding: 12px 24px;
         border: none;
         background: none;
         font-weight: 700;
-        color: #64748b;
+        font-size: 0.75rem;
+        color: #94a3b8;
         cursor: pointer;
-        transition: all 0.2s;
+        transition: all 0.3s ease;
+        border-bottom: 2px solid transparent;
+        letter-spacing: 0.5px;
     }
-    .active-tab {
+    .modal-tab-btn.active-tab {
         color: var(--pp-blue) !important;
-        border-bottom: 3px solid var(--pp-blue) !important;
+        border-bottom: 2px solid var(--pp-blue) !important;
     }
     .edit-label {
-        font-size: 10px;
+        font-size: 9px;
         font-weight: 800;
         color: #64748b;
         text-transform: uppercase;
-        margin-bottom: 4px;
+        margin-bottom: 6px;
         display: block;
+        letter-spacing: 0.5px;
+    }
+    .modern-input {
+        border-radius: 8px !important;
+        border: 1px solid #e2e8f0 !important;
+        font-size: 0.85rem !important;
+        padding: 8px 12px !important;
+        transition: border-color 0.2s;
+    }
+    .modern-input:focus {
+        border-color: var(--pp-accent) !important;
+        box-shadow: 0 0 0 2px rgba(0, 161, 224, 0.1) !important;
+    }
+    .note-card {
+        background: white;
+        border: 1px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 15px;
+        margin-bottom: 12px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
     }
