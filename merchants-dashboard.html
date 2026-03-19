@@ -40,9 +40,16 @@
 
 <div class="dashboard-container">
     <div class="modern-header">
-        <div>
-            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Merchant Portfolio</h1>
-        </div>
+       <div style="display: flex; align-items: center; gap: 15px;">
+    <a href="index.html" class="slds-button slds-button_neutral" style="display: flex; align-items: center; gap: 8px; border-radius: 10px; padding: 5px 15px; border: 1px solid #cbd5e1; text-decoration: none; color: #475569;">
+        <span class="material-icons" style="font-size: 18px;">arrow_back</span>
+        <span style="font-weight: 700; font-size: 12px;">BACK TO HOME</span>
+    </a>
+    
+    <div>
+        <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Merchant Portfolio</h1>
+    </div>
+</div>
         <div style="display: flex; gap: 10px;">
             <select id="statusFilter" class="slds-select" style="width: 170px; border-radius:10px;" onchange="resetAndFetch()">
                <option value="">All Statuses</option>
