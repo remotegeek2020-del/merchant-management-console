@@ -27,8 +27,6 @@
         .status-closed { background: #fee2e2; color: #991b1b; }
         .status-pending { background: #fef9c3; color: #854d0e; }
         .note-card { background: white; border: 1px solid #e2e8f0; padding: 12px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid var(--pp-blue); }
-        
-        /* Tabs Styling */
         .modal-tabs { display: flex; background: #f8fafc; border-bottom: 1px solid #e2e8f0; padding: 0 30px; }
         .modal-tab-btn { padding: 15px 25px; font-weight: 700; font-size: 11px; color: #64748b; border: none; background: none; cursor: pointer; border-bottom: 3px solid transparent; }
         .modal-tab-btn.active { color: var(--pp-blue); border-bottom-color: var(--pp-blue); }
@@ -194,34 +192,55 @@
                 const res = await fetch('/api/merchants', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value })
+                    body: JSON.stringify({ 
+                        action: 'list', 
+                        page: currentPage, 
+                        limit: limit, 
+                        query: document.getElementById('searchInput').value, 
+                        filterBy: document.getElementById('filterBy').value, 
+                        statusFilter: document.getElementById('statusFilter').value 
+                    })
                 });
                 const result = await res.json();
                 if (!result.success) throw new Error(result.message);
+                
                 currentRecords = result.data;
                 tbody.innerHTML = "";
+
+                // Update Metrics Dashboard
                 const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
                 document.getElementById('mtd-val').innerText = cur.format(result.metrics.totalMTD || 0);
                 document.getElementById('30d-val').innerText = cur.format(result.metrics.total30D || 0);
                 document.getElementById('90d-val').innerText = cur.format(result.metrics.total90D || 0);
                 document.getElementById('share-val').innerText = (result.metrics.portfolioShare || 0) + '%';
-              // merchants-dashboard.html - Inside fetchMerchants()
-currentRecords.forEach(m => {
-    const row = tbody.insertRow();
-    const statusClass = m.account_status?.toLowerCase().includes('approved') ? 'status-approved' : m.account_status?.toLowerCase().includes('closed') ? 'status-closed' : 'status-pending';
-    
-    // Safely navigate the nested object structure from the API
-    const companyName = m.agent_identifiers?.agents?.companies?.company_name || '---';
-    const partnerName = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
 
-    row.innerHTML = `
-        <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
-        <td><code>${m.merchant_id || '---'}</code></td>
-        <td>${m.agent_id || '---'}</td>
-        <td>${companyName}</td>
-        <td>${partnerName}</td>
-        <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>`;
-});
+                currentRecords.forEach(m => {
+                    const row = tbody.insertRow();
+                    const statusVal = (m.account_status || '').toLowerCase();
+                    const statusClass = statusVal.includes('approved') ? 'status-approved' : statusVal.includes('closed') ? 'status-closed' : 'status-pending';
+                    
+                    // Navigate the specific nested layers found in merchants.js list logic
+                    const companyName = m.agent_identifiers?.agents?.companies?.company_name || '---';
+                    const partnerName = m.agent_identifiers?.agents?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
+
+                    row.innerHTML = `
+                        <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
+                        <td><code>${m.merchant_id || '---'}</code></td>
+                        <td>${m.agent_id || '---'}</td>
+                        <td>${companyName}</td>
+                        <td>${partnerName}</td>
+                        <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>`;
+                });
+
+                document.getElementById('pageInfo').innerText = `Page ${currentPage + 1}`;
+                document.getElementById('prevBtn').disabled = (currentPage === 0);
+                document.getElementById('nextBtn').disabled = ((currentPage + 1) * limit) >= result.count;
+
+            } catch (err) { 
+                console.error(err);
+                tbody.innerHTML = "<tr><td colspan='6' style='color:red; text-align:center;'>Sync error. Check console.</td></tr>"; 
+            }
+        }
 
         function openModal(id) {
             const m = currentRecords.find(r => r.id === id);
@@ -326,7 +345,11 @@ currentRecords.forEach(m => {
 
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
-        window.onload = () => { const user = sessionStorage.getItem('pp_userid'); if(user) document.getElementById('user-greeting').innerText = `Staff: ${user}`; fetchMerchants(); };
+        window.onload = () => { 
+            const user = sessionStorage.getItem('pp_userid'); 
+            if(user) document.getElementById('user-greeting').innerText = `Staff: ${user}`; 
+            fetchMerchants(); 
+        };
     </script>
 </body>
 </html>
