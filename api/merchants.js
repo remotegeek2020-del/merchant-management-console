@@ -116,9 +116,20 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-        if (action === 'get_notes') {
+    if (action === 'get_notes') {
             const { merchant_uuid, type } = req.body;
-            let queryBuilder = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
+            
+            // We tell Supabase to select everything from notes (*) 
+            // AND the 'full_name' from the 'app_users' table linked by 'created_by'
+            let queryBuilder = supabase
+                .from('merchant_notes')
+                .select(`
+                    *,
+                    app_users!merchant_notes_created_by_fkey (
+                        full_name
+                    )
+                `)
+                .eq('merchant_id', merchant_uuid);
 
             if (type === 'manual') {
                 queryBuilder = queryBuilder.neq('title', 'System Update');
@@ -127,8 +138,17 @@ export default async function handler(req, res) {
             }
 
             const { data, error } = await queryBuilder.order('created_at', { ascending: false });
+            
             if (error) throw error;
-            return res.status(200).json({ success: true, data });
+
+            // Clean up the data so the frontend can easily read the name
+            const formattedNotes = (data || []).map(n => ({
+                ...n,
+                // If we found a name in app_users, use it. Otherwise, show what's in created_by
+                display_name: n.app_users?.full_name || n.created_by || 'Staff'
+            }));
+
+            return res.status(200).json({ success: true, data: formattedNotes });
         }
 
         if (action === 'add_note') {
