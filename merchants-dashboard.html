@@ -41,13 +41,18 @@
         </div>
         <div style="display: flex; gap: 10px;">
             <select id="statusFilter" class="slds-select" style="width: 170px; border-radius:10px;" onchange="resetAndFetch()">
-                <option value="">All Statuses</option>
-                <option value="Approved">Approved</option>
-                <option value="Closed">Closed</option>
-                <option value="Closed - Collections">Closed - Collections</option>
-                <option value="Fraud">Fraud</option>
-                <option value="Declined">Declined</option>
-                <option value="Withdrawn">Withdrawn</option>
+               <option value="">All Statuses</option>
+    <option value="Approved">Approved</option>
+    <option value="Approved - Collections">Approved - Collections</option>
+    <option value="Closed">Closed</option>
+    <option value="Closed - Collections">Closed - Collections</option>
+    <option value="Closed - Risk">Closed - Risk</option>
+    <option value="Collections">Collections</option>
+    <option value="Declined">Declined</option>
+    <option value="Enrollment">Enrollment</option>
+    <option value="Fraud">Fraud</option>
+    <option value="Pending">Pending</option>
+    <option value="Withdrawn">Withdrawn</option>
             </select>
             <select id="filterBy" class="slds-select" style="width: 150px; border-radius:10px;">
                 <option value="dba_name">DBA Name</option>
@@ -155,7 +160,24 @@
                             <div class="section-header">Primary Identity</div>
                             <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
                             <div><label class="edit-label">Merchant ID</label><input id="edit-merchant_id" class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
-                            <div><label class="edit-label">Account Status</label><select id="edit-account_status" class="modern-input"><option value="${m.account_status}" selected>${m.account_status}</option><option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Fraud">Fraud</option><option value="Declined">Declined</option></select></div>
+                            <div><label class="edit-label">Account Status</label>
+                            <select id="edit-account_status" class="modern-input">
+        <option value="${m.account_status}" selected>${m.account_status}</option>
+        <option value="Approved">Approved</option>
+        <option value="Approved - Collections">Approved - Collections</option>
+        <option value="Closed">Closed</option>
+        <option value="Closed - Collections">Closed - Collections</option>
+        <option value="Closed - Risk">Closed - Risk</option>
+        <option value="Collections">Collections</option>
+        <option value="Declined">Declined</option>
+        <option value="Enrollment">Enrollment</option>
+        <option value="Fraud">Fraud</option>
+        <option value="Pending">Pending</option>
+        <option value="Withdrawn">Withdrawn</option>
+    </select>
+    </div>
+
+
                             
                             <div class="section-header">Contact & Web</div>
                             <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
