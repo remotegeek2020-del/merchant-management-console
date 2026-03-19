@@ -195,16 +195,24 @@
                             <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
                             <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
                         </div>
-                        <div id="notes-list">${notes.map(n => `
-                            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-                                <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
-                                <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px;">${n.body}</textarea>
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-                                    <small>By: ${n.created_by}</small>
-                                    <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
-                                </div>
-                            </div>
-                        `).join('')}</div>
+                        <div id="notes-list">
+                        ${notes.map(n => `
+    <div class="note-card" style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; text-align:left;">
+        <div style="margin-bottom:8px;">
+            <label style="font-size:10px; font-weight:800; color:#64748b; display:block; text-transform:uppercase;">Note Title</label>
+            <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="font-weight:700; border:1px solid #cbd5e1; width:100%; border-radius:6px; padding:4px 8px;">
+        </div>
+        <div style="margin-bottom:10px;">
+            <label style="font-size:10px; font-weight:800; color:#64748b; display:block; text-transform:uppercase;">Note Body</label>
+            <textarea id="note-body-${n.id}" class="modern-input" style="width:100%; border:1px solid #cbd5e1; border-radius:6px; padding:8px; height:60px;">${n.body}</textarea>
+        </div>
+        <div style="display:flex; justify-content:space-between; align-items:center; padding-top:8px; border-top:1px solid #edf2f7;">
+            <small style="color:#94a3b8; font-weight:600;">By: ${n.created_by}</small>
+            <button onclick="updateNote('${n.id}', '${m.id}')" style="background:var(--pp-blue); color:white; border:none; padding:5px 15px; border-radius:6px; font-weight:700; cursor:pointer; font-size:11px;">UPDATE</button>
+        </div>
+    </div>
+`).join('') || '<p style="text-align:center; color:#94a3b8; padding:20px;">No internal notes found.</p>'}
+                        </div>
                     </div>
                     <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
                         <div style="background:white; border-radius:12px; border:1px solid #e2e8f0;">
@@ -231,20 +239,56 @@
         if((await res.json()).success) { Swal.fire('Success', 'Profile Synchronized.', 'success'); fetchMerchants(); }
     };
 
-    window.addNote = async (uuid) => {
-        const title = document.getElementById('new-note-title').value;
-        const body = document.getElementById('new-note-body').value;
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body }) });
-        if((await res.json()).success) openModal(uuid);
-    };
+    // --- FIX #1: ADDING A NEW NOTE ---
+window.addNote = async function(uuid) {
+    const title = document.getElementById('new-note-title').value;
+    const body = document.getElementById('new-note-body').value;
 
-    window.updateNote = async (noteId, merchantId) => {
-        const title = document.getElementById(`note-title-${noteId}`).value;
-        const body = document.getElementById(`note-body-${noteId}`).value;
-        // ACTION STRING IS CRITICAL HERE: verify with your API if it should be 'update_note'
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_note', note_id: noteId, title, body }) });
-        if((await res.json()).success) Swal.fire({ icon: 'success', title: 'Note Saved', timer: 800, showConfirmButton: false });
-    };
+    if(!title || !body) return Swal.fire('Error', 'Subject and Body required.', 'warning');
+
+    const res = await fetch('/api/merchants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'add_note', 
+            merchant_uuid: uuid, 
+            title, 
+            body, 
+            user: 'Staff' 
+        })
+    });
+    
+    const result = await res.json();
+    if(result.success) {
+        openModal(uuid); // This refreshes the modal so you see the new note immediately
+    }
+};
+
+   // --- FIX #2: UPDATING AN EXISTING NOTE ---
+window.updateNote = async function(noteId, merchantId) {
+    // These IDs MUST match the IDs in the HTML template below
+    const title = document.getElementById(`note-title-${noteId}`).value;
+    const body = document.getElementById(`note-body-${noteId}`).value;
+    
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'update_note', 
+                note_id: noteId, 
+                title: title, 
+                body: body 
+            })
+        });
+        const result = await res.json();
+        if(result.success) {
+            Swal.fire({ icon: 'success', title: 'Note Saved', timer: 800, showConfirmButton: false });
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Failed to save note', 'error');
+    }
+};
 
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
