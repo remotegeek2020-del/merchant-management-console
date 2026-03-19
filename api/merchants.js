@@ -1,28 +1,26 @@
-import { createClient } from '@supabase/supabase-js'
-
-export default async function handler(req, res) {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
-
-    try {
-    // --- ACTION: LIST MERCHANTS ---
+// --- ACTION: LIST MERCHANTS ---
 if (action === 'list') {
+    // We apply filters directly to the nested select strings to ensure the database correctly targets joined data
+    const companyFilter = (filterBy === 'company_name' && query) ? `.ilike(company_name, %${query}%)` : '';
+    const partnerFilter = (filterBy === 'partner_name' && query) ? `.ilike(full_name, %${query}%)` : '';
+
     let dataReq = supabase.from('merchants').select(`
         *,
         agent_identifiers!agent_id (
             agents ( 
-                companies ( 
+                companies${companyFilter} ( 
                     company_name, 
                     company_person_mapping ( 
-                        persons ( full_name ) 
+                        persons${partnerFilter} ( full_name ) 
                     ) 
                 ) 
             )
         )
     `, { count: 'exact' });
 
-    if (statusFilter) dataReq.eq('account_status', statusFilter);
-
+    // Handle standard top-level filters
+    if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
+    
     if (query && filterBy) {
         if (filterBy === 'dba_name') {
             dataReq = dataReq.ilike('dba_name', `%${query}%`);
@@ -30,115 +28,36 @@ if (action === 'list') {
             dataReq = dataReq.eq('merchant_id', query);
         } else if (filterBy === 'agent_id') {
             dataReq = dataReq.eq('agent_id', query);
-        } 
-        // SURGICAL ADDITION: Nested filtering for Company and Partner
-        else if (filterBy === 'company_name') {
-            dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-        } else if (filterBy === 'partner_name') {
-            dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-        }
-    }
-    // ... rest of your existing [dataRes, mathRes] code continues here
-    
-            const [dataRes, mathRes] = await Promise.all([
-                dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
-                supabase.rpc('get_merchant_metrics', { 
-                    p_status_filter: statusFilter || null, 
-                    p_query: query || null, 
-                    p_filter_by: filterBy || null 
-                })
-            ]);
-
-            if (dataRes.error) throw dataRes.error;
-            const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
-            return res.status(200).json({ 
-                success: true, 
-                data: dataRes.data,
-                count: dataRes.count,
-                metrics: { totalMTD: stats.out_mtd, total30D: stats.out_30d, total90D: stats.out_90d, portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" }
-            });
-        }
-
-       // --- ACTION: UPDATE MERCHANT WITH DETAILED LOGGING ---
-if (action === 'update') {
-    const { id, payload, user } = req.body;
-
-    // 1. Fetch current data to compare
-    const { data: oldData, error: fetchError } = await supabase
-        .from('merchants')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-    if (fetchError) throw fetchError;
-
-    // 2. Identify exactly what changed
-    let changes = [];
-    for (let key in payload) {
-        let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
-        let newVal = payload[key] ? String(payload[key]).trim() : "empty";
-
-        if (oldVal !== newVal) {
-            // Format labels for readability (e.g., account_status -> Account Status)
-            const label = key.replace(/_/g, ' ').toUpperCase();
-            changes.push(`${label}: "${oldVal}" → "${newVal}"`);
         }
     }
 
-    // 3. Perform the update
-    const { error: updateError } = await supabase.from('merchants').update(payload).eq('id', id);
-    if (updateError) throw updateError;
+    const [dataRes, mathRes] = await Promise.all([
+        dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
+        supabase.rpc('get_merchant_metrics', { 
+            p_status_filter: statusFilter || null, 
+            p_query: query || null, 
+            p_filter_by: filterBy || null 
+        })
+    ]);
 
-    // 4. Record the Detailed Audit Log
-    if (changes.length > 0) {
-        await supabase.from('merchant_notes').insert([{
-            merchant_id: id,
-            title: "System Update",
-            body: `Field Changes:\n${changes.join('\n')}`,
-            created_by: user || 'System'
-        }]);
+    if (dataRes.error) throw dataRes.error;
+
+    // POST-FILTERING: To remove merchants that don't match the nested search criteria
+    let filteredData = dataRes.data;
+    if (query && (filterBy === 'company_name' || filterBy === 'partner_name')) {
+        filteredData = dataRes.data.filter(m => {
+            const comp = m.agent_identifiers?.agents?.companies;
+            if (filterBy === 'company_name') return comp?.company_name;
+            if (filterBy === 'partner_name') return comp?.company_person_mapping?.[0]?.persons?.full_name;
+            return false;
+        });
     }
 
-    return res.status(200).json({ success: true });
-}
-
-        // --- ACTION: GLOBAL LOGS ---
-        if (action === 'global_logs') {
-            const { data, error } = await supabase
-                .from('merchant_notes')
-                .select(`*, merchants(dba_name)`)
-                .order('created_at', { ascending: false })
-                .limit(100);
-
-            if (error) throw error;
-            return res.status(200).json({ success: true, data });
-        }
-
-        // --- NOTE ACTIONS ---
-       if (action === 'get_notes') {
-    const { merchant_uuid, type } = req.body;
-    let query = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
-
-    // Filter based on the tab being viewed
-    if (type === 'manual') {
-        query = query.neq('title', 'System Update');
-    } else if (type === 'system') {
-        query = query.eq('title', 'System Update');
-    }
-
-    const { data, error } = await query.order('created_at', { ascending: false });
-    if (error) throw error;
-    return res.status(200).json({ success: true, data });
-}
-
-        if (action === 'add_note') {
-            const { error } = await supabase.from('merchant_notes').insert([{ merchant_id: req.body.merchant_uuid, title: req.body.title, body: req.body.body, created_by: req.body.user }]);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-
-    } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
-    }
+    const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
+    return res.status(200).json({ 
+        success: true, 
+        data: filteredData,
+        count: dataRes.count,
+        metrics: { totalMTD: stats.out_mtd, total30D: stats.out_30d, total90D: stats.out_90d, portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" }
+    });
 }
