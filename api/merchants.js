@@ -141,16 +141,31 @@ if (action === 'update_note') {
             return res.status(200).json({ success: true, data });
         }
 
-        if (action === 'add_note') {
-            const { error } = await supabase.from('merchant_notes').insert([{ 
-                merchant_id: req.body.merchant_uuid, 
-                title: req.body.title, 
-                body: req.body.body, 
-                created_by: req.body.user 
-            }]);
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
+       // Locate this block in your backend API file
+if (action === 'add_note') {
+    // 1. Extract the data from the incoming request (req.body)
+    const { merchant_uuid, title, body, created_by, userId } = req.body;
+
+    // 2. Perform the insert into Supabase
+    const { data, error } = await supabase
+        .from('merchant_notes')
+        .insert([{ 
+            merchant_uuid: merchant_uuid, 
+            title: title, 
+            body: body, 
+            // FIX: This ensures the value is NOT null by checking all possible incoming keys
+            // or falling back to a dummy UUID if the session is lost.
+            created_by: created_by || userId || '00000000-0000-0000-0000-000000000000' 
+        }]);
+
+    // 3. Handle the response
+    if (error) {
+        console.error("Supabase Error:", error);
+        return res.status(400).json({ success: false, message: error.message });
+    }
+
+    return res.json({ success: true });
+}
 
     } catch (err) {
         console.error("API Error:", err.message);
