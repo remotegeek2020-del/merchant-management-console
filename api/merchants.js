@@ -5,38 +5,23 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
-    // api/merchants.js -> Inside action === 'list'
-let dataReq = supabase.from('merchants').select(`
-    *,
-    agent_identifiers!inner (
-        agents!inner ( 
-            companies!inner ( 
-                company_name, 
-                company_person_mapping!inner ( 
-                    persons!inner ( full_name ) 
-                ) 
-            ) 
-        )
-    )
-`, { count: 'exact' });
+        // --- ACTION: LIST (MERGED WITH VIEW LOGIC) ---
+        if (action === 'list') {
+            let dataReq = supabase.from('merchant_portfolio_view').select('*', { count: 'exact' });
 
-if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
+            if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
 
-if (query && filterBy) {
-    if (filterBy === 'dba_name') {
-        dataReq = dataReq.ilike('dba_name', `%${query}%`);
-    } else if (filterBy === 'merchant_id') {
-        dataReq = dataReq.eq('merchant_id', query);
-    } else if (filterBy === 'agent_id') {
-        dataReq = dataReq.eq('agent_id', query);
-    } 
-    // Surgical path filtering using !inner logic
-    else if (filterBy === 'company_name') {
-        dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-    } else if (filterBy === 'partner_name') {
-        dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-    }
-}
+            if (query && filterBy) {
+                const colMap = {
+                    'dba_name': 'dba_name',
+                    'merchant_id': 'merchant_id',
+                    'agent_id': 'agent_id',
+                    'company_name': 'company_name',
+                    'partner_name': 'partner_full_name'
+                };
+                const targetCol = colMap[filterBy] || filterBy;
+                dataReq = dataReq.ilike(targetCol, `%${query}%`);
+            }
 
             const [dataRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
@@ -50,9 +35,16 @@ if (query && filterBy) {
             if (dataRes.error) throw dataRes.error;
             const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
             
+            // Map the data so the UI sees 'company_name' and 'partner_name' even if joins are null
+            const formattedData = (dataRes.data || []).map(m => ({
+                ...m,
+                company_name: m.company_name || m.agent_name || '---',
+                partner_name: m.partner_full_name || m.agent_name || '---'
+            }));
+
             return res.status(200).json({ 
                 success: true, 
-                data: dataRes.data,
+                data: formattedData,
                 count: dataRes.count,
                 metrics: { 
                     totalMTD: stats.out_mtd, 
@@ -65,7 +57,6 @@ if (query && filterBy) {
 
         // --- ACTION: UPDATE MERCHANT WITH DETAILED AUDIT LOGGING ---
         if (action === 'update') {
-            // 1. Fetch current data to identify changes for the audit trail
             const { data: oldData, error: fetchError } = await supabase
                 .from('merchants')
                 .select('*')
@@ -74,7 +65,6 @@ if (query && filterBy) {
 
             if (fetchError) throw fetchError;
 
-            // 2. Map differences between existing data and new payload
             let changes = [];
             for (let key in payload) {
                 let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
@@ -86,11 +76,9 @@ if (query && filterBy) {
                 }
             }
 
-            // 3. Update the record
             const { error: updateError } = await supabase.from('merchants').update(payload).eq('id', id);
             if (updateError) throw updateError;
 
-            // 4. Record automated system note if data changed
             if (changes.length > 0) {
                 await supabase.from('merchant_notes').insert([{
                     merchant_id: id,
@@ -120,7 +108,6 @@ if (query && filterBy) {
             const { merchant_uuid, type } = req.body;
             let queryBuilder = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
 
-            // Filter by "manual" staff entries vs "system" automated audit logs
             if (type === 'manual') {
                 queryBuilder = queryBuilder.neq('title', 'System Update');
             } else if (type === 'system') {
