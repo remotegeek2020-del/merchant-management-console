@@ -8,18 +8,18 @@ export default async function handler(req, res) {
         // --- ACTION: LIST MERCHANTS ---
         if (action === 'list') {
             let dataReq = supabase.from('merchants').select(`
-                *,
-                agent_identifiers!agent_id (
-                    agents ( 
-                        companies ( 
-                            company_name, 
-                            company_person_mapping ( 
-                                persons ( full_name ) 
-                            ) 
-                        ) 
-                    )
-                )
-            `, { count: 'exact' });
+    *,
+    agent_identifiers!inner (
+        agents!inner ( 
+            companies!inner ( 
+                company_name, 
+                company_person_mapping!inner ( 
+                    persons!inner ( full_name ) 
+                ) 
+            ) 
+        )
+    )
+`, { count: 'exact' });
 
             if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
 
