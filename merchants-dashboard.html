@@ -155,18 +155,22 @@
     } catch (err) { console.error(err); }
 }
 
-   async function openModal(id) {
+async function openModal(id) {
     const m = currentRecords.find(r => r.id === id);
     if (!m) return;
     Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
     try {
-        const [nRes, lRes] = await Promise.all([
+        // SURGICAL ADDITION: Added aRes to the Promise.all
+        const [nRes, lRes, aRes] = await Promise.all([
             fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) })
         ]);
+        
         const notes = (await nRes.json()).data || [];
         const logs = (await lRes.json()).data || [];
+        const files = (await aRes.json()).data || []; // NEW: Attachments data
 
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
@@ -175,8 +179,8 @@
                 <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
                     <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
                     <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
-                    <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                     <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
+                    <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                 </div>
 
                 <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
@@ -265,20 +269,37 @@
                         </div>
                     `).join('')}</div>
                 </div>
-<div id="content-attachments" class="tab-content" style="display:none; text-align:left;">
-    <div style="background:#f8fafc; border:2px dashed #cbd5e1; border-radius:12px; padding:30px; text-align:center; margin-bottom:20px;">
-        <span class="material-icons" style="font-size:48px; color:#94a3b8; margin-bottom:10px;">cloud_upload</span>
-        <p style="font-weight:700; color:#475569; margin-bottom:15px;">Upload Merchant Documents</p>
-        <input type="file" id="fileInput" style="display:none;" onchange="handleFileUpload('${m.id}')">
-        <button onclick="document.getElementById('fileInput').click()" class="slds-button slds-button_brand" style="background:var(--pp-blue); border-radius:8px;">
-            SELECT FILE
-        </button>
-        <p style="font-size:10px; color:#94a3b8; margin-top:10px;">PDF, PNG, JPG, or CSV (Max 10MB)</p>
-    </div>
-    <div id="attachments-list" style="display:grid; gap:10px;">
-        <p style="text-align:center; color:#94a3b8; padding:20px;">No attachments found.</p>
-    </div>
-</div>
+
+                <div id="content-attachments" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:#f8fafc; border:2px dashed #cbd5e1; border-radius:12px; padding:30px; text-align:center; margin-bottom:20px;">
+                        <span class="material-icons" style="font-size:48px; color:#94a3b8; margin-bottom:10px;">cloud_upload</span>
+                        <p style="font-weight:700; color:#475569; margin-bottom:15px;">Upload Merchant Documents</p>
+                        <input type="file" id="fileInput" style="display:none;" onchange="handleFileUpload('${m.id}')">
+                        <button onclick="document.getElementById('fileInput').click()" class="slds-button slds-button_brand" style="background:var(--pp-blue); border-radius:8px;">
+                            SELECT FILE
+                        </button>
+                        <p style="font-size:10px; color:#94a3b8; margin-top:10px;">PDF, PNG, JPG, or CSV (Max 10MB)</p>
+                    </div>
+                    <div id="attachments-list" style="display:grid; gap:10px;">
+                        ${files.length > 0 ? files.map(f => `
+                            <div style="display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e2e8f0; padding:12px; border-radius:10px;">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span class="material-icons" style="color:var(--pp-blue);">description</span>
+                                    <div>
+                                        <div style="font-weight:700; font-size:12px;">${f.file_name}</div>
+                                        <div style="font-size:10px; color:#64748b;">${new Date(f.created_at).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:10px;">
+                                    <button onclick="window.open('https://your-supabase-url.supabase.co/storage/v1/object/public/merchant-files/${f.file_path}')" style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
+                                        <span class="material-icons">download</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('') : '<p style="text-align:center; color:#94a3b8; padding:20px;">No attachments found.</p>'}
+                    </div>
+                </div>
+
                 <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
                     <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
                         ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
