@@ -118,11 +118,11 @@
 <script>
     let currentPage = 0;
     let currentRecords = [];
-
-    async function fetchMerchants() {
-        const tbody = document.getElementById('merchantTableBody');
-        const limit = document.getElementById('pageLimit').value;
-        // --- ADD THIS LINE HERE ---
+async function fetchMerchants() {
+    const tbody = document.getElementById('merchantTableBody');
+    const limit = document.getElementById('pageLimit').value;
+    
+    // THIS IS THE SYNCING MESSAGE
     tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
         <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
         Synchronizing Ledger...
