@@ -6,10 +6,13 @@ export default async function handler(req, res) {
 
     try {
         // --- ACTION: LIST (MERGED WITH VIEW LOGIC) ---
-        if (action === 'list') {
-            let dataReq = supabase.from('merchant_portfolio_view').select('*', { count: 'exact' });
+      if (action === 'list') {
+            // 1. Fetch Merchant Data from the View
+            const dataReq = supabase
+                .from('merchant_portfolio_view')
+                .select('*', { count: 'exact' });
 
-            if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
+            if (statusFilter) dataReq.eq('account_status', statusFilter);
 
             if (query && filterBy) {
                 const colMap = {
@@ -20,23 +23,31 @@ export default async function handler(req, res) {
                     'partner_name': 'partner_full_name'
                 };
                 const targetCol = colMap[filterBy] || filterBy;
-                dataReq = dataReq.ilike(targetCol, `%${query}%`);
+                dataReq.ilike(targetCol, `%${query}%`);
             }
 
-            const [dataRes, mathRes] = await Promise.all([
-                dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
-                supabase.rpc('get_merchant_metrics', { 
+            // 2. Execute Data Fetch
+            const { data, count, error: dataError } = await dataReq
+                .range(page * limit, (page + 1) * limit - 1)
+                .order('created_at', { ascending: false });
+
+            if (dataError) throw dataError;
+
+            // 3. Fetch Metrics (Wrapped so it doesn't crash the table if it fails)
+            let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
+            try {
+                const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
                     p_status_filter: statusFilter || null, 
                     p_query: query || null, 
                     p_filter_by: filterBy || null 
-                })
-            ]);
+                });
+                if (mathData && mathData[0]) stats = mathData[0];
+            } catch (rpcErr) {
+                console.error("Metrics RPC Failed, but continuing...", rpcErr);
+            }
 
-            if (dataRes.error) throw dataRes.error;
-            const stats = mathRes.data?.[0] || { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
-            
-            // Map the data so the UI sees 'company_name' and 'partner_name' even if joins are null
-            const formattedData = (dataRes.data || []).map(m => ({
+            // 4. Format for UI
+            const formattedData = (data || []).map(m => ({
                 ...m,
                 company_name: m.company_name || m.agent_name || '---',
                 partner_name: m.partner_full_name || m.agent_name || '---'
@@ -45,11 +56,11 @@ export default async function handler(req, res) {
             return res.status(200).json({ 
                 success: true, 
                 data: formattedData,
-                count: dataRes.count,
+                count: count || 0,
                 metrics: { 
-                    totalMTD: stats.out_mtd, 
-                    total30D: stats.out_30d, 
-                    total90D: stats.out_90d, 
+                    totalMTD: stats.out_mtd || 0, 
+                    total30D: stats.out_30d || 0, 
+                    total90D: stats.out_90d || 0, 
                     portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
                 }
             });
