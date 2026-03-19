@@ -144,26 +144,25 @@
                 document.getElementById('90d-val').innerText = cur.format(result.metrics.total90D || 0);
                 document.getElementById('share-val').innerText = (result.metrics.portfolioShare || 0) + '%';
 
-               currentRecords.forEach(m => {
-    const row = tbody.insertRow();
-    const statusVal = m.account_status || '';
-    const statusClass = statusVal.toLowerCase().includes('approved') ? 'status-approved' : 
-                      statusVal.toLowerCase().includes('closed') ? 'status-closed' : 'status-pending';
-    
-    // Because of !inner join, agent_identifiers is returned as a direct object
-    const agentData = m.agent_identifiers?.agents;
-    const companyName = agentData?.companies?.company_name || '---';
-    const partnerName = agentData?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
+                currentRecords.forEach(m => {
+                    const row = tbody.insertRow();
+                    const status = (m.account_status || 'Pending').toLowerCase();
+                    const statusClass = status.includes('approved') ? 'status-approved' : 
+                                      status.includes('closed') ? 'status-closed' : 'status-pending';
+                    
+                    // KEEPING YOUR WORKING LOGIC:
+                    const agentData = m.agent_identifiers?.agents;
+                    const companyName = agentData?.companies?.company_name || '---';
+                    const partnerName = agentData?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
 
-    row.innerHTML = `
-        <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
-        <td><code>${m.merchant_id || '---'}</code></td>
-        <td>${m.agent_id || '---'}</td>
-        <td>${companyName}</td>
-        <td>${partnerName}</td>
-        <td><span class="badge ${statusClass}">${statusVal || '---'}</span></td>
-    `;
-});
+                    row.innerHTML = `
+                        <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
+                        <td><code>${m.merchant_id || '---'}</code></td>
+                        <td>${m.agent_id || '---'}</td>
+                        <td>${companyName}</td>
+                        <td>${partnerName}</td>
+                        <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>`;
+                });
 
                 document.getElementById('pageInfo').innerText = `Page ${currentPage + 1}`;
                 document.getElementById('prevBtn').disabled = (currentPage === 0);
