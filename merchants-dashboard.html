@@ -7,80 +7,74 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); }
+        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0) !important; padding: 25px !important; font-family: 'Inter', sans-serif !important; min-height: 100vh; }
         
-        /* 1. Fix the "Clunky" Background and Spacing */
-        body { background: #f1f5f9 !important; padding: 30px !important; font-family: 'Inter', sans-serif !important; }
-        .dashboard-wrapper { max-width: 1600px; margin: 0 auto; }
-
-        /* 2. Fix the "Floating" Header */
-        .modern-header { 
-            background: white !important; border-radius: 20px !important; padding: 25px !important; 
-            margin-bottom: 25px !important; display: flex !important; justify-content: space-between !important; 
-            align-items: center !important; box-shadow: 0 10px 30px rgba(0,0,0,0.05) !important;
-        }
-
-        /* 3. Fix the "Stacked" KPI Cards */
-        .summary-bar { 
-            display: grid !important; grid-template-columns: repeat(4, 1fr) !important; 
-            gap: 20px !important; margin: 25px 0 !important; 
-        }
-        .kpi-card { 
-            background: white !important; padding: 20px !important; border-radius: 18px !important; 
-            display: flex !important; align-items: center !important; gap: 15px !important; 
-            border: 1px solid #edf2f7 !important;
-        }
-        .kpi-icon { background: rgba(0,73,144,0.08) !important; color: var(--pp-blue) !important; padding: 12px; border-radius: 12px; display: flex; }
-        .kpi-val { font-size: 1.3rem !important; font-weight: 800 !important; color: #002d5a !important; }
-        .kpi-label { font-size: 11px !important; font-weight: 700 !important; color: #64748b !important; text-transform: uppercase !important; }
-
-        /* 4. Fix the Table Look */
-        .main-card { background: white !important; border-radius: 20px !important; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: none; }
-        .slds-table thead th { background-color: #f8fafc !important; color: #64748b !important; padding: 16px !important; font-weight: 700 !important; border-bottom: 2px solid #edf2f7 !important; }
+        .dashboard-container { max-width: 1600px !important; margin: 0 auto !important; }
         
-        /* Status Badges */
+        .modern-header { background: var(--glass) !important; backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
+        
+        .summary-bar { display: grid !important; grid-template-columns: repeat(4, 1fr) !important; gap: 20px !important; margin: 20px 0 !important; }
+        
+        .kpi-card { background: var(--glass) !important; padding: 20px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 8px 20px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 15px; transition: transform 0.2s; }
+        .kpi-card:hover { transform: translateY(-3px); }
+        .kpi-icon { background: rgba(0,73,144,0.1); color: var(--pp-blue); padding: 12px; border-radius: 12px; display: flex; align-items: center; }
+        
+        .kpi-val { font-size: 1.3rem; font-weight: 800; color: #002d5a; display: block; }
+        .kpi-label { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .main-card { background: white !important; border-radius: 20px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.05); border: none; }
+        .slds-table thead th { background-color: #f8fafc !important; color: #64748b !important; text-transform: uppercase; font-size: 11px; padding: 15px !important; font-weight: 700 !important; }
+
         .badge { font-weight: 800; font-size: 9px; padding: 4px 12px; border-radius: 50px; text-transform: uppercase; display: inline-block; }
         .status-approved { background: #dcfce7; color: #166534; }
         .status-closed { background: #fee2e2; color: #991b1b; }
         .status-pending { background: #fef9c3; color: #854d0e; }
 
-        /* Modal / Tabs */
-        .modal-tab-btn { padding: 12px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; }
-        .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
-        .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.85rem; }
-        .edit-label { font-size: 10px; font-weight: 700; color: #64748b; margin-bottom: 4px; display: block; text-transform: uppercase; }
+        /* Modal Styles Restored */
+        .modal-tab-btn { padding: 14px 24px; border: none; background: none; font-weight: 700; font-size: 0.75rem; color: #94a3b8; cursor: pointer; transition: all 0.3s ease; border-bottom: 3px solid transparent; letter-spacing: 0.8px; }
+        .active-tab { color: var(--pp-blue) !important; border-bottom: 3px solid var(--pp-blue) !important; }
+        .edit-label { font-size: 10px; font-weight: 700; color: #64748b; margin-bottom: 5px; display: block; text-transform: uppercase; }
+        .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; font-size: 0.85rem !important; padding: 8px 12px !important; width: 100%; }
+        .note-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 16px; padding: 18px; margin-bottom: 15px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05); }
     </style>
 </head>
 <body>
 
-<div class="dashboard-wrapper">
+<div class="dashboard-container">
     <div class="modern-header">
         <div>
             <div style="display:flex; align-items:center; gap:12px; margin-bottom:8px;">
-                <a href="index.html" style="background:#f1f5f9; padding:4px 12px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.65rem; text-decoration:none;">HOME</a>
-                <div style="background:rgba(0,73,144,0.05); padding:4px 12px; border-radius:50px; font-size:0.65rem; font-weight:700; color:var(--pp-blue);">Staff Member</div>
+                <a href="index.html" style="background:white; border:1px solid #e2e8f0; padding:6px 14px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.7rem; text-decoration:none;">HOME</a>
+                <div id="user-greeting" style="background:rgba(0,73,144,0.08); padding:6px 16px; border-radius:50px; font-size:0.7rem; font-weight:700; color:var(--pp-blue);">Staff Member</div>
             </div>
-            <h1 style="font-size: 1.7rem; font-weight: 800; color: #002d5a; margin:0;">Merchant Portfolio</h1>
+            <h1 style="font-size: 1.8rem; font-weight: 800; color: #002d5a; margin:0;">Merchant Portfolio</h1>
         </div>
 
         <div style="display: flex; gap: 10px;">
-            <select id="statusFilter" class="slds-select" style="width: 170px; border-radius:10px;" onchange="resetAndFetch()">
+            <select id="statusFilter" class="slds-select" style="width: 170px; border-radius:12px; height:42px;" onchange="resetAndFetch()">
                 <option value="">All Statuses</option>
                 <option value="Approved">Approved</option>
+                <option value="Approved - Collections">Approved - Collections</option>
                 <option value="Closed">Closed</option>
-                <option value="Fraud">Fraud</option>
+                <option value="Closed - Collections">Closed - Collections</option>
+                <option value="Closed - Risk">Closed - Risk</option>
+                <option value="Collections">Collections</option>
                 <option value="Declined">Declined</option>
+                <option value="Enrollment">Enrollment</option>
+                <option value="Fraud">Fraud</option>
+                <option value="Pending">Pending</option>
                 <option value="Withdrawn">Withdrawn</option>
             </select>
-            <select id="filterBy" class="slds-select" style="width: 160px; border-radius:10px;">
+            <select id="filterBy" class="slds-select" style="width: 160px; border-radius:12px; height:42px;">
                 <option value="dba_name">DBA Name</option>
                 <option value="merchant_id">Merchant ID (MID)</option>
                 <option value="agent_id">Partner ID</option>
                 <option value="company_name">Company Name</option>
                 <option value="partner_name">Partner Name</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius:10px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
-            <button class="slds-button slds-button_brand" style="border-radius:10px; padding: 0 25px; background: var(--pp-blue);" onclick="resetAndFetch()">Search</button>
+            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius:10px; height:42px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
+            <button class="slds-button slds-button_brand" style="border-radius:12px; height: 42px; padding: 0 25px; background: var(--pp-blue);" onclick="resetAndFetch()">Search</button>
         </div>
     </div>
 
@@ -97,7 +91,7 @@
             <div class="kpi-icon" style="color:#2e7d32;"><span class="material-icons">history</span></div>
             <div><span class="kpi-label">Total 90D</span><span class="kpi-val" id="90d-val">$0.00</span></div>
         </div>
-        <div class="kpi-card" style="background:var(--pp-blue); color:white; border:none;">
+        <div class="kpi-card" style="background:#004990; color:white; border:none;">
             <div class="kpi-icon" style="color:white; background:rgba(255,255,255,0.1);"><span class="material-icons">pie_chart</span></div>
             <div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Portfolio Share</span><span class="kpi-val" id="share-val" style="color:white;">0.00%</span></div>
         </div>
@@ -117,14 +111,15 @@
             </thead>
             <tbody id="merchantTableBody"></tbody>
         </table>
-        <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
-            <div>
-                <select id="pageLimit" class="slds-select" style="width: 80px; height: 32px !important;" onchange="resetAndFetch()">
-                    <option value="20">20</option><option value="50">50</option>
+        <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <span style="font-size: 11px; font-weight: 700; color: #64748b;">Display:</span>
+                <select id="pageLimit" class="slds-select" style="width: 80px; height: 32px !important; border-radius:8px;" onchange="resetAndFetch()">
+                    <option value="20">20</option><option value="50">50</option><option value="100">100</option>
                 </select>
             </div>
             <div style="display: flex; align-items: center; gap: 15px;">
-                <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)">Previous</button>
+                <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)" disabled>Previous</button>
                 <span id="pageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</span>
                 <button class="slds-button slds-button_neutral" id="nextBtn" onclick="changePage(1)">Next</button>
             </div>
@@ -140,7 +135,7 @@
     async function fetchMerchants() {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
-        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:60px;'>Syncing Ledger...</td></tr>";
+        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:60px;'>Syncing Secure Ledger...</td></tr>";
         
         try {
             const res = await fetch('/api/merchants', {
@@ -165,24 +160,23 @@
 
             currentRecords.forEach(m => {
                 const row = tbody.insertRow();
-                const s = (m.account_status || '').toLowerCase();
-                const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : 'status-pending';
+                const statusVal = m.account_status || '';
+                const statusClass = statusVal.toLowerCase().includes('approved') ? 'status-approved' : 
+                                  statusVal.toLowerCase().includes('closed') ? 'status-closed' : 'status-pending';
                 
                 row.innerHTML = `
-                    <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
-                    <td><code style="background:#f1f5f9; padding:2px 5px; border-radius:4px;">${m.merchant_id || '---'}</code></td>
+                    <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer; text-decoration:none;">${m.dba_name || '---'}</a></td>
+                    <td><code>${m.merchant_id || '---'}</code></td>
                     <td>${m.agent_id || '---'}</td>
                     <td style="font-weight:600;">${m.company_name || '---'}</td>
                     <td>${m.partner_name || '---'}</td>
-                    <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
+                    <td><span class="badge ${statusClass}">${statusVal || '---'}</span></td>
                 `;
             });
-
             document.getElementById('pageInfo').innerText = `Page ${currentPage + 1}`;
             document.getElementById('prevBtn').disabled = (currentPage === 0);
             document.getElementById('nextBtn').disabled = (currentRecords.length < limit);
-
-        } catch (err) { tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; color:red; padding:20px;'>Connection Error</td></tr>"; }
+        } catch (err) { tbody.innerHTML = "<tr><td colspan='6' style='color:red; text-align:center;'>Sync error.</td></tr>"; }
     }
 
     async function openModal(id) {
@@ -207,20 +201,34 @@
                         <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
                         <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                     </div>
-
-                    <div id="content-details" class="tab-content" style="max-height:600px; overflow-y:auto; text-align:left; padding-right:10px;">
+                    <div id="content-details" class="tab-content" style="max-height:600px; overflow-y:auto; text-align:left;">
                         <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px;">
                             <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
                             <div><label class="edit-label">Account Status</label>
                                 <select id="edit-account_status" class="modern-input">
                                     <option value="${m.account_status}" selected>${m.account_status}</option>
-                                    <option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Fraud">Fraud</option><option value="Pending">Pending</option><option value="Withdrawn">Withdrawn</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Approved - Collections">Approved - Collections</option>
+                                    <option value="Closed">Closed</option>
+                                    <option value="Closed - Collections">Closed - Collections</option>
+                                    <option value="Closed - Risk">Closed - Risk</option>
+                                    <option value="Collections">Collections</option>
+                                    <option value="Declined">Declined</option>
+                                    <option value="Enrollment">Enrollment</option>
+                                    <option value="Fraud">Fraud</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Withdrawn">Withdrawn</option>
                                 </select>
                             </div>
-                            <div><label class="edit-label">MID (Locked)</label><input class="modern-input" value="${m.merchant_id}" disabled style="background:#f1f5f9;"></div>
+                            <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id}" disabled style="background:#f1f5f9;"></div>
                             <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
                             <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
-                            <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                            <div><label class="edit-label">Website</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
+                            <div><label class="edit-label">Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                            <div><label class="edit-label">Volume MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
+                            <div><label class="edit-label">Volume 30D</label><input id="edit-volume_30_day" class="modern-input" value="${m.volume_30_day || ''}"></div>
+                            <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
+                            <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="modern-input" value="${m.processor_platform || ''}"></div>
                             <div style="grid-column: span 3;"><label class="edit-label">Underwriting Note</label><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
                         </div>
                         <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:25px; width:100%; height:48px; border-radius:12px; font-weight:700; background:var(--pp-blue);">SAVE CHANGES</button>
@@ -233,17 +241,25 @@
                             <button onclick="addNote('${m.id}')" class="slds-button slds-button_brand" style="margin-top:12px; width:100%; border-radius:10px;">ADD NEW NOTE</button>
                         </div>
                         <div style="max-height:350px; overflow-y:auto;">
-                            ${notes.map(n => `<div class="note-card" style="padding:15px; border-radius:12px; border:1px solid #e2e8f0; margin-bottom:10px;">
-                                <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><strong style="color:var(--pp-blue);">${n.title}</strong><small>${new Date(n.created_at).toLocaleDateString()}</small></div>
-                                <div style="font-size:0.85rem; color:#475569;">${n.body}</div>
-                                <div style="margin-top:10px; font-size:0.7rem; font-weight:800; color:var(--pp-blue);">BY: ${n.created_by}</div>
-                            </div>`).join('') || '<p style="text-align:center; color:#94a3b8;">No notes recorded.</p>'}
+                            ${notes.map(n => `
+                                <div class="note-card">
+                                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                                        <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="font-weight:700; border:none; padding:0; width:70%;">
+                                        <span style="font-size:10px; color:#94a3b8; font-weight:600;">${new Date(n.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                    <textarea id="note-body-${n.id}" class="modern-input" style="width:100%; border:none; padding:0; background:transparent; font-size:0.85rem; height:auto;">${n.body}</textarea>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid #f1f5f9;">
+                                        <span style="font-size:10px; color:var(--pp-blue); font-weight:800;">BY: ${n.created_by}</span>
+                                        <button onclick="updateExistingNote('${n.id}', '${m.id}')" style="background:none; border:none; color:var(--pp-accent); font-weight:700; font-size:10px; cursor:pointer;">UPDATE NOTE</button>
+                                    </div>
+                                </div>
+                            `).join('') || '<p style="text-align:center; color:#94a3b8;">No notes recorded.</p>'}
                         </div>
                     </div>
 
                     <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                        <div style="max-height:400px; overflow-y:auto; font-family:monospace; font-size:11px; background:#1e293b; color:#38bdf8; padding:20px; border-radius:12px;">
-                            ${logs.map(l => `<div>[${new Date(l.created_at).toLocaleString()}] ${l.body}</div>`).join('') || '> LOGS EMPTY'}
+                        <div style="max-height:400px; overflow-y:auto; font-family:monospace; font-size:11px; background:#1e293b; color:#38bdf8; padding:20px; border-radius:12px; line-height:1.6;">
+                            ${logs.map(l => `<div>[${new Date(l.created_at).toLocaleString()}] ${l.body.replace(/\n/g, '<br>')}</div>`).join('') || '> LOGS EMPTY'}
                         </div>
                     </div>
                 `,
@@ -253,29 +269,42 @@
     }
 
     /* Helper Functions */
-    window.switchTab = function(tab) {
+    window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
         document.getElementById('content-' + tab).style.display = 'block';
         document.getElementById('tab-' + tab).classList.add('active-tab');
     };
 
-    window.saveMerchant = async function(uuid) {
-        const payload = { 
-            dba_name: document.getElementById('edit-dba_name').value, 
-            account_status: document.getElementById('edit-account_status').value,
-            underwriting_decision_note: document.getElementById('edit-underwriting_decision_note').value
-        };
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
-        if((await res.json()).success) { Swal.fire('Success', 'Profile Updated.', 'success'); fetchMerchants(); }
+    window.saveMerchant = async (uuid) => {
+        const fields = ['dba_name', 'account_status', 'email', 'merchant_phone', 'merchant_websites', 'merchant_primary_contact', 'volume_mtd', 'volume_30_day', 'processor', 'processor_platform', 'underwriting_decision_note'];
+        const payload = {};
+        fields.forEach(f => {
+            const el = document.getElementById('edit-' + f);
+            if(el) payload[f] = el.value;
+        });
+        
+        try {
+            const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload, user: 'Staff' }) });
+            const result = await res.json();
+            if(result.success) { Swal.fire('Success', 'Ledger Synchronized.', 'success'); fetchMerchants(); }
+        } catch (err) { Swal.fire('Error', 'Failed to save.', 'error'); }
     };
 
-    window.addNote = async function(uuid) {
+    window.addNote = async (uuid) => {
         const title = document.getElementById('new-note-title').value;
         const body = document.getElementById('new-note-body').value;
-        await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body }) });
-        openModal(uuid);
+        if(!title || !body) return Swal.fire('Error', 'Subject and Body required.', 'warning');
+        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body, user: 'Staff' }) });
+        if((await res.json()).success) openModal(uuid);
     };
+
+    window.updateExistingNote = async (noteId, merchantId) => {
+        const title = document.getElementById(`note-title-${noteId}`).value;
+        const body = document.getElementById(`note-body-${noteId}`).value;
+        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_note', note_id: noteId, title, body }) });
+        if((await res.json()).success) Swal.fire({ icon: 'success', title: 'Note Updated', timer: 1000, showConfirmButton: false });
+    }
 
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
