@@ -4,7 +4,10 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
-    try {
+    try 
+    
+    
+    {
         if (action === 'update_note') {
             const { note_id, title, body } = req.body;
             const { error } = await supabase
@@ -12,6 +15,33 @@ export default async function handler(req, res) {
                 .update({ title, body, created_at: new Date() })
                 .eq('id', note_id);
 
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: GET ATTACHMENTS ---
+        if (action === 'get_attachments') {
+            const { merchant_uuid } = req.body;
+            const { data, error } = await supabase
+                .from('merchant_attachments')
+                .select('*')
+                .eq('merchant_id', merchant_uuid)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+        }
+
+        // --- ACTION: DELETE ATTACHMENT ---
+        if (action === 'delete_attachment') {
+            const { file_id, file_path } = req.body;
+            
+            // Delete from Storage
+            await supabase.storage.from('merchant-files').remove([file_path]);
+            
+            // Delete from Database
+            const { error } = await supabase.from('merchant_attachments').delete().eq('id', file_id);
+            
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
