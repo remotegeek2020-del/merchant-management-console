@@ -119,18 +119,18 @@
     let currentPage = 0;
     let currentRecords = [];
 
-    async function fetchMerchants() {
-        const tbody = document.getElementById('merchantTableBody');
-        const limit = document.getElementById('pageLimit').value;
-        
-        // RE-ADDED: Syncing Message
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
-            <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
-            Synchronizing Ledger...
-        </td></tr>`;
+  async function fetchMerchants() {
+    const tbody = document.getElementById('merchantTableBody');
+    const limit = document.getElementById('pageLimit').value;
+    
+    // THE SYNCING EFFECT (Don't let this get deleted!)
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
+        <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
+        Synchronizing Ledger...
+    </td></tr>`;
 
-        try {
-            const res = await fetch('/api/merchants', {
+    try {
+        const res = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value })
