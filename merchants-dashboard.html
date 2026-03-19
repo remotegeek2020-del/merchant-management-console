@@ -378,6 +378,28 @@
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
     window.onload = () => { fetchMerchants(); };
+
+    window.updateExistingNote = async function(noteId, merchantId) {
+        const title = document.getElementById(`note-title-${noteId}`).value;
+        const body = document.getElementById(`note-body-${noteId}`).value;
+        
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'update_note', // You'll need to handle this in your API
+                    note_id: noteId,
+                    title,
+                    body
+                })
+            });
+            const result = await res.json();
+            if(result.success) {
+                Swal.fire({ icon: 'success', title: 'Note Updated', timer: 1000, showConfirmButton: false });
+            }
+        } catch (err) { Swal.fire('Error', 'Failed to update note', 'error'); }
+    }
 </script>
 </body>
 </html>
