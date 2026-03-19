@@ -118,15 +118,17 @@
 <script>
     let currentPage = 0;
     let currentRecords = [];
-async function fetchMerchants() {
-    const tbody = document.getElementById('merchantTableBody');
-    const limit = document.getElementById('pageLimit').value;
-    
-    // THIS IS THE SYNCING MESSAGE
-    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
-        <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
-        Synchronizing Ledger...
-    </td></tr>`;
+
+    async function fetchMerchants() {
+        const tbody = document.getElementById('merchantTableBody');
+        const limit = document.getElementById('pageLimit').value;
+        
+        // RE-ADDED: Syncing Message
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
+            <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
+            Synchronizing Ledger...
+        </td></tr>`;
+
         try {
             const res = await fetch('/api/merchants', {
                 method: 'POST',
@@ -154,126 +156,126 @@ async function fetchMerchants() {
         } catch (err) { console.error(err); }
     }
 
-  async function openModal(id) {
-    const m = currentRecords.find(r => r.id === id);
-    if (!m) return;
-    Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
+    async function openModal(id) {
+        const m = currentRecords.find(r => r.id === id);
+        if (!m) return;
+        Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
-    try {
-        const [nRes, lRes] = await Promise.all([
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
-        ]);
-        const notes = (await nRes.json()).data || [];
-        const logs = (await lRes.json()).data || [];
+        try {
+            const [nRes, lRes] = await Promise.all([
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
+            ]);
+            const notes = (await nRes.json()).data || [];
+            const logs = (await lRes.json()).data || [];
 
-        Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
-            width: '1100px',
-            html: `
-                <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
-                    <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
-                    <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
-                    <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
-                </div>
-
-                <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
-                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Core Identity & Status</div>
-                        <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                        <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
-                        <div>
-                            <label class="edit-label">Account Status</label>
-                            <select id="edit-account_status" class="modern-input">
-                                <option value="${m.account_status}" selected>${m.account_status}</option>
-                                <option value="Approved">Approved</option>
-                                <option value="Approved - Collections">Approved - Collections</option>
-                                <option value="Closed">Closed</option>
-                                <option value="Closed - Collections">Closed - Collections</option>
-                                <option value="Closed - Risk">Closed - Risk</option>
-                                <option value="Collections">Collections</option>
-                                <option value="Declined">Declined</option>
-                                <option value="Enrollment">Enrollment</option>
-                                <option value="Fraud">Fraud</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Withdrawn">Withdrawn</option>
-                            </select>
-                        </div>
-                        <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
-                        <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
-                        <div><label class="edit-label">Major Merchant</label><input id="edit-major_merchant" class="modern-input" value="${m.major_merchant || ''}"></div>
-
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Contact Information</div>
-                        <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
-                        <div><label class="edit-label">Merchant Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
-                        <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
-                        <div style="grid-column: span 2;"><label class="edit-label">Websites</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
-                        <div><label class="edit-label">ACH Properties</label><input id="edit-ach_properties" class="modern-input" value="${m.ach_properties || ''}"></div>
-
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Processing & Technical</div>
-                        <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
-                        <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="modern-input" value="${m.processor_platform || ''}"></div>
-                        <div><label class="edit-label">Gateway ID</label><input id="edit-gateway_account_id" class="modern-input" value="${m.gateway_account_id || ''}"></div>
-                        <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="modern-input" value="${m.is_edge_enabled || ''}"></div>
-                        <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="modern-input" value="${m.is_pci_compliant || ''}"></div>
-                        <div><label class="edit-label">Mobile</label><input id="edit-is_mobile" class="modern-input" value="${m.is_mobile || ''}"></div>
-                        <div><label class="edit-label">Source</label><input id="edit-source" class="modern-input" value="${m.source || ''}"></div>
-                        <div><label class="edit-label">Activated</label><input id="edit-is_activated" class="modern-input" value="${m.is_activated || ''}"></div>
-                        <div><label class="edit-label">Device Hub</label><input id="edit-is_device_hub_link_enabled" class="modern-input" value="${m.is_device_hub_link_enabled || ''}"></div>
-
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Volume & Financials</div>
-                        <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
-                        <div><label class="edit-label">Vol 30D</label><input id="edit-volume_30_day" class="modern-input" value="${m.volume_30_day || ''}"></div>
-                        <div><label class="edit-label">Vol 90D</label><input id="edit-volume_90_day" class="modern-input" value="${m.volume_90_day || ''}"></div>
-                        <div><label class="edit-label">Total Volume</label><input id="edit-volume" class="modern-input" value="${m.volume || ''}"></div>
-                        <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
-                        <div><label class="edit-label">Commission Code</label><input id="edit-isv_commission_code" class="modern-input" value="${m.isv_commission_code || ''}"></div>
-
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Dates & Compliance</div>
-                        <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
-                        <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
-                        <div><label class="edit-label">Batch Date</label><input type="date" id="edit-last_batch_date" class="modern-input" value="${m.last_batch_date || ''}"></div>
-                        <div><label class="edit-label">Status Change</label><input type="date" id="edit-account_status_change_date" class="modern-input" value="${m.account_status_change_date || ''}"></div>
-                        <div><label class="edit-label">Days Approved</label><input id="edit-days_approved" class="modern-input" value="${m.days_approved || ''}"></div>
-                        <div><label class="edit-label">Shipping Status</label><input id="edit-shipping_status" class="modern-input" value="${m.shipping_status || ''}"></div>
-                        <div><label class="edit-label">IRS TIN Status</label><input id="edit-irs_tin_status" class="modern-input" value="${m.irs_tin_status || ''}"></div>
-                        <div><label class="edit-label">NDF</label><input id="edit-ndf" class="modern-input" value="${m.ndf || ''}"></div>
-                        <div><label class="edit-label">Credit Review</label><input id="edit-credit_review" class="modern-input" value="${m.credit_review || ''}"></div>
-
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Underwriting Notes</div>
-                        <div style="grid-column: span 3;"><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+            Swal.fire({
+                title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
+                width: '1100px',
+                html: `
+                    <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
+                        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+                        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
+                        <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                     </div>
-                    <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
-                </div>
 
-                <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
-                        <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
-                        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
-                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
-                    </div>
-                    <div id="notes-list">${notes.map(n => `
-                        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-                            <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
-                            <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto;">${n.body}</textarea>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-                                <small style="color:#64748b;">By: ${n.created_by}</small>
-                                <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
+                    <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+                            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Core Identity & Status</div>
+                            <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
+                            <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
+                            <div>
+                                <label class="edit-label">Account Status</label>
+                                <select id="edit-account_status" class="modern-input">
+                                    <option value="${m.account_status}" selected>${m.account_status}</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Approved - Collections">Approved - Collections</option>
+                                    <option value="Closed">Closed</option>
+                                    <option value="Closed - Collections">Closed - Collections</option>
+                                    <option value="Closed - Risk">Closed - Risk</option>
+                                    <option value="Collections">Collections</option>
+                                    <option value="Declined">Declined</option>
+                                    <option value="Enrollment">Enrollment</option>
+                                    <option value="Fraud">Fraud</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Withdrawn">Withdrawn</option>
+                                </select>
                             </div>
-                        </div>
-                    `).join('')}</div>
-                </div>
+                            <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
+                            <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
+                            <div><label class="edit-label">Major Merchant</label><input id="edit-major_merchant" class="modern-input" value="${m.major_merchant || ''}"></div>
 
-                <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
-                        ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
+                            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Contact Information</div>
+                            <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
+                            <div><label class="edit-label">Merchant Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
+                            <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                            <div style="grid-column: span 2;"><label class="edit-label">Websites</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
+                            <div><label class="edit-label">ACH Properties</label><input id="edit-ach_properties" class="modern-input" value="${m.ach_properties || ''}"></div>
+
+                            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Processing & Technical</div>
+                            <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
+                            <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="modern-input" value="${m.processor_platform || ''}"></div>
+                            <div><label class="edit-label">Gateway ID</label><input id="edit-gateway_account_id" class="modern-input" value="${m.gateway_account_id || ''}"></div>
+                            <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="modern-input" value="${m.is_edge_enabled || ''}"></div>
+                            <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="modern-input" value="${m.is_pci_compliant || ''}"></div>
+                            <div><label class="edit-label">Mobile</label><input id="edit-is_mobile" class="modern-input" value="${m.is_mobile || ''}"></div>
+                            <div><label class="edit-label">Source</label><input id="edit-source" class="modern-input" value="${m.source || ''}"></div>
+                            <div><label class="edit-label">Activated</label><input id="edit-is_activated" class="modern-input" value="${m.is_activated || ''}"></div>
+                            <div><label class="edit-label">Device Hub</label><input id="edit-is_device_hub_link_enabled" class="modern-input" value="${m.is_device_hub_link_enabled || ''}"></div>
+
+                            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Volume & Financials</div>
+                            <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
+                            <div><label class="edit-label">Vol 30D</label><input id="edit-volume_30_day" class="modern-input" value="${m.volume_30_day || ''}"></div>
+                            <div><label class="edit-label">Vol 90D</label><input id="edit-volume_90_day" class="modern-input" value="${m.volume_90_day || ''}"></div>
+                            <div><label class="edit-label">Total Volume</label><input id="edit-volume" class="modern-input" value="${m.volume || ''}"></div>
+                            <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
+                            <div><label class="edit-label">Commission Code</label><input id="edit-isv_commission_code" class="modern-input" value="${m.isv_commission_code || ''}"></div>
+
+                            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Dates & Compliance</div>
+                            <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
+                            <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
+                            <div><label class="edit-label">Batch Date</label><input type="date" id="edit-last_batch_date" class="modern-input" value="${m.last_batch_date || ''}"></div>
+                            <div><label class="edit-label">Status Change</label><input type="date" id="edit-account_status_change_date" class="modern-input" value="${m.account_status_change_date || ''}"></div>
+                            <div><label class="edit-label">Days Approved</label><input id="edit-days_approved" class="modern-input" value="${m.days_approved || ''}"></div>
+                            <div><label class="edit-label">Shipping Status</label><input id="edit-shipping_status" class="modern-input" value="${m.shipping_status || ''}"></div>
+                            <div><label class="edit-label">IRS TIN Status</label><input id="edit-irs_tin_status" class="modern-input" value="${m.irs_tin_status || ''}"></div>
+                            <div><label class="edit-label">NDF</label><input id="edit-ndf" class="modern-input" value="${m.ndf || ''}"></div>
+                            <div><label class="edit-label">Credit Review</label><input id="edit-credit_review" class="modern-input" value="${m.credit_review || ''}"></div>
+
+                            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Underwriting Notes</div>
+                            <div style="grid-column: span 3;"><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+                        </div>
+                        <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
                     </div>
-                </div>
-            `,
-            showConfirmButton: false, showCloseButton: true
-        });
-    } catch (err) { Swal.fire('Error', 'Load failed', 'error'); }
-}
+
+                    <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
+                        <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
+                            <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
+                            <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
+                            <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
+                        </div>
+                        <div id="notes-list">${notes.map(n => `
+                            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
+                                <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
+                                <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto;">${n.body}</textarea>
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+                                    <small style="color:#64748b;">By: ${n.created_by}</small>
+                                    <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
+                                </div>
+                            </div>
+                        `).join('')}</div>
+                    </div>
+
+                    <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
+                        <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                            ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
+                        </div>
+                    </div>
+                `,
+                showConfirmButton: false, showCloseButton: true
+            });
+        } catch (err) { Swal.fire('Error', 'Load failed', 'error'); }
+    }
 
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
@@ -283,134 +285,69 @@ async function fetchMerchants() {
     };
 
     window.saveMerchant = async (uuid) => {
-    const fields = [
-        'dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant',
-        'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 'ach_properties',
-        'processor', 'processor_platform', 'gateway_account_id', 'is_edge_enabled', 'is_pci_compliant',
-        'is_mobile', 'source', 'is_activated', 'is_device_hub_link_enabled',
-        'volume_mtd', 'volume_30_day', 'volume_90_day', 'volume', 'fresno_buy_rate_tier', 'isv_commission_code',
-        'enrollment_date', 'approved_date', 'last_batch_date', 'account_status_change_date',
-        'days_approved', 'shipping_status', 'irs_tin_status', 'ndf', 'credit_review', 'underwriting_decision_note'
-    ];
-    
-    const payload = {}; 
-    fields.forEach(f => { 
-        const el = document.getElementById('edit-' + f); 
-        if(el) payload[f] = el.value; 
-    });
-    
-    try {
-        const res = await fetch('/api/merchants', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ action: 'update', id: uuid, payload }) 
-        });
-        const result = await res.json();
-        if(result.success) { 
-            Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); 
-            fetchMerchants(); 
-        }
-    } catch (err) { console.error(err); }
-};
+        const fields = ['dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant', 'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 'ach_properties', 'processor', 'processor_platform', 'gateway_account_id', 'is_edge_enabled', 'is_pci_compliant', 'is_mobile', 'source', 'is_activated', 'is_device_hub_link_enabled', 'volume_mtd', 'volume_30_day', 'volume_90_day', 'volume', 'fresno_buy_rate_tier', 'isv_commission_code', 'enrollment_date', 'approved_date', 'last_batch_date', 'account_status_change_date', 'days_approved', 'shipping_status', 'irs_tin_status', 'ndf', 'credit_review', 'underwriting_decision_note'];
+        const payload = {}; 
+        fields.forEach(f => { const el = document.getElementById('edit-' + f); if(el) payload[f] = el.value; });
+        try {
+            const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
+            const result = await res.json();
+            if(result.success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchMerchants(); }
+        } catch (err) { console.error(err); }
+    };
 
-window.addNote = async function(uuid) {
-    try {
-        const title = document.getElementById('new-note-title').value;
-        const body = document.getElementById('new-note-body').value;
-        const currentUserId = sessionStorage.getItem('pp_userid'); 
-        
-        if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
+    // FIXED: Cleaned logic and Toast feedback
+    window.addNote = async function(uuid) {
+        try {
+            const title = document.getElementById('new-note-title').value;
+            const body = document.getElementById('new-note-body').value;
+            const currentUserId = sessionStorage.getItem('pp_userid'); 
+            
+            if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
 
-        const res = await fetch('/api/merchants', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title: title, body: body, user_id: currentUserId || 'System' }) 
-        });
-        
-        const result = await res.json();
-        if (result.success) {
-            // THIS IS THE NEW NOTE NOTICE
-            const Toast = Swal.mixin({
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 1500,
-                timerProgressBar: true
+            const res = await fetch('/api/merchants', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title: title, body: body, user_id: currentUserId || 'System' }) 
             });
-            await Toast.fire({ icon: 'success', title: 'New note created' });
-        
-        const result = await res.json();
-        
-        if (result.success) {
-            const Toast = Swal.mixin({
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 1500,
-                timerProgressBar: true
-            });
-
-            await Toast.fire({ icon: 'success', title: 'New note created' });
-            openModal(uuid); 
-        } else {
-            throw new Error(result.message);
+            
+            const result = await res.json();
+            if (result.success) {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+                await Toast.fire({ icon: 'success', title: 'New note created' });
+                openModal(uuid); 
+            } else { throw new Error(result.message); }
+        } catch (err) { 
+            Swal.fire('Error', 'Failed to add note: ' + err.message, 'error'); 
         }
-    } catch (err) { // This will now work correctly
-        Swal.fire('Error', 'Failed to add note: ' + err.message, 'error');
-    }
-};
+    };
+
+    // FIXED: Correct ID lookup and Toast feedback
     window.updateNote = async function(noteId, merchantId) {
-    const title = document.getElementById(`note-title-${noteId}`).value;
-    const body = document.getElementById(`note-body-${noteId}`).value;
-    
-    try {
-        const res = await fetch('/api/merchants', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ 
-                action: 'update_note', 
-                note_id: noteId, 
-                title: title, 
-                body: body 
-            }) 
-        });
-        
-        const result = await res.json();
-        
-      if(result.success) {
-            // THIS IS THE SAVE NOTICE
-            const Toast = Swal.mixin({
-                toast: true,
-                position: 'top-end',
-                showConfirmButton: false,
-                timer: 2000,
-                timerProgressBar: true
+        const title = document.getElementById(`note-title-${noteId}`).value;
+        const body = document.getElementById(`note-body-${noteId}`).value;
+        try {
+            const res = await fetch('/api/merchants', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'update_note', note_id: noteId, title: title, body: body }) 
             });
-            Toast.fire({ icon: 'success', title: 'Note updated successfully' });
-        } else {
-            Swal.fire('Error', 'Could not save note: ' + result.message, 'error');
+            const result = await res.json();
+            if(result.success) {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true });
+                Toast.fire({ icon: 'success', title: 'Note updated successfully' });
+            } else { Swal.fire('Error', 'Could not save note: ' + result.message, 'error'); }
+        } catch (err) {
+            Swal.fire('Error', 'Network error while saving note', 'error');
         }
-    } catch (err) {
-        Swal.fire('Error', 'Network error while saving note', 'error');
-    }
-};
+    };
 
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
  
     window.onload = () => {
-    // Shows a quick loader before the data hits the screen
-    Swal.fire({
-        title: 'Initializing Secure Console',
-        html: 'Establishing encrypted link...',
-        allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
-    });
-    
-    fetchMerchants().then(() => {
-        Swal.close(); // Closes the popup once data is loaded
-    });
-};
+        Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        fetchMerchants().then(() => { Swal.close(); });
+    };
 </script>
 </body>
 </html>
