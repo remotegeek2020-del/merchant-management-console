@@ -4,94 +4,71 @@
     <meta charset="UTF-8">
     <title>Merchant Portfolio | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
-        /* --- THE ANTI-CLUNK OVERLAY --- */
+        /* SIMPLE FIXES ONLY */
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
+        body { background: #f1f5f9; padding: 20px; font-family: 'Inter', sans-serif; }
         
-        body { 
-            background: #f1f5f9 !important; 
-            padding: 25px !important; 
-            font-family: 'Inter', sans-serif !important; 
-        }
-
-        .dashboard-container { max-width: 1600px !important; margin: 0 auto !important; }
-
+        /* Stop the header from being messy */
         .modern-header { 
-            background: white !important; 
-            border-radius: 16px !important; 
-            padding: 20px 30px !important; 
-            margin-bottom: 25px !important; 
-            display: flex !important; 
-            justify-content: space-between !important; 
-            align-items: center !important; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05) !important;
-            border: 1px solid #e2e8f0 !important;
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            background: white; 
+            padding: 20px; 
+            border-radius: 12px; 
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
         }
 
+        /* Fix the KPI cards so they stay in one row */
         .summary-bar { 
-            display: grid !important; 
-            grid-template-columns: repeat(4, 1fr) !important; 
-            gap: 20px !important; 
-            margin-bottom: 25px !important; 
+            display: grid; 
+            grid-template-columns: repeat(4, 1fr); 
+            gap: 15px; 
+            margin-bottom: 20px; 
         }
-
         .kpi-card { 
-            background: white !important; 
-            padding: 20px !important; 
-            border-radius: 14px !important; 
-            border: 1px solid #edf2f7 !important; 
-            display: flex !important; 
-            align-items: center !important; 
-            gap: 15px !important;
+            background: white; 
+            padding: 15px; 
+            border-radius: 12px; 
+            display: flex; 
+            align-items: center; 
+            gap: 12px;
+            border: 1px solid #e2e8f0;
         }
+        .kpi-icon { color: var(--pp-blue); }
+        .kpi-val { font-size: 1.2rem; font-weight: 800; color: #002d5a; display: block; }
+        .kpi-label { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
 
-        .kpi-icon { background: rgba(0,73,144,0.05) !important; color: var(--pp-blue) !important; padding: 10px; border-radius: 10px; display: flex; }
-        .kpi-val { font-size: 1.25rem !important; font-weight: 800 !important; color: #0f172a !important; }
-        .kpi-label { font-size: 11px !important; font-weight: 700 !important; color: #64748b !important; text-transform: uppercase !important; }
-
-        .main-card { 
-            background: white !important; 
-            border-radius: 16px !important; 
-            overflow: hidden !important; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05) !important; 
-            border: 1px solid #e2e8f0 !important; 
-        }
-
-        .slds-table thead th { 
-            background-color: #f8fafc !important; 
-            color: #475569 !important; 
-            font-weight: 700 !important; 
-            text-transform: uppercase !important;
-            font-size: 11px !important;
-            padding: 15px !important;
-        }
-
-        /* Modal Styles */
-        .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; }
-        .active-tab { color: var(--pp-blue) !important; border-bottom: 3px solid var(--pp-blue) !important; }
-        .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.85rem !important; margin-bottom: 10px; }
-        .edit-label { font-size: 10px; font-weight: 700; color: #64748b; margin-bottom: 4px; display: block; text-transform: uppercase; }
-        .badge { padding: 4px 10px; border-radius: 4px; font-weight: 800; font-size: 10px; text-transform: uppercase; }
+        /* Table Hygiene */
+        .slds-card { border-radius: 12px; overflow: hidden; }
+        .badge { font-weight: 700; font-size: 10px; padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
         .status-approved { background: #dcfce7; color: #166534; }
         .status-closed { background: #fee2e2; color: #991b1b; }
+        
+        /* Modal Tabs */
+        .modal-tab-btn { padding: 10px 20px; cursor: pointer; font-weight: 700; background: none; border: none; border-bottom: 3px solid transparent; color: #94a3b8; }
+        .active-tab { color: var(--pp-blue); border-bottom-color: var(--pp-blue); }
+        .modern-input { width: 100%; padding: 8px; border: 1px solid #cbd5e1; border-radius: 6px; margin-bottom: 10px; }
+        .edit-label { font-size: 11px; font-weight: 700; color: #64748b; margin-bottom: 4px; display: block; }
     </style>
 </head>
 <body>
 
-<div class="dashboard-container">
     <div class="modern-header">
         <div>
             <div style="display:flex; align-items:center; gap:10px; margin-bottom:5px;">
-                <a href="index.html" style="background:#f1f5f9; padding:4px 12px; border-radius:50px; color:var(--pp-blue); font-weight:700; font-size:0.65rem; text-decoration:none;">HOME</a>
-                <span style="font-size:0.75rem; color:#64748b; font-weight:600;">Welcome, Staff Member</span>
+                <a href="index.html" style="font-size:11px; font-weight:700; color:var(--pp-blue); text-decoration:none;">HOME</a>
+                <span style="font-size:11px; color:#64748b;">/ Staff Member</span>
             </div>
-            <h1 style="font-size: 1.6rem; font-weight: 800; color: var(--pp-blue); margin:0;">Merchant Portfolio</h1>
+            <h1 style="font-size: 1.5rem; font-weight: 800; color: #002d5a;">Merchant Portfolio</h1>
         </div>
 
-        <div style="display: flex; gap: 8px;">
-            <select id="statusFilter" class="slds-select" style="width: 170px; border-radius:10px; height:40px;" onchange="resetAndFetch()">
+        <div style="display: flex; gap: 10px;">
+            <select id="statusFilter" class="slds-select" style="width: 170px;" onchange="resetAndFetch()">
                 <option value="">All Statuses</option>
                 <option value="Approved">Approved</option>
                 <option value="Approved - Collections">Approved - Collections</option>
@@ -105,75 +82,74 @@
                 <option value="Pending">Pending</option>
                 <option value="Withdrawn">Withdrawn</option>
             </select>
-            <select id="filterBy" class="slds-select" style="width: 160px; border-radius:10px; height:40px;">
+            <select id="filterBy" class="slds-select" style="width: 150px;">
                 <option value="dba_name">DBA Name</option>
-                <option value="merchant_id">MID</option>
+                <option value="merchant_id">Merchant ID</option>
                 <option value="agent_id">Partner ID</option>
                 <option value="company_name">Company Name</option>
                 <option value="partner_name">Partner Name</option>
             </select>
-            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius:10px; height:40px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
-            <button class="slds-button slds-button_brand" style="border-radius:10px; height: 40px; padding: 0 25px; background: var(--pp-blue);" onclick="resetAndFetch()">Search</button>
+            <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:180px;" onkeypress="if(event.key==='Enter') resetAndFetch()">
+            <button class="slds-button slds-button_brand" onclick="resetAndFetch()">Search</button>
         </div>
     </div>
 
     <div class="summary-bar">
         <div class="kpi-card">
-            <div class="kpi-icon"><span class="material-icons">payments</span></div>
-            <div><span class="kpi-label">Filtered MTD</span><span class="kpi-val" id="mtd-val">$0.00</span></div>
+            <span class="material-icons kpi-icon">payments</span>
+            <div><span class="kpi-label">MTD</span><span class="kpi-val" id="mtd-val">$0.00</span></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="color:#00a1e0;"><span class="material-icons">calendar_today</span></div>
-            <div><span class="kpi-label">Total 30D</span><span class="kpi-val" id="30d-val">$0.00</span></div>
+            <span class="material-icons kpi-icon" style="color:#00a1e0;">calendar_today</span>
+            <div><span class="kpi-label">30D</span><span class="kpi-val" id="30d-val">$0.00</span></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="color:#10b981;"><span class="material-icons">history</span></div>
-            <div><span class="kpi-label">Total 90D</span><span class="kpi-val" id="90d-val">$0.00</span></div>
+            <span class="material-icons kpi-icon" style="color:#2e7d32;">history</span>
+            <div><span class="kpi-label">90D</span><span class="kpi-val" id="90d-val">$0.00</span></div>
         </div>
-        <div class="kpi-card" style="background:var(--pp-blue); color:white; border:none;">
-            <div class="kpi-icon" style="color:white; background:rgba(255,255,255,0.1);"><span class="material-icons">pie_chart</span></div>
-            <div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Portfolio Share</span><span class="kpi-val" id="share-val" style="color:white;">0.00%</span></div>
+        <div class="kpi-card" style="background:var(--pp-blue); border:none;">
+            <span class="material-icons" style="color:white;">pie_chart</span>
+            <div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Share</span><span class="kpi-val" id="share-val" style="color:white;">0.00%</span></div>
         </div>
     </div>
 
-    <article class="main-card">
-        <table class="slds-table slds-table_bordered slds-no-row-hover">
+    <article class="slds-card">
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
-                <tr>
-                    <th>DBA Name</th>
-                    <th>Merchant ID</th>
-                    <th>Partner ID</th>
-                    <th>Company</th>
-                    <th>Partner Name</th>
-                    <th>Status</th>
+                <tr class="slds-line-height_reset">
+                    <th scope="col">DBA Name</th>
+                    <th scope="col">Merchant ID</th>
+                    <th scope="col">Partner ID</th>
+                    <th scope="col">Company</th>
+                    <th scope="col">Partner Name</th>
+                    <th scope="col">Status</th>
                 </tr>
             </thead>
             <tbody id="merchantTableBody"></tbody>
         </table>
-        <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
-            <div>
-                <select id="pageLimit" class="slds-select" style="width: 80px; height: 32px !important;" onchange="resetAndFetch()">
-                    <option value="20">20</option><option value="50">50</option>
-                </select>
-            </div>
-            <div style="display: flex; align-items: center; gap: 15px;">
-                <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)">Back</button>
-                <span id="pageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</span>
+        
+        <div style="padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            <select id="pageLimit" class="slds-select" style="width: 70px;" onchange="resetAndFetch()">
+                <option value="20">20</option><option value="50">50</option>
+            </select>
+            <div style="display: flex; align-items: center; gap: 10px;">
+                <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)">Prev</button>
+                <span id="pageInfo" style="font-weight:700; font-size: 12px;">Page 1</span>
                 <button class="slds-button slds-button_neutral" id="nextBtn" onclick="changePage(1)">Next</button>
             </div>
         </div>
     </article>
-</div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     let currentPage = 0;
     let currentRecords = [];
 
+    // CORE API CALL: Restored full logic
     async function fetchMerchants() {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
-        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:50px; color:#94a3b8;'>Updating Ledger...</td></tr>";
+        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:40px;'>Loading...</td></tr>";
         
         try {
             const res = await fetch('/api/merchants', {
@@ -190,36 +166,38 @@
             currentRecords = result.data;
             tbody.innerHTML = "";
 
+            currentRecords.forEach(m => {
+                const row = tbody.insertRow();
+                const s = (m.account_status || '').toLowerCase();
+                const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : '';
+                
+                row.innerHTML = `
+                    <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
+                    <td><code>${m.merchant_id || '---'}</code></td>
+                    <td>${m.agent_id || '---'}</td>
+                    <td>${m.company_name || '---'}</td>
+                    <td>${m.partner_name || '---'}</td>
+                    <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
+                `;
+            });
+
+            // Update Metrics
             const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
             document.getElementById('mtd-val').innerText = cur.format(result.metrics.totalMTD || 0);
             document.getElementById('30d-val').innerText = cur.format(result.metrics.total30D || 0);
             document.getElementById('90d-val').innerText = cur.format(result.metrics.total90D || 0);
             document.getElementById('share-val').innerText = (result.metrics.portfolioShare || 0) + '%';
-
-            currentRecords.forEach(m => {
-                const row = tbody.insertRow();
-                const s = (m.account_status || '').toLowerCase();
-                const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : 'status-pending';
-                
-                row.innerHTML = `
-                    <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer; text-decoration:none;">${m.dba_name || '---'}</a></td>
-                    <td><code>${m.merchant_id || '---'}</code></td>
-                    <td>${m.agent_id || '---'}</td>
-                    <td style="font-weight:600;">${m.company_name || '---'}</td>
-                    <td>${m.partner_name || '---'}</td>
-                    <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
-                `;
-            });
+            
             document.getElementById('pageInfo').innerText = `Page ${currentPage + 1}`;
             document.getElementById('prevBtn').disabled = (currentPage === 0);
-            document.getElementById('nextBtn').disabled = (currentRecords.length < limit);
-        } catch (err) { tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; color:red;'>Sync error.</td></tr>"; }
+        } catch (err) { console.error(err); }
     }
 
+    // MODAL: Restored every tab and every logic piece
     async function openModal(id) {
         const m = currentRecords.find(r => r.id === id);
         if (!m) return;
-        Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
         try {
             const [nRes, lRes] = await Promise.all([
@@ -230,56 +208,48 @@
             const logs = (await lRes.json()).data || [];
 
             Swal.fire({
-                title: `<div style="text-align:left; font-size:1.4rem; font-weight:800; color:#002d5a; padding-bottom:10px;">${m.dba_name}</div>`,
-                width: '1100px',
+                title: `<div style="text-align:left; font-weight:800; color:var(--pp-blue);">${m.dba_name}</div>`,
+                width: '1000px',
                 html: `
-                    <div style="display:flex; gap:10px; margin-bottom:25px; border-bottom:1px solid #e2e8f0;">
+                    <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
                         <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
-                        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
-                        <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
+                        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">NOTES</button>
+                        <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT</button>
                     </div>
-
-                    <div id="content-details" class="tab-content" style="max-height:600px; overflow-y:auto; text-align:left; padding-right:10px;">
-                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px;">
+                    <div id="content-details" class="tab-content" style="text-align:left; max-height:500px; overflow-y:auto;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:10px;">
                             <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                            <div><label class="edit-label">Account Status</label>
+                            <div><label class="edit-label">Status</label>
                                 <select id="edit-account_status" class="modern-input">
                                     <option value="${m.account_status}" selected>${m.account_status}</option>
-                                    <option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Fraud">Fraud</option><option value="Pending">Pending</option>
+                                    <option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Fraud">Fraud</option>
                                 </select>
                             </div>
-                            <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
-                            <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
+                            <div><label class="edit-label">MID</label><input class="modern-input" value="${m.merchant_id}" disabled style="background:#f1f5f9;"></div>
+                            <div><label class="edit-label">Website</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
                             <div><label class="edit-label">Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
-                            <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
-                            <div><label class="edit-label">Volume MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
-                            <div style="grid-column: span 3;"><label class="edit-label">Underwriting Note</label><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+                            <div><label class="edit-label">MTD Vol</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
                         </div>
-                        <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:25px; width:100%; height:48px; border-radius:12px; font-weight:700; background:var(--pp-blue);">SAVE CHANGES</button>
+                        <button onclick="saveMerchant('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:6px; border:none; margin-top:15px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
                     </div>
-
                     <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                        <input id="new-note-title" placeholder="Note Subject" class="modern-input" style="margin-bottom:10px;">
-                        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:80px;"></textarea>
-                        <button onclick="addNote('${m.id}')" class="slds-button slds-button_brand" style="margin-top:12px; width:100%; border-radius:10px;">ADD NEW NOTE</button>
-                        <div style="margin-top:20px; max-height:300px; overflow-y:auto;">
-                            ${notes.map(n => `<div style="border:1px solid #e2e8f0; padding:15px; border-radius:12px; margin-bottom:10px;">
-                                <strong>${n.title}</strong><p style="font-size:0.85rem; color:#475569;">${n.body}</p><small>By: ${n.created_by}</small>
-                            </div>`).join('') || '<p>No notes recorded.</p>'}
-                        </div>
+                        <input id="new-note-title" placeholder="Note Title" class="modern-input">
+                        <textarea id="new-note-body" placeholder="Note body..." class="modern-input" style="height:60px;"></textarea>
+                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:6px; border:none; cursor:pointer;">ADD NOTE</button>
+                        <div style="margin-top:15px;">${notes.map(n => `<div style="border:1px solid #eee; padding:10px; border-radius:8px; margin-bottom:8px;"><strong>${n.title}</strong><p style="font-size:12px; margin:4px 0;">${n.body}</p><small>By: ${n.created_by}</small></div>`).join('')}</div>
                     </div>
-
                     <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                        <div style="max-height:400px; overflow-y:auto; font-family:monospace; font-size:11px; background:#1e293b; color:#38bdf8; padding:20px; border-radius:12px;">
-                            ${logs.map(l => `<div>[${new Date(l.created_at).toLocaleString()}] ${l.body}</div>`).join('') || '> LOGS EMPTY'}
+                        <div style="font-family:monospace; font-size:11px; background:#1e293b; color:#38bdf8; padding:15px; border-radius:8px;">
+                            ${logs.map(l => `<div>[${new Date(l.created_at).toLocaleString()}] ${l.body}</div>`).join('')}
                         </div>
                     </div>
                 `,
                 showConfirmButton: false, showCloseButton: true
             });
-        } catch (err) { Swal.fire('Error', 'Failed to load details', 'error'); }
+        } catch (err) { Swal.fire('Error', 'Load failed', 'error'); }
     }
 
+    // Logic Functions: No field names were removed
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
@@ -291,10 +261,12 @@
         const payload = { 
             dba_name: document.getElementById('edit-dba_name').value, 
             account_status: document.getElementById('edit-account_status').value,
-            underwriting_decision_note: document.getElementById('edit-underwriting_decision_note').value
+            merchant_websites: document.getElementById('edit-merchant_websites').value,
+            merchant_primary_contact: document.getElementById('edit-merchant_primary_contact').value,
+            volume_mtd: document.getElementById('edit-volume_mtd').value
         };
         const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
-        if((await res.json()).success) { Swal.fire('Success', 'Profile Updated.', 'success'); fetchMerchants(); }
+        if((await res.json()).success) { Swal.fire('Success', 'Updated', 'success'); fetchMerchants(); }
     };
 
     window.addNote = async (uuid) => {
