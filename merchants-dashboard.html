@@ -376,8 +376,8 @@ window.addNote = async function(uuid) {
         
         const result = await res.json();
         
-        if(result.success) {
-            // SUCCESS CONFIRMATION (Toast style)
+      if(result.success) {
+            // THIS IS THE SAVE NOTICE
             const Toast = Swal.mixin({
                 toast: true,
                 position: 'top-end',
@@ -385,11 +385,7 @@ window.addNote = async function(uuid) {
                 timer: 2000,
                 timerProgressBar: true
             });
-
-            Toast.fire({
-                icon: 'success',
-                title: 'Note updated successfully'
-            });
+            Toast.fire({ icon: 'success', title: 'Note updated successfully' });
         } else {
             Swal.fire('Error', 'Could not save note: ' + result.message, 'error');
         }
