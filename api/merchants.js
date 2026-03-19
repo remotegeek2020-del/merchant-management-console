@@ -5,20 +5,18 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
-        // Add this inside the try/catch block in api/merchants.js
-if (action === 'update_note') {
-    const { note_id, title, body } = req.body;
-    const { error } = await supabase
-        .from('merchant_notes')
-        .update({ title, body, created_at: new Date() }) // Update content and timestamp
-        .eq('id', note_id);
+        if (action === 'update_note') {
+            const { note_id, title, body } = req.body;
+            const { error } = await supabase
+                .from('merchant_notes')
+                .update({ title, body, created_at: new Date() })
+                .eq('id', note_id);
 
-    if (error) throw error;
-    return res.status(200).json({ success: true });
-}
-        // --- ACTION: LIST (MERGED WITH VIEW LOGIC) ---
-      if (action === 'list') {
-            // 1. Fetch Merchant Data from the View
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'list') {
             const dataReq = supabase
                 .from('merchant_portfolio_view')
                 .select('*', { count: 'exact' });
@@ -37,14 +35,12 @@ if (action === 'update_note') {
                 dataReq.ilike(targetCol, `%${query}%`);
             }
 
-            // 2. Execute Data Fetch
             const { data, count, error: dataError } = await dataReq
                 .range(page * limit, (page + 1) * limit - 1)
                 .order('created_at', { ascending: false });
 
             if (dataError) throw dataError;
 
-            // 3. Fetch Metrics (Wrapped so it doesn't crash the table if it fails)
             let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
             try {
                 const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
@@ -57,7 +53,6 @@ if (action === 'update_note') {
                 console.error("Metrics RPC Failed, but continuing...", rpcErr);
             }
 
-            // 4. Format for UI
             const formattedData = (data || []).map(m => ({
                 ...m,
                 company_name: m.company_name || m.agent_name || '---',
@@ -77,7 +72,6 @@ if (action === 'update_note') {
             });
         }
 
-        // --- ACTION: UPDATE MERCHANT WITH DETAILED AUDIT LOGGING ---
         if (action === 'update') {
             const { data: oldData, error: fetchError } = await supabase
                 .from('merchants')
@@ -91,7 +85,6 @@ if (action === 'update_note') {
             for (let key in payload) {
                 let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
                 let newVal = payload[key] ? String(payload[key]).trim() : "empty";
-
                 if (oldVal !== newVal) {
                     const label = key.replace(/_/g, ' ').toUpperCase();
                     changes.push(`${label}: "${oldVal}" → "${newVal}"`);
@@ -109,11 +102,9 @@ if (action === 'update_note') {
                     created_by: user || 'System'
                 }]);
             }
-
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: GLOBAL ACTIVITY LOGS ---
         if (action === 'global_logs') {
             const { data, error } = await supabase
                 .from('merchant_notes')
@@ -125,7 +116,6 @@ if (action === 'update_note') {
             return res.status(200).json({ success: true, data });
         }
 
-        // --- NOTE ACTIONS (MANUAL & SYSTEM) ---
         if (action === 'get_notes') {
             const { merchant_uuid, type } = req.body;
             let queryBuilder = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
@@ -141,12 +131,9 @@ if (action === 'update_note') {
             return res.status(200).json({ success: true, data });
         }
 
-       // Locate this block in your backend API file
-// --- ACTION: ADD NOTE ---
         if (action === 'add_note') {
             const { merchant_uuid, title, body, created_by, userId } = req.body;
-
-            const { data, error } = await supabase
+            const { error } = await supabase
                 .from('merchant_notes')
                 .insert([{ 
                     merchant_id: merchant_uuid, 
@@ -159,23 +146,7 @@ if (action === 'update_note') {
             return res.status(200).json({ success: true });
         }
 
-        // Catch-all for unknown actions
         return res.status(400).json({ success: false, message: "Unknown action" });
-
-    } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
-    }
-}
-
-    // 3. Handle the response
-    if (error) {
-        console.error("Supabase Error:", error);
-        return res.status(400).json({ success: false, message: error.message });
-    }
-
-    return res.json({ success: true });
-}
 
     } catch (err) {
         console.error("API Error:", err.message);
