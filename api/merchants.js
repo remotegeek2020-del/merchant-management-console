@@ -116,13 +116,11 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-     if (action === 'get_notes') {
+   if (action === 'get_notes') {
     const { merchant_uuid, type } = req.body;
-    
-    // We remove the app_users join to ensure the query actually runs
     let queryBuilder = supabase
         .from('merchant_notes')
-        .select('*') 
+        .select('*') // Simple select to ensure it doesn't fail
         .eq('merchant_id', merchant_uuid);
 
     if (type === 'manual') {
@@ -132,10 +130,7 @@ export default async function handler(req, res) {
     }
 
     const { data, error } = await queryBuilder.order('created_at', { ascending: false });
-    
     if (error) throw error;
-
-    // We send the data back as-is. We will handle the "Staff" vs "Name" logic in the frontend.
     return res.status(200).json({ success: true, data: data || [] });
 }
 
