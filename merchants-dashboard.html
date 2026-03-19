@@ -329,14 +329,15 @@ window.addNote = async function(uuid) {
         
         const result = await res.json();
         if (result.success) {
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+            // THIS IS THE NEW NOTE NOTICE
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 1500,
+                timerProgressBar: true
+            });
             await Toast.fire({ icon: 'success', title: 'New note created' });
-            openModal(uuid); 
-        } else { throw new Error(result.message); }
-    } catch (err) { 
-        Swal.fire('Error', 'Failed to add note: ' + err.message, 'error'); 
-    }
-};
         
         const result = await res.json();
         
