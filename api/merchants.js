@@ -8,6 +8,25 @@ export default async function handler(req, res) {
     
     
     {
+        // --- ACTION: ADD ATTACHMENT RECORD ---
+        if (action === 'add_attachment') {
+            const { merchant_id, file_name, file_path, file_type, file_size, uploaded_by } = req.body;
+            
+            const { data, error } = await supabase
+                .from('merchant_attachments')
+                .insert([{
+                    merchant_id,
+                    file_name,
+                    file_path,
+                    file_type,
+                    file_size,
+                    uploaded_by
+                }]);
+
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+        
         if (action === 'update_note') {
             const { note_id, title, body } = req.body;
             const { error } = await supabase
