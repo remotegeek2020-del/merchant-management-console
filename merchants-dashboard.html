@@ -176,6 +176,7 @@
                     <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
                     <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
                     <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
+                    <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
                 </div>
 
                 <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
@@ -264,7 +265,20 @@
                         </div>
                     `).join('')}</div>
                 </div>
-
+<div id="content-attachments" class="tab-content" style="display:none; text-align:left;">
+    <div style="background:#f8fafc; border:2px dashed #cbd5e1; border-radius:12px; padding:30px; text-align:center; margin-bottom:20px;">
+        <span class="material-icons" style="font-size:48px; color:#94a3b8; margin-bottom:10px;">cloud_upload</span>
+        <p style="font-weight:700; color:#475569; margin-bottom:15px;">Upload Merchant Documents</p>
+        <input type="file" id="fileInput" style="display:none;" onchange="handleFileUpload('${m.id}')">
+        <button onclick="document.getElementById('fileInput').click()" class="slds-button slds-button_brand" style="background:var(--pp-blue); border-radius:8px;">
+            SELECT FILE
+        </button>
+        <p style="font-size:10px; color:#94a3b8; margin-top:10px;">PDF, PNG, JPG, or CSV (Max 10MB)</p>
+    </div>
+    <div id="attachments-list" style="display:grid; gap:10px;">
+        <p style="text-align:center; color:#94a3b8; padding:20px;">No attachments found.</p>
+    </div>
+</div>
                 <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
                     <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
                         ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
