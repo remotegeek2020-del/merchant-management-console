@@ -116,10 +116,10 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-  if (action === 'get_notes') {
+        if (action === 'get_notes') {
             const { merchant_uuid, type } = req.body;
             
-            // 1. Fetch the notes and the user names in one go
+            // Fetch notes and attempt to join app_users for the name
             let queryBuilder = supabase
                 .from('merchant_notes')
                 .select('*, app_users(full_name)')
@@ -135,15 +135,15 @@ export default async function handler(req, res) {
             
             if (error) throw error;
 
-            // 2. Format the data so it always has a name to display
+            // Map the data so "display_name" is always available for the frontend
             const formattedNotes = (data || []).map(n => ({
                 ...n,
-                // Logic: If joined name exists, use it. If not, use the raw string (like 'Staff').
-                display_name: n.app_users?.full_name || n.created_by || 'Unknown'
+                display_name: n.app_users?.full_name || n.created_by || 'Staff'
             }));
 
             return res.status(200).json({ success: true, data: formattedNotes });
         }
+
         if (action === 'add_note') {
             const { merchant_uuid, title, body, created_by, userId } = req.body;
             const { error } = await supabase
