@@ -5,9 +5,8 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
-        // --- ACTION: LIST MERCHANTS ---
-        if (action === 'list') {
-            let dataReq = supabase.from('merchants').select(`
+    // api/merchants.js -> Inside action === 'list'
+let dataReq = supabase.from('merchants').select(`
     *,
     agent_identifiers!inner (
         agents!inner ( 
@@ -21,23 +20,23 @@ export default async function handler(req, res) {
     )
 `, { count: 'exact' });
 
-            if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
+if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
 
-            if (query && filterBy) {
-                if (filterBy === 'dba_name') {
-                    dataReq = dataReq.ilike('dba_name', `%${query}%`);
-                } else if (filterBy === 'merchant_id') {
-                    dataReq = dataReq.eq('merchant_id', query);
-                } else if (filterBy === 'agent_id') {
-                    dataReq = dataReq.eq('agent_id', query);
-                } 
-                // SURGICAL FIX: Filter through deep relationship paths for Company and Partner
-                else if (filterBy === 'company_name') {
-                    dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                } else if (filterBy === 'partner_name') {
-                    dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-                }
-            }
+if (query && filterBy) {
+    if (filterBy === 'dba_name') {
+        dataReq = dataReq.ilike('dba_name', `%${query}%`);
+    } else if (filterBy === 'merchant_id') {
+        dataReq = dataReq.eq('merchant_id', query);
+    } else if (filterBy === 'agent_id') {
+        dataReq = dataReq.eq('agent_id', query);
+    } 
+    // Surgical path filtering using !inner logic
+    else if (filterBy === 'company_name') {
+        dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+    } else if (filterBy === 'partner_name') {
+        dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+    }
+}
 
             const [dataRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
