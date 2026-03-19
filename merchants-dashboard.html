@@ -319,6 +319,19 @@
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
     window.onload = fetchMerchants;
+    window.onload = () => {
+    // Shows a quick loader before the data hits the screen
+    Swal.fire({
+        title: 'Initializing Secure Console',
+        html: 'Establishing encrypted link...',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+    
+    fetchMerchants().then(() => {
+        Swal.close(); // Closes the popup once data is loaded
+    });
+};
 </script>
 </body>
 </html>
