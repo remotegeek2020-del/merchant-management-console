@@ -259,7 +259,7 @@
                                 <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
                                 <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto;">${n.body}</textarea>
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-                                    <small style="color:#64748b;">By: ${n.created_by}</small>
+                                    <small style="color:#64748b;">By: ${n.display_name}</small>
                                     <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
                                 </div>
                             </div>
