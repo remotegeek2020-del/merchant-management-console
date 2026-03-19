@@ -181,74 +181,113 @@
             }
         }
 
-        async function openModal(id) {
+       async function openModal(id) {
             const m = currentRecords.find(r => r.id === id);
             if (!m) return;
 
-            // 1. Show Loading State
-            Swal.fire({
-                title: 'Syncing Ledger History...',
-                didOpen: () => { Swal.showLoading(); }
-            });
+            Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
 
             try {
-                // 2. Fetch Notes from API
-                const res = await fetch('/api/merchants', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'get_notes', 
-                        merchant_uuid: m.id 
-                    })
-                });
-                const result = await res.json();
-                const notes = result.data || [];
+                // Fetch both Manual and System notes
+                const [notesRes, logsRes] = await Promise.all([
+                    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+                    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
+                ]);
                 
-                // 3. Format Notes HTML
-                const notesHtml = notes.length > 0 
-                    ? notes.map(n => `<div style="text-align:left; border-bottom:1px solid #e2e8f0; padding:12px 0;">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
-                            <strong style="font-size:0.85rem; color:#002d5a;">${n.title}</strong>
-                            <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">${new Date(n.created_at).toLocaleDateString()}</span>
-                        </div>
-                        <p style="margin:0; font-size:0.85rem; color:#475569; line-height:1.4;">${n.body}</p>
-                        <div style="margin-top:4px; font-size:0.65rem; color:var(--pp-blue); font-weight:700; text-transform:uppercase;">Entry by: ${n.created_by}</div>
-                      </div>`).join('')
-                    : '<div style="padding:40px; text-align:center; color:#94a3b8;"><span class="material-icons" style="font-size:48px; display:block; margin-bottom:10px;">inventory_2</span>No history found for this record.</div>';
+                const notes = (await notesRes.json()).data || [];
+                const logs = (await logsRes.json()).data || [];
 
-                // 4. Launch the Detail Popup
                 Swal.fire({
-                    title: `<div style="text-align:left; font-size:1.4rem; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
+                    title: `<div style="text-align:left; font-size:1.2rem; font-weight:800;">${m.dba_name}</div>`,
+                    width: '750px',
                     html: `
-                        <div style="text-align:left; font-size:0.9rem; display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#f1f5f9; padding:18px; border-radius:15px; margin-bottom:20px; border:1px solid #e2e8f0;">
-                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Merchant ID</label><br><strong style="color:#0f172a;">${m.merchant_id}</strong></div>
-                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Status</label><br><strong style="color:#0f172a;">${m.account_status}</strong></div>
-                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Company</label><br><strong style="color:#0f172a;">${m.company_name}</strong></div>
-                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Partner</label><br><strong style="color:#0f172a;">${m.partner_name}</strong></div>
+                        <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-bottom:20px;">
+                            <button onclick="switchTab('details')" id="tab-details" style="padding:10px 20px; border:none; background:none; font-weight:700; color:var(--pp-blue); border-bottom:3px solid var(--pp-blue); cursor:pointer;">ACCOUNT DETAILS</button>
+                            <button onclick="switchTab('notes')" id="tab-notes" style="padding:10px 20px; border:none; background:none; font-weight:700; color:#64748b; cursor:pointer;">INTERNAL NOTES</button>
+                            <button onclick="switchTab('audit')" id="tab-audit" style="padding:10px 20px; border:none; background:none; font-weight:700; color:#64748b; cursor:pointer;">AUDIT HISTORY</button>
                         </div>
-                        <div style="text-align:left;">
-                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
-                                <span class="material-icons" style="font-size:18px; color:var(--pp-blue);">history</span>
-                                <h3 style="font-weight:800; font-size:1rem; color:#002d5a; margin:0;">Activity History</h3>
+
+                        <div id="content-details" class="tab-content">
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; text-align:left;">
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">DBA NAME</label><input id="edit-dba" class="slds-input" value="${m.dba_name || ''}"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">STATUS</label>
+                                    <select id="edit-status" class="slds-select">
+                                        <option value="${m.account_status}" selected>${m.account_status}</option>
+                                        <option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Pending">Pending</option>
+                                    </select>
+                                </div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">MERCHANT ID</label><input id="edit-mid" class="slds-input" value="${m.merchant_id || ''}"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">AGENT ID</label><input id="edit-agent" class="slds-input" value="${m.agent_id || ''}"></div>
                             </div>
-                            <div style="max-height:300px; overflow-y:auto; padding-right:10px; border-top:2px solid #f1f5f9;">${notesHtml}</div>
+                            <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:20px; width:100%;">UPDATE MERCHANT RECORD</button>
+                        </div>
+
+                        <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
+                            <div style="margin-bottom:15px;">
+                                <input id="new-note-title" placeholder="Note Title" class="slds-input" style="margin-bottom:8px;">
+                                <textarea id="new-note-body" placeholder="Write internal note..." class="slds-textarea" style="height:60px;"></textarea>
+                                <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:8px; width:100%;">SAVE NOTE</button>
+                            </div>
+                            <div style="max-height:200px; overflow-y:auto;">
+                                ${notes.map(n => `<div style="padding:10px; border-bottom:1px solid #eee;"><strong>${n.title}</strong><br><small>${n.body}</small></div>`).join('') || 'No notes.'}
+                            </div>
+                        </div>
+
+                        <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
+                            <div style="max-height:350px; overflow-y:auto; font-family:monospace; font-size:11px;">
+                                ${logs.map(l => `<div style="padding:8px; background:#f8fafc; margin-bottom:5px; border-radius:4px;">
+                                    <span style="color:var(--pp-blue)">[${new Date(l.created_at).toLocaleDateString()}]</span> ${l.body.replace(/\n/g, '<br>')}
+                                </div>`).join('') || 'No history.'}
+                            </div>
                         </div>
                     `,
-                    width: '650px',
-                    confirmButtonText: 'CLOSE CONSOLE',
-                    confirmButtonColor: '#004990',
-                    buttonsStyling: true,
-                    customClass: {
-                        confirmButton: 'slds-button slds-button_brand',
-                        popup: 'border-radius-20'
-                    }
+                    showConfirmButton: false,
+                    showCloseButton: true
                 });
-
-            } catch (err) {
-                console.error(err);
-                Swal.fire('Sync Error', 'Could not retrieve ledger history.', 'error');
-            }
+            } catch (err) { Swal.fire('Error', err.message, 'error'); }
         }
+
+        // Helper: Switch Tabs
+        window.switchTab = function(tab) {
+            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+            document.querySelectorAll('[id^="tab-"]').forEach(t => { t.style.color = '#64748b'; t.style.borderBottom = 'none'; });
+            
+            document.getElementById('content-' + tab).style.display = 'block';
+            document.getElementById('tab-' + tab).style.color = 'var(--pp-blue)';
+            document.getElementById('tab-' + tab).style.borderBottom = '3px solid var(--pp-blue)';
+        };
+
+        // Helper: Save Merchant Changes
+        window.saveMerchant = async function(uuid) {
+            const payload = {
+                dba_name: document.getElementById('edit-dba').value,
+                account_status: document.getElementById('edit-status').value,
+                merchant_id: document.getElementById('edit-mid').value,
+                agent_id: document.getElementById('edit-agent').value
+            };
+            
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'update', id: uuid, payload, user: sessionStorage.getItem('pp_userid') })
+            });
+            if((await res.json()).success) {
+                Swal.fire('Success', 'Record updated and audit log created.', 'success');
+                fetchMerchants();
+            }
+        };
+
+        // Helper: Add Manual Note
+        window.addNote = async function(uuid) {
+            const title = document.getElementById('new-note-title').value;
+            const body = document.getElementById('new-note-body').value;
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body, user: sessionStorage.getItem('pp_userid') })
+            });
+            if((await res.json()).success) openModal(uuid); // Refresh modal
+        };
 
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
