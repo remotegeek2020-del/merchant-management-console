@@ -247,11 +247,15 @@
                     </div>
 
                     <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                        <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
-                            <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
-                            <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
-                            <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
-                        </div>
+    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
+        <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
+        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
+        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
+    </div>
+    <div id="notes-list">
+        ${notes.map(n => ` ... `).join('')}
+    </div>
+</div> ```
                         <div id="notes-list">${notes.map(n => `
                             <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
                                 <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
@@ -397,7 +401,7 @@ window.addNote = async function(uuid) {
 
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
-    window.onload = fetchMerchants;
+ 
     window.onload = () => {
     // Shows a quick loader before the data hits the screen
     Swal.fire({
