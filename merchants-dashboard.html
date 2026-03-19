@@ -7,23 +7,61 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --glass: rgba(255, 255, 255, 0.9); }
-        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); padding: 25px; font-family: 'Inter', sans-serif; min-height: 100vh; }
-        .modern-header { background: var(--glass); backdrop-filter: blur(10px); border-radius: 20px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 10px 30px rgba(0,0,0,0.05); }
-        .summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin-bottom: 25px; }
-        .kpi-card { background: var(--glass); padding: 20px; border-radius: 18px; border: 1px solid rgba(255,255,255,0.4); box-shadow: 0 8px 20px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 15px; transition: transform 0.2s; }
-        .kpi-card:hover { transform: translateY(-3px); }
-        .kpi-icon { background: rgba(0,73,144,0.1); color: var(--pp-blue); padding: 12px; border-radius: 12px; }
-        .kpi-val { font-size: 1.3rem; font-weight: 800; color: #002d5a; display: block; }
-        .kpi-label { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge { font-weight: 800; font-size: 9px; padding: 4px 12px; border-radius: 50px; text-transform: uppercase; }
-        .status-approved { background: #dcfce7; color: #166534; }
-        .status-closed { background: #fee2e2; color: #991b1b; }
-        .status-pending { background: #fef9c3; color: #854d0e; }
-        /* Style for Scrollbar in Modal */
-        .swal2-html-container::-webkit-scrollbar { width: 6px; }
-        .swal2-html-container::-webkit-scrollbar-track { background: #f1f1f1; }
-        .swal2-html-container::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
+     :root { 
+        --pp-blue: #004990; 
+        --pp-accent: #00a1e0; 
+        --border-radius: 12px;
+        --card-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    }
+    .modal-tab-btn {
+        padding: 14px 24px;
+        border: none;
+        background: none;
+        font-weight: 700;
+        font-size: 0.75rem;
+        color: #94a3b8;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        border-bottom: 3px solid transparent;
+        letter-spacing: 0.8px;
+    }
+    .modal-tab-btn.active-tab {
+        color: var(--pp-blue) !important;
+        border-bottom: 3px solid var(--pp-blue) !important;
+    }
+    .field-group-title {
+        grid-column: span 3;
+        font-size: 0.65rem;
+        font-weight: 900;
+        color: var(--pp-blue);
+        text-transform: uppercase;
+        letter-spacing: 1.2px;
+        margin-top: 15px;
+        padding-bottom: 5px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    .edit-label {
+        font-size: 10px;
+        font-weight: 700;
+        color: #64748b;
+        margin-bottom: 5px;
+        display: block;
+    }
+    .modern-input {
+        border-radius: 8px !important;
+        border: 1px solid #cbd5e1 !important;
+        font-size: 0.85rem !important;
+        padding: 8px 12px !important;
+        background: white;
+    }
+    .note-card {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 16px;
+        padding: 18px;
+        margin-bottom: 15px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
     </style>
 </head>
 <body>
@@ -175,100 +213,98 @@
         }
     }
 
- async function openModal(id) {
+async function openModal(id) {
         const m = currentRecords.find(r => r.id === id);
         if (!m) return;
 
-        Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: 'Syncing Secure Ledger...', didOpen: () => { Swal.showLoading(); } });
 
         try {
-            const [notesRes, logsRes] = await Promise.all([
+            const [nRes, lRes] = await Promise.all([
                 fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
                 fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
             ]);
             
-            const notes = (await notesRes.json()).data || [];
-            const logs = (await logsRes.json()).data || [];
+            const notes = (await nRes.json()).data || [];
+            const logs = (await lRes.json()).data || [];
 
             Swal.fire({
-                title: `<div style="text-align:left; font-size:1.4rem; font-weight:800; color:#002d5a; padding-bottom:10px;">${m.dba_name}</div>`,
+                title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
                 width: '1100px',
-                padding: '2rem',
                 html: `
-                    <div style="display:flex; gap:10px; margin-bottom:25px; border-bottom:1px solid #e2e8f0;">
-                        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+                    <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
+                        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">ACCOUNT DETAILS</button>
                         <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
                         <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                         <button onclick="switchTab('files')" id="tab-files" class="modal-tab-btn">ATTACHMENTS</button>
                     </div>
 
-                    <div id="content-details" class="tab-content" style="max-height:650px; overflow-y:auto;">
-                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px; text-align:left;">
+                    <div id="content-details" class="tab-content" style="max-height:650px; overflow-y:auto; padding-right:15px;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; text-align:left;">
                             
+                            <div class="field-group-title">Key Identifiers (Locked)</div>
+                            <div><label class="edit-label">Merchant ID</label><input class="slds-input modern-input" value="${m.merchant_id}" disabled style="background:#f1f5f9;"></div>
+                            <div><label class="edit-label">Partner ID</label><input class="slds-input modern-input" value="${m.agent_id}" disabled style="background:#f1f5f9;"></div>
+                            <div><label class="edit-label">Status ID</label><input class="slds-input modern-input" value="${m.status_id || ''}" disabled style="background:#f1f5f9;"></div>
+
+                            <div class="field-group-title">Primary Information</div>
                             <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="slds-input modern-input" value="${m.dba_name || ''}"></div>
                             <div><label class="edit-label">Account Status</label>
                                 <select id="edit-account_status" class="slds-select modern-input">
                                     <option value="${m.account_status}" selected>${m.account_status}</option>
-                                    <option value="Approved">Approved</option>
-                                    <option value="Approved - Collections">Approved - Collections</option>
-                                    <option value="Closed">Closed</option>
-                                    <option value="Closed - Collections">Closed - Collections</option>
-                                    <option value="Closed - Risk">Closed - Risk</option>
-                                    <option value="Collections">Collections</option>
-                                    <option value="Declined">Declined</option>
-                                    <option value="Enrollment">Enrollment</option>
-                                    <option value="Fraud">Fraud</option>
-                                    <option value="Pending">Pending</option>
-                                    <option value="Withdrawn">Withdrawn</option>
+                                    <option value="Approved">Approved</option><option value="Approved - Collections">Approved - Collections</option>
+                                    <option value="Closed">Closed</option><option value="Closed - Collections">Closed - Collections</option>
+                                    <option value="Closed - Risk">Closed - Risk</option><option value="Collections">Collections</option>
+                                    <option value="Declined">Declined</option><option value="Enrollment">Enrollment</option>
+                                    <option value="Fraud">Fraud</option><option value="Pending">Pending</option><option value="Withdrawn">Withdrawn</option>
                                 </select>
                             </div>
-                            <div><label class="edit-label">Merchant ID (Locked)</label><input class="slds-input modern-input" value="${m.merchant_id || ''}" disabled style="background:#f1f5f9;"></div>
-                            
-                            <div><label class="edit-label">Email</label><input id="edit-email" class="slds-input modern-input" value="${m.email || ''}"></div>
-                            <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="slds-input modern-input" value="${m.merchant_phone || ''}"></div>
-                            <div><label class="edit-label">Contact</label><input id="edit-merchant_primary_contact" class="slds-input modern-input" value="${m.merchant_primary_contact || ''}"></div>
-                            
+                            <div><label class="edit-label">Merchant Website</label><input id="edit-merchant_websites" class="slds-input modern-input" value="${m.merchant_websites || ''}"></div>
+                            <div><label class="edit-label">Contact Person</label><input id="edit-merchant_primary_contact" class="slds-input modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                            <div><label class="edit-label">Email Address</label><input id="edit-email" class="slds-input modern-input" value="${m.email || ''}"></div>
+                            <div><label class="edit-label">Phone Number</label><input id="edit-merchant_phone" class="slds-input modern-input" value="${m.merchant_phone || ''}"></div>
+
+                            <div class="field-group-title">Volume & Performance (MTD / 30D / 90D)</div>
+                            <div><label class="edit-label">Current MTD Volume</label><input id="edit-volume_mtd" class="slds-input modern-input" value="${m.volume_mtd || ''}"></div>
+                            <div><label class="edit-label">30-Day Volume</label><input id="edit-volume_30_day" class="slds-input modern-input" value="${m.volume_30_day || ''}"></div>
+                            <div><label class="edit-label">90-Day Volume</label><input id="edit-volume_90_day" class="slds-input modern-input" value="${m.volume_90_day || ''}"></div>
+                            <div><label class="edit-label">Total Volume</label><input id="edit-volume" class="slds-input modern-input" value="${m.volume || ''}"></div>
+                            <div><label class="edit-label">Last Batch Date</label><input id="edit-last_batch_date" class="slds-input modern-input" value="${m.last_batch_date || ''}"></div>
+                            <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="slds-input modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
+
+                            <div class="field-group-title">Technical Flags & Processing</div>
                             <div><label class="edit-label">Processor</label><input id="edit-processor" class="slds-input modern-input" value="${m.processor || ''}"></div>
                             <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="slds-input modern-input" value="${m.processor_platform || ''}"></div>
-                            <div><label class="edit-label">Source</label><input id="edit-source" class="slds-input modern-input" value="${m.source || ''}"></div>
-
-                            <div><label class="edit-label">Volume MTD</label><input id="edit-volume_mtd" class="slds-input modern-input" value="${m.volume_mtd || ''}"></div>
-                            <div><label class="edit-label">Volume 30D</label><input id="edit-volume_30_day" class="slds-input modern-input" value="${m.volume_30_day || ''}"></div>
-                            <div><label class="edit-label">Volume 90D</label><input id="edit-volume_90_day" class="slds-input modern-input" value="${m.volume_90_day || ''}"></div>
-
-                            <div><label class="edit-label">Enrollment Date</label><input id="edit-enrollment_date" class="slds-input modern-input" value="${m.enrollment_date || ''}"></div>
-                            <div><label class="edit-label">Approved Date</label><input id="edit-approved_date" class="slds-input modern-input" value="${m.approved_date || ''}"></div>
-                            <div><label class="edit-label">Last Batch</label><input id="edit-last_batch_date" class="slds-input modern-input" value="${m.last_batch_date || ''}"></div>
-
+                            <div><label class="edit-label">Gateway ID</label><input id="edit-gateway_account_id" class="slds-input modern-input" value="${m.gateway_account_id || ''}"></div>
                             <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="slds-input modern-input" value="${m.is_edge_enabled || ''}"></div>
                             <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="slds-input modern-input" value="${m.is_pci_compliant || ''}"></div>
-                            <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="slds-input modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
-                            
-                            <div style="grid-column: span 3;"><label class="edit-label">Underwriting Note</label><textarea id="edit-underwriting_decision_note" class="slds-textarea modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+                            <div><label class="edit-label">IS Mobile</label><input id="edit-is_mobile" class="slds-input modern-input" value="${m.is_mobile || ''}"></div>
+
+                            <div class="field-group-title">Underwriting & Compliance</div>
+                            <div style="grid-column: span 3;"><label class="edit-label">Underwriting Decision Note</label>
+                                <textarea id="edit-underwriting_decision_note" class="slds-textarea modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea>
+                            </div>
                         </div>
-                        <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:25px; width:100%; height:48px; border-radius:12px; font-weight:700; background:var(--pp-blue);">SAVE CHANGES</button>
+                        <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:25px; width:100%; height:50px; border-radius:12px; background:var(--pp-blue);">SAVE MERCHANT PROFILE</button>
                     </div>
 
                     <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                        <div style="background:#f8fafc; padding:20px; border-radius:16px; margin-bottom:20px; border:1px solid #e2e8f0;">
+                        <div style="background:#f8fafc; padding:20px; border-radius:15px; margin-bottom:20px; border:1px solid #e2e8f0;">
                             <input id="new-note-title" placeholder="Note Subject" class="slds-input modern-input" style="margin-bottom:10px;">
-                            <textarea id="new-note-body" placeholder="Internal commentary..." class="slds-textarea modern-input" style="height:80px;"></textarea>
-                            <button onclick="addNote('${m.id}')" class="slds-button slds-button_brand" style="margin-top:12px; width:100%; border-radius:10px;">ADD NEW NOTE</button>
+                            <textarea id="new-note-body" placeholder="Write internal commentary..." class="slds-textarea modern-input" style="height:80px;"></textarea>
+                            <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:12px; width:100%; border-radius:10px; font-weight:700;">ADD NEW NOTE</button>
                         </div>
-                        <div style="max-height:350px; overflow-y:auto;">
+                        <div style="max-height:400px; overflow-y:auto;">
                             ${notes.map(n => `
                                 <div class="note-card">
-                                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
-                                        <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="font-weight:700; border:none; padding:0; width:70%;">
-                                        <span style="font-size:10px; color:#94a3b8; font-weight:600;">${new Date(n.created_at).toLocaleDateString()}</span>
-                                    </div>
-                                    <textarea id="note-body-${n.id}" class="modern-input" style="width:100%; border:none; padding:0; background:transparent; font-size:0.85rem; height:auto;">${n.body}</textarea>
-                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid #f1f5f9;">
-                                        <span style="font-size:10px; color:var(--pp-blue); font-weight:800;">BY: ${n.created_by}</span>
-                                        <button onclick="updateExistingNote('${n.id}', '${m.id}')" style="background:none; border:none; color:var(--pp-accent); font-weight:700; font-size:10px; cursor:pointer;">UPDATE NOTE</button>
+                                    <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="font-weight:800; border:none; width:100%; margin-bottom:8px; font-size:1rem;">
+                                    <textarea id="note-body-${n.id}" class="modern-input" style="border:none; width:100%; height:auto; color:#475569;">${n.body}</textarea>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:12px; border-top:1px solid #f1f5f9; padding-top:10px;">
+                                        <small style="color:var(--pp-blue); font-weight:700;">BY: ${n.created_by}</small>
+                                        <button onclick="updateExistingNote('${n.id}', '${m.id}')" class="slds-button slds-button_neutral slds-button_small" style="font-size:10px; border-radius:8px;">UPDATE THIS NOTE</button>
                                     </div>
                                 </div>
-                            `).join('') || '<p style="text-align:center; color:#94a3b8;">No notes recorded.</p>'}
+                            `).join('') || '<p style="text-align:center; color:#94a3b8;">No history found.</p>'}
                         </div>
                     </div>
 
@@ -278,13 +314,55 @@
                         </div>
                     </div>
                 `,
-                showConfirmButton: false,
-                showCloseButton: true,
-                customClass: { popup: 'modern-swal-popup' }
+                showConfirmButton: false, showCloseButton: true
             });
         } catch (err) { Swal.fire('Error', err.message, 'error'); }
     }
 
+    // --- Note Update Action ---
+    window.updateExistingNote = async function(noteId, merchantId) {
+        const title = document.getElementById(`note-title-${noteId}`).value;
+        const body = document.getElementById(`note-body-${noteId}`).value;
+        
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'update_note', note_id: noteId, title, body })
+            });
+            const result = await res.json();
+            if(result.success) {
+                Swal.fire({ icon: 'success', title: 'Note Updated', timer: 1500, showConfirmButton: false });
+                openModal(merchantId); // Refresh popup
+            }
+        } catch (err) { Swal.fire('Error', 'Failed to update note', 'error'); }
+    }
+
+    // --- Master Save Action ---
+    window.saveMerchant = async function(uuid) {
+        const fields = [
+            'dba_name', 'account_status', 'email', 'merchant_phone', 'merchant_websites',
+            'merchant_primary_contact', 'volume_mtd', 'volume_30_day', 'volume_90_day',
+            'volume', 'last_batch_date', 'fresno_buy_rate_tier', 'processor',
+            'processor_platform', 'gateway_account_id', 'is_edge_enabled',
+            'is_pci_compliant', 'is_mobile', 'underwriting_decision_note'
+        ];
+        const payload = {};
+        fields.forEach(f => {
+            const el = document.getElementById('edit-' + f);
+            if(el) payload[f] = el.value;
+        });
+
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update', id: uuid, payload, user: sessionStorage.getItem('pp_userid') || 'Staff' })
+        });
+        if((await res.json()).success) {
+            Swal.fire('Success', 'Profile Synchronized.', 'success');
+            fetchMerchants();
+        }
+    };
         window.saveMerchant = async function(uuid) {
             // SCRIPT: Collect EVERY field from the markdown list
             const fields = [
