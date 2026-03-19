@@ -131,3 +131,24 @@ body {
     transition: all 0.3s ease;
 }
 .login-btn:hover { background: var(--pp-dark) !important; transform: scale(1.02); }
+.modal-tab-btn {
+        padding: 10px 20px;
+        border: none;
+        background: none;
+        font-weight: 700;
+        color: #64748b;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .active-tab {
+        color: var(--pp-blue) !important;
+        border-bottom: 3px solid var(--pp-blue) !important;
+    }
+    .edit-label {
+        font-size: 10px;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        margin-bottom: 4px;
+        display: block;
+    }
