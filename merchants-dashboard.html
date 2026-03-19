@@ -304,11 +304,18 @@
             
             if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
 
-            const res = await fetch('/api/merchants', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title: title, body: body, user_id: currentUserId || 'System' }) 
-            });
+           const res = await fetch('/api/merchants', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                action: 'add_note', 
+                merchant_uuid: uuid, 
+                title: title, 
+                body: body, 
+                // CHANGE THIS LINE: Use 'created_by' instead of 'user_id'
+                created_by: currentUserId || 'System' 
+            }) 
+        });
             
             const result = await res.json();
             if (result.success) {
