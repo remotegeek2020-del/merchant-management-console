@@ -181,14 +181,14 @@
             }
         }
 
-       async function openModal(id) {
+      async function openModal(id) {
             const m = currentRecords.find(r => r.id === id);
             if (!m) return;
 
             Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
 
             try {
-                // Fetch both Manual and System notes
+                // Fetch Notes and Logs
                 const [notesRes, logsRes] = await Promise.all([
                     fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
                     fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
@@ -198,8 +198,8 @@
                 const logs = (await logsRes.json()).data || [];
 
                 Swal.fire({
-                    title: `<div style="text-align:left; font-size:1.2rem; font-weight:800;">${m.dba_name}</div>`,
-                    width: '750px',
+                    title: `<div style="text-align:left; font-size:1.2rem; font-weight:800; color:#002d5a;">${m.dba_name || 'Merchant Profile'}</div>`,
+                    width: '850px',
                     html: `
                         <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-bottom:20px;">
                             <button onclick="switchTab('details')" id="tab-details" style="padding:10px 20px; border:none; background:none; font-weight:700; color:var(--pp-blue); border-bottom:3px solid var(--pp-blue); cursor:pointer;">ACCOUNT DETAILS</button>
@@ -208,44 +208,90 @@
                         </div>
 
                         <div id="content-details" class="tab-content">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; text-align:left;">
-                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">DBA NAME</label><input id="edit-dba" class="slds-input" value="${m.dba_name || ''}"></div>
-                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">STATUS</label>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; text-align:left; background:#f8fafc; padding:20px; border-radius:12px;">
+                                
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">MERCHANT ID (MID)</label>
+                                     <input id="edit-mid" class="slds-input" value="${m.merchant_id || ''}" disabled style="background:#e2e8f0; cursor:not-allowed;"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">PARTNER ID</label>
+                                     <input id="edit-agent" class="slds-input" value="${m.agent_id || ''}" disabled style="background:#e2e8f0; cursor:not-allowed;"></div>
+
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">DBA NAME</label>
+                                     <input id="edit-dba" class="slds-input" value="${m.dba_name || ''}"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">ACCOUNT STATUS</label>
                                     <select id="edit-status" class="slds-select">
                                         <option value="${m.account_status}" selected>${m.account_status}</option>
-                                        <option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Pending">Pending</option>
+                                        <option value="Approved">Approved</option>
+                                        <option value="Approved - Collections">Approved - Collections</option>
+                                        <option value="Closed">Closed</option>
+                                        <option value="Closed - Collections">Closed - Collections</option>
+                                        <option value="Closed - Risk">Closed - Risk</option>
+                                        <option value="Collections">Collections</option>
+                                        <option value="Declined">Declined</option>
+                                        <option value="Enrollment">Enrollment</option>
+                                        <option value="Fraud">Fraud</option>
+                                        <option value="Pending">Pending</option>
+                                        <option value="Withdrawn">Withdrawn</option>
                                     </select>
                                 </div>
-                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">MERCHANT ID</label><input id="edit-mid" class="slds-input" value="${m.merchant_id || ''}"></div>
-                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">AGENT ID</label><input id="edit-agent" class="slds-input" value="${m.agent_id || ''}"></div>
+
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">LEGAL NAME</label>
+                                     <input id="edit-legal" class="slds-input" value="${m.legal_name || ''}"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">CONTACT EMAIL</label>
+                                     <input id="edit-email" class="slds-input" value="${m.email || ''}"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">PHONE</label>
+                                     <input id="edit-phone" class="slds-input" value="${m.phone || ''}"></div>
+                                <div><label style="font-size:10px; font-weight:800; color:#64748b;">AGENT NAME (DISPLAY)</label>
+                                     <input id="edit-agent-name" class="slds-input" value="${m.agent_name || ''}"></div>
+                                     
+                                <div style="grid-column: span 2;">
+                                    <label style="font-size:10px; font-weight:800; color:#64748b;">BUSINESS ADDRESS</label>
+                                    <input id="edit-address" class="slds-input" value="${m.address || ''}">
+                                </div>
                             </div>
-                            <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:20px; width:100%;">UPDATE MERCHANT RECORD</button>
+                            <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:20px; width:100%; height:45px; border-radius:12px; font-weight:700;">COMMIT CHANGES TO SECURE LEDGER</button>
                         </div>
 
                         <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                            <div style="margin-bottom:15px;">
-                                <input id="new-note-title" placeholder="Note Title" class="slds-input" style="margin-bottom:8px;">
-                                <textarea id="new-note-body" placeholder="Write internal note..." class="slds-textarea" style="height:60px;"></textarea>
-                                <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:8px; width:100%;">SAVE NOTE</button>
+                            <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:15px;">
+                                <input id="new-note-title" placeholder="Short Subject..." class="slds-input" style="margin-bottom:8px; border-radius:8px;">
+                                <textarea id="new-note-body" placeholder="Enter staff commentary here..." class="slds-textarea" style="height:80px; border-radius:8px;"></textarea>
+                                <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:10px; width:100%; border-radius:8px; font-weight:700;">SAVE INTERNAL NOTE</button>
                             </div>
-                            <div style="max-height:200px; overflow-y:auto;">
-                                ${notes.map(n => `<div style="padding:10px; border-bottom:1px solid #eee;"><strong>${n.title}</strong><br><small>${n.body}</small></div>`).join('') || 'No notes.'}
+                            <div style="max-height:250px; overflow-y:auto; padding-right:10px;">
+                                ${notes.map(n => `
+                                    <div style="padding:12px; border-bottom:1px solid #e2e8f0;">
+                                        <div style="display:flex; justify-content:space-between;">
+                                            <strong style="font-size:0.85rem; color:#0f172a;">${n.title}</strong>
+                                            <small style="color:#94a3b8;">${new Date(n.created_at).toLocaleDateString()}</small>
+                                        </div>
+                                        <p style="font-size:0.85rem; color:#475569; margin:4px 0;">${n.body}</p>
+                                        <div style="font-size:10px; color:var(--pp-blue); font-weight:700;">BY: ${n.created_by}</div>
+                                    </div>
+                                `).join('') || '<p style="text-align:center; padding:20px; color:#94a3b8;">No internal notes for this merchant.</p>'}
                             </div>
                         </div>
 
                         <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                            <div style="max-height:350px; overflow-y:auto; font-family:monospace; font-size:11px;">
-                                ${logs.map(l => `<div style="padding:8px; background:#f8fafc; margin-bottom:5px; border-radius:4px;">
-                                    <span style="color:var(--pp-blue)">[${new Date(l.created_at).toLocaleDateString()}]</span> ${l.body.replace(/\n/g, '<br>')}
-                                </div>`).join('') || 'No history.'}
+                            <div style="max-height:400px; overflow-y:auto; font-family: 'Courier New', monospace; font-size:11px; background:#0f172a; color:#38bdf8; padding:15px; border-radius:12px;">
+                                ${logs.map(l => `
+                                    <div style="margin-bottom:10px; border-bottom:1px solid rgba(56,189,248,0.2); padding-bottom:5px;">
+                                        <span style="color:#94a3b8;">[${new Date(l.created_at).toLocaleString()}]</span><br>
+                                        ${l.body.replace(/\n/g, '<br>')}
+                                        <div style="text-align:right; font-size:9px; color:#94a3b8;">USER: ${l.created_by}</div>
+                                    </div>
+                                `).join('') || '> NO SYSTEM LOGS FOUND'}
                             </div>
                         </div>
                     `,
                     showConfirmButton: false,
-                    showCloseButton: true
+                    showCloseButton: true,
+                    customClass: { popup: 'modern-modal' }
                 });
             } catch (err) { Swal.fire('Error', err.message, 'error'); }
         }
+
+        // --- Keep your existing window.switchTab, window.saveMerchant, and window.addNote as they were ---
+        // Just make sure to add any new field IDs to your saveMerchant payload if you want them saved!
 
         // Helper: Switch Tabs
         window.switchTab = function(tab) {
