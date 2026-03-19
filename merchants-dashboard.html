@@ -40,6 +40,7 @@
     color: var(--pp-blue) !important;
 }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -407,46 +408,55 @@ async function openModal(id) {
     const file = fileInput.files[0];
     if (!file) return;
 
-    // Show loading state
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+        return Swal.fire('Error', 'File is too large (Max 10MB)', 'error');
+    }
+
     Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
 
     try {
+        // 1. Generate a unique path
         const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random()}-${Date.now()}.${fileExt}`;
+        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
         const filePath = `${merchantId}/${fileName}`;
 
-        // 1. Upload to Supabase Storage Bucket
-        // Note: Using the dashboard's existing Supabase client or a dedicated API route
-        const { data: uploadData, error: uploadError } = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'get_upload_url', 
-                path: filePath 
-            })
-        }).then(res => res.json());
+        // 2. Upload to Supabase Storage Bucket
+        // We use your existing Supabase credentials
+        const supabaseUrl = 'https://YOUR_PROJECT_ID.supabase.co';
+        const supabaseKey = 'YOUR_ANON_PUBLIC_KEY'; // Use the ANON key for frontend
+        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
-        // We use a specialized FormData approach or direct API handling for the binary
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('merchant_id', merchantId);
-        formData.append('file_name', file.name);
-        formData.append('file_path', filePath);
-        formData.append('action', 'upload_attachment');
+        const { data: storageData, error: storageError } = await supabase.storage
+            .from('merchant-files')
+            .upload(filePath, file);
 
+        if (storageError) throw storageError;
+
+        // 3. Register the file in your database table via your API
         const res = await fetch('/api/merchants', {
             method: 'POST',
-            body: formData // Note: Browser sets Content-Type to multipart/form-data automatically
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'add_attachment',
+                merchant_id: merchantId,
+                file_name: file.name,
+                file_path: filePath,
+                file_type: file.type,
+                file_size: file.size,
+                uploaded_by: sessionStorage.getItem('pp_username') || 'System'
+            })
         });
 
         const result = await res.json();
         if (result.success) {
-            Swal.fire('Success', 'File uploaded successfully', 'success');
-            openModal(merchantId); // Refresh modal to show file
+            Swal.fire({ icon: 'success', title: 'Uploaded!', timer: 1500, showConfirmButton: false });
+            openModal(merchantId); // Refresh to show the new file
         } else {
             throw new Error(result.message);
         }
     } catch (err) {
+        console.error(err);
         Swal.fire('Upload Failed', err.message, 'error');
     }
 };
