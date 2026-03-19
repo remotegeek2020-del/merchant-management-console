@@ -116,19 +116,13 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-    if (action === 'get_notes') {
+  if (action === 'get_notes') {
             const { merchant_uuid, type } = req.body;
             
-            // We tell Supabase to select everything from notes (*) 
-            // AND the 'full_name' from the 'app_users' table linked by 'created_by'
+            // 1. Fetch the notes and the user names in one go
             let queryBuilder = supabase
                 .from('merchant_notes')
-                .select(`
-                    *,
-                    app_users!merchant_notes_created_by_fkey (
-                        full_name
-                    )
-                `)
+                .select('*, app_users(full_name)')
                 .eq('merchant_id', merchant_uuid);
 
             if (type === 'manual') {
@@ -141,16 +135,15 @@ export default async function handler(req, res) {
             
             if (error) throw error;
 
-            // Clean up the data so the frontend can easily read the name
+            // 2. Format the data so it always has a name to display
             const formattedNotes = (data || []).map(n => ({
                 ...n,
-                // If we found a name in app_users, use it. Otherwise, show what's in created_by
-                display_name: n.app_users?.full_name || n.created_by || 'Staff'
+                // Logic: If joined name exists, use it. If not, use the raw string (like 'Staff').
+                display_name: n.app_users?.full_name || n.created_by || 'Unknown'
             }));
 
             return res.status(200).json({ success: true, data: formattedNotes });
         }
-
         if (action === 'add_note') {
             const { merchant_uuid, title, body, created_by, userId } = req.body;
             const { error } = await supabase
