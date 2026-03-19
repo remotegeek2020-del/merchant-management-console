@@ -5,40 +5,38 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
-        // --- ACTION: LIST MERCHANTS ---
-        if (action === 'list') {
-            // Added !inner to force Supabase to only return merchants that match joined search filters
-            let dataReq = supabase.from('merchants').select(`
-                *,
-                agent_identifiers!inner (
-                    agents!inner ( 
-                        companies!inner ( 
-                            company_name, 
-                            company_person_mapping!inner ( 
-                                persons!inner ( full_name ) 
-                            ) 
-                        ) 
-                    )
-                )
-            `, { count: 'exact' });
+    // api/merchants.js -> Inside action === 'list'
+let dataReq = supabase.from('merchants').select(`
+    *,
+    agent_identifiers!inner (
+        agents!inner ( 
+            companies!inner ( 
+                company_name, 
+                company_person_mapping!inner ( 
+                    persons!inner ( full_name ) 
+                ) 
+            ) 
+        )
+    )
+`, { count: 'exact' });
 
-            if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
+if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
 
-            if (query && filterBy) {
-                if (filterBy === 'dba_name') {
-                    dataReq = dataReq.ilike('dba_name', `%${query}%`);
-                } else if (filterBy === 'merchant_id') {
-                    dataReq = dataReq.eq('merchant_id', query);
-                } else if (filterBy === 'agent_id') {
-                    dataReq = dataReq.eq('agent_id', query);
-                } 
-                // SURGICAL FIX: Using dot-notation to filter the joined Michelle Collins/Company data
-                else if (filterBy === 'company_name') {
-                    dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-                } else if (filterBy === 'partner_name') {
-                    dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
-                }
-            }
+if (query && filterBy) {
+    if (filterBy === 'dba_name') {
+        dataReq = dataReq.ilike('dba_name', `%${query}%`);
+    } else if (filterBy === 'merchant_id') {
+        dataReq = dataReq.eq('merchant_id', query);
+    } else if (filterBy === 'agent_id') {
+        dataReq = dataReq.eq('agent_id', query);
+    } 
+    // Surgical path filtering using !inner logic
+    else if (filterBy === 'company_name') {
+        dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+    } else if (filterBy === 'partner_name') {
+        dataReq = dataReq.ilike('agent_identifiers.agents.companies.company_person_mapping.persons.full_name', `%${query}%`);
+    }
+}
 
             const [dataRes, mathRes] = await Promise.all([
                 dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false }),
@@ -65,8 +63,9 @@ export default async function handler(req, res) {
             });
         }
 
-        // --- ACTION: UPDATE MERCHANT WITH DETAILED LOGGING ---
+        // --- ACTION: UPDATE MERCHANT WITH DETAILED AUDIT LOGGING ---
         if (action === 'update') {
+            // 1. Fetch current data to identify changes for the audit trail
             const { data: oldData, error: fetchError } = await supabase
                 .from('merchants')
                 .select('*')
@@ -75,6 +74,7 @@ export default async function handler(req, res) {
 
             if (fetchError) throw fetchError;
 
+            // 2. Map differences between existing data and new payload
             let changes = [];
             for (let key in payload) {
                 let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
@@ -86,9 +86,11 @@ export default async function handler(req, res) {
                 }
             }
 
+            // 3. Update the record
             const { error: updateError } = await supabase.from('merchants').update(payload).eq('id', id);
             if (updateError) throw updateError;
 
+            // 4. Record automated system note if data changed
             if (changes.length > 0) {
                 await supabase.from('merchant_notes').insert([{
                     merchant_id: id,
@@ -101,7 +103,7 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: GLOBAL LOGS ---
+        // --- ACTION: GLOBAL ACTIVITY LOGS ---
         if (action === 'global_logs') {
             const { data, error } = await supabase
                 .from('merchant_notes')
@@ -113,11 +115,12 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-        // --- NOTE ACTIONS ---
+        // --- NOTE ACTIONS (MANUAL & SYSTEM) ---
         if (action === 'get_notes') {
             const { merchant_uuid, type } = req.body;
             let queryBuilder = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
 
+            // Filter by "manual" staff entries vs "system" automated audit logs
             if (type === 'manual') {
                 queryBuilder = queryBuilder.neq('title', 'System Update');
             } else if (type === 'system') {
@@ -130,7 +133,12 @@ export default async function handler(req, res) {
         }
 
         if (action === 'add_note') {
-            const { error } = await supabase.from('merchant_notes').insert([{ merchant_id: req.body.merchant_uuid, title: req.body.title, body: req.body.body, created_by: req.body.user }]);
+            const { error } = await supabase.from('merchant_notes').insert([{ 
+                merchant_id: req.body.merchant_uuid, 
+                title: req.body.title, 
+                body: req.body.body, 
+                created_by: req.body.user 
+            }]);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
