@@ -5,6 +5,17 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
 
     try {
+        // Add this inside the try/catch block in api/merchants.js
+if (action === 'update_note') {
+    const { note_id, title, body } = req.body;
+    const { error } = await supabase
+        .from('merchant_notes')
+        .update({ title, body, created_at: new Date() }) // Update content and timestamp
+        .eq('id', note_id);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true });
+}
         // --- ACTION: LIST (MERGED WITH VIEW LOGIC) ---
       if (action === 'list') {
             // 1. Fetch Merchant Data from the View
