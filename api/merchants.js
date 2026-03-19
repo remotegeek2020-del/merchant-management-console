@@ -116,33 +116,28 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-        if (action === 'get_notes') {
-            const { merchant_uuid, type } = req.body;
-            
-            // Fetch notes and attempt to join app_users for the name
-            let queryBuilder = supabase
-                .from('merchant_notes')
-                .select('*, app_users(full_name)')
-                .eq('merchant_id', merchant_uuid);
+     if (action === 'get_notes') {
+    const { merchant_uuid, type } = req.body;
+    
+    // We remove the app_users join to ensure the query actually runs
+    let queryBuilder = supabase
+        .from('merchant_notes')
+        .select('*') 
+        .eq('merchant_id', merchant_uuid);
 
-            if (type === 'manual') {
-                queryBuilder = queryBuilder.neq('title', 'System Update');
-            } else if (type === 'system') {
-                queryBuilder = queryBuilder.eq('title', 'System Update');
-            }
+    if (type === 'manual') {
+        queryBuilder = queryBuilder.neq('title', 'System Update');
+    } else if (type === 'system') {
+        queryBuilder = queryBuilder.eq('title', 'System Update');
+    }
 
-            const { data, error } = await queryBuilder.order('created_at', { ascending: false });
-            
-            if (error) throw error;
+    const { data, error } = await queryBuilder.order('created_at', { ascending: false });
+    
+    if (error) throw error;
 
-            // Map the data so "display_name" is always available for the frontend
-            const formattedNotes = (data || []).map(n => ({
-                ...n,
-                display_name: n.app_users?.full_name || n.created_by || 'Staff'
-            }));
-
-            return res.status(200).json({ success: true, data: formattedNotes });
-        }
+    // We send the data back as-is. We will handle the "Staff" vs "Name" logic in the frontend.
+    return res.status(200).json({ success: true, data: data || [] });
+}
 
         if (action === 'add_note') {
             const { merchant_uuid, title, body, created_by, userId } = req.body;
