@@ -309,12 +309,45 @@
         if((await res.json()).success) openModal(uuid);
     };
 
-    window.updateNote = async (noteId, merchantId) => {
-        const title = document.getElementById(`note-title-${noteId}`).value;
-        const body = document.getElementById(`note-body-${noteId}`).value;
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_note', note_id: noteId, title, body }) });
-        if((await res.json()).success) Swal.fire({ icon: 'success', title: 'Note Saved', timer: 800, showConfirmButton: false });
-    };
+    window.updateNote = async function(noteId, merchantId) {
+    const title = document.getElementById(`note-title-${noteId}`).value;
+    const body = document.getElementById(`note-body-${noteId}`).value;
+    
+    try {
+        const res = await fetch('/api/merchants', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                action: 'update_note', 
+                note_id: noteId, 
+                title: title, 
+                body: body 
+            }) 
+        });
+        
+        const result = await res.json();
+        
+        if(result.success) {
+            // SUCCESS CONFIRMATION (Toast style)
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2000,
+                timerProgressBar: true
+            });
+
+            Toast.fire({
+                icon: 'success',
+                title: 'Note updated successfully'
+            });
+        } else {
+            Swal.fire('Error', 'Could not save note: ' + result.message, 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Network error while saving note', 'error');
+    }
+};
 
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
