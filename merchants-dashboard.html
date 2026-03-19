@@ -313,26 +313,29 @@
     } catch (err) { console.error(err); }
 };
 
-  window.addNote = async function(uuid) {
+window.addNote = async function(uuid) {
     const title = document.getElementById('new-note-title').value;
     const body = document.getElementById('new-note-body').value;
+    
+    // Get the logged-in user's ID from session storage
+    const currentUserId = sessionStorage.getItem('pp_userid'); 
 
     if (!title || !body) {
         return Swal.fire('Error', 'Subject and Body are required.', 'warning');
     }
 
-    try {
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'add_note', 
-                merchant_uuid: uuid, 
-                title: title, 
-                body: body, 
-                user: 'Staff' 
-            })
-        });
+    const res = await fetch('/api/merchants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'add_note', 
+            merchant_uuid: uuid, 
+            title: title, 
+            body: body, 
+            // CHANGE THIS LINE: Pass the ID, let the backend handle the name lookup
+            user_id: currentUserId || 'System' 
+        })
+    });
         
         const result = await res.json();
         
