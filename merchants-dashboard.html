@@ -380,6 +380,55 @@
         Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         fetchMerchants().then(() => { Swal.close(); });
     };
+
+    window.handleFileUpload = async function(merchantId) {
+    const fileInput = document.getElementById('fileInput');
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    // Show loading state
+    Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+    try {
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${Math.random()}-${Date.now()}.${fileExt}`;
+        const filePath = `${merchantId}/${fileName}`;
+
+        // 1. Upload to Supabase Storage Bucket
+        // Note: Using the dashboard's existing Supabase client or a dedicated API route
+        const { data: uploadData, error: uploadError } = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'get_upload_url', 
+                path: filePath 
+            })
+        }).then(res => res.json());
+
+        // We use a specialized FormData approach or direct API handling for the binary
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('merchant_id', merchantId);
+        formData.append('file_name', file.name);
+        formData.append('file_path', filePath);
+        formData.append('action', 'upload_attachment');
+
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            body: formData // Note: Browser sets Content-Type to multipart/form-data automatically
+        });
+
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire('Success', 'File uploaded successfully', 'success');
+            openModal(merchantId); // Refresh modal to show file
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        Swal.fire('Upload Failed', err.message, 'error');
+    }
+};
 </script>
 </body>
 </html>
