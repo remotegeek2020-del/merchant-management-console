@@ -20,6 +20,10 @@
         .status-approved { background: #dcfce7; color: #166534; }
         .status-closed { background: #fee2e2; color: #991b1b; }
         .status-pending { background: #fef9c3; color: #854d0e; }
+        /* Style for Scrollbar in Modal */
+        .swal2-html-container::-webkit-scrollbar { width: 6px; }
+        .swal2-html-container::-webkit-scrollbar-track { background: #f1f1f1; }
+        .swal2-html-container::-webkit-scrollbar-thumb { background: #ccc; border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -144,37 +148,111 @@
                 document.getElementById('90d-val').innerText = cur.format(result.metrics.total90D || 0);
                 document.getElementById('share-val').innerText = (result.metrics.portfolioShare || 0) + '%';
 
+                // Table Rows
                 currentRecords.forEach(m => {
                     const row = tbody.insertRow();
-                    const status = (m.account_status || 'Pending').toLowerCase();
-                    const statusClass = status.includes('approved') ? 'status-approved' : 
-                                      status.includes('closed') ? 'status-closed' : 'status-pending';
+                    const statusVal = m.account_status || '';
+                    const statusClass = statusVal.toLowerCase().includes('approved') ? 'status-approved' : 
+                                      statusVal.toLowerCase().includes('closed') ? 'status-closed' : 'status-pending';
                     
-                    // KEEPING YOUR WORKING LOGIC:
-                    const agentData = m.agent_identifiers?.agents;
-                    const companyName = agentData?.companies?.company_name || '---';
-                    const partnerName = agentData?.companies?.company_person_mapping?.[0]?.persons?.full_name || '---';
+                    const companyName = m.company_name || '---';
+                    const partnerName = m.partner_name || '---';
 
                     row.innerHTML = `
                         <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
                         <td><code>${m.merchant_id || '---'}</code></td>
                         <td>${m.agent_id || '---'}</td>
-                        <td>${companyName}</td>
+                        <td style="font-weight:600;">${companyName}</td>
                         <td>${partnerName}</td>
-                        <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>`;
+                        <td><span class="badge ${statusClass}">${statusVal || '---'}</span></td>
+                    `;
                 });
 
-                document.getElementById('pageInfo').innerText = `Page ${currentPage + 1}`;
+                // Pagination & TOTAL COUNT Update
+                const totalFound = result.count || 0;
+                document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:8px;">(Total Found: ${totalFound.toLocaleString()})</span>`;
+                
                 document.getElementById('prevBtn').disabled = (currentPage === 0);
-                document.getElementById('nextBtn').disabled = ((currentPage + 1) * limit) >= result.count;
+                document.getElementById('nextBtn').disabled = ((currentPage + 1) * limit) >= totalFound;
+
             } catch (err) { 
                 console.error(err);
-                tbody.innerHTML = "<tr><td colspan='6' style='color:red; text-align:center;'>Sync error.</td></tr>"; 
+                tbody.innerHTML = "<tr><td colspan='6' style='color:red; text-align:center;'>Sync error. Check console.</td></tr>"; 
+            }
+        }
+
+        async function openModal(id) {
+            const m = currentRecords.find(r => r.id === id);
+            if (!m) return;
+
+            // 1. Show Loading State
+            Swal.fire({
+                title: 'Syncing Ledger History...',
+                didOpen: () => { Swal.showLoading(); }
+            });
+
+            try {
+                // 2. Fetch Notes from API
+                const res = await fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'get_notes', 
+                        merchant_uuid: m.id 
+                    })
+                });
+                const result = await res.json();
+                const notes = result.data || [];
+                
+                // 3. Format Notes HTML
+                const notesHtml = notes.length > 0 
+                    ? notes.map(n => `<div style="text-align:left; border-bottom:1px solid #e2e8f0; padding:12px 0;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+                            <strong style="font-size:0.85rem; color:#002d5a;">${n.title}</strong>
+                            <span style="font-size:0.7rem; color:#94a3b8; font-weight:600;">${new Date(n.created_at).toLocaleDateString()}</span>
+                        </div>
+                        <p style="margin:0; font-size:0.85rem; color:#475569; line-height:1.4;">${n.body}</p>
+                        <div style="margin-top:4px; font-size:0.65rem; color:var(--pp-blue); font-weight:700; text-transform:uppercase;">Entry by: ${n.created_by}</div>
+                      </div>`).join('')
+                    : '<div style="padding:40px; text-align:center; color:#94a3b8;"><span class="material-icons" style="font-size:48px; display:block; margin-bottom:10px;">inventory_2</span>No history found for this record.</div>';
+
+                // 4. Launch the Detail Popup
+                Swal.fire({
+                    title: `<div style="text-align:left; font-size:1.4rem; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
+                    html: `
+                        <div style="text-align:left; font-size:0.9rem; display:grid; grid-template-columns:1fr 1fr; gap:12px; background:#f1f5f9; padding:18px; border-radius:15px; margin-bottom:20px; border:1px solid #e2e8f0;">
+                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Merchant ID</label><br><strong style="color:#0f172a;">${m.merchant_id}</strong></div>
+                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Status</label><br><strong style="color:#0f172a;">${m.account_status}</strong></div>
+                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Company</label><br><strong style="color:#0f172a;">${m.company_name}</strong></div>
+                            <div><label style="font-size:0.6rem; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px;">Partner</label><br><strong style="color:#0f172a;">${m.partner_name}</strong></div>
+                        </div>
+                        <div style="text-align:left;">
+                            <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                                <span class="material-icons" style="font-size:18px; color:var(--pp-blue);">history</span>
+                                <h3 style="font-weight:800; font-size:1rem; color:#002d5a; margin:0;">Activity History</h3>
+                            </div>
+                            <div style="max-height:300px; overflow-y:auto; padding-right:10px; border-top:2px solid #f1f5f9;">${notesHtml}</div>
+                        </div>
+                    `,
+                    width: '650px',
+                    confirmButtonText: 'CLOSE CONSOLE',
+                    confirmButtonColor: '#004990',
+                    buttonsStyling: true,
+                    customClass: {
+                        confirmButton: 'slds-button slds-button_brand',
+                        popup: 'border-radius-20'
+                    }
+                });
+
+            } catch (err) {
+                console.error(err);
+                Swal.fire('Sync Error', 'Could not retrieve ledger history.', 'error');
             }
         }
 
         function changePage(dir) { currentPage += dir; fetchMerchants(); }
         function resetAndFetch() { currentPage = 0; fetchMerchants(); }
+        
         window.onload = () => { 
             const user = sessionStorage.getItem('pp_userid'); 
             if(user) document.getElementById('user-greeting').innerText = `Staff: ${user}`; 
