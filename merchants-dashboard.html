@@ -112,268 +112,218 @@
         </div>
     </article>
 
- <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-        let currentPage = 0;
-        let currentRecords = [];
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    let currentPage = 0;
+    let currentRecords = [];
 
-        async function fetchMerchants() {
-            const tbody = document.getElementById('merchantTableBody');
-            const limit = document.getElementById('pageLimit').value;
-            tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:60px;'>Syncing Secure Ledger...</td></tr>";
-            
-            try {
-                const res = await fetch('/api/merchants', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'list', 
-                        page: currentPage, 
-                        limit: limit, 
-                        query: document.getElementById('searchInput').value, 
-                        filterBy: document.getElementById('filterBy').value, 
-                        statusFilter: document.getElementById('statusFilter').value 
-                    })
-                });
-                const result = await res.json();
-                if (!result.success) throw new Error(result.message);
-                
-                currentRecords = result.data;
-                tbody.innerHTML = "";
-
-                const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-                document.getElementById('mtd-val').innerText = cur.format(result.metrics.totalMTD || 0);
-                document.getElementById('30d-val').innerText = cur.format(result.metrics.total30D || 0);
-                document.getElementById('90d-val').innerText = cur.format(result.metrics.total90D || 0);
-                document.getElementById('share-val').innerText = (result.metrics.portfolioShare || 0) + '%';
-
-                currentRecords.forEach(m => {
-                    const row = tbody.insertRow();
-                    const statusVal = m.account_status || '';
-                    const statusClass = statusVal.toLowerCase().includes('approved') ? 'status-approved' : 
-                                      statusVal.toLowerCase().includes('closed') ? 'status-closed' : 'status-pending';
-                    
-                    row.innerHTML = `
-                        <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
-                        <td><code>${m.merchant_id || '---'}</code></td>
-                        <td>${m.agent_id || '---'}</td>
-                        <td style="font-weight:600;">${m.company_name || '---'}</td>
-                        <td>${m.partner_name || '---'}</td>
-                        <td><span class="badge ${statusClass}">${statusVal || '---'}</span></td>
-                    `;
-                });
-
-                const totalFound = result.count || 0;
-                document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:8px;">(Total Found: ${totalFound.toLocaleString()})</span>`;
-                
-                document.getElementById('prevBtn').disabled = (currentPage === 0);
-                document.getElementById('nextBtn').disabled = ((currentPage + 1) * limit) >= totalFound;
-
-            } catch (err) { 
-                console.error(err);
-                tbody.innerHTML = "<tr><td colspan='6' style='color:red; text-align:center;'>Sync error. Check console.</td></tr>"; 
-            }
-        }
-
-        async function openModal(id) {
-            const m = currentRecords.find(r => r.id === id);
-            if (!m) return;
-
-            Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
-
-            try {
-                const [notesRes, logsRes] = await Promise.all([
-                    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-                    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
-                ]);
-                
-                const notes = (await notesRes.json()).data || [];
-                const logs = (await logsRes.json()).data || [];
-
-                Swal.fire({
-                    title: `<div style="text-align:left; font-size:1.2rem; font-weight:800; color:#002d5a;">${m.dba_name || 'Merchant Profile'}</div>`,
-                    width: '900px',
-                    html: `
-                        <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-bottom:20px;">
-                            <button onclick="switchTab('details')" id="tab-details" style="padding:10px 20px; border:none; background:none; font-weight:700; color:var(--pp-blue); border-bottom:3px solid var(--pp-blue); cursor:pointer;">ACCOUNT DETAILS</button>
-                            <button onclick="switchTab('notes')" id="tab-notes" style="padding:10px 20px; border:none; background:none; font-weight:700; color:#64748b; cursor:pointer;">INTERNAL NOTES</button>
-                            <button onclick="switchTab('audit')" id="tab-audit" style="padding:10px 20px; border:none; background:none; font-weight:700; color:#64748b; cursor:pointer;">AUDIT HISTORY</button>
-                        </div>
-
-                        <div id="content-details" class="tab-content" style="max-height:600px; overflow-y:auto; padding-right:10px;">
-                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; text-align:left; background:#f8fafc; padding:20px; border-radius:12px; border:1px solid #e2e8f0;">
-                                
-                                <div style="grid-column: span 2; display:flex; gap:10px; background:#e2e8f0; padding:10px; border-radius:8px; margin-bottom:10px;">
-                                    <div style="flex:1;"><label style="font-size:9px; font-weight:800; color:#475569;">MERCHANT ID (MID)</label><br><strong>${m.merchant_id || '---'}</strong></div>
-                                    <div style="flex:1;"><label style="font-size:9px; font-weight:800; color:#475569;">PARTNER ID</label><br><strong>${m.agent_id || '---'}</strong></div>
-                                    <div style="flex:1;"><label style="font-size:9px; font-weight:800; color:#475569;">UUID</label><br><small style="font-size:9px;">${m.id}</small></div>
-                                </div>
-
-                                <div><label class="edit-label">DBA NAME</label><input id="edit-dba_name" class="slds-input" value="${m.dba_name || ''}"></div>
-                                <div><label class="edit-label">ACCOUNT STATUS</label>
-                                    <select id="edit-account_status" class="slds-select">
-                                        <option value="${m.account_status}" selected>${m.account_status}</option>
-                                        <option value="Approved">Approved</option>
-                                        <option value="Approved - Collections">Approved - Collections</option>
-                                        <option value="Closed">Closed</option>
-                                        <option value="Closed - Collections">Closed - Collections</option>
-                                        <option value="Closed - Risk">Closed - Risk</option>
-                                        <option value="Collections">Collections</option>
-                                        <option value="Declined">Declined</option>
-                                        <option value="Enrollment">Enrollment</option>
-                                        <option value="Fraud">Fraud</option>
-                                        <option value="Pending">Pending</option>
-                                        <option value="Withdrawn">Withdrawn</option>
-                                    </select>
-                                </div>
-
-                                <div><label class="edit-label">EMAIL</label><input id="edit-email" class="slds-input" value="${m.email || ''}"></div>
-                                <div><label class="edit-label">MERCHANT PHONE</label><input id="edit-merchant_phone" class="slds-input" value="${m.merchant_phone || ''}"></div>
-                                <div><label class="edit-label">PRIMARY CONTACT</label><input id="edit-merchant_primary_contact" class="slds-input" value="${m.merchant_primary_contact || ''}"></div>
-                                <div><label class="edit-label">AGENT NAME</label><input id="edit-agent_name" class="slds-input" value="${m.agent_name || ''}"></div>
-
-                                <div><label class="edit-label">PROCESSOR</label><input id="edit-processor" class="slds-input" value="${m.processor || ''}"></div>
-                                <div><label class="edit-label">PLATFORM</label><input id="edit-processor_platform" class="slds-input" value="${m.processor_platform || ''}"></div>
-                                <div><label class="edit-label">EDGE ENABLED</label><input id="edit-is_edge_enabled" class="slds-input" value="${m.is_edge_enabled || ''}"></div>
-                                <div><label class="edit-label">PCI COMPLIANT</label><input id="edit-is_pci_compliant" class="slds-input" value="${m.is_pci_compliant || ''}"></div>
-
-                                <div><label class="edit-label">ENROLLMENT DATE</label><input id="edit-enrollment_date" class="slds-input" value="${m.enrollment_date || ''}"></div>
-                                <div><label class="edit-label">APPROVED DATE</label><input id="edit-approved_date" class="slds-input" value="${m.approved_date || ''}"></div>
-
-                                <div style="grid-column: span 2;">
-                                    <label class="edit-label">UNDERWRITING DECISION NOTE</label>
-                                    <textarea id="edit-underwriting_decision_note" class="slds-textarea" style="height:60px;">${m.underwriting_decision_note || ''}</textarea>
-                                </div>
-                            </div>
-                            <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:20px; width:100%; height:45px; border-radius:12px; font-weight:700;">COMMIT CHANGES TO SECURE LEDGER</button>
-                        </div>
-
-                        <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                            <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:15px;">
-                                <input id="new-note-title" placeholder="Short Subject..." class="slds-input" style="margin-bottom:8px; border-radius:8px;">
-                                <textarea id="new-note-body" placeholder="Enter staff commentary here..." class="slds-textarea" style="height:80px; border-radius:8px;"></textarea>
-                                <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:10px; width:100%; border-radius:8px; font-weight:700;">SAVE INTERNAL NOTE</button>
-                            </div>
-                            <div style="max-height:300px; overflow-y:auto;">
-                                ${notes.map(n => `<div style="padding:12px; border-bottom:1px solid #e2e8f0;"><strong>${n.title}</strong><br><small>${n.body}</small></div>`).join('') || 'No notes.'}
-                            </div>
-                        </div>
-
-                        <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                            <div style="max-height:450px; overflow-y:auto; font-family: monospace; font-size:11px; background:#0f172a; color:#38bdf8; padding:15px; border-radius:12px;">
-                                ${logs.map(l => `<div style="margin-bottom:10px; border-bottom:1px solid rgba(56,189,248,0.1); padding-bottom:5px;">[${new Date(l.created_at).toLocaleString()}] ${l.body.replace(/\n/g, '<br>')}</div>`).join('') || '> NO LOGS'}
-                            </div>
-                        </div>
-                    `,
-                    showConfirmButton: false,
-                    showCloseButton: true
-                });
-            } catch (err) { Swal.fire('Error', err.message, 'error'); }
-        }
-
-        window.switchTab = function(tab) {
-            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-            document.querySelectorAll('[id^="tab-"]').forEach(t => { t.style.color = '#64748b'; t.style.borderBottom = 'none'; });
-            document.getElementById('content-' + tab).style.display = 'block';
-            document.getElementById('tab-' + tab).style.color = 'var(--pp-blue)';
-            document.getElementById('tab-' + tab).style.borderBottom = '3px solid var(--pp-blue)';
-        };
-
-        window.saveMerchant = async function(uuid) {
-            // SCRIPT: Collect all fields matching the Supabase schema names
-            const fields = [
-                'dba_name', 'account_status', 'email', 'merchant_phone', 
-                'merchant_primary_contact', 'agent_name', 'processor', 
-                'processor_platform', 'is_edge_enabled', 'is_pci_compliant', 
-                'enrollment_date', 'approved_date', 'underwriting_decision_note'
-            ];
-            
-            const payload = {};
-            fields.forEach(f => {
-                const el = document.getElementById('edit-' + f);
-                if(el) payload[f] = el.value;
-            });
-            
-            try {
-                const res = await fetch('/api/merchants', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'update', id: uuid, payload, user: sessionStorage.getItem('pp_userid') })
-                });
-                const result = await res.json();
-                if(result.success) {
-                    Swal.fire('Success', 'Secure Ledger Updated.', 'success');
-                    fetchMerchants();
-                } else { throw new Error(result.message); }
-            } catch (err) { Swal.fire('Error', err.message, 'error'); }
-        };
-
-        window.addNote = async function(uuid) {
-            const title = document.getElementById('new-note-title').value;
-            const body = document.getElementById('new-note-body').value;
-            if(!title || !body) return Swal.fire('Error', 'Subject and Body required.', 'warning');
+    async function fetchMerchants() {
+        const tbody = document.getElementById('merchantTableBody');
+        const limit = document.getElementById('pageLimit').value;
+        tbody.innerHTML = "<tr><td colspan='6' style='text-align:center; padding:60px;'>Syncing Secure Ledger...</td></tr>";
+        
+        try {
             const res = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body, user: sessionStorage.getItem('pp_userid') })
+                body: JSON.stringify({ 
+                    action: 'list', 
+                    page: currentPage, 
+                    limit: limit, 
+                    query: document.getElementById('searchInput').value, 
+                    filterBy: document.getElementById('filterBy').value, 
+                    statusFilter: document.getElementById('statusFilter').value 
+                })
             });
-            if((await res.json()).success) openModal(uuid);
-        };
-
-        window.switchTab = function(tab) {
-            document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-            document.querySelectorAll('[id^="tab-"]').forEach(t => { t.style.color = '#64748b'; t.style.borderBottom = 'none'; });
-            document.getElementById('content-' + tab).style.display = 'block';
-            document.getElementById('tab-' + tab).style.color = 'var(--pp-blue)';
-            document.getElementById('tab-' + tab).style.borderBottom = '3px solid var(--pp-blue)';
-        };
-
-        // FIXED: Now collects ALL editable fields from the modal
-        window.saveMerchant = async function(uuid) {
-            const payload = {
-                dba_name: document.getElementById('edit-dba').value,
-                account_status: document.getElementById('edit-status').value,
-                legal_name: document.getElementById('edit-legal').value,
-                email: document.getElementById('edit-email').value,
-                phone: document.getElementById('edit-phone').value,
-                agent_name: document.getElementById('edit-agent-name').value,
-                address: document.getElementById('edit-address').value
-            };
+            const result = await res.json();
+            if (!result.success) throw new Error(result.message);
             
-            try {
-                const res = await fetch('/api/merchants', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'update', id: uuid, payload, user: sessionStorage.getItem('pp_userid') })
-                });
-                const result = await res.json();
-                if(result.success) {
-                    Swal.fire('Success', 'Record updated successfully.', 'success');
-                    fetchMerchants();
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (err) {
-                Swal.fire('Error', err.message, 'error');
-            }
-        };
+            currentRecords = result.data;
+            tbody.innerHTML = "";
 
-        window.addNote = async function(uuid) {
-            const title = document.getElementById('new-note-title').value;
-            const body = document.getElementById('new-note-body').value;
-            if(!title || !body) return Swal.fire('Error', 'Note must have a title and body', 'warning');
+            const cur = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
+            document.getElementById('mtd-val').innerText = cur.format(result.metrics.totalMTD || 0);
+            document.getElementById('30d-val').innerText = cur.format(result.metrics.total30D || 0);
+            document.getElementById('90d-val').innerText = cur.format(result.metrics.total90D || 0);
+            document.getElementById('share-val').innerText = (result.metrics.portfolioShare || 0) + '%';
+
+            currentRecords.forEach(m => {
+                const row = tbody.insertRow();
+                const statusVal = m.account_status || '';
+                const statusClass = statusVal.toLowerCase().includes('approved') ? 'status-approved' : 
+                                  statusVal.toLowerCase().includes('closed') ? 'status-closed' : 'status-pending';
+                
+                row.innerHTML = `
+                    <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
+                    <td><code>${m.merchant_id || '---'}</code></td>
+                    <td>${m.agent_id || '---'}</td>
+                    <td style="font-weight:600;">${m.company_name || '---'}</td>
+                    <td>${m.partner_name || '---'}</td>
+                    <td><span class="badge ${statusClass}">${statusVal || '---'}</span></td>
+                `;
+            });
+
+            const totalFound = result.count || 0;
+            document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="color:#94a3b8; font-weight:400; margin-left:8px;">(Total Found: ${totalFound.toLocaleString()})</span>`;
             
+            document.getElementById('prevBtn').disabled = (currentPage === 0);
+            document.getElementById('nextBtn').disabled = ((currentPage + 1) * limit) >= totalFound;
+
+        } catch (err) { 
+            console.error(err);
+            tbody.innerHTML = "<tr><td colspan='6' style='color:red; text-align:center;'>Sync error. Check console.</td></tr>"; 
+        }
+    }
+
+    async function openModal(id) {
+        const m = currentRecords.find(r => r.id === id);
+        if (!m) return;
+
+        Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
+
+        try {
+            const [notesRes, logsRes] = await Promise.all([
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
+            ]);
+            
+            const notes = (await notesRes.json()).data || [];
+            const logs = (await logsRes.json()).data || [];
+
+            Swal.fire({
+                title: `<div style="text-align:left; font-size:1.2rem; font-weight:800; color:#002d5a;">${m.dba_name || 'Merchant Profile'}</div>`,
+                width: '900px',
+                html: `
+                    <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-bottom:20px;">
+                        <button onclick="switchTab('details')" id="tab-details" style="padding:10px 20px; border:none; background:none; font-weight:700; color:var(--pp-blue); border-bottom:3px solid var(--pp-blue); cursor:pointer;">ACCOUNT DETAILS</button>
+                        <button onclick="switchTab('notes')" id="tab-notes" style="padding:10px 20px; border:none; background:none; font-weight:700; color:#64748b; cursor:pointer;">INTERNAL NOTES</button>
+                        <button onclick="switchTab('audit')" id="tab-audit" style="padding:10px 20px; border:none; background:none; font-weight:700; color:#64748b; cursor:pointer;">AUDIT HISTORY</button>
+                    </div>
+
+                    <div id="content-details" class="tab-content" style="max-height:600px; overflow-y:auto; padding-right:10px;">
+                        <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; text-align:left; background:#f8fafc; padding:20px; border-radius:12px; border:1px solid #e2e8f0;">
+                            <div style="grid-column: span 2; display:flex; gap:10px; background:#e2e8f0; padding:10px; border-radius:8px; margin-bottom:10px;">
+                                <div style="flex:1;"><label style="font-size:9px; font-weight:800; color:#475569;">MERCHANT ID (MID)</label><br><strong>${m.merchant_id || '---'}</strong></div>
+                                <div style="flex:1;"><label style="font-size:9px; font-weight:800; color:#475569;">PARTNER ID</label><br><strong>${m.agent_id || '---'}</strong></div>
+                            </div>
+
+                            <div><label style="font-size:10px; font-weight:800;">DBA NAME</label><input id="edit-dba_name" class="slds-input" value="${m.dba_name || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">ACCOUNT STATUS</label>
+                                <select id="edit-account_status" class="slds-select">
+                                    <option value="${m.account_status}" selected>${m.account_status}</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Approved - Collections">Approved - Collections</option>
+                                    <option value="Closed">Closed</option>
+                                    <option value="Closed - Collections">Closed - Collections</option>
+                                    <option value="Closed - Risk">Closed - Risk</option>
+                                    <option value="Collections">Collections</option>
+                                    <option value="Declined">Declined</option>
+                                    <option value="Enrollment">Enrollment</option>
+                                    <option value="Fraud">Fraud</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Withdrawn">Withdrawn</option>
+                                </select>
+                            </div>
+                            <div><label style="font-size:10px; font-weight:800;">EMAIL</label><input id="edit-email" class="slds-input" value="${m.email || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">MERCHANT PHONE</label><input id="edit-merchant_phone" class="slds-input" value="${m.merchant_phone || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">PRIMARY CONTACT</label><input id="edit-merchant_primary_contact" class="slds-input" value="${m.merchant_primary_contact || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">AGENT NAME</label><input id="edit-agent_name" class="slds-input" value="${m.agent_name || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">PROCESSOR</label><input id="edit-processor" class="slds-input" value="${m.processor || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">PLATFORM</label><input id="edit-processor_platform" class="slds-input" value="${m.processor_platform || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">EDGE ENABLED</label><input id="edit-is_edge_enabled" class="slds-input" value="${m.is_edge_enabled || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">PCI COMPLIANT</label><input id="edit-is_pci_compliant" class="slds-input" value="${m.is_pci_compliant || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">ENROLLMENT DATE</label><input id="edit-enrollment_date" class="slds-input" value="${m.enrollment_date || ''}"></div>
+                            <div><label style="font-size:10px; font-weight:800;">APPROVED DATE</label><input id="edit-approved_date" class="slds-input" value="${m.approved_date || ''}"></div>
+                            <div style="grid-column: span 2;">
+                                <label style="font-size:10px; font-weight:800;">UNDERWRITING NOTE</label>
+                                <textarea id="edit-underwriting_decision_note" class="slds-textarea" style="height:60px;">${m.underwriting_decision_note || ''}</textarea>
+                            </div>
+                        </div>
+                        <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:20px; width:100%; height:45px; border-radius:12px; font-weight:700;">COMMIT CHANGES</button>
+                    </div>
+
+                    <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
+                        <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:15px;">
+                            <input id="new-note-title" placeholder="Title" class="slds-input" style="margin-bottom:8px;">
+                            <textarea id="new-note-body" placeholder="Note content..." class="slds-textarea" style="height:80px;"></textarea>
+                            <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:10px; width:100%;">SAVE NOTE</button>
+                        </div>
+                        <div style="max-height:300px; overflow-y:auto;">
+                            ${notes.map(n => `<div style="padding:12px; border-bottom:1px solid #e2e8f0;"><strong>${n.title}</strong><br><small>${n.body}</small></div>`).join('') || 'No notes.'}
+                        </div>
+                    </div>
+
+                    <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
+                        <div style="max-height:450px; overflow-y:auto; font-family: monospace; font-size:11px; background:#0f172a; color:#38bdf8; padding:15px; border-radius:12px;">
+                            ${logs.map(l => `<div style="margin-bottom:10px;">[${new Date(l.created_at).toLocaleString()}] ${l.body.replace(/\n/g, '<br>')}</div>`).join('') || '> NO LOGS'}
+                        </div>
+                    </div>
+                `,
+                showConfirmButton: false,
+                showCloseButton: true
+            });
+        } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    }
+
+    // TAB SWITCHER
+    window.switchTab = function(tab) {
+        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
+        document.querySelectorAll('[id^="tab-"]').forEach(t => { t.style.color = '#64748b'; t.style.borderBottom = 'none'; });
+        document.getElementById('content-' + tab).style.display = 'block';
+        document.getElementById('tab-' + tab).style.color = 'var(--pp-blue)';
+        document.getElementById('tab-' + tab).style.borderBottom = '3px solid var(--pp-blue)';
+    };
+
+    // SINGLE SAVE FUNCTION
+    window.saveMerchant = async function(uuid) {
+        const fields = [
+            'dba_name', 'account_status', 'email', 'merchant_phone', 
+            'merchant_primary_contact', 'agent_name', 'processor', 
+            'processor_platform', 'is_edge_enabled', 'is_pci_compliant', 
+            'enrollment_date', 'approved_date', 'underwriting_decision_note'
+        ];
+        
+        const payload = {};
+        fields.forEach(f => {
+            const el = document.getElementById('edit-' + f);
+            if(el) payload[f] = el.value;
+        });
+        
+        try {
             const res = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body, user: sessionStorage.getItem('pp_userid') })
+                body: JSON.stringify({ 
+                    action: 'update', 
+                    id: uuid, 
+                    payload, 
+                    user: sessionStorage.getItem('pp_userid') || 'Staff' 
+                })
             });
-            if((await res.json()).success) openModal(uuid);
-        };
+            const result = await res.json();
+            if(result.success) {
+                Swal.fire('Success', 'Ledger Updated.', 'success');
+                fetchMerchants();
+            } else { throw new Error(result.message); }
+        } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    };
 
-        function changePage(dir) { currentPage += dir; fetchMerchants(); }
-        function resetAndFetch() { currentPage = 0; fetchMerchants(); }
-        window.onload = () => { fetchMerchants(); };
-    </script>
+    // ADD NOTE FUNCTION
+    window.addNote = async function(uuid) {
+        const title = document.getElementById('new-note-title').value;
+        const body = document.getElementById('new-note-body').value;
+        if(!title || !body) return Swal.fire('Error', 'Subject and Body required.', 'warning');
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body, user: sessionStorage.getItem('pp_userid') || 'Staff' })
+        });
+        if((await res.json()).success) openModal(uuid);
+    };
+
+    function changePage(dir) { currentPage += dir; fetchMerchants(); }
+    function resetAndFetch() { currentPage = 0; fetchMerchants(); }
+    window.onload = () => { fetchMerchants(); };
+</script>
 </body>
 </html>
