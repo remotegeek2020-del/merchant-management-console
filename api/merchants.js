@@ -142,22 +142,30 @@ if (action === 'update_note') {
         }
 
        // Locate this block in your backend API file
-if (action === 'add_note') {
-    const { merchant_uuid, title, body, created_by, userId } = req.body;
+// --- ACTION: ADD NOTE ---
+        if (action === 'add_note') {
+            const { merchant_uuid, title, body, created_by, userId } = req.body;
 
-    const { data, error } = await supabase
-        .from('merchant_notes')
-        .insert([{ 
-            // CHANGE THIS KEY from merchant_uuid to merchant_id
-            merchant_id: merchant_uuid, 
-            title: title, 
-            body: body, 
-            // This ensures created_by gets a value (ID or 'Staff')
-            created_by: created_by || userId || 'Staff' 
-        }]);
+            const { data, error } = await supabase
+                .from('merchant_notes')
+                .insert([{ 
+                    merchant_id: merchant_uuid, 
+                    title: title, 
+                    body: body, 
+                    created_by: created_by || userId || 'Staff' 
+                }]);
 
-    if (error) return res.status(400).json({ success: false, message: error.message });
-    return res.json({ success: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // Catch-all for unknown actions
+        return res.status(400).json({ success: false, message: "Unknown action" });
+
+    } catch (err) {
+        console.error("API Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
+    }
 }
 
     // 3. Handle the response
