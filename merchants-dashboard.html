@@ -254,16 +254,16 @@
                             <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
                             <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
                         </div>
-                        <div id="notes-list">${notes.map(n => `
-                            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-                                <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
-                                <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto;">${n.body}</textarea>
-                                <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-                                   <small style="color:#64748b;">By: ${n.display_name || n.created_by || 'Staff'}</small>
-                                    <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
-                                </div>
-                            </div>
-                        `).join('')}</div>
+                       <div id="notes-list">${notes.map(n => `
+    <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
+        <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
+        <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto; width:100%; resize:none;">${n.body}</textarea>
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+            <small style="color:#64748b;">By: ${n.created_by || 'Staff'}</small>
+            <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
+        </div>
+    </div>
+`).join('')}</div>
                     </div>
 
                     <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
