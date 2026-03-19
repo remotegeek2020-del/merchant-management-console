@@ -301,13 +301,53 @@
     } catch (err) { console.error(err); }
 };
 
-    window.addNote = async (uuid) => {
-        const title = document.getElementById('new-note-title').value;
-        const body = document.getElementById('new-note-body').value;
-        if(!title || !body) return;
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title, body, user: 'Staff' }) });
-        if((await res.json()).success) openModal(uuid);
-    };
+  window.addNote = async function(uuid) {
+    const title = document.getElementById('new-note-title').value;
+    const body = document.getElementById('new-note-body').value;
+
+    if (!title || !body) {
+        return Swal.fire('Error', 'Subject and Body are required.', 'warning');
+    }
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'add_note', 
+                merchant_uuid: uuid, 
+                title: title, 
+                body: body, 
+                user: 'Staff' 
+            })
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            // SUCCESS TOAST
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 1500,
+                timerProgressBar: true
+            });
+
+            await Toast.fire({
+                icon: 'success',
+                title: 'New note created'
+            });
+
+            // Re-open/Refresh the modal to show the new note in the list
+            openModal(uuid); 
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Failed to add note: ' + err.message, 'error');
+    }
+};
 
     window.updateNote = async function(noteId, merchantId) {
     const title = document.getElementById(`note-title-${noteId}`).value;
