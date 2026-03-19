@@ -307,7 +307,7 @@
 
         if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
 
-        const res = await fetch('/api/merchants', { 
+       const res = await fetch('/api/merchants', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ 
@@ -315,7 +315,9 @@
                 merchant_uuid: uuid, 
                 title: title, 
                 body: body, 
-                created_by: currentUserId // This matches your DB column name exactly
+                // Send BOTH to be safe, the backend will pick the right one
+                userId: currentUserId,
+                created_by: currentUserId 
             }) 
         });
         
