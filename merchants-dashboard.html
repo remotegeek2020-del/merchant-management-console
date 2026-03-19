@@ -175,85 +175,115 @@
         }
     }
 
-    async function openModal(id) {
-            const m = currentRecords.find(r => r.id === id);
-            if (!m) return;
+ async function openModal(id) {
+        const m = currentRecords.find(r => r.id === id);
+        if (!m) return;
 
-            Swal.fire({ title: 'Syncing Secure Ledger...', didOpen: () => { Swal.showLoading(); } });
+        Swal.fire({ title: 'Syncing Ledger...', didOpen: () => { Swal.showLoading(); } });
 
-            try {
-                // 1. Fetch Notes (Manual) and Logs (System)
-                const [notesRes, logsRes] = await Promise.all([
-                    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-                    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
-                ]);
-                
-                const notes = (await notesRes.json()).data || [];
-                const logs = (await logsRes.json()).data || [];
+        try {
+            const [notesRes, logsRes] = await Promise.all([
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) })
+            ]);
+            
+            const notes = (await notesRes.json()).data || [];
+            const logs = (await logsRes.json()).data || [];
 
-                Swal.fire({
-                    title: `<div style="text-align:left; font-size:1.2rem; font-weight:800; color:#002d5a;">${m.dba_name || 'Merchant Profile'}</div>`,
-                    width: '1000px',
-                    html: `
-                        <div style="display:flex; border-bottom:2px solid #e2e8f0; margin-bottom:20px;">
-                            <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">ACCOUNT DETAILS</button>
-                            <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
-                            <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
-                            <button onclick="switchTab('files')" id="tab-files" class="modal-tab-btn">ATTACHMENTS</button>
+            Swal.fire({
+                title: `<div style="text-align:left; font-size:1.4rem; font-weight:800; color:#002d5a; padding-bottom:10px;">${m.dba_name}</div>`,
+                width: '1100px',
+                padding: '2rem',
+                html: `
+                    <div style="display:flex; gap:10px; margin-bottom:25px; border-bottom:1px solid #e2e8f0;">
+                        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+                        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
+                        <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
+                        <button onclick="switchTab('files')" id="tab-files" class="modal-tab-btn">ATTACHMENTS</button>
+                    </div>
+
+                    <div id="content-details" class="tab-content" style="max-height:650px; overflow-y:auto;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:15px; text-align:left;">
+                            
+                            <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="slds-input modern-input" value="${m.dba_name || ''}"></div>
+                            <div><label class="edit-label">Account Status</label>
+                                <select id="edit-account_status" class="slds-select modern-input">
+                                    <option value="${m.account_status}" selected>${m.account_status}</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Approved - Collections">Approved - Collections</option>
+                                    <option value="Closed">Closed</option>
+                                    <option value="Closed - Collections">Closed - Collections</option>
+                                    <option value="Closed - Risk">Closed - Risk</option>
+                                    <option value="Collections">Collections</option>
+                                    <option value="Declined">Declined</option>
+                                    <option value="Enrollment">Enrollment</option>
+                                    <option value="Fraud">Fraud</option>
+                                    <option value="Pending">Pending</option>
+                                    <option value="Withdrawn">Withdrawn</option>
+                                </select>
+                            </div>
+                            <div><label class="edit-label">Merchant ID (Locked)</label><input class="slds-input modern-input" value="${m.merchant_id || ''}" disabled style="background:#f1f5f9;"></div>
+                            
+                            <div><label class="edit-label">Email</label><input id="edit-email" class="slds-input modern-input" value="${m.email || ''}"></div>
+                            <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="slds-input modern-input" value="${m.merchant_phone || ''}"></div>
+                            <div><label class="edit-label">Contact</label><input id="edit-merchant_primary_contact" class="slds-input modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                            
+                            <div><label class="edit-label">Processor</label><input id="edit-processor" class="slds-input modern-input" value="${m.processor || ''}"></div>
+                            <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="slds-input modern-input" value="${m.processor_platform || ''}"></div>
+                            <div><label class="edit-label">Source</label><input id="edit-source" class="slds-input modern-input" value="${m.source || ''}"></div>
+
+                            <div><label class="edit-label">Volume MTD</label><input id="edit-volume_mtd" class="slds-input modern-input" value="${m.volume_mtd || ''}"></div>
+                            <div><label class="edit-label">Volume 30D</label><input id="edit-volume_30_day" class="slds-input modern-input" value="${m.volume_30_day || ''}"></div>
+                            <div><label class="edit-label">Volume 90D</label><input id="edit-volume_90_day" class="slds-input modern-input" value="${m.volume_90_day || ''}"></div>
+
+                            <div><label class="edit-label">Enrollment Date</label><input id="edit-enrollment_date" class="slds-input modern-input" value="${m.enrollment_date || ''}"></div>
+                            <div><label class="edit-label">Approved Date</label><input id="edit-approved_date" class="slds-input modern-input" value="${m.approved_date || ''}"></div>
+                            <div><label class="edit-label">Last Batch</label><input id="edit-last_batch_date" class="slds-input modern-input" value="${m.last_batch_date || ''}"></div>
+
+                            <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="slds-input modern-input" value="${m.is_edge_enabled || ''}"></div>
+                            <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="slds-input modern-input" value="${m.is_pci_compliant || ''}"></div>
+                            <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="slds-input modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
+                            
+                            <div style="grid-column: span 3;"><label class="edit-label">Underwriting Note</label><textarea id="edit-underwriting_decision_note" class="slds-textarea modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
                         </div>
+                        <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:25px; width:100%; height:48px; border-radius:12px; font-weight:700; background:var(--pp-blue);">SAVE CHANGES</button>
+                    </div>
 
-                        <div id="content-details" class="tab-content" style="max-height:600px; overflow-y:auto; padding-right:10px;">
-                            <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; text-align:left; background:#f8fafc; padding:20px; border-radius:12px; border:1px solid #e2e8f0;">
-                                <div style="grid-column: span 3; background:#e2e8f0; padding:10px; border-radius:8px; display:flex; gap:20px; margin-bottom:10px;">
-                                    <div><label style="font-size:9px; font-weight:800; color:#475569;">MID</label><br><strong>${m.merchant_id || '---'}</strong></div>
-                                    <div><label style="font-size:9px; font-weight:800; color:#475569;">PARTNER ID</label><br><strong>${m.agent_id || '---'}</strong></div>
-                                    <div><label style="font-size:9px; font-weight:800; color:#475569;">GATEWAY</label><br><strong>${m.gateway_account_id || '---'}</strong></div>
+                    <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
+                        <div style="background:#f8fafc; padding:20px; border-radius:16px; margin-bottom:20px; border:1px solid #e2e8f0;">
+                            <input id="new-note-title" placeholder="Note Subject" class="slds-input modern-input" style="margin-bottom:10px;">
+                            <textarea id="new-note-body" placeholder="Internal commentary..." class="slds-textarea modern-input" style="height:80px;"></textarea>
+                            <button onclick="addNote('${m.id}')" class="slds-button slds-button_brand" style="margin-top:12px; width:100%; border-radius:10px;">ADD NEW NOTE</button>
+                        </div>
+                        <div style="max-height:350px; overflow-y:auto;">
+                            ${notes.map(n => `
+                                <div class="note-card">
+                                    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+                                        <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="font-weight:700; border:none; padding:0; width:70%;">
+                                        <span style="font-size:10px; color:#94a3b8; font-weight:600;">${new Date(n.created_at).toLocaleDateString()}</span>
+                                    </div>
+                                    <textarea id="note-body-${n.id}" class="modern-input" style="width:100%; border:none; padding:0; background:transparent; font-size:0.85rem; height:auto;">${n.body}</textarea>
+                                    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; padding-top:10px; border-top:1px solid #f1f5f9;">
+                                        <span style="font-size:10px; color:var(--pp-blue); font-weight:800;">BY: ${n.created_by}</span>
+                                        <button onclick="updateExistingNote('${n.id}', '${m.id}')" style="background:none; border:none; color:var(--pp-accent); font-weight:700; font-size:10px; cursor:pointer;">UPDATE NOTE</button>
+                                    </div>
                                 </div>
-                                <div><label class="edit-label">DBA NAME</label><input id="edit-dba_name" class="slds-input" value="${m.dba_name || ''}"></div>
-                                <div><label class="edit-label">STATUS</label><input id="edit-account_status" class="slds-input" value="${m.account_status || ''}"></div>
-                                <div><label class="edit-label">EMAIL</label><input id="edit-email" class="slds-input" value="${m.email || ''}"></div>
-                                <div><label class="edit-label">CONTACT</label><input id="edit-merchant_primary_contact" class="slds-input" value="${m.merchant_primary_contact || ''}"></div>
-                                <div><label class="edit-label">PHONE</label><input id="edit-merchant_phone" class="slds-input" value="${m.merchant_phone || ''}"></div>
-                                <div><label class="edit-label">VOL MTD</label><input id="edit-volume_mtd" class="slds-input" value="${m.volume_mtd || ''}"></div>
-                                <div><label class="edit-label">VOL 30D</label><input id="edit-volume_30_day" class="slds-input" value="${m.volume_30_day || ''}"></div>
-                                <div><label class="edit-label">VOL 90D</label><input id="edit-volume_90_day" class="slds-input" value="${m.volume_90_day || ''}"></div>
-                                <div><label class="edit-label">PROCESSOR</label><input id="edit-processor" class="slds-input" value="${m.processor || ''}"></div>
-                                <div style="grid-column: span 3;"><label class="edit-label">UNDERWRITING NOTE</label><textarea id="edit-underwriting_decision_note" class="slds-textarea">${m.underwriting_decision_note || ''}</textarea></div>
-                            </div>
-                            <button onclick="saveMerchant('${m.id}')" class="slds-button slds-button_brand" style="margin-top:20px; width:100%; height:45px; border-radius:12px; font-weight:700;">COMMIT CHANGES</button>
+                            `).join('') || '<p style="text-align:center; color:#94a3b8;">No notes recorded.</p>'}
                         </div>
+                    </div>
 
-                        <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                            <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:15px;">
-                                <input id="new-note-title" placeholder="Subject" class="slds-input" style="margin-bottom:8px;">
-                                <textarea id="new-note-body" placeholder="Staff commentary..." class="slds-textarea" style="height:80px;"></textarea>
-                                <button onclick="addNote('${m.id}')" class="slds-button slds-button_neutral" style="margin-top:10px; width:100%;">SAVE INTERNAL NOTE</button>
-                            </div>
-                            <div style="max-height:300px; overflow-y:auto;">
-                                ${notes.map(n => `<div style="padding:12px; border-bottom:1px solid #e2e8f0;"><strong>${n.title}</strong><br><small>${n.body}</small><br><em style="font-size:10px; color:var(--pp-blue);">By: ${n.created_by}</em></div>`).join('') || 'No manual notes.'}
-                            </div>
+                    <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
+                        <div style="max-height:450px; overflow-y:auto; font-family:monospace; font-size:11px; background:#1e293b; color:#38bdf8; padding:20px; border-radius:12px; line-height:1.6;">
+                            ${logs.map(l => `<div>[${new Date(l.created_at).toLocaleString()}] ${l.body.replace(/\n/g, '<br>')}</div>`).join('') || '> LOGS EMPTY'}
                         </div>
-
-                        <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                            <div style="max-height:450px; overflow-y:auto; font-family:monospace; font-size:11px; background:#0f172a; color:#38bdf8; padding:15px; border-radius:12px;">
-                                ${logs.map(l => `<div style="margin-bottom:10px; border-bottom:1px solid rgba(56,189,248,0.1); padding-bottom:5px;">[${new Date(l.created_at).toLocaleString()}]<br>${l.body.replace(/\n/g, '<br>')}</div>`).join('') || '> NO LOGS'}
-                            </div>
-                        </div>
-
-                        <div id="content-files" class="tab-content" style="display:none; text-align:left;">
-                            <div style="padding:40px; text-align:center; border:2px dashed #e2e8f0; border-radius:12px;">
-                                <span class="material-icons" style="font-size:48px; color:#94a3b8; display:block; margin-bottom:10px;">cloud_upload</span>
-                                <p style="color:#64748b;">Merchant Document Management Coming Soon.</p>
-                                <button class="slds-button slds-button_neutral" style="margin-top:15px;" disabled>Upload File</button>
-                            </div>
-                        </div>
-                    `,
-                    showConfirmButton: false,
-                    showCloseButton: true
-                });
-
-            } catch (err) { Swal.fire('Error', err.message, 'error'); }
-        }
+                    </div>
+                `,
+                showConfirmButton: false,
+                showCloseButton: true,
+                customClass: { popup: 'modern-swal-popup' }
+            });
+        } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    }
 
         window.saveMerchant = async function(uuid) {
             // SCRIPT: Collect EVERY field from the markdown list
