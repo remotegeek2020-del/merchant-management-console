@@ -296,15 +296,18 @@
     };
 
     // FIXED: Cleaned logic and Toast feedback
-    window.addNote = async function(uuid) {
-        try {
-            const title = document.getElementById('new-note-title').value;
-            const body = document.getElementById('new-note-body').value;
-            const currentUserId = sessionStorage.getItem('pp_userid'); 
-            
-            if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
+   window.addNote = async function(uuid) {
+    try {
+        const title = document.getElementById('new-note-title').value;
+        const body = document.getElementById('new-note-body').value;
+        
+        // Try to get ID from session, fallback to a 'placeholder' UUID if session is empty
+        // IMPORTANT: Replace the '00000000-...' string with your actual Supabase User ID if known
+        const currentUserId = sessionStorage.getItem('pp_userid') || '00000000-0000-0000-0000-000000000000'; 
 
-           const res = await fetch('/api/merchants', { 
+        if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
+
+        const res = await fetch('/api/merchants', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
             body: JSON.stringify({ 
@@ -312,22 +315,30 @@
                 merchant_uuid: uuid, 
                 title: title, 
                 body: body, 
-                // CHANGE THIS LINE: Use 'created_by' instead of 'user_id'
-                created_by: currentUserId || 'System' 
+                created_by: currentUserId // This matches your DB column name exactly
             }) 
         });
-            
-            const result = await res.json();
-            if (result.success) {
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
-                await Toast.fire({ icon: 'success', title: 'New note created' });
-                openModal(uuid); 
-            } else { throw new Error(result.message); }
-        } catch (err) { 
-            Swal.fire('Error', 'Failed to add note: ' + err.message, 'error'); 
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 1500,
+                timerProgressBar: true
+            });
+            await Toast.fire({ icon: 'success', title: 'New note created' });
+            openModal(uuid); 
+        } else {
+            // This will catch the Postgres "not-null" error if it still fails
+            throw new Error(result.message || 'Database rejected the entry');
         }
-    };
-
+    } catch (err) {
+        Swal.fire('Error', 'Failed to add note: ' + err.message, 'error');
+    }
+};
     // FIXED: Correct ID lookup and Toast feedback
     window.updateNote = async function(noteId, merchantId) {
         const title = document.getElementById(`note-title-${noteId}`).value;
