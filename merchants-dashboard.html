@@ -247,15 +247,11 @@
                     </div>
 
                     <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
-        <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
-        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
-        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
-    </div>
-    <div id="notes-list">
-        ${notes.map(n => ` ... `).join('')}
-    </div>
-</div> ```
+                        <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
+                            <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
+                            <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
+                            <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
+                        </div>
                         <div id="notes-list">${notes.map(n => `
                             <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
                                 <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
@@ -318,26 +314,29 @@
 };
 
 window.addNote = async function(uuid) {
-    try { // Added missing try
+    try {
         const title = document.getElementById('new-note-title').value;
         const body = document.getElementById('new-note-body').value;
         const currentUserId = sessionStorage.getItem('pp_userid'); 
+        
+        if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
 
-        if (!title || !body) {
-            return Swal.fire('Error', 'Subject and Body are required.', 'warning');
-        }
-
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'add_note', 
-                merchant_uuid: uuid, 
-                title: title, 
-                body: body, 
-                user_id: currentUserId || 'System' 
-            })
+        const res = await fetch('/api/merchants', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title: title, body: body, user_id: currentUserId || 'System' }) 
         });
+        
+        const result = await res.json();
+        if (result.success) {
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+            await Toast.fire({ icon: 'success', title: 'New note created' });
+            openModal(uuid); 
+        } else { throw new Error(result.message); }
+    } catch (err) { 
+        Swal.fire('Error', 'Failed to add note: ' + err.message, 'error'); 
+    }
+};
         
         const result = await res.json();
         
