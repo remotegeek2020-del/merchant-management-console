@@ -149,57 +149,86 @@
             Swal.fire({
                 title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
                 width: '1100px',
-                html: `
-                    <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
-                        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">ACCOUNT DETAILS</button>
-                        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
-                        <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
-                    </div>
-                    <div id="content-details" class="tab-content" style="text-align:left; max-height:600px; overflow-y:auto; padding-right:10px;">
-                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
-                            <div class="section-header">Primary Identity</div>
-                            <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                            <div><label class="edit-label">Merchant ID</label><input id="edit-merchant_id" class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
-                            <div><label class="edit-label">Account Status</label>
-                            <select id="edit-account_status" class="modern-input">
-        <option value="${m.account_status}" selected>${m.account_status}</option>
-        <option value="Approved">Approved</option>
-        <option value="Approved - Collections">Approved - Collections</option>
-        <option value="Closed">Closed</option>
-        <option value="Closed - Collections">Closed - Collections</option>
-        <option value="Closed - Risk">Closed - Risk</option>
-        <option value="Collections">Collections</option>
-        <option value="Declined">Declined</option>
-        <option value="Enrollment">Enrollment</option>
-        <option value="Fraud">Fraud</option>
-        <option value="Pending">Pending</option>
-        <option value="Withdrawn">Withdrawn</option>
-    </select>
+html: `
+    <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
+        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
+        <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
     </div>
 
+    <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
+        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+            
+            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Core Identity & Status</div>
+            <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
+            <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
+            <div>
+                <label class="edit-label">Account Status</label>
+                <select id="edit-account_status" class="modern-input">
+                    <option value="${m.account_status}" selected>${m.account_status}</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Approved - Collections">Approved - Collections</option>
+                    <option value="Closed">Closed</option>
+                    <option value="Closed - Collections">Closed - Collections</option>
+                    <option value="Closed - Risk">Closed - Risk</option>
+                    <option value="Collections">Collections</option>
+                    <option value="Declined">Declined</option>
+                    <option value="Enrollment">Enrollment</option>
+                    <option value="Fraud">Fraud</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Withdrawn">Withdrawn</option>
+                </select>
+            </div>
+            <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
+            <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
+            <div><label class="edit-label">Major Merchant</label><input id="edit-major_merchant" class="modern-input" value="${m.major_merchant || ''}"></div>
 
-                            
-                            <div class="section-header">Contact & Web</div>
-                            <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
-                            <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
-                            <div><label class="edit-label">Website</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
-                            
-                            <div class="section-header">Volume & Processing</div>
-                            <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
-                            <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
-                            <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="modern-input" value="${m.is_edge_enabled || ''}"></div>
-                            
-                            <div class="section-header">Underwriting</div>
-                            <div style="grid-column: span 3;"><label class="edit-label">Decision Note</label><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
-                        </div>
-                        <button onclick="saveMerchant('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:12px; border-radius:10px; border:none; margin-top:20px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
-                    </div>
-                    <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                        <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
-                            <input id="new-note-title" placeholder="New Note Subject" class="modern-input">
-                            <textarea id="new-note-body" placeholder="Write internal commentary..." class="modern-input" style="height:60px;"></textarea>
-                            <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
-                        </div>
+            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Contact Information</div>
+            <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
+            <div><label class="edit-label">Merchant Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
+            <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
+            <div style="grid-column: span 2;"><label class="edit-label">Websites</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
+            <div><label class="edit-label">ACH Properties</label><input id="edit-ach_properties" class="modern-input" value="${m.ach_properties || ''}"></div>
+
+            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Processing & Technical</div>
+            <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
+            <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="modern-input" value="${m.processor_platform || ''}"></div>
+            <div><label class="edit-label">Gateway ID</label><input id="edit-gateway_account_id" class="modern-input" value="${m.gateway_account_id || ''}"></div>
+            <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="modern-input" value="${m.is_edge_enabled || ''}"></div>
+            <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="modern-input" value="${m.is_pci_compliant || ''}"></div>
+            <div><label class="edit-label">Mobile</label><input id="edit-is_mobile" class="modern-input" value="${m.is_mobile || ''}"></div>
+            <div><label class="edit-label">Source</label><input id="edit-source" class="modern-input" value="${m.source || ''}"></div>
+            <div><label class="edit-label">Activated</label><input id="edit-is_activated" class="modern-input" value="${m.is_activated || ''}"></div>
+            <div><label class="edit-label">Device Hub</label><input id="edit-is_device_hub_link_enabled" class="modern-input" value="${m.is_device_hub_link_enabled || ''}"></div>
+
+            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Volume & Financials</div>
+            <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
+            <div><label class="edit-label">Vol 30D</label><input id="edit-volume_30_day" class="modern-input" value="${m.volume_30_day || ''}"></div>
+            <div><label class="edit-label">Vol 90D</label><input id="edit-volume_90_day" class="modern-input" value="${m.volume_90_day || ''}"></div>
+            <div><label class="edit-label">Total Volume</label><input id="edit-volume" class="modern-input" value="${m.volume || ''}"></div>
+            <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
+            <div><label class="edit-label">Commission Code</label><input id="edit-isv_commission_code" class="modern-input" value="${m.isv_commission_code || ''}"></div>
+
+            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Dates & Compliance (YYYY-MM-DD)</div>
+            <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
+            <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
+            <div><label class="edit-label">Batch Date</label><input type="date" id="edit-last_batch_date" class="modern-input" value="${m.last_batch_date || ''}"></div>
+            <div><label class="edit-label">Status Change</label><input type="date" id="edit-account_status_change_date" class="modern-input" value="${m.account_status_change_date || ''}"></div>
+            <div><label class="edit-label">Days Approved</label><input id="edit-days_approved" class="modern-input" value="${m.days_approved || ''}"></div>
+            <div><label class="edit-label">Shipping Status</label><input id="edit-shipping_status" class="modern-input" value="${m.shipping_status || ''}"></div>
+            <div><label class="edit-label">IRS TIN Status</label><input id="edit-irs_tin_status" class="modern-input" value="${m.irs_tin_status || ''}"></div>
+            <div><label class="edit-label">NDF</label><input id="edit-ndf" class="modern-input" value="${m.ndf || ''}"></div>
+            <div><label class="edit-label">Credit Review</label><input id="edit-credit_review" class="modern-input" value="${m.credit_review || ''}"></div>
+
+            <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Underwriting Notes</div>
+            <div style="grid-column: span 3;"><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+        </div>
+        <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
+    </div>
+`
+
+
+                
                         <div id="notes-list">${notes.map(n => `
                             <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
                                 <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
