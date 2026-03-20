@@ -190,6 +190,38 @@
     let totalItems = 0;
     let selectedId = null;
 
+    async function deleteEquipment(id, serial) {
+    const confirm = await Swal.fire({
+        title: 'Are you sure?',
+        text: `You are about to permanently delete unit ${serial}. This cannot be undone.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, delete it!'
+    });
+
+    if (confirm.isConfirmed) {
+        try {
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete', id: id })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                Swal.fire('Deleted!', 'The unit has been removed.', 'success');
+                fetchInventory(); // Refresh the list
+            } else {
+                Swal.fire('Error', result.message, 'error');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Server connection failed', 'error');
+        }
+    }
+}
+
     // 1. MODAL: Open for NEW Item
     function openAddModal() {
         selectedId = null; 
@@ -318,64 +350,81 @@
     }
 
     // 4. CORE LOGIC: Fetch, Tabs, Pagination
+
     async function fetchInventory() {
-        const tbody = document.getElementById('inventoryTableBody');
-        const limit = parseInt(document.getElementById('pageSize').value) || 50;
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
+    const tbody = document.getElementById('inventoryTableBody');
+    const limit = parseInt(document.getElementById('pageSize').value) || 50;
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
 
-        try {
-            const res = await fetch('/api/equipments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'list', 
-                    query: document.getElementById('invSearch').value, 
-                    page: currentPage, 
-                    limit: limit,
-                    filterLocation: currentFilter === 'deployed' ? null : currentFilter,
-                    filterStatus: currentFilter === 'deployed' ? 'deployed' : null
-                })
-            });
-            const result = await res.json();
-            if (!result.success) return;
+    try {
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'list', 
+                query: document.getElementById('invSearch').value, 
+                page: currentPage, 
+                limit: limit,
+                filterLocation: currentFilter === 'deployed' ? null : currentFilter,
+                filterStatus: currentFilter === 'deployed' ? 'deployed' : null
+            })
+        });
+        const result = await res.json();
+        if (!result.success) return;
 
-            inventory = result.data || [];
-            totalItems = result.count || 0;
+        inventory = result.data || [];
+        totalItems = result.count || 0;
 
-            document.getElementById('kpi-total').innerText = result.metrics.total;
-            document.getElementById('kpi-office').innerText = result.metrics.inOffice;
-            document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
-            document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
+        document.getElementById('kpi-total').innerText = result.metrics.total;
+        document.getElementById('kpi-office').innerText = result.metrics.inOffice;
+        document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
+        document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
 
-            const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
-            const end = Math.min((currentPage + 1) * limit, totalItems);
-            document.getElementById('pagination-info').innerText = `Showing ${start}-${end} of ${totalItems} items`;
-            document.getElementById('btn-prev').disabled = currentPage === 0;
-            document.getElementById('btn-next').disabled = end >= totalItems;
+        const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
+        const end = Math.min((currentPage + 1) * limit, totalItems);
+        document.getElementById('pagination-info').innerText = `Showing ${start}-${end} of ${totalItems} items`;
+        document.getElementById('btn-prev').disabled = currentPage === 0;
+        document.getElementById('btn-next').disabled = end >= totalItems;
 
-            tbody.innerHTML = "";
-            inventory.forEach(item => {
-                const row = tbody.insertRow();
-                let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
-                if (item.status === 'deployed') locClass = 'loc-deployed';
+        tbody.innerHTML = "";
+        inventory.forEach(item => {
+            const row = tbody.insertRow();
+            let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
+            if (item.status === 'deployed') locClass = 'loc-deployed';
 
-                const isDeployed = item.status === 'deployed';
-                row.innerHTML = `
-                    <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
-                    <td>${item.terminal_type || '---'}</td>
-                    <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
-                    <td><span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span></td>
-                    <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
-                    <td><span class="slds-badge">${item.status}</span></td>
-                    <td style="text-align:center;">
-                        <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
-                            <span class="material-icons" style="font-size:18px;">${isDeployed ? 'visibility' : 'edit'}</span>
-                        </button>
-                    </td>
-                `;
-            });
-        } catch (err) { console.error(err); }
-    }
+            const isDeployed = item.status === 'deployed';
+
+            // Define buttons based on status
+            const actionButtons = isDeployed ? `
+                <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="View">
+                    <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
+                </button>
+            ` : `
+                <div style="display: flex; gap: 5px; justify-content: center;">
+                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
+                        <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
+                    </button>
+                    <button onclick="deleteEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Delete">
+                        <span class="material-icons" style="font-size:18px; color: #e11d48;">delete_outline</span>
+                    </button>
+                </div>
+            `;
+
+            row.innerHTML = `
+                <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
+                <td>${item.terminal_type || '---'}</td>
+                <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
+                <td><span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span></td>
+                <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
+                <td><span class="slds-badge">${item.status}</span></td>
+                <td style="text-align:center;">
+                    ${actionButtons}
+                </td>
+            `;
+        });
+    } catch (err) { console.error(err); }
+}
+    
 
     function switchTab(tabName) {
         ['update', 'notes'].forEach(t => {
