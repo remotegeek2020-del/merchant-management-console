@@ -183,6 +183,63 @@
     let totalItems = 0;
     let selectedId = null;
 
+    async function saveEquipmentChanges() {
+    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+    
+    // 1. Collect data from the modal inputs
+    const updatedData = {
+        serial_number: document.getElementById('edit-serial').value,
+        terminal_type: document.getElementById('edit-terminal-type').value,
+        received_date: document.getElementById('edit-received-date').value,
+        status: document.getElementById('edit-status').value
+    };
+
+    // Basic Validation
+    if (!updatedData.serial_number) {
+        Swal.fire('Error', 'Serial Number is required', 'error');
+        return;
+    }
+
+    // 2. Disable button to prevent double-clicks
+    saveBtn.disabled = true;
+    saveBtn.innerText = 'Saving...';
+
+    try {
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'update',
+                id: selectedId, // This was set when you clicked the pencil
+                payload: updatedData
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+            Swal.fire({
+                icon: 'success',
+                title: 'Unit Updated',
+                text: 'The equipment details have been saved.',
+                timer: 1500,
+                showConfirmButton: false
+            });
+            
+            closeModal();      // Close the modal
+            fetchInventory();  // Refresh the table rows
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) {
+        console.error("Save Error:", err);
+        Swal.fire('Update Failed', err.message, 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerText = 'Save Changes';
+    }
+}
+
     async function fetchInventory() {
         const tbody = document.getElementById('inventoryTableBody');
         const limit = parseInt(document.getElementById('pageSize').value) || 50;
