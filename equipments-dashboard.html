@@ -27,8 +27,26 @@
         .badge { font-weight: 800; font-size: 9px; padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
         .loc-office { background: #dcfce7; color: #166534; }
         .loc-repair { background: #fee2e2; color: #991b1b; }
+        /* Center the modal over the dashboard */
+.slds-modal {
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+/* Tab contents visibility */
+.slds-hide { display: none !important; }
+.slds-show { display: block !important; }
+
+/* Styling for the notes list area */
+#notes-list {
+    background: #f8fafc;
+    border-radius: 8px;
+    margin-top: 10px;
+}
         
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
     </style>
 </head>
 <body>
@@ -238,6 +256,101 @@ function filterByLoc(loc) {
     // 2. Refresh the table
     fetchInventory();
 }
+
+
+
+
+
+let selectedEquipmentId = null; // Stores the ID of the unit currently being edited
+
+// Opens the Modal and loads the initial data
+async function editEquipment(id) {
+    selectedEquipmentId = id;
+    
+    // 1. Find the item in our local 'inventory' array to get the serial number
+    const item = inventory.find(i => i.id === id);
+    if (!item) return;
+
+    // 2. Set the UI text
+    document.getElementById('modalTitle').innerText = `Unit Details: ${item.serial_number}`;
+    document.getElementById('edit-status').value = item.status;
+    
+    // 3. Show the Modal (Flex is used to center the container)
+    const modal = document.getElementById('masterModal');
+    modal.style.display = 'flex';
+    
+    // 4. Default to the 'Update' tab every time it opens
+    switchTab('update');
+}
+
+// Handles switching between Update, Notes, and Logs tabs
+function switchTab(tabName) {
+    // Hide all tab contents and remove active class from all tab headers
+    const contents = ['update', 'notes', 'logs'];
+    contents.forEach(name => {
+        const contentDiv = document.getElementById(`tab-${name}`);
+        const tabLi = document.getElementById(`tab-${name}-li`);
+        
+        if (contentDiv) {
+            contentDiv.classList.remove('slds-show');
+            contentDiv.classList.add('slds-hide');
+        }
+        if (tabLi) {
+            tabLi.classList.remove('slds-is-active');
+        }
+    });
+
+    // Show the selected tab content and set header to active
+    document.getElementById(`tab-${tabName}`).classList.remove('slds-hide');
+    document.getElementById(`tab-${tabName}`).classList.add('slds-show');
+    document.getElementById(`tab-${tabName}-li`).classList.add('slds-is-active');
+
+    // If the user clicks 'Notes', automatically fetch the latest notes from the DB
+    if (tabName === 'notes') fetchNotes();
+}
+
+// Closes the Modal
+function closeMasterModal() {
+    document.getElementById('masterModal').style.display = 'none';
+}
+
+// Fetches notes specifically for the selected equipment
+async function fetchNotes() {
+    const container = document.getElementById('notes-list');
+    container.innerHTML = '<div style="padding:20px; text-align:center;">Loading notes...</div>';
+
+    try {
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getNotes', id: selectedEquipmentId })
+        });
+        const result = await res.json();
+
+        if (result.success && result.data.length > 0) {
+            container.innerHTML = result.data.map(n => `
+                <div style="padding: 12px; border-bottom: 1px solid #f1f5f9; background: #fff;">
+                    <p style="font-size: 13px; color: #1e293b; margin: 0;">${n.note_text}</p>
+                    <div style="display:flex; justify-content: space-between; margin-top: 5px;">
+                        <small style="color: #94a3b8;">${new Date(n.created_at).toLocaleString()}</small>
+                        <small style="color: #64748b; font-weight:600;">System Admin</small>
+                    </div>
+                </div>
+            `).join('');
+        } else {
+            container.innerHTML = '<p style="padding:40px; text-align:center; color:#94a3b8;">No notes recorded for this unit.</p>';
+        }
+    } catch (err) {
+        container.innerHTML = '<p style="padding:20px; color:red;">Failed to load notes.</p>';
+    }
+}
+
+
+    
+
+
+
+    
 
     // Initialize
     window.onload = fetchInventory;
