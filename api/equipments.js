@@ -71,11 +71,14 @@ if (action === 'addNote') {
             });
         }
 
-        if (action === 'create') {
-            const { data, error } = await supabase.from('equipments').insert([payload]);
-            if (error) throw error;
-            return res.status(200).json({ success: true, data });
-        }
+      if (action === 'create') {
+    const { data, error } = await supabase
+        .from('equipments')
+        .insert([payload]); // Supabase expects an array for inserts
+        
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
 
       if (action === 'update') {
     const { data, error } = await supabase
