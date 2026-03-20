@@ -8,16 +8,16 @@ export default async function handler(req, res) {
     const { action, query, filterLocation, limit = 50, page = 0 } = req.body;
 
     try {
-        if (action === 'list') {
-            // 1. Build the main query
-          let sb = supabase.from('equipments').select(`
+      if (action === 'list') {
+    let sb = supabase.from('equipments').select(`
         *,
-        merchants!merchant_id (dba_name) 
+        merchants!merchant_id (dba_name)
     `, { count: 'exact' });
 
-            if (query) {
-                sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
-            }
+    // Keep the rest of your filtering logic below...
+    if (query) {
+        sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
+    }
 
             if (filterLocation) {
                 sb = sb.eq('current_location', filterLocation);
