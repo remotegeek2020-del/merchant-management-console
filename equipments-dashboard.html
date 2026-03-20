@@ -335,20 +335,24 @@ let selectedEquipmentId = null; // Stores the ID of the unit currently being edi
 
 // Opens the Modal and loads the initial data
 async function editEquipment(id) {
-    console.log("Pencil clicked for ID:", id); // Check F12 Console for this
     selectedEquipmentId = id;
-    
-    // Safety check: ensure inventory actually has data
-    if (!inventory || inventory.length === 0) {
-        console.error("Inventory is empty. Reloading...");
-        await fetchInventory();
-    }
-
     const item = inventory.find(i => i.id === id);
-    if (!item) {
-        console.error("Could not find item with ID:", id);
-        return;
-    }
+    if (!item) return;
+
+    document.getElementById('modalTitle').innerText = `Unit: ${item.serial_number}`;
+    document.getElementById('edit-status').value = item.status;
+    
+    // NEW LOGIC TO OPEN
+    const modal = document.getElementById('customEquipmentModal');
+    modal.classList.add('is-open');
+    
+    switchTab('update');
+}
+
+function closeMasterModal() {
+    // NEW LOGIC TO CLOSE
+    document.getElementById('customEquipmentModal').classList.remove('is-open');
+}
 
     // Try-Catch to catch specific UI errors
     try {
