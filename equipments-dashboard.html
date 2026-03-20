@@ -343,19 +343,16 @@ let selectedEquipmentId = null; // Stores the ID of the unit currently being edi
 async function editEquipment(id) {
     selectedEquipmentId = id;
     
-    // 1. Find the item in our local 'inventory' array to get the serial number
     const item = inventory.find(i => i.id === id);
     if (!item) return;
 
-    // 2. Set the UI text
     document.getElementById('modalTitle').innerText = `Unit Details: ${item.serial_number}`;
     document.getElementById('edit-status').value = item.status;
     
-    // 3. Show the Modal (Flex is used to center the container)
     const modal = document.getElementById('masterModal');
     modal.style.display = 'flex';
+    modal.style.zIndex = "9999"; // Add this line for safety
     
-    // 4. Default to the 'Update' tab every time it opens
     switchTab('update');
 }
 
