@@ -144,12 +144,20 @@
         } catch (err) { console.error(err); }
     }
 
-    function filterByLoc(loc) {
-        currentFilter = loc;
-        document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
-        document.getElementById('btn-repairs').classList.toggle('active', loc === 'Warsaw Repairs');
-        fetchInventory();
-    }
+function filterByLoc(loc) {
+    currentFilter = loc;
+
+    // 1. Update the UI Button states
+    document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
+    document.getElementById('btn-repairs').classList.toggle('active', loc === 'Warsaw Repairs');
+    
+    // Add this line to handle the new button
+    const btnDeployed = document.getElementById('btn-deployed');
+    if (btnDeployed) btnDeployed.classList.toggle('active', loc === 'deployed');
+
+    // 2. Refresh the table
+    fetchInventory();
+}
 
     // Initialize
     window.onload = fetchInventory;
