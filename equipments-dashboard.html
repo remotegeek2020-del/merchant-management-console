@@ -51,16 +51,20 @@
 }
 /* Replace your existing #masterModal and .slds-modal styles with this */
 #masterModal {
+    display: none !important; /* Start hidden */
     position: fixed !important;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    z-index: 9999 !important;
-    display: none; /* JS will turn this to 'flex' */
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    height: 100% !important;
+    background: rgba(0, 0, 0, 0.7) !important;
+    z-index: 99999 !important;
     align-items: center;
     justify-content: center;
-    background: rgba(0, 0, 0, 0.6);
+}
+        /* This class will be used by JS to show it */
+#masterModal.is-open {
+    display: flex !important;
 }
 
 .slds-modal__container {
@@ -341,19 +345,37 @@ let selectedEquipmentId = null; // Stores the ID of the unit currently being edi
 
 // Opens the Modal and loads the initial data
 async function editEquipment(id) {
+    console.log("Pencil clicked for ID:", id); // Check F12 Console for this
     selectedEquipmentId = id;
     
-    const item = inventory.find(i => i.id === id);
-    if (!item) return;
+    // Safety check: ensure inventory actually has data
+    if (!inventory || inventory.length === 0) {
+        console.error("Inventory is empty. Reloading...");
+        await fetchInventory();
+    }
 
-    document.getElementById('modalTitle').innerText = `Unit Details: ${item.serial_number}`;
-    document.getElementById('edit-status').value = item.status;
-    
-    const modal = document.getElementById('masterModal');
-    modal.style.display = 'flex';
-    modal.style.zIndex = "9999"; // Add this line for safety
-    
-    switchTab('update');
+    const item = inventory.find(i => i.id === id);
+    if (!item) {
+        console.error("Could not find item with ID:", id);
+        return;
+    }
+
+    // Try-Catch to catch specific UI errors
+    try {
+        document.getElementById('modalTitle').innerText = `Unit Details: ${item.serial_number}`;
+        
+        const statusDropdown = document.getElementById('edit-status');
+        if (statusDropdown) statusDropdown.value = item.status;
+        
+        const modal = document.getElementById('masterModal');
+        modal.style.setProperty('display', 'flex', 'important'); // Force display
+        modal.style.zIndex = "9999";
+        
+        switchTab('update');
+        console.log("Modal should be visible now.");
+    } catch (err) {
+        console.error("Modal UI Error:", err);
+    }
 }
 
 // Handles switching between Update, Notes, and Logs tabs
