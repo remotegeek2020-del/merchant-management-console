@@ -77,29 +77,74 @@
             <tbody id="inventoryTableBody"></tbody>
         </table>
     </article>
+    <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; background: white; padding: 15px; border-radius: 12px; box-shadow: 0 4px 10px rgba(0,0,0,0.03);">
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <span style="font-size: 12px; font-weight: 700; color: #64748b;">SHOW:</span>
+        <select id="pageSize" onchange="changePageSize()" class="slds-select" style="width: 80px; border-radius: 8px;">
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+        </select>
+        <span id="pagination-info" style="font-size: 13px; color: #64748b; margin-left: 10px; font-weight: 600;">
+            Showing 0 of 0 items
+        </span>
+    </div>
+
+    <div style="display: flex; gap: 8px;">
+        <button onclick="prevPage()" class="slds-button slds-button_neutral" id="btn-prev" style="border-radius: 8px;">Previous</button>
+        <button onclick="nextPage()" class="slds-button slds-button_neutral" id="btn-next" style="border-radius: 8px;">Next</button>
+    </div>
+</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     let currentFilter = 'Warsaw Office';
     let inventory = [];
+    let currentPage = 0;
+let totalItems = 0;
+
+    function changePageSize() {
+    currentPage = 0; // Reset to page 1 when changing size
+    fetchInventory();
+}
+
+function nextPage() {
+    const limit = parseInt(document.getElementById('pageSize').value);
+    if ((currentPage + 1) * limit < totalItems) {
+        currentPage++;
+        fetchInventory();
+    }
+}
+
+function prevPage() {
+    if (currentPage > 0) {
+        currentPage--;
+        fetchInventory();
+    }
+}
 
 async function fetchInventory() {
     const tbody = document.getElementById('inventoryTableBody');
+    // Get the selected limit from your new dropdown
+    const limit = parseInt(document.getElementById('pageSize').value) || 50;
+
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;">
         <span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Scanning Inventory...
     </td></tr>`;
 
-    // --- LOGIC TO SWITCH PAYLOAD ---
+    // 1. Build Payload with Pagination
     let payload = { 
         action: 'list', 
-        query: document.getElementById('invSearch').value 
+        query: document.getElementById('invSearch').value,
+        page: currentPage, // Uses the global currentPage variable
+        limit: limit       // Uses the dropdown value
     };
 
     if (currentFilter === 'deployed') {
-        payload.filterStatus = 'deployed'; // Look for status
+        payload.filterStatus = 'deployed';
     } else {
-        payload.filterLocation = currentFilter; // Look for location
+        payload.filterLocation = currentFilter;
     }
 
     try {
@@ -116,6 +161,21 @@ async function fetchInventory() {
         }
 
         inventory = result.data || [];
+        totalItems = result.count || 0; // Store the total from Supabase
+
+        // 2. Update Pagination Text (Showing X-Y of Z)
+        const start = inventory.length > 0 ? (currentPage * limit) + 1 : 0;
+        const end = Math.min((currentPage + 1) * limit, totalItems);
+        const infoElement = document.getElementById('pagination-info');
+        if (infoElement) {
+            infoElement.innerText = `Showing ${start}-${end} of ${totalItems} items`;
+        }
+
+        // 3. Enable/Disable Prev/Next Buttons
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        if (btnPrev) btnPrev.disabled = (currentPage === 0);
+        if (btnNext) btnNext.disabled = (end >= totalItems);
 
         if (inventory.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;">No equipment found in ${currentFilter}.</td></tr>`;
@@ -132,10 +192,9 @@ async function fetchInventory() {
         inventory.forEach(item => {
             const row = tbody.insertRow();
             
-            // Logic for Location Badge coloring
             let locClass = 'loc-repair';
             if (item.current_location === 'Warsaw Office') locClass = 'loc-office';
-            if (item.status === 'deployed') locClass = 'loc-deployed'; // You can add this CSS class
+            if (item.status === 'deployed') locClass = 'loc-deployed';
 
             row.innerHTML = `
                 <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
@@ -153,7 +212,6 @@ async function fetchInventory() {
         });
     } catch (err) { console.error(err); }
 }
-
 function filterByLoc(loc) {
     currentFilter = loc;
 
