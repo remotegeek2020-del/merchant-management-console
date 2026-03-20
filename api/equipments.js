@@ -8,6 +8,17 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
+
+if (action === 'delete') {
+    const { data, error } = await supabase
+        .from('equipments')
+        .delete()
+        .eq('id', id);
+        
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
+        
         // --- ACTION: GET NOTES ---
 if (action === 'getNotes') {
     const { data, error } = await supabase
