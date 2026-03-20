@@ -77,11 +77,15 @@ if (action === 'addNote') {
             return res.status(200).json({ success: true, data });
         }
 
-        if (action === 'update') {
-            const { data, error } = await supabase.from('equipments').update(payload).eq('id', id);
-            if (error) throw error;
-            return res.status(200).json({ success: true, data });
-        }
+      if (action === 'update') {
+    const { data, error } = await supabase
+        .from('equipments')
+        .update(payload) // This 'payload' variable comes from req.body
+        .eq('id', id);
+        
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
 
         if (action === 'deploy') {
             const { merchant_id } = payload;
