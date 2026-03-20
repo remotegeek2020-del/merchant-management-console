@@ -146,6 +146,48 @@
 </div>
 </div>
 
+    <section id="masterModal" class="slds-modal">
+    <div class="slds-modal__container">
+        <header class="slds-modal__header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; position: relative;">
+            <h2 id="modalTitle" style="font-weight: 800; font-size: 1.25rem;">Equipment Details</h2>
+            <button onclick="closeMasterModal()" style="position: absolute; top: 15px; right: 15px; border: none; background: none; cursor: pointer;">
+                <span class="material-icons">close</span>
+            </button>
+        </header>
+        
+        <div class="slds-tabs_default">
+            <ul class="slds-tabs_default__nav" style="display: flex; list-style: none; padding: 0; margin: 0; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
+                <li id="tab-update-li" class="slds-tabs_default__item slds-is-active" style="padding: 10px 20px; cursor: pointer;">
+                    <a onclick="switchTab('update')">Update</a>
+                </li>
+                <li id="tab-notes-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;">
+                    <a onclick="switchTab('notes')">Notes</a>
+                </li>
+                <li id="tab-logs-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;">
+                    <a onclick="switchTab('logs')">Logs</a>
+                </li>
+            </ul>
+
+            <div id="tab-update" class="slds-tabs_default__content slds-show" style="padding: 20px;">
+                <label>Status</label>
+                <select id="edit-status" class="slds-select" style="width: 100%; margin-top: 10px;">
+                    <option value="stocked">Stocked</option>
+                    <option value="repairing">Repairing</option>
+                    <option value="deployed">Deployed</option>
+                </select>
+            </div>
+
+            <div id="tab-notes" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
+                <div id="notes-list" style="max-height: 250px; overflow-y: auto;"></div>
+            </div>
+
+            <div id="tab-logs" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
+                <p>Audit logs coming soon...</p>
+            </div>
+        </div>
+    </div>
+</section>
+
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     let currentFilter = 'Warsaw Office';
@@ -386,46 +428,6 @@ async function fetchNotes() {
     // Initialize
     window.onload = fetchInventory;
 </script>
- <section id="masterModal" class="slds-modal">
-    <div class="slds-modal__container">
-        <header class="slds-modal__header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; position: relative;">
-            <h2 id="modalTitle" style="font-weight: 800; font-size: 1.25rem;">Equipment Details</h2>
-            <button onclick="closeMasterModal()" style="position: absolute; top: 15px; right: 15px; border: none; background: none; cursor: pointer;">
-                <span class="material-icons">close</span>
-            </button>
-        </header>
-        
-        <div class="slds-tabs_default">
-            <ul class="slds-tabs_default__nav" style="display: flex; list-style: none; padding: 0; margin: 0; border-bottom: 1px solid #e2e8f0; background: #f8fafc;">
-                <li id="tab-update-li" class="slds-tabs_default__item slds-is-active" style="padding: 10px 20px; cursor: pointer;">
-                    <a onclick="switchTab('update')">Update</a>
-                </li>
-                <li id="tab-notes-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;">
-                    <a onclick="switchTab('notes')">Notes</a>
-                </li>
-                <li id="tab-logs-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;">
-                    <a onclick="switchTab('logs')">Logs</a>
-                </li>
-            </ul>
-
-            <div id="tab-update" class="slds-tabs_default__content slds-show" style="padding: 20px;">
-                <label>Status</label>
-                <select id="edit-status" class="slds-select" style="width: 100%; margin-top: 10px;">
-                    <option value="stocked">Stocked</option>
-                    <option value="repairing">Repairing</option>
-                    <option value="deployed">Deployed</option>
-                </select>
-            </div>
-
-            <div id="tab-notes" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
-                <div id="notes-list" style="max-height: 250px; overflow-y: auto;"></div>
-            </div>
-
-            <div id="tab-logs" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
-                <p>Audit logs coming soon...</p>
-            </div>
-        </div>
-    </div>
-</section>
+ 
 </body>
 </html>
