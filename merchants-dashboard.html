@@ -423,8 +423,8 @@ async function openModal(id) {
 
         // 2. Upload to Supabase Storage Bucket
         // We use your existing Supabase credentials
-        const supabaseUrl = 'https://YOUR_PROJECT_ID.supabase.co';
-        const supabaseKey = 'YOUR_ANON_PUBLIC_KEY'; // Use the ANON key for frontend
+        const supabaseUrl = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow'; // Use the ANON key for frontend
         const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
         const { data: storageData, error: storageError } = await supabase.storage
