@@ -100,7 +100,20 @@
                 })
             });
             const result = await res.json();
-            inventory = result.data;
+            
+            // --- ADD THIS CHECK ---
+            if (!result.success) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:red;">Error: ${result.message}</td></tr>`;
+                return;
+            }
+
+            inventory = result.data || [];
+
+            // If no data, show a friendly message
+            if (inventory.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;">No equipment found in ${currentFilter}.</td></tr>`;
+                return;
+            }
 
             // Update KPIs
             document.getElementById('kpi-total').innerText = result.metrics.total;
