@@ -186,7 +186,6 @@
     async function saveEquipmentChanges() {
     const saveBtn = document.querySelector('#tab-update .slds-button_brand');
     
-    // 1. Collect data from the modal inputs
     const updatedData = {
         serial_number: document.getElementById('edit-serial').value,
         terminal_type: document.getElementById('edit-terminal-type').value,
@@ -194,13 +193,11 @@
         status: document.getElementById('edit-status').value
     };
 
-    // Basic Validation
     if (!updatedData.serial_number) {
         Swal.fire('Error', 'Serial Number is required', 'error');
         return;
     }
 
-    // 2. Disable button to prevent double-clicks
     saveBtn.disabled = true;
     saveBtn.innerText = 'Saving...';
 
@@ -210,36 +207,43 @@
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 action: 'update',
-                id: selectedId, // This was set when you clicked the pencil
+                id: selectedId, 
                 payload: updatedData
             })
         });
 
         const result = await res.json();
+        console.log("Update Result:", result); // Check this in F12
 
         if (result.success) {
-            Swal.fire({
+            // SUCCESS POPUP
+            await Swal.fire({
                 icon: 'success',
-                title: 'Unit Updated',
-                text: 'The equipment details have been saved.',
+                title: 'Updated!',
+                text: 'Equipment record saved successfully.',
                 timer: 1500,
                 showConfirmButton: false
             });
             
-            closeModal();      // Close the modal
-            fetchInventory();  // Refresh the table rows
+            // USE THE CORRECT CLOSE FUNCTION NAME
+            if (typeof closeModal === "function") {
+                closeModal();
+            } else if (typeof closeMasterModal === "function") {
+                closeMasterModal();
+            }
+
+            fetchInventory(); 
         } else {
-            throw new Error(result.message);
+            Swal.fire('Update Failed', result.message || 'Unknown error', 'error');
         }
     } catch (err) {
         console.error("Save Error:", err);
-        Swal.fire('Update Failed', err.message, 'error');
+        Swal.fire('Connection Error', 'Could not reach the server.', 'error');
     } finally {
         saveBtn.disabled = false;
         saveBtn.innerText = 'Save Changes';
     }
 }
-
     async function fetchInventory() {
         const tbody = document.getElementById('inventoryTableBody');
         const limit = parseInt(document.getElementById('pageSize').value) || 50;
