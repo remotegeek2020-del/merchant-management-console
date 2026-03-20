@@ -150,11 +150,11 @@
 </div>
 </div>
 
-    <section id="masterModal" class="slds-modal">
-    <div class="slds-modal__container">
-        <header class="slds-modal__header" style="padding: 20px; border-bottom: 1px solid #e2e8f0; position: relative;">
-            <h2 id="modalTitle" style="font-weight: 800; font-size: 1.25rem;">Equipment Details</h2>
-            <button onclick="closeMasterModal()" style="position: absolute; top: 15px; right: 15px; border: none; background: none; cursor: pointer;">
+   <section id="customEquipmentModal">
+    <div class="modal-content-box">
+        <header style="padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
+            <h2 id="modalTitle" style="font-weight: 800; font-size: 1.25rem; margin: 0;">Equipment Details</h2>
+            <button onclick="closeMasterModal()" style="border: none; background: none; cursor: pointer;">
                 <span class="material-icons">close</span>
             </button>
         </header>
@@ -167,13 +167,10 @@
                 <li id="tab-notes-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;">
                     <a onclick="switchTab('notes')">Notes</a>
                 </li>
-                <li id="tab-logs-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;">
-                    <a onclick="switchTab('logs')">Logs</a>
-                </li>
             </ul>
 
             <div id="tab-update" class="slds-tabs_default__content slds-show" style="padding: 20px;">
-                <label>Status</label>
+                <label style="font-weight: 700; color: #64748b;">STATUS</label>
                 <select id="edit-status" class="slds-select" style="width: 100%; margin-top: 10px;">
                     <option value="stocked">Stocked</option>
                     <option value="repairing">Repairing</option>
@@ -183,10 +180,6 @@
 
             <div id="tab-notes" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
                 <div id="notes-list" style="max-height: 250px; overflow-y: auto;"></div>
-            </div>
-
-            <div id="tab-logs" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
-                <p>Audit logs coming soon...</p>
             </div>
         </div>
     </div>
