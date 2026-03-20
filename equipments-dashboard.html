@@ -69,6 +69,12 @@
             </div>
             <input type="text" id="invSearch" placeholder="Search Serial..." class="slds-input" style="width:200px; border-radius:10px; margin-right: 10px;">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
+            <button class="slds-button slds-button_success" 
+            style="border-radius:10px; background:#166534; color:white; margin-left:10px; display:flex; align-items:center; gap:5px;" 
+            onclick="openAddModal()">
+        <span class="material-icons" style="font-size:18px;">add</span>
+        + Add New Item
+    </button>
         </div>
     </div>
 
@@ -183,6 +189,84 @@
     let currentPage = 0;
     let totalItems = 0;
     let selectedId = null;
+
+// Function to open the modal for a NEW item
+function openAddModal() {
+    selectedId = null; // Important: Clear the ID so the system knows it's NEW
+    
+    // 1. Reset all fields to default/empty
+    document.getElementById('modalTitle').innerText = "Add New Equipment";
+    document.getElementById('edit-serial').value = "";
+    document.getElementById('edit-terminal-type').value = "Dejavoo P1";
+    document.getElementById('edit-received-date').value = new Date().toISOString().split('T')[0];
+    document.getElementById('edit-status').value = "stocked";
+    
+    // 2. Ensure fields are enabled (in case the last one was a 'deployed' locked unit)
+    const fields = ['edit-serial', 'edit-terminal-type', 'edit-received-date', 'edit-status'];
+    fields.forEach(id => document.getElementById(id).disabled = false);
+    
+    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+    if (saveBtn) {
+        saveBtn.style.display = 'block';
+        saveBtn.innerText = 'Create Equipment';
+    }
+
+    // 3. Open the modal
+    document.getElementById('customModal').classList.add('is-open');
+    switchTab('update');
+}
+
+// UPDATE your existing save function to handle "Create"
+async function saveEquipmentChanges() {
+    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+    const newStatus = document.getElementById('edit-status').value;
+    
+    let newLocation = (newStatus === 'repairing') ? 'Warsaw Repairs' : 'Warsaw Office';
+
+    const payload = {
+        serial_number: document.getElementById('edit-serial').value,
+        terminal_type: document.getElementById('edit-terminal-type').value,
+        received_date: document.getElementById('edit-received-date').value,
+        status: newStatus,
+        current_location: newLocation
+    };
+
+    if (!payload.serial_number) {
+        Swal.fire('Error', 'Serial Number is required', 'error');
+        return;
+    }
+
+    saveBtn.disabled = true;
+    saveBtn.innerText = 'Saving...';
+
+    try {
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                // If selectedId exists, action is 'update'. If null, action is 'create'
+                action: selectedId ? 'update' : 'create', 
+                id: selectedId, 
+                payload: payload
+            })
+        });
+
+        const result = await res.json();
+
+        if (result.success) {
+            closeModal();
+            fetchInventory(); 
+            Swal.fire({ icon: 'success', title: selectedId ? 'Updated' : 'Created', timer: 1500, showConfirmButton: false });
+        } else {
+            Swal.fire('Error', result.message, 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Server connection failed', 'error');
+    } finally {
+        saveBtn.disabled = false;
+        saveBtn.innerText = 'Save Changes';
+    }
+}
 
 async function saveEquipmentChanges() {
     const saveBtn = document.querySelector('#tab-update .slds-button_brand');
