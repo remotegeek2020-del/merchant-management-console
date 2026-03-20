@@ -187,14 +187,26 @@
 async function saveEquipmentChanges() {
     const saveBtn = document.querySelector('#tab-update .slds-button_brand');
     
+    // 1. Get the current status from the dropdown
+    const newStatus = document.getElementById('edit-status').value;
+    
+    // 2. LOGIC: Determine location based on status
+    let newLocation = "";
+    if (newStatus === 'repairing') {
+        newLocation = 'Warsaw Repairs';
+    } else if (newStatus === 'stocked') {
+        newLocation = 'Warsaw Office';
+    }
+
     const updatedData = {
         serial_number: document.getElementById('edit-serial').value,
         terminal_type: document.getElementById('edit-terminal-type').value,
         received_date: document.getElementById('edit-received-date').value,
-        status: document.getElementById('edit-status').value
+        status: newStatus,
+        current_location: newLocation // Automatically re-assigns the location
     };
 
-    // 1. Disable button to show progress
+    // 3. Disable button to show progress
     saveBtn.disabled = true;
     saveBtn.innerText = 'Saving...';
 
@@ -212,14 +224,14 @@ async function saveEquipmentChanges() {
         const result = await res.json();
 
         if (result.success) {
-            // 2. Safe Modal Close (Try both possible names)
+            // 4. Safe Modal Close (Try both possible names)
             const modal = document.getElementById('customModal') || document.getElementById('masterModal');
             if (modal) modal.classList.remove('is-open');
             
-            // 3. Refresh Table
+            // 5. Refresh Table
             fetchInventory(); 
 
-            // 4. Safe Popup (Check if Swal exists first)
+            // 6. Safe Popup
             if (window.Swal) {
                 Swal.fire({
                     icon: 'success',
@@ -243,7 +255,6 @@ async function saveEquipmentChanges() {
         saveBtn.innerText = 'Save Changes';
     }
 }
-
     
     async function fetchInventory() {
         const tbody = document.getElementById('inventoryTableBody');
