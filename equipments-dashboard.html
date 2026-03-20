@@ -209,15 +209,36 @@ row.innerHTML = `
         } catch (err) { console.error(err); }
     }
 
-    function editEquipment(id) {
-        selectedId = id;
-        const item = inventory.find(i => i.id === id);
-        if (!item) return;
-        document.getElementById('modalTitle').innerText = `Unit: ${item.serial_number}`;
-        document.getElementById('edit-status').value = item.status;
-        document.getElementById('customModal').classList.add('is-open');
-        switchTab('update');
+  function editEquipment(id) {
+    selectedId = id;
+    const item = inventory.find(i => i.id === id);
+    if (!item) return;
+
+    // 1. Set the Modal Title and Status value
+    document.getElementById('modalTitle').innerText = `Unit: ${item.serial_number}`;
+    
+    const statusDropdown = document.getElementById('edit-status');
+    statusDropdown.value = item.status;
+
+    // 2. Safety Check: If status is 'deployed', disable editing
+    const isDeployed = item.status === 'deployed';
+    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+
+    if (isDeployed) {
+        // Lock the fields and hide save button
+        statusDropdown.disabled = true;
+        if (saveBtn) saveBtn.style.display = 'none';
+        document.getElementById('modalTitle').innerHTML = `Unit: ${item.serial_number} <span style="color: #e11d48; font-size: 12px; margin-left: 10px;">(Read-Only: Deployed)</span>`;
+    } else {
+        // Unlock fields and show save button
+        statusDropdown.disabled = false;
+        if (saveBtn) saveBtn.style.display = 'block';
     }
+
+    // 3. Open Modal and default to Update tab
+    document.getElementById('customModal').classList.add('is-open');
+    switchTab('update');
+}
 
     function switchTab(tabName) {
         ['update', 'notes'].forEach(t => {
