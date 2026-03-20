@@ -190,156 +190,134 @@
     let totalItems = 0;
     let selectedId = null;
 
-// Function to open the modal for a NEW item
-function openAddModal() {
-    selectedId = null; // Important: Clear the ID so the system knows it's NEW
-    
-    // 1. Reset all fields to default/empty
-    document.getElementById('modalTitle').innerText = "Add New Equipment";
-    document.getElementById('edit-serial').value = "";
-    document.getElementById('edit-terminal-type').value = "Dejavoo P1";
-    document.getElementById('edit-received-date').value = new Date().toISOString().split('T')[0];
-    document.getElementById('edit-status').value = "stocked";
-    
-    // 2. Ensure fields are enabled (in case the last one was a 'deployed' locked unit)
-    const fields = ['edit-serial', 'edit-terminal-type', 'edit-received-date', 'edit-status'];
-    fields.forEach(id => document.getElementById(id).disabled = false);
-    
-    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
-    if (saveBtn) {
-        saveBtn.style.display = 'block';
-        saveBtn.innerText = 'Create Equipment';
-    }
-
-    // 3. Open the modal
-    document.getElementById('customModal').classList.add('is-open');
-    switchTab('update');
-}
-
-// UPDATE your existing save function to handle "Create"
-async function saveEquipmentChanges() {
-    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
-    const newStatus = document.getElementById('edit-status').value;
-    
-    let newLocation = (newStatus === 'repairing') ? 'Warsaw Repairs' : 'Warsaw Office';
-
-    const payload = {
-        serial_number: document.getElementById('edit-serial').value,
-        terminal_type: document.getElementById('edit-terminal-type').value,
-        received_date: document.getElementById('edit-received-date').value,
-        status: newStatus,
-        current_location: newLocation
-    };
-
-    if (!payload.serial_number) {
-        Swal.fire('Error', 'Serial Number is required', 'error');
-        return;
-    }
-
-    saveBtn.disabled = true;
-    saveBtn.innerText = 'Saving...';
-
-    try {
-        const res = await fetch('/api/equipments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                // If selectedId exists, action is 'update'. If null, action is 'create'
-                action: selectedId ? 'update' : 'create', 
-                id: selectedId, 
-                payload: payload
-            })
-        });
-
-        const result = await res.json();
-
-        if (result.success) {
-            closeModal();
-            fetchInventory(); 
-            Swal.fire({ icon: 'success', title: selectedId ? 'Updated' : 'Created', timer: 1500, showConfirmButton: false });
-        } else {
-            Swal.fire('Error', result.message, 'error');
+    // 1. MODAL: Open for NEW Item
+    function openAddModal() {
+        selectedId = null; 
+        document.getElementById('modalTitle').innerText = "Add New Equipment";
+        document.getElementById('edit-serial').value = "";
+        document.getElementById('edit-terminal-type').value = "Dejavoo P1";
+        document.getElementById('edit-received-date').value = new Date().toISOString().split('T')[0];
+        document.getElementById('edit-status').value = "stocked";
+        
+        const fields = ['edit-serial', 'edit-terminal-type', 'edit-received-date', 'edit-status'];
+        fields.forEach(id => document.getElementById(id).disabled = false);
+        
+        const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+        if (saveBtn) {
+            saveBtn.style.display = 'block';
+            saveBtn.innerText = 'Create Equipment';
         }
-    } catch (err) {
-        Swal.fire('Error', 'Server connection failed', 'error');
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.innerText = 'Save Changes';
-    }
-}
 
-async function saveEquipmentChanges() {
-    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
-    
-    // 1. Get the current status from the dropdown
-    const newStatus = document.getElementById('edit-status').value;
-    
-    // 2. LOGIC: Determine location based on status
-    let newLocation = "";
-    if (newStatus === 'repairing') {
-        newLocation = 'Warsaw Repairs';
-    } else if (newStatus === 'stocked') {
-        newLocation = 'Warsaw Office';
+        document.getElementById('customModal').classList.add('is-open');
+        switchTab('update');
     }
 
-    const updatedData = {
-        serial_number: document.getElementById('edit-serial').value,
-        terminal_type: document.getElementById('edit-terminal-type').value,
-        received_date: document.getElementById('edit-received-date').value,
-        status: newStatus,
-        current_location: newLocation // Automatically re-assigns the location
-    };
+    // 2. MODAL: Open for EDITING existing Item
+    function editEquipment(id) {
+        selectedId = id;
+        const item = inventory.find(i => i.id === id);
+        if (!item) return;
 
-    // 3. Disable button to show progress
-    saveBtn.disabled = true;
-    saveBtn.innerText = 'Saving...';
+        document.getElementById('modalTitle').innerText = `Editing: ${item.serial_number}`;
+        document.getElementById('edit-serial').value = item.serial_number || '';
+        document.getElementById('edit-terminal-type').value = item.terminal_type || 'Dejavoo P1';
+        document.getElementById('edit-status').value = item.status === 'deployed' ? 'stocked' : item.status;
+        
+        if (item.received_date) {
+            document.getElementById('edit-received-date').value = new Date(item.received_date).toISOString().split('T')[0];
+        } else {
+            document.getElementById('edit-received-date').value = '';
+        }
 
-    try {
-        const res = await fetch('/api/equipments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'update',
-                id: selectedId, 
-                payload: updatedData
-            })
+        const isDeployed = item.status === 'deployed';
+        const fields = ['edit-serial', 'edit-terminal-type', 'edit-received-date', 'edit-status'];
+        const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+
+        fields.forEach(fieldId => {
+            document.getElementById(fieldId).disabled = isDeployed;
         });
 
-        const result = await res.json();
+        if (isDeployed) {
+            if (saveBtn) saveBtn.style.display = 'none';
+            document.getElementById('modalTitle').innerHTML = `Unit: ${item.serial_number} <span style="color: #e11d48; font-size: 12px; margin-left: 10px;">(Read-Only: Deployed)</span>`;
+        } else {
+            if (saveBtn) {
+                saveBtn.style.display = 'block';
+                saveBtn.innerText = 'Save Changes';
+            }
+        }
 
-        if (result.success) {
-            // 4. Safe Modal Close (Try both possible names)
-            const modal = document.getElementById('customModal') || document.getElementById('masterModal');
-            if (modal) modal.classList.remove('is-open');
-            
-            // 5. Refresh Table
-            fetchInventory(); 
+        document.getElementById('customModal').classList.add('is-open');
+        switchTab('update');
+    }
 
-            // 6. Safe Popup
-            if (window.Swal) {
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Saved',
-                    text: 'Changes applied successfully',
-                    timer: 1500,
-                    showConfirmButton: false
+    // 3. DATABASE: Save (Create or Update)
+    async function saveEquipmentChanges() {
+        const saveBtn = document.querySelector('#tab-update .slds-button_brand');
+        const newStatus = document.getElementById('edit-status').value;
+        
+        // Auto-map location based on status
+        let newLocation = (newStatus === 'repairing') ? 'Warsaw Repairs' : 'Warsaw Office';
+
+        const payload = {
+            serial_number: document.getElementById('edit-serial').value,
+            terminal_type: document.getElementById('edit-terminal-type').value,
+            received_date: document.getElementById('edit-received-date').value,
+            status: newStatus,
+            current_location: newLocation
+        };
+
+        if (!payload.serial_number) {
+            Swal.fire('Error', 'Serial Number is required', 'error');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        saveBtn.innerText = 'Saving...';
+
+        // Fix the UUID "null" error by only including ID if it exists
+        const requestBody = {
+            action: selectedId ? 'update' : 'create',
+            payload: payload
+        };
+        if (selectedId) requestBody.id = selectedId;
+
+        try {
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(requestBody)
+            });
+
+            const result = await res.json();
+
+            if (result.success) {
+                closeModal();
+                fetchInventory(); 
+                Swal.fire({ 
+                    icon: 'success', 
+                    title: selectedId ? 'Updated' : 'Created', 
+                    timer: 1500, 
+                    showConfirmButton: false 
                 });
             } else {
-                alert("Saved successfully!");
+                // Check for duplicate serial error from Supabase
+                const msg = result.message || "";
+                if (msg.includes('unique')) {
+                    Swal.fire('Duplicate', 'This Serial Number already exists.', 'warning');
+                } else {
+                    Swal.fire('Error', result.message, 'error');
+                }
             }
-
-        } else {
-            alert("Error: " + result.message);
+        } catch (err) {
+            Swal.fire('Error', 'Server connection failed', 'error');
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.innerText = selectedId ? 'Save Changes' : 'Create Equipment';
         }
-    } catch (err) {
-        console.error("Save Error:", err);
-        alert("Connection Error. Check console (F12)");
-    } finally {
-        saveBtn.disabled = false;
-        saveBtn.innerText = 'Save Changes';
     }
-}
-    
+
+    // 4. CORE LOGIC: Fetch, Tabs, Pagination
     async function fetchInventory() {
         const tbody = document.getElementById('inventoryTableBody');
         const limit = parseInt(document.getElementById('pageSize').value) || 50;
@@ -364,99 +342,56 @@ async function saveEquipmentChanges() {
             inventory = result.data || [];
             totalItems = result.count || 0;
 
-            // Update KPIs
             document.getElementById('kpi-total').innerText = result.metrics.total;
             document.getElementById('kpi-office').innerText = result.metrics.inOffice;
             document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
             document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
 
-            // Pagination UI
             const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
             const end = Math.min((currentPage + 1) * limit, totalItems);
             document.getElementById('pagination-info').innerText = `Showing ${start}-${end} of ${totalItems} items`;
             document.getElementById('btn-prev').disabled = currentPage === 0;
             document.getElementById('btn-next').disabled = end >= totalItems;
 
+            tbody.innerHTML = "";
+            inventory.forEach(item => {
+                const row = tbody.insertRow();
+                let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
+                if (item.status === 'deployed') locClass = 'loc-deployed';
 
-    tbody.innerHTML = "";
-inventory.forEach(item => {
-    const row = tbody.insertRow();
-    
-    // 1. Determine the correct CSS class for the location badge
-    let locClass = 'loc-repair';
-    if (item.current_location === 'Warsaw Office') locClass = 'loc-office';
-    if (item.status === 'deployed') locClass = 'loc-deployed';
-
-    // 2. Logic for the Action Button (Pencil or Lock)
-    const isDeployed = item.status === 'deployed';
-    const actionButton = `
-        <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
-            <span class="material-icons" style="font-size:18px;">${isDeployed ? 'visibility' : 'edit'}</span>
-        </button>
-    `;
-
-    // 3. FILL THE ROW (Must have exactly 7 <td> tags to match your headers)
-    row.innerHTML = `
-        <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
-        <td>${item.terminal_type || '---'}</td>
-        <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
-        <td><span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span></td>
-        <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
-        <td><span class="slds-badge">${item.status}</span></td>
-        <td style="text-align:center;">${actionButton}</td>
-    `;
-});
+                const isDeployed = item.status === 'deployed';
+                row.innerHTML = `
+                    <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
+                    <td>${item.terminal_type || '---'}</td>
+                    <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
+                    <td><span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span></td>
+                    <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
+                    <td><span class="slds-badge">${item.status}</span></td>
+                    <td style="text-align:center;">
+                        <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
+                            <span class="material-icons" style="font-size:18px;">${isDeployed ? 'visibility' : 'edit'}</span>
+                        </button>
+                    </td>
+                `;
+            });
         } catch (err) { console.error(err); }
     }
 
-  function editEquipment(id) {
-    selectedId = id;
-    const item = inventory.find(i => i.id === id);
-    if (!item) return;
-
-    // 1. Fill the inputs with current data
-    document.getElementById('modalTitle').innerText = `Editing: ${item.serial_number}`;
-    document.getElementById('edit-serial').value = item.serial_number || '';
-    document.getElementById('edit-terminal-type').value = item.terminal_type || 'Dejavoo P1';
-    document.getElementById('edit-status').value = item.status === 'deployed' ? 'stocked' : item.status;
-    
-    // Format date for the input field (YYYY-MM-DD)
-    if (item.received_date) {
-        document.getElementById('edit-received-date').value = new Date(item.received_date).toISOString().split('T')[0];
-    } else {
-        document.getElementById('edit-received-date').value = '';
-    }
-
-    // 2. Lock logic for Deployed units
-    const isDeployed = item.status === 'deployed';
-    const fields = ['edit-serial', 'edit-terminal-type', 'edit-received-date', 'edit-status'];
-    const saveBtn = document.querySelector('#tab-update .slds-button_brand');
-
-    fields.forEach(fieldId => {
-        document.getElementById(fieldId).disabled = isDeployed;
-    });
-
-    if (isDeployed) {
-        if (saveBtn) saveBtn.style.display = 'none';
-        document.getElementById('modalTitle').innerHTML = `Unit: ${item.serial_number} <span style="color: #e11d48; font-size: 12px; margin-left: 10px;">(Read-Only: Deployed)</span>`;
-    } else {
-        if (saveBtn) saveBtn.style.display = 'block';
-    }
-
-    document.getElementById('customModal').classList.add('is-open');
-    switchTab('update');
-}
-
     function switchTab(tabName) {
         ['update', 'notes'].forEach(t => {
-            document.getElementById(`tab-${t}`).classList.replace('slds-show', 'slds-hide');
-            document.getElementById(`tab-${t}-li`).classList.remove('slds-is-active');
+            const content = document.getElementById(`tab-${t}`);
+            const tabLi = document.getElementById(`tab-${t}-li`);
+            if(content) content.classList.replace('slds-show', 'slds-hide');
+            if(tabLi) tabLi.classList.remove('slds-is-active');
         });
-        document.getElementById(`tab-${tabName}`).classList.replace('slds-hide', 'slds-show');
-        document.getElementById(`tab-${tabName}-li`).classList.add('slds-is-active');
+        const target = document.getElementById(`tab-${tabName}`);
+        const targetLi = document.getElementById(`tab-${tabName}-li`);
+        if(target) target.classList.replace('slds-hide', 'slds-show');
+        if(targetLi) targetLi.classList.add('slds-is-active');
     }
 
     function closeModal() { document.getElementById('customModal').classList.remove('is-open'); }
+    
     function filterByLoc(loc) { 
         currentFilter = loc; 
         currentPage = 0; 
@@ -465,6 +400,7 @@ inventory.forEach(item => {
         document.getElementById('btn-deployed').classList.toggle('active', loc === 'deployed');
         fetchInventory(); 
     }
+
     function changePageSize() { currentPage = 0; fetchInventory(); }
     function nextPage() { currentPage++; fetchInventory(); }
     function prevPage() { if(currentPage > 0) { currentPage--; fetchInventory(); } }
