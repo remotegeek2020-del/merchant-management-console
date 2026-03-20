@@ -47,6 +47,7 @@
         
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
 
@@ -183,7 +184,7 @@
     let totalItems = 0;
     let selectedId = null;
 
-    async function saveEquipmentChanges() {
+async function saveEquipmentChanges() {
     const saveBtn = document.querySelector('#tab-update .slds-button_brand');
     
     const updatedData = {
@@ -193,11 +194,7 @@
         status: document.getElementById('edit-status').value
     };
 
-    if (!updatedData.serial_number) {
-        Swal.fire('Error', 'Serial Number is required', 'error');
-        return;
-    }
-
+    // 1. Disable button to show progress
     saveBtn.disabled = true;
     saveBtn.innerText = 'Saving...';
 
@@ -213,37 +210,41 @@
         });
 
         const result = await res.json();
-        console.log("Update Result:", result); // Check this in F12
 
         if (result.success) {
-            // SUCCESS POPUP
-            await Swal.fire({
-                icon: 'success',
-                title: 'Updated!',
-                text: 'Equipment record saved successfully.',
-                timer: 1500,
-                showConfirmButton: false
-            });
+            // 2. Safe Modal Close (Try both possible names)
+            const modal = document.getElementById('customModal') || document.getElementById('masterModal');
+            if (modal) modal.classList.remove('is-open');
             
-            // USE THE CORRECT CLOSE FUNCTION NAME
-            if (typeof closeModal === "function") {
-                closeModal();
-            } else if (typeof closeMasterModal === "function") {
-                closeMasterModal();
+            // 3. Refresh Table
+            fetchInventory(); 
+
+            // 4. Safe Popup (Check if Swal exists first)
+            if (window.Swal) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Saved',
+                    text: 'Changes applied successfully',
+                    timer: 1500,
+                    showConfirmButton: false
+                });
+            } else {
+                alert("Saved successfully!");
             }
 
-            fetchInventory(); 
         } else {
-            Swal.fire('Update Failed', result.message || 'Unknown error', 'error');
+            alert("Error: " + result.message);
         }
     } catch (err) {
         console.error("Save Error:", err);
-        Swal.fire('Connection Error', 'Could not reach the server.', 'error');
+        alert("Connection Error. Check console (F12)");
     } finally {
         saveBtn.disabled = false;
         saveBtn.innerText = 'Save Changes';
     }
 }
+
+    
     async function fetchInventory() {
         const tbody = document.getElementById('inventoryTableBody');
         const limit = parseInt(document.getElementById('pageSize').value) || 50;
