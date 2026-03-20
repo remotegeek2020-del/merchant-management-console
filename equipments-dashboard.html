@@ -49,15 +49,15 @@
     visibility: visible !important;
     opacity: 1 !important;
 }
-        /* Minimal fix to ensure modal is visible */
+/* Replace your existing #masterModal and .slds-modal styles with this */
 #masterModal {
     position: fixed !important;
     top: 0;
     left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 9999 !important; /* Ensures it sits on top of the dashboard */
-    display: none; /* JS will change this to flex */
+    width: 100vw;
+    height: 100vh;
+    z-index: 9999 !important;
+    display: none; /* JS will turn this to 'flex' */
     align-items: center;
     justify-content: center;
     background: rgba(0, 0, 0, 0.6);
@@ -66,10 +66,13 @@
 .slds-modal__container {
     background: white;
     border-radius: 12px;
-    width: 90%;
+    width: 95%;
     max-width: 600px;
+    height: auto;
+    max-height: 80vh;
     overflow: hidden;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+    display: block !important;
 }
 
 /* Tab helper classes */
