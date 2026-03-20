@@ -398,65 +398,7 @@ async function openModal(id) {
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
  
-    window.handleFileUpload = async function(merchantId) {
-    const fileInput = document.getElementById('fileInput');
-    const file = fileInput.files[0];
-    if (!file) return;
-
-    // Check file size (10MB limit)
-    if (file.size > 10 * 1024 * 1024) {
-        return Swal.fire('Error', 'File is too large (Max 10MB)', 'error');
-    }
-
-    Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-
-    try {
-        // 1. Generate a unique path
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-        const filePath = `${merchantId}/${fileName}`;
-
-        // 2. Initialize Supabase Client (Renamed to sbClient to avoid conflict)
-        const supabaseUrl = 'https://zuzwljjrppyrzngmhdru.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow';
-        
-        // Use the library 'supabase' to create our specific 'sbClient'
-        const sbClient = supabase.createClient(supabaseUrl, supabaseKey);
-
-        // Upload to Bucket
-        const { data: storageData, error: storageError } = await sbClient.storage
-            .from('merchant-files')
-            .upload(filePath, file);
-
-        if (storageError) throw storageError;
-
-        // 3. Register the file in your database table via your API
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'add_attachment',
-                merchant_id: merchantId,
-                file_name: file.name,
-                file_path: filePath,
-                file_type: file.type,
-                file_size: file.size,
-                uploaded_by: sessionStorage.getItem('pp_username') || 'System'
-            })
-        });
-
-        const result = await res.json();
-        if (result.success) {
-            Swal.fire({ icon: 'success', title: 'Uploaded!', timer: 1500, showConfirmButton: false });
-            openModal(merchantId); // This refreshes the modal to show the new file list
-        } else {
-            throw new Error(result.message);
-        }
-    } catch (err) {
-        console.error("Upload Error Detail:", err);
-        Swal.fire('Upload Failed', err.message, 'error');
-    }
-};
+   
 </script>
 </body>
 </html>
