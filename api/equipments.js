@@ -8,6 +8,24 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
+        // --- ACTION: GET NOTES ---
+if (action === 'getNotes') {
+    const { data, error } = await supabase
+        .from('equipment_notes')
+        .select('*')
+        .eq('equipment_id', id)
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
+
+// --- ACTION: ADD NOTE ---
+if (action === 'addNote') {
+    const { data, error } = await supabase.from('equipment_notes').insert([payload]);
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
         // --- ACTION: LIST INVENTORY ---
         if (action === 'list') {
             let sb = supabase.from('equipments').select(`
