@@ -394,6 +394,43 @@
                 .upload(filePath, file);
 
             if (storageError) throw storageError;
+            // --- THE LOGBOOK STEP ---
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'add_attachment',
+                merchant_id: merchantId,
+                file_name: file.name,
+                file_path: filePath,
+                file_type: file.type,
+                file_size: file.size,
+                uploaded_by: sessionStorage.getItem('pp_username') || 'System'
+            })
+        });
+
+        const result = await res.json();
+        
+        if (result.success) {
+            // SHOW THE GREEN SUCCESS BOX
+            const Toast = Swal.mixin({
+                toast: true,
+                position: 'top-end',
+                showConfirmButton: false,
+                timer: 2000,
+                timerProgressBar: true
+            });
+
+            await Toast.fire({
+                icon: 'success',
+                title: 'Document attached successfully'
+            });
+
+            // REFRESH THE SCREEN SO THE FILE APPEARS
+            openModal(merchantId); 
+        } else {
+            throw new Error(result.message);
+        }
 
             const res = await fetch('/api/merchants', {
                 method: 'POST',
