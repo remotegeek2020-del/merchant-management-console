@@ -242,5 +242,56 @@ function filterByLoc(loc) {
     // Initialize
     window.onload = fetchInventory;
 </script>
+    <section id="masterModal" class="slds-modal" style="display:none; background: rgba(0,0,0,0.6);">
+    <div class="slds-modal__container" style="max-width: 800px;">
+        <header class="slds-modal__header">
+            <button onclick="closeMasterModal()" class="slds-button slds-button_icon slds-modal__close">
+                <span class="material-icons">close</span>
+            </button>
+            <h2 id="modalTitle" class="slds-text-heading_medium slds-hyphenate" style="font-weight: 800;">Equipment Details</h2>
+        </header>
+        
+        <div class="slds-tabs_default">
+            <ul class="slds-tabs_default__nav" role="tablist" style="background: #f8fafc; padding: 0 20px;">
+                <li class="slds-tabs_default__item slds-is-active" title="Update" id="tab-update-li">
+                    <a class="slds-tabs_default__link" onclick="switchTab('update')">Update Details</a>
+                </li>
+                <li class="slds-tabs_default__item" title="Notes" id="tab-notes-li">
+                    <a class="slds-tabs_default__link" onclick="switchTab('notes')">Notes</a>
+                </li>
+                <li class="slds-tabs_default__item" title="Logs" id="tab-logs-li">
+                    <a class="slds-tabs_default__link" onclick="switchTab('logs')">Audit Logs</a>
+                </li>
+            </ul>
+
+            <div id="tab-update" class="slds-tabs_default__content slds-show" style="padding: 20px;">
+                <div class="slds-form-element">
+                    <label class="slds-form-element__label">Status</label>
+                    <select id="edit-status" class="slds-select">
+                        <option value="stocked">Stocked</option>
+                        <option value="repairing">Repairing</option>
+                        <option value="deployed">Deployed</option>
+                    </select>
+                </div>
+                <button onclick="saveEquipmentUpdate()" class="slds-button slds-button_brand slds-m-top_medium">Update Equipment</button>
+            </div>
+
+            <div id="tab-notes" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
+                <div style="margin-bottom: 20px;">
+                    <textarea id="new-note-text" class="slds-textarea" placeholder="Write a note..."></textarea>
+                    <button onclick="addNote()" class="slds-button slds-button_neutral slds-m-top_x-small">Post Note</button>
+                </div>
+                <div id="notes-list" style="max-height: 300px; overflow-y: auto; border-top: 1px solid #eee;">
+                    </div>
+            </div>
+
+            <div id="tab-logs" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
+                <p style="color: #64748b; font-size: 13px;">System logs for this unit:</p>
+                <ul id="logs-list" class="slds-m-top_small">
+                    </ul>
+            </div>
+        </div>
+    </div>
+</section>
 </body>
 </html>
