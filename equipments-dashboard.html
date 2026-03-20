@@ -43,20 +43,33 @@
         justify-content: center;
     }
 
-    #masterModal.is-open {
-        display: flex !important;
-    }
+   /* RESET MODAL CSS - HIGH PRIORITY */
+#customEquipmentModal {
+    display: none !important; 
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100vw !important;
+    height: 100vh !important;
+    background: rgba(0, 0, 0, 0.8) !important;
+    z-index: 999999 !important;
+    align-items: center;
+    justify-content: center;
+}
 
-    .slds-modal__container {
-        background: white !important;
-        border-radius: 12px !important;
-        width: 95% !important;
-        max-width: 600px !important;
-        max-height: 85vh !important;
-        overflow: hidden !important;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
-        display: block !important;
-    }
+#customEquipmentModal.is-open {
+    display: flex !important;
+}
+
+.modal-content-box {
+    background: white !important;
+    border-radius: 12px !important;
+    width: 95% !important;
+    max-width: 600px !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
 
     /* Tab content visibility */
     .slds-hide { display: none !important; }
