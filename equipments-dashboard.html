@@ -84,65 +84,75 @@
     let currentFilter = 'Warsaw Office';
     let inventory = [];
 
-    async function fetchInventory() {
-        const tbody = document.getElementById('inventoryTableBody');
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;">
-            <span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Scanning Inventory...
-        </td></tr>`;
+async function fetchInventory() {
+    const tbody = document.getElementById('inventoryTableBody');
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;">
+        <span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Scanning Inventory...
+    </td></tr>`;
 
-        try {
-            const res = await fetch('/api/equipments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'list', 
-                    filterLocation: currentFilter,
-                    query: document.getElementById('invSearch').value 
-                })
-            });
-            const result = await res.json();
-            
-            // --- ADD THIS CHECK ---
-            if (!result.success) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:red;">Error: ${result.message}</td></tr>`;
-                return;
-            }
+    // --- LOGIC TO SWITCH PAYLOAD ---
+    let payload = { 
+        action: 'list', 
+        query: document.getElementById('invSearch').value 
+    };
 
-            inventory = result.data || [];
-
-            // If no data, show a friendly message
-            if (inventory.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;">No equipment found in ${currentFilter}.</td></tr>`;
-                return;
-            }
-
-            // Update KPIs
-            document.getElementById('kpi-total').innerText = result.metrics.total;
-            document.getElementById('kpi-office').innerText = result.metrics.inOffice;
-            document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
-            document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
-
-            tbody.innerHTML = "";
-            inventory.forEach(item => {
-                const row = tbody.insertRow();
-                const locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
-                
-                row.innerHTML = `
-                    <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
-                    <td>${item.terminal_type || '---'}</td>
-                    <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
-                    <td><span class="badge ${locClass}">${item.current_location}</span></td>
-                    <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
-                    <td><span class="slds-badge">${item.status}</span></td>
-                    <td>
-                        <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
-                            <span class="material-icons" style="font-size:18px;">edit</span>
-                        </button>
-                    </td>
-                `;
-            });
-        } catch (err) { console.error(err); }
+    if (currentFilter === 'deployed') {
+        payload.filterStatus = 'deployed'; // Look for status
+    } else {
+        payload.filterLocation = currentFilter; // Look for location
     }
+
+    try {
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const result = await res.json();
+        
+        if (!result.success) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:red;">Error: ${result.message}</td></tr>`;
+            return;
+        }
+
+        inventory = result.data || [];
+
+        if (inventory.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;">No equipment found in ${currentFilter}.</td></tr>`;
+            return;
+        }
+
+        // Update KPIs
+        document.getElementById('kpi-total').innerText = result.metrics.total;
+        document.getElementById('kpi-office').innerText = result.metrics.inOffice;
+        document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
+        document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
+
+        tbody.innerHTML = "";
+        inventory.forEach(item => {
+            const row = tbody.insertRow();
+            
+            // Logic for Location Badge coloring
+            let locClass = 'loc-repair';
+            if (item.current_location === 'Warsaw Office') locClass = 'loc-office';
+            if (item.status === 'deployed') locClass = 'loc-deployed'; // You can add this CSS class
+
+            row.innerHTML = `
+                <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
+                <td>${item.terminal_type || '---'}</td>
+                <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
+                <td><span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span></td>
+                <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
+                <td><span class="slds-badge">${item.status}</span></td>
+                <td>
+                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
+                        <span class="material-icons" style="font-size:18px;">edit</span>
+                    </button>
+                </td>
+            `;
+        });
+    } catch (err) { console.error(err); }
+}
 
 function filterByLoc(loc) {
     currentFilter = loc;
