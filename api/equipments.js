@@ -4,12 +4,12 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, id, payload, query, filterLocation, limit = 50, page = 0 } = req.body;
+    // Destructure filterStatus from req.body
+    const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
         // --- ACTION: LIST INVENTORY ---
         if (action === 'list') {
-            // FIX: Use the explicit constraint name 'current_merchant' verified in your SQL Editor
             let sb = supabase.from('equipments').select(`
                 *,
                 merchants!current_merchant (dba_name)
@@ -19,7 +19,10 @@ export default async function handler(req, res) {
                 sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
             }
 
-            if (filterLocation) {
+            // Minimal Change: Toggle between filtering by Status or Location
+            if (filterStatus) {
+                sb = sb.eq('status', filterStatus);
+            } else if (filterLocation) {
                 sb = sb.eq('current_location', filterLocation);
             }
 
