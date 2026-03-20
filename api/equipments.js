@@ -10,10 +10,10 @@ export default async function handler(req, res) {
     try {
         if (action === 'list') {
             // 1. Build the main query
-            let sb = supabase.from('equipments').select(`
-                *,
-                merchants:merchant_id (dba_name)
-            `, { count: 'exact' });
+          let sb = supabase.from('equipments').select(`
+        *,
+        merchants!merchant_id (dba_name) 
+    `, { count: 'exact' });
 
             if (query) {
                 sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
