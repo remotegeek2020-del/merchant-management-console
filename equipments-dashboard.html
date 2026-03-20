@@ -126,19 +126,17 @@ function prevPage() {
 
 async function fetchInventory() {
     const tbody = document.getElementById('inventoryTableBody');
-    // Get the selected limit from your new dropdown
     const limit = parseInt(document.getElementById('pageSize').value) || 50;
 
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;">
         <span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Scanning Inventory...
     </td></tr>`;
 
-    // 1. Build Payload with Pagination
     let payload = { 
         action: 'list', 
         query: document.getElementById('invSearch').value,
-        page: currentPage, // Uses the global currentPage variable
-        limit: limit       // Uses the dropdown value
+        page: currentPage,
+        limit: limit
     };
 
     if (currentFilter === 'deployed') {
@@ -153,6 +151,7 @@ async function fetchInventory() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         });
+        
         const result = await res.json();
         
         if (!result.success) {
@@ -160,34 +159,42 @@ async function fetchInventory() {
             return;
         }
 
-        inventory = result.data || [];
-        totalItems = result.count || 0; // Store the total from Supabase
-
-        // 2. Update Pagination Text (Showing X-Y of Z)
-        const start = inventory.length > 0 ? (currentPage * limit) + 1 : 0;
-        const end = Math.min((currentPage + 1) * limit, totalItems);
-        const infoElement = document.getElementById('pagination-info');
-        if (infoElement) {
-            infoElement.innerText = `Showing ${start}-${end} of ${totalItems} items`;
+        // Always update KPIs first so they show the correct counts even if the list is empty
+        if (result.metrics) {
+            document.getElementById('kpi-total').innerText = result.metrics.total || 0;
+            document.getElementById('kpi-office').innerText = result.metrics.inOffice || 0;
+            document.getElementById('kpi-repair').innerText = result.metrics.inRepair || 0;
+            document.getElementById('kpi-deployed').innerText = result.metrics.deployed || 0;
         }
 
-        // 3. Enable/Disable Prev/Next Buttons
+        inventory = result.data || [];
+        totalItems = result.count || 0; 
+
+        // --- ROBUST PAGINATION CALCULATION ---
+        const infoElement = document.getElementById('pagination-info');
+        if (infoElement) {
+            if (totalItems === 0) {
+                infoElement.innerText = `Showing 0-0 of 0 items`;
+            } else {
+                const start = (currentPage * limit) + 1;
+                const end = Math.min((currentPage + 1) * limit, totalItems);
+                infoElement.innerText = `Showing ${start}-${end} of ${totalItems} items`;
+            }
+        }
+
+        // --- BUTTON STATES ---
         const btnPrev = document.getElementById('btn-prev');
         const btnNext = document.getElementById('btn-next');
         if (btnPrev) btnPrev.disabled = (currentPage === 0);
-        if (btnNext) btnNext.disabled = (end >= totalItems);
+        if (btnNext) btnNext.disabled = (totalItems === 0 || (currentPage + 1) * limit >= totalItems);
 
+        // --- EMPTY STATE CHECK ---
         if (inventory.length === 0) {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:#94a3b8;">No equipment found in ${currentFilter}.</td></tr>`;
             return;
         }
 
-        // Update KPIs
-        document.getElementById('kpi-total').innerText = result.metrics.total;
-        document.getElementById('kpi-office').innerText = result.metrics.inOffice;
-        document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
-        document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
-
+        // --- RENDER TABLE ROWS ---
         tbody.innerHTML = "";
         inventory.forEach(item => {
             const row = tbody.insertRow();
@@ -210,10 +217,15 @@ async function fetchInventory() {
                 </td>
             `;
         });
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+        console.error(err);
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px; color:red;">System Error: Check Console</td></tr>`;
+    }
 }
+    
 function filterByLoc(loc) {
     currentFilter = loc;
+    currentPage = 0; // <--- ADD THIS LINE TO RESET PAGINATION
 
     // 1. Update the UI Button states
     document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
