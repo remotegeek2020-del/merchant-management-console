@@ -398,11 +398,6 @@ async function openModal(id) {
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
  
-    window.onload = () => {
-        Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-        fetchMerchants().then(() => { Swal.close(); });
-    };
-
     window.handleFileUpload = async function(merchantId) {
     const fileInput = document.getElementById('fileInput');
     const file = fileInput.files[0];
@@ -421,13 +416,15 @@ async function openModal(id) {
         const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
         const filePath = `${merchantId}/${fileName}`;
 
-        // 2. Upload to Supabase Storage Bucket
-        // We use your existing Supabase credentials
+        // 2. Initialize Supabase Client (Renamed to sbClient to avoid conflict)
         const supabaseUrl = 'https://zuzwljjrppyrzngmhdru.supabase.co';
-        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow'; // Use the ANON key for frontend
-        const supabase = supabase.createClient(supabaseUrl, supabaseKey);
+        const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow';
+        
+        // Use the library 'supabase' to create our specific 'sbClient'
+        const sbClient = supabase.createClient(supabaseUrl, supabaseKey);
 
-        const { data: storageData, error: storageError } = await supabase.storage
+        // Upload to Bucket
+        const { data: storageData, error: storageError } = await sbClient.storage
             .from('merchant-files')
             .upload(filePath, file);
 
@@ -451,12 +448,12 @@ async function openModal(id) {
         const result = await res.json();
         if (result.success) {
             Swal.fire({ icon: 'success', title: 'Uploaded!', timer: 1500, showConfirmButton: false });
-            openModal(merchantId); // Refresh to show the new file
+            openModal(merchantId); // This refreshes the modal to show the new file list
         } else {
             throw new Error(result.message);
         }
     } catch (err) {
-        console.error(err);
+        console.error("Upload Error Detail:", err);
         Swal.fire('Upload Failed', err.message, 'error');
     }
 };
