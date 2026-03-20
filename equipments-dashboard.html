@@ -256,28 +256,35 @@ inventory.forEach(item => {
     const item = inventory.find(i => i.id === id);
     if (!item) return;
 
-    // 1. Set the Modal Title and Status value
-    document.getElementById('modalTitle').innerText = `Unit: ${item.serial_number}`;
+    // 1. Fill the inputs with current data
+    document.getElementById('modalTitle').innerText = `Editing: ${item.serial_number}`;
+    document.getElementById('edit-serial').value = item.serial_number || '';
+    document.getElementById('edit-terminal-type').value = item.terminal_type || 'Dejavoo P1';
+    document.getElementById('edit-status').value = item.status === 'deployed' ? 'stocked' : item.status;
     
-    const statusDropdown = document.getElementById('edit-status');
-    statusDropdown.value = item.status;
+    // Format date for the input field (YYYY-MM-DD)
+    if (item.received_date) {
+        document.getElementById('edit-received-date').value = new Date(item.received_date).toISOString().split('T')[0];
+    } else {
+        document.getElementById('edit-received-date').value = '';
+    }
 
-    // 2. Safety Check: If status is 'deployed', disable editing
+    // 2. Lock logic for Deployed units
     const isDeployed = item.status === 'deployed';
+    const fields = ['edit-serial', 'edit-terminal-type', 'edit-received-date', 'edit-status'];
     const saveBtn = document.querySelector('#tab-update .slds-button_brand');
 
+    fields.forEach(fieldId => {
+        document.getElementById(fieldId).disabled = isDeployed;
+    });
+
     if (isDeployed) {
-        // Lock the fields and hide save button
-        statusDropdown.disabled = true;
         if (saveBtn) saveBtn.style.display = 'none';
         document.getElementById('modalTitle').innerHTML = `Unit: ${item.serial_number} <span style="color: #e11d48; font-size: 12px; margin-left: 10px;">(Read-Only: Deployed)</span>`;
     } else {
-        // Unlock fields and show save button
-        statusDropdown.disabled = false;
         if (saveBtn) saveBtn.style.display = 'block';
     }
 
-    // 3. Open Modal and default to Update tab
     document.getElementById('customModal').classList.add('is-open');
     switchTab('update');
 }
