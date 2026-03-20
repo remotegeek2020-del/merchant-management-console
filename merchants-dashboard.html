@@ -137,6 +137,26 @@
             });
             const result = await res.json();
             currentRecords = result.data;
+            // --- SURGICAL KPI UPDATE ---
+        if (result.metrics) {
+            // Update MTD Card
+            document.getElementById('mtd-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.totalMTD || 0);
+
+            // Update 30D Card
+            document.getElementById('30d-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.total30D || 0);
+
+            // Update 90D Card
+            document.getElementById('90d-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.total90D || 0);
+
+            // Update Share % Card
+            document.getElementById('share-val').innerText = `${result.metrics.portfolioShare || '0.00'}%`;
+        }
             tbody.innerHTML = "";
             currentRecords.forEach(m => {
                 const row = tbody.insertRow();
