@@ -28,21 +28,21 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [], metrics });
         }
 
-        // --- ACTION: GET LOOKUPS (Merchant Search & Office Inventory) ---
-    let merchantBuilder = supabase.from('merchants').select('id, dba_name, merchant_id').order('dba_name');
-    
-    if (query) {
-        // This searches BOTH dba_name and merchant_id for your typed text
-        merchantBuilder = merchantBuilder.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%`);
-    }
+        // --- ACTION: GET LOOKUPS ---
+        if (action === 'getLookups') {
+            let merchantBuilder = supabase.from('merchants').select('id, dba_name, merchant_id').order('dba_name');
+            
+            if (query) {
+                merchantBuilder = merchantBuilder.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%`);
+            }
 
-    const [merchants, inventory] = await Promise.all([
-        merchantBuilder.limit(50), 
-        supabase.from('equipments')
-            .select('id, serial_number, terminal_type, status')
-            .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
-    ]);
-            // Fallback: If no specific "Office" items are found, show any item that isn't Deployed
+            const [merchants, inventory] = await Promise.all([
+                merchantBuilder.limit(50), 
+                supabase.from('equipments')
+                    .select('id, serial_number, terminal_type, status')
+                    .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
+            ]);
+
             let finalInventory = inventory.data || [];
             if (finalInventory.length === 0) {
                 const fallback = await supabase.from('equipments')
@@ -63,7 +63,6 @@ export default async function handler(req, res) {
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
             
-            // A. Create Ticket
             const { data: depData, error: depError } = await supabase.from('deployments').insert([{
                 merchant_id, 
                 equipment_id, 
@@ -76,10 +75,8 @@ export default async function handler(req, res) {
             
             if (depError) throw depError;
 
-            // B. Flip Equipment Status to 'Deployed'
             await supabase.from('equipments').update({ status: 'Deployed' }).eq('id', equipment_id);
 
-            // C. Log History Entry
             const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
             await supabase.from('equipment_logs').insert([{
                 equipment_id, 
