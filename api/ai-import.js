@@ -9,6 +9,39 @@ export default async function handler(req, res) {
     try {
         const { fileBase64 } = req.body;
 
+        // We explicitly tell the model to use JSON response schema
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: { responseMimeType: "application/json" } 
+    });
+
+    const prompt = `
+        Extract hardware serial numbers and models from this invoice. 
+        Return an array of objects. 
+        Example: [{"serial_number": "12345", "terminal_type": "Dejavoo P1"}]
+        Use these mappings:
+        - Valor items (VL-550, VP800) -> 'Valor VL550' or 'Valor VP800'
+        - Dejavoo items (KOZ-P1, Koz-P3, Koz-P5) -> 'Dejavoo P1', 'Dejavoo P3', 'Dejavoo P5'
+    `;
+
+    const result = await model.generateContent([
+        prompt,
+        { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
+    ]);
+
+    // With responseMimeType: "application/json", Gemini returns valid JSON directly
+    const text = result.response.text();
+    const data = JSON.parse(text);
+
+    // If data is an object with a key (like { "items": [...] }), grab the array
+    const finalData = Array.isArray(data) ? data : (data.items || data.equipment || []);
+
+    return res.status(200).json({ success: true, data: finalData });
+} catch (err) {
+    console.error(err);
+    return res.status(500).json({ success: false, message: err.message });
+}
+
        const prompt = `
     You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
 
