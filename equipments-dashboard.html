@@ -126,10 +126,17 @@
             <button onclick="closeModal()" style="border: none; background: none; cursor: pointer;"><span class="material-icons">close</span></button>
         </header>
         <div class="slds-tabs_default">
-            <ul class="slds-tabs_default__nav" style="display: flex; list-style: none; padding: 0; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
-                <li id="tab-update-li" class="slds-tabs_default__item slds-is-active" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('update')">Update</a></li>
-                <li id="tab-notes-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('notes')">Notes</a></li>
-            </ul>
+          <ul class="slds-tabs_default__nav" style="display: flex; list-style: none; padding: 0; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+    <li id="tab-update-li" class="slds-tabs_default__item slds-is-active" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('update')">Update</a></li>
+    <li id="tab-notes-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('notes')">Notes</a></li>
+    <li id="tab-logs-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('logs')">Audit Logs</a></li>
+</ul>
+
+<div id="tab-logs" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
+    <div id="audit-list" style="max-height: 250px; overflow-y: auto; font-size: 12px;">
+        <p style="color: #94a3b8; text-align: center; padding: 20px;">Loading history...</p>
+    </div>
+</div>
             
             
           <div id="tab-update" class="slds-tabs_default__content slds-show" style="padding: 20px;">
@@ -189,6 +196,42 @@
     let currentPage = 0;
     let totalItems = 0;
     let selectedId = null;
+
+    async function decommissionEquipment(id, serial) {
+    const confirm = await Swal.fire({
+        title: 'Decommission Unit?',
+        text: `Are you sure you want to retire unit ${serial}? It will be moved to the decommissioned archive.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#64748b',
+        cancelButtonText: 'Cancel',
+        confirmButtonText: 'Yes, Decommission'
+    });
+
+    if (confirm.isConfirmed) {
+        try {
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'update', // We use 'update' instead of delete!
+                    id: id,
+                    payload: {
+                        status: 'decommissioned',
+                        current_location: 'Retired'
+                    }
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Retired', 'Unit has been decommissioned.', 'success');
+                fetchInventory();
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Action failed', 'error');
+        }
+    }
+}
 
     async function deleteEquipment(id, serial) {
     const confirm = await Swal.fire({
@@ -395,20 +438,20 @@
             const isDeployed = item.status === 'deployed';
 
             // Define buttons based on status
-            const actionButtons = isDeployed ? `
-                <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="View">
-                    <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
-                </button>
-            ` : `
-                <div style="display: flex; gap: 5px; justify-content: center;">
-                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
-                        <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
-                    </button>
-                    <button onclick="deleteEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Delete">
-                        <span class="material-icons" style="font-size:18px; color: #e11d48;">delete_outline</span>
-                    </button>
-                </div>
-            `;
+           const actionButtons = isDeployed ? `
+    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
+        <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
+    </button>
+` : `
+    <div style="display: flex; gap: 5px; justify-content: center;">
+        <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
+            <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
+        </button>
+        <button onclick="decommissionEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Decommission">
+            <span class="material-icons" style="font-size:18px; color: #64748b;">archive</span>
+        </button>
+    </div>
+`;
 
             row.innerHTML = `
                 <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
@@ -427,17 +470,34 @@
     
 
     function switchTab(tabName) {
-        ['update', 'notes'].forEach(t => {
-            const content = document.getElementById(`tab-${t}`);
-            const tabLi = document.getElementById(`tab-${t}-li`);
-            if(content) content.classList.replace('slds-show', 'slds-hide');
-            if(tabLi) tabLi.classList.remove('slds-is-active');
-        });
-        const target = document.getElementById(`tab-${tabName}`);
-        const targetLi = document.getElementById(`tab-${tabName}-li`);
-        if(target) target.classList.replace('slds-hide', 'slds-show');
-        if(targetLi) targetLi.classList.add('slds-is-active');
-    }
+    ['update', 'notes', 'logs'].forEach(t => {
+        const content = document.getElementById(`tab-${t}`);
+        const tabLi = document.getElementById(`tab-${t}-li`);
+        if(content) content.classList.replace('slds-show', 'slds-hide');
+        if(tabLi) tabLi.classList.remove('slds-is-active');
+    });
+    
+    document.getElementById(`tab-${tabName}`).classList.replace('slds-hide', 'slds-show');
+    document.getElementById(`tab-${tabName}-li`).classList.add('slds-is-active');
+
+    if (tabName === 'logs') fetchAuditLogs();
+}
+
+async function fetchAuditLogs() {
+    const container = document.getElementById('audit-list');
+    container.innerHTML = '<p style="text-align:center;">Fetching logs...</p>';
+
+    // Note: You will eventually need a 'logs' table in Supabase for this.
+    // For now, we can show a placeholder or fetch from a 'logs' table if you have one.
+    container.innerHTML = `
+        <div style="border-left: 2px solid #e2e8f0; padding-left: 15px; margin-left: 10px;">
+            <div style="margin-bottom: 15px;">
+                <p style="font-weight: 700; margin:0;">Status Changed to Decommissioned</p>
+                <small style="color: #64748b;">March 21, 2026 - System Admin</small>
+            </div>
+        </div>
+    `;
+}
 
     function closeModal() { document.getElementById('customModal').classList.remove('is-open'); }
     
