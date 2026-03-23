@@ -22,26 +22,31 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash-8b: Optimized for speed and large text extraction on Free Tier
+        // Use the standard gemini-1.5-flash which has the highest compatibility 
+        // across all Free Tier accounts.
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-8b",
+            model: "gemini-1.5-flash",
             generationConfig: {
                 temperature: 0,
             }
         });
 
         const prompt = `
-            Extract ALL hardware serial numbers from the attached PDF. 
-            Focus on these patterns:
-            - Valor: 12-digit numbers starting with 18125 or alphanumeric starting with X5C8.
-            - Dejavoo: 14+ character strings starting with P125, P325, P524, or P17B.
+            Act as a precise data extraction tool for payment terminal inventory.
             
-            Return the data as a simple list where each line is:
-            SERIAL_NUMBER | MODEL_NAME
+            TASK: Extract EVERY hardware serial number from this PDF.
+            
+            VENDORS & PATTERNS:
+            - VALOR: 12-digit numbers starting with 18125 OR alphanumeric starting with X5C8.
+            - DEJAVOO: Strings starting with P125, P325, P524, or P17B.
+            
+            OUTPUT FORMAT:
+            Just list them line by line like this:
+            SERIAL | MODEL
             
             Example:
-            181251934334 | Valor VL550
             P1250920000034 | Dejavoo P1
+            181251934334 | Valor VL550
         `;
 
         const result = await model.generateContent([
@@ -55,17 +60,19 @@ export default async function handler(req, res) {
         const items = [];
         const seenSerials = new Set();
 
-        // Hard-coded pattern definitions to find serials in the AI response even if messy
+        // --- HARD-CODED PATTERN HARVESTER ---
+        // This scans the AI response text directly for specific serial number patterns.
+        // Even if the AI's formatting is broken or it includes extra text, we will find these.
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
             { regex: /\b(X5C8[A-Z0-9]{8,10})\b/g, type: "Valor VP800" },
-            { regex: /\b(P125\d{10})\b/g, type: "Dejavoo P1" },
-            { regex: /\b(P325\d{10})\b/g, type: "Dejavoo P3" },
-            { regex: /\b(P524\d{10})\b/g, type: "Dejavoo P5" },
-            { regex: /\b(P17[B86]\d{11})\b/g, type: "Dejavoo P17" }
+            { regex: /\b(P125\d{10,12})\b/g, type: "Dejavoo P1" },
+            { regex: /\b(P325\d{10,12})\b/g, type: "Dejavoo P3" },
+            { regex: /\b(P524\d{10,12})\b/g, type: "Dejavoo P5" },
+            { regex: /\b(P17[B86]\d{10,12})\b/g, type: "Dejavoo P17" }
         ];
 
-        // 1. Pass: Scan the raw AI response for our known patterns
+        // Pass 1: Scan for our known prefixes directly in the text
         patterns.forEach(p => {
             let match;
             while ((match = p.regex.exec(rawText)) !== null) {
@@ -77,30 +84,36 @@ export default async function handler(req, res) {
             }
         });
 
-        // 2. Fallback: Parse pipe-delimited lines if regex didn't catch everything
-        const lines = rawText.split('\n');
-        lines.forEach(line => {
-            if (line.includes('|')) {
-                const parts = line.split('|');
-                const sn = parts[0].trim().replace(/[.,\s]/g, "").toUpperCase();
-                let type = parts[1]?.trim() || "Terminal";
-                
-                if (sn.length >= 8 && !seenSerials.has(sn)) {
-                    items.push({ serial_number: sn, terminal_type: type });
-                    seenSerials.add(sn);
+        // Pass 2: Line splitting for any missed items (flexible format)
+        if (items.length < 5) { // If the specific harvester failed, try a broad split
+            const lines = rawText.split('\n');
+            lines.forEach(line => {
+                if (line.includes('|') || line.includes('-')) {
+                    const parts = line.split(/[|-]/);
+                    const sn = parts[0].trim().replace(/[.,\s]/g, "").toUpperCase();
+                    let type = parts[1]?.trim() || "Terminal";
+                    
+                    if (sn.length >= 8 && !seenSerials.has(sn)) {
+                        items.push({ serial_number: sn, terminal_type: type });
+                        seenSerials.add(sn);
+                    }
                 }
-            }
-        });
-
-        if (items.length === 0) {
-            console.error("AI Response yield 0 matches. Text:", rawText);
-            return sendJsonError(422, "The AI couldn't find any serial numbers in this document. Please check the PDF quality.");
+            });
         }
 
+        if (items.length === 0) {
+            console.error("No serials found. AI raw output:", rawText);
+            return sendJsonError(422, "The AI couldn't find any serial numbers. Ensure the PDF is clear and readable.");
+        }
+
+        // Return the successfully harvested items
         return res.status(200).json({ success: true, data: items });
 
     } catch (err) {
         console.error("AI Exception:", err);
-        return sendJsonError(500, "The server timed out or the AI service is unavailable. Try splitting the PDF into single pages.");
+        // If we get a 404 or specific API error, report it clearly
+        const status = err.message?.includes('404') ? 404 : 500;
+        const msg = status === 404 ? "The AI model version is currently unavailable for your API key. Try again in a few minutes." : `Processing Error: ${err.message}`;
+        return sendJsonError(status, msg);
     }
 }
