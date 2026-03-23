@@ -33,36 +33,44 @@ export default async function handler(req, res) {
 
         // --- 2. GET LOOKUPS (Merchants & Available Office Inventory) ---
         if (action === 'getLookups') {
-            // We now accept a query for merchants to support "suggestions" as you type
+            // Enhanced Merchant Search logic
             let merchantBuilder = supabase.from('merchants').select('id, dba_name').order('dba_name');
             if (query) {
                 merchantBuilder = merchantBuilder.ilike('dba_name', `%${query}%`);
             }
 
             const [merchants, inventory] = await Promise.all([
-                merchantBuilder,
-                // Refined hardware lookup: catches Office, In Stock, and Null statuses
-                // ilike makes it case-insensitive (Office vs OFFICE)
+                merchantBuilder.limit(20), // Limit results for faster UI response
+                // Broadened hardware lookup: catches common variations of "In Stock"
                 supabase.from('equipments')
                     .select('id, serial_number, terminal_type, status')
-                    .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
+                    .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.ilike.In-Office,status.ilike.Available,status.is.null')
             ]);
 
             if (merchants.error) throw merchants.error;
             if (inventory.error) throw inventory.error;
 
+            // Debug fallback: If no "Office" items found, return all non-deployed items as a safeguard
+            let finalInventory = inventory.data || [];
+            if (finalInventory.length === 0) {
+                const fallback = await supabase.from('equipments')
+                    .select('id, serial_number, terminal_type, status')
+                    .neq('status', 'Deployed')
+                    .limit(50);
+                finalInventory = fallback.data || [];
+            }
+
             return res.status(200).json({ 
                 success: true, 
                 merchants: merchants.data || [], 
-                inventory: inventory.data || [] 
+                inventory: finalInventory
             });
         }
 
-        // --- 3. CREATE NEW DEPLOYMENT (With Status Flip & Logging) ---
+        // --- 3. CREATE NEW DEPLOYMENT ---
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
 
-            // Step A: Insert the Deployment Ticket (Status defaults to 'Open')
             const { data: depData, error: depError } = await supabase
                 .from('deployments')
                 .insert([{
@@ -78,20 +86,12 @@ export default async function handler(req, res) {
 
             if (depError) throw depError;
 
-            // Step B: Update Equipment status to 'Deployed'
-            const { error: equipUpdateError } = await supabase
+            await supabase
                 .from('equipments')
                 .update({ status: 'Deployed' })
                 .eq('id', equipment_id);
 
-            if (equipUpdateError) throw equipUpdateError;
-
-            // Step C: Create the Equipment Log (History)
-            const { data: mData } = await supabase
-                .from('merchants')
-                .select('dba_name')
-                .eq('id', merchant_id)
-                .single();
+            const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
             
             await supabase.from('equipment_logs').insert([{
                 equipment_id,
@@ -103,7 +103,7 @@ export default async function handler(req, res) {
                 notes: notes || `Initial deployment. Ticket ID: ${depData[0].deployment_id || 'N/A'}`
             }]);
 
-            return res.status(200).json({ success: true, message: "Deployment created and equipment updated." });
+            return res.status(200).json({ success: true, message: "Deployment created successfully" });
         }
 
         // --- 4. FETCH EQUIPMENT HISTORY ---
@@ -112,10 +112,7 @@ export default async function handler(req, res) {
 
             const { data, error } = await supabase
                 .from('equipment_logs')
-                .select(`
-                    *,
-                    merchants (dba_name)
-                `)
+                .select(`*, merchants (dba_name)`)
                 .eq('equipment_id', equipment_id)
                 .order('created_at', { ascending: false });
 
