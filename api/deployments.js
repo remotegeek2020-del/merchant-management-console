@@ -55,27 +55,36 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, merchants: merchants.data || [], inventory: finalInventory });
         }
 
-    // --- ACTION: CREATE DEPLOYMENT ---
+   // --- ACTION: CREATE DEPLOYMENT ---
 if (action === 'create') {
     const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
     
-    // A. Create Ticket - Mapping 'target_date' from frontend to 'target_deployment_date' in DB
+    // 1. Create the Deployment Ticket
     const { data: depData, error: depError } = await supabase.from('deployments').insert([{
         merchant_id, 
         equipment_id, 
         tid, 
         tracking_id, 
-        target_deployment_date: target_date, // Corrected column name
+        target_deployment_date: target_date, 
         status: 'Open', 
         notes: notes || ''
     }]).select();
     
     if (depError) throw depError;
 
-    // B. Flip Equipment Status to 'Deployed'
-    await supabase.from('equipments').update({ status: 'Deployed' }).eq('id', equipment_id);
+    // 2. UPDATE EQUIPMENT TABLE: Link to Merchant and flip Status
+    // This ensures the Warsaw Office no longer "owns" the device in the inventory list
+    const { error: equipUpdateError } = await supabase
+        .from('equipments')
+        .update({ 
+            status: 'Deployed',
+            merchant_id: merchant_id // Linking the device to the merchant record
+        })
+        .eq('id', equipment_id);
 
-    // C. Log History Entry
+    if (equipUpdateError) throw equipUpdateError;
+
+    // 3. Log History Entry
     const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
     await supabase.from('equipment_logs').insert([{
         equipment_id, 
