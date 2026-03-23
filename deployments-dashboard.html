@@ -49,7 +49,7 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Logistics & Deployments</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="depSearch" placeholder="Search Tickets..." class="slds-input" style="width:250px; border-radius:10px;">
+            <input type="text" id="depSearch" placeholder="Search Tickets..." class="slds-input" style="width:250px; border-radius:10px;" onkeyup="fetchDeployments()">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="openNewDeploymentModal()">
                 <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
                 NEW TICKET
@@ -82,7 +82,7 @@
                     <th>TID</th>
                     <th>Date</th>
                     <th>Status</th>
-                    <th>Audit</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="deploymentTableBody"></tbody>
@@ -134,6 +134,38 @@
     </div>
 </div>
 
+<div id="editDepModal" class="modal-backdrop" onclick="closeModal(event, 'editDepModal')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <span class="material-icons close-btn" onclick="document.getElementById('editDepModal').style.display='none'">close</span>
+        <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Edit / Close Ticket</h2>
+        
+        <form id="editDepForm" onsubmit="submitUpdate(event)">
+            <input type="hidden" id="editId">
+            
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TICKET STATUS</label>
+                <select id="editStatus" class="slds-select" style="border-radius:8px;">
+                    <option value="Open">Open</option>
+                    <option value="In Transit">In Transit</option>
+                    <option value="Closed">Closed / Delivered</option>
+                </select>
+            </div>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TRACKING ID</label>
+                <input type="text" id="editTracking" class="slds-input" placeholder="Update tracking..." style="border-radius:8px;">
+            </div>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">UPDATE NOTES</label>
+                <textarea id="editNotes" class="slds-textarea" placeholder="Add update notes..." style="border-radius:8px; height:60px;"></textarea>
+            </div>
+
+            <button type="submit" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); border-radius:8px; padding:10px;">UPDATE TICKET</button>
+        </form>
+    </div>
+</div>
+
 <div id="historyModal" class="modal-backdrop" onclick="closeModal(event, 'historyModal')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('historyModal').style.display='none'">close</span>
@@ -144,6 +176,8 @@
 </div>
 
 <script>
+    let currentDeployments = [];
+
     async function fetchDeployments() {
         const tbody = document.getElementById('deploymentTableBody');
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
@@ -154,14 +188,15 @@
                 body: JSON.stringify({ action: 'list', query: document.getElementById('depSearch').value })
             });
             const result = await res.json();
-            
+            currentDeployments = result.data;
+
             // Updating Cards
             document.getElementById('kpi-active').innerText = result.metrics.active;
             document.getElementById('kpi-total').innerText = result.metrics.total;
             document.getElementById('kpi-today').innerText = result.metrics.today;
 
             tbody.innerHTML = "";
-            result.data.forEach(d => {
+            result.data.forEach((d, index) => {
                 const row = tbody.insertRow();
                 row.innerHTML = `
                     <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
@@ -170,7 +205,10 @@
                     <td>${d.tid || '---'}</td>
                     <td>${d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---'}</td>
                     <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status}</span></td>
-                    <td>
+                    <td style="display:flex; gap:5px;">
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})">
+                            <span class="material-icons" style="font-size:18px;">edit</span>
+                        </button>
                         <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${d.equipments?.serial_number}')">
                             <span class="material-icons" style="font-size:18px;">history</span>
                         </button>
@@ -217,6 +255,15 @@
             result.inventory.map(e => `<option value="${e.id}">${e.serial_number} (${e.terminal_type})</option>`).join('');
     }
 
+    function openEditModal(index) {
+        const d = currentDeployments[index];
+        document.getElementById('editId').value = d.id;
+        document.getElementById('editStatus').value = d.status || 'Open';
+        document.getElementById('editTracking').value = d.tracking_id || '';
+        document.getElementById('editNotes').value = d.notes || '';
+        document.getElementById('editDepModal').style.display = 'flex';
+    }
+
     async function saveDeployment(event) {
         event.preventDefault();
         const payload = {
@@ -227,11 +274,29 @@
             target_date: document.getElementById('dateInput').value,
             notes: document.getElementById('notesInput').value
         };
-
         const res = await fetch('/api/deployments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'create', payload })
+        });
+        const result = await res.json();
+        if (result.success) { location.reload(); }
+        else { alert("Error: " + result.message); }
+    }
+
+    async function submitUpdate(event) {
+        event.preventDefault();
+        const payload = {
+            deployment_id: document.getElementById('editId').value,
+            status: document.getElementById('editStatus').value,
+            tracking_id: document.getElementById('editTracking').value,
+            notes: document.getElementById('editNotes').value
+        };
+
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update', payload })
         });
         const result = await res.json();
         if (result.success) { location.reload(); }
