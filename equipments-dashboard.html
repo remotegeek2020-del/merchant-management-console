@@ -94,6 +94,14 @@
     <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
     Print PDF Summary
 </button>
+            <button class="slds-button slds-button_outline-brand" 
+        style="border-radius:10px; border:1px solid var(--pp-accent); color:var(--pp-accent); display:flex; align-items:center; gap:5px;" 
+        onclick="triggerAIUpload()">
+    <span class="material-icons" style="font-size:18px;">auto_awesome</span>
+    AI Import
+</button>
+
+<input type="file" id="ai-file-input" accept="application/pdf" style="display:none;" onchange="handleAIFile(this)">
 
             <button class="slds-button slds-button_success" style="border-radius:10px; background:#166534; color:white; display:flex; align-items:center; gap:5px;" onclick="openAddModal()">
                 <span class="material-icons" style="font-size:18px;">add</span>
