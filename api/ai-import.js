@@ -1,20 +1,36 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
+// Vercel config to increase body size limit for large PDF base64 strings
+export const config = {
+    api: {
+        bodyParser: {
+            sizeLimit: '10mb',
+        },
+    },
+};
+
 export default async function handler(req, res) {
+    // Ensure the response is always JSON even for early exits
+    const sendError = (status, message) => {
+        return res.status(status).json({ success: false, message });
+    };
+
     // Only allow POST requests
     if (req.method !== 'POST') {
-        return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+        return sendError(405, 'Method Not Allowed');
     }
 
     // 1. Check for API Key
     if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ 
-            success: false, 
-            message: 'Server Error: GEMINI_API_KEY is missing in Vercel settings.' 
-        });
+        return sendError(500, 'Server Configuration Error: GEMINI_API_KEY is missing.');
     }
 
     try {
+        const { fileBase64 } = req.body;
+        if (!fileBase64) {
+            return sendError(400, 'No file data received.');
+        }
+
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
         // Define a strict schema to force the output format
@@ -38,39 +54,20 @@ export default async function handler(req, res) {
             }
         });
 
-        const { fileBase64 } = req.body;
-        if (!fileBase64) {
-            return res.status(400).json({ success: false, message: 'No file data received.' });
-        }
-
         const prompt = `
-             You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
+            Extract all hardware serial numbers from this invoice. 
+            Return an array of objects.
 
-    STRATEGY FOR VALOR PAYTECH:
-    - Look for items like 'VL-550' or 'VP800'.
-    - Serial numbers are located in the 'Description' or 'Memo' column, usually starting after the text 'Serial Numbers:'.
-    - They are comma-separated and may span multiple lines. Collect all of them for that specific item.
+            RULES:
+            - Valor (VL-550, VP800) -> 'Valor VL550' or 'Valor VP800'
+            - Dejavoo (KOZ-P1, Koz-P3, Koz-P5) -> 'Dejavoo P1', 'Dejavoo P3', 'Dejavoo P5'
+            - Look for serials in descriptions (Valor) or the 'Serial Numbers' table (Dejavoo).
+            - Ensure every single serial number is captured.
+            - Clean the data: remove dots, spaces, or commas from the serial strings.
+            - Output ONLY a raw JSON array.
+        `;
 
-    STRATEGY FOR DEJAVOO SYSTEMS:
-    - First, look at the main item table to identify Part Numbers (e.g., 'KOZ-P1', 'Koz-P3').
-    - Then, go to the 'Serial Numbers' table. Match the serials to the Part Number listed in the 'Line/Part No.' column.
-    - Note: Serial numbers for Dejavoo typically start with a prefix like 'P125', 'P325', or 'P524'.
-
-    NORMALIZATION RULES:
-    - 'VL-550' -> 'Valor VL550'
-    - 'VP800' -> 'Valor VP800'
-    - 'KOZ-P1' or 'P1 Desktop' -> 'Dejavoo P1'
-    - 'Koz-P3' or 'P3 Handheld' -> 'Dejavoo P3'
-    - 'Koz-P5' or 'P5 Handheld' -> 'Dejavoo P5'
-    - 'KOZ-P17' -> 'Dejavoo P17'
-
-    OUTPUT REQUIREMENTS:
-    - Return a clean JSON array of objects.
-    - Format: [{"serial_number": "STRING", "terminal_type": "STRING"}]
-    - Clean all serial numbers: remove extra spaces, dots, or hidden characters.
-    - Return ONLY the JSON array.
-
-        // We use the simpler generateContent call with inlineData
+        // Send to Gemini
         const result = await model.generateContent([
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
@@ -79,11 +76,9 @@ export default async function handler(req, res) {
         const response = await result.response;
         let text = response.text();
         
-        // Safety: Clean Markdown code blocks if the AI ignored the JSON mode
+        // Safety: Clean Markdown code blocks if the AI ignored the JSON mode settings
         if (text.includes("```")) {
-            text = text.replace(/```json/g, "")
-                       .replace(/```/g, "")
-                       .trim();
+            text = text.replace(/```json/g, "").replace(/```/g, "").trim();
         }
         
         // Parse the structured data
@@ -92,22 +87,16 @@ export default async function handler(req, res) {
             data = JSON.parse(text);
         } catch (parseError) {
             console.error("JSON Parse Error. Raw Text:", text);
-            return res.status(500).json({ 
-                success: false, 
-                message: "AI returned an unparseable format. Please check Vercel Logs for the raw output." 
-            });
+            return sendError(500, "AI returned invalid JSON. Please check Vercel logs.");
         }
         
-        // Ensure we return an array even if it's nested
+        // Ensure we return an array even if nested
         const finalData = Array.isArray(data) ? data : (data.items || data.data || data.equipment || []);
 
         return res.status(200).json({ success: true, data: finalData });
 
     } catch (err) {
-        console.error("AI Error:", err);
-        return res.status(500).json({ 
-            success: false, 
-            message: `AI Processing failed: ${err.message}` 
-        });
+        console.error("AI Import Exception:", err);
+        return sendError(500, `AI Processing failed: ${err.message}`);
     }
 }
