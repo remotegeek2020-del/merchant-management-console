@@ -55,11 +55,11 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, merchants: merchants.data || [], inventory: finalInventory });
         }
 
-   // --- ACTION: CREATE DEPLOYMENT ---
+  // --- ACTION: CREATE DEPLOYMENT (Updated to lowercase 'deployed') ---
 if (action === 'create') {
     const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
     
-    // 1. Fetch the Merchant's DBA Name first so we can use it for the location
+    // 1. Fetch Merchant Name for Location
     const { data: mData, error: mError } = await supabase
         .from('merchants')
         .select('dba_name')
@@ -81,6 +81,32 @@ if (action === 'create') {
     }]).select();
     
     if (depError) throw depError;
+
+    // 3. UPDATE EQUIPMENT TABLE (Fixed to lowercase 'deployed')
+    const { error: equipUpdateError } = await supabase
+        .from('equipments')
+        .update({ 
+            status: 'deployed', // Changed from 'Deployed' to 'deployed'
+            merchant_id: merchant_id,
+            current_location: merchantDBA
+        })
+        .eq('id', equipment_id);
+
+    if (equipUpdateError) throw equipUpdateError;
+
+    // 4. Log History Entry
+    await supabase.from('equipment_logs').insert([{
+        equipment_id, 
+        merchant_id, 
+        deployment_id: depData[0].id,
+        action: 'deployed', // Consistent lowercase
+        from_location: 'Warsaw Office',
+        to_location: merchantDBA, 
+        notes: notes || 'New Deployment Ticket Created'
+    }]);
+
+    return res.status(200).json({ success: true });
+}
 
     // 3. UPDATE EQUIPMENT TABLE: Link to Merchant, flip Status, AND Update Location
     const { error: equipUpdateError } = await supabase
