@@ -215,28 +215,45 @@
     }
 
     // 4. Save Ticket
-    async function saveDeployment(e) {
-        e.preventDefault();
-        const mId = document.getElementById('selectedMerchantId').value;
-        if (!mId) { alert("Please select a merchant from the search results!"); return; }
+async function saveDeployment(e) {
+    e.preventDefault();
+    
+    const mId = document.getElementById('selectedMerchantId').value;
+    const eId = document.getElementById('equipSelect').value;
 
-        const payload = {
-            merchant_id: mId,
-            equipment_id: document.getElementById('equipSelect').value,
-            tid: document.getElementById('tidInput').value,
-            target_date: document.getElementById('dateInput').value
-        };
+    if (!mId) { 
+        alert("Please search for a merchant and CLICK one from the suggestion list."); 
+        return; 
+    }
 
+    const payload = {
+        merchant_id: mId,
+        equipment_id: eId,
+        tid: document.getElementById('tidInput').value,
+        target_date: document.getElementById('dateInput').value,
+        notes: "New deployment via dashboard" // Added default to prevent null errors
+    };
+
+    try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'create', payload })
         });
-        if (res.ok) { 
-            document.getElementById('newDepModal').style.display = 'none';
-            fetchDeployments(); 
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            alert("Deployment Created Successfully!");
+            location.reload(); 
+        } else {
+            alert("Database Error: " + result.message);
         }
+    } catch (err) {
+        console.error(err);
+        alert("System Error: Could not connect to the API.");
     }
+}
 
     // 5. View Lifecycle Audit
     async function viewHistory(id, sn) {
