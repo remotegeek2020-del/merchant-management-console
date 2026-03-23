@@ -88,9 +88,12 @@
             <input type="text" id="invSearch" placeholder="Search..." class="slds-input" style="width:140px; border-radius:10px;">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
             
-            <button class="slds-button slds-button_neutral" style="border-radius:10px; border:1px solid #cbd5e1; min-width: 40px;" onclick="printPDFReport()" title="Print Summary">
-                <span class="material-icons" style="font-size:18px;">picture_as_pdf</span>
-            </button>
+            <button class="slds-button slds-button_neutral" 
+        style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #cbd5e1; background: white;" 
+        onclick="printPDFReport()">
+    <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
+    Print PDF Summary
+</button>
 
             <button class="slds-button slds-button_success" style="border-radius:10px; background:#166534; color:white; display:flex; align-items:center; gap:5px;" onclick="openAddModal()">
                 <span class="material-icons" style="font-size:18px;">add</span>
