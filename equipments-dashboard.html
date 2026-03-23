@@ -62,6 +62,10 @@
         .slds-hide { display: none !important; }
         .slds-show { display: block !important; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* Timeline Styles Added */
+        .timeline-item { position: relative; padding-left: 30px; margin-bottom: 20px; border-left: 2px solid #e2e8f0; margin-left: 10px; }
+        .timeline-marker { position: absolute; left: -9px; top: 0; width: 16px; height: 16px; border-radius: 50%; background: white; border: 3px solid var(--pp-accent); }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
@@ -79,29 +83,29 @@
 
         <div style="display: flex; align-items: center; gap: 10px;">
             <div class="location-toggle">
-    <button class="toggle-btn active" id="btn-office" onclick="filterByLoc('Warsaw Office')">OFFICE</button>
-    <button class="toggle-btn" id="btn-repairs" onclick="filterByLoc('Warsaw Repairs')">REPAIRS</button>
-    <button class="toggle-btn" id="btn-deployed" onclick="filterByLoc('deployed')">DEPLOYED</button>
-    <button class="toggle-btn" id="btn-retired" onclick="filterByLoc('Retired')">RETIRED</button>
-</div>
+                <button class="toggle-btn active" id="btn-office" onclick="filterByLoc('Warsaw Office')">OFFICE</button>
+                <button class="toggle-btn" id="btn-repairs" onclick="filterByLoc('Warsaw Repairs')">REPAIRS</button>
+                <button class="toggle-btn" id="btn-deployed" onclick="filterByLoc('deployed')">DEPLOYED</button>
+                <button class="toggle-btn" id="btn-retired" onclick="filterByLoc('Retired')">RETIRED</button>
+            </div>
             
             <input type="text" id="invSearch" placeholder="Search..." class="slds-input" style="width:140px; border-radius:10px;">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
             
             <button class="slds-button slds-button_neutral" 
-        style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #cbd5e1; background: white;" 
-        onclick="printPDFReport()">
-    <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
-    Print PDF Summary
-</button>
+                style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #cbd5e1; background: white;" 
+                onclick="printPDFReport()">
+                <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
+                Print PDF Summary
+            </button>
             <button class="slds-button slds-button_outline-brand" 
-        style="border-radius:10px; border:1px solid var(--pp-accent); color:var(--pp-accent); display:flex; align-items:center; gap:5px;" 
-        onclick="triggerAIUpload()">
-    <span class="material-icons" style="font-size:18px;">auto_awesome</span>
-    AI Import
-</button>
+                style="border-radius:10px; border:1px solid var(--pp-accent); color:var(--pp-accent); display:flex; align-items:center; gap:5px;" 
+                onclick="triggerAIUpload()">
+                <span class="material-icons" style="font-size:18px;">auto_awesome</span>
+                AI Import
+            </button>
 
-<input type="file" id="ai-file-input" accept="application/pdf" style="display:none;" onchange="handleAIFile(this)">
+            <input type="file" id="ai-file-input" accept="application/pdf" style="display:none;" onchange="handleAIFile(this)">
 
             <button class="slds-button slds-button_success" style="border-radius:10px; background:#166534; color:white; display:flex; align-items:center; gap:5px;" onclick="openAddModal()">
                 <span class="material-icons" style="font-size:18px;">add</span>
@@ -163,11 +167,11 @@
           <ul class="slds-tabs_default__nav" style="display: flex; list-style: none; padding: 0; background: #f8fafc; border-bottom: 1px solid #e2e8f0;">
                 <li id="tab-update-li" class="slds-tabs_default__item slds-is-active" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('update')">Update</a></li>
                 <li id="tab-notes-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('notes')">Notes</a></li>
-                <li id="tab-logs-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('logs')">Audit Logs</a></li>
+                <li id="tab-logs-li" class="slds-tabs_default__item" style="padding: 10px 20px; cursor: pointer;"><a onclick="switchTab('logs')">Audit & History</a></li>
           </ul>
 
         <div id="tab-logs" class="slds-tabs_default__content slds-hide" style="padding: 20px;">
-            <div id="audit-list" style="max-height: 250px; overflow-y: auto; font-size: 12px;">
+            <div id="audit-list" style="max-height: 350px; overflow-y: auto; font-size: 12px;">
                 <p style="color: #94a3b8; text-align: center; padding: 20px;">Loading history...</p>
             </div>
         </div>
@@ -301,7 +305,6 @@ function confirmAIImport(extractedData) {
         confirmButtonText: 'Confirm & Save All',
         cancelButtonText: 'Discard',
         preConfirm: () => {
-            // Collect the (possibly edited) data from the inputs
             const finalData = [];
             extractedData.forEach((_, index) => {
                 const modelInput = document.getElementById(`ai-model-${index}`);
@@ -322,11 +325,10 @@ function confirmAIImport(extractedData) {
     });
 }
 
-    // --- NEW PDF LOGIC ---
+    // --- PDF LOGIC ---
     function printPDFReport() {
         const today = new Date().toLocaleDateString();
         
-        // 1. Capture the current KPI values from your screen
         const total = document.getElementById('kpi-total').innerText;
         const office = document.getElementById('kpi-office').innerText;
         const repair = document.getElementById('kpi-repair').innerText;
@@ -334,7 +336,6 @@ function confirmAIImport(extractedData) {
         const retired = document.getElementById('kpi-retired').innerText;
         const alerts = document.getElementById('kpi-alerts').innerText;
 
-        // 2. Create the Print Content
         const printWindow = window.open('', '_blank');
         printWindow.document.write(`
             <html>
@@ -407,9 +408,6 @@ function confirmAIImport(extractedData) {
         printWindow.document.close();
     }
     
-
-  
-
     async function decommissionEquipment(id, serial) {
     const confirm = await Swal.fire({
         title: 'Decommission Unit?',
@@ -427,7 +425,7 @@ function confirmAIImport(extractedData) {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    action: 'update', // We use 'update' instead of delete!
+                    action: 'update',
                     id: id,
                     payload: {
                         status: 'decommissioned',
@@ -468,7 +466,7 @@ function confirmAIImport(extractedData) {
 
             if (result.success) {
                 Swal.fire('Deleted!', 'The unit has been removed.', 'success');
-                fetchInventory(); // Refresh the list
+                fetchInventory();
             } else {
                 Swal.fire('Error', result.message, 'error');
             }
@@ -478,30 +476,24 @@ function confirmAIImport(extractedData) {
     }
 }
 
-    // 1. MODAL: Open for NEW Item
   function openAddModal() {
     selectedId = null; 
     document.getElementById('modalTitle').innerText = "Add New Equipment";
     
-    // ... your existing reset logic ...
-
-    // HIDE THE EXTRA TABS for new items
     document.getElementById('tab-notes-li').style.display = 'none';
     document.getElementById('tab-logs-li').style.display = 'none';
 
     document.getElementById('customModal').classList.add('is-open');
-    switchTab('update'); // Force focus on the info tab
+    switchTab('update');
 }
 
-    // 2. MODAL: Open for EDITING existing Item
     function editEquipment(id) {
         selectedId = id;
         const item = inventory.find(i => i.id === id);
         if (!item) return;
 
-        // SHOW THE TABS for existing items
-    document.getElementById('tab-notes-li').style.display = 'block';
-    document.getElementById('tab-logs-li').style.display = 'block';
+        document.getElementById('tab-notes-li').style.display = 'block';
+        document.getElementById('tab-logs-li').style.display = 'block';
 
         document.getElementById('modalTitle').innerText = `Editing: ${item.serial_number}`;
         document.getElementById('edit-serial').value = item.serial_number || '';
@@ -536,12 +528,9 @@ function confirmAIImport(extractedData) {
         switchTab('update');
     }
 
-    // 3. DATABASE: Save (Create or Update)
     async function saveEquipmentChanges() {
         const saveBtn = document.querySelector('#tab-update .slds-button_brand');
         const newStatus = document.getElementById('edit-status').value;
-        
-        // Auto-map location based on status
         let newLocation = (newStatus === 'repairing') ? 'Warsaw Repairs' : 'Warsaw Office';
 
         const payload = {
@@ -560,7 +549,6 @@ function confirmAIImport(extractedData) {
         saveBtn.disabled = true;
         saveBtn.innerText = 'Saving...';
 
-        // Fix the UUID "null" error by only including ID if it exists
         const requestBody = {
             action: selectedId ? 'update' : 'create',
             payload: payload
@@ -586,7 +574,6 @@ function confirmAIImport(extractedData) {
                     showConfirmButton: false 
                 });
             } else {
-                // Check for duplicate serial error from Supabase
                 const msg = result.message || "";
                 if (msg.includes('unique')) {
                     Swal.fire('Duplicate', 'This Serial Number already exists.', 'warning');
@@ -646,19 +633,16 @@ async function saveNote() {
         });
         const result = await res.json();
         if (result.success) {
-            document.getElementById('note-text').value = ''; // Clear input
-            fetchNotes(); // Refresh list
+            document.getElementById('note-text').value = ''; 
+            fetchNotes(); 
         }
     } catch (err) { alert("Failed to save note"); }
 }
-
-    // 4. CORE LOGIC: Fetch, Tabs, Pagination
 
    async function fetchInventory() {
     const tbody = document.getElementById('inventoryTableBody');
     const limit = parseInt(document.getElementById('pageSize').value) || 50;
     
-    // Reset table with spinner
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
 
     try {
@@ -684,7 +668,6 @@ async function saveNote() {
         inventory = result.data || [];
         totalItems = result.count || 0;
 
-        // --- KPI UPDATES (Added Safety Optional Chaining) ---
         if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total ?? 0;
         if (document.getElementById('kpi-office')) document.getElementById('kpi-office').innerText = result.metrics?.inOffice ?? 0;
         if (document.getElementById('kpi-repair')) document.getElementById('kpi-repair').innerText = result.metrics?.inRepair ?? 0;
@@ -694,7 +677,6 @@ async function saveNote() {
         const alertCard = document.getElementById('kpi-alerts');
         if (alertCard) alertCard.innerText = result.metrics?.alerts ?? 0;
 
-        // --- PAGINATION UI ---
         const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
         const end = Math.min((currentPage + 1) * limit, totalItems);
         const navInfo = document.getElementById('pagination-info');
@@ -714,15 +696,12 @@ async function saveNote() {
 
         inventory.forEach(item => {
             const row = tbody.insertRow();
-            
-            // --- 1. SAFE ALERT CALCULATION ---
             let isStaleRepair = false;
             let diffDays = 0;
 
             if (item.current_location === 'Warsaw Repairs' && item.received_date) {
                 const lastUpdate = new Date(item.received_date);
                 const today = new Date();
-                // Ensure date is valid before calculating
                 if (!isNaN(lastUpdate.getTime())) {
                     const diffTime = Math.abs(today - lastUpdate);
                     diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -730,25 +709,30 @@ async function saveNote() {
                 }
             }
 
-            // --- 2. DEFINE CLASSES ---
             let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
             if (item.status === 'deployed') locClass = 'loc-deployed';
             const isDeployed = item.status === 'deployed';
 
-            // --- 3. ROW STYLE ---
             if (isStaleRepair) {
                 row.style.backgroundColor = '#fff1f2'; 
             }
 
-            // --- 4. DEFINE BUTTONS ---
             const actionButtons = isDeployed ? `
-                <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
-                    <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
-                </button>
+                <div style="display: flex; gap: 5px; justify-content: center;">
+                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Details">
+                        <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
+                    </button>
+                    <button onclick="showLifecycle('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Full History">
+                        <span class="material-icons" style="font-size:18px; color:#64748b;">history</span>
+                    </button>
+                </div>
             ` : `
                 <div style="display: flex; gap: 5px; justify-content: center;">
-                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
+                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
                         <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
+                    </button>
+                    <button onclick="showLifecycle('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Full History">
+                        <span class="material-icons" style="font-size:18px; color:#64748b;">history</span>
                     </button>
                     <button onclick="decommissionEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Decommission">
                         <span class="material-icons" style="font-size:18px; color: #64748b;">archive</span>
@@ -756,7 +740,6 @@ async function saveNote() {
                 </div>
             `;
 
-            // --- 5. RENDER ROW HTML ---
             row.innerHTML = `
                 <td style="font-weight:700; color:var(--pp-blue);">
                     ${item.serial_number}
@@ -780,7 +763,6 @@ async function saveNote() {
         tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Critical Error: Check Console</td></tr>`;
     }
 }
-    
 
     function switchTab(tabName) {
     ['update', 'notes', 'logs'].forEach(t => {
@@ -793,51 +775,91 @@ async function saveNote() {
     document.getElementById(`tab-${tabName}`).classList.replace('slds-hide', 'slds-show');
     document.getElementById(`tab-${tabName}-li`).classList.add('slds-is-active');
 
-    if (tabName === 'logs') fetchAuditLogs();
-    if (tabName === 'notes') fetchNotes(); // <--- ADD THIS
+    if (tabName === 'logs') fetchCombinedLogs();
+    if (tabName === 'notes') fetchNotes(); 
 }
 
-async function fetchAuditLogs() {
+// Function to trigger Lifecycle View from the Table
+function showLifecycle(id, serial) {
+    selectedId = id;
+    editEquipment(id); // Open modal
+    switchTab('logs'); // Jump to the combined logs tab
+}
+
+async function fetchCombinedLogs() {
     const container = document.getElementById('audit-list');
     const serial = document.getElementById('edit-serial').value;
-    container.innerHTML = '<p style="text-align:center; padding:20px;">Fetching history...</p>';
+    container.innerHTML = '<p style="text-align:center; padding:20px;">Fetching full history...</p>';
 
     try {
-        const res = await fetch('/api/equipments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'getActivityLogs', 
-                serial: serial 
+        // Fetch System Logs and Deployment History in parallel
+        const [sysLogsRes, lifecycleRes] = await Promise.all([
+            fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getActivityLogs', serial: serial })
+            }),
+            fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getHistory', equipment_id: selectedId })
             })
-        });
-        const result = await res.json();
+        ]);
 
-        if (result.success && result.data.length > 0) {
-            container.innerHTML = result.data.map(log => `
-                <div style="border-left: 3px solid var(--pp-blue); padding: 10px; margin-bottom: 10px; background: #fff; border-radius: 0 8px 8px 0; box-shadow: 0 2px 4px rgba(0,0,0,0.02);">
-                    <p style="font-weight: 800; margin: 0; color: #1e293b; font-size: 13px;">${log.action}</p>
-                    <p style="margin: 2px 0; color: #64748b; font-size: 12px;">${log.status}</p>
-                    <div style="display: flex; justify-content: space-between; margin-top: 5px;">
-                        <small style="color: #94a3b8;">${new Date(log.created_at).toLocaleString()}</small>
-                        <small style="color: var(--pp-accent); font-weight: 600;">${log.email || 'Admin'}</small>
-                    </div>
-                </div>
-            `).join('');
+        const sysData = await sysLogsRes.json();
+        const lifeData = await lifecycleRes.json();
+
+        // Combine and sort by date descending
+        let allEvents = [];
+        if (sysData.success) sysData.data.forEach(e => allEvents.push({...e, type: 'system'}));
+        if (lifeData.success) lifeData.data.forEach(e => allEvents.push({...e, type: 'lifecycle'}));
+        
+        allEvents.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+        if (allEvents.length > 0) {
+            container.innerHTML = allEvents.map(log => {
+                if (log.type === 'lifecycle') {
+                    // Deployment Lifecycle Formatting
+                    return `
+                        <div class="timeline-item">
+                            <div class="timeline-marker"></div>
+                            <p style="font-weight: 800; margin: 0; color: var(--pp-blue); font-size: 13px;">${log.action.toUpperCase()}</p>
+                            <p style="margin: 2px 0; color: #1e293b; font-size: 12px;">${log.from_location} → ${log.to_location}</p>
+                            <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                                <small style="color: #94a3b8;">${new Date(log.created_at).toLocaleString()}</small>
+                                <small style="color: #64748b; font-weight:600;">Logistics Event</small>
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    // Standard Activity Log Formatting
+                    return `
+                        <div class="timeline-item" style="border-left-color: #cbd5e1;">
+                            <div class="timeline-marker" style="border-color: #94a3b8;"></div>
+                            <p style="font-weight: 800; margin: 0; color: #1e293b; font-size: 13px;">${log.action}</p>
+                            <p style="margin: 2px 0; color: #64748b; font-size: 12px;">Status: ${log.status}</p>
+                            <div style="display: flex; justify-content: space-between; margin-top: 5px;">
+                                <small style="color: #94a3b8;">${new Date(log.created_at).toLocaleString()}</small>
+                                <small style="color: #94a3b8;">${log.email || 'Admin'}</small>
+                            </div>
+                        </div>
+                    `;
+                }
+            }).join('');
         } else {
-            container.innerHTML = '<p style="text-align:center; color:#94a3b8; padding:20px;">No audit history found for this unit.</p>';
+            container.innerHTML = '<p style="text-align:center; color:#94a3b8; padding:20px;">No audit history found.</p>';
         }
     } catch (err) {
         container.innerHTML = '<p style="text-align:center; color:red;">Error loading logs.</p>';
     }
 }
+
     function closeModal() { document.getElementById('customModal').classList.remove('is-open'); }
     
     function filterByLoc(loc) { 
     currentFilter = loc; 
     currentPage = 0; 
     
-    // Toggle active class for ALL buttons
     document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
     document.getElementById('btn-repairs').classList.toggle('active', loc === 'Warsaw Repairs');
     document.getElementById('btn-deployed').classList.toggle('active', loc === 'deployed');
