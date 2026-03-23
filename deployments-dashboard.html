@@ -182,8 +182,10 @@
         const result = await res.json();
         
         list.innerHTML = result.merchants.map(m => `
-            <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')">${m.dba_name}</div>
-        `).join('');
+    <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')">
+        <strong>${m.dba_name}</strong> <span style="font-size:10px; color:#64748b;">(ID: ${m.merchant_id || 'N/A'})</span>
+    </div>
+`).join('');
         list.style.display = 'block';
     }
 
