@@ -4,7 +4,7 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 export const config = {
     api: {
         bodyParser: {
-            sizeLimit: '10mb', // Attempt to increase limit, though Vercel has a hard 4.5MB cap on serverless
+            sizeLimit: '10mb',
         },
     },
 };
@@ -22,31 +22,35 @@ export default async function handler(req, res) {
         const { fileBase64 } = req.body;
         if (!fileBase64) return sendJsonError(400, 'No file data received.');
 
-        // Initialize Gemini
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use v1beta features for better PDF support if needed, 
-        // but the standard SDK usually handles this.
+        // Use a strict schema to force the output format
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: { 
                 responseMimeType: "application/json",
+                responseSchema: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            serial_number: { type: "string" },
+                            terminal_type: { type: "string" }
+                        },
+                        required: ["serial_number", "terminal_type"]
+                    }
+                },
                 temperature: 0.1 
             }
         });
 
         const prompt = `
             Extract hardware serial numbers and model types from this invoice. 
-            Return a JSON array of objects: [{"serial_number": "...", "terminal_type": "..."}]
+            Clean serials by removing dots, spaces, or commas.
 
             MAPPING RULES:
             - Valor (VL-550, VP800) -> 'Valor VL550' or 'Valor VP800'
             - Dejavoo (KOZ-P1, Koz-P3, Koz-P5, KOZ-P17) -> 'Dejavoo P1', 'Dejavoo P3', 'Dejavoo P5', 'Dejavoo P17'
-            
-            IMPORTANT:
-            - Capture EVERY serial number listed.
-            - Clean serials (remove dots/spaces).
-            - Output ONLY the raw JSON array.
         `;
 
         // Process multimodal input
@@ -58,30 +62,35 @@ export default async function handler(req, res) {
         const response = await result.response;
         let text = response.text();
         
-        // Handle cases where AI might still wrap in markdown code blocks
-        if (text.includes("```")) {
+        // Clean potential markdown or extra chars
+        text = text.trim();
+        if (text.startsWith("```")) {
             text = text.replace(/```json/g, "").replace(/```/g, "").trim();
         }
 
-        // Final attempt to find JSON array if text has extra noise
         try {
             const data = JSON.parse(text);
+            // The responseSchema should ensure it is an array, but we check anyway
             const finalData = Array.isArray(data) ? data : (data.items || data.data || []);
+            
+            if (finalData.length === 0) {
+                return sendJsonError(422, "AI found the document but couldn't identify any serial numbers.");
+            }
+
             return res.status(200).json({ success: true, data: finalData });
         } catch (e) {
-            // Regex fallback to find the array [ ... ]
+            // Final Regex fallback
             const match = text.match(/\[\s*\{.*\}\s*\]/s);
             if (match) {
                 return res.status(200).json({ success: true, data: JSON.parse(match[0]) });
             }
-            throw new Error("AI output format invalid");
+            throw new Error("The AI response could not be parsed as a list.");
         }
 
     } catch (err) {
         console.error("Critical AI Error:", err);
-        // If the error is "Payload Too Large", send a specific hint
         if (err.message.includes("413") || err.message.toLowerCase().includes("large")) {
-            return sendJsonError(413, "File is too large for Vercel. Try a 1-page PDF.");
+            return sendJsonError(413, "This PDF is too large for the current server limit. Try splitting it.");
         }
         return sendJsonError(500, `AI Error: ${err.message}`);
     }
