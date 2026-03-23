@@ -87,6 +87,12 @@ export default async function handler(req, res) {
                 inRepair: allData.filter(i => i.current_location === 'Warsaw Repairs').length || 0,
                 deployed: allData.filter(i => i.status === 'deployed').length || 0,
                 retired: allData.filter(i => i.status === 'decommissioned').length || 0 // Added this line
+
+                // NEW ALERT METRIC
+    alerts: allData.filter(i => 
+        i.current_location === 'Warsaw Repairs' && 
+        new Date(i.updated_at) < fourteenDaysAgo
+    ).length || 0
             };
 
             return res.status(200).json({ 
