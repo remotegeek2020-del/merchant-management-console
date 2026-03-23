@@ -21,8 +21,11 @@
         
         /* Modal Styles */
         .modal-backdrop { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
-        .modal-content { background:white; width:600px; border-radius:16px; padding:30px; position:relative; max-height:80vh; overflow-y:auto; }
+        .modal-content { background:white; width:600px; border-radius:16px; padding:30px; position:relative; max-height:90vh; overflow-y:auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
         .close-btn { position:absolute; top:20px; right:20px; cursor:pointer; color:#64748b; }
+        
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; font-weight: 700; font-size: 0.75rem; color: #64748b; margin-bottom: 5px; text-transform: uppercase; }
         
         /* Timeline Styles */
         .timeline { border-left: 2px solid #e2e8f0; margin-left: 20px; padding-left: 30px; position: relative; }
@@ -48,7 +51,10 @@
         </div>
         <div style="display: flex; gap: 10px;">
             <input type="text" id="depSearch" placeholder="Search ID or Serial..." class="slds-input" style="width:250px; border-radius:10px;">
-            <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchDeployments()">Search</button>
+            <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="openNewDeploymentModal()">
+                <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
+                NEW TICKET
+            </button>
         </div>
     </div>
 
@@ -78,15 +84,62 @@
 </div>
 
 <!-- History Modal -->
-<div id="historyModal" class="modal-backdrop" onclick="closeModal(event)">
+<div id="historyModal" class="modal-backdrop" onclick="closeModal(event, 'historyModal')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('historyModal').style.display='none'">close</span>
         <h2 id="modalTitle" style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:5px;">Equipment Lifecycle</h2>
         <p id="modalSubtitle" style="color:#64748b; font-size:0.9rem; margin-bottom:25px;">History for Serial #---</p>
+        <div id="timelineContainer" class="timeline"></div>
+    </div>
+</div>
+
+<!-- New Deployment Modal -->
+<div id="newDepModal" class="modal-backdrop" onclick="closeModal(event, 'newDepModal')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <span class="material-icons close-btn" onclick="document.getElementById('newDepModal').style.display='none'">close</span>
+        <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Create Deployment Ticket</h2>
         
-        <div id="timelineContainer" class="timeline">
-            <!-- Timeline items injected here -->
-        </div>
+        <form id="newDepForm" onsubmit="saveDeployment(event)">
+            <div class="form-group">
+                <label class="form-label">Merchant (DBA)</label>
+                <select id="merchantSelect" class="slds-select" required style="border-radius:8px;">
+                    <option value="">Select Merchant...</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label class="form-label">Hardware (From Office Inventory)</label>
+                <select id="equipSelect" class="slds-select" required style="border-radius:8px;">
+                    <option value="">Select Serial Number...</option>
+                </select>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                <div class="form-group">
+                    <label class="form-label">Terminal ID (TID)</label>
+                    <input type="text" id="tidInput" class="slds-input" placeholder="e.g. 12345678" style="border-radius:8px;">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tracking Number</label>
+                    <input type="text" id="trackingInput" class="slds-input" placeholder="UPS/FedEx..." style="border-radius:8px;">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Target Deployment Date</label>
+                <input type="date" id="dateInput" class="slds-input" required style="border-radius:8px;">
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Logistics Notes</label>
+                <textarea id="notesInput" class="slds-textarea" placeholder="Internal notes for this shipment..." style="border-radius:8px;"></textarea>
+            </div>
+
+            <div style="margin-top:25px; display:flex; justify-content:flex-end; gap:10px;">
+                <button type="button" class="slds-button slds-button_neutral" style="border-radius:8px;" onclick="document.getElementById('newDepModal').style.display='none'">Cancel</button>
+                <button type="submit" class="slds-button slds-button_brand" style="border-radius:8px; background:var(--pp-blue);">Create Ticket</button>
+            </div>
+        </form>
     </div>
 </div>
 
@@ -136,6 +189,59 @@
         } catch (err) { console.error(err); }
     }
 
+    async function openNewDeploymentModal() {
+        const modal = document.getElementById('newDepModal');
+        const mSelect = document.getElementById('merchantSelect');
+        const eSelect = document.getElementById('equipSelect');
+        
+        mSelect.innerHTML = '<option>Loading Merchants...</option>';
+        eSelect.innerHTML = '<option>Loading Inventory...</option>';
+        modal.style.display = 'flex';
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups' })
+            });
+            const data = await res.json();
+
+            mSelect.innerHTML = '<option value="">Select Merchant...</option>' + 
+                data.merchants.map(m => `<option value="${m.id}">${m.dba_name}</option>`).join('');
+                
+            eSelect.innerHTML = '<option value="">Select Serial Number...</option>' + 
+                data.inventory.map(e => `<option value="${e.id}">${e.serial_number} (${e.terminal_type})</option>`).join('');
+        } catch (err) { console.error(err); }
+    }
+
+    async function saveDeployment(e) {
+        e.preventDefault();
+        const payload = {
+            merchant_id: document.getElementById('merchantSelect').value,
+            equipment_id: document.getElementById('equipSelect').value,
+            tid: document.getElementById('tidInput').value,
+            tracking_id: document.getElementById('trackingInput').value,
+            target_date: document.getElementById('dateInput').value,
+            notes: document.getElementById('notesInput').value
+        };
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'create', payload })
+            });
+            const result = await res.json();
+            if (result.success) {
+                document.getElementById('newDepModal').style.display = 'none';
+                document.getElementById('newDepForm').reset();
+                fetchDeployments();
+            } else {
+                alert("Error: " + result.message);
+            }
+        } catch (err) { alert("Failed to save deployment."); }
+    }
+
     async function viewHistory(id, sn) {
         const modal = document.getElementById('historyModal');
         const container = document.getElementById('timelineContainer');
@@ -171,8 +277,8 @@
         }
     }
 
-    function closeModal(e) {
-        if (e.target.id === 'historyModal') document.getElementById('historyModal').style.display = 'none';
+    function closeModal(e, modalId) {
+        if (e.target.id === modalId) document.getElementById(modalId).style.display = 'none';
     }
 
     window.onload = fetchDeployments;
