@@ -4,16 +4,14 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, query } = req.body;
+    const { action, query, equipment_id } = req.body;
 
     try {
         if (action === 'list') {
-            // Join with Merchants (using merchant_id) and Equipments (using equipment_id)
-            // Note: If you renamed your constraints in the SQL editor, use those names here (e.g., current_merchant)
             let sb = supabase.from('deployments').select(`
                 *,
                 merchants!merchant_id (dba_name),
-                equipments!equipment_id (serial_number, terminal_type)
+                equipments!equipment_id (id, serial_number, terminal_type)
             `);
 
             if (query) {
@@ -21,10 +19,8 @@ export default async function handler(req, res) {
             }
 
             const { data, error } = await sb.order('created_at', { ascending: false });
-            
             if (error) throw error;
 
-            // Metrics calculation
             const metrics = {
                 active: data.filter(d => d.status === 'Open').length || 0,
                 total: data.length || 0,
@@ -33,6 +29,24 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ success: true, data: data || [], metrics });
         }
+
+        // --- NEW ACTION: FETCH EQUIPMENT HISTORY ---
+        if (action === 'getHistory') {
+            if (!equipment_id) return res.status(400).json({ message: "Equipment ID required" });
+
+            const { data, error } = await supabase
+                .from('equipment_logs')
+                .select(`
+                    *,
+                    merchants (dba_name)
+                `)
+                .eq('equipment_id', equipment_id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+        }
+
     } catch (err) {
         console.error("Deployment API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
