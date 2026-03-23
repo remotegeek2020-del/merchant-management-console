@@ -9,6 +9,17 @@ export default async function handler(req, res) {
 
     try {
 
+        if (action === 'getActivityLogs') {
+    const { data, error } = await supabase
+        .from('activity_logs')
+        .select('*')
+        .ilike('status', `%${req.body.serial}%`) // Search for logs containing the serial
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
+
 if (action === 'delete') {
     const { data, error } = await supabase
         .from('equipments')
