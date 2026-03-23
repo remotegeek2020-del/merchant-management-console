@@ -10,31 +10,34 @@
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
         body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
         .dashboard-container { max-width: 1600px; margin: 0 auto; }
+        
+        /* Header & Cards */
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .kpi-card { background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; flex: 1; display: flex; align-items: center; gap: 15px; }
         .kpi-val { font-size: 1.3rem; font-weight: 800; color: #002d5a; display: block; }
         .kpi-label { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
         .main-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        
+        /* Badges */
         .badge { font-weight: 800; font-size: 9px; padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
         .status-open { background: #e0f2fe; color: #0369a1; }
         .status-closed { background: #f1f5f9; color: #475569; }
-        
-        /* Modal Styles */
+
+        /* Modals */
         .modal-backdrop { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
-        .modal-content { background:white; width:600px; border-radius:16px; padding:30px; position:relative; max-height:90vh; overflow-y:auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2); }
+        .modal-content { background:white; width:550px; border-radius:16px; padding:30px; position:relative; box-shadow: 0 20px 50px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto; }
         .close-btn { position:absolute; top:20px; right:20px; cursor:pointer; color:#64748b; }
-        
-        .form-group { margin-bottom: 15px; }
-        .form-label { display: block; font-weight: 700; font-size: 0.75rem; color: #64748b; margin-bottom: 5px; text-transform: uppercase; }
-        
-        /* Timeline Styles */
+
+        /* Search Suggestions */
+        .suggestions-list { position: absolute; z-index: 1010; background: white; width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; max-height: 200px; overflow-y: auto; display: none; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin-top: 5px; }
+        .suggestion-item { padding: 12px; cursor: pointer; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+        .suggestion-item:hover { background: #f0f7ff; color: var(--pp-blue); font-weight: 600; }
+
+        /* Timeline */
         .timeline { border-left: 2px solid #e2e8f0; margin-left: 20px; padding-left: 30px; position: relative; }
         .timeline-item { margin-bottom: 25px; position: relative; }
         .timeline-dot { position: absolute; left: -41px; width: 20px; height: 20px; background: white; border: 4px solid var(--pp-accent); border-radius: 50%; }
-        .timeline-date { font-size: 0.75rem; font-weight: 700; color: #94a3b8; }
-        .timeline-action { font-weight: 800; color: #002d5a; font-size: 0.95rem; }
-        .timeline-location { font-size: 0.85rem; color: #64748b; }
-        
+
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -50,7 +53,7 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Logistics & Deployments</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="depSearch" placeholder="Search ID or Serial..." class="slds-input" style="width:250px; border-radius:10px;">
+            <input type="text" id="depSearch" placeholder="Search Tickets..." class="slds-input" style="width:250px; border-radius:10px;">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="openNewDeploymentModal()">
                 <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
                 NEW TICKET
@@ -59,23 +62,22 @@
     </div>
 
     <div style="display:flex; gap:20px; margin-bottom:20px;">
-        <div class="kpi-card"><div><span class="kpi-label">Active Shipments</span><span class="kpi-val" id="kpi-active">0</span></div></div>
-        <div class="kpi-card"><div><span class="kpi-label">Completed Today</span><span class="kpi-val" id="kpi-today">0</span></div></div>
-        <div class="kpi-card" style="background:var(--pp-blue); color:white;"><div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Total Fleet Deployed</span><span class="kpi-val" id="kpi-total" style="color:white;">0</span></div></div>
+        <div class="kpi-card"><div><span class="kpi-label">Active Tickets</span><span class="kpi-val" id="kpi-active">0</span></div></div>
+        <div class="kpi-card"><div><span class="kpi-label">New Today</span><span class="kpi-val" id="kpi-today">0</span></div></div>
+        <div class="kpi-card" style="background:var(--pp-blue); color:white;"><div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Total Logistics Events</span><span class="kpi-val" id="kpi-total" style="color:white;">0</span></div></div>
     </div>
 
     <article class="main-card">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
-                    <th>Deployment ID</th>
+                    <th>ID</th>
                     <th>Merchant (DBA)</th>
                     <th>Hardware (Serial)</th>
                     <th>TID</th>
-                    <th>Tracking</th>
                     <th>Date</th>
                     <th>Status</th>
-                    <th>History</th>
+                    <th>Audit</th>
                 </tr>
             </thead>
             <tbody id="deploymentTableBody"></tbody>
@@ -83,79 +85,63 @@
     </article>
 </div>
 
-<!-- History Modal -->
-<div id="historyModal" class="modal-backdrop" onclick="closeModal(event, 'historyModal')">
-    <div class="modal-content" onclick="event.stopPropagation()">
-        <span class="material-icons close-btn" onclick="document.getElementById('historyModal').style.display='none'">close</span>
-        <h2 id="modalTitle" style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:5px;">Equipment Lifecycle</h2>
-        <p id="modalSubtitle" style="color:#64748b; font-size:0.9rem; margin-bottom:25px;">History for Serial #---</p>
-        <div id="timelineContainer" class="timeline"></div>
-    </div>
-</div>
-
-<!-- New Deployment Modal -->
 <div id="newDepModal" class="modal-backdrop" onclick="closeModal(event, 'newDepModal')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('newDepModal').style.display='none'">close</span>
         <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Create Deployment Ticket</h2>
         
         <form id="newDepForm" onsubmit="saveDeployment(event)">
-            <div class="form-group">
-                <label class="form-label">Merchant (DBA)</label>
-                <select id="merchantSelect" class="slds-select" required style="border-radius:8px;">
-                    <option value="">Select Merchant...</option>
-                </select>
+            <div style="position:relative; margin-bottom: 15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">MERCHANT (Search 'Pizza', etc.)</label>
+                <input type="text" id="mSearch" class="slds-input" placeholder="Start typing merchant name..." onkeyup="handleMerchantSearch(this.value)" autocomplete="off" style="border-radius:8px;">
+                <input type="hidden" id="selectedMerchantId" required>
+                <div id="mSuggestions" class="suggestions-list"></div>
             </div>
-            
-            <div class="form-group">
-                <label class="form-label">Hardware (From Office Inventory)</label>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">HARDWARE (OFFICE INVENTORY)</label>
                 <select id="equipSelect" class="slds-select" required style="border-radius:8px;">
                     <option value="">Select Serial Number...</option>
                 </select>
             </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                <div class="form-group">
-                    <label class="form-label">Terminal ID (TID)</label>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
+                <div>
+                    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TID</label>
                     <input type="text" id="tidInput" class="slds-input" placeholder="e.g. 12345678" style="border-radius:8px;">
                 </div>
-                <div class="form-group">
-                    <label class="form-label">Tracking Number</label>
-                    <input type="text" id="trackingInput" class="slds-input" placeholder="UPS/FedEx..." style="border-radius:8px;">
+                <div>
+                    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TARGET DATE</label>
+                    <input type="date" id="dateInput" class="slds-input" required style="border-radius:8px;">
                 </div>
             </div>
 
-            <div class="form-group">
-                <label class="form-label">Target Deployment Date</label>
-                <input type="date" id="dateInput" class="slds-input" required style="border-radius:8px;">
-            </div>
-
-            <div class="form-group">
-                <label class="form-label">Logistics Notes</label>
-                <textarea id="notesInput" class="slds-textarea" placeholder="Internal notes for this shipment..." style="border-radius:8px;"></textarea>
-            </div>
-
-            <div style="margin-top:25px; display:flex; justify-content:flex-end; gap:10px;">
-                <button type="button" class="slds-button slds-button_neutral" style="border-radius:8px;" onclick="document.getElementById('newDepModal').style.display='none'">Cancel</button>
-                <button type="submit" class="slds-button slds-button_brand" style="border-radius:8px; background:var(--pp-blue);">Create Ticket</button>
-            </div>
+            <button type="submit" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); border-radius:8px; padding:10px;">CREATE DEPLOYMENT</button>
+            <button type="button" onclick="document.getElementById('newDepModal').style.display='none'" class="slds-button slds-button_neutral slds-size_1-of-1" style="margin-top:10px; border-radius:8px;">CANCEL</button>
         </form>
     </div>
 </div>
 
+<div id="historyModal" class="modal-backdrop" onclick="closeModal(event, 'historyModal')">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <span class="material-icons close-btn" onclick="document.getElementById('historyModal').style.display='none'">close</span>
+        <h2 style="font-size:1.3rem; font-weight:800; color:#002d5a; margin-bottom:5px;">Lifecycle History</h2>
+        <p id="histSubtitle" style="color:#64748b; font-size:0.85rem; margin-bottom:25px;"></p>
+        <div id="timeline" class="timeline"></div>
+    </div>
+</div>
+
 <script>
+    // 1. Fetch main table data
     async function fetchDeployments() {
         const tbody = document.getElementById('deploymentTableBody');
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:60px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Logistics Ledger...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:50px; color:#94a3b8;">Syncing Ledger...</td></tr>`;
 
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'list', 
-                    query: document.getElementById('depSearch').value 
-                })
+                body: JSON.stringify({ action: 'list', query: document.getElementById('depSearch').value })
             });
             const result = await res.json();
 
@@ -166,21 +152,15 @@
             tbody.innerHTML = "";
             result.data.forEach(d => {
                 const row = tbody.insertRow();
-                const equipId = d.equipments?.id;
-                const sn = d.equipments?.serial_number || '---';
-                
                 row.innerHTML = `
                     <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
-                    <td style="font-weight:600;">${d.merchants?.dba_name || 'Unassigned'}</td>
-                    <td><code>${sn}</code></td>
+                    <td style="font-weight:600;">${d.merchants?.dba_name || '---'}</td>
+                    <td><code>${d.equipments?.serial_number || '---'}</code></td>
                     <td>${d.tid || '---'}</td>
-                    <td><a href="#" style="color:var(--pp-accent); font-weight:700;">${d.tracking_id || '---'}</a></td>
                     <td>${d.target_deploymer ? new Date(d.target_deploymer).toLocaleDateString() : '---'}</td>
                     <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status}</span></td>
                     <td>
-                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
-                                onclick="viewHistory('${equipId}', '${sn}')" 
-                                title="View History" ${!equipId ? 'disabled' : ''}>
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${d.equipments?.serial_number}')">
                             <span class="material-icons" style="font-size:18px;">history</span>
                         </button>
                     </td>
@@ -189,98 +169,103 @@
         } catch (err) { console.error(err); }
     }
 
-    async function openNewDeploymentModal() {
-        const modal = document.getElementById('newDepModal');
-        const mSelect = document.getElementById('merchantSelect');
-        const eSelect = document.getElementById('equipSelect');
+    // 2. Search Merchants (Suggestions)
+    async function handleMerchantSearch(val) {
+        const list = document.getElementById('mSuggestions');
+        if (val.length < 2) { list.style.display = 'none'; return; }
+
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getLookups', query: val })
+        });
+        const result = await res.json();
         
-        mSelect.innerHTML = '<option>Loading Merchants...</option>';
-        eSelect.innerHTML = '<option>Loading Inventory...</option>';
-        modal.style.display = 'flex';
-
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getLookups' })
-            });
-            const data = await res.json();
-
-            mSelect.innerHTML = '<option value="">Select Merchant...</option>' + 
-                data.merchants.map(m => `<option value="${m.id}">${m.dba_name}</option>`).join('');
-                
-            eSelect.innerHTML = '<option value="">Select Serial Number...</option>' + 
-                data.inventory.map(e => `<option value="${e.id}">${e.serial_number} (${e.terminal_type})</option>`).join('');
-        } catch (err) { console.error(err); }
+        list.innerHTML = result.merchants.map(m => `
+            <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')">${m.dba_name}</div>
+        `).join('');
+        list.style.display = 'block';
     }
 
+    function selectMerchant(id, name) {
+        document.getElementById('selectedMerchantId').value = id;
+        document.getElementById('mSearch').value = name;
+        document.getElementById('mSuggestions').style.display = 'none';
+    }
+
+    // 3. Open New Ticket Modal & Load Hardware
+    async function openNewDeploymentModal() {
+        document.getElementById('newDepModal').style.display = 'flex';
+        document.getElementById('mSearch').value = '';
+        document.getElementById('selectedMerchantId').value = '';
+        
+        const select = document.getElementById('equipSelect');
+        select.innerHTML = '<option>Loading Office Inventory...</option>';
+
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getLookups' })
+        });
+        const result = await res.json();
+        select.innerHTML = '<option value="">Select Serial Number...</option>' + 
+            result.inventory.map(e => `<option value="${e.id}">${e.serial_number} (${e.terminal_type})</option>`).join('');
+    }
+
+    // 4. Save Ticket
     async function saveDeployment(e) {
         e.preventDefault();
+        const mId = document.getElementById('selectedMerchantId').value;
+        if (!mId) { alert("Please select a merchant from the search results!"); return; }
+
         const payload = {
-            merchant_id: document.getElementById('merchantSelect').value,
+            merchant_id: mId,
             equipment_id: document.getElementById('equipSelect').value,
             tid: document.getElementById('tidInput').value,
-            tracking_id: document.getElementById('trackingInput').value,
-            target_date: document.getElementById('dateInput').value,
-            notes: document.getElementById('notesInput').value
+            target_date: document.getElementById('dateInput').value
         };
 
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'create', payload })
-            });
-            const result = await res.json();
-            if (result.success) {
-                document.getElementById('newDepModal').style.display = 'none';
-                document.getElementById('newDepForm').reset();
-                fetchDeployments();
-            } else {
-                alert("Error: " + result.message);
-            }
-        } catch (err) { alert("Failed to save deployment."); }
-    }
-
-    async function viewHistory(id, sn) {
-        const modal = document.getElementById('historyModal');
-        const container = document.getElementById('timelineContainer');
-        document.getElementById('modalSubtitle').innerText = `History for Serial #${sn}`;
-        container.innerHTML = `<p style="color:#94a3b8; text-align:center;">Loading history...</p>`;
-        modal.style.display = 'flex';
-
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getHistory', equipment_id: id })
-            });
-            const result = await res.json();
-
-            if (result.data && result.data.length > 0) {
-                container.innerHTML = result.data.map(log => `
-                    <div class="timeline-item">
-                        <div class="timeline-dot"></div>
-                        <div class="timeline-date">${new Date(log.created_at).toLocaleString()}</div>
-                        <div class="timeline-action">${log.action.toUpperCase()}</div>
-                        <div class="timeline-location">
-                            ${log.from_location || 'Unknown'} <span class="material-icons" style="font-size:12px; vertical-align:middle;">arrow_forward</span> ${log.to_location || 'Unknown'}
-                        </div>
-                        ${log.notes ? `<div style="font-size:0.75rem; font-style:italic; margin-top:5px; color:#64748b;">"${log.notes}"</div>` : ''}
-                    </div>
-                `).join('');
-            } else {
-                container.innerHTML = `<p style="color:#94a3b8; text-align:center; padding:20px;">No historical logs found for this item.</p>`;
-            }
-        } catch (err) {
-            container.innerHTML = `<p style="color:red; text-align:center;">Error loading history.</p>`;
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', payload })
+        });
+        if (res.ok) { 
+            document.getElementById('newDepModal').style.display = 'none';
+            fetchDeployments(); 
         }
     }
 
-    function closeModal(e, modalId) {
-        if (e.target.id === modalId) document.getElementById(modalId).style.display = 'none';
+    // 5. View Lifecycle Audit
+    async function viewHistory(id, sn) {
+        const modal = document.getElementById('historyModal');
+        const list = document.getElementById('timeline');
+        document.getElementById('histSubtitle').innerText = `Full history for SN: ${sn}`;
+        list.innerHTML = 'Loading audit logs...';
+        modal.style.display = 'flex';
+
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getHistory', equipment_id: id })
+        });
+        const result = await res.json();
+
+        if (result.data?.length > 0) {
+            list.innerHTML = result.data.map(log => `
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div style="font-size:0.75rem; color:#94a3b8; font-weight:700;">${new Date(log.created_at).toLocaleString()}</div>
+                    <div style="font-weight:800; color:#002d5a;">${log.action.toUpperCase()}</div>
+                    <div style="font-size:0.85rem; color:#64748b;">${log.from_location} → ${log.to_location}</div>
+                </div>
+            `).join('');
+        } else {
+            list.innerHTML = 'No history logs found.';
+        }
     }
 
+    function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
     window.onload = fetchDeployments;
 </script>
 </body>
