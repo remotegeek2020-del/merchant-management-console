@@ -1,49 +1,34 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
+    // Only allow POST requests
+    if (req.method !== 'POST') {
+        return res.status(405).json({ success: false, message: 'Method Not Allowed' });
+    }
 
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    // 1. Check for API Key
+    if (!process.env.GEMINI_API_KEY) {
+        return res.status(500).json({ 
+            success: false, 
+            message: 'Server Error: GEMINI_API_KEY is missing in Vercel settings.' 
+        });
+    }
 
     try {
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        // Using Gemini 1.5 Flash for speed and high context window
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash",
+            generationConfig: { responseMimeType: "application/json" }
+        });
+
         const { fileBase64 } = req.body;
+        if (!fileBase64) {
+            return res.status(400).json({ success: false, message: 'No file data received.' });
+        }
 
-        // We explicitly tell the model to use JSON response schema
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" } 
-    });
-
-    const prompt = `
-        Extract hardware serial numbers and models from this invoice. 
-        Return an array of objects. 
-        Example: [{"serial_number": "12345", "terminal_type": "Dejavoo P1"}]
-        Use these mappings:
-        - Valor items (VL-550, VP800) -> 'Valor VL550' or 'Valor VP800'
-        - Dejavoo items (KOZ-P1, Koz-P3, Koz-P5) -> 'Dejavoo P1', 'Dejavoo P3', 'Dejavoo P5'
-    `;
-
-    const result = await model.generateContent([
-        prompt,
-        { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
-    ]);
-
-    // With responseMimeType: "application/json", Gemini returns valid JSON directly
-    const text = result.response.text();
-    const data = JSON.parse(text);
-
-    // If data is an object with a key (like { "items": [...] }), grab the array
-    const finalData = Array.isArray(data) ? data : (data.items || data.equipment || []);
-
-    return res.status(200).json({ success: true, data: finalData });
-} catch (err) {
-    console.error(err);
-    return res.status(500).json({ success: false, message: err.message });
-}
-
-       const prompt = `
-    You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
+        const prompt = `
+            You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
 
     STRATEGY FOR VALOR PAYTECH:
     - Look for items like 'VL-550' or 'VP800'.
@@ -68,18 +53,29 @@ export default async function handler(req, res) {
     - Format: [{"serial_number": "STRING", "terminal_type": "STRING"}]
     - Clean all serial numbers: remove extra spaces, dots, or hidden characters.
     - Return ONLY the JSON array.
-`;
+
+        `;
 
         const result = await model.generateContent([
-            prompt,
+            { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
         ]);
 
-        const text = result.response.text().replace(/```json|```/g, "").trim();
+        const response = await result.response;
+        const text = response.text();
+        
+        // Parse and return the structured data
         const data = JSON.parse(text);
+        const finalData = Array.isArray(data) ? data : (data.items || []);
 
-        return res.status(200).json({ success: true, data });
+        return res.status(200).json({ success: true, data: finalData });
+
     } catch (err) {
-        return res.status(500).json({ success: false, error: err.message });
+        console.error("AI Error:", err);
+        // Send a clean JSON error back so the frontend can display it
+        return res.status(500).json({ 
+            success: false, 
+            message: `AI Processing failed: ${err.message}` 
+        });
     }
 }
