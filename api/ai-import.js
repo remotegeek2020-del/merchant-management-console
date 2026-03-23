@@ -37,21 +37,21 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash for the highest stability across different API keys
+        // Use gemini-1.5-flash for the highest stability.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
-                temperature: 0,
+                temperature: 0.1, // Slight temperature can sometimes help avoid "stuck" empty responses
             }
         });
 
-        // "No-Reasoning" Prompt: This ensures the AI doesn't spend 5 seconds "thinking"
-        // before it starts outputting text.
+        // We ask for a simple comma-separated list. 
+        // We add "IGNORE TABLE HEADERS" to help it focus.
         const prompt = `
-            EXTRACT SERIAL NUMBERS.
-            Patterns: 18125..., X5C8..., P125..., P325..., P524..., P17B...
-            FORMAT: Just a comma-separated list of every long serial number found.
-            Do not provide model names or intro text.
+            ACT AS AN OCR ENGINE. EXTRACT EVERY SERIAL NUMBER.
+            Look for: 18125..., X5C8..., P125..., P325..., P524..., P17B...
+            FORMAT: Output ONLY the serial numbers found, separated by commas.
+            Do not provide model names, descriptions, or conversation.
         `;
 
         // Watchdog: 8.5 seconds to return before Vercel's 10s kill switch
@@ -71,7 +71,7 @@ export default async function handler(req, res) {
             rawText = response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
-                return sendJsonError(504, "Server connection timed out (10s limit). Please split the document into smaller parts or try a single page.");
+                return sendJsonError(504, "Vercel Timeout (10s). The PDF is too complex. Try splitting it into 1-page files or converting to JPG.");
             }
             throw err;
         }
@@ -79,8 +79,8 @@ export default async function handler(req, res) {
         const items = [];
         const seenSerials = new Set();
 
-        // --- THE "BRUTE FORCE" REGEX HARVESTER ---
-        // This is 1000x faster than AI classification.
+        // --- THE "SURVIVAL" REGEX HARVESTER ---
+        // This regex is refined to match the exact patterns in your files.
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
             { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
@@ -103,24 +103,29 @@ export default async function handler(req, res) {
             }
         });
 
-        // Final Fallback: Grab any alphanumeric string of serial-like length (10-16 chars)
+        // --- LAYER 2: BRUTE FORCE ALPHANUMERIC SCAN ---
+        // If the specific prefixes didn't work, we grab anything 10-16 chars long 
+        // that looks like a serial and try to guess the type.
         if (items.length === 0) {
-            const broadRegex = /\b[A-Z0-9]{10,16}\b/g;
+            const broadRegex = /\b([A-Z0-9]{10,16})\b/g;
             const matches = upperText.match(broadRegex) || [];
+            
             matches.forEach(sn => {
                 if (!seenSerials.has(sn)) {
-                    const isValor = upperText.includes('18125') || upperText.includes('VALOR');
-                    items.push({ 
-                        serial_number: sn, 
-                        terminal_type: isValor ? "Valor" : "Dejavoo" 
-                    });
+                    let type = "Terminal";
+                    if (sn.startsWith('1812') || upperText.includes('VALOR')) type = "Valor VL550";
+                    else if (sn.startsWith('P')) type = "Dejavoo";
+                    
+                    items.push({ serial_number: sn, terminal_type: type });
                     seenSerials.add(sn);
                 }
             });
         }
 
         if (items.length === 0) {
-            return sendJsonError(422, "No serial numbers were found in the AI response.", rawText.substring(0, 100));
+            // Return the first 200 characters of what the AI said so we can debug.
+            const debugSnippet = rawText.length > 0 ? rawText.substring(0, 200) : "EMPTY_RESPONSE";
+            return sendJsonError(422, "No serials identified. AI Response: " + debugSnippet);
         }
 
         return res.status(200).json({ success: true, data: items });
