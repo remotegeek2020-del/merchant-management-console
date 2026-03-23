@@ -17,9 +17,7 @@ async function callGeminiWithRetry(model, content, retries = 3) {
             const result = await model.generateContent(content);
             return result;
         } catch (err) {
-            // If it's the last retry, throw the error
             if (i === retries - 1) throw err;
-            // Otherwise wait (1s, 2s, 4s...)
             await wait(Math.pow(2, i) * 1000);
         }
     }
@@ -39,28 +37,29 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash: Highest reliability for high-density document tasks.
+        // Use gemini-1.5-flash for maximum speed and stability.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
-                temperature: 0.1,
+                temperature: 0,
             }
         });
 
         const prompt = `
-            EXTRACT ALL HARDWARE SERIAL NUMBERS. 
+            ACT AS A HIGH-SPEED OCR SCANNER.
+            TASK: FIND EVERY SERIAL NUMBER IN THIS DOCUMENT.
             
-            Look for these specific patterns:
-            - Valor: 12-digit numbers starting with 18125 or strings like X5C8...
-            - Dejavoo: 14+ char strings starting with P125, P325, P524, or P17B.
+            Look for:
+            - 12-digit numbers (Valor)
+            - 14-16 character alphanumeric strings starting with P (Dejavoo)
+            - Alphanumeric strings starting with X5 (Valor)
             
-            List them exactly like this:
-            SERIAL: [the number]
-            TYPE: [the terminal model]
-            ---
+            Format your output as a simple list:
+            SN: [number] | TYPE: [model]
+            
+            MODELS: Dejavoo P1, Dejavoo P3, Dejavoo P5, Dejavoo P17, Valor VL550, Valor VP800.
         `;
 
-        // Execute AI task with internal retry logic
         const result = await callGeminiWithRetry(model, [
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
@@ -72,49 +71,51 @@ export default async function handler(req, res) {
         const items = [];
         const seenSerials = new Set();
 
-        // --- LAYER 1: PATTERN HARVESTER ---
-        // This is the most reliable way to extract data from a noisy AI response.
-        const patterns = [
-            { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
-            { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
-            { regex: /\b(P125\d{10,12})\b/g, type: "Dejavoo P1" },
-            { regex: /\b(P325\d{10,12})\b/g, type: "Dejavoo P3" },
-            { regex: /\b(P524\d{10,12})\b/g, type: "Dejavoo P5" },
-            { regex: /\b(P17[B86]\d{10,12})\b/g, type: "Dejavoo P17" }
-        ];
-
-        patterns.forEach(p => {
-            let match;
-            while ((match = p.regex.exec(rawText)) !== null) {
-                const sn = match[1].toUpperCase();
-                if (!seenSerials.has(sn)) {
-                    items.push({ serial_number: sn, terminal_type: p.type });
-                    seenSerials.add(sn);
-                }
-            }
-        });
-
-        // --- LAYER 2: LINE PARSER FALLBACK ---
-        if (items.length === 0) {
-            const lines = rawText.split('\n');
-            let currentSn = null;
-            for (let line of lines) {
-                const upper = line.toUpperCase();
-                if (upper.includes('SERIAL:')) {
-                    currentSn = line.split(':')[1]?.trim().replace(/[.,\s]/g, "");
-                } else if (upper.includes('TYPE:') && currentSn) {
-                    const type = line.split(':')[1]?.trim();
-                    if (!seenSerials.has(currentSn)) {
-                        items.push({ serial_number: currentSn, terminal_type: type });
-                        seenSerials.add(currentSn);
-                    }
-                    currentSn = null;
-                }
+        // --- BRUTE FORCE HARVESTER ---
+        // This regex catches almost any string that looks like a serial number from your vendors.
+        const broadRegex = /\b([A-Z0-9]{10,16})\b/g;
+        let match;
+        
+        while ((match = broadRegex.exec(rawText.toUpperCase())) !== null) {
+            const sn = match[1].replace(/[.,\s]/g, "");
+            
+            // Determine type based on prefix
+            let type = "Terminal";
+            if (sn.startsWith('1812')) type = "Valor VL550";
+            else if (sn.startsWith('X5C8')) type = "Valor VP800";
+            else if (sn.startsWith('P125')) type = "Dejavoo P1";
+            else if (sn.startsWith('P325')) type = "Dejavoo P3";
+            else if (sn.startsWith('P524')) type = "Dejavoo P5";
+            else if (sn.startsWith('P17')) type = "Dejavoo P17";
+            
+            // Only add if it's a valid length for these specific serials
+            if (sn.length >= 10 && !seenSerials.has(sn)) {
+                items.push({ serial_number: sn, terminal_type: type });
+                seenSerials.add(sn);
             }
         }
 
+        // --- SECONDARY LINE SCAN ---
         if (items.length === 0) {
-            return sendJsonError(422, "No serial numbers were found. Ensure the PDF is a high-quality digital document.", rawText);
+            const lines = rawText.split('\n');
+            lines.forEach(line => {
+                if (line.includes('|') || line.includes(':')) {
+                    const parts = line.split(/[|:]/);
+                    const sn = parts[1]?.trim().split(' ')[0].replace(/[.,\s]/g, "").toUpperCase();
+                    if (sn && sn.length >= 10 && !seenSerials.has(sn)) {
+                        items.push({ 
+                            serial_number: sn, 
+                            terminal_type: line.toLowerCase().includes('valor') ? 'Valor' : 'Dejavoo'
+                        });
+                        seenSerials.add(sn);
+                    }
+                }
+            });
+        }
+
+        if (items.length === 0) {
+            console.error("No serials found. AI raw output:", rawText);
+            return sendJsonError(422, "No serial numbers were found in the AI response.", rawText);
         }
 
         return res.status(200).json({ success: true, data: items });
