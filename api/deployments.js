@@ -33,14 +33,23 @@ export default async function handler(req, res) {
 
         // --- 2. GET LOOKUPS (Merchants & Available Office Inventory) ---
         if (action === 'getLookups') {
+            // We now accept a query for merchants to support "suggestions" as you type
+            let merchantBuilder = supabase.from('merchants').select('id, dba_name').order('dba_name');
+            if (query) {
+                merchantBuilder = merchantBuilder.ilike('dba_name', `%${query}%`);
+            }
+
             const [merchants, inventory] = await Promise.all([
-                supabase.from('merchants').select('id, dba_name').order('dba_name'),
-                // Filter for equipment currently in Office/Inventory
-                // Adjust keywords based on your exact status names in Supabase
+                merchantBuilder,
+                // Refined hardware lookup: catches Office, In Stock, and Null statuses
+                // ilike makes it case-insensitive (Office vs OFFICE)
                 supabase.from('equipments')
-                    .select('id, serial_number, terminal_type')
-                    .or('status.ilike.Office,status.ilike.In Stock,status.is.null')
+                    .select('id, serial_number, terminal_type, status')
+                    .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
             ]);
+
+            if (merchants.error) throw merchants.error;
+            if (inventory.error) throw inventory.error;
 
             return res.status(200).json({ 
                 success: true, 
