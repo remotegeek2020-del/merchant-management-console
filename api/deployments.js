@@ -55,41 +55,40 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, merchants: merchants.data || [], inventory: finalInventory });
         }
 
-        // --- ACTION: CREATE DEPLOYMENT ---
-        if (action === 'create') {
-            const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
-            
-            // A. Create Ticket
-            const { data: depData, error: depError } = await supabase.from('deployments').insert([{
-                merchant_id, 
-                equipment_id, 
-                tid, 
-                tracking_id, 
-                target_deploymer: target_date, 
-                status: 'Open', 
-                notes: notes || ''
-            }]).select();
-            
-            if (depError) throw depError;
+    // --- ACTION: CREATE DEPLOYMENT ---
+if (action === 'create') {
+    const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
+    
+    // A. Create Ticket - Mapping 'target_date' from frontend to 'target_deployment_date' in DB
+    const { data: depData, error: depError } = await supabase.from('deployments').insert([{
+        merchant_id, 
+        equipment_id, 
+        tid, 
+        tracking_id, 
+        target_deployment_date: target_date, // Corrected column name
+        status: 'Open', 
+        notes: notes || ''
+    }]).select();
+    
+    if (depError) throw depError;
 
-            // B. Update Equipment Status
-            await supabase.from('equipments').update({ status: 'Deployed' }).eq('id', equipment_id);
+    // B. Flip Equipment Status to 'Deployed'
+    await supabase.from('equipments').update({ status: 'Deployed' }).eq('id', equipment_id);
 
-            // C. Log History Entry
-            const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-            await supabase.from('equipment_logs').insert([{
-                equipment_id, 
-                merchant_id, 
-                deployment_id: depData[0].id,
-                action: 'Deployed', 
-                from_location: 'Warsaw Office',
-                to_location: mData?.dba_name || 'Merchant', 
-                notes: notes || 'New Deployment Ticket Created'
-            }]);
+    // C. Log History Entry
+    const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    await supabase.from('equipment_logs').insert([{
+        equipment_id, 
+        merchant_id, 
+        deployment_id: depData[0].id,
+        action: 'Deployed', 
+        from_location: 'Warsaw Office',
+        to_location: mData?.dba_name || 'Merchant', 
+        notes: notes || 'New Deployment Ticket Created'
+    }]);
 
-            return res.status(200).json({ success: true });
-        }
-
+    return res.status(200).json({ success: true });
+}
         // --- ACTION: HISTORY ---
         if (action === 'getHistory') {
             const { data, error } = await supabase.from('equipment_logs')
