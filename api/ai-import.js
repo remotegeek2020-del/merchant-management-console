@@ -22,39 +22,32 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash for the fastest "Time to First Token".
-        // We REMOVE responseMimeType: "application/json" because it adds significant
-        // latency as the AI "plans" the JSON structure, which causes Vercel timeouts.
+        // Use gemini-1.5-flash: The fastest model for "first-token" response times.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
                 temperature: 0,
-                maxOutputTokens: 8192
+                // We do NOT use responseMimeType: "application/json" because it causes 
+                // the AI to pre-calculate the whole list, leading to Vercel timeouts.
             }
         });
 
+        // Simplified prompt for raw text dumping
         const prompt = `
-            EXTRACT EVERY SERIAL NUMBER FROM THIS DOCUMENT.
+            OCR TASK: Extract all hardware serial numbers.
+            Focus on strings like: 18125..., X5C8..., P125..., P325..., P524..., P17B...
             
-            DIRECTIONS:
-            1. Find 12-digit strings starting with 18125 or alphanumeric starting with X5C8 (Valor).
-            2. Find strings starting with P125, P325, P524, or P17B (Dejavoo).
-            
-            OUTPUT:
-            Just list the serial numbers one per line. Do not add any text, headers, or markdown.
-            Example:
-            181251934334
-            P1250920000034
+            OUTPUT: Just the serial numbers separated by commas. No intro, no outro.
         `;
 
-        // Watchdog: 9 seconds. Vercel kills at 10s.
+        // Watchdog: 8.8 seconds. Vercel Hobby tier kills at 10s.
         const aiRequest = model.generateContent([
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
         ]);
 
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 9000)
+            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 8800)
         );
 
         let rawText = "";
@@ -72,8 +65,8 @@ export default async function handler(req, res) {
         const items = [];
         const seenSerials = new Set();
 
-        // --- THE "SURGICAL" REGEX HARVESTER ---
-        // We scan the raw text for prefixes we know are in your Dejavoo and Valor files.
+        // --- LOCAL IDENTIFICATION LOGIC (Instant) ---
+        // Instead of asking the AI to "classify", we do it here.
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
             { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
@@ -83,9 +76,10 @@ export default async function handler(req, res) {
             { regex: /\b(P17[B86]\d{10,12})\b/g, type: "Dejavoo P17" }
         ];
 
+        // First pass: Match specific prefixes
+        const upperText = rawText.toUpperCase();
         patterns.forEach(p => {
             let match;
-            const upperText = rawText.toUpperCase();
             while ((match = p.regex.exec(upperText)) !== null) {
                 const sn = match[1];
                 if (!seenSerials.has(sn)) {
@@ -95,21 +89,26 @@ export default async function handler(req, res) {
             }
         });
 
-        // If the specific harvester failed, try a broad alphanumeric scrape
+        // Fallback: If AI just dumped raw text and prefix regex missed, 
+        // search for any 10-15 char blocks and guess based on keywords
         if (items.length === 0) {
-            const broadRegex = /\b[A-Z0-9]{10,15}\b/g;
-            const matches = rawText.toUpperCase().match(broadRegex) || [];
+            const broadRegex = /\b[A-Z0-9]{10,16}\b/g;
+            const matches = upperText.match(broadRegex) || [];
+            const isValor = upperText.includes('VALOR') || upperText.includes('1812');
+            
             matches.forEach(sn => {
                 if (!seenSerials.has(sn)) {
-                    let type = rawText.includes('1812') ? "Valor" : "Dejavoo";
-                    items.push({ serial_number: sn, terminal_type: type });
+                    items.push({ 
+                        serial_number: sn, 
+                        terminal_type: isValor ? "Valor" : "Dejavoo" 
+                    });
                     seenSerials.add(sn);
                 }
             });
         }
 
         if (items.length === 0) {
-            return sendJsonError(422, "No serial numbers were found in the response. Raw output sample: " + rawText.substring(0, 50));
+            return sendJsonError(422, "The AI responded but no serial numbers were recognized. Raw response: " + rawText.substring(0, 50));
         }
 
         return res.status(200).json({ success: true, data: items });
