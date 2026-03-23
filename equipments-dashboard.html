@@ -471,9 +471,11 @@ async function saveNote() {
 
     // 4. CORE LOGIC: Fetch, Tabs, Pagination
 
-    async function fetchInventory() {
+   async function fetchInventory() {
     const tbody = document.getElementById('inventoryTableBody');
     const limit = parseInt(document.getElementById('pageSize').value) || 50;
+    
+    // Reset table with spinner
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
 
     try {
@@ -489,42 +491,61 @@ async function saveNote() {
                 filterStatus: currentFilter === 'deployed' ? 'deployed' : null
             })
         });
+        
         const result = await res.json();
-        if (!result.success) return;
+        if (!result.success) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error: ${result.message}</td></tr>`;
+            return;
+        }
 
         inventory = result.data || [];
         totalItems = result.count || 0;
 
-        // --- KPI UPDATES ---
-        document.getElementById('kpi-total').innerText = result.metrics.total;
-        document.getElementById('kpi-office').innerText = result.metrics.inOffice;
-        document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
-        document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
-        document.getElementById('kpi-retired').innerText = result.metrics.retired || 0;
+        // --- KPI UPDATES (Added Safety Optional Chaining) ---
+        if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total ?? 0;
+        if (document.getElementById('kpi-office')) document.getElementById('kpi-office').innerText = result.metrics?.inOffice ?? 0;
+        if (document.getElementById('kpi-repair')) document.getElementById('kpi-repair').innerText = result.metrics?.inRepair ?? 0;
+        if (document.getElementById('kpi-deployed')) document.getElementById('kpi-deployed').innerText = result.metrics?.deployed ?? 0;
+        if (document.getElementById('kpi-retired')) document.getElementById('kpi-retired').innerText = result.metrics?.retired ?? 0;
         
-        // Update the new Alerts KPI card if you added it
         const alertCard = document.getElementById('kpi-alerts');
-        if (alertCard) alertCard.innerText = result.metrics.alerts || 0;
+        if (alertCard) alertCard.innerText = result.metrics?.alerts ?? 0;
 
         // --- PAGINATION UI ---
         const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
         const end = Math.min((currentPage + 1) * limit, totalItems);
-        document.getElementById('pagination-info').innerText = `Showing ${start}-${end} of ${totalItems} items`;
-        document.getElementById('btn-prev').disabled = currentPage === 0;
-        document.getElementById('btn-next').disabled = end >= totalItems;
+        const navInfo = document.getElementById('pagination-info');
+        if (navInfo) navInfo.innerText = `Showing ${start}-${end} of ${totalItems} items`;
+        
+        const btnPrev = document.getElementById('btn-prev');
+        const btnNext = document.getElementById('btn-next');
+        if (btnPrev) btnPrev.disabled = currentPage === 0;
+        if (btnNext) btnNext.disabled = end >= totalItems;
 
         tbody.innerHTML = "";
+        
+        if (inventory.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:20px; color:#94a3b8;">No equipment found.</td></tr>`;
+            return;
+        }
+
         inventory.forEach(item => {
             const row = tbody.insertRow();
             
-            // --- 1. CALCULATE STALE ALERT (14 Days) ---
-            // Use updated_at if available, otherwise fallback to received_date
-            const lastUpdate = new Date(item.received_date);
-            const today = new Date();
-            const diffTime = Math.abs(today - lastUpdate);
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-            
-            const isStaleRepair = (item.current_location === 'Warsaw Repairs' && diffDays >= 14);
+            // --- 1. SAFE ALERT CALCULATION ---
+            let isStaleRepair = false;
+            let diffDays = 0;
+
+            if (item.current_location === 'Warsaw Repairs' && item.received_date) {
+                const lastUpdate = new Date(item.received_date);
+                const today = new Date();
+                // Ensure date is valid before calculating
+                if (!isNaN(lastUpdate.getTime())) {
+                    const diffTime = Math.abs(today - lastUpdate);
+                    diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                    if (diffDays >= 14) isStaleRepair = true;
+                }
+            }
 
             // --- 2. DEFINE CLASSES ---
             let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
@@ -533,7 +554,7 @@ async function saveNote() {
 
             // --- 3. ROW STYLE ---
             if (isStaleRepair) {
-                row.style.backgroundColor = '#fff1f2'; // Soft red highlight
+                row.style.backgroundColor = '#fff1f2'; 
             }
 
             // --- 4. DEFINE BUTTONS ---
@@ -571,7 +592,10 @@ async function saveNote() {
                 </td>
             `;
         });
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+        console.error("Fetch Inventory Error:", err);
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Critical Error: Check Console</td></tr>`;
+    }
 }
     
 
