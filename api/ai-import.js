@@ -1,6 +1,5 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Vercel config to allow large base64 uploads
 export const config = {
     api: {
         bodyParser: {
@@ -23,29 +22,32 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use 1.5-flash for maximum speed and stability on free tier
-        // We use responseMimeType: "application/json" to force valid data output.
+        // Use 1.5-flash for maximum speed and stability on free-tier.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
-                temperature: 0,
-                responseMimeType: "application/json",
+                temperature: 0.1,
+                // We do NOT use responseMimeType: "application/json" here.
+                // Strict JSON mode crashes the entire request if it's truncated.
+                // We want the raw text so we can "rescue" partial data.
             }
         });
 
         const prompt = `
-            Extract ALL hardware serial numbers from this PDF.
+            Act as a precise data extractor. Extract EVERY serial number from this PDF.
             
             DIRECTIONS:
-            1. VALOR: Extract 12-digit strings (starting with 1812... or X5C...) found in 'Memo' or 'Description'.
-            2. DEJAVOO: Extract serials (starting with P125..., P325..., P524..., P17B...) and match them to model names (P1, P3, P5, P17) based on table line indices.
+            1. VALOR: Look for 12-digit numeric strings (e.g., 18125...) in Memo columns.
+            2. DEJAVOO: Match serials (P125..., P325..., P524..., P17B...) to model names (P1, P3, P5, P17).
             
-            MAPPING:
-            Normalize model names to exactly: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            NORMALIZED NAMES: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+
+            OUTPUT REQUIREMENT (MANDATORY):
+            Output each item as a single line of JSON. Do not use a wrapper array.
+            Format exactly like this:
+            {"sn": "SERIAL_NUMBER", "type": "MODEL_NAME"}
             
-            OUTPUT:
-            Return a JSON object with one key "items" containing an array of objects.
-            Format: {"items": [{"serial_number": "...", "terminal_type": "..."}]}
+            Capture every single number. If the list is long, keep going until you are cut off.
         `;
 
         const result = await model.generateContent([
@@ -54,64 +56,60 @@ export default async function handler(req, res) {
         ]);
 
         const response = await result.response;
-        let text = response.text().trim();
+        const rawText = response.text();
         
-        // --- ROBUST PARSING ---
-        let finalItems = [];
+        // --- THE RESCUE PARSER ---
+        // This splits the response by line and attempts to parse each one.
+        // It's "Unbreakable" because if the last line is truncated, it's simply ignored.
+        const lines = rawText.split('\n');
+        const items = [];
+        const seenSerials = new Set();
 
-        try {
-            // Find JSON content even if wrapped in markdown
-            const start = text.indexOf('{');
-            const end = text.lastIndexOf('}');
-            if (start !== -1 && end !== -1) {
-                const parsed = JSON.parse(text.substring(start, end + 1));
-                finalItems = parsed.items || (Array.isArray(parsed) ? parsed : []);
+        for (let line of lines) {
+            line = line.trim();
+            if (!line || !line.includes('{')) continue;
+
+            try {
+                // Find the JSON object within the line
+                const start = line.indexOf('{');
+                const end = line.lastIndexOf('}');
+                if (start !== -1 && end !== -1) {
+                    const obj = JSON.parse(line.substring(start, end + 1));
+                    const sn = String(obj.sn || obj.serial_number || "").replace(/[.,\s]/g, "").toUpperCase();
+                    const type = obj.type || obj.terminal_type || "Terminal";
+
+                    if (sn.length >= 8 && !seenSerials.has(sn)) {
+                        items.push({ serial_number: sn, terminal_type: type });
+                        seenSerials.add(sn);
+                    }
+                }
+            } catch (e) {
+                // Ignore lines that were cut off or malformed
+                continue;
             }
-        } catch (e) {
-            console.warn("JSON Parse failed, falling back to emergency regex scrape.");
         }
 
-        // --- EMERGENCY REGEX SCRAPE ---
-        // If JSON failed or is empty, we hunt for the serial patterns directly.
-        if (finalItems.length === 0) {
-            // Match known serial prefixes: P125, P325, P524, P17B, 1812, X5C
-            const serialRegex = /\b(P125|P325|P524|P17B|1812|X5C)[A-Z0-9]{6,12}\b/g;
-            const matches = text.match(serialRegex) || [];
-            
-            // Re-scan the PDF text for the serials if the AI output was too clean
-            // (Note: In this specific handler, we only have the AI's response text)
-            
-            let defaultType = text.toLowerCase().includes("valor") ? "Valor VL550" : "Dejavoo P1";
-            
-            matches.forEach(s => {
-                finalItems.push({
-                    serial_number: s,
-                    terminal_type: defaultType
-                });
-            });
+        // --- SECONDARY REGEX SCRAPE (IF PARSE YIELDED NOTHING) ---
+        if (items.length === 0) {
+            const regex = /"sn"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"/g;
+            let match;
+            while ((match = regex.exec(rawText)) !== null) {
+                const sn = match[1].replace(/[.,\s]/g, "").toUpperCase();
+                if (!seenSerials.has(sn)) {
+                    items.push({ serial_number: sn, terminal_type: match[2] });
+                    seenSerials.add(sn);
+                }
+            }
         }
 
-        if (finalItems.length === 0) {
-            return sendJsonError(422, "No serial numbers identified. Please ensure the PDF is a high-quality digital document.");
+        if (items.length === 0) {
+            return sendJsonError(422, "The AI couldn't find a list in this format. Try splitting the PDF.");
         }
 
-        // Final data scrubbing: Remove duplicates and clean strings
-        const seen = new Set();
-        const cleanedData = finalItems
-            .map(item => ({
-                serial_number: String(item.serial_number || "").replace(/[.,\s]/g, "").toUpperCase(),
-                terminal_type: item.terminal_type || "Terminal"
-            }))
-            .filter(item => {
-                if (item.serial_number.length < 8 || seen.has(item.serial_number)) return false;
-                seen.add(item.serial_number);
-                return true;
-            });
-
-        return res.status(200).json({ success: true, data: cleanedData });
+        return res.status(200).json({ success: true, data: items });
 
     } catch (err) {
-        console.error("AI Import Exception:", err);
-        return sendJsonError(500, `AI System Error: ${err.message}`);
+        console.error("Critical AI Error:", err);
+        return sendJsonError(500, "The server timed out. Please try uploading just one page of the PDF.");
     }
 }
