@@ -10,14 +10,14 @@ export default async function handler(req, res) {
 
         // --- ADD THIS NEW ACTION TO YOUR deployments.js ---
 if (action === 'update') {
-    const { deployment_id, status, tracking_id, notes } = payload;
+    const { deployment_id, status, tracking_id, target_date, notes } = payload;
 
-    // 1. Update the Deployment Ticket
     const { data: updatedDep, error: updateError } = await supabase
         .from('deployments')
         .update({ 
             status, 
             tracking_id, 
+            target_deployment_date: target_date, // Added this mapping
             notes 
         })
         .eq('id', deployment_id)
