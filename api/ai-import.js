@@ -22,32 +22,33 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use 1.5-flash for maximum speed and stability on free-tier.
+        // Use 1.5-flash: Best for high-volume extraction on Free Tier.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
-                temperature: 0.1,
-                // We do NOT use responseMimeType: "application/json" here.
-                // Strict JSON mode crashes the entire request if it's truncated.
-                // We want the raw text so we can "rescue" partial data.
+                temperature: 0,
+                // We avoid strict JSON mode because it fails completely if the 
+                // response is truncated (very common with 170+ items).
             }
         });
 
         const prompt = `
-            Act as a precise data extractor. Extract EVERY serial number from this PDF.
+            Act as a data extraction tool. Extract EVERY serial number from this PDF.
             
             DIRECTIONS:
-            1. VALOR: Look for 12-digit numeric strings (e.g., 18125...) in Memo columns.
-            2. DEJAVOO: Match serials (P125..., P325..., P524..., P17B...) to model names (P1, P3, P5, P17).
+            1. VALOR: Extract 12-digit strings (starting with 1812 or X5C) from comma-separated blocks.
+            2. DEJAVOO: Match serials (starting with P125, P325, P524, P17B) to models (P1, P3, P5, P17).
             
-            NORMALIZED NAMES: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
-
-            OUTPUT REQUIREMENT (MANDATORY):
-            Output each item as a single line of JSON. Do not use a wrapper array.
-            Format exactly like this:
-            {"sn": "SERIAL_NUMBER", "type": "MODEL_NAME"}
+            OUTPUT FORMAT (MANDATORY):
+            For every serial number found, output a single line exactly like this:
+            SERIAL_NUMBER | MODEL_NAME
             
-            Capture every single number. If the list is long, keep going until you are cut off.
+            Example:
+            P1250920000034 | Dejavoo P1
+            181251934334 | Valor VL550
+            
+            Do not include headers, intros, or markdown. Just the data lines. 
+            Keep going until you have listed every single item in the document.
         `;
 
         const result = await model.generateContent([
@@ -58,58 +59,63 @@ export default async function handler(req, res) {
         const response = await result.response;
         const rawText = response.text();
         
-        // --- THE RESCUE PARSER ---
-        // This splits the response by line and attempts to parse each one.
-        // It's "Unbreakable" because if the last line is truncated, it's simply ignored.
+        // --- THE "PIPE" SCRAPER ---
+        // This is the most resilient way to parse large amounts of AI data.
+        // It processes line-by-line and ignores malformed ones.
         const lines = rawText.split('\n');
         const items = [];
         const seenSerials = new Set();
 
         for (let line of lines) {
             line = line.trim();
-            if (!line || !line.includes('{')) continue;
+            if (!line || !line.includes('|')) continue;
 
-            try {
-                // Find the JSON object within the line
-                const start = line.indexOf('{');
-                const end = line.lastIndexOf('}');
-                if (start !== -1 && end !== -1) {
-                    const obj = JSON.parse(line.substring(start, end + 1));
-                    const sn = String(obj.sn || obj.serial_number || "").replace(/[.,\s]/g, "").toUpperCase();
-                    const type = obj.type || obj.terminal_type || "Terminal";
+            // Split by the pipe character
+            const parts = line.split('|');
+            if (parts.length < 2) continue;
 
-                    if (sn.length >= 8 && !seenSerials.has(sn)) {
-                        items.push({ serial_number: sn, terminal_type: type });
-                        seenSerials.add(sn);
-                    }
-                }
-            } catch (e) {
-                // Ignore lines that were cut off or malformed
-                continue;
+            const sn = parts[0].trim().replace(/[.,\s]/g, "").toUpperCase();
+            let type = parts[1].trim();
+
+            // Clean up common model name noise
+            if (type.toLowerCase().includes("p1") && !type.includes("P17")) type = "Dejavoo P1";
+            else if (type.toLowerCase().includes("p3")) type = "Dejavoo P3";
+            else if (type.toLowerCase().includes("p5")) type = "Dejavoo P5";
+            else if (type.toLowerCase().includes("p17")) type = "Dejavoo P17";
+            else if (type.toLowerCase().includes("vl-550") || type.toLowerCase().includes("vl550")) type = "Valor VL550";
+            else if (type.toLowerCase().includes("vp800")) type = "Valor VP800";
+
+            if (sn.length >= 8 && !seenSerials.has(sn)) {
+                items.push({ serial_number: sn, terminal_type: type });
+                seenSerials.add(sn);
             }
         }
 
-        // --- SECONDARY REGEX SCRAPE (IF PARSE YIELDED NOTHING) ---
+        // --- EMERGENCY REGEX HARVESTER ---
+        // If the formatted lines failed, we scan the whole text for known serial patterns.
         if (items.length === 0) {
-            const regex = /"sn"\s*:\s*"([^"]+)"\s*,\s*"type"\s*:\s*"([^"]+)"/g;
-            let match;
-            while ((match = regex.exec(rawText)) !== null) {
-                const sn = match[1].replace(/[.,\s]/g, "").toUpperCase();
-                if (!seenSerials.has(sn)) {
-                    items.push({ serial_number: sn, terminal_type: match[2] });
-                    seenSerials.add(sn);
+            const snRegex = /\b(P125|P325|P524|P17B|P178|P176|1812|X5C)[A-Z0-9]{6,12}\b/g;
+            const matches = rawText.match(snRegex) || [];
+            
+            let defaultType = rawText.toLowerCase().includes("valor") ? "Valor VL550" : "Dejavoo P1";
+
+            matches.forEach(sn => {
+                const cleanSn = sn.toUpperCase();
+                if (!seenSerials.has(cleanSn)) {
+                    items.push({ serial_number: cleanSn, terminal_type: defaultType });
+                    seenSerials.add(cleanSn);
                 }
-            }
+            });
         }
 
         if (items.length === 0) {
-            return sendJsonError(422, "The AI couldn't find a list in this format. Try splitting the PDF.");
+            return sendJsonError(422, "No items found. Ensure the PDF has selectable text.");
         }
 
         return res.status(200).json({ success: true, data: items });
 
     } catch (err) {
-        console.error("Critical AI Error:", err);
-        return sendJsonError(500, "The server timed out. Please try uploading just one page of the PDF.");
+        console.error("AI Exception:", err);
+        return sendJsonError(500, "The server timed out or the file is too complex. Try splitting the PDF.");
     }
 }
