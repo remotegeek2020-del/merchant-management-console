@@ -230,6 +230,68 @@
     let totalItems = 0;
     let selectedId = null;
 
+    function triggerAIUpload() {
+    document.getElementById('ai-file-input').click();
+}
+
+async function handleAIFile(input) {
+    if (!input.files || !input.files[0]) return;
+    
+    Swal.fire({ title: 'AI is reading invoice...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+    const file = input.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = async () => {
+        const base64 = reader.result.split(',')[1];
+        
+        try {
+            const res = await fetch('/api/ai-import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileBase64: base64 })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                confirmAIImport(result.data);
+            } else {
+                Swal.fire('AI Error', 'Could not read the invoice format.', 'error');
+            }
+        } catch (err) {
+            Swal.fire('Connection Error', err.message, 'error');
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function confirmAIImport(data) {
+    const listHtml = data.map(item => `<li><b>${item.terminal_type}</b>: ${item.serial_number}</li>`).join('');
+    
+    Swal.fire({
+        title: 'Confirm AI Import',
+        html: `<p>I found ${data.length} items:</p><ul style="text-align:left; font-size:12px; max-height:150px; overflow:auto;">${listHtml}</ul>`,
+        showCancelButton: true,
+        confirmButtonText: 'Upload All to Inventory'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            // Loop through extracted items and save them
+            for (const item of data) {
+                await fetch('/api/equipments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'create', 
+                        payload: { ...item, status: 'stocked', current_location: 'Warsaw Office', received_date: new Date().toISOString().split('T')[0] } 
+                    })
+                });
+            }
+            Swal.fire('Success', 'Inventory updated!', 'success');
+            fetchInventory();
+        }
+    });
+}
+
     // --- NEW PDF LOGIC ---
     function printPDFReport() {
         const today = new Date().toLocaleDateString();
