@@ -593,13 +593,17 @@ async function fetchAuditLogs() {
     function closeModal() { document.getElementById('customModal').classList.remove('is-open'); }
     
     function filterByLoc(loc) { 
-        currentFilter = loc; 
-        currentPage = 0; 
-        document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
-        document.getElementById('btn-repairs').classList.toggle('active', loc === 'Warsaw Repairs');
-        document.getElementById('btn-deployed').classList.toggle('active', loc === 'deployed');
-        fetchInventory(); 
-    }
+    currentFilter = loc; 
+    currentPage = 0; 
+    
+    // Toggle active class for ALL buttons
+    document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
+    document.getElementById('btn-repairs').classList.toggle('active', loc === 'Warsaw Repairs');
+    document.getElementById('btn-deployed').classList.toggle('active', loc === 'deployed');
+    document.getElementById('btn-retired').classList.toggle('active', loc === 'Retired');
+    
+    fetchInventory(); 
+}
 
     function changePageSize() { currentPage = 0; fetchInventory(); }
     function nextPage() { currentPage++; fetchInventory(); }
