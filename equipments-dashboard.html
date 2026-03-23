@@ -265,29 +265,59 @@ async function handleAIFile(input) {
     reader.readAsDataURL(file);
 }
 
-function confirmAIImport(data) {
-    const listHtml = data.map(item => `<li><b>${item.terminal_type}</b>: ${item.serial_number}</li>`).join('');
-    
+function confirmAIImport(extractedData) {
+    let tableHtml = `
+        <div style="max-height: 300px; overflow-y: auto;">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer" style="font-size: 11px;">
+                <thead>
+                    <tr class="slds-line-height_reset">
+                        <th scope="col">Model</th>
+                        <th scope="col">Serial Number</th>
+                        <th scope="col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+    `;
+
+    extractedData.forEach((item, index) => {
+        tableHtml += `
+            <tr>
+                <td><input type="text" id="ai-model-${index}" value="${item.terminal_type}" class="slds-input" style="font-size:11px; padding:2px;"></td>
+                <td><input type="text" id="ai-serial-${index}" value="${item.serial_number}" class="slds-input" style="font-size:11px; padding:2px;"></td>
+                <td><button onclick="this.closest('tr').remove()" class="slds-button slds-button_icon slds-button_icon-error" title="Remove">
+                    <span class="material-icons" style="font-size:16px;">delete</span>
+                </button></td>
+            </tr>
+        `;
+    });
+
+    tableHtml += `</tbody></table></div>`;
+
     Swal.fire({
-        title: 'Confirm AI Import',
-        html: `<p>I found ${data.length} items:</p><ul style="text-align:left; font-size:12px; max-height:150px; overflow:auto;">${listHtml}</ul>`,
+        title: 'Review Extracted Data',
+        html: tableHtml,
+        width: '600px',
         showCancelButton: true,
-        confirmButtonText: 'Upload All to Inventory'
+        confirmButtonText: 'Confirm & Save All',
+        cancelButtonText: 'Discard',
+        preConfirm: () => {
+            // Collect the (possibly edited) data from the inputs
+            const finalData = [];
+            extractedData.forEach((_, index) => {
+                const modelInput = document.getElementById(`ai-model-${index}`);
+                const serialInput = document.getElementById(`ai-serial-${index}`);
+                if (modelInput && serialInput) {
+                    finalData.push({
+                        terminal_type: modelInput.value,
+                        serial_number: serialInput.value
+                    });
+                }
+            });
+            return finalData;
+        }
     }).then(async (result) => {
         if (result.isConfirmed) {
-            // Loop through extracted items and save them
-            for (const item of data) {
-                await fetch('/api/equipments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'create', 
-                        payload: { ...item, status: 'stocked', current_location: 'Warsaw Office', received_date: new Date().toISOString().split('T')[0] } 
-                    })
-                });
-            }
-            Swal.fire('Success', 'Inventory updated!', 'success');
-            fetchInventory();
+            processFinalImport(result.value);
         }
     });
 }
