@@ -16,12 +16,25 @@ export default async function handler(req, res) {
 
     try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // Using Gemini 1.5 Flash for speed and high context window
-        // Force the model to output valid JSON
+        
+        // Define a strict schema to force the output format
+        const responseSchema = {
+            type: "array",
+            items: {
+                type: "object",
+                properties: {
+                    serial_number: { type: "string" },
+                    terminal_type: { type: "string" }
+                },
+                required: ["serial_number", "terminal_type"]
+            }
+        };
+
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: { 
                 responseMimeType: "application/json",
+                responseSchema: responseSchema
             }
         });
 
@@ -64,7 +77,12 @@ export default async function handler(req, res) {
         ]);
 
         const response = await result.response;
-        const text = response.text();
+        let text = response.text();
+        
+        // Safety: Sometimes AI wraps JSON in backticks despite instructions
+        if (text.includes("```")) {
+            text = text.replace(/```json|```/g, "").trim();
+        }
         
         // Parse the structured data
         let data;
@@ -74,18 +92,17 @@ export default async function handler(req, res) {
             console.error("JSON Parse Error:", text);
             return res.status(500).json({ 
                 success: false, 
-                message: "AI returned an invalid data format. Check server logs." 
+                message: "AI returned an invalid data format. Please try again or check Vercel logs." 
             });
         }
         
-        // Ensure we return an array even if the AI wraps it in an object
-        const finalData = Array.isArray(data) ? data : (data.items || data.equipment || data.data || []);
+        // Ensure we return an array
+        const finalData = Array.isArray(data) ? data : (data.items || data.data || []);
 
         return res.status(200).json({ success: true, data: finalData });
 
     } catch (err) {
         console.error("AI Error:", err);
-        // Send a clean JSON error back so the frontend can display it
         return res.status(500).json({ 
             success: false, 
             message: `AI Processing failed: ${err.message}` 
