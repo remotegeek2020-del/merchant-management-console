@@ -92,8 +92,8 @@
         
         <form id="newDepForm" onsubmit="saveDeployment(event)">
             <div style="position:relative; margin-bottom: 15px;">
-                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">MERCHANT (Search 'Pizza', etc.)</label>
-                <input type="text" id="mSearch" class="slds-input" placeholder="Start typing merchant name..." onkeyup="handleMerchantSearch(this.value)" autocomplete="off" style="border-radius:8px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">MERCHANT (Search Name or ID)</label>
+                <input type="text" id="mSearch" class="slds-input" placeholder="Search DBA or Merchant ID..." onkeyup="handleMerchantSearch(this.value)" autocomplete="off" style="border-radius:8px;">
                 <input type="hidden" id="selectedMerchantId" required>
                 <div id="mSuggestions" class="suggestions-list"></div>
             </div>
@@ -111,9 +111,14 @@
                     <input type="text" id="tidInput" class="slds-input" placeholder="e.g. 12345678" style="border-radius:8px;">
                 </div>
                 <div>
-                    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TARGET DATE</label>
-                    <input type="date" id="dateInput" class="slds-input" required style="border-radius:8px;">
+                    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TRACKING ID</label>
+                    <input type="text" id="trackingInput" class="slds-input" placeholder="Tracking Number" style="border-radius:8px;">
                 </div>
+            </div>
+
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TARGET DATE</label>
+                <input type="date" id="dateInput" class="slds-input" required style="border-radius:8px;">
             </div>
 
             <button type="submit" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); border-radius:8px; padding:10px;">CREATE DEPLOYMENT</button>
@@ -169,7 +174,7 @@
         } catch (err) { console.error(err); }
     }
 
-    // 2. Search Merchants (Suggestions)
+    // 2. Search Merchants (Suggestions by DBA or Merchant ID)
     async function handleMerchantSearch(val) {
         const list = document.getElementById('mSuggestions');
         if (val.length < 2) { list.style.display = 'none'; return; }
@@ -182,10 +187,10 @@
         const result = await res.json();
         
         list.innerHTML = result.merchants.map(m => `
-    <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')">
-        <strong>${m.dba_name}</strong> <span style="font-size:10px; color:#64748b;">(ID: ${m.merchant_id || 'N/A'})</span>
-    </div>
-`).join('');
+            <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')">
+                <strong>${m.dba_name}</strong> <span style="font-size:10px; color:#64748b;">(ID: ${m.merchant_id || 'N/A'})</span>
+            </div>
+        `).join('');
         list.style.display = 'block';
     }
 
@@ -214,46 +219,55 @@
             result.inventory.map(e => `<option value="${e.id}">${e.serial_number} (${e.terminal_type})</option>`).join('');
     }
 
-    // 4. Save Ticket
-async function saveDeployment(e) {
-    e.preventDefault();
-    
-    const mId = document.getElementById('selectedMerchantId').value;
-    const eId = document.getElementById('equipSelect').value;
-
-    if (!mId) { 
-        alert("Please search for a merchant and CLICK one from the suggestion list."); 
-        return; 
-    }
-
-    const payload = {
-        merchant_id: mId,
-        equipment_id: eId,
-        tid: document.getElementById('tidInput').value,
-        target_date: document.getElementById('dateInput').value,
-        notes: "New deployment via dashboard" // Added default to prevent null errors
-    };
-
-    try {
-        const res = await fetch('/api/deployments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'create', payload })
-        });
+    // 4. Save Deployment
+    async function saveDeployment(e) {
+        e.preventDefault();
         
-        const result = await res.json();
-        
-        if (result.success) {
-            alert("Deployment Created Successfully!");
-            location.reload(); 
-        } else {
-            alert("Database Error: " + result.message);
+        const mId = document.getElementById('selectedMerchantId').value;
+        const eId = document.getElementById('equipSelect').value;
+        const submitBtn = e.target.querySelector('button[type="submit"]');
+
+        if (!mId) { 
+            alert("Please search for a merchant and CLICK one from the suggestion list."); 
+            return; 
         }
-    } catch (err) {
-        console.error(err);
-        alert("System Error: Could not connect to the API.");
+
+        const payload = {
+            merchant_id: mId,
+            equipment_id: eId,
+            tid: document.getElementById('tidInput').value,
+            tracking_id: document.getElementById('trackingInput').value,
+            target_date: document.getElementById('dateInput').value,
+            notes: "New deployment via dashboard"
+        };
+
+        submitBtn.disabled = true;
+        submitBtn.innerText = "CREATING...";
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'create', payload })
+            });
+            
+            const result = await res.json();
+            
+            if (result.success) {
+                alert("Deployment Created Successfully!");
+                location.reload(); 
+            } else {
+                alert("Database Error: " + result.message);
+                submitBtn.disabled = false;
+                submitBtn.innerText = "CREATE DEPLOYMENT";
+            }
+        } catch (err) {
+            console.error(err);
+            alert("System Error: Could not connect to the API.");
+            submitBtn.disabled = false;
+            submitBtn.innerText = "CREATE DEPLOYMENT";
+        }
     }
-}
 
     // 5. View Lifecycle Audit
     async function viewHistory(id, sn) {
