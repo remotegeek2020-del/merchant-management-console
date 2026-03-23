@@ -23,32 +23,33 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Using the absolute latest model available for high-density document parsing
+        // Use the absolute latest model optimized for document parsing
+        // We force application/json mode which is the most stable for large arrays
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash-preview-09-2025",
             generationConfig: {
-                temperature: 0, // Maximum determinism
+                responseMimeType: "application/json",
+                temperature: 0, 
                 topP: 1,
                 topK: 1
             }
         });
 
         const prompt = `
-            Act as a high-precision data extraction system for merchant hardware. 
-            Your goal is to extract EVERY hardware serial number from the attached PDF.
+            Act as a precise hardware inventory auditor.
+            TASK: Extract EVERY hardware serial number from this PDF.
             
-            DIRECTIONS FOR DATA:
-            1. VALOR: Serials are in comma-separated blocks inside "Memo" or "Description".
-            2. DEJAVOO: Serials are in a separate table at the end. Match serials to Part Numbers (KOZ-P1, Koz-P3, etc) using the line numbers (1, 2, 3...).
+            VENDOR PATTERNS:
+            1. VALOR: Look for comma-separated lists of 12-digit strings (e.g., 18125...).
+            2. DEJAVOO: Look for the 'Serial Numbers' table at the end. Match serials to Part Numbers (KOZ-P1, Koz-P3, etc).
             
-            MAPPING RULES:
-            - Normalize to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            MAPPING:
+            - Normalize types to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
             - Clean serials: Strip periods, spaces, and commas from the serial itself.
             
-            OUTPUT REQUIREMENT:
-            Return ONLY a raw JSON array. Do not include markdown. Do not include any intro text.
-            Capture EVERY SINGLE serial number found.
-            Format: [{"serial_number": "...", "terminal_type": "..."}]
+            OUTPUT:
+            Return ONLY a JSON array of objects: [{"serial_number": "...", "terminal_type": "..."}]
+            It is critical to capture EVERY SINGLE serial number found across all pages.
         `;
 
         const result = await model.generateContent([
@@ -69,23 +70,23 @@ export default async function handler(req, res) {
         const end = text.lastIndexOf(']');
 
         if (start === -1) {
-            console.error("No array found. Raw output:", text);
-            return sendJsonError(422, "The AI could not identify a valid list in this invoice.");
+            console.error("No array found in raw output:", text);
+            return sendJsonError(422, "The AI could not identify a valid list in this invoice. Try a smaller PDF.");
         }
 
-        // If end is missing or before start, we have a truncation issue
-        let jsonString = end > start ? text.substring(start, end + 1) : text.substring(start);
-
-        // 3. JSON HEALING: If the response was truncated mid-item (likely for 100+ serials)
-        if (!jsonString.endsWith(']')) {
-            // Find the last completed object
+        // 3. JSON HEALING: This is the critical fix for high-volume invoices
+        let jsonString = text.substring(start);
+        
+        // If the array didn't close (common for 100+ serials), we force-close it
+        if (!jsonString.includes(']')) {
             const lastClosingBrace = jsonString.lastIndexOf('}');
             if (lastClosingBrace !== -1) {
                 jsonString = jsonString.substring(0, lastClosingBrace + 1) + ']';
-            } else {
-                // If not even one object finished, something is wrong
-                return sendJsonError(500, "The invoice is too long for the AI to process in one pass. Try uploading page by page.");
             }
+        } else {
+            // If it did close, make sure we only take up to the closing bracket
+            const finalEnd = jsonString.lastIndexOf(']');
+            jsonString = jsonString.substring(0, finalEnd + 1);
         }
 
         try {
@@ -98,12 +99,12 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ success: true, data: finalData });
         } catch (parseErr) {
-            console.error("Parse Error. Fragment:", jsonString.substring(0, 100));
-            return sendJsonError(500, "The data was extracted but was formatted incorrectly. Try splitting the PDF.");
+            console.error("Final Parse Failure. Snippet:", jsonString.substring(0, 100));
+            return sendJsonError(500, "The invoice is too long for one scan. Please upload Page 1 and Page 2 separately.");
         }
 
     } catch (err) {
-        console.error("AI Exception:", err);
+        console.error("Critical AI Exception:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
