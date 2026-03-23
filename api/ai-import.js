@@ -9,8 +9,9 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    const sendJsonError = (status, message) => {
-        return res.status(status).json({ success: false, message });
+    // Utility to log and send errors consistently
+    const sendJsonError = (status, message, raw = null) => {
+        return res.status(status).json({ success: false, message, raw });
     };
 
     if (req.method !== 'POST') return sendJsonError(405, 'Method Not Allowed');
@@ -22,50 +23,52 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash. It's the workhorse of the Free Tier.
-        // We set a slightly higher temperature to encourage the model to 
-        // start outputting text immediately to avoid connection timeouts.
+        // Use gemini-1.5-flash: It is the most robust and fastest for high-density OCR.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
-                temperature: 0.1,
+                temperature: 0,
+                // We do NOT use JSON mode here because it adds "thinking time" overhead 
+                // that leads to Vercel timeouts. We want the fastest raw text.
             }
         });
 
+        // Simplified prompt to reduce AI processing time
         const prompt = `
-            Extract ALL hardware serial numbers from the attached PDF. 
-            Focus on these specific patterns:
-            - Valor: 12-digit numbers starting with 18125 or alphanumeric starting with X5C8.
-            - Dejavoo: 14+ character strings starting with P125, P325, P524, or P17B.
-            
-            Do not worry about JSON or formatting. Just list the serial numbers and their model names.
-            I will use a script to find them in your response.
+            LIST EVERY SERIAL NUMBER FOUND. 
+            Example format: P1250920000034, 181251934334, X5C800029972
+            Just a comma-separated list of every long number you see.
         `;
 
-        const result = await model.generateContent([
+        // Create a promise for the AI call
+        const aiTask = model.generateContent([
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
         ]);
 
+        // Race the AI task against a 9-second timeout (Vercel limit is 10s)
+        const result = await Promise.race([
+            aiTask,
+            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_REACHED')), 9000))
+        ]);
+
         const response = await result.response;
-        const rawText = response.text();
+        const rawText = response.text().trim();
         
-        // --- THE "UNSTOPPABLE" REGEX HARVESTER ---
-        // This engine doesn't care what the AI thinks or how it formats.
-        // it scans the raw text response for the actual data patterns.
         const items = [];
         const seenSerials = new Set();
 
+        // --- THE UNIVERSAL HARVESTER ---
+        // This scans the raw AI response for patterns found in your Valor/Dejavoo files.
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
-            { regex: /\b(X5C8[A-Z0-9]{8,10})\b/g, type: "Valor VP800" },
+            { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
             { regex: /\b(P125\d{10,12})\b/g, type: "Dejavoo P1" },
             { regex: /\b(P325\d{10,12})\b/g, type: "Dejavoo P3" },
             { regex: /\b(P524\d{10,12})\b/g, type: "Dejavoo P5" },
             { regex: /\b(P17[B86]\d{10,12})\b/g, type: "Dejavoo P17" }
         ];
 
-        // Harvest data from the AI's response
         patterns.forEach(p => {
             let match;
             while ((match = p.regex.exec(rawText)) !== null) {
@@ -77,31 +80,16 @@ export default async function handler(req, res) {
             }
         });
 
-        // Fallback for messy lists (finding serials in "SN: P123 | Type: P1" format)
         if (items.length === 0) {
-            const lines = rawText.split('\n');
-            lines.forEach(line => {
-                if (line.includes('|') || line.includes(':') || line.includes('-')) {
-                    const parts = line.split(/[|:-]/);
-                    const sn = parts[0].trim().replace(/[.,\s]/g, "").toUpperCase();
-                    let type = parts[1]?.trim() || "Terminal";
-                    if (sn.length >= 8 && !seenSerials.has(sn)) {
-                        items.push({ serial_number: sn, terminal_type: type });
-                        seenSerials.add(sn);
-                    }
-                }
-            });
-        }
-
-        if (items.length === 0) {
-            console.error("No serials found. AI raw output:", rawText);
-            return sendJsonError(422, "The AI couldn't find any serial numbers in this document. Please check the PDF quality.");
+            return sendJsonError(422, "The AI responded but no serial numbers were found. Check your file format.", rawText);
         }
 
         return res.status(200).json({ success: true, data: items });
 
     } catch (err) {
-        console.error("AI Exception:", err);
-        return sendJsonError(500, `Processing Error: ${err.message}`);
+        if (err.message === 'TIMEOUT_REACHED') {
+            return sendJsonError(504, "The document is too large for the current plan. Please split the PDF into single pages.");
+        }
+        return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
