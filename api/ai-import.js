@@ -22,91 +22,92 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use 1.5-flash-8b: It is the fastest possible model. 
-        // Latency is the enemy of the 10-second Vercel limit.
+        // Using gemini-1.5-flash with a Strict JSON Schema.
+        // This is the fastest and most reliable way to get structured data back.
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-8b",
+            model: "gemini-1.5-flash",
             generationConfig: {
                 temperature: 0,
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "object",
+                    properties: {
+                        items: {
+                            type: "array",
+                            items: {
+                                type: "object",
+                                properties: {
+                                    serial_number: { type: "string" },
+                                    terminal_type: { type: "string" }
+                                },
+                                required: ["serial_number", "terminal_type"]
+                            }
+                        }
+                    },
+                    required: ["items"]
+                }
             }
         });
 
-        // We ask for the simplest possible text dump. 
-        // No commas, no JSON, no formatting. Just raw strings.
         const prompt = `
-            DUMP EVERY SERIAL NUMBER. 
-            Prefixes: 18125, X5C8, P125, P325, P524, P17B.
-            Just list the numbers. One per line. Do not say anything else.
+            Extract ALL hardware serial numbers from the attached invoice.
+            
+            - VALOR units: Look for 12-digit numbers starting with 18125 or X5C8.
+            - DEJAVOO units: Look for serials starting with P125, P325, P524, or P17B.
+            
+            Match them to these models: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
         `;
 
-        // Watchdog: 8.8 seconds. Vercel kills at 10s.
-        const aiRequest = model.generateContent([
+        const result = await model.generateContent([
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
         ]);
 
-        const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 8800)
-        );
-
-        let rawText = "";
-        try {
-            const result = await Promise.race([aiRequest, timeoutPromise]);
-            const response = await result.response;
-            rawText = response.text().trim();
-        } catch (err) {
-            if (err.message === 'VERCEL_TIMEOUT') {
-                return sendJsonError(504, "Vercel 10s limit reached. Please use the split version of the PDF.");
+        const response = await result.response;
+        let text = response.text().trim();
+        
+        // --- EMERGENCY REPAIR FOR TRUNCATED JSON ---
+        // If the AI was cut off by Vercel's 10s limit, we try to close the JSON manually.
+        if (text && !text.endsWith('}')) {
+            const lastBrace = text.lastIndexOf('}');
+            if (lastBrace !== -1) {
+                text = text.substring(0, lastBrace + 1);
+                // Ensure it's a valid object end
+                if (!text.endsWith(']}')) text += ']}';
             }
-            throw err;
         }
 
-        const items = [];
-        const seenSerials = new Set();
+        let items = [];
+        try {
+            const parsed = JSON.parse(text);
+            items = parsed.items || [];
+        } catch (e) {
+            // Fallback: If JSON is totally broken, try a quick regex scrape of the text we DID get
+            const snRegex = /\b(P125|P325|P524|P17B|18125|X5C8)[A-Z0-9]{7,12}\b/g;
+            const matches = text.match(snRegex) || [];
+            items = matches.map(sn => ({
+                serial_number: sn,
+                terminal_type: text.toLowerCase().includes('valor') ? "Valor" : "Dejavoo"
+            }));
+        }
 
-        // --- THE "SPEED" HARVESTER ---
-        const patterns = [
-            { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
-            { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
-            { regex: /\b(P125\d{10,12})\b/g, type: "Dejavoo P1" },
-            { regex: /\b(P325\d{10,12})\b/g, type: "Dejavoo P3" },
-            { regex: /\b(P524\d{10,12})\b/g, type: "Dejavoo P5" },
-            { regex: /\b(P17[B86]\d{10,12})\b/g, type: "Dejavoo P17" }
-        ];
+        if (items.length === 0) {
+            return sendJsonError(422, "No serial numbers were found. Ensure the PDF is a digital file (not a scan of a scan).");
+        }
 
-        patterns.forEach(p => {
-            let match;
-            while ((match = p.regex.exec(rawText.toUpperCase())) !== null) {
-                const sn = match[1];
-                if (!seenSerials.has(sn)) {
-                    items.push({ serial_number: sn, terminal_type: p.type });
-                    seenSerials.add(sn);
-                }
-            }
+        // Final deduplication
+        const seen = new Set();
+        const cleanedItems = items.filter(item => {
+            const sn = String(item.serial_number || "").toUpperCase().replace(/\s/g, "");
+            if (!sn || seen.has(sn)) return false;
+            seen.add(sn);
+            return true;
         });
 
-        if (items.length === 0) {
-            // If regex failed, try a last-resort alphanumeric grabber
-            const fallbackRegex = /\b[A-Z0-9]{10,16}\b/g;
-            const matches = rawText.match(fallbackRegex) || [];
-            matches.forEach(sn => {
-                if (!seenSerials.has(sn)) {
-                    items.push({ 
-                        serial_number: sn, 
-                        terminal_type: rawText.includes('1812') ? "Valor" : "Dejavoo" 
-                    });
-                    seenSerials.add(sn);
-                }
-            });
-        }
-
-        if (items.length === 0) {
-            return sendJsonError(422, "No serials found. AI Response: " + rawText.substring(0, 100));
-        }
-
-        return res.status(200).json({ success: true, data: items });
+        return res.status(200).json({ success: true, data: cleanedItems });
 
     } catch (err) {
+        console.error("AI Import Exception:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
