@@ -29,23 +29,19 @@ export default async function handler(req, res) {
         }
 
         // --- ACTION: GET LOOKUPS (Merchant Search & Office Inventory) ---
-        if (action === 'getLookups') {
-            // 1. Merchant search logic (Limit increased to 50 for better visibility)
-            let merchantBuilder = supabase.from('merchants').select('id, dba_name').order('dba_name');
-            
-            if (query) {
-                // Filters by query if user is typing (e.g., "Pizza")
-                merchantBuilder = merchantBuilder.ilike('dba_name', `%${query}%`);
-            }
+    let merchantBuilder = supabase.from('merchants').select('id, dba_name, merchant_id').order('dba_name');
+    
+    if (query) {
+        // This searches BOTH dba_name and merchant_id for your typed text
+        merchantBuilder = merchantBuilder.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%`);
+    }
 
-            const [merchants, inventory] = await Promise.all([
-                merchantBuilder.limit(50), 
-                // 2. Hardware search: Look for Office, In Stock, or Null status
-                supabase.from('equipments')
-                    .select('id, serial_number, terminal_type, status')
-                    .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
-            ]);
-
+    const [merchants, inventory] = await Promise.all([
+        merchantBuilder.limit(50), 
+        supabase.from('equipments')
+            .select('id, serial_number, terminal_type, status')
+            .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
+    ]);
             // Fallback: If no specific "Office" items are found, show any item that isn't Deployed
             let finalInventory = inventory.data || [];
             if (finalInventory.length === 0) {
