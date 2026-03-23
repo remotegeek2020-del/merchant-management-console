@@ -22,32 +22,30 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash: The fastest model for "first-token" response times.
+        // Using gemini-2.0-flash: The fastest model currently available in the preview environment.
+        // This model has the lowest "Time to First Token", crucial for beating Vercel's 10s timeout.
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash",
+            model: "gemini-2.0-flash",
             generationConfig: {
                 temperature: 0,
-                // We do NOT use responseMimeType: "application/json" because it causes 
-                // the AI to pre-calculate the whole list, leading to Vercel timeouts.
             }
         });
 
-        // Simplified prompt for raw text dumping
+        // Prompt designed for maximum speed: stop thinking, start dumping.
         const prompt = `
-            OCR TASK: Extract all hardware serial numbers.
-            Focus on strings like: 18125..., X5C8..., P125..., P325..., P524..., P17B...
-            
-            OUTPUT: Just the serial numbers separated by commas. No intro, no outro.
+            DUMP ALL SERIAL NUMBERS. 
+            Look for: 18125..., X5C8..., P125..., P325..., P524..., P17B...
+            List every matching string separated by spaces. No other text.
         `;
 
-        // Watchdog: 8.8 seconds. Vercel Hobby tier kills at 10s.
+        // 9-second timeout watchdog (Vercel kills at 10s)
         const aiRequest = model.generateContent([
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
         ]);
 
         const timeoutPromise = new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 8800)
+            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 9000)
         );
 
         let rawText = "";
@@ -57,7 +55,7 @@ export default async function handler(req, res) {
             rawText = response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
-                return sendJsonError(504, "The document is too large for the 10-second limit. Please split the PDF into single pages.");
+                return sendJsonError(504, "Server timeout (10s). The document is too dense. Please try converting this PDF page to a JPG and upload that instead, as images process faster.");
             }
             throw err;
         }
@@ -65,8 +63,8 @@ export default async function handler(req, res) {
         const items = [];
         const seenSerials = new Set();
 
-        // --- LOCAL IDENTIFICATION LOGIC (Instant) ---
-        // Instead of asking the AI to "classify", we do it here.
+        // --- THE "SPEED-LIMIT" HARVESTER ---
+        // We use local regex to classify models instantly so the AI doesn't have to.
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
             { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
@@ -76,7 +74,6 @@ export default async function handler(req, res) {
             { regex: /\b(P17[B86]\d{10,12})\b/g, type: "Dejavoo P17" }
         ];
 
-        // First pass: Match specific prefixes
         const upperText = rawText.toUpperCase();
         patterns.forEach(p => {
             let match;
@@ -89,18 +86,15 @@ export default async function handler(req, res) {
             }
         });
 
-        // Fallback: If AI just dumped raw text and prefix regex missed, 
-        // search for any 10-15 char blocks and guess based on keywords
+        // Fallback: If no exact prefix match, grab any 10-15 character alphanumeric block
         if (items.length === 0) {
-            const broadRegex = /\b[A-Z0-9]{10,16}\b/g;
-            const matches = upperText.match(broadRegex) || [];
-            const isValor = upperText.includes('VALOR') || upperText.includes('1812');
-            
+            const fallbackRegex = /\b[A-Z0-9]{10,16}\b/g;
+            const matches = upperText.match(fallbackRegex) || [];
             matches.forEach(sn => {
                 if (!seenSerials.has(sn)) {
                     items.push({ 
                         serial_number: sn, 
-                        terminal_type: isValor ? "Valor" : "Dejavoo" 
+                        terminal_type: upperText.includes('VALOR') ? "Valor" : "Dejavoo" 
                     });
                     seenSerials.add(sn);
                 }
@@ -108,13 +102,13 @@ export default async function handler(req, res) {
         }
 
         if (items.length === 0) {
-            return sendJsonError(422, "The AI responded but no serial numbers were recognized. Raw response: " + rawText.substring(0, 50));
+            return sendJsonError(422, "No serial numbers identified. Raw text preview: " + rawText.substring(0, 50));
         }
 
         return res.status(200).json({ success: true, data: items });
 
     } catch (err) {
-        console.error("AI Import Exception:", err);
+        console.error("Critical AI Exception:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
