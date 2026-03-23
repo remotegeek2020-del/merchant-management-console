@@ -10,8 +10,8 @@ export const config = {
 };
 
 export default async function handler(req, res) {
-    const sendJsonError = (status, message, details = null) => {
-        return res.status(status).json({ success: false, message, details });
+    const sendJsonError = (status, message) => {
+        return res.status(status).json({ success: false, message });
     };
 
     if (req.method !== 'POST') return sendJsonError(405, 'Method Not Allowed');
@@ -23,13 +23,12 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // We use the most advanced model available.
-        // We are removing responseMimeType to allow the model to use its full reasoning 
-        // capacity without being "choked" by strict JSON token constraints on large lists.
+        // Using the most capable model for high-density document parsing
         const model = genAI.getGenerativeModel({ 
             model: "gemini-2.5-flash-preview-09-2025",
             generationConfig: {
-                temperature: 0.1,
+                temperature: 0,
+                responseMimeType: "application/json",
             }
         });
 
@@ -37,18 +36,17 @@ export default async function handler(req, res) {
             Act as a high-precision hardware inventory auditor.
             TASK: Extract EVERY hardware serial number from this PDF.
             
-            VENDOR PATTERNS TO MATCH:
-            1. VALOR: Look for long strings of numbers (12 digits) often separated by commas.
-            2. DEJAVOO: Look for serials in the table at the end (often starting with P12, P32, P52, P17).
+            VENDOR PATTERNS:
+            1. VALOR: Look for comma-separated lists of 12-digit strings (e.g., 18125...).
+            2. DEJAVOO: Look for the 'Serial Numbers' table at the end. Match serials to Part Numbers (KOZ-P1, Koz-P3, etc).
             
-            MAPPING RULES:
-            - If item is VL-550/VL550 or VP800 -> "Valor VL550" or "Valor VP800"
-            - If item is KOZ-P1, Koz-P3, Koz-P5, KOZ-P17 -> "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17"
+            MAPPING:
+            - Normalize types to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            - Clean serials: Strip periods, spaces, and commas from the serial itself.
             
             OUTPUT:
-            Return a JSON array of objects: [{"serial_number": "...", "terminal_type": "..."}]
-            Capture EVERY SINGLE serial number found across all pages. 
-            If there are 170 serials, I expect 170 objects.
+            Return ONLY a JSON array of objects: [{"serial_number": "...", "terminal_type": "..."}]
+            It is critical to capture EVERY SINGLE serial number found across all pages.
         `;
 
         const result = await model.generateContent([
@@ -59,77 +57,70 @@ export default async function handler(req, res) {
         const response = await result.response;
         let text = response.text().trim();
         
-        // --- MULTI-LAYER RECOVERY PARSER ---
+        // --- THE "UNIVERSE" PARSER: EXTREMELY ROBUST ---
         
-        let finalData = [];
+        // 1. Remove Markdown markers if AI ignored instructions
+        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        
+        // 2. Find the bounds of the array
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
 
-        // Layer 1: Standard JSON Parse
-        try {
-            // Clean markdown blocks
-            let cleanText = text.replace(/```json/g, "").replace(/```/g, "").trim();
-            const start = cleanText.indexOf('[');
-            const end = cleanText.lastIndexOf(']');
-            
-            if (start !== -1 && end !== -1) {
-                let jsonString = cleanText.substring(start, end + 1);
-                
-                // Attempt to heal truncated JSON if necessary
-                if (!jsonString.endsWith(']')) {
-                    const lastBrace = jsonString.lastIndexOf('}');
-                    if (lastBrace !== -1) jsonString = jsonString.substring(0, lastBrace + 1) + ']';
-                }
-                
-                const parsed = JSON.parse(jsonString);
-                if (Array.isArray(parsed)) finalData = parsed;
-            }
-        } catch (e) {
-            console.warn("JSON Parse failed, falling back to Pattern Matching...");
+        if (start === -1) {
+            return sendJsonError(422, "The AI could not identify a valid list in this invoice.");
         }
 
-        // Layer 2: Pattern Matching Fallback (In case AI returned mixed text or broken JSON)
-        if (finalData.length === 0) {
-            // Look for patterns like {"serial_number": "...", "terminal_type": "..."}
+        // 3. JSON HEALING: This is the critical fix for high-volume invoices
+        // If the array didn't close (common for 100+ serials), we force-close it
+        let jsonString = text.substring(start);
+        
+        if (!jsonString.includes(']')) {
+            // Find the last completed object brace
+            const lastClosingBrace = jsonString.lastIndexOf('}');
+            if (lastClosingBrace !== -1) {
+                jsonString = jsonString.substring(0, lastClosingBrace + 1) + ']';
+            }
+        } else {
+            // If it did close, make sure we only take up to the closing bracket
+            const finalEnd = jsonString.lastIndexOf(']');
+            jsonString = jsonString.substring(0, finalEnd + 1);
+        }
+
+        try {
+            const data = JSON.parse(jsonString);
+            const finalData = Array.isArray(data) ? data : (data.items || []);
+            
+            if (finalData.length === 0) {
+                return sendJsonError(422, "No serial numbers were found in the document.");
+            }
+
+            // Final safety cleanup of strings
+            const cleanedData = finalData.map(item => ({
+                serial_number: String(item.serial_number || "").replace(/[.,\s]/g, ""),
+                terminal_type: item.terminal_type || "Unknown Terminal"
+            })).filter(item => item.serial_number.length > 3);
+
+            return res.status(200).json({ success: true, data: cleanedData });
+        } catch (parseErr) {
+            // If standard JSON fails, use a regex "Search & Rescue"
+            const items = [];
             const regex = /\{\s*"serial_number"\s*:\s*"([^"]+)"\s*,\s*"terminal_type"\s*:\s*"([^"]+)"\s*\}/g;
             let match;
-            while ((match = regex.exec(text)) !== null) {
-                finalData.push({
+            while ((match = regex.exec(jsonString)) !== null) {
+                items.push({
                     serial_number: match[1].replace(/[.,\s]/g, ""),
                     terminal_type: match[2]
                 });
             }
+
+            if (items.length > 0) {
+                return res.status(200).json({ success: true, data: items });
+            }
+
+            return sendJsonError(500, "The invoice is too long for the AI to process in one pass. Try uploading page by page.");
         }
-
-        // Layer 3: Raw Serial Extraction (The "Nuclear" option)
-        if (finalData.length === 0) {
-            // Match any 10-15 digit alphanumeric string that looks like a serial
-            const serialRegex = /\b[A-Z0-9]{10,16}\b/g;
-            const foundSerials = text.match(serialRegex) || [];
-            
-            // Try to guess type based on document keywords
-            let guessedType = "Unknown Terminal";
-            if (text.toLowerCase().includes("valor")) guessedType = "Valor VL550";
-            if (text.toLowerCase().includes("dejavoo")) guessedType = "Dejavoo P1";
-
-            finalData = foundSerials.map(s => ({
-                serial_number: s,
-                terminal_type: guessedType
-            }));
-        }
-
-        if (finalData.length === 0) {
-            return sendJsonError(422, "The AI couldn't find a valid list. Please ensure the PDF has selectable text.");
-        }
-
-        // Final cleanup of the data
-        finalData = finalData.map(item => ({
-            serial_number: String(item.serial_number).replace(/[.,\s]/g, ""),
-            terminal_type: item.terminal_type || "Unknown Terminal"
-        }));
-
-        return res.status(200).json({ success: true, data: finalData });
 
     } catch (err) {
-        console.error("AI System Error:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
