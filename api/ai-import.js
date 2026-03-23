@@ -17,9 +17,12 @@ export default async function handler(req, res) {
     try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         // Using Gemini 1.5 Flash for speed and high context window
+        // Force the model to output valid JSON
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
-            generationConfig: { responseMimeType: "application/json" }
+            generationConfig: { 
+                responseMimeType: "application/json",
+            }
         });
 
         const { fileBase64 } = req.body;
@@ -28,7 +31,7 @@ export default async function handler(req, res) {
         }
 
         const prompt = `
-            You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
+             You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
 
     STRATEGY FOR VALOR PAYTECH:
     - Look for items like 'VL-550' or 'VP800'.
@@ -64,9 +67,11 @@ export default async function handler(req, res) {
         const response = await result.response;
         const text = response.text();
         
-        // Parse and return the structured data
-        const data = JSON.parse(text);
-        const finalData = Array.isArray(data) ? data : (data.items || []);
+        // Parse the structured data
+        let data = JSON.parse(text);
+        
+        // Ensure we return an array even if the AI wraps it in an object
+        const finalData = Array.isArray(data) ? data : (data.items || data.equipment || data.data || []);
 
         return res.status(200).json({ success: true, data: finalData });
 
