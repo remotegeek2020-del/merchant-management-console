@@ -9,13 +9,33 @@ export default async function handler(req, res) {
     try {
         const { fileBase64 } = req.body;
 
-        const prompt = `
-            Analyze this vendor invoice/packing slip. 
-            Extract all equipment into a JSON array. 
-            Include: 'serial_number' and 'terminal_type'. 
-            If the model is 'P1', label it 'Dejavoo P1'. 
-            Return ONLY the JSON array, no extra text.
-        `;
+       const prompt = `
+    You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
+
+    STRATEGY FOR VALOR PAYTECH:
+    - Look for items like 'VL-550' or 'VP800'.
+    - Serial numbers are located in the 'Description' or 'Memo' column, usually starting after the text 'Serial Numbers:'.
+    - They are comma-separated and may span multiple lines. Collect all of them for that specific item.
+
+    STRATEGY FOR DEJAVOO SYSTEMS:
+    - First, look at the main item table to identify Part Numbers (e.g., 'KOZ-P1', 'Koz-P3').
+    - Then, go to the 'Serial Numbers' table. Match the serials to the Part Number listed in the 'Line/Part No.' column.
+    - Note: Serial numbers for Dejavoo typically start with a prefix like 'P125', 'P325', or 'P524'.
+
+    NORMALIZATION RULES:
+    - 'VL-550' -> 'Valor VL550'
+    - 'VP800' -> 'Valor VP800'
+    - 'KOZ-P1' or 'P1 Desktop' -> 'Dejavoo P1'
+    - 'Koz-P3' or 'P3 Handheld' -> 'Dejavoo P3'
+    - 'Koz-P5' or 'P5 Handheld' -> 'Dejavoo P5'
+    - 'KOZ-P17' -> 'Dejavoo P17'
+
+    OUTPUT REQUIREMENTS:
+    - Return a clean JSON array of objects.
+    - Format: [{"serial_number": "STRING", "terminal_type": "STRING"}]
+    - Clean all serial numbers: remove extra spaces, dots, or hidden characters.
+    - Return ONLY the JSON array.
+`;
 
         const result = await model.generateContent([
             prompt,
