@@ -30,14 +30,16 @@ export default async function handler(req, res) {
 
         // --- ACTION: GET LOOKUPS (Merchant Search & Office Inventory) ---
         if (action === 'getLookups') {
-            // 1. Merchant search logic (e.g. searching for "Pizza")
+            // 1. Merchant search logic (Limit increased to 50 for better visibility)
             let merchantBuilder = supabase.from('merchants').select('id, dba_name').order('dba_name');
+            
             if (query) {
+                // Filters by query if user is typing (e.g., "Pizza")
                 merchantBuilder = merchantBuilder.ilike('dba_name', `%${query}%`);
             }
 
             const [merchants, inventory] = await Promise.all([
-                merchantBuilder.limit(15),
+                merchantBuilder.limit(50), 
                 // 2. Hardware search: Look for Office, In Stock, or Null status
                 supabase.from('equipments')
                     .select('id, serial_number, terminal_type, status')
@@ -50,7 +52,7 @@ export default async function handler(req, res) {
                 const fallback = await supabase.from('equipments')
                     .select('id, serial_number, terminal_type, status')
                     .neq('status', 'Deployed')
-                    .limit(50);
+                    .limit(100);
                 finalInventory = fallback.data || [];
             }
 
