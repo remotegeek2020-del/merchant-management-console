@@ -28,11 +28,12 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [], metrics });
         }
 
-        // --- ACTION: GET LOOKUPS ---
+        // --- ACTION: GET LOOKUPS (Merchant Search & Office Inventory) ---
         if (action === 'getLookups') {
             let merchantBuilder = supabase.from('merchants').select('id, dba_name, merchant_id').order('dba_name');
             
             if (query) {
+                // Searches BOTH DBA Name and Merchant ID
                 merchantBuilder = merchantBuilder.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%`);
             }
 
@@ -47,22 +48,18 @@ export default async function handler(req, res) {
             if (finalInventory.length === 0) {
                 const fallback = await supabase.from('equipments')
                     .select('id, serial_number, terminal_type, status')
-                    .neq('status', 'Deployed')
-                    .limit(100);
+                    .neq('status', 'Deployed').limit(100);
                 finalInventory = fallback.data || [];
             }
 
-            return res.status(200).json({ 
-                success: true, 
-                merchants: merchants.data || [], 
-                inventory: finalInventory 
-            });
+            return res.status(200).json({ success: true, merchants: merchants.data || [], inventory: finalInventory });
         }
 
         // --- ACTION: CREATE DEPLOYMENT ---
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
             
+            // A. Create Ticket
             const { data: depData, error: depError } = await supabase.from('deployments').insert([{
                 merchant_id, 
                 equipment_id, 
@@ -70,13 +67,15 @@ export default async function handler(req, res) {
                 tracking_id, 
                 target_deploymer: target_date, 
                 status: 'Open', 
-                notes
+                notes: notes || ''
             }]).select();
             
             if (depError) throw depError;
 
+            // B. Update Equipment Status
             await supabase.from('equipments').update({ status: 'Deployed' }).eq('id', equipment_id);
 
+            // C. Log History Entry
             const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
             await supabase.from('equipment_logs').insert([{
                 equipment_id, 
@@ -97,7 +96,6 @@ export default async function handler(req, res) {
                 .select(`*, merchants(dba_name)` )
                 .eq('equipment_id', equipment_id)
                 .order('created_at', { ascending: false });
-            
             if (error) throw error;
             return res.status(200).json({ success: true, data });
         }
