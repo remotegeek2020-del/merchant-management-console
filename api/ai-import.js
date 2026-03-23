@@ -31,7 +31,7 @@ export default async function handler(req, res) {
         }
 
         const prompt = `
-             You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
+            You are an inventory data specialist. Your task is to extract hardware serial numbers from vendor invoices.
 
     STRATEGY FOR VALOR PAYTECH:
     - Look for items like 'VL-550' or 'VP800'.
@@ -56,7 +56,6 @@ export default async function handler(req, res) {
     - Format: [{"serial_number": "STRING", "terminal_type": "STRING"}]
     - Clean all serial numbers: remove extra spaces, dots, or hidden characters.
     - Return ONLY the JSON array.
-
         `;
 
         const result = await model.generateContent([
@@ -68,7 +67,16 @@ export default async function handler(req, res) {
         const text = response.text();
         
         // Parse the structured data
-        let data = JSON.parse(text);
+        let data;
+        try {
+            data = JSON.parse(text);
+        } catch (parseError) {
+            console.error("JSON Parse Error:", text);
+            return res.status(500).json({ 
+                success: false, 
+                message: "AI returned an invalid data format. Check server logs." 
+            });
+        }
         
         // Ensure we return an array even if the AI wraps it in an object
         const finalData = Array.isArray(data) ? data : (data.items || data.equipment || data.data || []);
