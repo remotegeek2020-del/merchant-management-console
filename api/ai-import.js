@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
-// Vercel config to allow large base64 uploads from multi-page PDFs
+// Vercel config to allow large base64 uploads
 export const config = {
     api: {
         bodyParser: {
@@ -23,48 +23,27 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use the absolute latest model optimized for document parsing
+        // Use the absolute latest model for maximum context and logic
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-flash-preview-09-2025",
-            generationConfig: {
-                responseMimeType: "application/json",
-                // Strict schema helps the model stay on track
-                responseSchema: {
-                    type: "array",
-                    items: {
-                        type: "object",
-                        properties: {
-                            serial_number: { type: "string" },
-                            terminal_type: { type: "string" }
-                        },
-                        required: ["serial_number", "terminal_type"]
-                    }
-                },
-                temperature: 0.1 
-            }
+            model: "gemini-2.5-flash-preview-09-2025"
         });
 
         const prompt = `
-            Act as a precise inventory audit engine. Extract EVERY hardware serial number from the attached PDF.
+            Act as a precision inventory scanner. 
+            Extract EVERY hardware serial number from this invoice.
             
-            VENDOR RECOGNITION:
-            1. VALOR PAYTECH: Serials are long comma-separated lists (e.g., 1812519...) inside "Description" or "Memo" fields. Extract EVERY single number.
-            2. DEJAVOO SYSTEMS: Serials are in a dedicated "Serial Numbers" table. Match them to the Part Numbers (KOZ-P1, Koz-P3, etc.) using the line indices (1, 2, 3...) provided in the tables.
-            
-            MAPPING RULES:
-            - VL-550 / VL550 -> "Valor VL550"
-            - VP800 -> "Valor VP800"
-            - KOZ-P1 / P1 -> "Dejavoo P1"
-            - Koz-P3 / P3 -> "Dejavoo P3"
-            - Koz-P5 / P5 -> "Dejavoo P5"
-            - KOZ-P17 / P17 -> "Dejavoo P17"
+            DIRECTIONS:
+            1. Scan EVERY page. Items are often on page 1 and serials on page 2.
+            2. For Valor (VL-550, VP800): Serials are in long comma-separated blocks in the Memo/Description column.
+            3. For Dejavoo (KOZ-P1, Koz-P3, Koz-P5, KOZ-P17): Serials are in a table at the end. Match them to the items using the line numbers (1, 2, 3, etc).
             
             CLEANING:
-            - Remove all dots, spaces, and commas from the serial number strings.
-            - Ensure every serial number is a separate object in the result array.
+            - Normalize to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            - Clean serials: Strip all periods, spaces, and commas from the serial number.
             
             OUTPUT:
-            Return ONLY a raw JSON array. No conversational text. No Markdown backticks.
+            Return ONLY a raw JSON array. No text, no markdown.
+            Format: [{"serial_number": "...", "terminal_type": "..."}]
         `;
 
         const result = await model.generateContent([
@@ -75,38 +54,45 @@ export default async function handler(req, res) {
         const response = await result.response;
         let text = response.text().trim();
         
-        // --- ROBUST JSON RECOVERY ---
-        // Some models include Markdown backticks even when asked not to.
-        // We find the first '[' and last ']' to isolate the raw array.
-        const arrayStart = text.indexOf('[');
-        const arrayEnd = text.lastIndexOf(']');
+        // --- EMERGENCY JSON HEALING ---
+        // 1. Remove Markdown code blocks
+        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
+        
+        // 2. Find the start and end of the array
+        const start = text.indexOf('[');
+        const end = text.lastIndexOf(']');
 
-        if (arrayStart === -1 || arrayEnd === -1) {
-            console.error("AI Response failed to include a JSON array:", text);
-            return sendJsonError(422, "The AI could not identify a valid list of serial numbers in this file.");
+        if (start === -1 || end === -1) {
+            console.error("AI did not return a list. Raw output:", text);
+            return sendJsonError(422, "The AI could not find a list in this invoice. Check if the PDF text is selectable.");
         }
 
-        let jsonString = text.substring(arrayStart, arrayEnd + 1);
+        let jsonString = text.substring(start, end + 1);
 
-        // Fix potential "trailing comma" fatigue errors from the AI
-        jsonString = jsonString.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}');
+        // 3. Fix truncated JSON (If the list is so long it cut off)
+        if (!jsonString.endsWith(']')) {
+            const lastClosingBrace = jsonString.lastIndexOf('}');
+            if (lastClosingBrace !== -1) {
+                jsonString = jsonString.substring(0, lastClosingBrace + 1) + ']';
+            }
+        }
 
         try {
             const data = JSON.parse(jsonString);
             const finalData = Array.isArray(data) ? data : [];
             
             if (finalData.length === 0) {
-                return sendJsonError(422, "Document scanned successfully, but no equipment serials were found.");
+                return sendJsonError(422, "Found the document, but 0 serial numbers were extracted.");
             }
 
             return res.status(200).json({ success: true, data: finalData });
         } catch (parseErr) {
-            console.error("JSON Parse Error. Cleaned text segment:", jsonString);
-            return sendJsonError(500, "The data was found, but it was too large or complex to process. Try uploading pages separately.");
+            console.error("JSON Parse Fail. Snippet:", jsonString.substring(0, 100));
+            return sendJsonError(500, "The invoice is too long for one process. Try uploading Page 1 and Page 2 separately.");
         }
 
     } catch (err) {
-        console.error("Critical AI Exception:", err);
+        console.error("AI Error:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
