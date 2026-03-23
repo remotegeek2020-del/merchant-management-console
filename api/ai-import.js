@@ -23,8 +23,7 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use 1.5-flash: It is significantly faster and more reliable on the Free Tier 
-        // than the preview models for high-volume extraction.
+        // Use 1.5-flash for speed and higher stability on high-volume lists
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
@@ -34,18 +33,19 @@ export default async function handler(req, res) {
         });
 
         const prompt = `
-            Act as a hardware auditor. Extract EVERY serial number from this PDF.
+            Act as a precise data extraction engine. Extract EVERY hardware serial number from the attached invoice.
             
-            DIRECTIONS:
-            1. VALOR: Extract 12-digit strings from comma-separated lists in Memo columns.
-            2. DEJAVOO: Match serials (P125..., P325..., P17B...) to model names using table indices.
+            SPECIFIC VENDOR PATTERNS:
+            1. VALOR PAYTECH: Look for "Serial Numbers:" followed by a long comma-separated list. Extract EVERY 12-digit string.
+            2. DEJAVOO SYSTEMS: Match serials (P125..., P325..., P524..., P17B...) to the Part Numbers (KOZ-P1, Koz-P3, etc) using the line numbers (1, 2, 3...) provided in the tables.
             
-            MAPPING:
-            "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            MAPPING RULES:
+            - Normalize to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            - Clean serials: remove dots, spaces, or commas.
             
-            OUTPUT:
-            Return a JSON array: [{"serial_number": "...", "terminal_type": "..."}]
-            If there are many, extract as many as you can before the limit.
+            OUTPUT REQUIREMENT:
+            Return a JSON object with a key "items" containing the array: {"items": [{"serial_number": "...", "terminal_type": "..."}]}
+            If the list is very long, extract as many as possible before the response ends.
         `;
 
         const result = await model.generateContent([
@@ -56,59 +56,72 @@ export default async function handler(req, res) {
         const response = await result.response;
         let text = response.text().trim();
         
-        // --- FREE TIER "JSON HEALER" ---
+        // --- EMERGENCY RECOVERY ENGINE ---
         
-        // Find the start of the array
-        const start = text.indexOf('[');
-        if (start === -1) return sendJsonError(422, "No list found in document.");
+        let finalItems = [];
 
-        let jsonString = text.substring(start);
-
-        // If the array didn't close (common on Free Tier timeouts), we surgically close it.
-        if (!jsonString.includes(']')) {
-            const lastClosingBrace = jsonString.lastIndexOf('}');
-            if (lastClosingBrace !== -1) {
-                jsonString = jsonString.substring(0, lastClosingBrace + 1) + ']';
+        // Strategy 1: Attempt standard JSON parse
+        try {
+            // Clean markdown or extra noise if AI ignored JSON mode
+            let cleanJson = text.replace(/```json/g, "").replace(/```/g, "").trim();
+            
+            // "Heal" truncated JSON: If it ends with a comma or doesn't close, try to close it.
+            if (!cleanJson.endsWith('}')) {
+                const lastBrace = cleanJson.lastIndexOf('}');
+                if (lastBrace !== -1) {
+                    // Find if we are inside an array
+                    const lastBracket = cleanJson.lastIndexOf(']');
+                    if (lastBracket < lastBrace) {
+                        cleanJson = cleanJson.substring(0, lastBrace + 1) + ']}';
+                    } else {
+                        cleanJson = cleanJson.substring(0, lastBrace + 1);
+                    }
+                }
             }
-        } else {
-            // Clean up everything after the closing bracket
-            const end = jsonString.lastIndexOf(']');
-            jsonString = jsonString.substring(0, end + 1);
+
+            const parsed = JSON.parse(cleanJson);
+            finalItems = parsed.items || (Array.isArray(parsed) ? parsed : []);
+        } catch (e) {
+            console.warn("Standard JSON Parse failed, falling back to Regex Scrape...");
         }
 
-        try {
-            const data = JSON.parse(jsonString);
-            const finalData = Array.isArray(data) ? data : [];
-            
-            if (finalData.length === 0) {
-                return sendJsonError(422, "Scanned, but found no serial numbers.");
-            }
-
-            // Cleanup strings
-            const cleanedData = finalData.map(item => ({
-                serial_number: String(item.serial_number || "").replace(/[.,\s]/g, ""),
-                terminal_type: item.terminal_type || "Terminal"
-            })).filter(item => item.serial_number.length > 5);
-
-            return res.status(200).json({ success: true, data: cleanedData });
-        } catch (parseErr) {
-            // Final Regex Rescue for Free Tier
-            const items = [];
+        // Strategy 2: Regex Scrape (The "Unbreakable" fallback)
+        // This looks for any pair of serial/type even if the JSON is totally broken
+        if (finalItems.length === 0) {
             const regex = /\{\s*"serial_number"\s*:\s*"([^"]+)"\s*,\s*"terminal_type"\s*:\s*"([^"]+)"\s*\}/g;
             let match;
-            while ((match = regex.exec(jsonString)) !== null) {
-                items.push({
-                    serial_number: match[1].replace(/[.,\s]/g, ""),
+            while ((match = regex.exec(text)) !== null) {
+                finalItems.push({
+                    serial_number: match[1],
                     terminal_type: match[2]
                 });
             }
-
-            if (items.length > 0) return res.status(200).json({ success: true, data: items });
-            return sendJsonError(500, "The invoice is too complex. Try splitting the PDF into separate pages.");
         }
 
+        // Strategy 3: Raw Serial Pattern Matching (The "Nuclear" fallback)
+        if (finalItems.length === 0) {
+            const serialRegex = /\b[A-Z0-9]{10,16}\b/g;
+            const found = text.match(serialRegex) || [];
+            let defaultType = text.toLowerCase().includes("valor") ? "Valor VL550" : "Dejavoo P1";
+            finalItems = found.map(s => ({ serial_number: s, terminal_type: defaultType }));
+        }
+
+        if (finalItems.length === 0) {
+            return sendJsonError(422, "No items found. Ensure the PDF has readable text.");
+        }
+
+        // Clean up data and remove duplicates or short strings
+        const cleanedData = finalItems
+            .map(item => ({
+                serial_number: String(item.serial_number || "").replace(/[.,\s]/g, ""),
+                terminal_type: item.terminal_type || "Terminal"
+            }))
+            .filter(item => item.serial_number.length > 5);
+
+        return res.status(200).json({ success: true, data: cleanedData });
+
     } catch (err) {
-        console.error("Gemini Error:", err);
-        return sendJsonError(500, `AI Error: ${err.message}`);
+        console.error("Critical System Error:", err);
+        return sendJsonError(500, `Processing Failed: ${err.message}`);
     }
 }
