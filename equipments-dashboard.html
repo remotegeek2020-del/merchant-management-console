@@ -495,12 +495,18 @@ async function saveNote() {
         inventory = result.data || [];
         totalItems = result.count || 0;
 
+        // --- KPI UPDATES ---
         document.getElementById('kpi-total').innerText = result.metrics.total;
         document.getElementById('kpi-office').innerText = result.metrics.inOffice;
         document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
         document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
         document.getElementById('kpi-retired').innerText = result.metrics.retired || 0;
+        
+        // Update the new Alerts KPI card if you added it
+        const alertCard = document.getElementById('kpi-alerts');
+        if (alertCard) alertCard.innerText = result.metrics.alerts || 0;
 
+        // --- PAGINATION UI ---
         const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
         const end = Math.min((currentPage + 1) * limit, totalItems);
         document.getElementById('pagination-info').innerText = `Showing ${start}-${end} of ${totalItems} items`;
@@ -510,32 +516,54 @@ async function saveNote() {
         tbody.innerHTML = "";
         inventory.forEach(item => {
             const row = tbody.insertRow();
+            
+            // --- 1. CALCULATE STALE ALERT (14 Days) ---
+            // Use updated_at if available, otherwise fallback to received_date
+            const lastUpdate = new Date(item.updated_at || item.received_date);
+            const today = new Date();
+            const diffTime = Math.abs(today - lastUpdate);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            const isStaleRepair = (item.current_location === 'Warsaw Repairs' && diffDays >= 14);
+
+            // --- 2. DEFINE CLASSES ---
             let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
             if (item.status === 'deployed') locClass = 'loc-deployed';
-
             const isDeployed = item.status === 'deployed';
 
-            // Define buttons based on status
-           const actionButtons = isDeployed ? `
-    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
-        <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
-    </button>
-` : `
-    <div style="display: flex; gap: 5px; justify-content: center;">
-        <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
-            <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
-        </button>
-        <button onclick="decommissionEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Decommission">
-            <span class="material-icons" style="font-size:18px; color: #64748b;">archive</span>
-        </button>
-    </div>
-`;
+            // --- 3. ROW STYLE ---
+            if (isStaleRepair) {
+                row.style.backgroundColor = '#fff1f2'; // Soft red highlight
+            }
 
+            // --- 4. DEFINE BUTTONS ---
+            const actionButtons = isDeployed ? `
+                <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
+                    <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
+                </button>
+            ` : `
+                <div style="display: flex; gap: 5px; justify-content: center;">
+                    <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border">
+                        <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
+                    </button>
+                    <button onclick="decommissionEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Decommission">
+                        <span class="material-icons" style="font-size:18px; color: #64748b;">archive</span>
+                    </button>
+                </div>
+            `;
+
+            // --- 5. RENDER ROW HTML ---
             row.innerHTML = `
-                <td style="font-weight:700; color:var(--pp-blue);">${item.serial_number}</td>
+                <td style="font-weight:700; color:var(--pp-blue);">
+                    ${item.serial_number}
+                    ${isStaleRepair ? `<span class="material-icons" style="font-size:14px; color:#e11d48; vertical-align:middle; margin-left:4px;" title="Stale: ${diffDays} days in repair">warning</span>` : ''}
+                </td>
                 <td>${item.terminal_type || '---'}</td>
                 <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
-                <td><span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span></td>
+                <td>
+                    <span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span>
+                    ${isStaleRepair ? `<div style="color:#e11d48; font-weight:700; font-size:10px; margin-top:2px;">STALE: ${diffDays} DAYS</div>` : ''}
+                </td>
                 <td>${item.merchants ? `<span style="color:var(--pp-accent); font-weight:600;">${item.merchants.dba_name}</span>` : '<span style="color:#cbd5e1;">In Stock</span>'}</td>
                 <td><span class="slds-badge">${item.status}</span></td>
                 <td style="text-align:center;">
