@@ -117,24 +117,37 @@
         <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Edit / Close Ticket</h2>
         <form id="editDepForm" onsubmit="submitUpdate(event)">
             <input type="hidden" id="editId">
+            
+            <div style="margin-bottom:15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TERMINAL ID (TID)</label>
+                <input type="text" id="editTid" class="slds-input" readonly style="border-radius:8px; background:#f8fafc; color:#64748b;">
+            </div>
+
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TICKET STATUS</label>
-                <select id="editStatus" class="slds-select">
+                <select id="editStatus" class="slds-select" style="border-radius:8px;">
                     <option value="Open">Open</option>
                     <option value="In Transit">In Transit</option>
                     <option value="Closed">Closed / Delivered</option>
                 </select>
             </div>
+
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TARGET DATE</label>
-                <input type="date" id="editDate" class="slds-input">
+                <input type="date" id="editDate" class="slds-input" style="border-radius:8px;">
             </div>
+
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TRACKING ID</label>
-                <input type="text" id="editTracking" class="slds-input" placeholder="Update tracking...">
+                <input type="text" id="editTracking" class="slds-input" placeholder="Update tracking..." style="border-radius:8px;">
             </div>
-            <textarea id="editNotes" class="slds-textarea" style="margin-bottom:20px; height:60px;"></textarea>
-            <button type="submit" id="updateBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue);">UPDATE TICKET</button>
+
+            <div style="margin-bottom:20px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">LOGISTICS & UPDATE NOTES</label>
+                <textarea id="editNotes" class="slds-textarea" placeholder="Add update notes here..." style="border-radius:8px; height:80px;"></textarea>
+            </div>
+
+            <button type="submit" id="updateBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); padding:10px; border-radius:8px;">UPDATE TICKET</button>
         </form>
     </div>
 </div>
@@ -204,20 +217,24 @@
     }
 
     // Modal populate logic
-    function openEditModal(index) {
-        const d = currentDeployments[index];
-        if (!d) return;
-        document.getElementById('editId').value = d.id;
-        document.getElementById('editStatus').value = d.status || 'Open';
-        document.getElementById('editTracking').value = d.tracking_id || '';
-        document.getElementById('editNotes').value = d.notes || '';
-        if (d.target_deployment_date) {
-            document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
-        } else {
-            document.getElementById('editDate').value = '';
-        }
-        document.getElementById('editDepModal').style.display = 'flex';
+function openEditModal(index) {
+    const d = currentDeployments[index];
+    if (!d) return;
+
+    document.getElementById('editId').value = d.id;
+    document.getElementById('editTid').value = d.tid || '---'; // Fills the TID
+    document.getElementById('editStatus').value = d.status || 'Open';
+    document.getElementById('editTracking').value = d.tracking_id || '';
+    document.getElementById('editNotes').value = d.notes || '';
+
+    if (d.target_deployment_date) {
+        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
+    } else {
+        document.getElementById('editDate').value = '';
     }
+    
+    document.getElementById('editDepModal').style.display = 'flex';
+}
 
     // Submit Updates
     async function submitUpdate(event) {
