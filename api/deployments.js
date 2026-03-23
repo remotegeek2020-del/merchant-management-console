@@ -4,9 +4,10 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, query, equipment_id } = req.body;
+    const { action, query, equipment_id, payload } = req.body;
 
     try {
+        // --- 1. LIST ALL DEPLOYMENTS ---
         if (action === 'list') {
             let sb = supabase.from('deployments').select(`
                 *,
@@ -30,7 +31,73 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [], metrics });
         }
 
-        // --- NEW ACTION: FETCH EQUIPMENT HISTORY ---
+        // --- 2. GET LOOKUPS (Merchants & Available Office Inventory) ---
+        if (action === 'getLookups') {
+            const [merchants, inventory] = await Promise.all([
+                supabase.from('merchants').select('id, dba_name').order('dba_name'),
+                // Filter for equipment currently in Office/Inventory
+                // Adjust keywords based on your exact status names in Supabase
+                supabase.from('equipments')
+                    .select('id, serial_number, terminal_type')
+                    .or('status.ilike.Office,status.ilike.In Stock,status.is.null')
+            ]);
+
+            return res.status(200).json({ 
+                success: true, 
+                merchants: merchants.data || [], 
+                inventory: inventory.data || [] 
+            });
+        }
+
+        // --- 3. CREATE NEW DEPLOYMENT (With Status Flip & Logging) ---
+        if (action === 'create') {
+            const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
+
+            // Step A: Insert the Deployment Ticket (Status defaults to 'Open')
+            const { data: depData, error: depError } = await supabase
+                .from('deployments')
+                .insert([{
+                    merchant_id,
+                    equipment_id,
+                    tid,
+                    tracking_id,
+                    target_deploymer: target_date,
+                    status: 'Open',
+                    notes
+                }])
+                .select();
+
+            if (depError) throw depError;
+
+            // Step B: Update Equipment status to 'Deployed'
+            const { error: equipUpdateError } = await supabase
+                .from('equipments')
+                .update({ status: 'Deployed' })
+                .eq('id', equipment_id);
+
+            if (equipUpdateError) throw equipUpdateError;
+
+            // Step C: Create the Equipment Log (History)
+            const { data: mData } = await supabase
+                .from('merchants')
+                .select('dba_name')
+                .eq('id', merchant_id)
+                .single();
+            
+            await supabase.from('equipment_logs').insert([{
+                equipment_id,
+                merchant_id,
+                deployment_id: depData[0].id,
+                action: 'Deployed',
+                from_location: 'Warsaw Office',
+                to_location: mData?.dba_name || 'Merchant',
+                notes: notes || `Initial deployment. Ticket ID: ${depData[0].deployment_id || 'N/A'}`
+            }]);
+
+            return res.status(200).json({ success: true, message: "Deployment created and equipment updated." });
+        }
+
+        // --- 4. FETCH EQUIPMENT HISTORY ---
         if (action === 'getHistory') {
             if (!equipment_id) return res.status(400).json({ message: "Equipment ID required" });
 
