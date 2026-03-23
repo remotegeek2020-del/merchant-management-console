@@ -30,13 +30,26 @@ if (action === 'delete') {
     return res.status(200).json({ success: true, data });
 }
         
-        // --- ACTION: GET NOTES ---
+   // --- ACTION: GET NOTES ---
 if (action === 'getNotes') {
     const { data, error } = await supabase
         .from('equipment_notes')
         .select('*')
-        .eq('equipment_id', id)
+        .eq('equipment_id', req.body.equipment_id)
         .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
+        // --- ACTION: SAVE NOTE ---
+if (action === 'saveNote') {
+    const { data, error } = await supabase
+        .from('equipment_notes')
+        .insert([{ 
+            equipment_id: req.body.equipment_id, 
+            note_text: req.body.note_text, 
+            author_name: req.headers['x-user-name'] || 'Staff Member' // Matches your screenshot
+        }]);
 
     if (error) throw error;
     return res.status(200).json({ success: true, data });
