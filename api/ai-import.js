@@ -8,8 +8,24 @@ export const config = {
     },
 };
 
+// Exponential backoff helper
+const wait = (ms) => new Promise(res => setTimeout(res, ms));
+
+async function callGeminiWithRetry(model, content, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const result = await model.generateContent(content);
+            return result;
+        } catch (err) {
+            // If it's the last retry, throw the error
+            if (i === retries - 1) throw err;
+            // Otherwise wait (1s, 2s, 4s...)
+            await wait(Math.pow(2, i) * 1000);
+        }
+    }
+}
+
 export default async function handler(req, res) {
-    // Utility to log and send errors consistently
     const sendJsonError = (status, message, raw = null) => {
         return res.status(status).json({ success: false, message, raw });
     };
@@ -23,33 +39,31 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-1.5-flash: It is the most robust and fastest for high-density OCR.
+        // Use gemini-1.5-flash: Highest reliability for high-density document tasks.
         const model = genAI.getGenerativeModel({ 
             model: "gemini-1.5-flash",
             generationConfig: {
-                temperature: 0,
-                // We do NOT use JSON mode here because it adds "thinking time" overhead 
-                // that leads to Vercel timeouts. We want the fastest raw text.
+                temperature: 0.1,
             }
         });
 
-        // Simplified prompt to reduce AI processing time
         const prompt = `
-            LIST EVERY SERIAL NUMBER FOUND. 
-            Example format: P1250920000034, 181251934334, X5C800029972
-            Just a comma-separated list of every long number you see.
+            EXTRACT ALL HARDWARE SERIAL NUMBERS. 
+            
+            Look for these specific patterns:
+            - Valor: 12-digit numbers starting with 18125 or strings like X5C8...
+            - Dejavoo: 14+ char strings starting with P125, P325, P524, or P17B.
+            
+            List them exactly like this:
+            SERIAL: [the number]
+            TYPE: [the terminal model]
+            ---
         `;
 
-        // Create a promise for the AI call
-        const aiTask = model.generateContent([
+        // Execute AI task with internal retry logic
+        const result = await callGeminiWithRetry(model, [
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
-        ]);
-
-        // Race the AI task against a 9-second timeout (Vercel limit is 10s)
-        const result = await Promise.race([
-            aiTask,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('TIMEOUT_REACHED')), 9000))
         ]);
 
         const response = await result.response;
@@ -58,8 +72,8 @@ export default async function handler(req, res) {
         const items = [];
         const seenSerials = new Set();
 
-        // --- THE UNIVERSAL HARVESTER ---
-        // This scans the raw AI response for patterns found in your Valor/Dejavoo files.
+        // --- LAYER 1: PATTERN HARVESTER ---
+        // This is the most reliable way to extract data from a noisy AI response.
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
             { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
@@ -80,16 +94,33 @@ export default async function handler(req, res) {
             }
         });
 
+        // --- LAYER 2: LINE PARSER FALLBACK ---
         if (items.length === 0) {
-            return sendJsonError(422, "The AI responded but no serial numbers were found. Check your file format.", rawText);
+            const lines = rawText.split('\n');
+            let currentSn = null;
+            for (let line of lines) {
+                const upper = line.toUpperCase();
+                if (upper.includes('SERIAL:')) {
+                    currentSn = line.split(':')[1]?.trim().replace(/[.,\s]/g, "");
+                } else if (upper.includes('TYPE:') && currentSn) {
+                    const type = line.split(':')[1]?.trim();
+                    if (!seenSerials.has(currentSn)) {
+                        items.push({ serial_number: currentSn, terminal_type: type });
+                        seenSerials.add(currentSn);
+                    }
+                    currentSn = null;
+                }
+            }
+        }
+
+        if (items.length === 0) {
+            return sendJsonError(422, "No serial numbers were found. Ensure the PDF is a high-quality digital document.", rawText);
         }
 
         return res.status(200).json({ success: true, data: items });
 
     } catch (err) {
-        if (err.message === 'TIMEOUT_REACHED') {
-            return sendJsonError(504, "The document is too large for the current plan. Please split the PDF into single pages.");
-        }
+        console.error("AI System Error:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
