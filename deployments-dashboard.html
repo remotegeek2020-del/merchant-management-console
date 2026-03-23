@@ -18,6 +18,20 @@
         .badge { font-weight: 800; font-size: 9px; padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
         .status-open { background: #e0f2fe; color: #0369a1; }
         .status-closed { background: #f1f5f9; color: #475569; }
+        
+        /* Modal Styles */
+        .modal-backdrop { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
+        .modal-content { background:white; width:600px; border-radius:16px; padding:30px; position:relative; max-height:80vh; overflow-y:auto; }
+        .close-btn { position:absolute; top:20px; right:20px; cursor:pointer; color:#64748b; }
+        
+        /* Timeline Styles */
+        .timeline { border-left: 2px solid #e2e8f0; margin-left: 20px; padding-left: 30px; position: relative; }
+        .timeline-item { margin-bottom: 25px; position: relative; }
+        .timeline-dot { position: absolute; left: -41px; width: 20px; height: 20px; background: white; border: 4px solid var(--pp-accent); border-radius: 50%; }
+        .timeline-date { font-size: 0.75rem; font-weight: 700; color: #94a3b8; }
+        .timeline-action { font-weight: 800; color: #002d5a; font-size: 0.95rem; }
+        .timeline-location { font-size: 0.85rem; color: #64748b; }
+        
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -52,9 +66,10 @@
                     <th>Merchant (DBA)</th>
                     <th>Hardware (Serial)</th>
                     <th>TID</th>
-                    <th>Tracking Number</th>
-                    <th>Target Date</th>
+                    <th>Tracking</th>
+                    <th>Date</th>
                     <th>Status</th>
+                    <th>History</th>
                 </tr>
             </thead>
             <tbody id="deploymentTableBody"></tbody>
@@ -62,10 +77,23 @@
     </article>
 </div>
 
+<!-- History Modal -->
+<div id="historyModal" class="modal-backdrop" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+        <span class="material-icons close-btn" onclick="document.getElementById('historyModal').style.display='none'">close</span>
+        <h2 id="modalTitle" style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:5px;">Equipment Lifecycle</h2>
+        <p id="modalSubtitle" style="color:#64748b; font-size:0.9rem; margin-bottom:25px;">History for Serial #---</p>
+        
+        <div id="timelineContainer" class="timeline">
+            <!-- Timeline items injected here -->
+        </div>
+    </div>
+</div>
+
 <script>
     async function fetchDeployments() {
         const tbody = document.getElementById('deploymentTableBody');
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Logistics Ledger...</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:60px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Logistics Ledger...</td></tr>`;
 
         try {
             const res = await fetch('/api/deployments', {
@@ -78,7 +106,6 @@
             });
             const result = await res.json();
 
-            // Update KPIs
             document.getElementById('kpi-active').innerText = result.metrics.active;
             document.getElementById('kpi-total').innerText = result.metrics.total;
             document.getElementById('kpi-today').innerText = result.metrics.today;
@@ -86,18 +113,68 @@
             tbody.innerHTML = "";
             result.data.forEach(d => {
                 const row = tbody.insertRow();
+                const equipId = d.equipments?.id;
+                const sn = d.equipments?.serial_number || '---';
+                
                 row.innerHTML = `
                     <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
                     <td style="font-weight:600;">${d.merchants?.dba_name || 'Unassigned'}</td>
-                    <td><code>${d.equipments?.serial_number || '---'}</code></td>
+                    <td><code>${sn}</code></td>
                     <td>${d.tid || '---'}</td>
                     <td><a href="#" style="color:var(--pp-accent); font-weight:700;">${d.tracking_id || '---'}</a></td>
                     <td>${d.target_deploymer ? new Date(d.target_deploymer).toLocaleDateString() : '---'}</td>
                     <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status}</span></td>
+                    <td>
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
+                                onclick="viewHistory('${equipId}', '${sn}')" 
+                                title="View History" ${!equipId ? 'disabled' : ''}>
+                            <span class="material-icons" style="font-size:18px;">history</span>
+                        </button>
+                    </td>
                 `;
             });
         } catch (err) { console.error(err); }
     }
+
+    async function viewHistory(id, sn) {
+        const modal = document.getElementById('historyModal');
+        const container = document.getElementById('timelineContainer');
+        document.getElementById('modalSubtitle').innerText = `History for Serial #${sn}`;
+        container.innerHTML = `<p style="color:#94a3b8; text-align:center;">Loading history...</p>`;
+        modal.style.display = 'flex';
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getHistory', equipment_id: id })
+            });
+            const result = await res.json();
+
+            if (result.data && result.data.length > 0) {
+                container.innerHTML = result.data.map(log => `
+                    <div class="timeline-item">
+                        <div class="timeline-dot"></div>
+                        <div class="timeline-date">${new Date(log.created_at).toLocaleString()}</div>
+                        <div class="timeline-action">${log.action.toUpperCase()}</div>
+                        <div class="timeline-location">
+                            ${log.from_location || 'Unknown'} <span class="material-icons" style="font-size:12px; vertical-align:middle;">arrow_forward</span> ${log.to_location || 'Unknown'}
+                        </div>
+                        ${log.notes ? `<div style="font-size:0.75rem; font-style:italic; margin-top:5px; color:#64748b;">"${log.notes}"</div>` : ''}
+                    </div>
+                `).join('');
+            } else {
+                container.innerHTML = `<p style="color:#94a3b8; text-align:center; padding:20px;">No historical logs found for this item.</p>`;
+            }
+        } catch (err) {
+            container.innerHTML = `<p style="color:red; text-align:center;">Error loading history.</p>`;
+        }
+    }
+
+    function closeModal(e) {
+        if (e.target.id === 'historyModal') document.getElementById('historyModal').style.display = 'none';
+    }
+
     window.onload = fetchDeployments;
 </script>
 </body>
