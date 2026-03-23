@@ -7,6 +7,39 @@ export default async function handler(req, res) {
     const { action, query, equipment_id, payload } = req.body;
 
     try {
+
+        // --- ADD THIS NEW ACTION TO YOUR deployments.js ---
+if (action === 'update') {
+    const { deployment_id, status, tracking_id, notes } = payload;
+
+    // 1. Update the Deployment Ticket
+    const { data: updatedDep, error: updateError } = await supabase
+        .from('deployments')
+        .update({ 
+            status, 
+            tracking_id, 
+            notes 
+        })
+        .eq('id', deployment_id)
+        .select(`*, equipments(serial_number), merchants(dba_name)`)
+        .single();
+
+    if (updateError) throw updateError;
+
+    // 2. Log the change in History
+    await supabase.from('equipment_logs').insert([{
+        equipment_id: updatedDep.equipment_id,
+        merchant_id: updatedDep.merchant_id,
+        deployment_id: updatedDep.id,
+        action: status === 'Closed' ? 'Deployment Closed' : 'Ticket Updated',
+        from_location: 'In Transit', // Assuming it was moving
+        to_location: updatedDep.merchants.dba_name,
+        notes: notes || `Status changed to ${status}. Tracking: ${tracking_id}`
+    }]);
+
+    return res.status(200).json({ success: true });
+}
+        
         // --- ACTION: LIST DEPLOYMENTS ---
         if (action === 'list') {
             let sb = supabase.from('deployments').select(`
