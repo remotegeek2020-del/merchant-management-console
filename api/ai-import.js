@@ -23,27 +23,47 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use the absolute latest model for maximum context and logic
+        // Use the absolute latest model with strict JSON schema
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.5-flash-preview-09-2025"
+            model: "gemini-2.5-flash-preview-09-2025",
+            generationConfig: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "array",
+                    items: {
+                        type: "object",
+                        properties: {
+                            serial_number: { type: "string" },
+                            terminal_type: { type: "string" }
+                        },
+                        required: ["serial_number", "terminal_type"]
+                    }
+                },
+                temperature: 0.1 
+            }
         });
 
         const prompt = `
-            Act as a precision inventory scanner. 
-            Extract EVERY hardware serial number from this invoice.
+            Act as a precise data extraction tool for payment hardware inventory.
+            Your mission: Extract EVERY serial number from the provided PDF invoice.
             
-            DIRECTIONS:
-            1. Scan EVERY page. Items are often on page 1 and serials on page 2.
-            2. For Valor (VL-550, VP800): Serials are in long comma-separated blocks in the Memo/Description column.
-            3. For Dejavoo (KOZ-P1, Koz-P3, Koz-P5, KOZ-P17): Serials are in a table at the end. Match them to the items using the line numbers (1, 2, 3, etc).
+            DIRECTIONS FOR VENDORS:
+            1. VALOR PAYTECH: 
+               - Models: VL-550, VP800.
+               - Location: Look for "Serial Numbers:" followed by long comma-separated lists in the 'Memo' or 'Description' column.
+               - Task: Extract EVERY 12-digit numeric or alphanumeric string in those lists.
             
-            CLEANING:
-            - Normalize to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
-            - Clean serials: Strip all periods, spaces, and commas from the serial number.
+            2. DEJAVOO SYSTEMS:
+               - Models: KOZ-P1, Koz-P3, Koz-P5, KOZ-P17.
+               - Location: Look for the separate "Serial Numbers" table.
+               - Task: Match serials to Part Numbers using the line indices (e.g., "1:KOZ-P1" means all serials following that index are Dejavoo P1s).
+            
+            MAPPING RULES:
+            - Normalize types to: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
+            - Clean serials: Strip ALL dots, spaces, or commas from the serial number itself.
             
             OUTPUT:
-            Return ONLY a raw JSON array. No text, no markdown.
-            Format: [{"serial_number": "...", "terminal_type": "..."}]
+            Return ONLY a JSON array. Capturing EVERY single serial number is critical.
         `;
 
         const result = await model.generateContent([
@@ -55,21 +75,21 @@ export default async function handler(req, res) {
         let text = response.text().trim();
         
         // --- EMERGENCY JSON HEALING ---
-        // 1. Remove Markdown code blocks
+        // 1. Remove Markdown code blocks if present
         text = text.replace(/```json/g, "").replace(/```/g, "").trim();
         
-        // 2. Find the start and end of the array
+        // 2. Locate the array boundaries [ ... ]
         const start = text.indexOf('[');
         const end = text.lastIndexOf(']');
 
         if (start === -1 || end === -1) {
             console.error("AI did not return a list. Raw output:", text);
-            return sendJsonError(422, "The AI could not find a list in this invoice. Check if the PDF text is selectable.");
+            return sendJsonError(422, "The AI could not find a serial number list in this document.");
         }
 
         let jsonString = text.substring(start, end + 1);
 
-        // 3. Fix truncated JSON (If the list is so long it cut off)
+        // 3. Fix truncated JSON if the list was so long it cut off mid-item
         if (!jsonString.endsWith(']')) {
             const lastClosingBrace = jsonString.lastIndexOf('}');
             if (lastClosingBrace !== -1) {
@@ -82,13 +102,13 @@ export default async function handler(req, res) {
             const finalData = Array.isArray(data) ? data : [];
             
             if (finalData.length === 0) {
-                return sendJsonError(422, "Found the document, but 0 serial numbers were extracted.");
+                return sendJsonError(422, "Scanned document but found 0 serial numbers.");
             }
 
             return res.status(200).json({ success: true, data: finalData });
         } catch (parseErr) {
             console.error("JSON Parse Fail. Snippet:", jsonString.substring(0, 100));
-            return sendJsonError(500, "The invoice is too long for one process. Try uploading Page 1 and Page 2 separately.");
+            return sendJsonError(500, "The invoice contains too many units to process in a single scan. Please try uploading the pages separately.");
         }
 
     } catch (err) {
