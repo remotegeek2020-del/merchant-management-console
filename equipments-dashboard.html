@@ -12,7 +12,12 @@
         .dashboard-container { max-width: 1600px; margin: 0 auto; }
         
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .summary-bar { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 20px; }
+        .summary-bar { 
+    display: grid; 
+    grid-template-columns: repeat(5, 1fr); /* Changed from 4 to 5 */
+    gap: 20px; 
+    margin-bottom: 20px; 
+}
         .kpi-card { background: white; padding: 20px; border-radius: 16px; border: 1px solid #e2e8f0; display: flex; align-items: center; gap: 15px; }
         .kpi-val { font-size: 1.3rem; font-weight: 800; color: #002d5a; display: block; }
         .kpi-label { font-size: 0.65rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
@@ -66,6 +71,7 @@
                 <button class="toggle-btn active" id="btn-office" onclick="filterByLoc('Warsaw Office')">WARSAW OFFICE</button>
                 <button class="toggle-btn" id="btn-repairs" onclick="filterByLoc('Warsaw Repairs')">WARSAW REPAIRS</button>
                 <button class="toggle-btn" id="btn-deployed" onclick="filterByLoc('deployed')">DEPLOYED</button>
+                <button class="toggle-btn" id="btn-retired" onclick="filterByLoc('Retired')">RETIRED</button>
             </div>
             <input type="text" id="invSearch" placeholder="Search Serial..." class="slds-input" style="width:200px; border-radius:10px; margin-right: 10px;">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
@@ -83,6 +89,12 @@
         <div class="kpi-card"><div><span class="kpi-label">Ready in Office</span><span class="kpi-val" id="kpi-office" style="color: #166534;">0</span></div></div>
         <div class="kpi-card"><div><span class="kpi-label">In Repair Bin</span><span class="kpi-val" id="kpi-repair" style="color: #991b1b;">0</span></div></div>
         <div class="kpi-card" style="background:var(--pp-blue); color:white; border:none;"><div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Deployed Units</span><span class="kpi-val" id="kpi-deployed" style="color:white;">0</span></div></div>
+    <div class="kpi-card" style="border-left: 4px solid #64748b;">
+    <div>
+        <span class="kpi-label">Retired Units</span>
+        <span class="kpi-val" id="kpi-retired" style="color: #64748b;">0</span>
+    </div>
+</div>
     </div>
 
     <article class="main-card">
@@ -481,6 +493,7 @@ async function saveNote() {
         document.getElementById('kpi-office').innerText = result.metrics.inOffice;
         document.getElementById('kpi-repair').innerText = result.metrics.inRepair;
         document.getElementById('kpi-deployed').innerText = result.metrics.deployed;
+        document.getElementById('kpi-retired').innerText = result.metrics.retired || 0;
 
         const start = totalItems === 0 ? 0 : (currentPage * limit) + 1;
         const end = Math.min((currentPage + 1) * limit, totalItems);
