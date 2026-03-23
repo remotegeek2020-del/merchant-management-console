@@ -519,7 +519,7 @@ async function saveNote() {
             
             // --- 1. CALCULATE STALE ALERT (14 Days) ---
             // Use updated_at if available, otherwise fallback to received_date
-            const lastUpdate = new Date(item.updated_at || item.received_date);
+            const lastUpdate = new Date(item.received_date);
             const today = new Date();
             const diffTime = Math.abs(today - lastUpdate);
             const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
