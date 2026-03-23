@@ -45,11 +45,11 @@ export default async function handler(req, res) {
         });
 
         const prompt = `
-            You are a specialized inventory auditor. Extract EVERY hardware serial number from this invoice PDF.
+            Act as a precise inventory audit engine. Extract EVERY hardware serial number from the attached PDF.
             
-            VENDOR PATTERNS:
-            - VALOR PAYTECH: Look for "Serial Numbers:" followed by comma-separated lists in the Memo or Description column.
-            - DEJAVOO: Look for the dedicated "Serial Numbers" table. Match serials to the model using the "Line/Part No" index (e.g., 1=P1, 2=P3).
+            VENDOR RECOGNITION:
+            1. VALOR PAYTECH: Serials are long comma-separated lists (e.g., 1812519...) inside "Description" or "Memo" fields. Extract EVERY single number.
+            2. DEJAVOO SYSTEMS: Serials are in a dedicated "Serial Numbers" table. Match them to the Part Numbers (KOZ-P1, Koz-P3, etc.) using the line indices (1, 2, 3...) provided in the tables.
             
             MAPPING RULES:
             - VL-550 / VL550 -> "Valor VL550"
@@ -59,10 +59,12 @@ export default async function handler(req, res) {
             - Koz-P5 / P5 -> "Dejavoo P5"
             - KOZ-P17 / P17 -> "Dejavoo P17"
             
-            IMPORTANT:
-            - Capture EVERY single serial number. 
-            - Clean serials: remove any dots, commas, or spaces from the serial number itself.
-            - Return ONLY the JSON array.
+            CLEANING:
+            - Remove all dots, spaces, and commas from the serial number strings.
+            - Ensure every serial number is a separate object in the result array.
+            
+            OUTPUT:
+            Return ONLY a raw JSON array. No conversational text. No Markdown backticks.
         `;
 
         const result = await model.generateContent([
@@ -73,22 +75,20 @@ export default async function handler(req, res) {
         const response = await result.response;
         let text = response.text().trim();
         
-        // --- ADVANCED JSON REPAIR ---
-        // 1. Remove Markdown markers
-        text = text.replace(/```json/g, "").replace(/```/g, "").trim();
-        
-        // 2. Locate the array
+        // --- ROBUST JSON RECOVERY ---
+        // Some models include Markdown backticks even when asked not to.
+        // We find the first '[' and last ']' to isolate the raw array.
         const arrayStart = text.indexOf('[');
         const arrayEnd = text.lastIndexOf(']');
 
         if (arrayStart === -1 || arrayEnd === -1) {
-            console.error("AI Response was not a list:", text);
-            return sendJsonError(422, "The AI could not find a serial number list in this document.");
+            console.error("AI Response failed to include a JSON array:", text);
+            return sendJsonError(422, "The AI could not identify a valid list of serial numbers in this file.");
         }
 
         let jsonString = text.substring(arrayStart, arrayEnd + 1);
 
-        // 3. Fix common "AI Fatigue" syntax errors (like trailing commas before a closing bracket)
+        // Fix potential "trailing comma" fatigue errors from the AI
         jsonString = jsonString.replace(/,\s*]/g, ']').replace(/,\s*}/g, '}');
 
         try {
@@ -96,13 +96,13 @@ export default async function handler(req, res) {
             const finalData = Array.isArray(data) ? data : [];
             
             if (finalData.length === 0) {
-                return sendJsonError(422, "Document recognized, but no serial numbers were found.");
+                return sendJsonError(422, "Document scanned successfully, but no equipment serials were found.");
             }
 
             return res.status(200).json({ success: true, data: finalData });
         } catch (parseErr) {
-            console.error("Final JSON Parse Error:", jsonString);
-            return sendJsonError(500, "The list was found but was too large to format. Try uploading the pages separately.");
+            console.error("JSON Parse Error. Cleaned text segment:", jsonString);
+            return sendJsonError(500, "The data was found, but it was too large or complex to process. Try uploading pages separately.");
         }
 
     } catch (err) {
