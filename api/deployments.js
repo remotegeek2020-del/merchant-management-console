@@ -59,7 +59,17 @@ export default async function handler(req, res) {
 if (action === 'create') {
     const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
     
-    // 1. Create the Deployment Ticket
+    // 1. Fetch the Merchant's DBA Name first so we can use it for the location
+    const { data: mData, error: mError } = await supabase
+        .from('merchants')
+        .select('dba_name')
+        .eq('id', merchant_id)
+        .single();
+    
+    if (mError) throw mError;
+    const merchantDBA = mData?.dba_name || 'Merchant';
+
+    // 2. Create the Deployment Ticket
     const { data: depData, error: depError } = await supabase.from('deployments').insert([{
         merchant_id, 
         equipment_id, 
@@ -72,27 +82,26 @@ if (action === 'create') {
     
     if (depError) throw depError;
 
-    // 2. UPDATE EQUIPMENT TABLE: Link to Merchant and flip Status
-    // This ensures the Warsaw Office no longer "owns" the device in the inventory list
+    // 3. UPDATE EQUIPMENT TABLE: Link to Merchant, flip Status, AND Update Location
     const { error: equipUpdateError } = await supabase
         .from('equipments')
         .update({ 
             status: 'Deployed',
-            merchant_id: merchant_id // Linking the device to the merchant record
+            merchant_id: merchant_id,
+            current_location: merchantDBA // FIX: Explicitly setting the location to the Merchant Name
         })
         .eq('id', equipment_id);
 
     if (equipUpdateError) throw equipUpdateError;
 
-    // 3. Log History Entry
-    const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    // 4. Log History Entry
     await supabase.from('equipment_logs').insert([{
         equipment_id, 
         merchant_id, 
         deployment_id: depData[0].id,
         action: 'Deployed', 
         from_location: 'Warsaw Office',
-        to_location: mData?.dba_name || 'Merchant', 
+        to_location: merchantDBA, 
         notes: notes || 'New Deployment Ticket Created'
     }]);
 
