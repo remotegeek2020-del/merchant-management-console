@@ -90,15 +90,26 @@ if (action === 'addNote') {
     if (error) throw error;
     return res.status(200).json({ success: true, data });
 }
-
-      if (action === 'update') {
-    const { data, error } = await supabase
+if (action === 'update') {
+    // 1. Perform the update
+    const { data: updatedData, error: updateError } = await supabase
         .from('equipments')
-        .update(payload) // This 'payload' variable comes from req.body
-        .eq('id', id);
-        
-    if (error) throw error;
-    return res.status(200).json({ success: true, data });
+        .update(payload)
+        .eq('id', id)
+        .select(); // Get the updated row back
+
+    if (updateError) throw updateError;
+
+    // 2. LOG THE ACTIVITY (Using your table columns)
+    await supabase.from('activity_logs').insert([{
+        email: req.headers['x-user-email'] || 'System Admin', // Use actual email if available
+        action: 'Update Equipment',
+        status: `Serial ${payload.serial_number} set to ${payload.status}`,
+        user_agent: req.headers['user-agent'],
+        ip_address: req.headers['x-forwarded-for'] || 'internal'
+    }]);
+
+    return res.status(200).json({ success: true, data: updatedData });
 }
 
         if (action === 'deploy') {
