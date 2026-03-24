@@ -96,7 +96,18 @@ export default async function handler(req, res) {
             const { data: inventory } = await supabase.from('equipments').select('id, serial_number, terminal_type').eq('status', 'stocked');
             return res.status(200).json({ merchants, inventory });
         }
+// --- ACTION: GET HISTORY ---
+        if (action === 'getHistory') {
+            const { equipment_id } = body; // body is defined at the top of our previous script
+            const { data, error } = await supabase
+                .from('equipment_logs')
+                .select('*')
+                .eq('equipment_id', equipment_id)
+                .order('created_at', { ascending: false });
 
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
         return res.status(400).json({ success: false, message: "Invalid Action" });
 
     } catch (err) {
