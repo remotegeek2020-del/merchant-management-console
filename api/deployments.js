@@ -41,27 +41,36 @@ if (action === 'update') {
 }
         
         // --- ACTION: LIST DEPLOYMENTS ---
-        if (action === 'list') {
+       // --- ACTION: LIST DEPLOYMENTS in deployments.js ---
+if (action === 'list') {
     let sb = supabase.from('deployments').select(`
         *,
-        merchants!merchant_id (dba_name, merchant_id), // ADD merchant_id HERE
-        equipments!equipment_id (id, serial_number, terminal_type)
+        merchants!merchant_id (
+            dba_name, 
+            merchant_id
+        ),
+        equipments!equipment_id (
+            id, 
+            serial_number, 
+            terminal_type
+        )
     `);
-            
-            if (query) {
-                sb = sb.or(`deployment_id.ilike.%${query}%,tid.ilike.%${query}%,tracking_id.ilike.%${query}%`);
-            }
-            
-            const { data, error } = await sb.order('created_at', { ascending: false });
-            if (error) throw error;
+    
+    if (query) {
+        sb = sb.or(`deployment_id.ilike.%${query}%,tid.ilike.%${query}%,tracking_id.ilike.%${query}%`);
+    }
+    
+    const { data, error } = await sb.order('created_at', { ascending: false });
+    if (error) throw error;
 
-            const metrics = {
-                active: data.filter(d => d.status === 'Open').length || 0,
-                total: data.length || 0,
-                today: data.filter(d => new Date(d.created_at).toDateString() === new Date().toDateString()).length || 0
-            };
-            return res.status(200).json({ success: true, data: data || [], metrics });
-        }
+    const metrics = {
+        active: data.filter(d => d.status === 'Open').length || 0,
+        total: data.length || 0,
+        today: data.filter(d => new Date(d.created_at).toDateString() === new Date().toDateString()).length || 0
+    };
+    
+    return res.status(200).json({ success: true, data: data || [], metrics });
+}
 
         // --- ACTION: GET LOOKUPS (Merchant Search & Office Inventory) ---
         if (action === 'getLookups') {
