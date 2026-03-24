@@ -42,11 +42,11 @@ if (action === 'update') {
         
         // --- ACTION: LIST DEPLOYMENTS ---
         if (action === 'list') {
-let sb = supabase.from('deployments').select(`
-    *,
-    merchants!merchant_id (dba_name, merchant_id), // Ensure merchant_id is inside these parentheses
-    equipments!equipment_id (id, serial_number, terminal_type)
-`);
+            let sb = supabase.from('deployments').select(`
+                *,
+                merchants!merchant_id (dba_name),
+                equipments!equipment_id (id, serial_number, terminal_type)
+            `);
             
             if (query) {
                 sb = sb.or(`deployment_id.ilike.%${query}%,tid.ilike.%${query}%,tracking_id.ilike.%${query}%`);
