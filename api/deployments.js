@@ -8,6 +8,48 @@ export default async function handler(req, res) {
 
     try {
 
+        // --- ADD THIS INSIDE THE try BLOCK OF api/deployments.js ---
+
+if (action === 'return_to_office') {
+    const { equipment_id, merchant_id, deployment_id, notes, return_type, tid } = payload;
+
+    // 1. Determine new status and location based on condition
+    const newStatus = return_type === 'Defective' ? 'repairing' : 'stocked';
+    const newLocation = return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office';
+
+    // 2. Insert into the RETURNS table (Matches your screenshot columns)
+    const { error: returnError } = await supabase
+        .from('returns')
+        .insert([{
+            merchant_id,
+            equipment_id,
+            return_reason: 'Client Return', // Category
+            condition: return_type,        // 'Working' or 'Defective'
+            destination: newLocation,
+            status: 'open',
+            notes: notes || 'Unit returned from field'
+        }]);
+
+    if (returnError) throw returnError;
+
+    // 3. Reset the Equipment (Clear merchant, update location/status)
+    const { error: equipError } = await supabase
+        .from('equipments')
+        .update({ 
+            status: newStatus,
+            current_location: newLocation,
+            merchant_id: null 
+        })
+        .eq('id', equipment_id);
+
+    if (equipError) throw equipError;
+
+    // 4. Close the original Deployment Ticket
+    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+
+    return res.status(200).json({ success: true });
+}
+
         // --- ADD THIS NEW ACTION TO YOUR deployments.js ---
 if (action === 'update') {
     const { deployment_id, status, tracking_id, target_date, notes } = payload;
