@@ -425,32 +425,55 @@ async function processReturn() {
         } catch (e) { select.innerHTML = '<option>Error loading inventory</option>'; }
     }
 
-    async function saveDeployment(event) {
-        event.preventDefault();
-        const btn = document.getElementById('createBtn');
-        btn.disabled = true;
-        btn.innerText = "SAVING...";
-        
-        const payload = {
-            merchant_id: document.getElementById('selectedMerchantId').value,
-            equipment_id: document.getElementById('equipSelect').value,
-            tid: document.getElementById('tidInput').value,
-            tracking_id: document.getElementById('trackingInput').value,
-            target_date: document.getElementById('dateInput').value,
-            notes: document.getElementById('notesInput').value
-        };
+  async function saveDeployment(event) {
+    event.preventDefault();
+    const btn = document.getElementById('createBtn');
+    
+    // 1. UI Loading State
+    btn.disabled = true;
+    btn.innerText = "SAVING...";
+    
+    const payload = {
+        merchant_id: document.getElementById('selectedMerchantId').value,
+        equipment_id: document.getElementById('equipSelect').value,
+        tid: document.getElementById('tidInput').value,
+        tracking_id: document.getElementById('trackingInput').value,
+        target_date: document.getElementById('dateInput').value,
+        notes: document.getElementById('notesInput').value
+    };
 
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'create', payload })
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', payload })
+        });
+        
+        const result = await res.json();
+
+        if (result.success) {
+            // --- THE MISSING POPUP ---
+            Swal.fire({
+                icon: 'success',
+                title: 'Deployment Created',
+                text: 'Ticket is live and equipment status updated to Deployed.',
+                timer: 2000,
+                showConfirmButton: false
+            }).then(() => {
+                location.reload(); // Refresh to show the new row in the table
             });
-            const result = await res.json();
-            if (result.success) { location.reload(); }
-            else { alert("Error: " + result.message); btn.disabled = false; btn.innerText = "CREATE DEPLOYMENT"; }
-        } catch (e) { alert("System Error"); btn.disabled = false; btn.innerText = "CREATE DEPLOYMENT"; }
+        } else {
+            Swal.fire('Error', result.message || 'Failed to create ticket', 'error');
+            btn.disabled = false;
+            btn.innerText = "CREATE DEPLOYMENT";
+        }
+    } catch (e) {
+        console.error("System Error:", e);
+        Swal.fire('System Error', 'Could not connect to the server.', 'error');
+        btn.disabled = false;
+        btn.innerText = "CREATE DEPLOYMENT";
     }
+}
 
     async function viewHistory(id, sn) {
         const modal = document.getElementById('historyModal');
