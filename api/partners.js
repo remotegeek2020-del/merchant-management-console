@@ -6,66 +6,59 @@ export default async function handler(req, res) {
     const { action, person_id } = req.body || {};
 
     try {
-        if (action === 'get_partners_list') {
-            // 1. Get the Names from app_users (Linked to persons)
-            const { data: users, error: uErr } = await supabase
-                .from('app_users')
-                .select('userid, first_name, last_name');
-            if (uErr) throw uErr;
+       if (action === 'get_partners_list') {
+    // 1. Get Names from app_users
+    const { data: users, error: uErr } = await supabase
+        .from('app_users')
+        .select('userid, first_name, last_name');
+    if (uErr) throw uErr;
 
-            // 2. Get Mappings
-            const { data: mappings, error: mErr } = await supabase
-                .from('company_person_mapping')
-                .select(`person_id, company_id, companies(id, company_name)`);
-            if (mErr) throw mErr;
+    // 2. Get Mappings (Person -> Company)
+    const { data: mappings, error: mErr } = await supabase
+        .from('company_person_mapping')
+        .select(`person_id, company_id, companies(id, company_name)`);
+    if (mErr) throw mErr;
 
-            // 3. Get ALL Identifiers and their Company IDs
-            // We join agent_identifiers -> agents to find which company owns the ID
-            const { data: idData, error: iErr } = await supabase
-                .from('agent_identifiers')
-                .select(`
-                    id_string,
-                    agents!inner ( company_id )
-                `);
-            if (iErr) throw iErr;
+    // 3. THE FIX: Fetch all identifiers and the company they belong to
+    // We select FROM agent_identifiers and JOIN agents to get the company_id
+    const { data: idData, error: iErr } = await supabase
+        .from('agent_identifiers')
+        .select(`
+            id_string,
+            agents:agent_id (
+                company_id
+            )
+        `);
+    if (iErr) throw iErr;
 
-            // --- STITCHING ---
-            const finalData = users.map(u => {
-                // Find all companies mapped to this user
-                const myMappings = mappings.filter(m => m.person_id === u.userid);
-                
-                const myCompanies = myMappings.map(m => {
-                    const co = m.companies;
-                    if (!co) return null;
+    // --- STITCHING ---
+    const finalData = users.map(u => {
+        const myMappings = mappings.filter(m => m.person_id === u.userid);
+        
+        const myCompanies = myMappings.map(m => {
+            const co = m.companies;
+            if (!co) return null;
 
-                    // Find all ID strings belonging to THIS company
-                    const myIds = idData
-                        .filter(item => item.agents?.company_id === co.id)
-                        .map(item => item.id_string);
+            // Look for any ID where the agent's company_id matches this company's ID
+            const myIds = idData
+                .filter(item => item.agents && item.agents.company_id === co.id)
+                .map(item => item.id_string);
 
-                    return {
-                        id: co.id,
-                        name: co.company_name,
-                        ids: myIds // This will be empty [] if no IDs exist in agent_identifiers
-                    };
-                }).filter(Boolean);
+            return {
+                id: co.id,
+                name: co.company_name,
+                ids: myIds // Now checks the agent_id -> company_id link
+            };
+        }).filter(Boolean);
 
-                // Only return if they actually have companies (to filter out non-partner staff)
-                if (myCompanies.length === 0) return null;
+        if (myCompanies.length === 0) return null;
 
-                return {
-                    id: u.userid,
-                    name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Unknown Partner',
-                    companies: myCompanies
-                };
-            }).filter(Boolean);
+        return {
+            id: u.userid,
+            name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+            companies: myCompanies
+        };
+    }).filter(Boolean);
 
-            return res.status(200).json({ success: true, data: finalData });
-        }
-
-        // ... keep hierarchy action ...
-
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
+    return res.status(200).json({ success: true, data: finalData });
 }
