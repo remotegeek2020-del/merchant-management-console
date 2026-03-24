@@ -174,54 +174,59 @@
         <html>
         <head>
             <title>Packing Slip - ${d.deployment_id}</title>
+            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
             <style>
-                body { font-family: 'Inter', sans-serif; padding: 50px; color: #1e293b; }
-                .header { display: flex; justify-content: space-between; border-bottom: 2px solid #004990; padding-bottom: 20px; margin-bottom: 30px; }
-                .logo-area { font-size: 24px; font-weight: 800; color: #004990; }
-                .slip-title { font-size: 18px; font-weight: 700; text-transform: uppercase; color: #64748b; }
+                body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.4; }
+                .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
+                .logo-area img { height: 45px; width: auto; }
+                .slip-title { font-size: 16px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
                 
                 .info-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
-                .info-box h3 { font-size: 11px; text-transform: uppercase; color: #64748b; margin-bottom: 8px; border-bottom: 1px solid #e2e8f0; }
-                .info-box p { margin: 2px 0; font-size: 14px; font-weight: 600; }
+                .info-box h3 { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; letter-spacing: 0.5px; }
+                .info-box p { margin: 3px 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+                .info-box span { color: #64748b; font-weight: 400; }
 
-                .item-table { width: 100%; border-collapse: collapse; margin-bottom: 50px; }
-                .item-table th { background: #f8fafc; text-align: left; padding: 12px; font-size: 11px; text-transform: uppercase; border: 1px solid #e2e8f0; }
-                .item-table td { padding: 12px; border: 1px solid #e2e8f0; font-size: 13px; }
+                .item-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+                .item-table th { background: #f8fafc; text-align: left; padding: 12px; font-size: 10px; text-transform: uppercase; border: 1px solid #e2e8f0; color: #64748b; }
+                .item-table td { padding: 12px; border: 1px solid #e2e8f0; font-size: 13px; font-weight: 500; }
+                .item-table code { background: #f1f5f9; padding: 2px 4px; border-radius: 4px; font-family: monospace; font-size: 12px; }
 
-                .notes-area { background: #f8fafc; padding: 20px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 50px; }
-                .notes-area label { font-size: 11px; font-weight: 700; color: #64748b; display: block; margin-bottom: 5px; }
+                .notes-area { background: #fff7ed; padding: 15px; border-radius: 8px; border: 1px solid #ffedd5; margin-bottom: 40px; }
+                .notes-area label { font-size: 10px; font-weight: 800; color: #c2410c; display: block; margin-bottom: 5px; text-transform: uppercase; }
 
-                .sign-off { display: grid; grid-template-columns: 1fr 1fr; gap: 50px; margin-top: 80px; }
-                .signature-line { border-top: 1px solid #1e293b; padding-top: 10px; font-size: 12px; text-align: center; font-weight: 700; }
+                .sign-off { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 60px; }
+                .signature-line { border-top: 1px solid #cbd5e1; padding-top: 10px; font-size: 11px; text-align: center; color: #64748b; font-weight: 700; text-transform: uppercase; }
             </style>
         </head>
         <body>
             <div class="header">
-                <div class="logo-area">SECURE CONSOLE</div>
-                <div class="slip-title">Packing Slip / Installation Sign-off</div>
+                <div class="logo-area">
+                    <img src="https://cdn.prod.website-files.com/617aeb477b067ad6d4afee78/63dafce12a177260d7ec306e_pptlogo-orange.svg" alt="Payprotec Logo">
+                </div>
+                <div class="slip-title">Installation & Packing Slip</div>
             </div>
 
             <div class="info-section">
                 <div class="info-box">
                     <h3>Merchant Information</h3>
                     <p>${d.merchants?.dba_name || '---'}</p>
-                    <p>MID: ${d.merchants?.merchant_id || '---'}</p>
+                    <p><span>MID:</span> ${d.merchants?.merchant_id || '---'}</p>
                 </div>
                 <div class="info-box">
-                    <h3>Shipment Details</h3>
-                    <p>Ticket ID: ${d.deployment_id || '---'}</p>
-                    <p>Target Date: ${targetDate}</p>
-                    <p>Tracking: ${d.tracking_id || 'N/A'}</p>
+                    <h3>Ticket Details</h3>
+                    <p><span>ID:</span> ${d.deployment_id || '---'}</p>
+                    <p><span>Target:</span> ${targetDate}</p>
+                    <p><span>Tracking:</span> ${d.tracking_id || 'Not Assigned'}</p>
                 </div>
             </div>
 
             <table class="item-table">
                 <thead>
                     <tr>
-                        <th>Equipment Model</th>
-                        <th>Serial Number (S/N)</th>
-                        <th>Terminal ID (TID)</th>
-                        <th>Condition</th>
+                        <th style="width: 25%;">Model</th>
+                        <th style="width: 35%;">Serial Number (S/N)</th>
+                        <th style="width: 20%;">TID</th>
+                        <th style="width: 20%;">Condition</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -229,27 +234,27 @@
                         <td>${d.equipments?.terminal_type || '---'}</td>
                         <td><code>${d.equipments?.serial_number || '---'}</code></td>
                         <td>${d.tid || '---'}</td>
-                        <td>New/Verified</td>
+                        <td>New / Verified</td>
                     </tr>
                 </tbody>
             </table>
 
             <div class="notes-area">
-                <label>INSTALLATION & SETUP NOTES:</label>
-                <div style="font-size: 13px; line-height: 1.6;">${d.notes || 'No special instructions provided.'}</div>
+                <label>Logistics & Setup Notes</label>
+                <div style="font-size: 13px; color: #431407;">${d.notes || 'No special setup instructions provided.'}</div>
             </div>
 
-            <div style="font-size: 12px; color: #64748b; margin-bottom: 40px;">
-                By signing below, the merchant acknowledges receipt of the hardware listed above in good working condition and authorizes the installation of the equipment at the business location.
+            <div style="font-size: 11px; color: #94a3b8; text-align: center; margin-bottom: 60px; padding: 0 40px;">
+                Merchant acknowledges receipt of the equipment listed above. Hardware has been tested and verified for production use.
             </div>
 
             <div class="sign-off">
-                <div class="signature-line">Technician Signature</div>
-                <div class="signature-line">Merchant Authorized Signature</div>
+                <div class="signature-line">Released By (Technician)</div>
+                <div class="signature-line">Accepted By (Merchant Signature)</div>
             </div>
 
-            <div style="margin-top: 40px; text-align: center; font-size: 10px; color: #94a3b8;">
-                Generated on ${today} | Secure Console Logistics Module
+            <div style="margin-top: 60px; text-align: center; font-size: 9px; color: #cbd5e1; font-weight: 700; text-transform: uppercase; letter-spacing: 1px;">
+                Payprotec Secure Console | Generated ${today}
             </div>
 
             <script>
