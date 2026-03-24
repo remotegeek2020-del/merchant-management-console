@@ -13,24 +13,36 @@ export default async function handler(req, res) {
 if (action === 'return_to_office') {
     const { equipment_id, merchant_id, deployment_id, notes, return_type, tid } = payload;
 
-    // 1. Determine new status and location based on condition
-    const newStatus = return_type === 'Defective' ? 'repairing' : 'stocked';
-    const newLocation = return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office';
-
-    // 2. Insert into the RETURNS table (Matches your screenshot columns)
+    // 1. Create the RMA ticket in 'open' status
     const { error: returnError } = await supabase
         .from('returns')
         .insert([{
             merchant_id,
             equipment_id,
-            return_reason: 'Client Return', // Category
-            condition: return_type,        // 'Working' or 'Defective'
-            destination: newLocation,
-            status: 'open',
-            notes: notes || 'Unit returned from field'
+            return_reason: notes || 'No notes provided', // FIX: Now uses your input
+            condition: return_type,
+            destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office',
+            status: 'open' // RMA starts here
         }]);
 
     if (returnError) throw returnError;
+
+    // 2. UPDATE EQUIPMENT: Mark as 'pending_return' instead of 'stocked'
+    // This keeps it out of the "Available" pool until inspected.
+    await supabase
+        .from('equipments')
+        .update({ 
+            status: 'pending_return', 
+            current_location: 'In Transit / RMA',
+            merchant_id: null 
+        })
+        .eq('id', equipment_id);
+
+    // 3. Close the deployment ticket
+    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+
+    return res.status(200).json({ success: true });
+}
 
     // 3. Reset the Equipment (Clear merchant, update location/status)
     const { error: equipError } = await supabase
