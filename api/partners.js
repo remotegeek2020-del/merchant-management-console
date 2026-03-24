@@ -12,18 +12,19 @@ export default async function handler(req, res) {
     const { action, person_id, query } = body;
 
     try {
-     // --- ACTION: GET PARTNERS LIST (Surgical Fix for "persons_1" error) ---
+ // --- ACTION: GET PARTNERS LIST (Aliased Fix) ---
 if (action === 'get_partners_list') {
+    // We are selecting from 'persons' but being extremely explicit
     const { data, error } = await supabase
         .from('persons')
         .select(`
             id,
-            first_name,
-            last_name,
+            firstName:first_name, 
+            lastName:last_name,
             company_person_mapping (
                 companies (
                     id, 
-                    company_name,
+                    companyName:company_name,
                     agents (
                         id,
                         agent_identifiers (id_string)
@@ -33,34 +34,29 @@ if (action === 'get_partners_list') {
         `);
 
     if (error) {
-        console.error("Supabase Query Error:", error);
-        throw error;
+        // If it fails again, this log will tell us EXACTLY which column it hates
+        console.error("Database Error Detail:", error);
+        return res.status(500).json({ success: false, message: error.message });
     }
 
-    // Process the data to group by Person
-    const rollup = data.map(person => {
-        return {
-            id: person.id,
-            name: `${person.first_name || ''} ${person.last_name || ''}`.trim(),
-            // Extract companies from the mapping
-            companies: person.company_person_mapping?.map(m => {
-                const co = m.companies;
-                return {
-                    id: co?.id,
-                    name: co?.company_name || 'Unknown Company',
-                    // Flatten IDs from all agents under this company
-                    ids: co?.agents?.flatMap(a => 
-                        a.agent_identifiers?.map(ai => ai.id_string)
-                    ) || []
-                };
-            }).filter(c => c.id) || [] // Remove any null mappings
-        };
-    });
+    const rollup = data.map(p => ({
+        id: p.id,
+        // Using the aliases we created above (firstName / lastName)
+        name: `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Unnamed Partner',
+        companies: p.company_person_mapping?.map(m => {
+            const co = m.companies;
+            if (!co) return null;
+            return {
+                id: co.id,
+                name: co.companyName || 'Unknown Entity',
+                ids: co.agents?.flatMap(a => 
+                    a.agent_identifiers?.map(ai => ai.id_string)
+                ) || []
+            };
+        }).filter(Boolean) || []
+    }));
 
-    return res.status(200).json({ 
-        success: true, 
-        data: rollup 
-    });
+    return res.status(200).json({ success: true, data: rollup });
 }
         // --- ACTION: GET SUB-AGENTS (For the Hierarchy Tab) ---
         if (action === 'get_hierarchy') {
