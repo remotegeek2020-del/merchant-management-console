@@ -97,17 +97,19 @@ export default async function handler(req, res) {
             return res.status(200).json({ merchants, inventory });
         }
 // --- ACTION: GET HISTORY ---
-        if (action === 'getHistory') {
-            const { equipment_id } = body; // body is defined at the top of our previous script
-            const { data, error } = await supabase
-                .from('equipment_logs')
-                .select('*')
-                .eq('equipment_id', equipment_id)
-                .order('created_at', { ascending: false });
+     if (action === 'getHistory') {
+    // We use req.body directly because 'body' wasn't defined in your variables
+    const { equipment_id } = req.body; 
+    
+    const { data, error } = await supabase
+        .from('equipment_logs')
+        .select('*')
+        .eq('equipment_id', equipment_id)
+        .order('created_at', { ascending: false });
 
-            if (error) throw error;
-            return res.status(200).json({ success: true, data: data || [] });
-        }
+    if (error) throw error;
+    return res.status(200).json({ success: true, data: data || [] });
+}
         return res.status(400).json({ success: false, message: "Invalid Action" });
 
     } catch (err) {
