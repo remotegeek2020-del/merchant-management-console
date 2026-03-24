@@ -9,6 +9,25 @@ export default async function handler(req, res) {
     
     {
 
+        // --- ACTION: getMerchantHistory in merchants.js ---
+if (action === 'getMerchantHistory') {
+    const { merchant_id } = req.body;
+
+    // We query equipment_logs, but we need to join with equipments 
+    // to see WHAT was returned (Serial, Model)
+    const { data, error } = await supabase
+        .from('equipment_logs')
+        .select(`
+            *,
+            equipments:equipment_id (serial_number, terminal_type)
+        `)
+        .eq('merchant_id', merchant_id) // Ensure your logs table has merchant_id
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
+
         // --- ADD THIS ACTION TO YOUR merchants.js ---
 if (action === 'get_merchant_equipment') {
     const { merchant_uuid } = req.body;
