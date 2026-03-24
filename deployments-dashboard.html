@@ -179,15 +179,27 @@
 <script>
     let currentDeployments = [];
 
-    async function processReturn() {
+   async function processReturn() {
     const deploymentId = document.getElementById('editId').value;
+    
+    // Safety check: ensure we have the data
+    if (!currentDeployments || currentDeployments.length === 0) {
+        console.error("No deployment data found in memory.");
+        return;
+    }
+
     const d = currentDeployments.find(item => item.id === deploymentId);
     
-    if (!d) return;
+    if (!d) {
+        alert("Error: Could not find deployment record for ID: " + deploymentId);
+        return;
+    }
+
+    const returnType = document.getElementById('returnType').value;
 
     const confirm = await Swal.fire({
-        title: 'Log Formal Return?',
-        text: `Return S/N ${d.equipments?.serial_number} to ${document.getElementById('returnType').value}?`,
+        title: 'Confirm Return?',
+        text: `Log S/N ${d.equipments?.serial_number || 'Unknown'} as a formal return?`,
         icon: 'warning',
         showCancelButton: true,
         confirmButtonColor: '#e11d48',
@@ -195,14 +207,15 @@
     });
 
     if (confirm.isConfirmed) {
-        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'Syncing with Returns Ledger...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         const payload = {
             equipment_id: d.equipment_id,
             merchant_id: d.merchant_id,
             deployment_id: d.id,
-            return_type: document.getElementById('returnType').value,
-            notes: document.getElementById('editNotes').value
+            return_type: returnType,
+            notes: document.getElementById('editNotes').value,
+            tid: d.tid
         };
 
         try {
@@ -214,12 +227,15 @@
 
             const result = await res.json();
             if (result.success) {
-                Swal.fire('Success', 'Return logged and inventory reset.', 'success').then(() => location.reload());
+                Swal.fire('Success!', 'Return logged and Inventory updated.', 'success').then(() => {
+                    location.reload();
+                });
             } else {
-                throw new Error(result.message);
+                Swal.fire('API Error', result.message, 'error');
             }
         } catch (err) {
-            Swal.fire('Error', err.message, 'error');
+            console.error("Network Error:", err);
+            Swal.fire('Network Error', 'Could not reach the server.', 'error');
         }
     }
 }
