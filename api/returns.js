@@ -40,28 +40,59 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [], metrics, count: data?.length || 0 });
         }
 
-        // --- ACTION: COMPLETE RETURN ---
-       if (action === 'complete_return') {
-    const { id: rmaId, equipment_id, condition, destination } = payload;
+        // --- ACTION: COMPLETE RETURN (Surgical Fix) ---
+        if (action === 'complete_return') {
+            const { id: rmaId, equipment_id, condition, destination } = payload || {};
 
-    // ... [Your existing RMA and Equipment updates here] ...
+            if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
 
-    // ADD THIS: Finalize the History Log
-    await supabase.from('equipment_logs').insert([{
-        equipment_id: equipment_id,
-        action: 'RMA Completed',
-        from_location: 'In Transit / RMA',
-        to_location: destination, // 'Warsaw Office' or 'Warsaw Repairs'
-        notes: `Inspection finished. Unit marked as ${condition}.`
-    }]);
+            // A. Update Return Ticket status to 'closed'
+            const { error: rmaError } = await supabase
+                .from('returns')
+                .update({ status: 'closed' })
+                .eq('id', rmaId);
+            if (rmaError) throw rmaError;
 
-    return res.status(200).json({ success: true });
-}
+            // B. Update Equipment Table (Final Status & Location)
+            const finalStatus = condition === 'Defective' ? 'repairing' : 'stocked';
+            const { error: equipError } = await supabase
+                .from('equipments')
+                .update({ 
+                    status: finalStatus,
+                    current_location: destination 
+                })
+                .eq('id', equipment_id);
+            if (equipError) throw equipError;
+
+            // C. Finalize the History Log
+            const { error: logError } = await supabase.from('equipment_logs').insert([{
+                equipment_id: equipment_id,
+                action: 'RMA Completed',
+                from_location: 'In Transit / RMA',
+                to_location: destination,
+                notes: `Inspection finished. Unit marked as ${condition}.`
+            }]);
+            if (logError) throw logError;
+
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: GET HISTORY (Added back) ---
+        if (action === 'getHistory') {
+            const targetId = body.equipment_id; 
+            const { data, error } = await supabase
+                .from('equipment_logs')
+                .select('*')
+                .eq('equipment_id', targetId)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
 
         return res.status(400).json({ success: false, message: "Invalid action: " + action });
 
     } catch (err) {
-        // This is the CRITICAL part: It sends the error as JSON so the dashboard can read it
         console.error("Internal Server Error:", err.message);
         return res.status(500).json({ 
             success: false, 
