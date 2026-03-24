@@ -6,65 +6,91 @@ export default async function handler(req, res) {
     const { action, person_id } = req.body || {};
 
     try {
-       if (action === 'get_partners_list') {
-    // 1. Get all base data
-    const { data: persons } = await supabase.from('persons').select('id');
-    const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name, email');
-    const { data: mappings } = await supabase.from('company_person_mapping').select(`person_id, company_id, companies(id, company_name)`);
-    const { data: agents } = await supabase.from('agents').select('id, company_id, agent_name, parent_agent_id');
-    const { data: idStrings } = await supabase.from('agent_identifiers').select('id_string, agent_id');
+        if (action === 'get_partners_list') {
+            // 1. Get Persons (Partners) using the correct 'full_name' column
+            const { data: persons, error: pErr } = await supabase
+                .from('persons')
+                .select('id, full_name, email');
+            if (pErr) throw pErr;
 
-    const finalData = persons.map(p => {
-        // --- NAME DISCOVERY LOGIC ---
-        // Try 1: Match by app_users.userid
-        let userMatch = users?.find(u => u.userid === p.id);
-        
-        // Try 2: If no match, try matching app_users.email to the persons ID (if ID is an email)
-        if (!userMatch) userMatch = users?.find(u => u.email === p.id);
+            // 2. Get Company Mappings
+            const { data: mappings } = await supabase
+                .from('company_person_mapping')
+                .select(`person_id, company_id, companies(id, company_name)`);
 
-        let displayName = "";
-        if (userMatch) {
-            displayName = `${userMatch.first_name || ''} ${userMatch.last_name || ''}`.trim();
-        } 
-        
-        // Try 3: Look at the Agents table for a name linked to this person's companies
-        if (!displayName) {
-            const firstAgent = agents?.find(a => 
-                mappings?.find(m => m.person_id === p.id && m.company_id === a.company_id)
-            );
-            displayName = firstAgent?.agent_name || `Partner ${p.id.substring(0, 5)}`;
+            // 3. Get Agent Identifiers & their Parent hierarchy
+            const { data: agentData } = await supabase
+                .from('agent_identifiers')
+                .select(`
+                    id_string,
+                    agents:agent_id (
+                        id,
+                        company_id,
+                        parent_agent_id
+                    )
+                `);
+
+            // 4. Get Merchant counts (Linking dba_name to the agent_id string)
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('agent_id, dba_name');
+
+            // --- RECURSIVE STITCHING ---
+            const finalData = persons.map(p => {
+                // Find companies mapped to this person
+                const myMappings = mappings?.filter(m => m.person_id === p.id) || [];
+                
+                const myCompanies = myMappings.map(m => {
+                    const co = m.companies;
+                    if (!co) return null;
+
+                    // Find IDs owned by this company
+                    const myAgentIds = agentData?.filter(ad => ad.agents?.company_id === co.id) || [];
+
+                    return {
+                        id: co.id,
+                        name: co.company_name,
+                        identifiers: myAgentIds.map(ai => {
+                            // Count Merchants under this specific ID string (e.g., 23232)
+                            const mCount = merchants?.filter(merc => merc.agent_id === ai.id_string).length || 0;
+                            
+                            // Check for Downline (Sub-partners reporting to this Agent ID)
+                            const subCount = agentData?.filter(sub => sub.agents?.parent_agent_id === ai.agents?.id).length || 0;
+
+                            // Check for Upline (If this Agent reports to someone else)
+                            const hasUpline = ai.agents?.parent_agent_id ? true : false;
+
+                            return {
+                                id_string: ai.id_string,
+                                merchant_count: mCount,
+                                sub_partner_count: subCount,
+                                is_sub_partner: hasUpline
+                            };
+                        })
+                    };
+                }).filter(Boolean);
+
+                // Only show if they have at least one company
+                if (myCompanies.length === 0) return null;
+
+                return {
+                    id: p.id,
+                    name: p.full_name, // Corrected from first_name/last_name
+                    email: p.email,
+                    companies: myCompanies,
+                    // Aggregated stats for the card
+                    total_merchants: myCompanies.reduce((sum, co) => 
+                        sum + co.identifiers.reduce((isum, id) => isum + id.merchant_count, 0), 0)
+                };
+            }).filter(Boolean);
+
+            return res.status(200).json({ success: true, data: finalData });
         }
 
-        // --- COMPANY & ID MAPPING ---
-        const myMappings = mappings?.filter(m => m.person_id === p.id) || [];
-        const myCompanies = myMappings.map(m => {
-            const co = m.companies;
-            if (!co) return null;
+        return res.status(400).json({ success: false, message: "Invalid Action" });
 
-            const coAgents = agents?.filter(a => a.company_id === co.id) || [];
-            const coAgentUuids = coAgents.map(a => a.id);
-            const identifiers = idStrings?.filter(is => coAgentUuids.includes(is.agent_id)).map(is => is.id_string) || [];
-
-            // Hierarchy calculations (Recursive)
-            const downlineCount = agents?.filter(a => coAgentUuids.includes(a.parent_agent_id)).length || 0;
-            const uplineCount = coAgents.filter(a => a.parent_agent_id && !coAgentUuids.includes(a.parent_agent_id)).length || 0;
-
-            return {
-                name: co.company_name,
-                ids: identifiers,
-                downline: downlineCount,
-                upline: uplineCount
-            };
-        }).filter(Boolean);
-
-        if (myCompanies.length === 0) return null;
-
-        return {
-            id: p.id,
-            name: displayName,
-            companies: myCompanies
-        };
-    }).filter(Boolean);
-
-    return res.status(200).json({ success: true, data: finalData });
+    } catch (err) {
+        console.error("Partners API Final Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
+    }
 }
