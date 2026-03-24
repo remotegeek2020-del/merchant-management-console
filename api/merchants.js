@@ -8,6 +8,22 @@ export default async function handler(req, res) {
     
     
     {
+        // --- ACTION: get_merchant_history (MATCHES FRONTEND EXACTLY) ---
+if (action === 'get_merchant_history') {
+    const { merchant_id } = req.body;
+
+    const { data, error } = await supabase
+        .from('equipment_logs')
+        .select(`
+            *,
+            equipments:equipment_id (serial_number, terminal_type)
+        `)
+        .eq('merchant_id', merchant_id) 
+        .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data: data || [] });
+}
 
         // --- ACTION: getMerchantHistory in merchants.js ---
 if (action === 'getMerchantHistory') {
