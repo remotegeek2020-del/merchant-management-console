@@ -74,12 +74,11 @@
 <script>
 
     async function viewHistory(id, sn) {
-    // Note: Ensure you have a <div id="historyModal"> and <div id="timeline"> in your HTML
     document.getElementById('historyModal').style.display = 'flex';
     const res = await fetch('/api/returns', { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ action: 'getHistory', equipment_id: id }) 
+        body: JSON.stringify({ action: 'getHistory', equipment_id: id }) // Sending the ID
     });
     const result = await res.json();
     document.getElementById('timeline').innerHTML = (result.data || []).map(log => `
