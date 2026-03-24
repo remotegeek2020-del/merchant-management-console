@@ -8,7 +8,6 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
-        // --- ACTION: LIST ---
         if (action === 'list') {
             const { data, error } = await supabase
                 .from('deployments')
@@ -24,72 +23,49 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [], metrics });
         }
 
-        // --- ACTION: CREATE (This was missing!) ---
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
-
-            // 1. Create the deployment record
             const { data: newDep, error: depError } = await supabase
                 .from('deployments')
-                .insert([{
-                    merchant_id,
-                    equipment_id,
-                    tid,
-                    tracking_id,
-                    target_deployment_date: target_date,
-                    notes,
-                    status: 'Open'
-                }]).select();
+                .insert([{ merchant_id, equipment_id, tid, tracking_id, target_deployment_date: target_date, notes, status: 'Open' }]).select();
 
             if (depError) throw depError;
 
-            // 2. Update Equipment status to 'deployed' and link merchant
-            const { error: equipError } = await supabase
-                .from('equipments')
-                .update({ 
-                    status: 'deployed', 
-                    current_location: 'Client Site',
-                    merchant_id: merchant_id 
-                })
-                .eq('id', equipment_id);
+            await supabase.from('equipments').update({ 
+                status: 'deployed', current_location: 'Client Site', merchant_id: merchant_id 
+            }).eq('id', equipment_id);
 
-            if (equipError) throw equipError;
-
-            // 3. Log to History
             await supabase.from('equipment_logs').insert([{
-                equipment_id: equipment_id,
+                equipment_id,
+                merchant_id, // Link for merchant dashboard
                 action: 'Deployed',
                 from_location: 'Warsaw Office',
                 to_location: 'Client Site',
-                notes: `Deployment Ticket Created. TID: ${tid}`
+                notes: `Deployment Created. TID: ${tid}`
             }]);
 
             return res.status(200).json({ success: true, data: newDep });
         }
 
-        // --- ACTION: RETURN TO OFFICE ---
         if (action === 'return_to_office') {
             const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
             
+            // 1. Create Return Ticket
             await supabase.from('returns').insert([{
-             equipment_id: equipment_id,
-    merchant_id: merchant_id, // CRITICAL: This links the log to the merchant!
-    action: 'Initiated Return',
-    from_location: 'Merchant Field',
-    to_location: 'In Transit / RMA',
-    notes: `RMA Started. Condition: ${return_type}`
-}]);
+                merchant_id, equipment_id, return_reason: notes || 'Field Return',
+                condition: return_type, destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office', status: 'open'
+            }]);
 
-            await supabase.from('equipments').update({
-                status: 'pending_return',
-                current_location: 'In Transit / RMA',
-                merchant_id: null
-            }).eq('id', equipment_id);
+            // 2. Update Equipment
+            await supabase.from('equipments').update({ status: 'pending_return', current_location: 'In Transit / RMA', merchant_id: null }).eq('id', equipment_id);
 
+            // 3. Close Deployment
             await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
+            // 4. Log History with merchant_id link
             await supabase.from('equipment_logs').insert([{
-                equipment_id: equipment_id,
+                equipment_id,
+                merchant_id, // CRITICAL: Link for merchant dashboard
                 action: 'Initiated Return',
                 from_location: 'Merchant Field',
                 to_location: 'In Transit / RMA',
@@ -99,38 +75,25 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: UPDATE TICKET ---
         if (action === 'update') {
             const { deployment_id, status, tracking_id, target_date, notes } = payload;
-            const { error } = await supabase.from('deployments').update({
-                status, tracking_id, target_deployment_date: target_date, notes
-            }).eq('id', deployment_id);
+            const { error } = await supabase.from('deployments').update({ status, tracking_id, target_deployment_date: target_date, notes }).eq('id', deployment_id);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: LOOKUPS ---
         if (action === 'getLookups') {
             const { data: merchants } = await supabase.from('merchants').select('id, dba_name, merchant_id').ilike('dba_name', `%${query || ''}%`).limit(5);
             const { data: inventory } = await supabase.from('equipments').select('id, serial_number, terminal_type').eq('status', 'stocked');
             return res.status(200).json({ merchants, inventory });
         }
 
-        // --- ACTION: GET HISTORY ---
         if (action === 'getHistory') {
-            const { data, error } = await supabase
-                .from('equipment_logs')
-                .select('*')
-                .eq('equipment_id', body.equipment_id)
-                .order('created_at', { ascending: false });
-
+            const { data, error } = await supabase.from('equipment_logs').select('*').eq('equipment_id', body.equipment_id).order('created_at', { ascending: false });
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });
         }
 
-        return res.status(400).json({ success: false, message: "Invalid Action: " + action });
-
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
+        return res.status(400).json({ success: false, message: "Invalid Action" });
+    } catch (err) { return res.status(500).json({ success: false, message: err.message }); }
 }
