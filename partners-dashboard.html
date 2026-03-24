@@ -61,34 +61,43 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
-    // Placeholder data for Michelle Collins example
-    let partners = [];
+    let allPartners = [];
 
     async function loadPartners() {
-        // We will replace this with fetch('/api/partners', { action: 'get_partners_list' })
         const grid = document.getElementById('partnerGrid');
         
-        // Simulating the Michelle Collins Structure
-        const mockData = [
-            {
-                id: 'uuid-1',
-                name: 'Michelle Collins',
-                companies: [
-                    { name: 'Adara Group', ids: ['23232', '23237', 'Prime49'] },
-                    { name: 'Chellecom', ids: ['121872', '123272'] },
-                    { name: 'Impact Merchant Group', ids: ['99881'] }
-                ],
-                sub_agents_count: 2
-            }
-        ];
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_partners_list' })
+            });
+            const result = await res.json();
 
-        renderGrid(mockData);
+            if (result.success) {
+                allPartners = result.data;
+                renderGrid(allPartners);
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (err) {
+            grid.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: red; padding: 50px;">
+                <span class="material-icons">error_outline</span>
+                <p>Failed to load partner network: ${err.message}</p>
+            </div>`;
+        }
     }
 
     function renderGrid(data) {
         const grid = document.getElementById('partnerGrid');
+        if (data.length === 0) {
+            grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center; color: #94a3b8;">No partners found.</p>';
+            return;
+        }
+
         grid.innerHTML = data.map(p => {
-            const allIds = p.companies.flatMap(c => c.ids);
+            // Flatten all IDs from all companies for the "Unlimited IDs" count
+            const allIds = p.companies.flatMap(c => c.ids || []);
             const displayIds = allIds.slice(0, 3);
             const extraCount = allIds.length - 3;
 
@@ -97,9 +106,9 @@
                     <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                         <div>
                             <h2 style="font-weight:800; font-size:1.1rem; color:#002d5a;">${p.name}</h2>
-                            <p style="font-size:12px; color:#64748b;">${p.companies.length} Companies Managed</p>
+                            <p style="font-size:11px; color:#64748b; font-weight:600;">${p.companies.length} Mapped Entities</p>
                         </div>
-                        <span class="material-icons" style="color:#cbd5e1;">chevron_right</span>
+                        <span class="material-icons" style="color:#cbd5e1;">account_tree</span>
                     </div>
                     
                     <div style="margin-top:15px; border-top:1px solid #f1f5f9; padding-top:15px;">
@@ -108,63 +117,51 @@
                         </div>
                         <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
                             ${displayIds.map(id => `
-                                <span class="${id === 'Prime49' ? 'prime-badge' : 'id-badge'}">${id}</span>
+                                <span class="${id.toLowerCase().includes('prime49') ? 'prime-badge' : 'id-badge'}">${id}</span>
                             `).join('')}
-                            ${extraCount > 0 ? `<span style="font-size:10px; color:#94a3b8; font-weight:700;">+${extraCount} MORE</span>` : ''}
+                            ${extraCount > 0 ? `<span style="font-size:10px; color:#94a3b8; font-weight:800; margin-left:5px;">+${extraCount} MORE</span>` : ''}
                         </div>
                     </div>
-
-                    ${p.sub_agents_count > 0 ? `
-                        <div style="margin-top:15px; background:#f0fdf4; border-radius:8px; padding:8px 12px; display:flex; align-items:center; gap:8px;">
-                            <span class="material-icons" style="color:#16a34a; font-size:16px;">groups</span>
-                            <span style="color:#166534; font-size:11px; font-weight:700;">${p.sub_agents_count} SUB-PARTNERS UNDER HIERARCHY</span>
-                        </div>
-                    ` : ''}
                 </div>
             `;
         }).join('');
     }
 
-    function openPartnerDetails(id) {
-        // We will fetch specific detail in the API phase
+    async function openPartnerDetails(personId) {
+        const p = allPartners.find(ptr => ptr.id === personId);
+        if (!p) return;
+
         Swal.fire({
-            title: '<div style="text-align:left; font-weight:800; color:#002d5a;">Michelle Collins</div>',
-            width: '900px',
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
+            width: '1000px',
             html: `
                 <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
                     <button onclick="switchPartnerTab('portfolio')" id="tab-portfolio" class="modal-tab-btn active-tab">PORTFOLIO & IDS</button>
-                    <button onclick="switchPartnerTab('subagents')" id="tab-subagents" class="modal-tab-btn">SUB-AGENTS (DOWNLINE)</button>
-                    <button onclick="switchPartnerTab('revshare')" id="tab-revshare" class="modal-tab-btn">REVSHARE CONFIG</button>
+                    <button onclick="switchPartnerTab('subagents', '${p.id}')" id="tab-subagents" class="modal-tab-btn">SUB-AGENTS (DOWNLINE)</button>
                 </div>
 
-                <div id="p-content-portfolio" class="p-tab-content" style="text-align:left;">
-                    <h3 style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:15px; text-transform:uppercase;">Registered Entities</h3>
-                    <div class="company-box">
-                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                            <b style="color:var(--pp-blue);">ADARA GROUP</b>
-                            <span class="prime-badge">PRIME49 PARTNER</span>
-                        </div>
-                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                            <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; flex:1; min-width:120px;">
-                                <div style="font-size:9px; color:#94a3b8; font-weight:800;">ID STRING</div>
-                                <div style="font-family:monospace; font-weight:700;">23232</div>
+                <div id="p-content-portfolio" class="p-tab-content" style="text-align:left; max-height:500px; overflow-y:auto;">
+                    ${p.companies.map(co => `
+                        <div class="company-box">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                                <b style="color:var(--pp-blue); text-transform:uppercase; font-size:13px;">${co.name}</b>
+                                ${co.ids.some(id => id.toLowerCase().includes('prime49')) ? '<span class="prime-badge">PRIME49 ELIGIBLE</span>' : ''}
                             </div>
-                            <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; flex:1; min-width:120px;">
-                                <div style="font-size:9px; color:#94a3b8; font-weight:800;">ID STRING</div>
-                                <div style="font-family:monospace; font-weight:700;">23237</div>
-                            </div>
-                            <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; flex:1; min-width:120px;">
-                                <div style="font-size:9px; color:#94a3b8; font-weight:800;">ID STRING</div>
-                                <div style="font-family:monospace; font-weight:700;">Prime49</div>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:10px;">
+                                ${co.ids.map(id => `
+                                    <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px;">
+                                        <div style="font-size:9px; color:#94a3b8; font-weight:800; margin-bottom:2px;">AGENT ID</div>
+                                        <div style="font-family:monospace; font-weight:700; color:#334155;">${id}</div>
+                                    </div>
+                                `).join('')}
                             </div>
                         </div>
-                    </div>
-                    </div>
+                    `).join('')}
+                </div>
 
                 <div id="p-content-subagents" class="p-tab-content" style="display:none; text-align:left;">
-                    <div class="sub-agent-row">
-                        <span><b>Karen Dovey</b> <br> <small style="color:#64748b;">Under ID: 23232</small></span>
-                        <span class="id-badge">ID: 2322787</span>
+                    <div id="subagent-list-container" style="padding:10px;">
+                        <p style="text-align:center; color:#94a3b8;">Loading hierarchy...</p>
                     </div>
                 </div>
             `,
@@ -173,12 +170,48 @@
         });
     }
 
-    window.switchPartnerTab = (tab) => {
+    window.switchPartnerTab = async (tab, personId) => {
         document.querySelectorAll('.p-tab-content').forEach(c => c.style.display = 'none');
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
         document.getElementById('p-content-' + tab).style.display = 'block';
         document.getElementById('tab-' + tab).classList.add('active-tab');
+
+        if (tab === 'subagents') {
+            const container = document.getElementById('subagent-list-container');
+            try {
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_hierarchy', person_id: personId })
+                });
+                const result = await res.json();
+                
+                if (!result.data || result.data.length === 0) {
+                    container.innerHTML = '<p style="text-align:center; padding:20px; color:#94a3b8;">No sub-agents found in this hierarchy.</p>';
+                } else {
+                    container.innerHTML = result.data.map(sub => `
+                        <div class="sub-agent-row">
+                            <span><b>${sub.agent_name}</b></span>
+                            <div style="display:flex; gap:5px;">
+                                ${sub.agent_identifiers.map(ai => `<span class="id-badge">${ai.id_string}</span>`).join('')}
+                            </div>
+                        </div>
+                    `).join('');
+                }
+            } catch (err) {
+                container.innerHTML = '<p style="color:red; text-align:center;">Failed to load downline.</p>';
+            }
+        }
     };
+
+    function filterPartners() {
+        const query = document.getElementById('partnerSearch').value.toLowerCase();
+        const filtered = allPartners.filter(p => 
+            p.name.toLowerCase().includes(query) || 
+            p.companies.some(c => c.name.toLowerCase().includes(query))
+        );
+        renderGrid(filtered);
+    }
 
     window.onload = loadPartners;
 </script>
