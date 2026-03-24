@@ -369,44 +369,49 @@
     };
 
     // SURGICAL ADD: fetchMerchantLifecycle function
-    async function fetchMerchantLifecycle() {
-        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
-        if (!saveBtn) return;
-        const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
-        const listDiv = document.getElementById('lifecycle-list');
+   async function fetchMerchantLifecycle() {
+    // We grab the UUID from the Save button attribute or the hidden input
+    const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+    if (!saveBtn) return;
+    const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+    
+    const listDiv = document.getElementById('lifecycle-list');
+    listDiv.innerHTML = '<p style="text-align:center; padding:20px;">Consulting logs...</p>';
 
-        try {
-            const res = await fetch('/api/merchants', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_merchant_history', merchant_id: merchantUuid })
-            });
-            const result = await res.json();
-            
-            if (!result.data || result.data.length === 0) {
-                listDiv.innerHTML = '<p style="text-align:center; padding:20px; color:#94a3b8;">No lifecycle history found.</p>';
-                return;
-            }
-
-            listDiv.innerHTML = result.data.map(log => `
-                <div class="lifecycle-item">
-                    <div class="lifecycle-dot"></div>
-                    <div style="font-weight:800; color:var(--pp-blue); font-size:11px; text-transform:uppercase;">${log.action}</div>
-                    <div style="font-size:10px; color:#94a3b8; margin-bottom:5px;">${new Date(log.created_at).toLocaleString()}</div>
-                    <div style="font-size:12px; font-weight:600;">${log.equipments?.terminal_type || 'Device'} (${log.equipments?.serial_number || 'S/N Missing'})</div>
-                    <div style="font-size:11px; color:#64748b; margin-top:2px;">
-                        Movement: <b>${log.from_location}</b> → <b>${log.to_location}</b>
-                    </div>
-                    <div style="font-size:11px; color:#475569; font-style:italic; margin-top:4px; background:#f8fafc; padding:4px; border-radius:4px;">
-                        "${log.notes || '---'}"
-                    </div>
-                </div>
-            `).join('');
-        } catch (err) {
-            listDiv.innerHTML = '<p style="text-align:center; color:red;">History load error.</p>';
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'get_merchant_history', // Matches backend
+                merchant_id: merchantUuid        // Sent directly in the body
+            })
+        });
+        const result = await res.json();
+        
+        if (!result.data || result.data.length === 0) {
+            listDiv.innerHTML = '<p style="text-align:center; padding:20px; color:#94a3b8;">No history found for this merchant.</p>';
+            return;
         }
-    }
 
+        listDiv.innerHTML = result.data.map(log => `
+            <div class="lifecycle-item" style="border-left: 2px solid #e2e8f0; margin-left: 10px; padding-left: 20px; padding-bottom: 20px; position: relative;">
+                <div class="lifecycle-dot" style="position: absolute; left: -6px; top: 0; width: 10px; height: 10px; background: #004990; border-radius: 50%;"></div>
+                <div style="font-weight:800; color:#004990; font-size:11px; text-transform:uppercase;">${log.action}</div>
+                <div style="font-size:10px; color:#94a3b8; margin-bottom:5px;">${new Date(log.created_at).toLocaleString()}</div>
+                <div style="font-size:12px; font-weight:600;">${log.equipments?.terminal_type || 'Device'} (${log.equipments?.serial_number || 'S/N Missing'})</div>
+                <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                    Movement: <b>${log.from_location}</b> → <b>${log.to_location}</b>
+                </div>
+                <div style="font-size:11px; color:#475569; font-style:italic; margin-top:4px; background:#f8fafc; padding:4px; border-radius:4px;">
+                    "${log.notes || '---'}"
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        listDiv.innerHTML = '<p style="text-align:center; color:red;">History load error.</p>';
+    }
+}
     async function fetchMerchantEquipment() {
         const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
         if (!saveBtn) return;
