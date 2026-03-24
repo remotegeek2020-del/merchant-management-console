@@ -41,31 +41,22 @@ export default async function handler(req, res) {
         }
 
         // --- ACTION: COMPLETE RETURN ---
-        if (action === 'complete_return') {
-            const { id: rmaId, equipment_id, condition, destination } = payload || {};
+       if (action === 'complete_return') {
+    const { id: rmaId, equipment_id, condition, destination } = payload;
 
-            if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
+    // ... [Your existing RMA and Equipment updates here] ...
 
-            // Update Return Table
-            const { error: rmaError } = await supabase
-                .from('returns')
-                .update({ status: 'closed' })
-                .eq('id', rmaId);
-            if (rmaError) throw rmaError;
+    // ADD THIS: Finalize the History Log
+    await supabase.from('equipment_logs').insert([{
+        equipment_id: equipment_id,
+        action: 'RMA Completed',
+        from_location: 'In Transit / RMA',
+        to_location: destination, // 'Warsaw Office' or 'Warsaw Repairs'
+        notes: `Inspection finished. Unit marked as ${condition}.`
+    }]);
 
-            // Update Equipment Table
-            const finalStatus = (condition === 'Defective') ? 'repairing' : 'stocked';
-            const { error: equipError } = await supabase
-                .from('equipments')
-                .update({ 
-                    status: finalStatus,
-                    current_location: destination 
-                })
-                .eq('id', equipment_id);
-            if (equipError) throw equipError;
-
-            return res.status(200).json({ success: true });
-        }
+    return res.status(200).json({ success: true });
+}
 
         return res.status(400).json({ success: false, message: "Invalid action: " + action });
 
