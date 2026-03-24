@@ -36,10 +36,11 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ success: true, data, count, metrics });
         }
-        if (action === 'complete_return') {
+      // --- ACTION: complete_return in returns.js ---
+if (action === 'complete_return') {
     const { id, equipment_id, condition, destination } = payload;
 
-    // 1. Update the Return Ticket to 'closed'
+    // 1. Update the Return Ticket status to 'closed'
     const { error: rmaError } = await supabase
         .from('returns')
         .update({ status: 'closed' })
@@ -47,20 +48,21 @@ export default async function handler(req, res) {
 
     if (rmaError) throw rmaError;
 
-    // 2. FINALLY move the equipment to Stock or Repairs
+    // 2. Update the Equipment Table to move it back to live inventory
     const finalStatus = condition === 'Defective' ? 'repairing' : 'stocked';
     
-    await supabase
+    const { error: equipError } = await supabase
         .from('equipments')
         .update({ 
             status: finalStatus,
-            current_location: destination // e.g., 'Warsaw Office'
+            current_location: destination // Matches 'Warsaw Office' or 'Warsaw Repairs'
         })
         .eq('id', equipment_id);
 
+    if (equipError) throw equipError;
+
     return res.status(200).json({ success: true });
 }
-
         if (action === 'update') {
             const { status, condition, destination } = payload;
             const { error } = await supabase
