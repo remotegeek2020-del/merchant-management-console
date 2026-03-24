@@ -7,42 +7,67 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'get_partners_list') {
+            // 1. Get all Companies (The Anchor)
+            const { data: companies } = await supabase.from('companies').select('id, company_name');
+            
+            // 2. Get the Person Mappings
+            const { data: mappings } = await supabase.from('company_person_mapping').select('person_id, company_id');
+            
+            // 3. Get Human Names
             const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name');
-            const { data: mappings } = await supabase.from('company_person_mapping').select(`person_id, company_id, companies(id, company_name)`);
-            const { data: agents } = await supabase.from('agents').select('id, company_id, parent_agent_id, agent_name');
+            
+            // 4. Get Agent Records (to check Parent/Sub relationships)
+            const { data: agents } = await supabase.from('agents').select('id, company_id, parent_agent_id');
+            
+            // 5. Get the actual ID Strings
             const { data: idStrings } = await supabase.from('agent_identifiers').select('id_string, agent_id');
 
-            const finalData = users.map(u => {
-                const myMappings = mappings?.filter(m => m.person_id === u.userid) || [];
-                const myCompanyIds = myMappings.map(m => m.company_id);
+            // --- RECURSIVE STITCHING ---
+            // We group by PERSON_ID first so Agent A doesn't show up twice
+            const personGroups = {};
 
-                // IDs I OWN
-                const myOwnedAgents = agents?.filter(a => myCompanyIds.includes(a.company_id)) || [];
-                const myOwnedAgentUuids = myOwnedAgents.map(a => a.id);
-                
-                const myIdentifiers = idStrings?.filter(is => myOwnedAgentUuids.includes(is.agent_id)) || [];
+            mappings.forEach(map => {
+                const pid = map.person_id;
+                if (!personGroups[pid]) {
+                    const u = users?.find(user => user.userid === pid);
+                    personGroups[pid] = {
+                        id: pid,
+                        name: u ? `${u.first_name} ${u.last_name}` : `Partner ${pid.substring(0,5)}`,
+                        companies: []
+                    };
+                }
 
-                // SUB-PARTNERS REPORTING TO ME (Downline)
-                const mySubPartners = agents?.filter(a => myOwnedAgentUuids.includes(a.parent_agent_id)) || [];
+                const co = companies?.find(c => c.id === map.company_id);
+                if (co) {
+                    // Find agents for this company
+                    const coAgents = agents?.filter(a => a.company_id === co.id) || [];
+                    const coAgentIds = coAgents.map(a => a.id);
+                    
+                    // Find ID strings
+                    const identifiers = idStrings?.filter(is => coAgentIds.includes(is.agent_id)).map(is => is.id_string) || [];
 
-                // I AM A SUB-PARTNER TO (Upline)
-                // Look for my agents that have a parent_agent_id NOT in my owned list
-                const uplineLinks = myOwnedAgents.filter(a => a.parent_agent_id && !myOwnedAgentUuids.includes(a.parent_agent_id));
+                    // Check for Hierarchy: 
+                    // Downline: Agents who have one of THIS company's agents as a parent
+                    const downlineCount = agents?.filter(a => coAgentIds.includes(a.parent_agent_id)).length || 0;
+                    
+                    // Upline: If this company's agent has a parent_agent_id that is NOT in this company
+                    const uplineCount = coAgents.filter(a => a.parent_agent_id && !coAgentIds.includes(a.parent_agent_id)).length || 0;
 
-                if (myMappings.length === 0) return null;
+                    personGroups[pid].companies.push({
+                        name: co.company_name,
+                        ids: identifiers,
+                        downline: downlineCount,
+                        upline: uplineCount
+                    });
+                }
+            });
 
-                return {
-                    id: u.userid,
-                    name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
-                    companies: myMappings.map(m => m.companies?.company_name),
-                    owned_ids: myIdentifiers.map(i => i.id_string),
-                    downline_count: mySubPartners.length,
-                    upline_count: uplineLinks.length
-                };
-            }).filter(Boolean);
-
-            return res.status(200).json({ success: true, data: finalData });
+            const result = Object.values(personGroups);
+            return res.status(200).json({ success: true, data: result });
         }
+
+        return res.status(400).json({ success: false, message: "Invalid Action" });
+
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
