@@ -8,6 +8,19 @@ export default async function handler(req, res) {
     
     
     {
+
+        // --- ADD THIS ACTION TO YOUR merchants.js ---
+if (action === 'get_merchant_equipment') {
+    const { merchant_uuid } = req.body;
+    const { data, error } = await supabase
+        .from('equipments')
+        .select('*')
+        .eq('merchant_id', merchant_uuid)
+        .order('serial_number', { ascending: true });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data: data || [] });
+}
         // --- ACTION: ADD ATTACHMENT RECORD ---
         if (action === 'add_attachment') {
             const { merchant_id, file_name, file_path, file_type, file_size, uploaded_by } = req.body;
