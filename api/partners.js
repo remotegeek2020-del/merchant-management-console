@@ -12,51 +12,64 @@ export default async function handler(req, res) {
     const { action, person_id, query } = body;
 
     try {
- // --- ACTION: GET PARTNERS LIST (Aliased Fix) ---
 if (action === 'get_partners_list') {
-    // We are selecting from 'persons' but being extremely explicit
-    const { data, error } = await supabase
+    // 1. Get all Persons
+    const { data: persons, error: pErr } = await supabase
         .from('persons')
+        .select('id, first_name, last_name');
+    
+    if (pErr) throw pErr;
+
+    // 2. Get all Company Mappings with Company Names
+    const { data: mappings, error: mErr } = await supabase
+        .from('company_person_mapping')
         .select(`
-            id,
-            firstName:first_name, 
-            lastName:last_name,
-            company_person_mapping (
-                companies (
-                    id, 
-                    companyName:company_name,
-                    agents (
-                        id,
-                        agent_identifiers (id_string)
-                    )
-                )
-            )
+            person_id,
+            company_id,
+            companies (id, company_name)
         `);
 
-    if (error) {
-        // If it fails again, this log will tell us EXACTLY which column it hates
-        console.error("Database Error Detail:", error);
-        return res.status(500).json({ success: false, message: error.message });
-    }
+    if (mErr) throw mErr;
 
-    const rollup = data.map(p => ({
-        id: p.id,
-        // Using the aliases we created above (firstName / lastName)
-        name: `${p.firstName || ''} ${p.lastName || ''}`.trim() || 'Unnamed Partner',
-        companies: p.company_person_mapping?.map(m => {
+    // 3. Get all IDs grouped by Company
+    const { data: identifiers, error: iErr } = await supabase
+        .from('agent_identifiers')
+        .select(`
+            id_string,
+            agents (company_id)
+        `);
+
+    if (iErr) throw iErr;
+
+    // --- DATA STITCHING ---
+    const finalData = persons.map(p => {
+        // Find companies for this person
+        const myMappings = mappings.filter(m => m.person_id === p.id);
+        
+        const myCompanies = myMappings.map(m => {
             const co = m.companies;
             if (!co) return null;
+
+            // Find all IDs that belong to this company
+            const myIds = identifiers
+                .filter(idObj => idObj.agents?.company_id === co.id)
+                .map(idObj => idObj.id_string);
+
             return {
                 id: co.id,
-                name: co.companyName || 'Unknown Entity',
-                ids: co.agents?.flatMap(a => 
-                    a.agent_identifiers?.map(ai => ai.id_string)
-                ) || []
+                name: co.company_name,
+                ids: myIds
             };
-        }).filter(Boolean) || []
-    }));
+        }).filter(Boolean);
 
-    return res.status(200).json({ success: true, data: rollup });
+        return {
+            id: p.id,
+            name: `${p.first_name} ${p.last_name}`,
+            companies: myCompanies
+        };
+    });
+
+    return res.status(200).json({ success: true, data: finalData });
 }
         // --- ACTION: GET SUB-AGENTS (For the Hierarchy Tab) ---
         if (action === 'get_hierarchy') {
