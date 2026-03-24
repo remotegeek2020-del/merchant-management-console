@@ -59,17 +59,17 @@
         <div style="display: flex; gap: 10px;">
             <select id="statusFilter" class="slds-select" style="width: 170px; border-radius:10px;" onchange="resetAndFetch()">
                <option value="">All Statuses</option>
-    <option value="Approved">Approved</option>
-    <option value="Approved - Collections">Approved - Collections</option>
-    <option value="Closed">Closed</option>
-    <option value="Closed - Collections">Closed - Collections</option>
-    <option value="Closed - Risk">Closed - Risk</option>
-    <option value="Collections">Collections</option>
-    <option value="Declined">Declined</option>
-    <option value="Enrollment">Enrollment</option>
-    <option value="Fraud">Fraud</option>
-    <option value="Pending">Pending</option>
-    <option value="Withdrawn">Withdrawn</option>
+                <option value="Approved">Approved</option>
+                <option value="Approved - Collections">Approved - Collections</option>
+                <option value="Closed">Closed</option>
+                <option value="Closed - Collections">Closed - Collections</option>
+                <option value="Closed - Risk">Closed - Risk</option>
+                <option value="Collections">Collections</option>
+                <option value="Declined">Declined</option>
+                <option value="Enrollment">Enrollment</option>
+                <option value="Fraud">Fraud</option>
+                <option value="Pending">Pending</option>
+                <option value="Withdrawn">Withdrawn</option>
             </select>
             <select id="filterBy" class="slds-select" style="width: 150px; border-radius:10px;">
                 <option value="dba_name">DBA Name</option>
@@ -137,24 +137,20 @@
             });
             const result = await res.json();
             currentRecords = result.data;
-            // --- SURGICAL KPI UPDATE ---
+
         if (result.metrics) {
-            // Update MTD Card
             document.getElementById('mtd-val').innerText = new Intl.NumberFormat('en-US', {
                 style: 'currency', currency: 'USD'
             }).format(result.metrics.totalMTD || 0);
 
-            // Update 30D Card
             document.getElementById('30d-val').innerText = new Intl.NumberFormat('en-US', {
                 style: 'currency', currency: 'USD'
             }).format(result.metrics.total30D || 0);
 
-            // Update 90D Card
             document.getElementById('90d-val').innerText = new Intl.NumberFormat('en-US', {
                 style: 'currency', currency: 'USD'
             }).format(result.metrics.total90D || 0);
 
-            // Update Share % Card
             document.getElementById('share-val').innerText = `${result.metrics.portfolioShare || '0.00'}%`;
         }
             tbody.innerHTML = "";
@@ -197,6 +193,7 @@
                 html: `
                     <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
                         <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+                        <button onclick="switchTab('equipment')" id="tab-equipment" class="modal-tab-btn">EQUIPMENT</button>
                         <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
                         <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
                         <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
@@ -271,6 +268,26 @@
                         <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
                     </div>
 
+                    <div id="content-equipment" class="tab-content" style="display:none; text-align:left;">
+                        <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                            <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                                <thead>
+                                    <tr class="slds-line-height_reset">
+                                        <th scope="col" style="font-size:10px;">SERIAL NUMBER</th>
+                                        <th scope="col" style="font-size:10px;">MODEL</th>
+                                        <th scope="col" style="font-size:10px;">STATUS</th>
+                                        <th scope="col" style="font-size:10px;">INSTALLED</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="merchant-equip-list"></tbody>
+                            </table>
+                            <div id="equip-empty-state" style="padding:40px; text-align:center; color:#94a3b8; display:none;">
+                                <span class="material-icons" style="font-size:48px; display:block; margin-bottom:10px;">devices_other</span>
+                                No equipment assigned to this merchant.
+                            </div>
+                        </div>
+                    </div>
+
                     <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
                         <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
                             <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
@@ -335,7 +352,45 @@
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
         document.getElementById('content-' + tab).style.display = 'block';
         document.getElementById('tab-' + tab).classList.add('active-tab');
+        if (tab === 'equipment') fetchMerchantEquipment();
     };
+
+    async function fetchMerchantEquipment() {
+        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+        if (!saveBtn) return;
+        const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+        const tbody = document.getElementById('merchant-equip-list');
+        const emptyState = document.getElementById('equip-empty-state');
+        
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">Loading assets...</td></tr>';
+        emptyState.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_equipment', merchant_uuid: merchantUuid })
+            });
+            const result = await res.json();
+            
+            tbody.innerHTML = "";
+            if (!result.data || result.data.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                result.data.forEach(e => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td style="font-weight:700; color:var(--pp-blue); font-size:12px;">${e.serial_number}</td>
+                        <td style="font-size:12px;">${e.terminal_type}</td>
+                        <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${e.status}</span></td>
+                        <td style="font-size:11px; color:#64748b;">${e.received_date ? new Date(e.received_date).toLocaleDateString() : '---'}</td>
+                    `;
+                });
+            }
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Failed to load equipment.</td></tr>';
+        }
+    }
 
     window.saveMerchant = async (uuid) => {
         const fields = ['dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant', 'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 'ach_properties', 'processor', 'processor_platform', 'gateway_account_id', 'is_edge_enabled', 'is_pci_compliant', 'is_mobile', 'source', 'is_activated', 'is_device_hub_link_enabled', 'volume_mtd', 'volume_30_day', 'volume_90_day', 'volume', 'fresno_buy_rate_tier', 'isv_commission_code', 'enrollment_date', 'approved_date', 'last_batch_date', 'account_status_change_date', 'days_approved', 'shipping_status', 'irs_tin_status', 'ndf', 'credit_review', 'underwriting_decision_note'];
