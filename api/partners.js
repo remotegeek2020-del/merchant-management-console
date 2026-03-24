@@ -2,84 +2,65 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
-    
-    const supabase = createClient(
-        process.env.SUPABASE_URL, 
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { action } = req.body || {};
 
-    const body = req.body || {};
-    const { action } = body;
+    if (action !== 'get_partners_list') {
+        return res.status(400).json({ success: false, message: "Invalid Action" });
+    }
 
     try {
-        if (action === 'get_partners_list') {
-            // 1. Fetch tables individually (Prevents complex join crashes)
-            const { data: persons, error: pErr } = await supabase.from('persons').select('id, full_name');
-            if (pErr) throw new Error(`Persons Table: ${pErr.message}`);
+        // 1. Fetch data with extreme caution
+        const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
+            supabase.from('persons').select('id, full_name'),
+            supabase.from('company_person_mapping').select('person_id, company_id'),
+            supabase.from('companies').select('id, company_name'),
+            supabase.from('agents').select('id, company_id'),
+            supabase.from('agent_identifiers').select('id_string, agent_id, rev_share, prime49')
+        ]);
 
-            const { data: mappings, error: mErr } = await supabase.from('company_person_mapping').select('person_id, company_id');
-            if (mErr) throw new Error(`Mapping Table: ${mErr.message}`);
+        // Check for any database errors immediately
+        if (pRes.error) throw new Error("Persons: " + pRes.error.message);
+        if (iRes.error) throw new Error("Identifiers: " + iRes.error.message);
 
-            const { data: companies, error: cErr } = await supabase.from('companies').select('id, company_name');
-            if (cErr) throw new Error(`Companies Table: ${cErr.message}`);
+        const persons = pRes.data || [];
+        const mappings = mRes.data || [];
+        const companies = cRes.data || [];
+        const agents = aRes.data || [];
+        const identifiers = iRes.data || [];
 
-            const { data: agents, error: agErr } = await supabase.from('agents').select('id, company_id');
-            if (agErr) throw new Error(`Agents Table: ${agErr.message}`);
+        // 2. Stitch with safety checks
+        const finalData = persons.map(p => {
+            const myCompanyIds = mappings
+                .filter(m => m.person_id === p.id)
+                .map(m => m.company_id);
 
-            const { data: agentData, error: aErr } = await supabase.from('agent_identifiers').select('id_string, agent_id, rev_share, prime49');
-            if (aErr) throw new Error(`Identifiers Table: ${aErr.message}`);
+            const myCompanies = companies
+                .filter(c => myCompanyIds.includes(c.id))
+                .map(co => {
+                    const coAgentIds = agents
+                        .filter(a => a.company_id === co.id)
+                        .map(a => a.id);
 
-            // 2. Stitch the data in JavaScript
-            const finalData = persons.map(p => {
-                // Find companies for this person via mapping
-                const myCompanyIds = mappings
-                    .filter(m => m.person_id === p.id)
-                    .map(m => m.company_id);
-                
-                const myCompanies = companies
-                    .filter(c => myCompanyIds.includes(c.id))
-                    .map(co => {
-                        // Find agents belonging to this company
-                        const coAgents = agents
-                            .filter(a => a.company_id === co.id)
-                            .map(a => a.id);
-                        
-                        // Find identifiers tied to those agents
-                        const myIdentifiers = agentData
-                            .filter(ad => coAgents.includes(ad.agent_id))
-                            .map(id => ({
-                                string: id.id_string,
-                                rev: id.rev_share || '0%',
-                                isPrime: id.prime49 || false
-                            }));
+                    const myIds = identifiers
+                        .filter(i => coAgentIds.includes(i.agent_id))
+                        .map(i => ({
+                            string: i.id_string,
+                            rev: i.rev_share || '0%',
+                            isPrime: !!i.prime49 // Forces to boolean
+                        }));
 
-                        return {
-                            name: co.company_name,
-                            ids: myIdentifiers
-                        };
-                    })
-                    .filter(item => item.ids.length > 0 || item.name);
+                    return { name: co.company_name, ids: myIds };
+                });
 
-                if (myCompanies.length === 0) return null;
+            // Only return persons who actually have a company mapping
+            return myCompanies.length > 0 ? { id: p.id, name: p.full_name, companies: myCompanies } : null;
+        }).filter(Boolean);
 
-                return {
-                    id: p.id,
-                    name: p.full_name,
-                    companies: myCompanies
-                };
-            }).filter(Boolean);
-
-            return res.status(200).json({ success: true, data: finalData });
-        }
-
-        return res.status(400).json({ success: false, message: "Invalid Action" });
+        return res.status(200).json({ success: true, data: finalData });
 
     } catch (err) {
-        console.error("API Error:", err.message);
-        // Returning JSON prevents the "Unexpected Token A" error in the frontend
-        return res.status(500).json({ 
-            success: false, 
-            message: err.message 
-        });
+        console.error("Internal Server Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
     }
 }
