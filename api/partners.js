@@ -11,25 +11,19 @@ export default async function handler(req, res) {
     const { action, person_id } = req.body || {};
 
     try {
-        if (action === 'get_partners_list') {
-            // Call the database function directly
-            const { data, error } = await supabase.rpc('get_partner_network');
+       if (action === 'get_partners_list') {
+    const { data, error } = await supabase.rpc('get_partner_network_v2');
 
-            if (error) throw error;
-
-            return res.status(200).json({ 
-                success: true, 
-                data: data || [] 
-            });
-        }
-
-        // Keep your hierarchy logic here...
-        if (action === 'get_hierarchy') {
-            // ... (keep the previous get_hierarchy code)
-        }
-
-    } catch (err) {
-        console.error("RPC Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+    if (error) {
+        console.error("RPC V2 Error:", error);
+        return res.status(500).json({ success: false, message: error.message });
     }
+
+    // Map the internal 'partner_name' to the 'name' field the UI expects
+    const formatted = (data || []).map(item => ({
+        ...item,
+        name: item.partner_name || 'Unnamed Partner'
+    }));
+
+    return res.status(200).json({ success: true, data: formatted });
 }
