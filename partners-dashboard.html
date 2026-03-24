@@ -16,12 +16,11 @@
         
         /* Partner Grid */
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; overflow: hidden; }
+        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; overflow: hidden; min-height: 180px; }
         .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
         
         /* Badges & Tags */
-        .company-tag { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-right: 5px; margin-top: 5px; display: inline-block; }
-        .id-badge { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; font-family: monospace; }
+        .id-badge { background: #f1f5f9; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: monospace; border: 1px solid #e2e8f0; }
         .prime-badge { background: #004990; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; }
         
         /* Modal Tabs */
@@ -32,9 +31,17 @@
         .sub-agent-row { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
 
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Loading Overlay Overlay */
+        #loadingOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
     </style>
 </head>
 <body>
+
+<div id="loadingOverlay" style="display:none;">
+    <span class="material-icons" style="animation: spin 2s linear infinite; font-size: 50px; color: var(--pp-blue);">sync</span>
+    <p style="margin-top:15px; font-weight:700; color: var(--pp-blue);">MAPPING RELATIONSHIPS...</p>
+</div>
 
 <div class="dashboard-container">
     <div class="modern-header">
@@ -52,11 +59,7 @@
     </div>
 
     <div id="partnerGrid" class="partner-grid">
-        <div style="grid-column: 1/-1; text-align: center; padding: 50px; color: #94a3b8;">
-            <span class="material-icons" style="animation: spin 2s linear infinite; font-size: 40px;">sync</span>
-            <p style="margin-top:10px; font-weight:600;">Mapping Relationships...</p>
         </div>
-    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -64,96 +67,69 @@
     let allPartners = [];
 
     async function loadPartners() {
-    console.log("Starting loadPartners...");
-    const overlay = document.getElementById('loadingOverlay');
-    const grid = document.getElementById('partnerGrid');
+        console.log("Starting loadPartners...");
+        const overlay = document.getElementById('loadingOverlay');
+        const grid = document.getElementById('partnerGrid');
+        
+        // Show the spinner
+        overlay.style.display = 'flex';
 
-    // 1. Force hide after 5 seconds if it gets stuck
-    setTimeout(() => {
-        if (overlay.style.display !== 'none') {
-            console.warn("Spinner stuck - forcing hide.");
+        try {
+            const response = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_partners_list' })
+            });
+            
+            const result = await response.json();
+            console.log("API Data received:", result);
+
+            if (result.success) {
+                allPartners = result.data; // Store globally for filtering/modals
+                renderGrid(allPartners);
+            } else {
+                grid.innerHTML = `<div style="color:red; padding:20px; grid-column:1/-1; text-align:center;">API Error: ${result.message}</div>`;
+            }
+        } catch (err) {
+            console.error("Critical Frontend Error:", err);
+            grid.innerHTML = `<div style="color:red; padding:20px; grid-column:1/-1; text-align:center;">Frontend Error: ${err.message}</div>`;
+        } finally {
             overlay.style.display = 'none';
         }
-    }, 5000);
+    }
 
-    try {
-        const response = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_partners_list' })
-        });
-
-        console.log("Server responded with status:", response.status);
-        
-        const result = await response.json();
-        console.log("API Data received:", result);
-
-        if (result.success) {
-            renderGrid(result.data);
-        } else {
-            grid.innerHTML = `<div style="color:red; padding:20px;">API Error: ${result.message}</div>`;
+    function renderGrid(data) {
+        const grid = document.getElementById('partnerGrid');
+        if (!data || data.length === 0) {
+            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px; color:#94a3b8;">No partners match your search.</div>';
+            return;
         }
-    } catch (err) {
-        console.error("Critical Frontend Error:", err);
-        grid.innerHTML = `<div style="color:red; padding:20px;">Frontend Error: ${err.message}</div>`;
-    } finally {
-        overlay.style.display = 'none';
-        console.log("Spinner hidden.");
-    }
-}
 
-function renderGrid(data) {
-    const grid = document.getElementById('partnerGrid');
-    if (!data || data.length === 0) {
-        grid.innerHTML = '<p>No partners found.</p>';
-        return;
-    }
-
-    grid.innerHTML = data.map(p => `
-        <div class="partner-card">
-            <h3>${p.name || 'Unnamed'}</h3>
-            ${p.companies.map(co => `
-                <div style="margin-top:10px;">
-                    <b style="font-size:0.9rem;">${co.name}</b>
-                    <div style="font-size:0.8rem; color:#666;">
-                        ${co.ids.map(id => `ID: ${id.string} (${id.rev})`).join(', ')}
-                    </div>
+        grid.innerHTML = data.map(p => `
+            <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+                <h2 style="color: #002d5a; margin-bottom: 15px; font-weight: 800; font-size:1.2rem;">${p.name}</h2>
+                
+                <div class="company-list">
+                    ${p.companies.map(co => `
+                        <div style="margin-bottom: 12px; border-top: 1px solid #eee; padding-top: 8px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <span class="material-icons" style="font-size:16px; color:#64748b;">business</span>
+                                <span style="font-weight:600; font-size:13px; color:#334155;">${co.name}</span>
+                            </div>
+                            
+                            <div style="margin-left: 24px; margin-top: 6px; display:flex; flex-wrap:wrap; gap:5px;">
+                                ${co.ids && co.ids.length > 0 ? co.ids.map(id => `
+                                    <span class="id-badge">
+                                        ${id.string} <small style="color:#64748b; font-weight:400;">(${id.rev})</small>
+                                    </span>
+                                `).join('') : '<span style="font-size:11px; color:#94a3b8; font-style:italic;">No IDs assigned</span>'}
+                            </div>
+                        </div>
+                    `).join('')}
                 </div>
-            `).join('')}
-        </div>
-    `).join('');
-}
-
-// Run on page load
-document.addEventListener('DOMContentLoaded', loadPartners);
-
-function renderGrid(data) {
-    const grid = document.getElementById('partnerGrid');
-    grid.innerHTML = data.map(p => `
-        <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-            <h2 style="color: #002d5a; margin-bottom: 15px; font-weight: 800;">${p.name}</h2>
-            
-            <div class="company-list">
-                ${p.companies.map(co => `
-                    <div style="margin-bottom: 12px; border-top: 1px solid #eee; padding-top: 8px;">
-                        <div style="display:flex; align-items:center; gap:8px;">
-                            <span class="material-icons" style="font-size:16px; color:#64748b;">business</span>
-                            <span style="font-weight:600; font-size:13px; color:#334155;">${co.name}</span>
-                        </div>
-                        
-                        <div style="margin-left: 24px; margin-top: 4px; display:flex; flex-wrap:wrap; gap:5px;">
-                            ${co.ids.length > 0 ? co.ids.map(id => `
-                                <span style="background:#f1f5f9; color:#0369a1; font-family:monospace; font-weight:700; font-size:11px; padding:2px 8px; border-radius:4px; border:1px solid #e2e8f0;">
-                                    ${id.string} <small style="color:#64748b; font-weight:400;">(${id.rev})</small>
-                                </span>
-                            `).join('') : '<span style="font-size:10px; color:#94a3b8; font-style:italic;">No IDs assigned</span>'}
-                        </div>
-                    </div>
-                `).join('')}
             </div>
-        </div>
-    `).join('');
-}
+        `).join('');
+    }
 
     async function openPartnerDetails(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
@@ -161,7 +137,7 @@ function renderGrid(data) {
 
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
-            width: '1000px',
+            width: '900px',
             html: `
                 <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
                     <button onclick="switchPartnerTab('portfolio')" id="tab-portfolio" class="modal-tab-btn active-tab">PORTFOLIO & IDS</button>
@@ -173,13 +149,13 @@ function renderGrid(data) {
                         <div class="company-box">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
                                 <b style="color:var(--pp-blue); text-transform:uppercase; font-size:13px;">${co.name}</b>
-                                ${co.ids.some(id => id.toLowerCase().includes('prime49')) ? '<span class="prime-badge">PRIME49 ELIGIBLE</span>' : ''}
+                                ${co.ids.some(id => id.isPrime) ? '<span class="prime-badge">PRIME49 ELIGIBLE</span>' : ''}
                             </div>
-                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap:10px;">
+                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap:10px;">
                                 ${co.ids.map(id => `
                                     <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px;">
-                                        <div style="font-size:9px; color:#94a3b8; font-weight:800; margin-bottom:2px;">AGENT ID</div>
-                                        <div style="font-family:monospace; font-weight:700; color:#334155;">${id}</div>
+                                        <div style="font-size:9px; color:#94a3b8; font-weight:800; margin-bottom:2px;">AGENT ID (${id.rev})</div>
+                                        <div style="font-family:monospace; font-weight:700; color:#334155; font-size:13px;">${id.string}</div>
                                     </div>
                                 `).join('')}
                             </div>
@@ -241,7 +217,8 @@ function renderGrid(data) {
         renderGrid(filtered);
     }
 
-    window.onload = loadPartners;
+    // Initialize on page load
+    window.addEventListener('DOMContentLoaded', loadPartners);
 </script>
 </body>
 </html>
