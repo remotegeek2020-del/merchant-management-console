@@ -72,6 +72,25 @@
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+
+    async function viewHistory(id, sn) {
+    // Note: Ensure you have a <div id="historyModal"> and <div id="timeline"> in your HTML
+    document.getElementById('historyModal').style.display = 'flex';
+    const res = await fetch('/api/returns', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ action: 'getHistory', equipment_id: id }) 
+    });
+    const result = await res.json();
+    document.getElementById('timeline').innerHTML = (result.data || []).map(log => `
+        <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <b>${log.action.toUpperCase()}</b><br>
+            <small>${new Date(log.created_at).toLocaleString()}</small><br>
+            <span style="font-size:11px;">${log.from_location} → ${log.to_location}</span>
+        </div>
+    `).join('');
+}
     async function fetchReturns() {
         const tbody = document.getElementById('returnsTableBody');
         tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
@@ -103,6 +122,12 @@
                     <td><span class="badge ${r.condition === 'Defective' ? 'cond-defective' : 'cond-working'}">${r.condition || 'Unknown'}</span></td>
                     <td style="font-weight:600; color:#475569;">${r.destination || '---'}</td>
                     <td><span class="slds-badge">${r.status.toUpperCase()}</span></td>
+                    <td>
+    <button class="slds-button slds-button_icon slds-button_icon-border" 
+            onclick="viewHistory('${r.equipment_id}', '${r.equipments?.serial_number}')" title="View History">
+        <span class="material-icons" style="font-size:16px;">history</span>
+    </button>
+    </td>
                     <td>
                         ${isItemOpen ? `
                             <button class="slds-button slds-button_success" 
