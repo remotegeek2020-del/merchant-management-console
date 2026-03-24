@@ -239,6 +239,13 @@
 async function processReturn() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
+    const payload = {
+    equipment_id: d.equipment_id,
+    merchant_id: d.merchant_id, // Make sure this isn't empty!
+    deployment_id: d.id,
+    return_type: returnType,
+    notes: document.getElementById('editNotes').value 
+};
     
     if (!d) {
         Swal.fire('Error', 'Record not found in memory.', 'error');
