@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Partner Portfolio | Secure Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
+        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
+        .dashboard-container { max-width: 1400px; margin: 0 auto; }
+        
+        /* Header & Search */
+        .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        
+        /* Partner Grid */
+        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; overflow: hidden; }
+        .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
+        
+        /* Badges & Tags */
+        .company-tag { background: #f1f5f9; color: #475569; padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 700; margin-right: 5px; margin-top: 5px; display: inline-block; }
+        .id-badge { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; font-family: monospace; }
+        .prime-badge { background: #004990; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; }
+        
+        /* Modal Tabs */
+        .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; font-size: 12px; }
+        .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
+        
+        .company-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; background: #fafbfc; }
+        .sub-agent-row { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
+
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="dashboard-container">
+    <div class="modern-header">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="display: flex; align-items: center; gap: 8px; border-radius: 10px;">
+                <span class="material-icons" style="font-size: 18px;">arrow_back</span>
+                <span style="font-weight: 700; font-size: 12px;">BACK</span>
+            </a>
+            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Partner Network</h1>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="partnerSearch" placeholder="Search Person or Company..." class="slds-input" style="width:300px; border-radius:10px;" onkeyup="filterPartners()">
+            <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);">ADD PARTNER</button>
+        </div>
+    </div>
+
+    <div id="partnerGrid" class="partner-grid">
+        <div style="grid-column: 1/-1; text-align: center; padding: 50px; color: #94a3b8;">
+            <span class="material-icons" style="animation: spin 2s linear infinite; font-size: 40px;">sync</span>
+            <p style="margin-top:10px; font-weight:600;">Mapping Relationships...</p>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    // Placeholder data for Michelle Collins example
+    let partners = [];
+
+    async function loadPartners() {
+        // We will replace this with fetch('/api/partners', { action: 'get_partners_list' })
+        const grid = document.getElementById('partnerGrid');
+        
+        // Simulating the Michelle Collins Structure
+        const mockData = [
+            {
+                id: 'uuid-1',
+                name: 'Michelle Collins',
+                companies: [
+                    { name: 'Adara Group', ids: ['23232', '23237', 'Prime49'] },
+                    { name: 'Chellecom', ids: ['121872', '123272'] },
+                    { name: 'Impact Merchant Group', ids: ['99881'] }
+                ],
+                sub_agents_count: 2
+            }
+        ];
+
+        renderGrid(mockData);
+    }
+
+    function renderGrid(data) {
+        const grid = document.getElementById('partnerGrid');
+        grid.innerHTML = data.map(p => {
+            const allIds = p.companies.flatMap(c => c.ids);
+            const displayIds = allIds.slice(0, 3);
+            const extraCount = allIds.length - 3;
+
+            return `
+                <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+                    <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                        <div>
+                            <h2 style="font-weight:800; font-size:1.1rem; color:#002d5a;">${p.name}</h2>
+                            <p style="font-size:12px; color:#64748b;">${p.companies.length} Companies Managed</p>
+                        </div>
+                        <span class="material-icons" style="color:#cbd5e1;">chevron_right</span>
+                    </div>
+                    
+                    <div style="margin-top:15px; border-top:1px solid #f1f5f9; padding-top:15px;">
+                        <div style="margin-bottom:10px;">
+                            ${p.companies.map(c => `<span class="company-tag">${c.name}</span>`).join('')}
+                        </div>
+                        <div style="display:flex; gap:5px; align-items:center; flex-wrap:wrap;">
+                            ${displayIds.map(id => `
+                                <span class="${id === 'Prime49' ? 'prime-badge' : 'id-badge'}">${id}</span>
+                            `).join('')}
+                            ${extraCount > 0 ? `<span style="font-size:10px; color:#94a3b8; font-weight:700;">+${extraCount} MORE</span>` : ''}
+                        </div>
+                    </div>
+
+                    ${p.sub_agents_count > 0 ? `
+                        <div style="margin-top:15px; background:#f0fdf4; border-radius:8px; padding:8px 12px; display:flex; align-items:center; gap:8px;">
+                            <span class="material-icons" style="color:#16a34a; font-size:16px;">groups</span>
+                            <span style="color:#166534; font-size:11px; font-weight:700;">${p.sub_agents_count} SUB-PARTNERS UNDER HIERARCHY</span>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
+    function openPartnerDetails(id) {
+        // We will fetch specific detail in the API phase
+        Swal.fire({
+            title: '<div style="text-align:left; font-weight:800; color:#002d5a;">Michelle Collins</div>',
+            width: '900px',
+            html: `
+                <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
+                    <button onclick="switchPartnerTab('portfolio')" id="tab-portfolio" class="modal-tab-btn active-tab">PORTFOLIO & IDS</button>
+                    <button onclick="switchPartnerTab('subagents')" id="tab-subagents" class="modal-tab-btn">SUB-AGENTS (DOWNLINE)</button>
+                    <button onclick="switchPartnerTab('revshare')" id="tab-revshare" class="modal-tab-btn">REVSHARE CONFIG</button>
+                </div>
+
+                <div id="p-content-portfolio" class="p-tab-content" style="text-align:left;">
+                    <h3 style="font-size:11px; font-weight:800; color:#64748b; margin-bottom:15px; text-transform:uppercase;">Registered Entities</h3>
+                    <div class="company-box">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <b style="color:var(--pp-blue);">ADARA GROUP</b>
+                            <span class="prime-badge">PRIME49 PARTNER</span>
+                        </div>
+                        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+                            <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; flex:1; min-width:120px;">
+                                <div style="font-size:9px; color:#94a3b8; font-weight:800;">ID STRING</div>
+                                <div style="font-family:monospace; font-weight:700;">23232</div>
+                            </div>
+                            <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; flex:1; min-width:120px;">
+                                <div style="font-size:9px; color:#94a3b8; font-weight:800;">ID STRING</div>
+                                <div style="font-family:monospace; font-weight:700;">23237</div>
+                            </div>
+                            <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; flex:1; min-width:120px;">
+                                <div style="font-size:9px; color:#94a3b8; font-weight:800;">ID STRING</div>
+                                <div style="font-family:monospace; font-weight:700;">Prime49</div>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
+
+                <div id="p-content-subagents" class="p-tab-content" style="display:none; text-align:left;">
+                    <div class="sub-agent-row">
+                        <span><b>Karen Dovey</b> <br> <small style="color:#64748b;">Under ID: 23232</small></span>
+                        <span class="id-badge">ID: 2322787</span>
+                    </div>
+                </div>
+            `,
+            showConfirmButton: false,
+            showCloseButton: true
+        });
+    }
+
+    window.switchPartnerTab = (tab) => {
+        document.querySelectorAll('.p-tab-content').forEach(c => c.style.display = 'none');
+        document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
+        document.getElementById('p-content-' + tab).style.display = 'block';
+        document.getElementById('tab-' + tab).classList.add('active-tab');
+    };
+
+    window.onload = loadPartners;
+</script>
+</body>
+</html>
