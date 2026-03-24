@@ -1,224 +1,106 @@
 import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
-    if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
-
+    // 1. Initialize Supabase
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, query, equipment_id, payload } = req.body;
+    
+    // 2. Always set header to JSON to prevent the "Unexpected Token A" error
+    res.setHeader('Content-Type', 'application/json');
+
+    const { action, payload, query, id } = req.body || {};
 
     try {
-
-        // --- ADD THIS INSIDE THE try BLOCK OF api/deployments.js ---
-
-if (action === 'return_to_office') {
-    const { equipment_id, merchant_id, deployment_id, notes, return_type, tid } = payload;
-
-    // 1. Create the RMA ticket in 'open' status
-    const { error: returnError } = await supabase
-        .from('returns')
-        .insert([{
-            merchant_id,
-            equipment_id,
-            return_reason: notes || 'No notes provided', // FIX: Now uses your input
-            condition: return_type,
-            destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office',
-            status: 'open' // RMA starts here
-        }]);
-
-    if (returnError) throw returnError;
-
-    // 2. UPDATE EQUIPMENT: Mark as 'pending_return' instead of 'stocked'
-    // This keeps it out of the "Available" pool until inspected.
-    await supabase
-        .from('equipments')
-        .update({ 
-            status: 'pending_return', 
-            current_location: 'In Transit / RMA',
-            merchant_id: null 
-        })
-        .eq('id', equipment_id);
-
-    // 3. Close the deployment ticket
-    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-
-    return res.status(200).json({ success: true });
-}
-
-    // 3. Reset the Equipment (Clear merchant, update location/status)
-    const { error: equipError } = await supabase
-        .from('equipments')
-        .update({ 
-            status: newStatus,
-            current_location: newLocation,
-            merchant_id: null 
-        })
-        .eq('id', equipment_id);
-
-    if (equipError) throw equipError;
-
-    // 4. Close the original Deployment Ticket
-    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-
-    return res.status(200).json({ success: true });
-}
-
-        // --- ADD THIS NEW ACTION TO YOUR deployments.js ---
-if (action === 'update') {
-    const { deployment_id, status, tracking_id, target_date, notes } = payload;
-
-    const { data: updatedDep, error: updateError } = await supabase
-        .from('deployments')
-        .update({ 
-            status, 
-            tracking_id, 
-            target_deployment_date: target_date, // Added this mapping
-            notes 
-        })
-        .eq('id', deployment_id)
-        .select(`*, equipments(serial_number), merchants(dba_name)`)
-        .single();
-
-    if (updateError) throw updateError;
-
-    // 2. Log the change in History
-    await supabase.from('equipment_logs').insert([{
-        equipment_id: updatedDep.equipment_id,
-        merchant_id: updatedDep.merchant_id,
-        deployment_id: updatedDep.id,
-        action: status === 'Closed' ? 'Deployment Closed' : 'Ticket Updated',
-        from_location: 'In Transit', // Assuming it was moving
-        to_location: updatedDep.merchants.dba_name,
-        notes: notes || `Status changed to ${status}. Tracking: ${tracking_id}`
-    }]);
-
-    return res.status(200).json({ success: true });
-}
-        
-        // --- ACTION: LIST DEPLOYMENTS ---
-       // --- ACTION: LIST DEPLOYMENTS in deployments.js ---
-if (action === 'list') {
-    let sb = supabase.from('deployments').select(`
-        *,
-        merchants!merchant_id (
-            dba_name, 
-            merchant_id
-        ),
-        equipments!equipment_id (
-            id, 
-            serial_number, 
-            terminal_type
-        )
-    `);
-    
-    if (query) {
-        sb = sb.or(`deployment_id.ilike.%${query}%,tid.ilike.%${query}%,tracking_id.ilike.%${query}%`);
-    }
-    
-    const { data, error } = await sb.order('created_at', { ascending: false });
-    if (error) throw error;
-
-    const metrics = {
-        active: data.filter(d => d.status === 'Open').length || 0,
-        total: data.length || 0,
-        today: data.filter(d => new Date(d.created_at).toDateString() === new Date().toDateString()).length || 0
-    };
-    
-    return res.status(200).json({ success: true, data: data || [], metrics });
-}
-
-        // --- ACTION: GET LOOKUPS (Merchant Search & Office Inventory) ---
-        if (action === 'getLookups') {
-            let merchantBuilder = supabase.from('merchants').select('id, dba_name, merchant_id').order('dba_name');
+        // --- ACTION: LIST ---
+        if (action === 'list') {
+            let sb = supabase.from('deployments').select(`
+                *,
+                merchants!merchant_id (dba_name, merchant_id),
+                equipments!equipment_id (id, serial_number, terminal_type)
+            `);
             
             if (query) {
-                // Searches BOTH DBA Name and Merchant ID
-                merchantBuilder = merchantBuilder.or(`dba_name.ilike.%${query}%,merchant_id.ilike.%${query}%`);
+                sb = sb.or(`deployment_id.ilike.%${query}%,tid.ilike.%${query}%,tracking_id.ilike.%${query}%`);
             }
 
-            const [merchants, inventory] = await Promise.all([
-                merchantBuilder.limit(50), 
-                supabase.from('equipments')
-                    .select('id, serial_number, terminal_type, status')
-                    .or('status.ilike.Office,status.ilike.In Stock,status.ilike.Inventory,status.is.null')
-            ]);
+            const { data, error } = await sb.order('created_at', { ascending: false });
+            if (error) throw error;
 
-            let finalInventory = inventory.data || [];
-            if (finalInventory.length === 0) {
-                const fallback = await supabase.from('equipments')
-                    .select('id, serial_number, terminal_type, status')
-                    .neq('status', 'deployed').limit(100);
-                finalInventory = fallback.data || [];
-            }
+            const metrics = {
+                active: data ? data.filter(d => d.status === 'Open' || d.status === 'In Transit').length : 0,
+                total: data ? data.length : 0,
+                today: data ? data.filter(d => new Date(d.created_at).toDateString() === new Date().toDateString()).length : 0
+            };
 
-            return res.status(200).json({ success: true, merchants: merchants.data || [], inventory: finalInventory });
+            return res.status(200).json({ success: true, data: data || [], metrics });
         }
 
-        // --- ACTION: CREATE DEPLOYMENT ---
-        if (action === 'create') {
-            const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
-            
-            // 1. Fetch Merchant Name for Location and Logging
-            const { data: mData, error: mError } = await supabase
-                .from('merchants')
-                .select('dba_name')
-                .eq('id', merchant_id)
-                .single();
-            
-            if (mError) throw mError;
-            const merchantDBA = mData?.dba_name || 'Merchant';
+        // --- ACTION: RETURN TO OFFICE (The new logic) ---
+        if (action === 'return_to_office') {
+            const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-            // 2. Create the Deployment Ticket
-            const { data: depData, error: depError } = await supabase.from('deployments').insert([{
-                merchant_id, 
-                equipment_id, 
-                tid, 
-                tracking_id, 
-                target_deployment_date: target_date, 
-                status: 'Open', 
-                notes: notes || ''
-            }]).select();
-            
-            if (depError) throw depError;
+            // 1. Create the RMA ticket in 'returns' table
+            // Mapping 'notes' to 'return_reason' as per your schema
+            const { error: returnError } = await supabase
+                .from('returns')
+                .insert([{
+                    merchant_id,
+                    equipment_id,
+                    return_reason: notes || 'Unit returned from field',
+                    condition: return_type, 
+                    destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office',
+                    status: 'open'
+                }]);
+            if (returnError) throw returnError;
 
-            // 3. UPDATE EQUIPMENT TABLE: Link to Merchant, set status to 'deployed', and update location
-            const { error: equipUpdateError } = await supabase
+            // 2. Update Equipment to 'pending_return' status
+            const { error: equipError } = await supabase
                 .from('equipments')
                 .update({ 
-                    status: 'deployed', 
-                    merchant_id: merchant_id,
-                    current_location: merchantDBA 
+                    status: 'pending_return', 
+                    current_location: 'In Transit / RMA',
+                    merchant_id: null 
                 })
                 .eq('id', equipment_id);
+            if (equipError) throw equipError;
 
-            if (equipUpdateError) throw equipUpdateError;
-
-            // 4. Log History Entry
-            await supabase.from('equipment_logs').insert([{
-                equipment_id, 
-                merchant_id, 
-                deployment_id: depData[0].id,
-                action: 'deployed', 
-                from_location: 'Warsaw Office',
-                to_location: merchantDBA, 
-                notes: notes || 'New Deployment Ticket Created'
-            }]);
+            // 3. Close the Deployment Ticket
+            const { error: depError } = await supabase
+                .from('deployments')
+                .update({ status: 'Closed' })
+                .eq('id', deployment_id);
+            if (depError) throw depError;
 
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: HISTORY ---
-        if (action === 'getHistory') {
-            const { data, error } = await supabase.from('equipment_logs')
-                .select(`*, merchants(dba_name)` )
-                .eq('equipment_id', equipment_id)
-                .order('created_at', { ascending: false });
-            
+        // --- ACTION: UPDATE (Standard Ticket Update) ---
+        if (action === 'update') {
+            const { deployment_id, status, tracking_id, target_date, notes } = payload;
+            const { error } = await supabase
+                .from('deployments')
+                .update({ 
+                    status, 
+                    tracking_id, 
+                    target_deployment_date: target_date, 
+                    notes 
+                })
+                .eq('id', deployment_id);
+
             if (error) throw error;
-            return res.status(200).json({ success: true, data });
+            return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: LOOKUPS ---
+        if (action === 'getLookups') {
+            const { data: merchants } = await supabase.from('merchants').select('id, dba_name, merchant_id').ilike('dba_name', `%${query}%`).limit(5);
+            const { data: inventory } = await supabase.from('equipments').select('id, serial_number, terminal_type').eq('status', 'stocked');
+            return res.status(200).json({ merchants, inventory });
+        }
+
+        return res.status(400).json({ success: false, message: "Invalid Action" });
+
     } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error("Deployments API Error:", err.message);
+        return res.status(500).json({ success: false, message: "Server Error: " + err.message });
     }
 }
