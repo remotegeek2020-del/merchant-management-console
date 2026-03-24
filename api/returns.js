@@ -1,10 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 
 export default async function handler(req, res) {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    
-    // Safety: Ensure we are getting the body
-    const { action, id, payload, query } = req.body || {};
+    // 1. Initialize Supabase
+    const supabase = createClient(
+        process.env.SUPABASE_URL, 
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    // 2. Safely parse the body
+    const body = req.body || {};
+    const action = body.action;
+    const payload = body.payload || {};
+    const query = body.query;
 
     try {
         // --- ACTION: LIST ---
@@ -30,20 +37,24 @@ export default async function handler(req, res) {
             const { data, error } = await sb.order('created_at', { ascending: false });
             if (error) throw error;
 
-            // Calculate Metrics
             const metrics = {
-                open: data.filter(d => d.status === 'open').length,
-                defective: data.filter(d => d.condition === 'Defective').length
+                open: data ? data.filter(d => d.status === 'open').length : 0,
+                defective: data ? data.filter(d => d.condition === 'Defective').length : 0
             };
 
-            return res.status(200).json({ success: true, data: data || [], metrics, count: data.length });
+            return res.status(200).json({ 
+                success: true, 
+                data: data || [], 
+                metrics, 
+                count: data ? data.length : 0 
+            });
         }
 
-        // --- ACTION: COMPLETE RETURN (The 2nd Step) ---
+        // --- ACTION: COMPLETE RETURN ---
         if (action === 'complete_return') {
             const { id: rmaId, equipment_id, condition, destination } = payload;
 
-            // 1. Close the RMA Ticket
+            // Update Return Table
             const { error: rmaError } = await supabase
                 .from('returns')
                 .update({ status: 'closed' })
@@ -51,14 +62,13 @@ export default async function handler(req, res) {
 
             if (rmaError) throw rmaError;
 
-            // 2. Finalize Equipment Status
+            // Update Equipment Table
             const finalStatus = (condition === 'Defective') ? 'repairing' : 'stocked';
-            
             const { error: equipError } = await supabase
                 .from('equipments')
                 .update({ 
                     status: finalStatus,
-                    current_location: destination // e.g. 'Warsaw Office'
+                    current_location: destination 
                 })
                 .eq('id', equipment_id);
 
@@ -67,10 +77,11 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        return res.status(400).json({ success: false, message: "Invalid Action" });
+        return res.status(400).json({ success: false, message: "Action not recognized" });
 
     } catch (err) {
-        console.error("Returns API Error:", err.message);
+        console.error("Vercel Function Error:", err.message);
+        // This ensures the frontend gets JSON even if the server fails
         return res.status(500).json({ success: false, message: err.message });
     }
 }
