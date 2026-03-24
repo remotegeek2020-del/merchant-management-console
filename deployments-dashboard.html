@@ -163,6 +163,22 @@
     </div>
     <p style="font-size:10px; color:#991b1b; margin-top:8px; font-style:italic;">*This closes the ticket and resets the hardware.</p>
 </div>
+            <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #e2e8f0; background: #fff1f2; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+    <label style="display:block; font-weight:800; font-size:10px; color:#e11d48; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">
+        <span class="material-icons" style="font-size:14px; vertical-align:middle;">assignment_return</span> 
+        Process Formal Return
+    </label>
+    <div style="display: flex; gap: 10px;">
+        <select id="returnType" class="slds-select" style="border-radius:8px; flex: 1;">
+            <option value="Working">Working (Back to Stock)</option>
+            <option value="Defective">Defective (To Repairs)</option>
+        </select>
+        <button type="button" onclick="processReturn()" class="slds-button slds-button_destructive" style="border-radius:8px; font-weight:700;">
+            LOG RETURN
+        </button>
+    </div>
+    <p style="font-size:10px; color:#991b1b; margin-top:8px; font-style:italic;">*This closes the ticket and moves hardware to "Pending Return" status.</p>
+</div>
             <button type="submit" id="updateBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); padding:10px; border-radius:8px; margin-top:15px;">UPDATE TICKET</button>
         </form>
     </div>
@@ -235,56 +251,57 @@
         }
     }
 
-    async function processReturn() {
-        const deploymentId = document.getElementById('editId').value;
-        const d = currentDeployments.find(item => item.id === deploymentId);
-        
-        if (!d) {
-            Swal.fire('Error', 'Record not found in system memory.', 'error');
-            return;
-        }
+   async function processReturn() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    
+    if (!d) {
+        Swal.fire('Error', 'Record not found in memory.', 'error');
+        return;
+    }
 
-        const returnType = document.getElementById('returnType').value;
+    const returnType = document.getElementById('returnType').value;
 
-        const confirm = await Swal.fire({
-            title: 'Log Formal Return?',
-            text: `Return S/N ${d.equipments?.serial_number || 'Unknown'} to ${returnType}?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#e11d48',
-            confirmButtonText: 'Yes, Process Return'
-        });
+    const confirm = await Swal.fire({
+        title: 'Initiate Return?',
+        text: `Log S/N ${d.equipments?.serial_number} as Pending Return? This will close the deployment ticket.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        confirmButtonText: 'Yes, Log Return'
+    });
 
-        if (confirm.isConfirmed) {
-            Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    if (confirm.isConfirmed) {
+        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-            const payload = {
-                equipment_id: d.equipment_id,
-                merchant_id: d.merchant_id,
-                deployment_id: d.id,
-                return_type: returnType,
-                tid: d.tid,
-                notes: document.getElementById('editNotes').value
-            };
+        const payload = {
+            equipment_id: d.equipment_id,
+            merchant_id: d.merchant_id,
+            deployment_id: d.id,
+            return_type: returnType,
+            tid: d.tid,
+            notes: document.getElementById('editNotes').value // Uses your notes as the reason
+        };
 
-            try {
-                const res = await fetch('/api/deployments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'return_to_office', payload })
-                });
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'return_to_office', payload })
+            });
 
-                const result = await res.json();
-                if (result.success) {
-                    Swal.fire('Success', 'Return logged and inventory reset.', 'success').then(() => location.reload());
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (err) {
-                Swal.fire('Error', err.message, 'error');
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Success', 'Return initiated. Check the Returns Dashboard for final restocking.', 'success')
+                .then(() => location.reload());
+            } else {
+                Swal.fire('Error', result.message, 'error');
             }
+        } catch (err) {
+            Swal.fire('Error', 'Network error or server crash.', 'error');
         }
     }
+}
 
     function openEditModal(index) {
         const d = currentDeployments[index];
