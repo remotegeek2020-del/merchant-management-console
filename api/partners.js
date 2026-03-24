@@ -13,7 +13,7 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'get_partners_list') {
-            // 1. Fetch all data points separately (Isolated to find the exact failure point)
+            // 1. Fetch tables individually (Prevents complex join crashes)
             const { data: persons, error: pErr } = await supabase.from('persons').select('id, full_name');
             if (pErr) throw new Error(`Persons Table: ${pErr.message}`);
 
@@ -26,7 +26,6 @@ export default async function handler(req, res) {
             const { data: agents, error: agErr } = await supabase.from('agents').select('id, company_id');
             if (agErr) throw new Error(`Agents Table: ${agErr.message}`);
 
-            // This is the most likely spot for a typo or permission error
             const { data: agentData, error: aErr } = await supabase.from('agent_identifiers').select('id_string, agent_id, rev_share, prime49');
             if (aErr) throw new Error(`Identifiers Table: ${aErr.message}`);
 
@@ -73,13 +72,11 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: finalData });
         }
 
-        // Add other actions (like get_hierarchy) here if needed
-
         return res.status(400).json({ success: false, message: "Invalid Action" });
 
     } catch (err) {
         console.error("API Error:", err.message);
-        // We return a JSON object so the frontend doesn't get that "Unexpected Token A"
+        // Returning JSON prevents the "Unexpected Token A" error in the frontend
         return res.status(500).json({ 
             success: false, 
             message: err.message 
