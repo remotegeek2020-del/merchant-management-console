@@ -15,7 +15,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        // 1. Fetch all data points in parallel for better performance
+        // 1. Fetch all data points in parallel
         const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
             supabase.from('persons').select('id, full_name'),
             supabase.from('company_person_mapping').select('person_id, company_id'),
@@ -24,7 +24,6 @@ export default async function handler(req, res) {
             supabase.from('agent_identifiers').select('id_string, agent_id, rev_share, prime49')
         ]);
 
-        // Error checking for the fetch results
         if (pRes.error) throw pRes.error;
         if (iRes.error) throw iRes.error;
 
@@ -34,29 +33,32 @@ export default async function handler(req, res) {
         const agents = aRes.data || [];
         const identifiers = iRes.data || [];
 
-        // 2. Stitch the Data: Person -> Mapping -> Company -> Agent -> ID String
+        // 2. Stitch the Data with Type-Safe Matching
         const finalData = persons.map(p => {
-            // Get all company IDs associated with this person
+            // Force Person ID to string for comparison
+            const personIdStr = String(p.id).trim();
+
             const myCompanyIds = mappings
-                .filter(m => m.person_id === p.id)
-                .map(m => m.company_id);
+                .filter(m => String(m.person_id).trim() === personIdStr)
+                .map(m => String(m.company_id).trim());
             
-            // Map those IDs to actual company objects
             const myCompanies = companies
-                .filter(c => myCompanyIds.includes(c.id))
+                .filter(c => myCompanyIds.includes(String(c.id).trim()))
                 .map(co => {
+                    const companyIdStr = String(co.id).trim();
+
                     // Find any agent UUIDs linked to this company
                     const coAgentUuids = agents
-                        .filter(a => a.company_id === co.id)
-                        .map(a => a.id);
+                        .filter(a => String(a.company_id).trim() === companyIdStr)
+                        .map(a => String(a.id).trim());
                     
                     // Find all ID strings (Partner IDs) linked to those agent UUIDs
                     const myIds = identifiers
-                        .filter(i => coAgentUuids.includes(i.agent_id))
+                        .filter(i => coAgentUuids.includes(String(i.agent_id).trim()))
                         .map(id => ({
                             string: id.id_string,
                             rev: id.rev_share || '0%',
-                            isPrime: !!id.prime49 // Double bang forces a boolean
+                            isPrime: !!id.prime49 
                         }));
 
                     return {
@@ -65,7 +67,6 @@ export default async function handler(req, res) {
                     };
                 });
 
-            // Filter out persons who don't have any companies (keeps the list clean)
             if (myCompanies.length === 0) return null;
 
             return {
@@ -73,7 +74,7 @@ export default async function handler(req, res) {
                 name: p.full_name,
                 companies: myCompanies
             };
-        }).filter(Boolean); // Remove the null entries
+        }).filter(Boolean);
 
         return res.status(200).json({ success: true, data: finalData });
 
