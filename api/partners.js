@@ -6,69 +6,65 @@ export default async function handler(req, res) {
     const { action, person_id } = req.body || {};
 
     try {
-        if (action === 'get_partners_list') {
-            // 1. Get all Companies (The Anchor)
-            const { data: companies } = await supabase.from('companies').select('id, company_name');
-            
-            // 2. Get the Person Mappings
-            const { data: mappings } = await supabase.from('company_person_mapping').select('person_id, company_id');
-            
-            // 3. Get Human Names
-            const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name');
-            
-            // 4. Get Agent Records (to check Parent/Sub relationships)
-            const { data: agents } = await supabase.from('agents').select('id, company_id, parent_agent_id');
-            
-            // 5. Get the actual ID Strings
-            const { data: idStrings } = await supabase.from('agent_identifiers').select('id_string, agent_id');
+       if (action === 'get_partners_list') {
+    // 1. Get all base data
+    const { data: persons } = await supabase.from('persons').select('id');
+    const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name, email');
+    const { data: mappings } = await supabase.from('company_person_mapping').select(`person_id, company_id, companies(id, company_name)`);
+    const { data: agents } = await supabase.from('agents').select('id, company_id, agent_name, parent_agent_id');
+    const { data: idStrings } = await supabase.from('agent_identifiers').select('id_string, agent_id');
 
-            // --- RECURSIVE STITCHING ---
-            // We group by PERSON_ID first so Agent A doesn't show up twice
-            const personGroups = {};
+    const finalData = persons.map(p => {
+        // --- NAME DISCOVERY LOGIC ---
+        // Try 1: Match by app_users.userid
+        let userMatch = users?.find(u => u.userid === p.id);
+        
+        // Try 2: If no match, try matching app_users.email to the persons ID (if ID is an email)
+        if (!userMatch) userMatch = users?.find(u => u.email === p.id);
 
-            mappings.forEach(map => {
-                const pid = map.person_id;
-                if (!personGroups[pid]) {
-                    const u = users?.find(user => user.userid === pid);
-                    personGroups[pid] = {
-                        id: pid,
-                        name: u ? `${u.first_name} ${u.last_name}` : `Partner ${pid.substring(0,5)}`,
-                        companies: []
-                    };
-                }
-
-                const co = companies?.find(c => c.id === map.company_id);
-                if (co) {
-                    // Find agents for this company
-                    const coAgents = agents?.filter(a => a.company_id === co.id) || [];
-                    const coAgentIds = coAgents.map(a => a.id);
-                    
-                    // Find ID strings
-                    const identifiers = idStrings?.filter(is => coAgentIds.includes(is.agent_id)).map(is => is.id_string) || [];
-
-                    // Check for Hierarchy: 
-                    // Downline: Agents who have one of THIS company's agents as a parent
-                    const downlineCount = agents?.filter(a => coAgentIds.includes(a.parent_agent_id)).length || 0;
-                    
-                    // Upline: If this company's agent has a parent_agent_id that is NOT in this company
-                    const uplineCount = coAgents.filter(a => a.parent_agent_id && !coAgentIds.includes(a.parent_agent_id)).length || 0;
-
-                    personGroups[pid].companies.push({
-                        name: co.company_name,
-                        ids: identifiers,
-                        downline: downlineCount,
-                        upline: uplineCount
-                    });
-                }
-            });
-
-            const result = Object.values(personGroups);
-            return res.status(200).json({ success: true, data: result });
+        let displayName = "";
+        if (userMatch) {
+            displayName = `${userMatch.first_name || ''} ${userMatch.last_name || ''}`.trim();
+        } 
+        
+        // Try 3: Look at the Agents table for a name linked to this person's companies
+        if (!displayName) {
+            const firstAgent = agents?.find(a => 
+                mappings?.find(m => m.person_id === p.id && m.company_id === a.company_id)
+            );
+            displayName = firstAgent?.agent_name || `Partner ${p.id.substring(0, 5)}`;
         }
 
-        return res.status(400).json({ success: false, message: "Invalid Action" });
+        // --- COMPANY & ID MAPPING ---
+        const myMappings = mappings?.filter(m => m.person_id === p.id) || [];
+        const myCompanies = myMappings.map(m => {
+            const co = m.companies;
+            if (!co) return null;
 
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
+            const coAgents = agents?.filter(a => a.company_id === co.id) || [];
+            const coAgentUuids = coAgents.map(a => a.id);
+            const identifiers = idStrings?.filter(is => coAgentUuids.includes(is.agent_id)).map(is => is.id_string) || [];
+
+            // Hierarchy calculations (Recursive)
+            const downlineCount = agents?.filter(a => coAgentUuids.includes(a.parent_agent_id)).length || 0;
+            const uplineCount = coAgents.filter(a => a.parent_agent_id && !coAgentUuids.includes(a.parent_agent_id)).length || 0;
+
+            return {
+                name: co.company_name,
+                ids: identifiers,
+                downline: downlineCount,
+                upline: uplineCount
+            };
+        }).filter(Boolean);
+
+        if (myCompanies.length === 0) return null;
+
+        return {
+            id: p.id,
+            name: displayName,
+            companies: myCompanies
+        };
+    }).filter(Boolean);
+
+    return res.status(200).json({ success: true, data: finalData });
 }
