@@ -35,22 +35,23 @@ export default async function handler(req, res) {
         }
 
         // --- ACTION: RETURN TO OFFICE (The new logic) ---
-        if (action === 'return_to_office') {
-            const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+ if (action === 'return_to_office') {
+    const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+    const newLocation = 'In Transit / RMA';
 
-            // 1. Create the RMA ticket in 'returns' table
-            // Mapping 'notes' to 'return_reason' as per your schema
-            const { error: returnError } = await supabase
-                .from('returns')
-                .insert([{
-                    merchant_id,
-                    equipment_id,
-                    return_reason: notes || 'Unit returned from field',
-                    condition: return_type, 
-                    destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office',
-                    status: 'open'
-                }]);
-            if (returnError) throw returnError;
+    // ... [Your existing Return and Equipment updates here] ...
+
+    // ADD THIS: Create the History Log
+    await supabase.from('equipment_logs').insert([{
+        equipment_id: equipment_id,
+        action: 'Initiated Return',
+        from_location: 'Merchant Field',
+        to_location: newLocation,
+        notes: `RMA Started: ${notes || 'No notes'}`
+    }]);
+
+    return res.status(200).json({ success: true });
+}
 
             // 2. Update Equipment to 'pending_return' status
             const { error: equipError } = await supabase
