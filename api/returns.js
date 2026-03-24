@@ -36,6 +36,30 @@ export default async function handler(req, res) {
 
             return res.status(200).json({ success: true, data, count, metrics });
         }
+        if (action === 'complete_return') {
+    const { id, equipment_id, condition, destination } = payload;
+
+    // 1. Update the Return Ticket to 'closed'
+    const { error: rmaError } = await supabase
+        .from('returns')
+        .update({ status: 'closed' })
+        .eq('id', id);
+
+    if (rmaError) throw rmaError;
+
+    // 2. FINALLY move the equipment to Stock or Repairs
+    const finalStatus = condition === 'Defective' ? 'repairing' : 'stocked';
+    
+    await supabase
+        .from('equipments')
+        .update({ 
+            status: finalStatus,
+            current_location: destination // e.g., 'Warsaw Office'
+        })
+        .eq('id', equipment_id);
+
+    return res.status(200).json({ success: true });
+}
 
         if (action === 'update') {
             const { status, condition, destination } = payload;
