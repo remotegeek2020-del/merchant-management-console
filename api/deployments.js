@@ -34,42 +34,45 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [], metrics });
         }
 
-        // --- ACTION: RETURN TO OFFICE (The new logic) ---
- if (action === 'return_to_office') {
-    const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
-    const newLocation = 'In Transit / RMA';
+        // --- ACTION: RETURN TO OFFICE ---
+        if (action === 'return_to_office') {
+            const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+            const newLocation = 'In Transit / RMA';
 
-    // ... [Your existing Return and Equipment updates here] ...
+            // A. Create the RMA ticket in 'returns' table
+            const { error: returnError } = await supabase.from('returns').insert([{
+                merchant_id,
+                equipment_id,
+                return_reason: notes || 'Unit returned from field',
+                condition: return_type, 
+                destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office',
+                status: 'open'
+            }]);
+            if (returnError) throw returnError;
 
-    // ADD THIS: Create the History Log
-    await supabase.from('equipment_logs').insert([{
-        equipment_id: equipment_id,
-        action: 'Initiated Return',
-        from_location: 'Merchant Field',
-        to_location: newLocation,
-        notes: `RMA Started: ${notes || 'No notes'}`
-    }]);
-
-    return res.status(200).json({ success: true });
-}
-
-            // 2. Update Equipment to 'pending_return' status
-            const { error: equipError } = await supabase
-                .from('equipments')
-                .update({ 
-                    status: 'pending_return', 
-                    current_location: 'In Transit / RMA',
-                    merchant_id: null 
-                })
-                .eq('id', equipment_id);
+            // B. Update Equipment to 'pending_return' status
+            const { error: equipError } = await supabase.from('equipments').update({ 
+                status: 'pending_return', 
+                current_location: newLocation,
+                merchant_id: null 
+            }).eq('id', equipment_id);
             if (equipError) throw equipError;
 
-            // 3. Close the Deployment Ticket
-            const { error: depError } = await supabase
-                .from('deployments')
-                .update({ status: 'Closed' })
-                .eq('id', deployment_id);
+            // C. Close the Deployment Ticket
+            const { error: depError } = await supabase.from('deployments').update({ 
+                status: 'Closed' 
+            }).eq('id', deployment_id);
             if (depError) throw depError;
+
+            // D. Create the History Log entry
+            const { error: logError } = await supabase.from('equipment_logs').insert([{
+                equipment_id: equipment_id,
+                action: 'Initiated Return',
+                from_location: 'Merchant Field',
+                to_location: newLocation,
+                notes: `RMA Started: ${notes || 'No notes'}`
+            }]);
+            if (logError) throw logError;
 
             return res.status(200).json({ success: true });
         }
@@ -77,15 +80,12 @@ export default async function handler(req, res) {
         // --- ACTION: UPDATE (Standard Ticket Update) ---
         if (action === 'update') {
             const { deployment_id, status, tracking_id, target_date, notes } = payload;
-            const { error } = await supabase
-                .from('deployments')
-                .update({ 
-                    status, 
-                    tracking_id, 
-                    target_deployment_date: target_date, 
-                    notes 
-                })
-                .eq('id', deployment_id);
+            const { error } = await supabase.from('deployments').update({ 
+                status, 
+                tracking_id, 
+                target_deployment_date: target_date, 
+                notes 
+            }).eq('id', deployment_id);
 
             if (error) throw error;
             return res.status(200).json({ success: true });
@@ -97,20 +97,19 @@ export default async function handler(req, res) {
             const { data: inventory } = await supabase.from('equipments').select('id, serial_number, terminal_type').eq('status', 'stocked');
             return res.status(200).json({ merchants, inventory });
         }
-// --- ACTION: GET HISTORY ---
-     if (action === 'getHistory') {
-    // We use req.body directly because 'body' wasn't defined in your variables
-    const { equipment_id } = req.body; 
-    
-    const { data, error } = await supabase
-        .from('equipment_logs')
-        .select('*')
-        .eq('equipment_id', equipment_id)
-        .order('created_at', { ascending: false });
 
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
-}
+        // --- ACTION: GET HISTORY ---
+        if (action === 'getHistory') {
+            const { equipment_id } = req.body; 
+            const { data, error } = await supabase.from('equipment_logs')
+                .select('*')
+                .eq('equipment_id', equipment_id)
+                .order('created_at', { ascending: false });
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
         return res.status(400).json({ success: false, message: "Invalid Action" });
 
     } catch (err) {
