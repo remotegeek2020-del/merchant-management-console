@@ -2,51 +2,43 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
-    
-    const supabase = createClient(
-        process.env.SUPABASE_URL, 
-        process.env.SUPABASE_SERVICE_ROLE_KEY
-    );
-
-    const body = req.body || {};
-    const { action, person_id } = body;
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { action, person_id } = req.body || {};
 
     try {
         if (action === 'get_partners_list') {
-            // 1. Fetch ONLY the ID from persons to prevent the "column not found" error
-            const { data: persons, error: pErr } = await supabase
-                .from('persons')
-                .select('id'); 
-            
-            if (pErr) throw pErr;
+            // 1. Get the Names from app_users (Linked to persons)
+            const { data: users, error: uErr } = await supabase
+                .from('app_users')
+                .select('userid, first_name, last_name');
+            if (uErr) throw uErr;
 
-            // 2. Fetch Mappings with Company info
+            // 2. Get Mappings
             const { data: mappings, error: mErr } = await supabase
                 .from('company_person_mapping')
-                .select(`
-                    person_id,
-                    company_id,
-                    companies (id, company_name)
-                `);
+                .select(`person_id, company_id, companies(id, company_name)`);
             if (mErr) throw mErr;
 
-            // 3. Fetch All Identifiers
+            // 3. Get ALL Identifiers and their Company IDs
+            // We join agent_identifiers -> agents to find which company owns the ID
             const { data: idData, error: iErr } = await supabase
                 .from('agent_identifiers')
                 .select(`
                     id_string,
-                    agents (company_id)
+                    agents!inner ( company_id )
                 `);
             if (iErr) throw iErr;
 
             // --- STITCHING ---
-            const finalData = persons.map(p => {
-                const myMappings = mappings.filter(m => m.person_id === p.id);
+            const finalData = users.map(u => {
+                // Find all companies mapped to this user
+                const myMappings = mappings.filter(m => m.person_id === u.userid);
                 
                 const myCompanies = myMappings.map(m => {
                     const co = m.companies;
                     if (!co) return null;
 
+                    // Find all ID strings belonging to THIS company
                     const myIds = idData
                         .filter(item => item.agents?.company_id === co.id)
                         .map(item => item.id_string);
@@ -54,26 +46,26 @@ export default async function handler(req, res) {
                     return {
                         id: co.id,
                         name: co.company_name,
-                        ids: myIds
+                        ids: myIds // This will be empty [] if no IDs exist in agent_identifiers
                     };
                 }).filter(Boolean);
 
+                // Only return if they actually have companies (to filter out non-partner staff)
+                if (myCompanies.length === 0) return null;
+
                 return {
-                    id: p.id,
-                    // Temporarily use the ID as the name to verify the link works
-                    name: `Partner ${p.id.substring(0, 5)}`, 
+                    id: u.userid,
+                    name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || 'Unknown Partner',
                     companies: myCompanies
                 };
-            });
+            }).filter(Boolean);
 
             return res.status(200).json({ success: true, data: finalData });
         }
 
-        // ... keep your get_hierarchy action here ...
+        // ... keep hierarchy action ...
 
     } catch (err) {
-        console.error("Internal API Error:", err.message);
-        // Returning a JSON error instead of letting the server crash with text
         return res.status(500).json({ success: false, message: err.message });
     }
 }
