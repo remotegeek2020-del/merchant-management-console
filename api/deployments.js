@@ -72,13 +72,13 @@ export default async function handler(req, res) {
             const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
             
             await supabase.from('returns').insert([{
-                merchant_id,
-                equipment_id,
-                return_reason: notes || 'Unit returned from field',
-                condition: return_type,
-                destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office',
-                status: 'open'
-            }]);
+             equipment_id: equipment_id,
+    merchant_id: merchant_id, // CRITICAL: This links the log to the merchant!
+    action: 'Initiated Return',
+    from_location: 'Merchant Field',
+    to_location: 'In Transit / RMA',
+    notes: `RMA Started. Condition: ${return_type}`
+}]);
 
             await supabase.from('equipments').update({
                 status: 'pending_return',
