@@ -54,26 +54,27 @@
     <article class="main-card">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
-                <tr class="slds-line-height_reset">
-                    <th>RMA ID</th>
-                    <th>Date</th>
-                    <th>Merchant</th>
-                    <th>Equipment (S/N)</th>
-                    <th>Reason</th>
-                    <th>Condition</th>
-                    <th>Destination</th>
-                    <th>Status</th>
-                </tr>
-            </thead>
+    <tr class="slds-line-height_reset">
+        <th>RMA ID</th>
+        <th>Date</th>
+        <th>Merchant</th>
+        <th>Equipment (S/N)</th>
+        <th>Reason</th>
+        <th>Condition</th>
+        <th>Destination</th>
+        <th>Status</th>
+        <th>Actions</th> </tr>
+</thead>
             <tbody id="returnsTableBody"></tbody>
         </table>
     </article>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     async function fetchReturns() {
         const tbody = document.getElementById('returnsTableBody');
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
         
         try {
             const res = await fetch('/api/returns', {
@@ -90,6 +91,9 @@
             tbody.innerHTML = "";
             result.data.forEach(r => {
                 const row = tbody.insertRow();
+                // Determine if button should be shown (only for 'open' status)
+                const isItemOpen = r.status.toLowerCase() === 'open';
+
                 row.innerHTML = `
                     <td style="font-weight:800; color:var(--pp-blue);">${r.return_id || 'PENDING'}</td>
                     <td style="font-size:12px; color:#64748b;">${new Date(r.created_at).toLocaleDateString()}</td>
@@ -99,10 +103,64 @@
                     <td><span class="badge ${r.condition === 'Defective' ? 'cond-defective' : 'cond-working'}">${r.condition || 'Unknown'}</span></td>
                     <td style="font-weight:600; color:#475569;">${r.destination || '---'}</td>
                     <td><span class="slds-badge">${r.status.toUpperCase()}</span></td>
+                    <td>
+                        ${isItemOpen ? `
+                            <button class="slds-button slds-button_success" 
+                                    style="background:#16a34a; color:white; border-radius:8px; padding:4px 12px; font-size:10px; font-weight:700; border:none; cursor:pointer;"
+                                    onclick="finalizeRMA('${r.id}', '${r.equipment_id}', '${r.condition}', '${r.destination}')">
+                                COMPLETE & RESTOCK
+                            </button>
+                        ` : `
+                            <span style="color:#64748b; font-size:10px; font-weight:700; text-transform:uppercase;">Processed</span>
+                        `}
+                    </td>
                 `;
             });
-        } catch (err) { console.error(err); }
+        } catch (err) { console.error("Fetch Error:", err); }
     }
+
+    async function finalizeRMA(id, equipment_id, condition, destination) {
+        const confirm = await Swal.fire({
+            title: 'Complete Inspection?',
+            text: `Physically verify unit. Move to ${destination} and set status to ${condition === 'Defective' ? 'Repairing' : 'Stocked'}?`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#16a34a',
+            cancelButtonColor: '#64748b',
+            confirmButtonText: 'Yes, Restock Unit'
+        });
+
+        if (confirm.isConfirmed) {
+            Swal.fire({ title: 'Updating Inventory...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                const res = await fetch('/api/returns', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'complete_return', 
+                        payload: { id, equipment_id, condition, destination } 
+                    })
+                });
+                
+                const result = await res.json();
+                if (result.success) {
+                    Swal.fire({
+                        icon: 'success',
+                        title: 'Restocked Successfully',
+                        text: 'The equipment is now back in live inventory.',
+                        timer: 2000,
+                        showConfirmButton: false
+                    }).then(() => fetchReturns());
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (err) {
+                Swal.fire('Error', 'Failed to complete return: ' + err.message, 'error');
+            }
+        }
+    }
+
     window.onload = fetchReturns;
 </script>
 </body>
