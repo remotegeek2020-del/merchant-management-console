@@ -129,35 +129,24 @@ document.addEventListener('DOMContentLoaded', loadPartners);
 
 function renderGrid(data) {
     const grid = document.getElementById('partnerGrid');
-    if (data.length === 0) {
-        grid.innerHTML = '<p style="grid-column: 1/-1; text-align: center;">No partners found.</p>';
-        return;
-    }
-
     grid.innerHTML = data.map(p => `
         <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-            <div style="margin-bottom: 12px;">
-                <h2 style="font-weight:800; font-size:1.2rem; color:#002d5a; margin:0;">${p.name}</h2>
-            </div>
-
-            <div style="border-top: 1px solid #f1f5f9; padding-top: 12px;">
+            <h2 style="color: #002d5a; margin-bottom: 15px; font-weight: 800;">${p.name}</h2>
+            
+            <div class="company-list">
                 ${p.companies.map(co => `
-                    <div style="margin-bottom: 10px;">
-                        <div style="display:flex; align-items:center; gap:6px;">
-                            <span class="material-icons" style="font-size:14px; color:#64748b;">business</span>
-                            <b style="font-size:13px; color:#334155; text-transform:uppercase;">${co.name}</b>
+                    <div style="margin-bottom: 12px; border-top: 1px solid #eee; padding-top: 8px;">
+                        <div style="display:flex; align-items:center; gap:8px;">
+                            <span class="material-icons" style="font-size:16px; color:#64748b;">business</span>
+                            <span style="font-weight:600; font-size:13px; color:#334155;">${co.name}</span>
                         </div>
                         
-                        <div style="margin-left: 20px; margin-top: 4px; display:flex; flex-wrap:wrap; gap:4px;">
-                            ${co.ids.map(id => `
-                                <div style="display:inline-flex; align-items:center; gap:4px; background:#f8fafc; border:1px solid #e2e8f0; padding:2px 6px; border-radius:4px;">
-                                    <span style="font-family:monospace; font-weight:700; font-size:11px; color:#0369a1;">
-                                        ${id.string}
-                                    </span>
-                                    ${id.rev ? `<span style="font-size:9px; color:#64748b;">(${id.rev})</span>` : ''}
-                                    ${id.isPrime ? `<span class="material-icons" style="font-size:12px; color:#fbbf24;">verified</span>` : ''}
-                                </div>
-                            `).join('')}
+                        <div style="margin-left: 24px; margin-top: 4px; display:flex; flex-wrap:wrap; gap:5px;">
+                            ${co.ids.length > 0 ? co.ids.map(id => `
+                                <span style="background:#f1f5f9; color:#0369a1; font-family:monospace; font-weight:700; font-size:11px; padding:2px 8px; border-radius:4px; border:1px solid #e2e8f0;">
+                                    ${id.string} <small style="color:#64748b; font-weight:400;">(${id.rev})</small>
+                                </span>
+                            `).join('') : '<span style="font-size:10px; color:#94a3b8; font-style:italic;">No IDs assigned</span>'}
                         </div>
                     </div>
                 `).join('')}
