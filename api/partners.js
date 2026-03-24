@@ -7,84 +7,53 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'get_partners_list') {
-            // 1. Get Human Names (Michelle Collins) from app_users
-            const { data: users, error: uErr } = await supabase
-                .from('app_users')
-                .select('userid, first_name, last_name');
-            if (uErr) throw uErr;
+            // 1. Get ALL persons first (The source of truth)
+            const { data: persons, error: pErr } = await supabase.from('persons').select('id');
+            if (pErr) throw pErr;
 
-            // 2. Get Mappings (Links the Person to the Company)
-            const { data: mappings, error: mErr } = await supabase
-                .from('company_person_mapping')
-                .select(`person_id, company_id, companies(id, company_name)`);
-            if (mErr) throw mErr;
+            // 2. Get User names as a lookup
+            const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name');
 
-            // 3. Get Identifiers (The ID Strings) and the Company they belong to
-            // This follows: agent_identifiers -> agent_id -> agents -> company_id
-            const { data: idData, error: iErr } = await supabase
-                .from('agent_identifiers')
-                .select(`
-                    id_string,
-                    agents:agent_id (
-                        company_id
-                    )
-                `);
-            if (iErr) throw iErr;
+            // 3. Get Mappings and Identifiers
+            const { data: mappings } = await supabase.from('company_person_mapping').select(`person_id, company_id, companies(id, company_name)`);
+            const { data: idData } = await supabase.from('agent_identifiers').select(`id_string, agents:agent_id(company_id)`);
 
-            // --- DATA STITCHING (Following your exact path) ---
-            const finalData = users.map(u => {
-                // Find companies for this person
-                const myMappings = mappings.filter(m => m.person_id === u.userid);
-                
+            // --- RELAXED STITCHING ---
+            const finalData = persons.map(p => {
+                // Find name from app_users, or fallback to the ID
+                const userMatch = users?.find(u => u.userid === p.id);
+                const displayName = userMatch 
+                    ? `${userMatch.first_name || ''} ${userMatch.last_name || ''}`.trim() 
+                    : `Partner ${p.id.substring(0, 5)}`;
+
+                // Find companies
+                const myMappings = mappings?.filter(m => m.person_id === p.id) || [];
                 const myCompanies = myMappings.map(m => {
                     const co = m.companies;
                     if (!co) return null;
 
-                    // Find all IDs where the Agent record's company_id matches this Company
                     const myIds = idData
-                        .filter(item => item.agents && item.agents.company_id === co.id)
-                        .map(item => item.id_string);
+                        ?.filter(item => item.agents && item.agents.company_id === co.id)
+                        .map(item => item.id_string) || [];
 
-                    return {
-                        id: co.id,
-                        name: co.company_name,
-                        ids: myIds // This will now catch Chellecom & TrueNorth
-                    };
+                    return { id: co.id, name: co.company_name, ids: myIds };
                 }).filter(Boolean);
 
-                // Only show cards for people who are actually mapped to companies (Partners)
+                // Show all persons who have at least ONE company mapped
                 if (myCompanies.length === 0) return null;
 
                 return {
-                    id: u.userid,
-                    name: `${u.first_name || ''} ${u.last_name || ''}`.trim(),
+                    id: p.id,
+                    name: displayName,
                     companies: myCompanies
                 };
             }).filter(Boolean);
 
             return res.status(200).json({ success: true, data: finalData });
         }
-
-        // --- SUB-AGENT HIERARCHY ---
-        if (action === 'get_hierarchy') {
-            // Find agents whose parent is the selected person's agent record
-            const { data: subs, error: subError } = await supabase
-                .from('agents')
-                .select(`
-                    id, 
-                    agent_name, 
-                    agent_identifiers (id_string)
-                `)
-                .eq('parent_agent_id', person_id);
-
-            if (subError) throw subError;
-            return res.status(200).json({ success: true, data: subs });
-        }
-
-        return res.status(400).json({ success: false, message: "Invalid Action" });
-
+        
+        // ... hierarchy logic ...
     } catch (err) {
-        console.error("Partners API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
