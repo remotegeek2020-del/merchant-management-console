@@ -404,24 +404,32 @@
         }
     }
 
-    async function handleMerchantSearch(val) {
-        const list = document.getElementById('mSuggestions');
-        if (val.length < 2) { list.style.display = 'none'; return; }
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getLookups', query: val })
-            });
-            const result = await res.json();
-            list.innerHTML = (result.merchants || []).map(m => `
-                <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')">
-                    <strong>${m.dba_name}</strong>
+  async function handleMerchantSearch(val) {
+    const list = document.getElementById('mSuggestions');
+    if (val.length < 2) { list.style.display = 'none'; return; }
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getLookups', query: val })
+        });
+        const result = await res.json();
+        
+        // Updated to include the Merchant ID (MID) in the display
+        list.innerHTML = (result.merchants || []).map(m => `
+            <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong style="display:block;">${m.dba_name}</strong>
+                    <span style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</span>
                 </div>
-            `).join('');
-            list.style.display = 'block';
-        } catch (e) { console.error(e); }
+                <span class="material-icons" style="font-size:16px; color:#cbd5e1;">add_circle_outline</span>
+            </div>
+        `).join('');
+        list.style.display = 'block';
+    } catch (e) { 
+        console.error("Merchant Lookup Error:", e); 
     }
+}
 
     function selectMerchant(id, name) {
         document.getElementById('selectedMerchantId').value = id;
