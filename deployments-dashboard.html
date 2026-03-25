@@ -216,12 +216,12 @@ async function confirmDelete(id, dba, sn, equipId, merchantId) {
     });
             const result = await res.json();
             if (result.success) {
-                Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success').then(() => fetchDeployments());
+                Swal.fire('d!', 'Ticket removed and hardware reset.', 'success').then(() => fetchDeployments());
             } else {
                 throw new Error(result.message);
             }
         } catch (err) {
-            console.error("Delete Error:", err);
+            console.error(" Error:", err);
             Swal.fire('Error', err.message || 'API connection failed.', 'error');
         }
     }
@@ -306,13 +306,13 @@ function selectEquip(id, serial, type) {
                             <span class="material-icons" style="font-size:18px;">history</span>
                         </button>
                     </td>
-                    <td style="display:flex; gap:5px;">
+                 
         <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
                 onclick="confirmDelete('${d.id}', '${(d.merchants?.dba_name || 'Merchant').replace(/'/g, "\\'")}', '${d.equipments?.serial_number}', '${d.equipment_id}')" 
                 title="Delete">
             <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
         </button>
-    </td>
+   
                 `;
             });
         } catch (err) { 
