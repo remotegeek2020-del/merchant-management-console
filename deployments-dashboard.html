@@ -97,10 +97,12 @@
                 <input type="hidden" id="selectedMerchantId" required>
                 <div id="mSuggestions" class="suggestions-list"></div>
             </div>
-            <div style="margin-bottom:15px;">
-                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">HARDWARE</label>
-                <select id="equipSelect" class="slds-select" required></select>
-            </div>
+            <div style="position:relative; margin-bottom: 15px;">
+    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">HARDWARE (SERIAL NUMBER)</label>
+    <input type="text" id="eSearch" class="slds-input" placeholder="Type Serial Number..." onkeyup="handleEquipSearch(this.value)" autocomplete="off">
+    <input type="hidden" id="equipSelect" required>
+    <div id="eSuggestions" class="suggestions-list"></div>
+</div>
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:15px;">
                 <input type="text" id="tidInput" class="slds-input" placeholder="TID">
                 <input type="date" id="dateInput" class="slds-input" required>
@@ -180,6 +182,38 @@
 
 <script>
     let currentDeployments = [];
+    async function handleEquipSearch(val) {
+    const list = document.getElementById('eSuggestions');
+    if (val.length < 1) { list.style.display = 'none'; return; }
+    
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getLookups', query: val })
+        });
+        const result = await res.json();
+        
+        list.innerHTML = (result.inventory || []).map(e => `
+            <div class="suggestion-item" onclick="selectEquip('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <strong>${e.serial_number}</strong>
+                    <span style="font-size:10px; color:#64748b; display:block;">${e.terminal_type}</span>
+                </div>
+                <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">
+                    ${e.status.toUpperCase()}
+                </span>
+            </div>
+        `).join('');
+        list.style.display = 'block';
+    } catch (e) { console.error(e); }
+}
+
+function selectEquip(id, serial, type) {
+    document.getElementById('equipSelect').value = id;
+    document.getElementById('eSearch').value = `${serial} (${type})`;
+    document.getElementById('eSuggestions').style.display = 'none';
+}
 
     async function fetchDeployments() {
         const tbody = document.getElementById('deploymentTableBody');
