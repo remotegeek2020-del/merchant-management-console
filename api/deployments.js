@@ -46,8 +46,8 @@ export default async function handler(req, res) {
         }
         
         // --- ACTION: LIST (With Crash-Proof Metrics) ---
-    if (action === 'list') {
-            const { query, page = 1, limit = 10 } = body; // Default to 10 rows per page
+if (action === 'list') {
+            const { query, page = 1, limit = 10 } = body;
             const from = (page - 1) * limit;
             const to = from + limit - 1;
 
@@ -57,11 +57,12 @@ export default async function handler(req, res) {
                     *,
                     merchants:merchant_id(dba_name, merchant_id),
                     equipments:equipment_id(id, serial_number, terminal_type)
-                `, { count: 'exact' }); // Get total count for pagination
+                `, { count: 'exact' });
 
+            // THE FIX: Use a raw OR filter string to avoid the logic tree error
             if (query) {
                 const searchTerm = `%${query}%`;
-                // FIX: Added the alias 'equipments' explicitly inside the OR string
+                // Note: We use the table name 'equipments' followed by the column name
                 request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
             }
 
@@ -69,14 +70,15 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false })
                 .range(from, to);
 
-            if (error) throw error;
+            if (error) {
+                console.error("Supabase Error:", error.message);
+                return res.status(500).json({ success: false, message: error.message });
+            }
 
             const safeData = data || [];
-            
-            // Calculate metrics
             const metrics = {
                 active: safeData.filter(d => d.status === 'Open' || d.status === 'In Transit').length,
-                total: count || 0, // Use the database count
+                total: count || 0,
                 today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
             };
             
@@ -87,7 +89,7 @@ export default async function handler(req, res) {
                 pagination: {
                     totalRecords: count,
                     currentPage: page,
-                    totalPages: Math.ceil(count / limit)
+                    totalPages: Math.ceil((count || 0) / limit)
                 }
             });
         }
