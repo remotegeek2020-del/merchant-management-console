@@ -91,23 +91,51 @@ export default async function handler(req, res) {
         }
 
         // --- ACTION: RETURN TO OFFICE ---
-        if (action === 'return_to_office') {
-            const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
-            await supabase.from('returns').insert([{
-                merchant_id, equipment_id, status: 'open', condition: return_type,
-                return_reason: notes || 'Returned from field',
-                destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office'
-            }]);
+      // --- ACTION: RETURN TO OFFICE ---
+if (action === 'return_to_office') {
+    const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-            await supabase.from('equipments').update({ status: 'pending_return', current_location: 'In Transit / RMA', merchant_id: null }).eq('id', equipment_id);
-            await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-            await supabase.from('equipment_logs').insert([{
-                equipment_id, merchant_id, action: 'Initiated Return', from_location: 'Merchant Field', to_location: 'In Transit / RMA',
-                notes: `RMA Started. Condition: ${return_type}. Notes: ${notes}`
-            }]);
+    // 1. Fetch Merchant Name for accurate logging
+    const { data: merchantData } = await supabase
+        .from('merchants')
+        .select('dba_name')
+        .eq('id', merchant_id)
+        .single();
 
-            return res.status(200).json({ success: true });
-        }
+    const dbaName = merchantData?.dba_name || 'Merchant Field';
+
+    // 2. Create the RMA ticket
+    await supabase.from('returns').insert([{
+        merchant_id, 
+        equipment_id, 
+        status: 'open', 
+        condition: return_type,
+        return_reason: notes || 'Returned from field',
+        destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office'
+    }]);
+
+    // 3. Update Equipment status
+    await supabase.from('equipments').update({ 
+        status: 'pending_return', 
+        current_location: 'In Transit / RMA', 
+        merchant_id: null 
+    }).eq('id', equipment_id);
+
+    // 4. Close Deployment Ticket
+    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+
+    // 5. Create History Log using the ACTUAL Merchant Name
+    await supabase.from('equipment_logs').insert([{
+        equipment_id: equipment_id,
+        merchant_id: merchant_id, 
+        action: 'Initiated Return',
+        from_location: dbaName, // Now shows "Better Than Yesterday" instead of "Merchant Field"
+        to_location: 'In Transit / RMA',
+        notes: `RMA Started. Condition: ${return_type}. Notes: ${notes}`
+    }]);
+
+    return res.status(200).json({ success: true });
+}
 
         // --- ACTION: UPDATE ---
         if (action === 'update') {
