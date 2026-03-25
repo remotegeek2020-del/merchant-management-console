@@ -8,38 +8,38 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
-        if (action === 'delete') {
+       if (action === 'delete') {
             const { deployment_id, merchant_name, serial_number, equipment_id, user_email } = payload;
 
             // 1. Delete the deployment ticket
-            const { error: deleteError } = await supabase
-                .from('deployments')
-                .delete()
-                .eq('id', deployment_id);
-
+            const { error: deleteError } = await supabase.from('deployments').delete().eq('id', deployment_id);
             if (deleteError) throw deleteError;
 
-            // 2. RESET EQUIPMENT: Move back to stock and clear merchant link
-            const { error: equipError } = await supabase
-                .from('equipments')
-                .update({ 
-                    status: 'stocked', 
-                    current_location: 'Warsaw Office',
-                    merchant_id: null 
-                })
-                .eq('id', equipment_id);
+            // 2. RESET EQUIPMENT STATUS
+            await supabase.from('equipments').update({ 
+                status: 'stocked', 
+                current_location: 'Warsaw Office',
+                merchant_id: null 
+            }).eq('id', equipment_id);
 
-            if (equipError) throw equipError;
+            // 3. NEW: Add a "System Reversion" log to the Equipment Lifecycle
+            // This is what makes the "Accountability" look professional
+            await supabase.from('equipment_logs').insert([{
+                equipment_id: equipment_id,
+                action: 'Ticket Deleted',
+                from_location: merchant_name,
+                to_location: 'Warsaw Office',
+                notes: `Deployment Ticket ${deployment_id} was deleted by ${user_email}. Unit returned to stock.`
+            }]);
 
-            // 3. LOG ACTIVITY: Record who deleted it in activity_logs
+            // 4. Log to General Activity Logs (Your screenshot table)
             await supabase.from('activity_logs').insert([{
                 email: user_email || 'System User',
                 action: 'DELETE_DEPLOYMENT',
                 status: 'Success',
                 user_agent: req.headers['user-agent'],
                 ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
-                // Using the detail format from your table screenshot
-                details: `Deleted ticket ${deployment_id}. HW ${serial_number} returned to Warsaw Stock.`
+                details: `Deleted ticket ${deployment_id} for ${merchant_name}. HW ${serial_number} reset to Stock.`
             }]);
 
             return res.status(200).json({ success: true });
