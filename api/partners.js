@@ -25,7 +25,6 @@ export default async function handler(req, res) {
         ]);
 
         if (pRes.error) throw pRes.error;
-        if (iRes.error) throw iRes.error;
 
         const persons = pRes.data || [];
         const mappings = mRes.data || [];
@@ -33,25 +32,26 @@ export default async function handler(req, res) {
         const agents = aRes.data || [];
         const identifiers = iRes.data || [];
 
-        // 2. Stitch Data with Strict String Matching
+        // 2. Stitch Data with Crash Protection (Optional Chaining)
         const finalData = persons.map(p => {
-            const pId = String(p.id).toLowerCase().trim();
+            // Use fallback empty string to prevent .toLowerCase() crashes
+            const pId = String(p.id || '').toLowerCase().trim();
             
             // Find Company IDs for this Person
             const myCompanyIds = mappings
-                .filter(m => String(m.person_id).toLowerCase().trim() === pId)
-                .map(m => String(m.company_id).toLowerCase().trim());
+                .filter(m => String(m.person_id || '').toLowerCase().trim() === pId)
+                .map(m => String(m.company_id || '').toLowerCase().trim());
             
             // Map those IDs to Company Objects
             const myCompanies = companies
-                .filter(c => myCompanyIds.includes(String(c.id).toLowerCase().trim()))
+                .filter(c => myCompanyIds.includes(String(c.id || '').toLowerCase().trim()))
                 .map(co => {
-                    const coId = String(co.id).toLowerCase().trim();
+                    const coId = String(co.id || '').toLowerCase().trim();
 
                     // Find Agent UUIDs for this Company
                     const coAgentUuids = agents
-                        .filter(a => String(a.company_id).toLowerCase().trim() === coId)
-                        .map(a => String(a.id).toLowerCase().trim());
+                        .filter(a => String(a.company_id || '').toLowerCase().trim() === coId)
+                        .map(a => String(a.id || '').toLowerCase().trim());
                     
                     // Find Identifiers for those Agent UUIDs
                     const myIds = identifiers
@@ -68,7 +68,7 @@ export default async function handler(req, res) {
                     };
                 });
 
-            // Only return the partner if they have mapped companies
+            // Hide the person if they have no companies mapped
             if (myCompanies.length === 0) return null;
 
             return { 
@@ -81,7 +81,10 @@ export default async function handler(req, res) {
         return res.status(200).json({ success: true, data: finalData });
 
     } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error("Dashboard API Error:", err.message);
+        return res.status(500).json({ 
+            success: false, 
+            message: err.message 
+        });
     }
 }
