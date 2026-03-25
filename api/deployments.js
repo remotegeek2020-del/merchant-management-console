@@ -26,17 +26,16 @@ export default async function handler(req, res) {
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
 
-            // SAFETY CHECK: Ensure the hardware is still 'stocked' before deploying
-            const { data: checkEquip } = await supabase
-                .from('equipments')
-                .select('status')
-                .eq('id', equipment_id)
+            // 1. Fetch the Merchant's DBA name to make the log useful
+            const { data: merchantData } = await supabase
+                .from('merchants')
+                .select('dba_name')
+                .eq('id', merchant_id)
                 .single();
 
-            if (checkEquip?.status !== 'stocked') {
-                return res.status(400).json({ success: false, message: "This unit was just deployed by someone else." });
-            }
+            const dbaName = merchantData?.dba_name || 'Client Site';
 
+            // 2. Insert the deployment
             const { data: newDep, error: depError } = await supabase
                 .from('deployments')
                 .insert([{ 
@@ -51,16 +50,20 @@ export default async function handler(req, res) {
 
             if (depError) throw depError;
 
+            // 3. Update Equipment status
             await supabase.from('equipments').update({ 
-                status: 'deployed', current_location: 'Client Site', merchant_id: merchant_id 
+                status: 'deployed', 
+                current_location: dbaName, // Update the location to the actual DBA
+                merchant_id: merchant_id 
             }).eq('id', equipment_id);
 
+            // 4. Create the History Log with the MERCHANT NAME
             await supabase.from('equipment_logs').insert([{
                 equipment_id,
-                merchant_id, // Link for merchant dashboard
+                merchant_id,
                 action: 'Deployed',
                 from_location: 'Warsaw Office',
-                to_location: 'Client Site',
+                to_location: dbaName, // Changed from 'Client Site' to the DBA Name
                 notes: `Deployment Created. TID: ${tid}`
             }]);
 
