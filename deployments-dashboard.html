@@ -182,6 +182,54 @@
 
 <script>
     let currentDeployments = [];
+
+    async function confirmDelete(id, dba, sn) {
+    const { value: confirmContent } = await Swal.fire({
+        title: 'Are you absolutely sure?',
+        html: `You are about to delete the deployment for <b>${dba}</b> (SN: ${sn}).<br><br>Type <b>DELETE</b> to confirm:`,
+        input: 'text',
+        inputPlaceholder: 'DELETE',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        confirmButtonText: 'Permanently Delete',
+        inputValidator: (value) => {
+            if (value !== 'DELETE') {
+                return 'You must type DELETE in all caps to proceed!';
+            }
+        }
+    });
+
+    if (confirmContent === 'DELETE') {
+        Swal.fire({ title: 'Deleting...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'delete', 
+                    payload: { 
+                        deployment_id: id,
+                        merchant_name: dba,
+                        serial_number: sn,
+                        user_email: 'admin@secureconsole.com' // Replace with actual logged-in user if available
+                    } 
+                })
+            });
+
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Deleted!', 'The ticket has been removed and logged.', 'success')
+                .then(() => fetchDeployments()); // Refresh grid
+            } else {
+                Swal.fire('Error', result.message, 'error');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Connection failed.', 'error');
+        }
+    }
+}
     async function handleEquipSearch(val) {
     const list = document.getElementById('eSuggestions');
     if (val.length < 1) { list.style.display = 'none'; return; }
@@ -261,6 +309,11 @@ function selectEquip(id, serial, type) {
                         <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${d.equipments?.serial_number || 'Unknown'}')">
                             <span class="material-icons" style="font-size:18px;">history</span>
                         </button>
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
+        onclick="confirmDelete('${d.id}', '${d.merchants?.dba_name}', '${d.equipments?.serial_number}')" 
+        title="Delete Ticket">
+    <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
+</button>
                     </td>
                 `;
             });
