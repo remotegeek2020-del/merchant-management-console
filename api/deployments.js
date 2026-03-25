@@ -46,20 +46,25 @@ export default async function handler(req, res) {
         }
         
         // --- ACTION: LIST (With Crash-Proof Metrics) ---
-       if (action === 'list') {
-            const { data, error } = await supabase
+     if (action === 'list') {
+            const searchTerm = query ? `%${query}%` : null;
+
+            let request = supabase
                 .from('deployments')
                 .select(`
                     *,
                     merchants:merchant_id(dba_name, merchant_id),
                     equipments:equipment_id(id, serial_number, terminal_type)
-                `)
-                .order('created_at', { ascending: false });
+                `);
 
-            if (error) {
-                console.error("Database Error:", error);
-                return res.status(500).json({ success: false, message: error.message });
+            // If there's a search query, filter by Deployment ID OR Serial Number
+            if (searchTerm) {
+                request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
             }
+
+            const { data, error } = await request.order('created_at', { ascending: false });
+
+            if (error) throw error;
 
             const safeData = data || [];
             const metrics = {
@@ -67,6 +72,7 @@ export default async function handler(req, res) {
                 total: safeData.length,
                 today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
             };
+            
             return res.status(200).json({ success: true, data: safeData, metrics });
         }
         // --- ACTION: CREATE ---
