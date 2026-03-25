@@ -184,6 +184,7 @@
 
 <script>
     let currentDeployments = [];
+   let searchTimeout;
     let currentPage = 1;
     let totalPages = 1;
 
@@ -459,63 +460,85 @@
    // 3. FETCH AND RENDER DEPLOYMENTS (with Search Debounce)
  let searchTimeout; 
 
-    async function fetchDeployments(page = 1) {
-        currentPage = page; // Update global page tracker
+ async function fetchDeployments(page = 1) {
+        currentPage = page;
+        const tbody = document.getElementById('deploymentTableBody');
+        if (!tbody) return;
+
+        // Show loading state
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
+
         clearTimeout(searchTimeout);
-
         searchTimeout = setTimeout(async () => {
-            const tbody = document.getElementById('deploymentTableBody');
-            if (!tbody) return;
-            
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
-            
-            const queryValue = document.getElementById('depSearch')?.value || '';
-
             try {
+                const queryValue = document.getElementById('depSearch')?.value || '';
                 const res = await fetch('/api/deployments', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
                         action: 'list', 
-                        query: queryValue,
-                        page: currentPage,
+                        query: queryValue, 
+                        page: currentPage, 
                         limit: 10 
                     })
                 });
-                const result = await res.json();
                 
+                const result = await res.json();
                 if (!result.success) throw new Error(result.message);
 
                 currentDeployments = result.data || [];
-                totalPages = result.pagination.totalPages;
+                totalPages = result.pagination?.totalPages || 1;
 
-                // Render Table (same loop as before)
-                renderTable(); 
+                // 1. Render Table Rows
+                tbody.innerHTML = "";
+                if (currentDeployments.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;">No records found.</td></tr>`;
+                } else {
+                    currentDeployments.forEach((d, index) => {
+                        const row = tbody.insertRow();
+                        const dateStr = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+                        const merchantName = d.merchants?.dba_name || '---';
+                        const serialNum = d.equipments?.serial_number || '---';
+                        const safeDba = merchantName.replace(/'/g, "\\'");
 
-                // Render Pagination Controls
+                        row.innerHTML = `
+                            <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
+                            <td style="font-weight:600;">${merchantName}</td>
+                            <td><code>${serialNum}</code></td>
+                            <td>${d.tid || '---'}</td>
+                            <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
+                            <td>${dateStr}</td>
+                            <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
+                            <td style="display:flex; gap:5px;">
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${serialNum}')"><span class="material-icons" style="font-size:18px;">history</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
+                            </td>
+                        `;
+                    });
+                }
+
+                // 2. Update KPIs
+                if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
+                
+                // 3. Render Pagination Controls
                 renderPagination();
 
-                // Update KPIs
-                document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
-            } catch (err) { 
+            } catch (err) {
                 console.error("Fetch Error:", err);
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:red;">Error loading data: ${err.message}</td></tr>`;
             }
         }, 300);
     }
-
-    function renderPagination() {
+  function renderPagination() {
         const container = document.getElementById('paginationControls');
         if (!container) return;
-
         container.innerHTML = `
-            <div style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:20px; padding:10px;">
-                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
-                    Previous
-                </button>
-                <span style="font-weight:700; color:#64748b;">Page ${currentPage} of ${totalPages}</span>
-                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
-                    Next
-                </button>
+            <div style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:20px; padding:10px; background:#f8fafc; border-radius:8px;">
+                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>Previous</button>
+                <span style="font-weight:700; color:#475569;">Page ${currentPage} of ${totalPages}</span>
+                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
             </div>
         `;
     }
