@@ -12,7 +12,6 @@ export default async function handler(req, res) {
         if (action === 'delete') {
             const { deployment_id, equipment_id, merchant_id, merchant_name, serial_number, user_email } = payload || {};
 
-            // 1. Reset Equipment Status to Stock
             if (equipment_id) {
                 await supabase.from('equipments').update({ 
                     status: 'stocked', 
@@ -20,7 +19,6 @@ export default async function handler(req, res) {
                     merchant_id: null 
                 }).eq('id', equipment_id);
 
-                // 2. Add log to Equipment Lifecycle (So it shows in Merchant Dashboard)
                 await supabase.from('equipment_logs').insert([{
                     equipment_id: equipment_id,
                     merchant_id: merchant_id,
@@ -31,10 +29,8 @@ export default async function handler(req, res) {
                 }]);
             }
 
-            // 3. Delete the Deployment record
             await supabase.from('deployments').delete().eq('id', deployment_id);
 
-            // 4. Log to activity_logs (Your Audit Table)
             await supabase.from('activity_logs').insert([{
                 email: user_email || 'admin@secureconsole.com',
                 action: 'DELETE_DEPLOYMENT',
@@ -45,69 +41,76 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
         
-        // --- ACTION: LIST (With Crash-Proof Metrics) ---
-if (action === 'list') {
-    const { query, page = 1, limit = 10 } = body;
-    const from = (page - 1) * limit;
-    const to = from + limit - 1;
+        // --- ACTION: LIST (With Fix for Search & KPI Metrics) ---
+        if (action === 'list') {
+            const { query, page = 1, limit = 10 } = body;
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
 
-    let request = supabase
-        .from('deployments')
-        .select(`
-            *,
-            merchants:merchant_id(dba_name, merchant_id),
-            equipments:equipment_id(id, serial_number, terminal_type)
-        `, { count: 'exact' });
+            let request = supabase
+                .from('deployments')
+                .select(`
+                    *,
+                    merchants:merchant_id(dba_name, merchant_id),
+                    equipments:equipment_id(id, serial_number, terminal_type)
+                `, { count: 'exact' });
 
-    if (query) {
-        const term = `%${query}%`;
+            if (query) {
+                const term = `%${query}%`;
+                const { data: matchedEquip } = await supabase
+                    .from('equipments')
+                    .select('id')
+                    .ilike('serial_number', term);
 
-        // 1. First, find any equipment IDs that match this serial number
-        const { data: matchedEquip } = await supabase
-            .from('equipments')
-            .select('id')
-            .ilike('serial_number', term);
+                const equipIds = (matchedEquip || []).map(e => e.id);
 
-        const equipIds = (matchedEquip || []).map(e => e.id);
+                if (equipIds.length > 0) {
+                    request = request.or(`deployment_id.ilike.${term},equipment_id.in.(${equipIds.join(',')})`);
+                } else {
+                    request = request.ilike('deployment_id', term);
+                }
+            }
 
-        // 2. Build the OR condition safely
-        // We check if the Deployment ID matches OR if the equipment_id is in our matched list
-        if (equipIds.length > 0) {
-            request = request.or(`deployment_id.ilike.${term},equipment_id.in.(${equipIds.join(',')})`);
-        } else {
-            // If no equipment matched, just search the Deployment ID
-            request = request.ilike('deployment_id', term);
+            const { data, error, count } = await request
+                .order('created_at', { ascending: false })
+                .range(from, to);
+
+            if (error) throw error;
+
+            // SURGICAL FIX: Fetch real counts from the database for KPIs
+            // 1. Get Active Count (Open or In Transit)
+            const { count: activeCount } = await supabase
+                .from('deployments')
+                .select('*', { count: 'exact', head: true })
+                .in('status', ['Open', 'In Transit']);
+
+            // 2. Get Today's Count
+            const startOfDay = new Date();
+            startOfDay.setHours(0, 0, 0, 0);
+            const { count: todayCount } = await supabase
+                .from('deployments')
+                .select('*', { count: 'exact', head: true })
+                .gte('created_at', startOfDay.toISOString());
+
+            const safeData = data || [];
+            const metrics = {
+                active: activeCount || 0,
+                total: count || 0,
+                today: todayCount || 0
+            };
+            
+            return res.status(200).json({ 
+                success: true, 
+                data: safeData, 
+                metrics,
+                pagination: {
+                    totalRecords: count,
+                    currentPage: page,
+                    totalPages: Math.ceil((count || 0) / limit)
+                }
+            });
         }
-    }
 
-    const { data, error, count } = await request
-        .order('created_at', { ascending: false })
-        .range(from, to);
-
-    if (error) {
-        console.error("Supabase Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
-    }
-
-    // ... (rest of your metrics and response logic stays the same)
-    const safeData = data || [];
-    const metrics = {
-        active: safeData.filter(d => d.status === 'Open' || d.status === 'In Transit').length,
-        total: count || 0,
-        today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
-    };
-    
-    return res.status(200).json({ 
-        success: true, 
-        data: safeData, 
-        metrics,
-        pagination: {
-            totalRecords: count,
-            currentPage: page,
-            totalPages: Math.ceil((count || 0) / limit)
-        }
-    });
-}
         // --- ACTION: CREATE ---
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
@@ -130,83 +133,46 @@ if (action === 'list') {
         }
 
         // --- ACTION: RETURN TO OFFICE ---
-      // --- ACTION: RETURN TO OFFICE ---
-if (action === 'return_to_office') {
-    const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+        if (action === 'return_to_office') {
+            const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-    // 1. Fetch Merchant Name for accurate logging
-    const { data: merchantData } = await supabase
-        .from('merchants')
-        .select('dba_name')
-        .eq('id', merchant_id)
-        .single();
+            const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+            const dbaName = merchantData?.dba_name || 'Merchant Field';
 
-    const dbaName = merchantData?.dba_name || 'Merchant Field';
+            await supabase.from('returns').insert([{
+                merchant_id, equipment_id, status: 'open', condition: return_type,
+                return_reason: notes || 'Returned from field',
+                destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office'
+            }]);
 
-    // 2. Create the RMA ticket
-    await supabase.from('returns').insert([{
-        merchant_id, 
-        equipment_id, 
-        status: 'open', 
-        condition: return_type,
-        return_reason: notes || 'Returned from field',
-        destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office'
-    }]);
+            await supabase.from('equipments').update({ 
+                status: 'pending_return', current_location: 'In Transit / RMA', merchant_id: null 
+            }).eq('id', equipment_id);
 
-    // 3. Update Equipment status
-    await supabase.from('equipments').update({ 
-        status: 'pending_return', 
-        current_location: 'In Transit / RMA', 
-        merchant_id: null 
-    }).eq('id', equipment_id);
+            await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
-    // 4. Close Deployment Ticket
-    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+            await supabase.from('equipment_logs').insert([{
+                equipment_id, merchant_id, action: 'Initiated Return', from_location: dbaName,
+                to_location: 'In Transit / RMA', notes: `RMA Started. Condition: ${return_type}. Notes: ${notes}`
+            }]);
 
-    // 5. Create History Log using the ACTUAL Merchant Name
-    await supabase.from('equipment_logs').insert([{
-        equipment_id: equipment_id,
-        merchant_id: merchant_id, 
-        action: 'Initiated Return',
-        from_location: dbaName, // Now shows "Better Than Yesterday" instead of "Merchant Field"
-        to_location: 'In Transit / RMA',
-        notes: `RMA Started. Condition: ${return_type}. Notes: ${notes}`
-    }]);
+            return res.status(200).json({ success: true });
+        }
 
-    return res.status(200).json({ success: true });
-}
-
-        // --- ACTION: UPDATE ---
-      if (action === 'update') {
+        // --- ACTION: UPDATE (With Tracking/Status Logs) ---
+        if (action === 'update') {
             const { deployment_id, status, tracking_id, target_date, notes } = payload;
 
-            // 1. Get current details BEFORE updating (to see what changed)
-            const { data: oldDep } = await supabase
-                .from('deployments')
-                .select(`
-                    status, 
-                    tracking_id, 
-                    equipment_id,
-                    merchants:merchant_id(dba_name)
-                `)
-                .eq('id', deployment_id)
-                .single();
+            const { data: oldDep } = await supabase.from('deployments').select(`
+                status, tracking_id, equipment_id, merchants:merchant_id(dba_name)
+            `).eq('id', deployment_id).single();
 
-            // 2. Perform the update
-            const { error: updateError } = await supabase
-                .from('deployments')
-                .update({ 
-                    status, 
-                    tracking_id, 
-                    target_deployment_date: target_date, 
-                    notes 
-                })
-                .eq('id', deployment_id);
+            const { error: updateError } = await supabase.from('deployments').update({ 
+                status, tracking_id, target_deployment_date: target_date, notes 
+            }).eq('id', deployment_id);
 
             if (updateError) throw updateError;
 
-            // 3. Create a History Log for the update
-            // We only log if the status or tracking actually changed
             if (oldDep && (oldDep.status !== status || oldDep.tracking_id !== tracking_id)) {
                 await supabase.from('equipment_logs').insert([{
                     equipment_id: oldDep.equipment_id,
@@ -217,13 +183,13 @@ if (action === 'return_to_office') {
                 }]);
             }
 
-            // 4. If status is Closed, set hardware to 'deployed'
             if (status === 'Closed' && oldDep?.equipment_id) {
                 await supabase.from('equipments').update({ status: 'deployed' }).eq('id', oldDep.equipment_id);
             }
 
             return res.status(200).json({ success: true });
         }
+
         // --- ACTION: LOOKUPS ---
         if (action === 'getLookups') {
             const { data: merchants } = await supabase.from('merchants').select('id, dba_name, merchant_id').ilike('dba_name', `%${query || ''}%`).limit(5);
