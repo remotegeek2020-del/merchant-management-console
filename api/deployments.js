@@ -138,10 +138,38 @@ if (action === 'return_to_office') {
 }
 
         // --- ACTION: UPDATE ---
-        if (action === 'update') {
+      if (action === 'update') {
             const { deployment_id, status, tracking_id, target_date, notes } = payload;
-            const { error } = await supabase.from('deployments').update({ status, tracking_id, target_deployment_date: target_date, notes }).eq('id', deployment_id);
+
+            // 1. Update the deployment ticket
+            const { error } = await supabase
+                .from('deployments')
+                .update({ 
+                    status, 
+                    tracking_id, 
+                    target_deployment_date: target_date, 
+                    notes 
+                })
+                .eq('id', deployment_id);
+
             if (error) throw error;
+
+            // 2. If status is set to Closed, ensure the equipment is officially 'deployed'
+            if (status === 'Closed') {
+                // Fetch the equipment_id for this deployment first
+                const { data: dep } = await supabase
+                    .from('deployments')
+                    .select('equipment_id, merchant_id')
+                    .eq('id', deployment_id)
+                    .single();
+
+                if (dep?.equipment_id) {
+                    await supabase.from('equipments').update({ 
+                        status: 'deployed' 
+                    }).eq('id', dep.equipment_id);
+                }
+            }
+
             return res.status(200).json({ success: true });
         }
 
