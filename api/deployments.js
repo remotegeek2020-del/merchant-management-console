@@ -60,10 +60,9 @@ if (action === 'list') {
     `, { count: 'exact' });
 
 if (query) {
-    // DO NOT change the spacing or the dots here. 
-    // This specific format is required to bypass the logic tree parser error.
     const searchTerm = `%${query}%`;
-    request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
+    // We manually construct the OR filter string
+    request = request.filter('or', `(deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm})`);
 }
 
             const { data, error, count } = await request
