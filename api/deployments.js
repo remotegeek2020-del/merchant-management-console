@@ -52,19 +52,20 @@ if (action === 'list') {
             const to = from + limit - 1;
 
             let request = supabase
-                .from('deployments')
-                .select(`
-                    *,
-                    merchants:merchant_id(dba_name, merchant_id),
-                    equipments:equipment_id(id, serial_number, terminal_type)
-                `, { count: 'exact' });
+    .from('deployments')
+    .select(`
+        *,
+        merchants:merchant_id(dba_name, merchant_id),
+        equipments:equipment_id(id, serial_number, terminal_type)
+    `, { count: 'exact' });
 
-            // THE FIX: Use a raw OR filter string to avoid the logic tree error
-            if (query) {
-                const searchTerm = `%${query}%`;
-                // Note: We use the table name 'equipments' followed by the column name
-                request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
-            }
+if (query) {
+    const searchTerm = `%${query}%`;
+    // SURGICAL FIX: Use the 'referenced table' filter 
+    // This tells Supabase to look at deployment_id in the main table 
+    // AND serial_number in the equipments table separately to avoid the logic tree error.
+    request = request.or(`deployment_id.ilike.${searchTerm}, serial_number.ilike.${searchTerm}`, { foreignTable: 'equipments' });
+}
 
             const { data, error, count } = await request
                 .order('created_at', { ascending: false })
