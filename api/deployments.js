@@ -8,6 +8,30 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
+        if (action === 'delete') {
+            const { deployment_id, merchant_name, serial_number, user_email } = payload;
+
+            // 1. Delete the deployment ticket
+            const { error: deleteError } = await supabase
+                .from('deployments')
+                .delete()
+                .eq('id', deployment_id);
+
+            if (deleteError) throw deleteError;
+
+            // 2. Log the activity to your activity_logs table
+            await supabase.from('activity_logs').insert([{
+                email: user_email || 'System User',
+                action: 'DELETE_DEPLOYMENT',
+                status: 'Success',
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+                // Optional: Store details in a text format since the table uses text fields
+                details: `Deleted ticket ${deployment_id} for ${merchant_name} (SN: ${serial_number})`
+            }]);
+
+            return res.status(200).json({ success: true });
+        }
         if (action === 'list') {
             const { data, error } = await supabase
                 .from('deployments')
