@@ -25,9 +25,29 @@ export default async function handler(req, res) {
 
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
+
+            // SAFETY CHECK: Ensure the hardware is still 'stocked' before deploying
+            const { data: checkEquip } = await supabase
+                .from('equipments')
+                .select('status')
+                .eq('id', equipment_id)
+                .single();
+
+            if (checkEquip?.status !== 'stocked') {
+                return res.status(400).json({ success: false, message: "This unit was just deployed by someone else." });
+            }
+
             const { data: newDep, error: depError } = await supabase
                 .from('deployments')
-                .insert([{ merchant_id, equipment_id, tid, tracking_id, target_deployment_date: target_date, notes, status: 'Open' }]).select();
+                .insert([{ 
+                    merchant_id, 
+                    equipment_id, 
+                    tid, 
+                    tracking_id, 
+                    target_deployment_date: target_date, 
+                    notes, 
+                    status: 'Open' 
+                }]).select();
 
             if (depError) throw depError;
 
