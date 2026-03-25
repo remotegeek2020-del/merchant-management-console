@@ -44,8 +44,8 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Logistics & Deployments</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="depSearch" placeholder="Search ID or Serial..." class="slds-input" 
-       style="width:250px; border-radius:10px;" onkeyup="fetchDeployments()">
+            <input type="text" id="depSearch" placeholder="Search ID or Serial..." 
+       class="slds-input" oninput="fetchDeployments()">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="openNewDeploymentModal()">
                 <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
                 NEW TICKET
