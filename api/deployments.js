@@ -9,45 +9,58 @@ export default async function handler(req, res) {
 
     try {
 if (action === 'delete') {
-    const { deployment_id, equipment_id, merchant_id, merchant_name, serial_number } = payload || {};
+    const { deployment_id, equipment_id, merchant_name, serial_number } = payload || {};
 
     if (!deployment_id) {
         return res.status(400).json({ success: false, message: "Missing deployment_id" });
     }
 
-    // 1. Delete Deployment
-    await supabase.from('deployments').delete().eq('id', deployment_id);
+    try {
+        // 1. Reset the Equipment status FIRST (so we don't lose the reference)
+        if (equipment_id) {
+            const { error: equipError } = await supabase
+                .from('equipments')
+                .update({ 
+                    status: 'stocked', 
+                    current_location: 'Warsaw Office',
+                    merchant_id: null 
+                })
+                .eq('id', equipment_id);
 
-    // 2. Reset Equipment (only if we have the ID)
-    if (equipment_id) {
-        await supabase.from('equipments').update({ 
-            status: 'stocked', 
-            current_location: 'Warsaw Office',
-            merchant_id: null 
-        }).eq('id', equipment_id);
+            if (equipError) throw equipError;
 
-        // 3. Log to Equipment Lifecycle
-        await supabase.from('equipment_logs').insert([{
-            equipment_id: equipment_id,
-            merchant_id: merchant_id,
-            action: 'Ticket Deleted',
-            from_location: merchant_name || 'Client Site',
-            to_location: 'Warsaw Office',
-            notes: `Deployment ticket ${deployment_id} deleted. Hardware reset to stock.`
+            // 2. Add the accountability log to the equipment's history
+            await supabase.from('equipment_logs').insert([{
+                equipment_id: equipment_id,
+                action: 'Ticket Deleted',
+                from_location: merchant_name || 'Client Site',
+                to_location: 'Warsaw Office',
+                notes: `Deployment ${deployment_id} was deleted. Hardware returned to stock.`
+            }]);
+        }
+
+        // 3. Delete the actual deployment ticket
+        const { error: deleteError } = await supabase
+            .from('deployments')
+            .delete()
+            .eq('id', deployment_id);
+
+        if (deleteError) throw deleteError;
+
+        // 4. Log the deletion in activity_logs
+        await supabase.from('activity_logs').insert([{
+            email: 'admin@secureconsole.com',
+            action: 'DELETE_DEPLOYMENT',
+            status: 'Success',
+            details: `Deleted ticket ${deployment_id} for ${merchant_name}. SN: ${serial_number} reset to Stock.`
         }]);
+
+        return res.status(200).json({ success: true });
+    } catch (err) {
+        console.error("Delete Logic Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
     }
-
-    // 4. Activity Log
-    await supabase.from('activity_logs').insert([{
-        email: 'admin@secureconsole.com',
-        action: 'DELETE_DEPLOYMENT',
-        status: 'Success',
-        details: `Deleted ticket ${deployment_id} for ${merchant_name} (SN: ${serial_number})`
-    }]);
-
-    return res.status(200).json({ success: true });
 }
-
         
         if (action === 'list') {
             const { data, error } = await supabase
