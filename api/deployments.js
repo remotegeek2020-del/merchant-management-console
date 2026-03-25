@@ -46,8 +46,10 @@ export default async function handler(req, res) {
         }
         
         // --- ACTION: LIST (With Crash-Proof Metrics) ---
-     if (action === 'list') {
-            const searchTerm = query ? `%${query}%` : null;
+    if (action === 'list') {
+            const { query, page = 1, limit = 10 } = body; // Default to 10 rows per page
+            const from = (page - 1) * limit;
+            const to = from + limit - 1;
 
             let request = supabase
                 .from('deployments')
@@ -55,25 +57,39 @@ export default async function handler(req, res) {
                     *,
                     merchants:merchant_id(dba_name, merchant_id),
                     equipments:equipment_id(id, serial_number, terminal_type)
-                `);
+                `, { count: 'exact' }); // Get total count for pagination
 
-            // If there's a search query, filter by Deployment ID OR Serial Number
-            if (searchTerm) {
+            if (query) {
+                const searchTerm = `%${query}%`;
+                // FIX: Added the alias 'equipments' explicitly inside the OR string
                 request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
             }
 
-            const { data, error } = await request.order('created_at', { ascending: false });
+            const { data, error, count } = await request
+                .order('created_at', { ascending: false })
+                .range(from, to);
 
             if (error) throw error;
 
             const safeData = data || [];
+            
+            // Calculate metrics
             const metrics = {
                 active: safeData.filter(d => d.status === 'Open' || d.status === 'In Transit').length,
-                total: safeData.length,
+                total: count || 0, // Use the database count
                 today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
             };
             
-            return res.status(200).json({ success: true, data: safeData, metrics });
+            return res.status(200).json({ 
+                success: true, 
+                data: safeData, 
+                metrics,
+                pagination: {
+                    totalRecords: count,
+                    currentPage: page,
+                    totalPages: Math.ceil(count / limit)
+                }
+            });
         }
         // --- ACTION: CREATE ---
         if (action === 'create') {
