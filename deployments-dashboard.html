@@ -260,6 +260,8 @@ function selectEquip(id, serial, type) {
 
     async function fetchDeployments() {
     const tbody = document.getElementById('deploymentTableBody');
+    if (!tbody) return; // Safety check
+    
     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
     
     try {
@@ -273,9 +275,11 @@ function selectEquip(id, serial, type) {
         if (!result.success) throw new Error(result.message);
 
         currentDeployments = result.data || [];
-        document.getElementById('kpi-active').innerText = result.metrics?.active || 0;
-        document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
-        document.getElementById('kpi-today').innerText = result.metrics?.today || 0;
+        
+        // Update KPIs safely
+        if (document.getElementById('kpi-active')) document.getElementById('kpi-active').innerText = result.metrics?.active || 0;
+        if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
+        if (document.getElementById('kpi-today')) document.getElementById('kpi-today').innerText = result.metrics?.today || 0;
 
         tbody.innerHTML = "";
         if (currentDeployments.length === 0) {
@@ -284,48 +288,54 @@ function selectEquip(id, serial, type) {
         }
 
         currentDeployments.forEach((d, index) => {
-            const row = tbody.insertRow();
-            const dateStr = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
-            
-            // Sanitizing variables for the HTML string
-            const safeDba = (d.merchants?.dba_name || 'Merchant').replace(/'/g, "\\'");
-            const safeSn = d.equipments?.serial_number || 'N/A';
-            const depId = d.id || '';
-            const equipId = d.equipment_id || '';
-            const merchId = d.merchant_id || '';
+            try {
+                const row = tbody.insertRow();
+                const dateStr = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+                
+                // CRITICAL: Use Optional Chaining (?.) to prevent crashes if data is missing
+                const merchantName = d.merchants?.dba_name || 'Unknown Merchant';
+                const serialNum = d.equipments?.serial_number || 'No Serial';
+                const equipId = d.equipment_id || '';
+                const merchId = d.merchant_id || '';
+                const depUuid = d.id || ''; // The UUID for the delete/edit actions
+                
+                // Escape quotes for the onclick string
+                const safeDba = merchantName.replace(/'/g, "\\'");
 
-            row.innerHTML = `
-                <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
-                <td style="font-weight:600;">${d.merchants?.dba_name || '---'}</td>
-                <td><code>${safeSn}</code></td>
-                <td>${d.tid || '---'}</td>
-                <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
-                <td>${dateStr}</td>
-                <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
-                <td style="display:flex; gap:5px;">
-                    <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print">
-                        <span class="material-icons" style="font-size:18px; color:#004990;">print</span>
-                    </button>
-                    <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})">
-                        <span class="material-icons" style="font-size:18px;">edit</span>
-                    </button>
-                    <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${equipId}', '${safeSn}')">
-                        <span class="material-icons" style="font-size:18px;">history</span>
-                    </button>
-                    <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
-                            onclick="confirmDelete('${depId}', '${safeDba}', '${safeSn}', '${equipId}', '${merchId}')" 
-                            title="Delete Ticket">
-                        <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
-                    </button>
-                </td>
-            `;
+                row.innerHTML = `
+                    <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
+                    <td style="font-weight:600;">${merchantName}</td>
+                    <td><code>${serialNum}</code></td>
+                    <td>${d.tid || '---'}</td>
+                    <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
+                    <td>${dateStr}</td>
+                    <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
+                    <td style="display:flex; gap:5px;">
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print">
+                            <span class="material-icons" style="font-size:18px; color:#004990;">print</span>
+                        </button>
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})">
+                            <span class="material-icons" style="font-size:18px;">edit</span>
+                        </button>
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${equipId}', '${serialNum}')">
+                            <span class="material-icons" style="font-size:18px;">history</span>
+                        </button>
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
+                                onclick="confirmDelete('${depUuid}', '${safeDba}', '${serialNum}', '${equipId}', '${merchId}')" 
+                                title="Delete Ticket">
+                            <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
+                        </button>
+                    </td>
+                `;
+            } catch (rowErr) {
+                console.error("Error rendering row:", rowErr, d);
+            }
         });
     } catch (err) { 
         console.error("Fetch Error:", err);
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:red;">Error loading data: ${err.message}</td></tr>`;
     }
 }
-
 async function processReturn() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
