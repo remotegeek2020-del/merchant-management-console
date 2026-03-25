@@ -61,10 +61,10 @@ if (action === 'list') {
 
 if (query) {
     const searchTerm = `%${query}%`;
-    // SURGICAL FIX: Use the 'referenced table' filter 
-    // This tells Supabase to look at deployment_id in the main table 
-    // AND serial_number in the equipments table separately to avoid the logic tree error.
-    request = request.or(`deployment_id.ilike.${searchTerm}, serial_number.ilike.${searchTerm}`, { foreignTable: 'equipments' });
+    
+    // THE FIX: Use the 'referenced table' name followed by the column in one flat string.
+    // Do NOT use the { foreignTable } option here, as it forces all columns into that table.
+    request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
 }
 
             const { data, error, count } = await request
