@@ -47,56 +47,67 @@ export default async function handler(req, res) {
         
         // --- ACTION: LIST (With Crash-Proof Metrics) ---
 if (action === 'list') {
-            const { query, page = 1, limit = 10 } = body;
-            const from = (page - 1) * limit;
-            const to = from + limit - 1;
+    const { query, page = 1, limit = 10 } = body;
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
 
-            // 1. Start the base request
-            let request = supabase
-                .from('deployments')
-                .select(`
-                    *,
-                    merchants:merchant_id(dba_name, merchant_id),
-                    equipments:equipment_id(id, serial_number, terminal_type)
-                `, { count: 'exact' });
+    let request = supabase
+        .from('deployments')
+        .select(`
+            *,
+            merchants:merchant_id(dba_name, merchant_id),
+            equipments:equipment_id(id, serial_number, terminal_type)
+        `, { count: 'exact' });
 
-            // 2. APPLY SEARCH SURGICALLY
-            if (query) {
-                const term = `%${query}%`;
-                
-                // We use a flat filter here. If the user types a DPL ID, it hits the main table.
-                // If they type a serial, it checks the joined equipment table separately.
-                // This specific syntax avoids the "equipments_1" alias crash.
-                request = request.or(`deployment_id.ilike.${term},equipment_id.in.(select id from equipments where serial_number.ilike.${term})`);
-            }
+    if (query) {
+        const term = `%${query}%`;
 
-            const { data, error, count } = await request
-                .order('created_at', { ascending: false })
-                .range(from, to);
+        // 1. First, find any equipment IDs that match this serial number
+        const { data: matchedEquip } = await supabase
+            .from('equipments')
+            .select('id')
+            .ilike('serial_number', term);
 
-            if (error) {
-                console.error("Supabase Error:", error.message);
-                return res.status(500).json({ success: false, message: error.message });
-            }
+        const equipIds = (matchedEquip || []).map(e => e.id);
 
-            const safeData = data || [];
-            const metrics = {
-                active: safeData.filter(d => d.status === 'Open' || d.status === 'In Transit').length,
-                total: count || 0,
-                today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
-            };
-            
-            return res.status(200).json({ 
-                success: true, 
-                data: safeData, 
-                metrics,
-                pagination: {
-                    totalRecords: count,
-                    currentPage: page,
-                    totalPages: Math.ceil((count || 0) / limit)
-                }
-            });
+        // 2. Build the OR condition safely
+        // We check if the Deployment ID matches OR if the equipment_id is in our matched list
+        if (equipIds.length > 0) {
+            request = request.or(`deployment_id.ilike.${term},equipment_id.in.(${equipIds.join(',')})`);
+        } else {
+            // If no equipment matched, just search the Deployment ID
+            request = request.ilike('deployment_id', term);
         }
+    }
+
+    const { data, error, count } = await request
+        .order('created_at', { ascending: false })
+        .range(from, to);
+
+    if (error) {
+        console.error("Supabase Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // ... (rest of your metrics and response logic stays the same)
+    const safeData = data || [];
+    const metrics = {
+        active: safeData.filter(d => d.status === 'Open' || d.status === 'In Transit').length,
+        total: count || 0,
+        today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
+    };
+    
+    return res.status(200).json({ 
+        success: true, 
+        data: safeData, 
+        metrics,
+        pagination: {
+            totalRecords: count,
+            currentPage: page,
+            totalPages: Math.ceil((count || 0) / limit)
+        }
+    });
+}
         // --- ACTION: CREATE ---
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
