@@ -44,7 +44,8 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Logistics & Deployments</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="depSearch" placeholder="Search Tickets..." class="slds-input" style="width:250px; border-radius:10px;" onkeyup="fetchDeployments()">
+            <input type="text" id="depSearch" placeholder="Search ID or Serial..." class="slds-input" 
+       style="width:250px; border-radius:10px;" onkeyup="fetchDeployments()">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="openNewDeploymentModal()">
                 <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
                 NEW TICKET
@@ -452,73 +453,85 @@
         document.getElementById('eSuggestions').style.display = 'none';
     }
 
-    // 3. FETCH AND RENDER DEPLOYMENTS
+   // 3. FETCH AND RENDER DEPLOYMENTS (with Search Debounce)
+    let searchTimeout; 
+
     async function fetchDeployments() {
-        const tbody = document.getElementById('deploymentTableBody');
-        if (!tbody) return;
-        
-        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
-        
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'list', query: document.getElementById('depSearch').value })
-            });
-            const result = await res.json();
+        // Clear any existing timeout to prevent multiple rapid API calls
+        clearTimeout(searchTimeout);
+
+        searchTimeout = setTimeout(async () => {
+            const tbody = document.getElementById('deploymentTableBody');
+            if (!tbody) return;
             
-            if (!result.success) throw new Error(result.message);
-
-            currentDeployments = result.data || [];
+            // Show loading state
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
             
-            if (document.getElementById('kpi-active')) document.getElementById('kpi-active').innerText = result.metrics?.active || 0;
-            if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
-            if (document.getElementById('kpi-today')) document.getElementById('kpi-today').innerText = result.metrics?.today || 0;
+            const searchInput = document.getElementById('depSearch');
+            const queryValue = searchInput ? searchInput.value : '';
 
-            tbody.innerHTML = "";
-            if (currentDeployments.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;">No records found.</td></tr>`;
-                return;
-            }
-
-            currentDeployments.forEach((d, index) => {
-                const row = tbody.insertRow();
-                const dateStr = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+            try {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'list', query: queryValue })
+                });
+                const result = await res.json();
                 
-                const merchantName = d.merchants?.dba_name || 'Unknown Merchant';
-                const serialNum = d.equipments?.serial_number || 'No Serial';
-                const safeDba = merchantName.replace(/'/g, "\\'");
+                if (!result.success) throw new Error(result.message);
 
-                row.innerHTML = `
-                    <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
-                    <td style="font-weight:600;">${merchantName}</td>
-                    <td><code>${serialNum}</code></td>
-                    <td>${d.tid || '---'}</td>
-                    <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
-                    <td>${dateStr}</td>
-                    <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
-                    <td style="display:flex; gap:5px;">
-                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print">
-                            <span class="material-icons" style="font-size:18px; color:#004990;">print</span>
-                        </button>
-                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})">
-                            <span class="material-icons" style="font-size:18px;">edit</span>
-                        </button>
-                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${serialNum}')">
-                            <span class="material-icons" style="font-size:18px;">history</span>
-                        </button>
-                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
-                                onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')" 
-                                title="Delete Ticket">
-                            <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
-                        </button>
-                    </td>
-                `;
-            });
-        } catch (err) { 
-            console.error("Fetch Error:", err);
-            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:red;">Error: ${err.message}</td></tr>`;
-        }
+                currentDeployments = result.data || [];
+                
+                // Update KPI Cards
+                if (document.getElementById('kpi-active')) document.getElementById('kpi-active').innerText = result.metrics?.active || 0;
+                if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
+                if (document.getElementById('kpi-today')) document.getElementById('kpi-today').innerText = result.metrics?.today || 0;
+
+                tbody.innerHTML = "";
+                if (currentDeployments.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;">No records matched "${queryValue}"</td></tr>`;
+                    return;
+                }
+
+                currentDeployments.forEach((d, index) => {
+                    const row = tbody.insertRow();
+                    const dateStr = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+                    
+                    const merchantName = d.merchants?.dba_name || 'Unknown Merchant';
+                    const serialNum = d.equipments?.serial_number || 'No Serial';
+                    const safeDba = merchantName.replace(/'/g, "\\'");
+
+                    row.innerHTML = `
+                        <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
+                        <td style="font-weight:600;">${merchantName}</td>
+                        <td><code>${serialNum}</code></td>
+                        <td>${d.tid || '---'}</td>
+                        <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
+                        <td>${dateStr}</td>
+                        <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
+                        <td style="display:flex; gap:5px;">
+                            <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print">
+                                <span class="material-icons" style="font-size:18px; color:#004990;">print</span>
+                            </button>
+                            <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})">
+                                <span class="material-icons" style="font-size:18px;">edit</span>
+                            </button>
+                            <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${serialNum}')">
+                                <span class="material-icons" style="font-size:18px;">history</span>
+                            </button>
+                            <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
+                                    onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')" 
+                                    title="Delete Ticket">
+                                <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
+                            </button>
+                        </td>
+                    `;
+                });
+            } catch (err) { 
+                console.error("Fetch Error:", err);
+                tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:red;">Error: ${err.message}</td></tr>`;
+            }
+        }, 300); // 300ms delay: wait for user to stop typing
     }
 
     // 4. OTHER ACTIONS (Saves, Modals, Searches)
