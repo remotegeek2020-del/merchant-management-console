@@ -183,6 +183,65 @@
 <script>
     let currentDeployments = [];
 
+    async function processReturn() {
+    // 1. Get the ID of the deployment being edited
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    
+    if (!d) {
+        Swal.fire('Error', 'Deployment record not found in memory.', 'error');
+        return;
+    }
+
+    // 2. Capture the return type and notes
+    const returnType = document.getElementById('returnType').value;
+    const notes = document.getElementById('editNotes').value;
+
+    const confirm = await Swal.fire({
+        title: 'Initiate Return?',
+        text: `Log S/N ${d.equipments?.serial_number || 'Unknown'} as Pending Return? This will close the deployment ticket.`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        confirmButtonText: 'Yes, Log Return'
+    });
+
+    if (confirm.isConfirmed) {
+        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        // 3. Construct the payload exactly as the API expects it
+        const payload = {
+            equipment_id: d.equipment_id,
+            merchant_id: d.merchant_id,
+            deployment_id: d.id,
+            return_type: returnType,
+            notes: notes || 'Unit returned from field'
+        };
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'return_to_office', payload })
+            });
+
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Success', 'Return initiated. Hardware moved to Pending Return.', 'success')
+                .then(() => {
+                    document.getElementById('editDepModal').style.display = 'none';
+                    fetchDeployments(); // Refresh the table
+                });
+            } else {
+                Swal.fire('Error', result.message || 'Failed to process return', 'error');
+            }
+        } catch (err) {
+            console.error("Return Error:", err);
+            Swal.fire('Error', 'Network error or server crash.', 'error');
+        }
+    }
+}
+
     function generateDeploymentPDF(index) {
     const d = currentDeployments[index];
     if (!d) {
