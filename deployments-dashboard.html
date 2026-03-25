@@ -223,6 +223,17 @@
                 const result = await res.json();
                 if (!result.success) throw new Error(result.message);
 
+                // Update KPI Cards surgically
+if (document.getElementById('kpi-active')) {
+    document.getElementById('kpi-active').innerText = result.metrics.active;
+}
+if (document.getElementById('kpi-today')) {
+    document.getElementById('kpi-today').innerText = result.metrics.today;
+}
+if (document.getElementById('kpi-total')) {
+    document.getElementById('kpi-total').innerText = result.metrics.total;
+}
+
                 currentDeployments = result.data || [];
                 totalPages = result.pagination?.totalPages || 1;
 
