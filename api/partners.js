@@ -20,54 +20,57 @@ export default async function handler(req, res) {
 
     try {
         // --- ROUTE: GET PARTNERS LIST ---
-        if (action === 'get_partners_list') {
-            const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
-                supabase.from('persons').select('id, full_name'),
-                supabase.from('company_person_mapping').select('person_id, company_id'),
-                supabase.from('companies').select('id, company_name'),
-                supabase.from('agents').select('id, company_id'),
-                supabase.from('agent_identifiers').select('*') 
-            ]);
+     // --- ACTION: GET PARTNERS LIST (Aggregated Version) ---
+if (action === 'get_partners_list') {
+    const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
+        supabase.from('persons').select('id, full_name'),
+        supabase.from('company_person_mapping').select('person_id, company_id'),
+        supabase.from('companies').select('id, company_name'),
+        supabase.from('agents').select('id, company_id'),
+        supabase.from('agent_identifiers').select('*') 
+    ]);
 
-            if (pRes.error) throw pRes.error;
+    const persons = pRes.data || [];
+    const mappings = mRes.data || [];
+    const companies = cRes.data || [];
+    const agents = aRes.data || [];
+    const identifiers = iRes.data || [];
 
-            const persons = pRes.data || [];
-            const mappings = mRes.data || [];
-            const companies = cRes.data || [];
-            const agents = aRes.data || [];
-            const identifiers = iRes.data || [];
+    const finalData = persons.map(p => {
+        const pId = String(p.id || '').toLowerCase().trim();
+        
+        const myCompanyIds = mappings
+            .filter(m => String(m.person_id || '').toLowerCase().trim() === pId)
+            .map(m => String(m.company_id || '').toLowerCase().trim());
+        
+        const myCompanies = companies
+            .filter(c => myCompanyIds.includes(String(c.id || '').toLowerCase().trim()))
+            .map(co => {
+                const coId = String(co.id || '').toLowerCase().trim();
 
-            const finalData = persons.map(p => {
-                const pId = String(p.id || '').toLowerCase().trim();
-                const myCompanyIds = mappings
-                    .filter(m => String(m.person_id || '').toLowerCase().trim() === pId)
-                    .map(m => String(m.company_id || '').toLowerCase().trim());
+                // FIX: Collect EVERY agent associated with this company
+                const coAgentUuids = agents
+                    .filter(a => String(a.company_id || '').toLowerCase().trim() === coId)
+                    .map(a => String(a.id || '').toLowerCase().trim());
                 
-                const myCompanies = companies
-                    .filter(c => myCompanyIds.includes(String(c.id || '').toLowerCase().trim()))
-                    .map(co => {
-                        const coId = String(co.id || '').toLowerCase().trim();
-                        const coAgentUuids = agents
-                            .filter(a => String(a.company_id || '').toLowerCase().trim() === coId)
-                            .map(a => String(a.id || '').toLowerCase().trim());
-                        
-                        const myIds = identifiers
-                            .filter(i => i.agent_id && coAgentUuids.includes(String(i.agent_id).toLowerCase().trim()))
-                            .map(id => ({
-                                string: id.id_string || "Missing ID",
-                                rev: id.rev_share || '0%',
-                                isPrime: !!id.prime49
-                            }));
-                        return { name: co.company_name, ids: myIds };
-                    });
+                // FIX: Collect EVERY identifier linked to ANY of those agents
+                const myIds = identifiers
+                    .filter(i => i.agent_id && coAgentUuids.includes(String(i.agent_id).toLowerCase().trim()))
+                    .map(id => ({
+                        string: id.id_string || "Missing ID",
+                        rev: id.rev_share || '0%',
+                        isPrime: !!id.prime49
+                    }));
 
-                if (myCompanies.length === 0) return null;
-                return { id: p.id, name: p.full_name, companies: myCompanies };
-            }).filter(Boolean);
+                return { name: co.company_name, ids: myIds };
+            });
 
-            return res.status(200).json({ success: true, data: finalData });
-        }
+        if (myCompanies.length === 0) return null;
+        return { id: p.id, name: p.full_name, companies: myCompanies };
+    }).filter(Boolean);
 
+    return res.status(200).json({ success: true, data: finalData });
+}
         // --- ROUTE: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             if (!person_id) {
