@@ -7,13 +7,7 @@ export default async function handler(req, res) {
     const body = req.body || {};
     const { action, payload, query } = body;
 
-    try {
-if (action === 'delete') {
-    const { deployment_id, equipment_id, merchant_name, serial_number } = payload || {};
-
-    if (!deployment_id) {
-        return res.status(400).json({ success: false, message: "Missing deployment_id" });
-    }
+ 
 
     try {
     if (action === 'delete') {
