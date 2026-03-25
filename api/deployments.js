@@ -180,8 +180,20 @@ if (action === 'return_to_office') {
       if (action === 'update') {
             const { deployment_id, status, tracking_id, target_date, notes } = payload;
 
-            // 1. Update the deployment ticket
-            const { error } = await supabase
+            // 1. Get current details BEFORE updating (to see what changed)
+            const { data: oldDep } = await supabase
+                .from('deployments')
+                .select(`
+                    status, 
+                    tracking_id, 
+                    equipment_id,
+                    merchants:merchant_id(dba_name)
+                `)
+                .eq('id', deployment_id)
+                .single();
+
+            // 2. Perform the update
+            const { error: updateError } = await supabase
                 .from('deployments')
                 .update({ 
                     status, 
@@ -191,27 +203,27 @@ if (action === 'return_to_office') {
                 })
                 .eq('id', deployment_id);
 
-            if (error) throw error;
+            if (updateError) throw updateError;
 
-            // 2. If status is set to Closed, ensure the equipment is officially 'deployed'
-            if (status === 'Closed') {
-                // Fetch the equipment_id for this deployment first
-                const { data: dep } = await supabase
-                    .from('deployments')
-                    .select('equipment_id, merchant_id')
-                    .eq('id', deployment_id)
-                    .single();
+            // 3. Create a History Log for the update
+            // We only log if the status or tracking actually changed
+            if (oldDep && (oldDep.status !== status || oldDep.tracking_id !== tracking_id)) {
+                await supabase.from('equipment_logs').insert([{
+                    equipment_id: oldDep.equipment_id,
+                    action: 'Ticket Updated',
+                    from_location: oldDep.merchants?.dba_name || 'Merchant',
+                    to_location: oldDep.merchants?.dba_name || 'Merchant',
+                    notes: `Status changed to ${status}. Tracking: ${tracking_id || 'N/A'}`
+                }]);
+            }
 
-                if (dep?.equipment_id) {
-                    await supabase.from('equipments').update({ 
-                        status: 'deployed' 
-                    }).eq('id', dep.equipment_id);
-                }
+            // 4. If status is Closed, set hardware to 'deployed'
+            if (status === 'Closed' && oldDep?.equipment_id) {
+                await supabase.from('equipments').update({ status: 'deployed' }).eq('id', oldDep.equipment_id);
             }
 
             return res.status(200).json({ success: true });
         }
-
         // --- ACTION: LOOKUPS ---
         if (action === 'getLookups') {
             const { data: merchants } = await supabase.from('merchants').select('id, dba_name, merchant_id').ilike('dba_name', `%${query || ''}%`).limit(5);
