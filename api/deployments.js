@@ -46,7 +46,7 @@ export default async function handler(req, res) {
         }
         
         // --- ACTION: LIST (With Crash-Proof Metrics) ---
-        if (action === 'list') {
+       if (action === 'list') {
             const { data, error } = await supabase
                 .from('deployments')
                 .select(`
@@ -56,20 +56,19 @@ export default async function handler(req, res) {
                 `)
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
+            if (error) {
+                console.error("Database Error:", error);
+                return res.status(500).json({ success: false, message: error.message });
+            }
 
             const safeData = data || [];
-
-            // Calculate metrics safely using safeData
             const metrics = {
                 active: safeData.filter(d => d.status === 'Open' || d.status === 'In Transit').length,
                 total: safeData.length,
                 today: safeData.filter(d => d.created_at && new Date(d.created_at).toDateString() === new Date().toDateString()).length
             };
-
             return res.status(200).json({ success: true, data: safeData, metrics });
         }
-
         // --- ACTION: CREATE ---
         if (action === 'create') {
             const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
