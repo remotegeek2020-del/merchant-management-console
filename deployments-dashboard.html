@@ -342,7 +342,7 @@
                 <thead><tr><th style="width: 25%;">Model</th><th style="width: 35%;">Serial Number</th><th style="width: 20%;">TID</th><th style="width: 20%;">Condition</th></tr></thead>
                 <tbody><tr><td>${terminalType}</td><td><code>${serialNumber}</code></td><td>${d.tid || '---'}</td><td>New / Verified</td></tr></tbody>
             </table>
-            <div id="paginationControls"></div>
+           
             <div class="notes-area"><label>Logistics & Setup Notes</label><div style="font-size: 13px; color: #431407;">${d.notes || 'No instructions.'}</div></div>
             <div class="sign-off"><div class="signature-line">Released By</div><div class="signature-line">Accepted By</div></div>
             <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 700); }<\/script>
