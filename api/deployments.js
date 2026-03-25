@@ -51,23 +51,25 @@ if (action === 'list') {
             const from = (page - 1) * limit;
             const to = from + limit - 1;
 
+            // 1. Start the base request
             let request = supabase
-    .from('deployments')
-    .select(`
-        *,
-        merchants:merchant_id(dba_name, merchant_id),
-        equipments:equipment_id(id, serial_number, terminal_type)
-    `, { count: 'exact' });
+                .from('deployments')
+                .select(`
+                    *,
+                    merchants:merchant_id(dba_name, merchant_id),
+                    equipments:equipment_id(id, serial_number, terminal_type)
+                `, { count: 'exact' });
 
-if (query) {
-    const term = `%${query}%`;
-    // This is the most compatible way to handle cross-table OR logic
-    request = request.or(`deployment_id.ilike.${term},serial_number.ilike.${term}`, { foreignTable: "equipments" });
-    
-    // NOTE: If this fails with "column deployment_id does not exist", 
-    // it means your Supabase version requires two separate calls. 
-    // Use the version in the first block above as the primary fix.
-}
+            // 2. APPLY SEARCH SURGICALLY
+            if (query) {
+                const term = `%${query}%`;
+                
+                // We use a flat filter here. If the user types a DPL ID, it hits the main table.
+                // If they type a serial, it checks the joined equipment table separately.
+                // This specific syntax avoids the "equipments_1" alias crash.
+                request = request.or(`deployment_id.ilike.${term},equipment_id.in.(select id from equipments where serial_number.ilike.${term})`);
+            }
+
             const { data, error, count } = await request
                 .order('created_at', { ascending: false })
                 .range(from, to);
