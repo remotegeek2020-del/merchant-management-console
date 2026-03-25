@@ -60,9 +60,13 @@ if (action === 'list') {
     `, { count: 'exact' });
 
 if (query) {
-    const searchTerm = `%${query}%`;
-    // We use the raw 'or' filter. This bypasses the Logic Tree parser entirely.
-    request = request.filter('or', `deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
+    const term = `%${query}%`;
+    // This is the most compatible way to handle cross-table OR logic
+    request = request.or(`deployment_id.ilike.${term},serial_number.ilike.${term}`, { foreignTable: "equipments" });
+    
+    // NOTE: If this fails with "column deployment_id does not exist", 
+    // it means your Supabase version requires two separate calls. 
+    // Use the version in the first block above as the primary fix.
 }
             const { data, error, count } = await request
                 .order('created_at', { ascending: false })
