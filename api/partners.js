@@ -2,88 +2,107 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    
+    const supabase = createClient(
+        process.env.SUPABASE_URL, 
+        process.env.SUPABASE_SERVICE_ROLE_KEY
+    );
+
+    // FIX: Ensure action is defined at the top-level scope
+    const { action, person_id } = req.body || {};
+
+    if (!action) {
+        return res.status(400).json({ success: false, message: "No action provided" });
+    }
 
     try {
+        // --- ACTION 1: GET PARTNERS LIST ---
+        if (action === 'get_partners_list') {
+            const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
+                supabase.from('persons').select('id, full_name'),
+                supabase.from('company_person_mapping').select('person_id, company_id'),
+                supabase.from('companies').select('id, company_name'),
+                supabase.from('agents').select('id, company_id'),
+                supabase.from('agent_identifiers').select('*') 
+            ]);
+
+            if (pRes.error) throw pRes.error;
+
+            const persons = pRes.data || [];
+            const mappings = mRes.data || [];
+            const companies = cRes.data || [];
+            const agents = aRes.data || [];
+            const identifiers = iRes.data || [];
+
+            const finalData = persons.map(p => {
+                const pId = String(p.id || '').toLowerCase().trim();
+                const myCompanyIds = mappings
+                    .filter(m => String(m.person_id || '').toLowerCase().trim() === pId)
+                    .map(m => String(m.company_id || '').toLowerCase().trim());
+                
+                const myCompanies = companies
+                    .filter(c => myCompanyIds.includes(String(c.id || '').toLowerCase().trim()))
+                    .map(co => {
+                        const coId = String(co.id || '').toLowerCase().trim();
+                        const coAgentUuids = agents
+                            .filter(a => String(a.company_id || '').toLowerCase().trim() === coId)
+                            .map(a => String(a.id || '').toLowerCase().trim());
+                        
+                        const myIds = identifiers
+                            .filter(i => i.agent_id && coAgentUuids.includes(String(i.agent_id).toLowerCase().trim()))
+                            .map(id => ({
+                                string: id.id_string || "Missing ID",
+                                rev: id.rev_share || '0%',
+                                isPrime: !!id.prime49
+                            }));
+                        return { name: co.company_name, ids: myIds };
+                    });
+
+                if (myCompanies.length === 0) return null;
+                return { id: p.id, name: p.full_name, companies: myCompanies };
+            }).filter(Boolean);
+
+            return res.status(200).json({ success: true, data: finalData });
+        }
+
+        // --- ACTION 2: GET HIERARCHY (SUB-AGENTS) ---
         if (action === 'get_hierarchy') {
-    const { person_id } = req.body;
+            if (!person_id) return res.status(400).json({ success: false, message: "person_id required" });
 
-    // 1. Get the Company IDs for this person
-    const { data: mappings } = await supabase
-        .from('company_person_mapping')
-        .select('company_id')
-        .eq('person_id', person_id);
-    
-    const coIds = mappings.map(m => m.company_id);
+            // 1. Get Company IDs for this person
+            const { data: mappings } = await supabase
+                .from('company_person_mapping')
+                .select('company_id')
+                .eq('person_id', person_id);
+            
+            const coIds = (mappings || []).map(m => m.company_id);
 
-    // 2. Find the "Master" Agents for those companies
-    const { data: masters } = await supabase
-        .from('agents')
-        .select('id')
-        .in('company_id', coIds);
-    
-    const masterAgentIds = masters.map(a => a.id);
+            // 2. Find Master Agents
+            const { data: masters } = await supabase
+                .from('agents')
+                .select('id')
+                .in('company_id', coIds);
+            
+            const masterAgentIds = (masters || []).map(a => a.id);
 
-    // 3. Find all "Sub-Agents" pointing to those Masters
-    const { data: subAgents, error } = await supabase
-        .from('agents')
-        .select(`
-            agent_name,
-            agent_identifiers (id_string, rev_share)
-        `)
-        .in('parent_agent_id', masterAgentIds);
+            // 3. Find Sub-Agents and their IDs
+            const { data: subAgents, error } = await supabase
+                .from('agents')
+                .select(`
+                    agent_name,
+                    agent_identifiers (id_string, rev_share)
+                `)
+                .in('parent_agent_id', masterAgentIds);
 
-    if (error) throw error;
+            if (error) throw error;
 
-    return res.status(200).json({ success: true, data: subAgents });
-}
-        // 1. Single, Deep-Nested Query
-        // This fetches Persons -> Companies -> Agents -> Identifiers in one shot
-        const { data, error } = await supabase
-            .from('persons')
-            .select(`
-                id,
-                full_name,
-                companies:company_person_mapping(
-                    company:companies(
-                        id,
-                        company_name,
-                        agent:agents(
-                            id,
-                            identifiers:agent_identifiers(
-                                id_string,
-                                rev_share,
-                                prime49
-                            )
-                        )
-                    )
-                )
-            `);
+            return res.status(200).json({ success: true, data: subAgents });
+        }
 
-        if (error) throw error;
-
-        // 2. Simple Flattening (The DB did the hard work)
-        const formatted = data.map(p => ({
-            id: p.id,
-            name: p.full_name,
-            companies: p.companies.map(map => {
-                const co = map.company;
-                // Flatten IDs from all agents linked to this company
-                const allIds = co.agent?.flatMap(a => a.identifiers) || [];
-                return {
-                    name: co.company_name,
-                    ids: allIds.map(i => ({
-                        string: i.id_string,
-                        rev: i.rev_share || '0%',
-                        isPrime: !!i.prime49
-                    }))
-                };
-            })
-        }));
-
-        return res.status(200).json({ success: true, data: formatted });
+        return res.status(400).json({ success: false, message: "Unknown action" });
 
     } catch (err) {
+        console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
