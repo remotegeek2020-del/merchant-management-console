@@ -183,6 +183,27 @@
 <script>
     let currentDeployments = [];
 
+    async function openNewDeploymentModal() {
+    // 1. Show the Modal
+    document.getElementById('newDepModal').style.display = 'flex';
+    
+    // 2. Clear previous search inputs (Crucial for the searchable fields)
+    document.getElementById('mSearch').value = '';
+    document.getElementById('selectedMerchantId').value = '';
+    document.getElementById('eSearch').value = '';
+    document.getElementById('equipSelect').value = '';
+    document.getElementById('tidInput').value = '';
+    document.getElementById('trackingInput').value = '';
+    document.getElementById('notesInput').value = '';
+    
+    // 3. Clear any leftover suggestion lists
+    document.getElementById('mSuggestions').style.display = 'none';
+    document.getElementById('eSuggestions').style.display = 'none';
+    
+    // 4. Set default date to today
+    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+}
+
     // 1. DELETE LOGIC (With Equipment Reset and Accountability Logging)
     async function confirmDelete(id, dba, sn, equipId, merchantId) {
         console.log("Attempting delete for:", { id, dba, sn, equipId, merchantId });
