@@ -127,12 +127,23 @@ if (action === 'return_to_office') {
             return res.status(200).json({ success: true });
         }
 
-        if (action === 'getLookups') {
-            const { data: merchants } = await supabase.from('merchants').select('id, dba_name, merchant_id').ilike('dba_name', `%${query || ''}%`).limit(5);
-            const { data: inventory } = await supabase.from('equipments').select('id, serial_number, terminal_type').eq('status', 'stocked');
+       if (action === 'getLookups') {
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('id, dba_name, merchant_id')
+                .ilike('dba_name', `%${query || ''}%`)
+                .limit(5);
+
+            // Updated: Searchable inventory with status and type
+            const { data: inventory } = await supabase
+                .from('equipments')
+                .select('id, serial_number, terminal_type, status')
+                .eq('status', 'stocked')
+                .ilike('serial_number', `%${query || ''}%`) // Search by Serial
+                .limit(10); // Keep the dropdown light
+
             return res.status(200).json({ merchants, inventory });
         }
-
         if (action === 'getHistory') {
             const { data, error } = await supabase.from('equipment_logs').select('*').eq('equipment_id', body.equipment_id).order('created_at', { ascending: false });
             if (error) throw error;
