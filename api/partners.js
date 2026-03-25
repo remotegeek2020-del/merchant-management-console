@@ -8,15 +8,18 @@ export default async function handler(req, res) {
         process.env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // FIX: Ensure action is defined at the top-level scope
-    const { action, person_id } = req.body || {};
+    // 1. EXTRACT DATA IMMEDIATELY
+    const body = req.body || {};
+    const action = body.action;
+    const person_id = body.person_id;
 
+    // 2. GUARD CLAUZE
     if (!action) {
         return res.status(400).json({ success: false, message: "No action provided" });
     }
 
     try {
-        // --- ACTION 1: GET PARTNERS LIST ---
+        // --- ROUTE: GET PARTNERS LIST ---
         if (action === 'get_partners_list') {
             const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
                 supabase.from('persons').select('id, full_name'),
@@ -65,11 +68,12 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: finalData });
         }
 
-        // --- ACTION 2: GET HIERARCHY (SUB-AGENTS) ---
+        // --- ROUTE: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
-            if (!person_id) return res.status(400).json({ success: false, message: "person_id required" });
+            if (!person_id) {
+                return res.status(400).json({ success: false, message: "person_id is missing" });
+            }
 
-            // 1. Get Company IDs for this person
             const { data: mappings } = await supabase
                 .from('company_person_mapping')
                 .select('company_id')
@@ -77,7 +81,6 @@ export default async function handler(req, res) {
             
             const coIds = (mappings || []).map(m => m.company_id);
 
-            // 2. Find Master Agents
             const { data: masters } = await supabase
                 .from('agents')
                 .select('id')
@@ -85,7 +88,6 @@ export default async function handler(req, res) {
             
             const masterAgentIds = (masters || []).map(a => a.id);
 
-            // 3. Find Sub-Agents and their IDs
             const { data: subAgents, error } = await supabase
                 .from('agents')
                 .select(`
@@ -96,13 +98,14 @@ export default async function handler(req, res) {
 
             if (error) throw error;
 
-            return res.status(200).json({ success: true, data: subAgents });
+            return res.status(200).json({ success: true, data: subAgents || [] });
         }
 
-        return res.status(400).json({ success: false, message: "Unknown action" });
+        // DEFAULT FOR UNKNOWN ACTIONS
+        return res.status(400).json({ success: false, message: `Unknown action: ${action}` });
 
     } catch (err) {
-        console.error("API Error:", err.message);
+        console.error("Dashboard API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
