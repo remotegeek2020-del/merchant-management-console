@@ -198,22 +198,21 @@ async function confirmDelete(id, dba, sn, equipId, merchantId) {
     });
 
     if (confirmContent === 'DELETE') {
-        Swal.fire({ title: 'Deleting...', didOpen: () => Swal.showLoading() });
-
-        try {
-          const res = await fetch('/api/deployments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            action: 'delete', 
-            payload: { 
-                deployment_id: id, 
-                equipment_id: equipId, // THIS IS THE KEY
-                merchant_name: dba, 
-                serial_number: sn 
-            } 
-        })
-    });
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'delete', 
+                payload: { 
+                    deployment_id: id,
+                    equipment_id: equipId,
+                    merchant_id: merchantId, // SENDING TO API
+                    merchant_name: dba,
+                    serial_number: sn,
+                    user_email: 'admin@secureconsole.com'
+                } 
+            })
+        });
             const result = await res.json();
             if (result.success) {
                 Swal.fire('d!', 'Ticket removed and hardware reset.', 'success').then(() => fetchDeployments());
@@ -305,13 +304,14 @@ function selectEquip(id, serial, type) {
                         <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${d.equipments?.serial_number || 'Unknown'}')">
                             <span class="material-icons" style="font-size:18px;">history</span>
                         </button>
-                    </td>
-                 
-        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
-                onclick="confirmDelete('${d.id}', '${(d.merchants?.dba_name || 'Merchant').replace(/'/g, "\\'")}', '${d.equipments?.serial_number}', '${d.equipment_id}')" 
+                        <button class="slds-button slds-button_icon slds-button_icon-border-filled" 
+                onclick="confirmDelete('${d.id}', '${(d.merchants?.dba_name || 'Merchant').replace(/'/g, "\\'")}', '${d.equipments?.serial_number}', '${d.equipment_id}', '${d.merchant_id}')" 
                 title="Delete">
             <span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span>
         </button>
+                    </td>
+                 
+       
    
                 `;
             });
