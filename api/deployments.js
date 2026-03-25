@@ -8,42 +8,53 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
-       if (action === 'delete') {
-            const { deployment_id, merchant_name, serial_number, equipment_id, user_email } = payload;
+if (action === 'delete') {
+    const { deployment_id, merchant_name, serial_number, equipment_id, user_email } = payload || {};
 
-            // 1. Delete the deployment ticket
-            const { error: deleteError } = await supabase.from('deployments').delete().eq('id', deployment_id);
-            if (deleteError) throw deleteError;
+    // 1. Safety Check: If we don't have the IDs, we can't proceed
+    if (!deployment_id || !equipment_id) {
+        return res.status(400).json({ success: false, message: "Missing required ID data for deletion." });
+    }
 
-            // 2. RESET EQUIPMENT STATUS
-            await supabase.from('equipments').update({ 
-                status: 'stocked', 
-                current_location: 'Warsaw Office',
-                merchant_id: null 
-            }).eq('id', equipment_id);
+    try {
+        // 2. Delete the deployment ticket
+        const { error: deleteError } = await supabase.from('deployments').delete().eq('id', deployment_id);
+        if (deleteError) throw deleteError;
 
-            // 3. NEW: Add a "System Reversion" log to the Equipment Lifecycle
-            // This is what makes the "Accountability" look professional
-            await supabase.from('equipment_logs').insert([{
-                equipment_id: equipment_id,
-                action: 'Ticket Deleted',
-                from_location: merchant_name,
-                to_location: 'Warsaw Office',
-                notes: `Deployment Ticket ${deployment_id} was deleted by ${user_email}. Unit returned to stock.`
-            }]);
+        // 3. Reset Equipment Status
+        await supabase.from('equipments').update({ 
+            status: 'stocked', 
+            current_location: 'Warsaw Office',
+            merchant_id: null 
+        }).eq('id', equipment_id);
 
-            // 4. Log to General Activity Logs (Your screenshot table)
-            await supabase.from('activity_logs').insert([{
-                email: user_email || 'System User',
-                action: 'DELETE_DEPLOYMENT',
-                status: 'Success',
-                user_agent: req.headers['user-agent'],
-                ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
-                details: `Deleted ticket ${deployment_id} for ${merchant_name}. HW ${serial_number} reset to Stock.`
-            }]);
+        // 4. Add the "Accountability" log to Equipment History
+        await supabase.from('equipment_logs').insert([{
+            equipment_id: equipment_id,
+            action: 'Ticket Deleted',
+            from_location: merchant_name || 'Unknown',
+            to_location: 'Warsaw Office',
+            notes: `Deployment Ticket ${deployment_id} deleted. Unit returned to stock.`
+        }]);
 
-            return res.status(200).json({ success: true });
-        }
+        // 5. Log to Activity Logs
+        await supabase.from('activity_logs').insert([{
+            email: user_email || 'admin@secureconsole.com',
+            action: 'DELETE_DEPLOYMENT',
+            status: 'Success',
+            user_agent: req.headers['user-agent'],
+            ip_address: req.headers['x-forwarded-for'] || req.socket.remoteAddress,
+            details: `Deleted ticket ${deployment_id} (SN: ${serial_number}).`
+        }]);
+
+        return res.status(200).json({ success: true });
+    } catch (dbError) {
+        console.error("Database Error:", dbError.message);
+        return res.status(500).json({ success: false, message: dbError.message });
+    }
+}
+
+        
         if (action === 'list') {
             const { data, error } = await supabase
                 .from('deployments')
