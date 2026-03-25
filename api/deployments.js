@@ -61,10 +61,9 @@ if (action === 'list') {
 
 if (query) {
     const searchTerm = `%${query}%`;
-    // We manually construct the OR filter string
-    request = request.filter('or', `(deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm})`);
+    // We use the raw 'or' filter. This bypasses the Logic Tree parser entirely.
+    request = request.filter('or', `deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
 }
-
             const { data, error, count } = await request
                 .order('created_at', { ascending: false })
                 .range(from, to);
