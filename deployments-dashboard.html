@@ -184,288 +184,16 @@
 
 <script>
     let currentDeployments = [];
-   let searchTimeout;
+    let searchTimeout;
     let currentPage = 1;
     let totalPages = 1;
 
-    async function submitUpdate(event) {
-        event.preventDefault();
-        const btn = document.getElementById('updateBtn');
-        btn.disabled = true;
-        btn.innerText = "UPDATING...";
-
-        const payload = {
-            deployment_id: document.getElementById('editId').value,
-            status: document.getElementById('editStatus').value,
-            tracking_id: document.getElementById('editTracking').value,
-            target_date: document.getElementById('editDate').value,
-            notes: document.getElementById('editNotes').value
-        };
-
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update', payload })
-            });
-            const result = await res.json();
-            
-            if (result.success) { 
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Ticket Updated',
-                    timer: 1500,
-                    showConfirmButton: false
-                });
-                document.getElementById('editDepModal').style.display = 'none';
-                await fetchDeployments(); // Refresh the table grid instantly
-            } else { 
-                Swal.fire('Error', result.message, 'error');
-            }
-        } catch (e) { 
-            Swal.fire('Error', 'System Error', 'error'); 
-        } finally {
-            btn.disabled = false; 
-            btn.innerText = "UPDATE TICKET";
-        }
-    }
-
-    async function processReturn() {
-    // 1. Get the ID of the deployment being edited
-    const deploymentId = document.getElementById('editId').value;
-    const d = currentDeployments.find(item => item.id === deploymentId);
-    
-    if (!d) {
-        Swal.fire('Error', 'Deployment record not found in memory.', 'error');
-        return;
-    }
-
-    // 2. Capture the return type and notes
-    const returnType = document.getElementById('returnType').value;
-    const notes = document.getElementById('editNotes').value;
-
-    const confirm = await Swal.fire({
-        title: 'Initiate Return?',
-        text: `Log S/N ${d.equipments?.serial_number || 'Unknown'} as Pending Return? This will close the deployment ticket.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#e11d48',
-        confirmButtonText: 'Yes, Log Return'
-    });
-
-    if (confirm.isConfirmed) {
-        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
-        // 3. Construct the payload exactly as the API expects it
-        const payload = {
-            equipment_id: d.equipment_id,
-            merchant_id: d.merchant_id,
-            deployment_id: d.id,
-            return_type: returnType,
-            notes: notes || 'Unit returned from field'
-        };
-
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'return_to_office', payload })
-            });
-
-            const result = await res.json();
-            if (result.success) {
-                Swal.fire('Success', 'Return initiated. Hardware moved to Pending Return.', 'success')
-                .then(() => {
-                    document.getElementById('editDepModal').style.display = 'none';
-                    fetchDeployments(); // Refresh the table
-                });
-            } else {
-                Swal.fire('Error', result.message || 'Failed to process return', 'error');
-            }
-        } catch (err) {
-            console.error("Return Error:", err);
-            Swal.fire('Error', 'Network error or server crash.', 'error');
-        }
-    }
-}
-
-    function generateDeploymentPDF(index) {
-    const d = currentDeployments[index];
-    if (!d) {
-        Swal.fire('Error', 'Could not locate deployment record for printing.', 'error');
-        return;
-    }
-
-    const today = new Date().toLocaleDateString();
-    const targetDate = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
-    
-    // Safety check for nested objects
-    const merchantName = d.merchants?.dba_name || '---';
-    const merchantId = d.merchants?.merchant_id || '---';
-    const serialNumber = d.equipments?.serial_number || '---';
-    const terminalType = d.equipments?.terminal_type || '---';
-
-    const printWindow = window.open('', '_blank');
-    printWindow.document.write(`
-        <html>
-        <head>
-            <title>Packing Slip - ${d.deployment_id || 'New Ticket'}</title>
-            <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
-            <style>
-                body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.4; }
-                .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
-                .logo-area img { height: 45px; width: auto; }
-                .slip-title { font-size: 16px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
-                .info-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
-                .info-box h3 { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; letter-spacing: 0.5px; }
-                .info-box p { margin: 3px 0; font-size: 14px; font-weight: 700; color: #0f172a; }
-                .info-box span { color: #64748b; font-weight: 400; }
-                .item-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
-                .item-table th { background: #f8fafc; text-align: left; padding: 12px; font-size: 10px; text-transform: uppercase; border: 1px solid #e2e8f0; color: #64748b; }
-                .item-table td { padding: 12px; border: 1px solid #e2e8f0; font-size: 13px; font-weight: 500; }
-                .notes-area { background: #fff7ed; padding: 15px; border-radius: 8px; border: 1px solid #ffedd5; margin-bottom: 40px; }
-                .notes-area label { font-size: 10px; font-weight: 800; color: #c2410c; display: block; margin-bottom: 5px; text-transform: uppercase; }
-                .sign-off { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 60px; }
-                .signature-line { border-top: 1px solid #cbd5e1; padding-top: 10px; font-size: 11px; text-align: center; color: #64748b; font-weight: 700; text-transform: uppercase; }
-            </style>
-        </head>
-        <body>
-            <div class="header">
-                <div class="logo-area"><img src="https://cdn.prod.website-files.com/617aeb477b067ad6d4afee78/63dafce12a177260d7ec306e_pptlogo-orange.svg"></div>
-                <div class="slip-title">Installation & Packing Slip</div>
-            </div>
-            <div class="info-section">
-                <div class="info-box"><h3>Merchant Information</h3><p>${merchantName}</p><p><span>MID:</span> ${merchantId}</p></div>
-                <div class="info-box"><h3>Ticket Details</h3><p><span>ID:</span> ${d.deployment_id || '---'}</p><p><span>Target:</span> ${targetDate}</p><p><span>Tracking:</span> ${d.tracking_id || 'Not Assigned'}</p></div>
-            </div>
-            <table class="item-table">
-                <thead><tr><th style="width: 25%;">Model</th><th style="width: 35%;">Serial Number</th><th style="width: 20%;">TID</th><th style="width: 20%;">Condition</th></tr></thead>
-                <tbody><tr><td>${terminalType}</td><td><code>${serialNumber}</code></td><td>${d.tid || '---'}</td><td>New / Verified</td></tr></tbody>
-            </table>
-            <div class="notes-area"><label>Logistics & Setup Notes</label><div style="font-size: 13px; color: #431407;">${d.notes || 'No instructions.'}</div></div>
-            <div class="sign-off"><div class="signature-line">Released By</div><div class="signature-line">Accepted By</div></div>
-            <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 700); }<\/script>
-        </body>
-        </html>
-    `);
-    printWindow.document.close();
-}
-
-    async function openNewDeploymentModal() {
-    // 1. Show the Modal
-    document.getElementById('newDepModal').style.display = 'flex';
-    
-    // 2. Clear previous search inputs (Crucial for the searchable fields)
-    document.getElementById('mSearch').value = '';
-    document.getElementById('selectedMerchantId').value = '';
-    document.getElementById('eSearch').value = '';
-    document.getElementById('equipSelect').value = '';
-    document.getElementById('tidInput').value = '';
-    document.getElementById('trackingInput').value = '';
-    document.getElementById('notesInput').value = '';
-    
-    // 3. Clear any leftover suggestion lists
-    document.getElementById('mSuggestions').style.display = 'none';
-    document.getElementById('eSuggestions').style.display = 'none';
-    
-    // 4. Set default date to today
-    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
-}
-
-    // 1. DELETE LOGIC (With Equipment Reset and Accountability Logging)
-    async function confirmDelete(id, dba, sn, equipId, merchantId) {
-        console.log("Attempting delete for:", { id, dba, sn, equipId, merchantId });
-
-        const { value: confirmContent } = await Swal.fire({
-            title: 'Delete Deployment?',
-            html: `This will remove the record for <b>${dba}</b>.<br>Hardware <b>${sn}</b> will return to stock.<br><br>Type <b>DELETE</b>:`,
-            input: 'text',
-            inputPlaceholder: 'DELETE',
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#e11d48',
-            confirmButtonText: 'Permanently Delete',
-            inputValidator: (value) => {
-                if (value !== 'DELETE') return 'You must type DELETE to proceed!';
-            }
-        });
-
-        if (confirmContent === 'DELETE') {
-            Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
-            try {
-                const res = await fetch('/api/deployments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'delete', 
-                        payload: { 
-                            deployment_id: id,
-                            equipment_id: equipId,
-                            merchant_id: merchantId,
-                            merchant_name: dba,
-                            serial_number: sn,
-                            user_email: 'admin@secureconsole.com'
-                        } 
-                    })
-                });
-                
-                const result = await res.json();
-                if (result.success) {
-                    Swal.fire('Deleted!', 'Ticket removed and hardware reset to stock.', 'success')
-                        .then(() => fetchDeployments());
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (err) {
-                console.error("Delete Error:", err);
-                Swal.fire('Error', err.message || 'API connection failed.', 'error');
-            }
-        }
-    }
-
-    // 2. SEARCHABLE HARDWARE LOOKUP
-    async function handleEquipSearch(val) {
-        const list = document.getElementById('eSuggestions');
-        if (val.length < 1) { list.style.display = 'none'; return; }
-        
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getLookups', query: val })
-            });
-            const result = await res.json();
-            
-            list.innerHTML = (result.inventory || []).map(e => `
-                <div class="suggestion-item" onclick="selectEquip('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
-                    <div>
-                        <strong>${e.serial_number}</strong>
-                        <span style="font-size:10px; color:#64748b; display:block;">${e.terminal_type}</span>
-                    </div>
-                    <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">
-                        ${e.status.toUpperCase()}
-                    </span>
-                </div>
-            `).join('');
-            list.style.display = 'block';
-        } catch (e) { console.error(e); }
-    }
-
-    function selectEquip(id, serial, type) {
-        document.getElementById('equipSelect').value = id;
-        document.getElementById('eSearch').value = `${serial} (${type})`;
-        document.getElementById('eSuggestions').style.display = 'none';
-    }
-
-   // 3. FETCH AND RENDER DEPLOYMENTS (with Search Debounce)
- let searchTimeout; 
-
- async function fetchDeployments(page = 1) {
+    // --- 1. DATA FETCHING & RENDERING (With Search & Pagination) ---
+    async function fetchDeployments(page = 1) {
         currentPage = page;
         const tbody = document.getElementById('deploymentTableBody');
         if (!tbody) return;
 
-        // Show loading state
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
 
         clearTimeout(searchTimeout);
@@ -489,7 +217,6 @@
                 currentDeployments = result.data || [];
                 totalPages = result.pagination?.totalPages || 1;
 
-                // 1. Render Table Rows
                 tbody.innerHTML = "";
                 if (currentDeployments.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;">No records found.</td></tr>`;
@@ -510,19 +237,16 @@
                             <td>${dateStr}</td>
                             <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
                             <td style="display:flex; gap:5px;">
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${serialNum}')"><span class="material-icons" style="font-size:18px;">history</span></button>
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
                             </td>
                         `;
                     });
                 }
 
-                // 2. Update KPIs
                 if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
-                
-                // 3. Render Pagination Controls
                 renderPagination();
 
             } catch (err) {
@@ -531,7 +255,8 @@
             }
         }, 300);
     }
-  function renderPagination() {
+
+    function renderPagination() {
         const container = document.getElementById('paginationControls');
         if (!container) return;
         container.innerHTML = `
@@ -542,78 +267,157 @@
             </div>
         `;
     }
-    // 4. OTHER ACTIONS (Saves, Modals, Searches)
-    async function saveDeployment(event) {
-        event.preventDefault();
-        const btn = document.getElementById('createBtn');
-        const merchantId = document.getElementById('selectedMerchantId').value;
-        const equipId = document.getElementById('equipSelect').value;
-        
-        if (!merchantId || !equipId) {
-            Swal.fire('Missing Info', 'Please select a Merchant and Hardware.', 'info');
-            return;
-        }
 
+    // --- 2. UPDATE & RETURN LOGIC ---
+    async function submitUpdate(event) {
+        event.preventDefault();
+        const btn = document.getElementById('updateBtn');
         btn.disabled = true;
-        btn.innerText = "SAVING...";
-        
+        btn.innerText = "UPDATING...";
+
+        const payload = {
+            deployment_id: document.getElementById('editId').value,
+            status: document.getElementById('editStatus').value,
+            tracking_id: document.getElementById('editTracking').value,
+            target_date: document.getElementById('editDate').value,
+            notes: document.getElementById('editNotes').value
+        };
+
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'create', 
-                    payload: {
-                        merchant_id: merchantId,
-                        equipment_id: equipId,
-                        tid: document.getElementById('tidInput').value,
-                        tracking_id: document.getElementById('trackingInput').value,
-                        target_date: document.getElementById('dateInput').value,
-                        notes: document.getElementById('notesInput').value
-                    }
-                })
+                body: JSON.stringify({ action: 'update', payload })
             });
             const result = await res.json();
-            if (result.success) {
-                Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
-                document.getElementById('newDepModal').style.display = 'none';
-                document.getElementById('newDepForm').reset();
-                await fetchDeployments(); 
-            } else { throw new Error(result.message); }
-        } catch (e) {
-            Swal.fire('Error', e.message, 'error');
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "CREATE DEPLOYMENT";
+            if (result.success) { 
+                Swal.fire({ icon: 'success', title: 'Ticket Updated', timer: 1500, showConfirmButton: false });
+                document.getElementById('editDepModal').style.display = 'none';
+                await fetchDeployments(currentPage);
+            } else { Swal.fire('Error', result.message, 'error'); }
+        } catch (e) { Swal.fire('Error', 'System Error', 'error'); } 
+        finally { btn.disabled = false; btn.innerText = "UPDATE TICKET"; }
+    }
+
+    async function processReturn() {
+        const deploymentId = document.getElementById('editId').value;
+        const d = currentDeployments.find(item => item.id === deploymentId);
+        if (!d) return Swal.fire('Error', 'Record not found.', 'error');
+
+        const returnType = document.getElementById('returnType').value;
+        const notes = document.getElementById('editNotes').value;
+
+        const confirm = await Swal.fire({
+            title: 'Initiate Return?',
+            text: `Log S/N ${d.equipments?.serial_number || 'Unknown'} as Pending Return?`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            confirmButtonText: 'Yes, Log Return'
+        });
+
+        if (confirm.isConfirmed) {
+            Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            try {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'return_to_office', payload: {
+                        equipment_id: d.equipment_id,
+                        merchant_id: d.merchant_id,
+                        deployment_id: d.id,
+                        return_type: returnType,
+                        notes: notes
+                    }})
+                });
+                const result = await res.json();
+                if (result.success) {
+                    Swal.fire('Success', 'Return initiated.', 'success').then(() => {
+                        document.getElementById('editDepModal').style.display = 'none';
+                        fetchDeployments(currentPage);
+                    });
+                } else { throw new Error(result.message); }
+            } catch (err) { Swal.fire('Error', err.message, 'error'); }
         }
     }
 
-  async function handleMerchantSearch(val) {
-    const list = document.getElementById('mSuggestions');
-    if (val.length < 2) { list.style.display = 'none'; return; }
-    try {
-        const res = await fetch('/api/deployments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getLookups', query: val })
-        });
-        const result = await res.json();
-        
-        // Updated to include the Merchant ID (MID) in the display
-        list.innerHTML = (result.merchants || []).map(m => `
-            <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <strong style="display:block;">${m.dba_name}</strong>
-                    <span style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</span>
+    // --- 3. PRINTING (FULL STYLE RESTORED) ---
+    function generateDeploymentPDF(index) {
+        const d = currentDeployments[index];
+        if (!d) return;
+
+        const targetDate = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+        const merchantName = d.merchants?.dba_name || '---';
+        const merchantId = d.merchants?.merchant_id || '---';
+        const serialNumber = d.equipments?.serial_number || '---';
+        const terminalType = d.equipments?.terminal_type || '---';
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Packing Slip - ${d.deployment_id}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.4; }
+                    .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
+                    .logo-area img { height: 45px; width: auto; }
+                    .slip-title { font-size: 16px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+                    .info-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+                    .info-box h3 { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; letter-spacing: 0.5px; }
+                    .info-box p { margin: 3px 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+                    .info-box span { color: #64748b; font-weight: 400; }
+                    .item-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+                    .item-table th { background: #f8fafc; text-align: left; padding: 12px; font-size: 10px; text-transform: uppercase; border: 1px solid #e2e8f0; color: #64748b; }
+                    .item-table td { padding: 12px; border: 1px solid #e2e8f0; font-size: 13px; font-weight: 500; }
+                    .notes-area { background: #fff7ed; padding: 15px; border-radius: 8px; border: 1px solid #ffedd5; margin-bottom: 40px; }
+                    .notes-area label { font-size: 10px; font-weight: 800; color: #c2410c; display: block; margin-bottom: 5px; text-transform: uppercase; }
+                    .sign-off { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 60px; }
+                    .signature-line { border-top: 1px solid #cbd5e1; padding-top: 10px; font-size: 11px; text-align: center; color: #64748b; font-weight: 700; text-transform: uppercase; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo-area"><img src="https://cdn.prod.website-files.com/617aeb477b067ad6d4afee78/63dafce12a177260d7ec306e_pptlogo-orange.svg"></div>
+                    <div class="slip-title">Installation & Packing Slip</div>
                 </div>
-                <span class="material-icons" style="font-size:16px; color:#cbd5e1;">add_circle_outline</span>
-            </div>
-        `).join('');
-        list.style.display = 'block';
-    } catch (e) { 
-        console.error("Merchant Lookup Error:", e); 
+                <div class="info-section">
+                    <div class="info-box"><h3>Merchant Information</h3><p>${merchantName}</p><p><span>MID:</span> ${merchantId}</p></div>
+                    <div class="info-box"><h3>Ticket Details</h3><p><span>ID:</span> ${d.deployment_id || '---'}</p><p><span>Target:</span> ${targetDate}</p><p><span>Tracking:</span> ${d.tracking_id || 'Not Assigned'}</p></div>
+                </div>
+                <table class="item-table">
+                    <thead><tr><th style="width: 25%;">Model</th><th style="width: 35%;">Serial Number</th><th style="width: 20%;">TID</th><th style="width: 20%;">Condition</th></tr></thead>
+                    <tbody><tr><td>${terminalType}</td><td><code>${serialNumber}</code></td><td>${d.tid || '---'}</td><td>New / Verified</td></tr></tbody>
+                </table>
+                <div class="notes-area"><label>Logistics & Setup Notes</label><div style="font-size: 13px; color: #431407;">${d.notes || 'No instructions.'}</div></div>
+                <div class="sign-off"><div class="signature-line">Released By</div><div class="signature-line">Accepted By</div></div>
+                <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 700); }<\/script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
     }
-}
+
+    // --- 4. LOOKUPS & SUGGESTIONS ---
+    async function handleMerchantSearch(val) {
+        const list = document.getElementById('mSuggestions');
+        if (val.length < 2) { list.style.display = 'none'; return; }
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.merchants || []).map(m => `
+                <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div><strong>${m.dba_name}</strong><br><span style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</span></div>
+                    <span class="material-icons" style="font-size:16px; color:#cbd5e1;">add_circle_outline</span>
+                </div>
+            `).join('');
+            list.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }
 
     function selectMerchant(id, name) {
         document.getElementById('selectedMerchantId').value = id;
@@ -621,7 +425,42 @@
         document.getElementById('mSuggestions').style.display = 'none';
     }
 
-    // Modal helpers
+    async function handleEquipSearch(val) {
+        const list = document.getElementById('eSuggestions');
+        if (val.length < 1) { list.style.display = 'none'; return; }
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.inventory || []).map(e => `
+                <div class="suggestion-item" onclick="selectEquip('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div><strong>${e.serial_number}</strong><br><span style="font-size:10px; color:#64748b;">${e.terminal_type}</span></div>
+                    <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">${e.status.toUpperCase()}</span>
+                </div>
+            `).join('');
+            list.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }
+
+    function selectEquip(id, serial, type) {
+        document.getElementById('equipSelect').value = id;
+        document.getElementById('eSearch').value = `${serial} (${type})`;
+        document.getElementById('eSuggestions').style.display = 'none';
+    }
+
+    // --- 5. MODAL & DELETE HELPERS ---
+    function openNewDeploymentModal() {
+        document.getElementById('newDepModal').style.display = 'flex';
+        ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
+        });
+        document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+    }
+
     function openEditModal(index) {
         const d = currentDeployments[index];
         if (!d) return;
@@ -632,6 +471,54 @@
         document.getElementById('editNotes').value = d.notes || '';
         if (d.target_deployment_date) document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
         document.getElementById('editDepModal').style.display = 'flex';
+    }
+
+    async function saveDeployment(event) {
+        event.preventDefault();
+        const payload = {
+            merchant_id: document.getElementById('selectedMerchantId').value,
+            equipment_id: document.getElementById('equipSelect').value,
+            tid: document.getElementById('tidInput').value,
+            tracking_id: document.getElementById('trackingInput').value,
+            target_date: document.getElementById('dateInput').value,
+            notes: document.getElementById('notesInput').value
+        };
+        try {
+            const res = await fetch('/api/deployments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', payload }) });
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
+                document.getElementById('newDepModal').style.display = 'none';
+                fetchDeployments();
+            } else { throw new Error(result.message); }
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
+    }
+
+    async function confirmDelete(id, dba, sn, equipId, merchantId) {
+        const { value: confirmContent } = await Swal.fire({
+            title: 'Delete Deployment?',
+            html: `Type <b>DELETE</b> to confirm removal for ${dba}:`,
+            input: 'text',
+            showCancelButton: true,
+            confirmButtonColor: '#e11d48',
+            inputValidator: (v) => v !== 'DELETE' && 'You must type DELETE!'
+        });
+
+        if (confirmContent === 'DELETE') {
+            try {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'delete', payload: { 
+                        deployment_id: id, equipment_id: equipId, merchant_id: merchantId, merchant_name: dba, serial_number: sn, user_email: 'admin@secureconsole.com' 
+                    }})
+                });
+                const result = await res.json();
+                if (result.success) {
+                    Swal.fire('Deleted!', '', 'success').then(() => fetchDeployments(currentPage));
+                } else { throw new Error(result.message); }
+            } catch (err) { Swal.fire('Error', err.message, 'error'); }
+        }
     }
 
     async function viewHistory(id, sn) {
@@ -658,7 +545,7 @@
     }
 
     function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
-    window.onload = fetchDeployments;
+    window.onload = () => fetchDeployments();
 </script>
 </body>
 </html>
