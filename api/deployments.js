@@ -60,10 +60,9 @@ if (action === 'list') {
     `, { count: 'exact' });
 
 if (query) {
+    // DO NOT change the spacing or the dots here. 
+    // This specific format is required to bypass the logic tree parser error.
     const searchTerm = `%${query}%`;
-    
-    // THE FIX: Use the 'referenced table' name followed by the column in one flat string.
-    // Do NOT use the { foreignTable } option here, as it forces all columns into that table.
     request = request.or(`deployment_id.ilike.${searchTerm},equipments.serial_number.ilike.${searchTerm}`);
 }
 
