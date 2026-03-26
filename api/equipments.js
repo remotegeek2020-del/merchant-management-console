@@ -90,21 +90,34 @@ export default async function handler(req, res) {
             
             if (statsError) throw statsError;
 
-        const [
+if (action === 'list') {
+    // ... your existing pagination/search logic ...
+
+    // ADVANCED METRICS FOR 50,000+ ITEMS
+    const [
         { count: totalCount },
         { count: officeCount },
         { count: repairCount },
         { count: deployedCount },
         { count: retiredCount }
     ] = await Promise.all([
+        // 1. Every single item in the system
         supabase.from('equipments').select('*', { count: 'exact', head: true }),
+        
+        // 2. Only items that are 'stocked' AND at the 'Warsaw Office'
         supabase.from('equipments').select('*', { count: 'exact', head: true })
                 .eq('current_location', 'Warsaw Office')
-                .neq('status', 'decommissioned'),
+                .eq('status', 'stocked'),
+        
+        // 3. Items specifically in the repair bin
         supabase.from('equipments').select('*', { count: 'exact', head: true })
                 .eq('current_location', 'Warsaw Repairs'),
+        
+        // 4. Items currently with merchants (Deployed)
         supabase.from('equipments').select('*', { count: 'exact', head: true })
                 .eq('status', 'deployed'),
+        
+        // 5. Items permanently removed
         supabase.from('equipments').select('*', { count: 'exact', head: true })
                 .eq('status', 'decommissioned')
     ]);
