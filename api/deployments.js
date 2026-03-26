@@ -190,12 +190,26 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: LOOKUPS ---
-        if (action === 'getLookups') {
-            const { data: merchants } = await supabase.from('merchants').select('id, dba_name, merchant_id').ilike('dba_name', `%${query || ''}%`).limit(5);
-            const { data: inventory } = await supabase.from('equipments').select('id, serial_number, terminal_type, status').eq('status', 'stocked').ilike('serial_number', `%${query || ''}%`).limit(10);
-            return res.status(200).json({ merchants, inventory });
-        }
+        // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
+if (action === 'getLookups') {
+    const term = `%${query || ''}%`;
+
+    // Search BOTH dba_name and merchant_id
+    const { data: merchants } = await supabase
+        .from('merchants')
+        .select('id, dba_name, merchant_id')
+        .or(`dba_name.ilike.${term},merchant_id.ilike.${term}`) 
+        .limit(10); // Increased limit for better selection
+
+    const { data: inventory } = await supabase
+        .from('equipments')
+        .select('id, serial_number, terminal_type, status')
+        .eq('status', 'stocked')
+        .ilike('serial_number', term)
+        .limit(10);
+
+    return res.status(200).json({ merchants, inventory });
+}
 
         // --- ACTION: HISTORY ---
         if (action === 'getHistory') {
