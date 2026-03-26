@@ -8,6 +8,59 @@ export default async function handler(req, res) {
     
     
     {
+
+        // --- ACTION: bulk_upsert (Create or Update based on merchant_id) ---
+if (action === 'bulk_upsert') {
+    const dataToUpsert = payload.map(row => ({
+        merchant_id: row.merchant_id?.trim(),
+        dba_name: row.dba_name,
+        status_id: row.status_id,
+        agent_name: row.agent_name,
+        agent_id: row.agent_id,
+        account_status: row.account_status,
+        is_edge_enabled: row.is_edge_enabled,
+        is_pci_compliant: row.is_pci_compliant,
+        isv_commission_code: row.isv_commission_code,
+        is_mobile: row.is_mobile,
+        is_device_hub_link_enabled: row.is_device_hub_link_enabled,
+        enrollment_date: row.enrollment_date,
+        approved_date: row.approved_date,
+        source: row.source,
+        processor: row.processor,
+        processor_platform: row.processor_platform,
+        is_activated: row.is_activated,
+        days_approved: row.days_approved,
+        shipping_status: row.shipping_status,
+        gateway_account_id: row.gateway_account_id,
+        last_batch_date: row.last_batch_date,
+        account_status_change_date: row.account_status_change_date,
+        account_code: row.account_code,
+        ndf: row.ndf,
+        irs_tin_status: row.irs_tin_status,
+        volume: row.volume,
+        volume_30_day: row.volume_30_day,
+        volume_90_day: row.volume_90_day,
+        volume_mtd: row.volume_mtd,
+        credit_review: row.credit_review,
+        fresno_buy_rate_tier: row.fresno_buy_rate_tier,
+        underwriting_decision_note: row.underwriting_decision_note,
+        email: row.email,
+        ach_properties: row.ach_properties,
+        major_merchant: row.major_merchant,
+        merchant_websites: row.merchant_websites,
+        merchant_primary_contact: row.merchant_primary_contact,
+        merchant_phone: row.merchant_phone
+    })).filter(item => item.merchant_id); // Ensure we don't send rows without IDs
+
+    // Supabase Upsert logic: If merchant_id matches an existing record, update it.
+    // Otherwise, create a new record.
+    const { error } = await supabase
+        .from('merchants')
+        .upsert(dataToUpsert, { onConflict: 'merchant_id' });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, count: dataToUpsert.length });
+}
         if (action === 'get_merchant_history') {
     const { merchant_id } = req.body; // Pulls directly from body
 
