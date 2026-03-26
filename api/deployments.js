@@ -154,32 +154,61 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true, data: newDep });
 }
-        // --- ACTION: RETURN TO OFFICE ---
-        if (action === 'return_to_office') {
-            const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+      // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
+if (action === 'return_to_office') {
+    const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-            const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-            const dbaName = merchantData?.dba_name || 'Merchant Field';
+    // Determine target locations and equipment status based on selection
+    let equipStatus = 'pending_return';
+    let equipLoc = 'In Transit / RMA';
+    let rmaStatus = 'open';
 
-            await supabase.from('returns').insert([{
-                merchant_id, equipment_id, status: 'open', condition: return_type,
-                return_reason: notes || 'Returned from field',
-                destination: return_type === 'Defective' ? 'Warsaw Repairs' : 'Warsaw Office'
-            }]);
+    if (return_type === 'Working (Back to Stock)') {
+        equipStatus = 'stocked';
+        equipLoc = 'Warsaw Office';
+        rmaStatus = 'completed';
+    } else if (return_type === 'Defective (Received in Repairs)') {
+        equipStatus = 'repairing';
+        equipLoc = 'Warsaw Repairs';
+        rmaStatus = 'completed';
+    }
 
-            await supabase.from('equipments').update({ 
-                status: 'pending_return', current_location: 'In Transit / RMA', merchant_id: null 
-            }).eq('id', equipment_id);
+    // 1. Get Merchant Name
+    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    const dbaName = merchantData?.dba_name || 'Merchant Site';
 
-            await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+    // 2. Insert/Upsert the RMA record
+    await supabase.from('returns').upsert([{
+        merchant_id, 
+        equipment_id, 
+        status: rmaStatus, 
+        condition: return_type,
+        return_reason: notes || 'Returned from field',
+        destination: return_type.includes('Defective') ? 'Warsaw Repairs' : 'Warsaw Office'
+    }]);
 
-            await supabase.from('equipment_logs').insert([{
-                equipment_id, merchant_id, action: 'Initiated Return', from_location: dbaName,
-                to_location: 'In Transit / RMA', notes: `RMA Started. Condition: ${return_type}. Notes: ${notes}`
-            }]);
+    // 3. Update Equipment
+    await supabase.from('equipments').update({ 
+        status: equipStatus, 
+        current_location: equipLoc, 
+        merchant_id: (rmaStatus === 'completed' ? null : merchant_id) // Unlink only if received
+    }).eq('id', equipment_id);
 
-            return res.status(200).json({ success: true });
-        }
+    // 4. Update Deployment Ticket (Close it)
+    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+
+    // 5. Log it
+    await supabase.from('equipment_logs').insert([{
+        equipment_id,
+        merchant_id, 
+        action: rmaStatus === 'completed' ? 'RMA Completed' : 'RMA Initiated',
+        from_location: dbaName,
+        to_location: equipLoc,
+        notes: `RMA Type: ${return_type}. Notes: ${notes}`
+    }]);
+
+    return res.status(200).json({ success: true });
+}
 
         // --- ACTION: UPDATE (With Tracking/Status Logs) ---
         if (action === 'update') {
