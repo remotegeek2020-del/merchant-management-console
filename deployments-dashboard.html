@@ -172,26 +172,26 @@
                 <textarea id="editNotes" class="slds-textarea" placeholder="Add update notes here..." style="border-radius:8px; height:80px;"></textarea>
             </div>
 <div id="returnProcessBox" style="margin-top: 20px; padding: 15px; border-top: 2px dashed #e2e8f0; background: #fff1f2; border-radius: 8px;">
-    
-            <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #e2e8f0; background: #fff1f2; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
     <label style="display:block; font-weight:800; font-size:10px; color:#e11d48; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">
         <span class="material-icons" style="font-size:14px; vertical-align:middle;">assignment_return</span> 
-        Process Formal Return
+        Initiate Formal Return
     </label>
-    <div style="display: flex; gap: 10px;">
-        <select id="returnType" class="slds-select" style="border-radius:8px; flex: 1;">
-           <option value="Working (Back to Stock)">Working (Back to Stock) - Instant Close</option>
-    <option value="Working (In Transit)">Working (In Transit)</option>
-    <option value="Defective (Received in Repairs)">Defective (Received in Repairs) - Instant Repair</option>
-    <option value="Defective (In Transit)">Defective (In Transit)</option>
+    <div style="display: flex; flex-direction: column; gap: 10px;">
+        <select id="returnReason" class="slds-select" style="border-radius:8px;" onchange="const other = document.getElementById('otherReasonText'); other.style.display = (this.value === 'Other') ? 'block' : 'none';">
+            <option value="">Select Return Reason...</option>
+            <option value="Merchant Cancellation">Merchant Cancellation</option>
+            <option value="Equipment Type Swap">Equipment Type Swap</option>
+            <option value="Technical Issue Swap">Technical Issue Swap</option>
+            <option value="Other">Other</option>
         </select>
-        <button type="button" onclick="processReturn()" class="slds-button slds-button_destructive" style="border-radius:8px; font-weight:700;">
-            LOG RETURN
+        
+        <input type="text" id="otherReasonText" class="slds-input" placeholder="Please specify reason..." style="display:none; border-radius:8px;">
+        
+        <button type="button" onclick="processReturn()" class="slds-button slds-button_destructive" style="border-radius:8px; font-weight:700; width: 100%;">
+            LOG RETURN (IN TRANSIT)
         </button>
     </div>
-    <p style="font-size:10px; color:#991b1b; margin-top:8px; font-style:italic;">*This closes the ticket and moves hardware to "Pending Return" status.</p>
 </div>
-    </div>
             <button type="submit" id="updateBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); padding:10px; border-radius:8px; margin-top:15px;">UPDATE TICKET</button>
         </form>
     </div>
@@ -214,14 +214,13 @@
     let totalPages = 1;
     let lookupTimeout;
 
-    async function completeInTransitRMA() {
+   async function completeInTransitRMA() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
-    if (!d) return;
-
-    const { value: destination } = await Swal.fire({
-        title: 'Receive Hardware',
-        text: `Where is S/N ${d.equipments?.serial_number} being received?`,
+    
+    const result = await Swal.fire({
+        title: 'Complete RMA',
+        text: `Confirm receipt for S/N: ${d.equipments?.serial_number}`,
         icon: 'question',
         showCancelButton: true,
         confirmButtonText: 'Warsaw Office (Stock)',
@@ -231,33 +230,34 @@
         showDenyButton: true
     });
 
-    if (destination) {
-        const isRepair = Swal.getDenyButton() === document.activeElement;
-        const finalType = isRepair ? 'Defective (Received in Repairs)' : 'Working (Back to Stock)';
-        
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'return_to_office', 
-                    payload: {
-                        equipment_id: d.equipment_id,
-                        merchant_id: d.merchant_id,
-                        deployment_id: d.id,
-                        return_type: finalType,
-                        notes: 'Manual completion from In-Transit badge.'
-                    }
-                })
-            });
-            const result = await res.json();
-            if (result.success) {
-                Swal.fire('Received', 'Inventory updated successfully.', 'success');
+    let finalType = '';
+    if (result.isConfirmed) finalType = 'Working (Back to Stock)';
+    else if (result.isDenied) finalType = 'Defective (Received in Repairs)';
+    else return;
+
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'return_to_office', 
+                payload: {
+                    equipment_id: d.equipment_id,
+                    merchant_id: d.merchant_id,
+                    deployment_id: d.id,
+                    return_type: finalType,
+                    notes: 'Unit received at warehouse.'
+                }
+            })
+        });
+        const finalResult = await res.json();
+        if (finalResult.success) {
+            Swal.fire('Success', `Unit moved to ${finalType}`, 'success').then(() => {
                 document.getElementById('editDepModal').style.display = 'none';
                 fetchDeployments(currentPage);
-            }
-        } catch (e) { Swal.fire('Error', 'Update failed', 'error'); }
-    }
+            });
+        }
+    } catch (e) { console.error(e); }
 }
 
     // --- 1. FETCH AND RENDER DEPLOYMENTS (With Search & Pagination) ---
@@ -393,45 +393,39 @@ if (document.getElementById('kpi-total')) {
 async function processReturn() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
-    if (!d) return;
+    const reasonDropdown = document.getElementById('returnReason');
+    const otherText = document.getElementById('otherReasonText');
+    
+    let finalReason = reasonDropdown.value;
+    if (finalReason === 'Other') finalReason = otherText.value;
 
-    // Requirement 2: Popup for RMA Reason
-    const { value: rmaNote } = await Swal.fire({
-        title: 'RMA Reason',
-        input: 'textarea',
-        inputLabel: 'Why is this unit being returned?',
-        inputPlaceholder: 'e.g. Screen cracked, merchant closed, etc...',
-        showCancelButton: true,
-        inputValidator: (value) => {
-            if (!value) return 'You need to provide a reason!';
-        }
-    });
+    if (!finalReason) return Swal.fire('Error', 'Please select a reason', 'warning');
 
-    if (rmaNote) {
-        const returnType = document.getElementById('returnType').value;
-        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'return_to_office', payload: {
+    Swal.fire({ title: 'Processing Logistics...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'return_to_office', 
+                payload: {
                     equipment_id: d.equipment_id,
                     merchant_id: d.merchant_id,
                     deployment_id: d.id,
-                    return_type: returnType,
-                    notes: rmaNote // Saved to return_reason in DB
-                }})
+                    return_type: 'In Transit', // Initial State
+                    notes: finalReason
+                }
+            })
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire('In Transit', 'RMA initiated and equipment status updated.', 'success').then(() => {
+                document.getElementById('editDepModal').style.display = 'none';
+                fetchDeployments(currentPage);
             });
-            const result = await res.json();
-            if (result.success) {
-                Swal.fire('Success', 'RMA Initiated.', 'success').then(() => {
-                    document.getElementById('editDepModal').style.display = 'none';
-                    fetchDeployments(currentPage);
-                });
-            }
-        } catch (err) { Swal.fire('Error', err.message, 'error'); }
-    }
+        }
+    } catch (err) { Swal.fire('Error', 'API Error', 'error'); }
 }
     // --- 3. DELETE & HISTORY LOGIC ---
     async function confirmDelete(id, dba, sn, equipId, merchantId) {
