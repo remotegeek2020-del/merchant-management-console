@@ -390,48 +390,49 @@ if (document.getElementById('kpi-total')) {
         }
     }
 
-    async function processReturn() {
-        const deploymentId = document.getElementById('editId').value;
-        const d = currentDeployments.find(item => item.id === deploymentId);
-        if (!d) return Swal.fire('Error', 'Deployment record not found.', 'error');
+async function processReturn() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    if (!d) return;
 
-        const returnType = document.getElementById('returnType').value;
-        const notes = document.getElementById('editNotes').value;
-
-        const confirm = await Swal.fire({
-            title: 'Initiate Return?',
-            text: `Log S/N ${d.equipments?.serial_number || 'Unknown'} as Pending Return?`,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#e11d48',
-            confirmButtonText: 'Yes, Log Return'
-        });
-
-        if (confirm.isConfirmed) {
-            Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-            try {
-                const res = await fetch('/api/deployments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'return_to_office', payload: {
-                        equipment_id: d.equipment_id,
-                        merchant_id: d.merchant_id,
-                        deployment_id: d.id,
-                        return_type: returnType,
-                        notes: notes || 'Unit returned from field'
-                    }})
-                });
-                const result = await res.json();
-                if (result.success) {
-                    Swal.fire('Success', 'Return initiated.', 'success').then(() => {
-                        document.getElementById('editDepModal').style.display = 'none';
-                        fetchDeployments(currentPage);
-                    });
-                } else { throw new Error(result.message); }
-            } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    // Requirement 2: Popup for RMA Reason
+    const { value: rmaNote } = await Swal.fire({
+        title: 'RMA Reason',
+        input: 'textarea',
+        inputLabel: 'Why is this unit being returned?',
+        inputPlaceholder: 'e.g. Screen cracked, merchant closed, etc...',
+        showCancelButton: true,
+        inputValidator: (value) => {
+            if (!value) return 'You need to provide a reason!';
         }
-    }
+    });
 
+    if (rmaNote) {
+        const returnType = document.getElementById('returnType').value;
+        Swal.fire({ title: 'Processing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+        
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'return_to_office', payload: {
+                    equipment_id: d.equipment_id,
+                    merchant_id: d.merchant_id,
+                    deployment_id: d.id,
+                    return_type: returnType,
+                    notes: rmaNote // Saved to return_reason in DB
+                }})
+            });
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Success', 'RMA Initiated.', 'success').then(() => {
+                    document.getElementById('editDepModal').style.display = 'none';
+                    fetchDeployments(currentPage);
+                });
+            }
+        } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    }
+}
     // --- 3. DELETE & HISTORY LOGIC ---
     async function confirmDelete(id, dba, sn, equipId, merchantId) {
         const { value: confirmContent } = await Swal.fire({
