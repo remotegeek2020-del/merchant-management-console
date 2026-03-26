@@ -90,7 +90,7 @@ export default async function handler(req, res) {
             
             if (statsError) throw statsError;
 
-          const [
+        const [
         { count: totalCount },
         { count: officeCount },
         { count: repairCount },
@@ -98,10 +98,15 @@ export default async function handler(req, res) {
         { count: retiredCount }
     ] = await Promise.all([
         supabase.from('equipments').select('*', { count: 'exact', head: true }),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Office').neq('status', 'decommissioned'),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Repairs'),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'decommissioned')
+        supabase.from('equipments').select('*', { count: 'exact', head: true })
+                .eq('current_location', 'Warsaw Office')
+                .neq('status', 'decommissioned'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true })
+                .eq('current_location', 'Warsaw Repairs'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true })
+                .eq('status', 'deployed'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true })
+                .eq('status', 'decommissioned')
     ]);
 
     const metrics = {
@@ -110,13 +115,13 @@ export default async function handler(req, res) {
         inRepair: repairCount || 0,
         deployed: deployedCount || 0,
         retired: retiredCount || 0,
-        alerts: repairCount || 0 // Or your specific alert logic
+        alerts: repairCount || 0 
     };
 
     return res.status(200).json({ 
         success: true, 
         data: data || [], 
-        count: count || 0, // This is the 'count' from the paginated 'sb' request
+        count: count || 0, 
         metrics 
     });
 }
