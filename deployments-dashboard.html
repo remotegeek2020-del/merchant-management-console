@@ -557,18 +557,40 @@ if (document.getElementById('kpi-total')) {
         document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
     }
 
-    function openEditModal(index) {
-        const d = currentDeployments[index];
-        if (!d) return;
-        document.getElementById('editId').value = d.id;
-        document.getElementById('editTid').value = d.tid || '';
-        document.getElementById('editStatus').value = d.status || 'Open';
-        document.getElementById('editTracking').value = d.tracking_id || '';
-        document.getElementById('editNotes').value = d.notes || '';
-        if (d.target_deployment_date) document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
-        document.getElementById('editDepModal').style.display = 'flex';
+  async function openEditModal(index) {
+    const d = currentDeployments[index];
+    if (!d) return;
+
+    // Reset UI
+    document.getElementById('editId').value = d.id;
+    document.getElementById('editTid').value = d.tid || '';
+    document.getElementById('editStatus').value = d.status || 'Open';
+    document.getElementById('editTracking').value = d.tracking_id || '';
+    document.getElementById('editNotes').value = d.notes || '';
+    const rmaBadge = document.getElementById('rmaStatusBadge');
+    rmaBadge.style.display = 'none';
+
+    if (d.target_deployment_date) {
+        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
     }
 
+    // SURGICAL ADD: Check for existing RMA
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'check_rma', equipment_id: d.equipment_id })
+        });
+        const result = await res.json();
+        if (result.success && result.data) {
+            rmaBadge.style.display = 'block';
+            document.getElementById('rmaCurrentStatusText').innerText = 
+                `${result.data.status.toUpperCase()} (${result.data.condition})`;
+        }
+    } catch (e) { console.error("RMA Check failed", e); }
+
+    document.getElementById('editDepModal').style.display = 'flex';
+}
     async function saveDeployment(event) {
         event.preventDefault();
         const payload = {
