@@ -46,6 +46,7 @@
         }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
 </head>
 <body>
 
@@ -85,6 +86,13 @@
             </select>
             <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius:10px;">
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="resetAndFetch()">Search</button>
+            <button class="slds-button slds-button_neutral" 
+        style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #166534; color: #166534;" 
+        onclick="document.getElementById('csvFileInput').click()">
+    <span class="material-icons" style="font-size:18px;">upload_file</span>
+    CSV BULK UPDATE
+</button>
+<input type="file" id="csvFileInput" accept=".csv" style="display:none;" onchange="handleCSVUpload(this)">
         </div>
     </div>
 
@@ -124,7 +132,46 @@
 <script>
     let currentPage = 0;
     let currentRecords = [];
+async function handleCSVUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
 
+    Swal.fire({
+        title: 'Processing CSV...',
+        html: 'Reading records and preparing upsert...',
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: async function(results) {
+            try {
+                const res = await fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'bulk_upsert', 
+                        payload: results.data 
+                    })
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    Swal.fire('Success', `Processed ${results.data.length} records successfully.`, 'success');
+                    fetchMerchants();
+                } else {
+                    throw new Error(result.message);
+                }
+            } catch (err) {
+                Swal.fire('Import Failed', err.message, 'error');
+            } finally {
+                input.value = ''; // Reset input
+            }
+        }
+    });
+}
     async function fetchMerchants() {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
