@@ -62,7 +62,12 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
-        if (action === 'list') {
+   if (action === 'list') {
+            const limit = parseInt(req.body.limit) || 50;
+            const page = parseInt(req.body.page) || 0;
+            const { query, filterLocation, filterStatus } = req.body;
+
+            // 1. Main Data Query with Pagination
             let sb = supabase.from('equipments').select(`
                 *,
                 merchants!current_merchant (dba_name)
@@ -82,71 +87,51 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
 
-            if (error) throw error;
+            if (error) {
+                console.error("Supabase Data Error:", error.message);
+                throw error;
+            }
 
-            const { data: allData, error: statsError } = await supabase
-                .from('equipments')
-                .select('status, current_location');
+            // 2. High-Performance KPI Counts
+            // We use 'head: true' so NO data is transferred, only the integer count.
+            // This is how you handle 50,000+ rows without timeouts.
+            let metrics = { total: 0, inOffice: 0, inRepair: 0, deployed: 0, retired: 0, alerts: 0 };
             
-            if (statsError) throw statsError;
+            try {
+                const [
+                    { count: totalCount },
+                    { count: officeCount },
+                    { count: repairCount },
+                    { count: deployedCount },
+                    { count: retiredCount }
+                ] = await Promise.all([
+                    supabase.from('equipments').select('*', { count: 'exact', head: true }),
+                    supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Office').eq('status', 'stocked'),
+                    supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Repairs'),
+                    supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
+                    supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'decommissioned')
+                ]);
 
-if (action === 'list') {
-    const limit = parseInt(req.body.limit) || 50;
-    const page = parseInt(req.body.page) || 0;
+                metrics = {
+                    total: totalCount || 0,
+                    inOffice: officeCount || 0,
+                    inRepair: repairCount || 0,
+                    deployed: deployedCount || 0,
+                    retired: retiredCount || 0,
+                    alerts: repairCount || 0 
+                };
+            } catch (metricErr) {
+                console.error("Metric Calculation Failed:", metricErr.message);
+                // We keep the default 0s so the table can still render
+            }
 
-    // 1. MAIN DATA QUERY (Paginated)
-    let sb = supabase.from('equipments').select(`
-        *,
-        merchants!current_merchant (dba_name)
-    `, { count: 'exact' });
-
-    if (query) {
-        sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
-    }
-    if (filterStatus) {
-        sb = sb.eq('status', filterStatus);
-    } else if (filterLocation) {
-        sb = sb.eq('current_location', filterLocation);
-    }
-
-    const { data, count, error } = await sb
-        .order('created_at', { ascending: false })
-        .range(page * limit, (page + 1) * limit - 1);
-
-    if (error) throw error;
-
-    // 2. HIGH-SCALE KPI COUNTS
-    // Using { head: true } means Supabase only returns the number, NOT the data.
-    // This makes the query nearly instant regardless of table size.
-    const [
-        { count: totalCount },
-        { count: officeCount },
-        { count: repairCount },
-        { count: deployedCount },
-        { count: retiredCount }
-    ] = await Promise.all([
-        supabase.from('equipments').select('*', { count: 'exact', head: true }),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Office').eq('status', 'stocked'),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Repairs'),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
-        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'decommissioned')
-    ]);
-
-    return res.status(200).json({ 
-        success: true, 
-        data: data || [], 
-        count: count || 0, 
-        metrics: {
-            total: totalCount || 0,
-            inOffice: officeCount || 0,
-            inRepair: repairCount || 0,
-            deployed: deployedCount || 0,
-            retired: retiredCount || 0,
-            alerts: repairCount || 0 
-        } 
-    });
-}
-
+            return res.status(200).json({ 
+                success: true, 
+                data: data || [], 
+                count: count || 0, 
+                metrics 
+            });
+        }
         if (action === 'create') {
             const { data, error } = await supabase
                 .from('equipments')
