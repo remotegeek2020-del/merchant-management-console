@@ -9,16 +9,19 @@ export default async function handler(req, res) {
 
     try {
 
-        if (action === 'check_rma') {
+      // --- ACTION: check_rma ---
+if (action === 'check_rma') {
+    // Only fetch the RMA if it's currently 'open' (In Transit)
     const { data, error } = await supabase
         .from('returns')
         .select('*')
         .eq('equipment_id', payload.equipment_id)
+        .eq('status', 'open') 
         .order('created_at', { ascending: false })
         .limit(1)
         .single();
     
-    // Return null if not found instead of throwing error
+    // If error is PGRST116 (no rows), we return null safely
     return res.status(200).json({ success: true, data: data || null });
 }
         // --- ACTION: DELETE (Reset Equipment + Log Activity) ---
