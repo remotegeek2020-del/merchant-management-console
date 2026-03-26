@@ -67,10 +67,12 @@ export default async function handler(req, res) {
             const page = parseInt(req.body.page) || 0;
             const { query, filterLocation, filterStatus } = req.body;
 
-            // 1. Main Data Query with Pagination
+            // 1. SIMPLE DATA QUERY
+            // Removed the "!" alias to prevent join errors. 
+            // This will work as long as a foreign key exists.
             let sb = supabase.from('equipments').select(`
                 *,
-                merchants!current_merchant (dba_name)
+                merchants(dba_name)
             `, { count: 'exact' });
 
             if (query) {
@@ -88,22 +90,20 @@ export default async function handler(req, res) {
                 .range(page * limit, (page + 1) * limit - 1);
 
             if (error) {
-                console.error("Supabase Data Error:", error.message);
-                throw error;
+                console.error("Table Data Error:", error.message);
+                return res.status(500).json({ success: false, message: error.message });
             }
 
-            // 2. High-Performance KPI Counts
-            // We use 'head: true' so NO data is transferred, only the integer count.
-            // This is how you handle 50,000+ rows without timeouts.
+            // 2. STABLE METRICS (Separated so they don't crash the table)
             let metrics = { total: 0, inOffice: 0, inRepair: 0, deployed: 0, retired: 0, alerts: 0 };
             
             try {
                 const [
-                    { count: totalCount },
-                    { count: officeCount },
-                    { count: repairCount },
-                    { count: deployedCount },
-                    { count: retiredCount }
+                    { count: tCount },
+                    { count: oCount },
+                    { count: rCount },
+                    { count: dCount },
+                    { count: rtCount }
                 ] = await Promise.all([
                     supabase.from('equipments').select('*', { count: 'exact', head: true }),
                     supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Office').eq('status', 'stocked'),
@@ -113,16 +113,15 @@ export default async function handler(req, res) {
                 ]);
 
                 metrics = {
-                    total: totalCount || 0,
-                    inOffice: officeCount || 0,
-                    inRepair: repairCount || 0,
-                    deployed: deployedCount || 0,
-                    retired: retiredCount || 0,
-                    alerts: repairCount || 0 
+                    total: tCount || 0,
+                    inOffice: oCount || 0,
+                    inRepair: rCount || 0,
+                    deployed: dCount || 0,
+                    retired: rtCount || 0,
+                    alerts: rCount || 0 
                 };
-            } catch (metricErr) {
-                console.error("Metric Calculation Failed:", metricErr.message);
-                // We keep the default 0s so the table can still render
+            } catch (mErr) {
+                console.warn("Metrics failed but table will still load:", mErr.message);
             }
 
             return res.status(200).json({ 
