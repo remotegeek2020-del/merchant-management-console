@@ -171,11 +171,11 @@ if (action === 'check_rma') {
     return res.status(200).json({ success: true, data: newDep });
 }
       // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
+// --- ACTION: RETURN TO OFFICE (Robust Version) ---
 if (action === 'return_to_office') {
     const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-    // Logic Map for the 4 States
-    let equipStatus = 'pending_return'; // Default for Transit
+    let equipStatus = 'pending_return'; 
     let equipLoc = 'In Transit / RMA';
     let rmaStatus = 'open';
 
@@ -187,43 +187,29 @@ if (action === 'return_to_office') {
         equipStatus = 'repairing';
         equipLoc = 'Warsaw Repairs';
         rmaStatus = 'completed';
-    } else if (return_type === 'Defective (In Transit)') {
-        // Keeps status as pending_return but marks destination for repairs
-        equipLoc = 'In Transit to Repairs';
     }
 
-    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-    const dbaName = merchantData?.dba_name || 'Merchant Site';
-
-    // 1. Log the RMA
-    await supabase.from('returns').upsert([{
-        merchant_id, 
-        equipment_id, 
+    // 1. Log the RMA (Use upsert to prevent duplicate active RMAs for one serial)
+    const { error: rmaError } = await supabase.from('returns').upsert([{
+        merchant_id: merchant_id, 
+        equipment_id: equipment_id, 
         status: rmaStatus, 
         condition: return_type,
         return_reason: notes || 'Logistics Update',
         destination: return_type.includes('Defective') ? 'Warsaw Repairs' : 'Warsaw Office'
-    }], { onConflict: 'equipment_id, status' }); // Ensures one open RMA per device
+    }]);
 
-    // 2. Update Equipment (If RMA is completed, merchant_id is cleared)
+    if (rmaError) throw rmaError;
+
+    // 2. Update Equipment table
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
         merchant_id: (rmaStatus === 'completed' ? null : merchant_id) 
     }).eq('id', equipment_id);
 
-    // 3. Close the deployment ticket as the unit has left the merchant's possession
+    // 3. Close the deployment ticket
     await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-
-    // 4. Record the specific logistics action
-    await supabase.from('equipment_logs').insert([{
-        equipment_id,
-        merchant_id, 
-        action: rmaStatus === 'completed' ? 'Unit Received' : 'Return Started',
-        from_location: dbaName,
-        to_location: equipLoc,
-        notes: `Logistics Type: ${return_type}. Notes: ${notes}`
-    }]);
 
     return res.status(200).json({ success: true });
 }
