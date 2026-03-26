@@ -179,36 +179,35 @@ if (action === 'return_to_office') {
     let equipLoc = 'In Transit / RMA';
     let rmaStatus = 'open';
 
-    if (return_type === 'Working (Back to Stock)') {
-        equipStatus = 'stocked';
-        equipLoc = 'Warsaw Office';
-        rmaStatus = 'completed';
-    } else if (return_type === 'Defective (Received in Repairs)') {
-        equipStatus = 'repairing';
-        equipLoc = 'Warsaw Repairs';
+    // Logic for instant completion
+    if (return_type.includes('Back to Stock') || return_type.includes('Received in Repairs')) {
+        equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
+        equipLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
         rmaStatus = 'completed';
     }
 
-    // 1. Log the RMA (Use upsert to prevent duplicate active RMAs for one serial)
-    const { error: rmaError } = await supabase.from('returns').upsert([{
-        merchant_id: merchant_id, 
+    // SURGICAL FIX: UPSERT instead of INSERT
+    // This looks for an existing record with this equipment_id and status='open' 
+    // to update it, otherwise it creates a new one.
+    const { error: rmaError } = await supabase.from('returns').upsert({
         equipment_id: equipment_id, 
+        merchant_id: merchant_id,
         status: rmaStatus, 
         condition: return_type,
         return_reason: notes || 'Logistics Update',
         destination: return_type.includes('Defective') ? 'Warsaw Repairs' : 'Warsaw Office'
-    }]);
+    }, { onConflict: 'equipment_id' }); // Ensures only ONE record per Serial Number in the returns table
 
     if (rmaError) throw rmaError;
 
-    // 2. Update Equipment table
+    // Update Equipment (Clear merchant only if completed)
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
         merchant_id: (rmaStatus === 'completed' ? null : merchant_id) 
     }).eq('id', equipment_id);
 
-    // 3. Close the deployment ticket
+    // Only close the deployment if it's not already closed
     await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
     return res.status(200).json({ success: true });
