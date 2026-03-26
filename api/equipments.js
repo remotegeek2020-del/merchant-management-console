@@ -91,9 +91,33 @@ export default async function handler(req, res) {
             if (statsError) throw statsError;
 
 if (action === 'list') {
-    // ... your existing pagination/search logic ...
+    const limit = parseInt(req.body.limit) || 50;
+    const page = parseInt(req.body.page) || 0;
 
-    // ADVANCED METRICS FOR 50,000+ ITEMS
+    // 1. MAIN DATA QUERY (Paginated)
+    let sb = supabase.from('equipments').select(`
+        *,
+        merchants!current_merchant (dba_name)
+    `, { count: 'exact' });
+
+    if (query) {
+        sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
+    }
+    if (filterStatus) {
+        sb = sb.eq('status', filterStatus);
+    } else if (filterLocation) {
+        sb = sb.eq('current_location', filterLocation);
+    }
+
+    const { data, count, error } = await sb
+        .order('created_at', { ascending: false })
+        .range(page * limit, (page + 1) * limit - 1);
+
+    if (error) throw error;
+
+    // 2. HIGH-SCALE KPI COUNTS
+    // Using { head: true } means Supabase only returns the number, NOT the data.
+    // This makes the query nearly instant regardless of table size.
     const [
         { count: totalCount },
         { count: officeCount },
@@ -101,41 +125,25 @@ if (action === 'list') {
         { count: deployedCount },
         { count: retiredCount }
     ] = await Promise.all([
-        // 1. Every single item in the system
         supabase.from('equipments').select('*', { count: 'exact', head: true }),
-        
-        // 2. Only items that are 'stocked' AND at the 'Warsaw Office'
-        supabase.from('equipments').select('*', { count: 'exact', head: true })
-                .eq('current_location', 'Warsaw Office')
-                .eq('status', 'stocked'),
-        
-        // 3. Items specifically in the repair bin
-        supabase.from('equipments').select('*', { count: 'exact', head: true })
-                .eq('current_location', 'Warsaw Repairs'),
-        
-        // 4. Items currently with merchants (Deployed)
-        supabase.from('equipments').select('*', { count: 'exact', head: true })
-                .eq('status', 'deployed'),
-        
-        // 5. Items permanently removed
-        supabase.from('equipments').select('*', { count: 'exact', head: true })
-                .eq('status', 'decommissioned')
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Office').eq('status', 'stocked'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Repairs'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'decommissioned')
     ]);
-
-    const metrics = {
-        total: totalCount || 0,
-        inOffice: officeCount || 0,
-        inRepair: repairCount || 0,
-        deployed: deployedCount || 0,
-        retired: retiredCount || 0,
-        alerts: repairCount || 0 
-    };
 
     return res.status(200).json({ 
         success: true, 
         data: data || [], 
         count: count || 0, 
-        metrics 
+        metrics: {
+            total: totalCount || 0,
+            inOffice: officeCount || 0,
+            inRepair: repairCount || 0,
+            deployed: deployedCount || 0,
+            retired: retiredCount || 0,
+            alerts: repairCount || 0 
+        } 
     });
 }
 
