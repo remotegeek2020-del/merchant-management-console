@@ -611,37 +611,36 @@ if (document.getElementById('kpi-total')) {
         document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
     }
 
-  async function openEditModal(index) {
+async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // Reset UI
+    // 1. Reset Form Fields
     document.getElementById('editId').value = d.id;
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
+    
+    // 2. Clear and Hide Badge initially
     const rmaBadge = document.getElementById('rmaStatusBadge');
     rmaBadge.style.display = 'none';
 
-    if (d.target_deployment_date) {
-        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
-    }
-
-    // SURGICAL ADD: Check for existing RMA
+    // 3. Check for Active RMA
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'check_rma', equipment_id: d.equipment_id })
+            body: JSON.stringify({ action: 'check_rma', payload: { equipment_id: d.equipment_id } })
         });
         const result = await res.json();
-        if (result.success && result.data) {
+        
+        // Only show if there is an active (open) RMA record
+        if (result.success && result.data && result.data.status === 'open') {
             rmaBadge.style.display = 'block';
-            document.getElementById('rmaCurrentStatusText').innerText = 
-                `${result.data.status.toUpperCase()} (${result.data.condition})`;
+            document.getElementById('rmaCurrentStatusText').innerText = result.data.condition;
         }
-    } catch (e) { console.error("RMA Check failed", e); }
+    } catch (e) { console.error("Badge Check Error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
