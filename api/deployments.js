@@ -112,26 +112,48 @@ export default async function handler(req, res) {
         }
 
         // --- ACTION: CREATE ---
-        if (action === 'create') {
-            const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
-            const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-            const dbaName = merchantData?.dba_name || 'Client Site';
+       if (action === 'create') {
+    const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
 
-            const { data: newDep, error: depError } = await supabase
-                .from('deployments')
-                .insert([{ merchant_id, equipment_id, tid, tracking_id, target_deployment_date: target_date, notes, status: 'Open' }]).select();
+    // 1. SURGICAL ATOMIC CHECK: Verify equipment is still 'stocked' right now
+    const { data: checkEquip, error: checkError } = await supabase
+        .from('equipments')
+        .select('status, serial_number')
+        .eq('id', equipment_id)
+        .single();
 
-            if (depError) throw depError;
+    if (checkError || !checkEquip) throw new Error("Equipment not found.");
+    
+    // If someone else grabbed it 1 second ago, the status won't be 'stocked'
+    if (checkEquip.status !== 'stocked') {
+        return res.status(400).json({ 
+            success: false, 
+            message: `Conflict: Serial ${checkEquip.serial_number} was just deployed by another user.` 
+        });
+    }
 
-            await supabase.from('equipments').update({ status: 'deployed', current_location: dbaName, merchant_id }).eq('id', equipment_id);
+    // 2. Proceed with creation only if the check passed
+    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    const dbaName = merchantData?.dba_name || 'Client Site';
 
-            await supabase.from('equipment_logs').insert([{
-                equipment_id, merchant_id, action: 'Deployed', from_location: 'Warsaw Office', to_location: dbaName, notes: `Deployment Created. TID: ${tid}`
-            }]);
+    const { data: newDep, error: depError } = await supabase
+        .from('deployments')
+        .insert([{ merchant_id, equipment_id, tid, tracking_id, target_deployment_date: target_date, notes, status: 'Open' }])
+        .select();
 
-            return res.status(200).json({ success: true, data: newDep });
-        }
+    if (depError) throw depError;
 
+    // 3. Update equipment to 'deployed' so it disappears from other users' lookups
+    await supabase.from('equipments')
+        .update({ status: 'deployed', current_location: dbaName, merchant_id })
+        .eq('id', equipment_id);
+
+    await supabase.from('equipment_logs').insert([{
+        equipment_id, merchant_id, action: 'Deployed', from_location: 'Warsaw Office', to_location: dbaName, notes: `Deployment Created. TID: ${tid}`
+    }]);
+
+    return res.status(200).json({ success: true, data: newDep });
+}
         // --- ACTION: RETURN TO OFFICE ---
         if (action === 'return_to_office') {
             const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
