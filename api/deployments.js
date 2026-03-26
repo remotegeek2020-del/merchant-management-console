@@ -193,13 +193,13 @@ export default async function handler(req, res) {
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
 if (action === 'getLookups') {
     const term = `%${query || ''}%`;
-
-    // Search BOTH dba_name and merchant_id
+    
+    // Search BOTH dba_name and merchant_id using the new index
     const { data: merchants } = await supabase
         .from('merchants')
         .select('id, dba_name, merchant_id')
         .or(`dba_name.ilike.${term},merchant_id.ilike.${term}`) 
-        .limit(10); // Increased limit for better selection
+        .limit(10); 
 
     const { data: inventory } = await supabase
         .from('equipments')
