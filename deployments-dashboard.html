@@ -171,7 +171,8 @@
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">LOGISTICS & UPDATE NOTES</label>
                 <textarea id="editNotes" class="slds-textarea" placeholder="Add update notes here..." style="border-radius:8px; height:80px;"></textarea>
             </div>
-
+<div id="returnProcessBox" style="margin-top: 20px; padding: 15px; border-top: 2px dashed #e2e8f0; background: #fff1f2; border-radius: 8px;">
+    
             <div style="margin-top: 20px; padding-top: 15px; border-top: 2px dashed #e2e8f0; background: #fff1f2; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
     <label style="display:block; font-weight:800; font-size:10px; color:#e11d48; margin-bottom:8px; text-transform:uppercase; letter-spacing:1px;">
         <span class="material-icons" style="font-size:14px; vertical-align:middle;">assignment_return</span> 
@@ -190,6 +191,7 @@
     </div>
     <p style="font-size:10px; color:#991b1b; margin-top:8px; font-style:italic;">*This closes the ticket and moves hardware to "Pending Return" status.</p>
 </div>
+    </div>
             <button type="submit" id="updateBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); padding:10px; border-radius:8px; margin-top:15px;">UPDATE TICKET</button>
         </form>
     </div>
@@ -614,6 +616,9 @@ if (document.getElementById('kpi-total')) {
 
 async function openEditModal(index) {
     const d = currentDeployments[index];
+    const rmaBadge = document.getElementById('rmaStatusBadge');
+    const returnBox = document.getElementById('returnProcessBox'); // Wrap your "Log Return" HTML in this ID
+    
     if (!d) return;
 
     // 1. Reset Form Fields
@@ -624,8 +629,9 @@ async function openEditModal(index) {
     document.getElementById('editNotes').value = d.notes || '';
     
     // 2. Clear and Hide Badge initially
-    const rmaBadge = document.getElementById('rmaStatusBadge');
+    // Reset UI
     rmaBadge.style.display = 'none';
+    returnBox.style.display = 'block'; // Show Log Return by default
 
     // 3. Check for Active RMA
     try {
@@ -636,12 +642,13 @@ async function openEditModal(index) {
         });
         const result = await res.json();
         
-        // Only show if there is an active (open) RMA record
+        // If an OPEN RMA exists, hide the "Log " form and show the badge
         if (result.success && result.data && result.data.status === 'open') {
             rmaBadge.style.display = 'block';
+            Box.style.display = 'none'; // LOG RETURN IS GONE
             document.getElementById('rmaCurrentStatusText').innerText = result.data.condition;
         }
-    } catch (e) { console.error("Badge Check Error:", e); }
+    } catch (e) { console.error(e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
