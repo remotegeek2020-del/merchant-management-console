@@ -90,23 +90,36 @@ export default async function handler(req, res) {
             
             if (statsError) throw statsError;
 
-            // UPDATED METRICS CALCULATION
-           const metrics = {
-    total: allData.length || 0,
-    inOffice: allData.filter(i => i.current_location === 'Warsaw Office' && i.status !== 'decommissioned').length || 0,
-    inRepair: allData.filter(i => i.current_location === 'Warsaw Repairs').length || 0,
-    deployed: allData.filter(i => i.status === 'deployed').length || 0,
-    retired: allData.filter(i => i.status === 'decommissioned').length || 0,
-    alerts: allData.filter(i => i.current_location === 'Warsaw Repairs').length || 0 // Add this temporarily to test!
-};
+          const [
+        { count: totalCount },
+        { count: officeCount },
+        { count: repairCount },
+        { count: deployedCount },
+        { count: retiredCount }
+    ] = await Promise.all([
+        supabase.from('equipments').select('*', { count: 'exact', head: true }),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Office').neq('status', 'decommissioned'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('current_location', 'Warsaw Repairs'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
+        supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'decommissioned')
+    ]);
 
-            return res.status(200).json({ 
-                success: true, 
-                data: data || [], 
-                count: count || 0, 
-                metrics 
-            });
-        }
+    const metrics = {
+        total: totalCount || 0,
+        inOffice: officeCount || 0,
+        inRepair: repairCount || 0,
+        deployed: deployedCount || 0,
+        retired: retiredCount || 0,
+        alerts: repairCount || 0 // Or your specific alert logic
+    };
+
+    return res.status(200).json({ 
+        success: true, 
+        data: data || [], 
+        count: count || 0, // This is the 'count' from the paginated 'sb' request
+        metrics 
+    });
+}
 
         if (action === 'create') {
             const { data, error } = await supabase
