@@ -177,22 +177,22 @@ if (action === 'return_to_office') {
 
     let equipStatus = 'pending_return'; 
     let equipLoc = 'In Transit / RMA';
-    let rmaStatus = 'open';
+    let rmaStatus = 'open'; // Default for Transit
 
-    // Handle instant completion states
+    // Logic for Finalizing the RMA
     if (return_type.includes('Back to Stock') || return_type.includes('Received in Repairs')) {
         equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
         equipLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
-        rmaStatus = 'completed';
+        rmaStatus = 'Closed'; // Requirement 1: Status is "Closed"
     }
 
-    // UPSERT: Updates the existing row for this Serial Number instead of creating a new one
+    // UPSERT: Requirement 3: Updates the condition to the final received state
     const { error: rmaError } = await supabase.from('returns').upsert({
         equipment_id: equipment_id, 
         merchant_id: merchant_id,
         status: rmaStatus, 
-        condition: return_type,
-        return_reason: notes || 'Logistics Update',
+        condition: return_type, // Requirement 3: This now reflects the final choice
+        return_reason: notes,   // Requirement 2: Captured from the popup note
         destination: return_type.includes('Defective') ? 'Warsaw Repairs' : 'Warsaw Office'
     }, { onConflict: 'equipment_id' }); 
 
@@ -202,7 +202,7 @@ if (action === 'return_to_office') {
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
-        merchant_id: (rmaStatus === 'completed' ? null : merchant_id) 
+        merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
     }).eq('id', equipment_id);
 
     // Close Deployment Ticket
