@@ -195,6 +195,7 @@
     let searchTimeout; // Declared once at the top level
     let currentPage = 1;
     let totalPages = 1;
+    let lookupTimeout;
 
     // --- 1. FETCH AND RENDER DEPLOYMENTS (With Search & Pagination) ---
     async function fetchDeployments(page = 1) {
@@ -475,9 +476,12 @@ if (document.getElementById('kpi-total')) {
         printWindow.document.close();
     }
 
-    async function handleMerchantSearch(val) {
-        const list = document.getElementById('mSuggestions');
-        if (val.length < 2) { list.style.display = 'none'; return; }
+  async function handleMerchantSearch(val) {
+    const list = document.getElementById('mSuggestions');
+    if (val.length < 2) { list.style.display = 'none'; return; }
+
+    clearTimeout(lookupTimeout);
+    lookupTimeout = setTimeout(async () => {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
@@ -487,13 +491,17 @@ if (document.getElementById('kpi-total')) {
             const result = await res.json();
             list.innerHTML = (result.merchants || []).map(m => `
                 <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
-                    <div><strong>${m.dba_name}</strong><br><span style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</span></div>
+                    <div>
+                        <strong style="color:#004990;">${m.dba_name}</strong>
+                        <div style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</div>
+                    </div>
                     <span class="material-icons" style="font-size:16px; color:#cbd5e1;">add_circle_outline</span>
                 </div>
             `).join('');
             list.style.display = 'block';
         } catch (e) { console.error(e); }
-    }
+    }, 300); // 300ms pause before searching
+}
 
     function selectMerchant(id, name) {
         document.getElementById('selectedMerchantId').value = id;
@@ -502,8 +510,11 @@ if (document.getElementById('kpi-total')) {
     }
 
     async function handleEquipSearch(val) {
-        const list = document.getElementById('eSuggestions');
-        if (val.length < 1) { list.style.display = 'none'; return; }
+    const list = document.getElementById('eSuggestions');
+    if (val.length < 1) { list.style.display = 'none'; return; }
+
+    clearTimeout(lookupTimeout);
+    lookupTimeout = setTimeout(async () => {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
@@ -513,13 +524,17 @@ if (document.getElementById('kpi-total')) {
             const result = await res.json();
             list.innerHTML = (result.inventory || []).map(e => `
                 <div class="suggestion-item" onclick="selectEquip('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
-                    <div><strong>${e.serial_number}</strong><br><span style="font-size:10px; color:#64748b;">${e.terminal_type}</span></div>
+                    <div>
+                        <strong>${e.serial_number}</strong>
+                        <div style="font-size:10px; color:#64748b;">${e.terminal_type}</div>
+                    </div>
                     <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">${e.status.toUpperCase()}</span>
                 </div>
             `).join('');
             list.style.display = 'block';
         } catch (e) { console.error(e); }
-    }
+    }, 200); // Hardware search can be slightly faster (200ms)
+}
 
     function selectEquip(id, serial, type) {
         document.getElementById('equipSelect').value = id;
