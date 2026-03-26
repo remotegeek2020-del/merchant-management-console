@@ -177,35 +177,47 @@ if (action === 'return_to_office') {
 
     let equipStatus = 'pending_return'; 
     let equipLoc = 'In Transit / RMA';
-    let rmaStatus = 'open'; // Default for Transit
+    let rmaStatus = 'open';
 
-    // Logic for Finalizing the RMA
-    if (return_type.includes('Back to Stock') || return_type.includes('Received in Repairs')) {
+    // 1. Logic for Final Reception (Requirement 2)
+    if (return_type === 'Working (Back to Stock)' || return_type === 'Defective (Received in Repairs)') {
         equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
         equipLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
-        rmaStatus = 'Closed'; // Requirement 1: Status is "Closed"
+        rmaStatus = 'Closed';
     }
 
-    // UPSERT: Requirement 3: Updates the condition to the final received state
-    const { error: rmaError } = await supabase.from('returns').upsert({
-        equipment_id: equipment_id, 
-        merchant_id: merchant_id,
-        status: rmaStatus, 
-        condition: return_type, // Requirement 3: This now reflects the final choice
-        return_reason: notes,   // Requirement 2: Captured from the popup note
-        destination: return_type.includes('Defective') ? 'Warsaw Repairs' : 'Warsaw Office'
-    }, { onConflict: 'equipment_id' }); 
+    // 2. Capture Merchant Name for Logs
+    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    const dbaName = merchantData?.dba_name || 'Client Site';
 
-    if (rmaError) throw rmaError;
+    // 3. Update/Insert RMA Ticket
+    await supabase.from('returns').upsert({
+        equipment_id,
+        merchant_id,
+        status: rmaStatus,
+        condition: return_type, // Tracks "In Transit" vs Final Destination
+        return_reason: notes
+    }, { onConflict: 'equipment_id' });
 
-    // Update Equipment Table
+    // 4. Update Equipment Master Record
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
         merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
     }).eq('id', equipment_id);
 
-    // Close Deployment Ticket
+    // 5. REQUIREMENT 3: Write to equipment_logs (Lifecycle Tracking)
+    await supabase.from('equipment_logs').insert([{
+        equipment_id,
+        merchant_id,
+        deployment_id,
+        action: rmaStatus === 'open' ? 'RETURN_INITIATED' : 'RETURN_RECEIVED',
+        from_location: rmaStatus === 'open' ? dbaName : 'In Transit',
+        to_location: equipLoc,
+        notes: notes
+    }]);
+
+    // Close deployment ticket
     await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
     return res.status(200).json({ success: true });
