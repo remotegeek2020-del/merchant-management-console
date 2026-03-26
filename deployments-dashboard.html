@@ -128,9 +128,16 @@
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('editDepModal').style.display='none'">close</span>
         <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Edit / Close Ticket</h2>
-        <div id="rmaStatusBadge" style="display:none; margin-bottom: 15px; padding: 10px; border-radius: 8px; background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; font-weight: 700; font-size: 11px;">
-    <span class="material-icons" style="font-size:14px; vertical-align:middle;">info</span> 
-    RMA IN PROGRESS: <span id="rmaCurrentStatusText"></span>
+        <div id="rmaStatusBadge" style="display:none; margin-bottom: 15px; padding: 15px; border-radius: 8px; background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; font-weight: 700; font-size: 11px;">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <span class="material-icons" style="font-size:14px; vertical-align:middle;">info</span> 
+            RMA IN PROGRESS: <span id="rmaCurrentStatusText"></span>
+        </div>
+        <button type="button" onclick="completeInTransitRMA()" class="slds-button slds-button_neutral" style="font-size: 9px; padding: 2px 8px; border-radius: 4px; height: auto; line-height: 1.5; background: white;">
+            COMPLETE RECEIVING
+        </button>
+    </div>
 </div>
         <form id="editDepForm" onsubmit="submitUpdate(event)">
             <input type="hidden" id="editId">
@@ -202,6 +209,52 @@
     let currentPage = 1;
     let totalPages = 1;
     let lookupTimeout;
+
+    async function completeInTransitRMA() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    if (!d) return;
+
+    const { value: destination } = await Swal.fire({
+        title: 'Receive Hardware',
+        text: `Where is S/N ${d.equipments?.serial_number} being received?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Warsaw Office (Stock)',
+        confirmButtonColor: '#004990',
+        denyButtonText: 'Warsaw Repairs',
+        denyButtonColor: '#e11d48',
+        showDenyButton: true
+    });
+
+    if (destination) {
+        const isRepair = Swal.getDenyButton() === document.activeElement;
+        const finalType = isRepair ? 'Defective (Received in Repairs)' : 'Working (Back to Stock)';
+        
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'return_to_office', 
+                    payload: {
+                        equipment_id: d.equipment_id,
+                        merchant_id: d.merchant_id,
+                        deployment_id: d.id,
+                        return_type: finalType,
+                        notes: 'Manual completion from In-Transit badge.'
+                    }
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Received', 'Inventory updated successfully.', 'success');
+                document.getElementById('editDepModal').style.display = 'none';
+                fetchDeployments(currentPage);
+            }
+        } catch (e) { Swal.fire('Error', 'Update failed', 'error'); }
+    }
+}
 
     // --- 1. FETCH AND RENDER DEPLOYMENTS (With Search & Pagination) ---
     async function fetchDeployments(page = 1) {
