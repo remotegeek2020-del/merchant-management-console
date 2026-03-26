@@ -61,18 +61,16 @@ export default async function handler(req, res) {
             if (error) throw error;
             return res.status(200).json({ success: true, data });
         }
-
-if (action === 'list') {
+        if (action === 'list') {
             const limit = parseInt(req.body.limit) || 50;
             const page = parseInt(req.body.page) || 0;
             const { query, filterLocation, filterStatus } = req.body;
 
-            // 1. DATA QUERY WITH EXPLICIT RELATIONSHIP
-            // Replace 'merchant_id' with the actual column name in your equipments 
-            // table that links to the merchants table (e.g., current_merchant_id)
+            // SURGICAL FIX: Using the explicit foreign key name 'current_merchant' 
+            // identified in your screenshot to resolve the ambiguity.
             let sb = supabase.from('equipments').select(`
                 *,
-                merchants:merchant_id(dba_name)
+                merchants!current_merchant(dba_name)
             `, { count: 'exact' });
 
             if (query) {
@@ -94,7 +92,7 @@ if (action === 'list') {
                 return res.status(500).json({ success: false, message: error.message });
             }
 
-            // 2. HIGH-SCALE KPI COUNTS (Remain the same, very fast)
+            // --- KPI METRICS (High-Performance for 50k+ records) ---
             let metrics = { total: 0, inOffice: 0, inRepair: 0, deployed: 0, retired: 0, alerts: 0 };
             try {
                 const [
@@ -123,6 +121,8 @@ if (action === 'list') {
 
             return res.status(200).json({ success: true, data: data || [], count: count || 0, metrics });
         }
+
+
         if (action === 'create') {
             const { data, error } = await supabase
                 .from('equipments')
