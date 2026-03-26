@@ -179,16 +179,14 @@ if (action === 'return_to_office') {
     let equipLoc = 'In Transit / RMA';
     let rmaStatus = 'open';
 
-    // Logic for instant completion
+    // Handle instant completion states
     if (return_type.includes('Back to Stock') || return_type.includes('Received in Repairs')) {
         equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
         equipLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
         rmaStatus = 'completed';
     }
 
-    // SURGICAL FIX: UPSERT instead of INSERT
-    // This looks for an existing record with this equipment_id and status='open' 
-    // to update it, otherwise it creates a new one.
+    // UPSERT: Updates the existing row for this Serial Number instead of creating a new one
     const { error: rmaError } = await supabase.from('returns').upsert({
         equipment_id: equipment_id, 
         merchant_id: merchant_id,
@@ -196,23 +194,22 @@ if (action === 'return_to_office') {
         condition: return_type,
         return_reason: notes || 'Logistics Update',
         destination: return_type.includes('Defective') ? 'Warsaw Repairs' : 'Warsaw Office'
-    }, { onConflict: 'equipment_id' }); // Ensures only ONE record per Serial Number in the returns table
+    }, { onConflict: 'equipment_id' }); 
 
     if (rmaError) throw rmaError;
 
-    // Update Equipment (Clear merchant only if completed)
+    // Update Equipment Table
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
         merchant_id: (rmaStatus === 'completed' ? null : merchant_id) 
     }).eq('id', equipment_id);
 
-    // Only close the deployment if it's not already closed
+    // Close Deployment Ticket
     await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
     return res.status(200).json({ success: true });
 }
-
         // --- ACTION: UPDATE (With Tracking/Status Logs) ---
         if (action === 'update') {
             const { deployment_id, status, tracking_id, target_date, notes } = payload;
