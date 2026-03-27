@@ -218,85 +218,66 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // 1. SAFETY: Check for required IDs immediately
+        // 1. Check if we actually have the IDs needed
         if (!equipment_id || !deployment_id) {
-            return res.status(400).json({ success: false, message: "Missing Hardware or Deployment ID" });
+            return res.status(400).json({ success: false, message: `Missing IDs: Equip=${equipment_id}, Dep=${deployment_id}` });
         }
 
-        // 2. SAFE MERCHANT LOOKUP
-        let dba = 'Merchant Site';
-        if (merchant_id) {
-            const { data: mData } = await supabase
-                .from('merchants')
-                .select('dba_name')
-                .eq('id', merchant_id)
-                .maybeSingle();
-            if (mData?.dba_name) dba = mData.dba_name;
-        }
-
-        // 3. FETCH EXISTING RMA REASON (Preserve what user selected)
-        const { data: existingRma } = await supabase
-            .from('returns')
-            .select('return_reason')
-            .eq('deployment_id', deployment_id)
-            .maybeSingle();
-
-        const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : (notes || 'No reason provided');
-
-        // 4. DETERMINE STATE & DESTINATION
-        let rmaStatus = 'open';
-        let equipStatus = 'pending_return';
+        // 2. Determine States
+        let rmaStatus = (return_type.includes('Stock') || return_type.includes('Repairs')) ? 'Closed' : 'open';
         let currentLoc = 'In Transit / RMA';
-        let logAction = 'RMA_INITIATED';
-        let fromLoc = dba;
-
-        if (return_type && (return_type.includes('Stock') || return_type.includes('Repairs'))) {
-            rmaStatus = 'Closed';
-            equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
+        if (rmaStatus === 'Closed') {
             currentLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
-            logAction = 'RMA_RECEIVED';
-            fromLoc = 'In Transit';
         }
 
-        // 5. UPSERT RMA (Matches your returns table schema)
-        const { error: rmaError } = await supabase.from('returns').upsert({
-            deployment_id: deployment_id,
-            equipment_id: equipment_id,
-            merchant_id: merchant_id || null, // Allow null if missing
+        // 3. UPSERT RMA - We use a simple object first to avoid errors
+        const rmaData = {
+            deployment_id,
+            equipment_id,
+            merchant_id: merchant_id || null,
             status: rmaStatus,
-            condition: return_type || 'In Transit',
-            destination: currentLoc,
-            return_reason: persistentReason
-        }, { onConflict: 'deployment_id' });
+            condition: return_type,
+            return_reason: notes,
+            destination: currentLoc
+        };
 
-        if (rmaError) throw rmaError;
+        const { error: rmaError } = await supabase.from('returns').upsert(rmaData, { onConflict: 'deployment_id' });
 
-        // 6. UPDATE EQUIPMENT
-        await supabase.from('equipments').update({ 
-            status: equipStatus, 
+        // IF DATABASE REJECTS IT, WE SEND THE ERROR TO THE FRONTEND
+        if (rmaError) {
+            return res.status(500).json({ 
+                success: false, 
+                message: `Database Error (Returns): ${rmaError.message}. Hint: ${rmaError.hint || ''}` 
+            });
+        }
+
+        // 4. Update Equipment
+        const { error: equipError } = await supabase.from('equipments').update({ 
+            status: rmaStatus === 'Closed' ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return', 
             current_location: currentLoc,
-            merchant_id: (rmaStatus === 'Closed' ? null : (merchant_id || null)) 
+            merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
         }).eq('id', equipment_id);
 
-        // 7. LOG HISTORY (Matches image_6b48c2.png schema)
+        if (equipError) return res.status(500).json({ success: false, message: `Equip Error: ${equipError.message}` });
+
+        // 5. Log History
         await supabase.from('equipment_logs').insert([{
-            equipment_id: equipment_id,
+            equipment_id,
             merchant_id: merchant_id || null,
-            deployment_id: deployment_id,
-            action: logAction,
-            from_location: fromLoc,
+            deployment_id,
+            action: rmaStatus === 'Closed' ? 'RMA_RECEIVED' : 'RMA_INITIATED',
+            from_location: 'Merchant Site',
             to_location: currentLoc,
-            notes: `Reason: ${persistentReason}`
+            notes: notes
         }]);
 
-        // 8. CLOSE DEPLOYMENT
+        // 6. Close Deployment
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
         return res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error("CRITICAL RMA ERROR:", error);
-        return res.status(500).json({ success: false, message: error.message });
+        return res.status(500).json({ success: false, message: `Server Crash: ${error.message}` });
     }
 }
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
