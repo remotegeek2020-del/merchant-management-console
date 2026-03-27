@@ -13,40 +13,41 @@ export default async function handler(req, res) {
 if (action === 'update') {
     const { deployment_id, status, tracking_id, target_date, notes } = payload;
 
-    // 1. Check if the ticket is already locked
-    const { data: currentDep } = await supabase
+    // 1. Fetch current data to ensure it exists and to get the equipment_id for logs
+    const { data: oldDep, error: fetchError } = await supabase
         .from('deployments')
-        .select('status')
+        .select('status, tracking_id, equipment_id, merchant_id')
         .eq('id', deployment_id)
         .single();
 
-    if (currentDep && currentDep.status === 'Closed') {
-        // Optional: Add logic to check RMA table here for even stricter locking
-        return res.status(403).json({ success: false, message: "This ticket is closed and archived." });
+    // Safety Check: if the ticket doesn't exist, stop here
+    if (fetchError || !oldDep) {
+        return res.status(404).json({ success: false, message: "Deployment ticket not found." });
     }
 
     // 2. Perform the Update
     const { error: updateError } = await supabase
         .from('deployments')
         .update({ 
-            status, 
-            tracking_id, 
+            status: status, 
+            tracking_id: tracking_id, 
             target_deployment_date: target_date, 
-            notes 
+            notes: notes 
         })
         .eq('id', deployment_id);
 
     if (updateError) throw updateError;
 
-    // 3. Log the Change in History
-    if (oldDep && (oldDep.status !== status || oldDep.tracking_id !== tracking_id)) {
+    // 3. Log the change ONLY if status or tracking actually changed
+    if (oldDep.status !== status || oldDep.tracking_id !== tracking_id) {
         await supabase.from('equipment_logs').insert([{
             equipment_id: oldDep.equipment_id,
+            merchant_id: oldDep.merchant_id,
             deployment_id: deployment_id,
             action: 'TICKET_UPDATED',
             from_location: 'Merchant Site',
             to_location: 'Merchant Site',
-            notes: `Status: ${status} | Tracking: ${tracking_id || 'N/A'}`
+            notes: `Status changed to ${status}. Tracking: ${tracking_id || 'None'}`
         }]);
     }
 
