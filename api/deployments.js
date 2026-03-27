@@ -11,17 +11,13 @@ export default async function handler(req, res) {
 
       // --- ACTION: check_rma ---
 if (action === 'check_rma') {
-    // Only fetch the RMA if it's currently 'open' (In Transit)
+    const { deployment_id } = body.payload; // Ensure we pull from payload
     const { data, error } = await supabase
         .from('returns')
         .select('*')
-        .eq('equipment_id', payload.equipment_id)
-        .eq('status', 'open') 
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single();
+        .eq('deployment_id', deployment_id) // The 1:1 Bind
+        .maybeSingle(); // Better than .single() as it doesn't throw error if empty
     
-    // If error is PGRST116 (no rows), we return null safely
     return res.status(200).json({ success: true, data: data || null });
 }
         // --- ACTION: DELETE (Reset Equipment + Log Activity) ---
@@ -175,26 +171,27 @@ if (action === 'check_rma') {
 if (action === 'return_to_office') {
     const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-    let rmaStatus = (return_type.includes('Stock') || return_type.includes('Repairs')) ? 'Closed' : 'open';
+    // Fix 1: Ensure condition is NEVER "unknown"
+    let finalCondition = (return_type === 'In Transit') ? 'In Transit' : return_type;
+    let rmaStatus = (finalCondition.includes('Stock') || finalCondition.includes('Repairs')) ? 'Closed' : 'open';
 
-    // 1. UPSERT the RMA and bind it to the deployment_id
+    // 1. UPSERT the RMA bound to the deployment_id
     const { data: rmaData, error: rmaError } = await supabase.from('returns').upsert({
-        deployment_id: deployment_id, // The 1:1 Link
+        deployment_id: deployment_id,
         equipment_id: equipment_id,
         merchant_id: merchant_id,
         status: rmaStatus,
-        return_reason: notes // The dropdown reason
+        condition: finalCondition, // Requirement: Save actual state
+        return_reason: notes       // Requirement: Save the dropdown reason
     }, { onConflict: 'deployment_id' }).select();
 
     if (rmaError) throw rmaError;
 
-    // 2. FORCE CLOSE the deployment ticket
-    await supabase.from('deployments')
-        .update({ status: 'Closed' })
-        .eq('id', deployment_id);
+    // 2. FORCE CLOSE the deployment
+    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
-    // 3. Update Equipment status
-    let equipStatus = rmaStatus === 'Closed' ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
+    // 3. Update Equipment
+    let equipStatus = rmaStatus === 'Closed' ? (finalCondition.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
     await supabase.from('equipments').update({ 
         status: equipStatus,
         merchant_id: rmaStatus === 'Closed' ? null : merchant_id 
