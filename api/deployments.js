@@ -218,50 +218,60 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // 1. Fetch Business Name for the Log
-        let dba = 'Merchant Site';
-        if (merchant_id) {
-            const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).maybeSingle();
-            if (mData?.dba_name) dba = mData.dba_name;
-        }
+        // 1. Fetch Existing RMA to preserve the ID and the ORIGINAL Reason
+        const { data: existingRma } = await supabase
+            .from('returns')
+            .select('return_reason, id, status')
+            .eq('deployment_id', deployment_id)
+            .maybeSingle();
 
-        // 2. UPSERT RMA (Targeting Deployment ID)
+        // 2. LOGIC: If we are "Completing", we keep the old reason. 
+        // If it's brand new, we use the 'notes' from the dropdown.
+        const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes;
+
+        // 3. Determine if this is a "Completion" (Received) or "Initiation" (In Transit)
+        let isCompleting = (return_type.includes('Stock') || return_type.includes('Repairs'));
+        let rmaStatus = isCompleting ? 'Closed' : 'open';
+        let equipStatus = isCompleting ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
+        let finalLoc = isCompleting ? (return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office') : 'In Transit / RMA';
+
+        // 4. UPSERT RMA: Maintain the link and the reason
         const { error: rmaError } = await supabase.from('returns').upsert({
             deployment_id: deployment_id,
             equipment_id: equipment_id,
             merchant_id: merchant_id,
-            status: 'open',
-            condition: 'In Transit',
-            destination: 'In Transit',
-            return_reason: notes
+            status: rmaStatus,
+            condition: return_type, // Updated to 'Working' or 'Defective'
+            destination: finalLoc,
+            return_reason: persistentReason // REQUIREMENT 2: Reason never changes
         }, { onConflict: 'deployment_id' });
 
         if (rmaError) throw rmaError;
 
-        // 3. Update Equipment Status
+        // 5. Update Equipment & Location (Requirement 1: It actually completes now)
         await supabase.from('equipments').update({ 
-            status: 'pending_return',
-            current_location: 'In Transit / RMA'
+            status: equipStatus, 
+            current_location: finalLoc,
+            merchant_id: isCompleting ? null : merchant_id 
         }).eq('id', equipment_id);
 
-        // 4. Create History Log
+        // 6. Lifecycle Log
         await supabase.from('equipment_logs').insert([{
             equipment_id,
             merchant_id,
             deployment_id,
-            action: 'RMA_INITIATED',
-            from_location: dba,
-            to_location: 'In Transit / RMA',
-            notes: notes
+            action: isCompleting ? 'RMA_COMPLETED' : 'RMA_INITIATED',
+            from_location: isCompleting ? 'In Transit' : 'Merchant Site',
+            to_location: finalLoc,
+            notes: `Final Condition: ${return_type} | Original Reason: ${persistentReason}`
         }]);
 
-        // 5. Close the Deployment
+        // 7. Ensure Deployment is Closed
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
         return res.status(200).json({ success: true });
 
     } catch (e) {
-        console.error("RMA Error:", e.message);
         return res.status(500).json({ success: false, message: e.message });
     }
 }
