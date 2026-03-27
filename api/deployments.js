@@ -218,7 +218,7 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // 1. SAFE MERCHANT LOOKUP
+        // 1. SAFE MERCHANT LOOKUP (Avoids crash if merchant_id is missing)
         let dba = 'Merchant Site';
         if (merchant_id) {
             const { data: mData } = await supabase
@@ -229,16 +229,16 @@ if (action === 'return_to_office') {
             if (mData?.dba_name) dba = mData.dba_name;
         }
 
-        // 2. FETCH EXISTING RMA
+        // 2. FETCH EXISTING RMA REASON (Prevents overwriting with "Manual Completion")
         const { data: existingRma } = await supabase
             .from('returns')
-            .select('return_reason, id')
+            .select('return_reason')
             .eq('deployment_id', deployment_id)
             .maybeSingle();
 
         const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes;
 
-        // 3. LOGIC FOR DESTINATION
+        // 3. DETERMINE STATE
         let rmaStatus = 'open';
         let equipStatus = 'pending_return';
         let currentLoc = 'In Transit / RMA';
@@ -253,8 +253,8 @@ if (action === 'return_to_office') {
             fromLoc = 'In Transit';
         }
 
-        // 4. UPSERT RMA
-        const { data: rmaRecord, error: rmaError } = await supabase.from('returns').upsert({
+        // 4. UPSERT RMA (This creates the return_id)
+        const { error: rmaError } = await supabase.from('returns').upsert({
             deployment_id,
             equipment_id,
             merchant_id,
@@ -262,7 +262,7 @@ if (action === 'return_to_office') {
             condition: return_type,
             destination: currentLoc,
             return_reason: persistentReason
-        }, { onConflict: 'deployment_id' }).select();
+        }, { onConflict: 'deployment_id' });
 
         if (rmaError) throw rmaError;
 
@@ -273,7 +273,7 @@ if (action === 'return_to_office') {
             merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
         }).eq('id', equipment_id);
 
-        // 6. LOG HISTORY
+        // 6. LOG HISTORY (Uses the real Business Name)
         await supabase.from('equipment_logs').insert([{
             equipment_id,
             merchant_id,
@@ -287,10 +287,12 @@ if (action === 'return_to_office') {
         // 7. CLOSE DEPLOYMENT
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
+        // IMPORTANT: Always send a success response
         return res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error("CRITICAL RMA ERROR:", error);
+        console.error("RMA API ERROR:", error);
+        // This ensures the frontend stops "Processing" and shows the error instead
         return res.status(500).json({ success: false, message: error.message });
     }
 }
