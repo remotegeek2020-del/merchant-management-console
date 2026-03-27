@@ -426,9 +426,11 @@ async function processReturn() {
                 fetchDeployments(currentPage);
             });
         }
-  } catch (err) { 
+  } 
+    catch (err) { 
     console.error(err);
     Swal.fire('System Error', 'The server failed to respond. Check console.', 'error'); 
+}
 }
     // --- 3. DELETE & HISTORY LOGIC ---
     async function confirmDelete(id, dba, sn, equipId, merchantId) {
@@ -616,16 +618,7 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // 1. Reset standard fields and populate data
-    const form = document.getElementById('editDepForm');
-    const inputs = form.querySelectorAll('input, select, textarea, button[type="submit"]');
-    const rmaBadge = document.getElementById('rmaStatusBadge');
-    const returnBox = document.getElementById('returnProcessBox');
-
-    // Re-enable everything by default for new selections
-    inputs.forEach(el => el.disabled = false);
-    document.getElementById('updateBtn').style.display = 'block';
-
+    // 1. Populate standard fields
     document.getElementById('editId').value = d.id;
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
@@ -634,6 +627,20 @@ async function openEditModal(index) {
     if (d.target_deployment_date) {
         document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
     }
+
+    const rmaBadge = document.getElementById('rmaStatusBadge');
+    const returnBox = document.getElementById('returnProcessBox');
+    const updateBtn = document.getElementById('updateBtn');
+
+    // Reset UI to default
+    rmaBadge.style.display = 'none';
+    returnBox.style.display = 'block';
+    if (updateBtn) {
+        updateBtn.style.display = 'block';
+        updateBtn.disabled = false;
+    }
+    // Re-enable all inputs in case they were locked
+    document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = false);
 
     try {
         const res = await fetch('/api/deployments', {
@@ -646,33 +653,19 @@ async function openEditModal(index) {
         if (result.success && result.data) {
             returnBox.style.display = 'none';
             rmaBadge.style.display = 'block';
-            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'N/A'}`;
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
             document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
 
-            // 2. THE LOCK LOGIC: If Deployment is Closed AND RMA is Closed
-            if (d.status === 'Closed' && result.data.status === 'Closed') {
-                // Disable all inputs
-                inputs.forEach(el => el.disabled = true);
-                // Hide the Update button entirely
-                document.getElementById('updateBtn').style.display = 'none';
-                
-                // Update Badge to show "ARCHIVED"
-                rmaBadge.style.background = '#f1f5f9'; 
-                rmaBadge.style.borderColor = '#cbd5e1';
-                document.getElementById('rmaIdText').innerText += " (ARCHIVED/READ-ONLY)";
-            }
-
-            const completeBtn = rmaBadge.querySelector('button');
             if (result.data.status === 'Closed') {
-                if (completeBtn) completeBtn.style.display = 'none';
-            } else {
-                if (completeBtn) completeBtn.style.display = 'block';
+                rmaBadge.style.background = '#f0fdf4'; 
+                if (d.status === 'Closed') {
+                    // ARCHIVE LOCK: Both are closed
+                    document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
+                    if (updateBtn) updateBtn.style.display = 'none';
+                }
             }
-        } else {
-            rmaBadge.style.display = 'none';
-            returnBox.style.display = 'block';
         }
-    } catch (e) { console.error("Lock Check Error:", e); }
+    } catch (e) { console.error("RMA fetch error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
@@ -700,6 +693,8 @@ async function openEditModal(index) {
     function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
 
     window.onload = () => fetchDeployments();
+
+    
 </script>
 </body>
 </html>
