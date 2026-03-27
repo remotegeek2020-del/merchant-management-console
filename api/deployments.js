@@ -175,36 +175,36 @@ if (action === 'check_rma') {
 if (action === 'return_to_office') {
     const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-    // 1. Determine Final State
     let equipStatus = 'pending_return'; 
     let equipLoc = 'In Transit / RMA';
     let rmaStatus = 'open';
 
+    // Requirement: Finalized states
     if (return_type === 'Working (Back to Stock)' || return_type === 'Defective (Received in Repairs)') {
         equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
         equipLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
         rmaStatus = 'Closed';
     }
 
-    // 2. Fetch existing RMA to preserve the original Return Reason (Requirement 1)
+    // 1. Fetch existing RMA to preserve the original Return Reason
     const { data: existingRma } = await supabase
         .from('returns')
-        .select('return_reason')
+        .select('return_reason, id')
         .eq('equipment_id', equipment_id)
         .single();
 
-    // 3. UPSERT RMA (Preserves original reason if it exists)
-    const { error: rmaError } = await supabase.from('returns').upsert({
+    // 2. UPSERT RMA: This generates or updates the RMA ID
+    const { data: rmaData, error: rmaError } = await supabase.from('returns').upsert({
         equipment_id,
         merchant_id,
         status: rmaStatus,
         condition: rmaStatus === 'open' ? 'In Transit' : return_type,
-        return_reason: existingRma ? existingRma.return_reason : notes // Requirement 1: Keep original reason
-    }, { onConflict: 'equipment_id' });
+        return_reason: existingRma ? existingRma.return_reason : notes // Requirement: Keep original reason
+    }, { onConflict: 'equipment_id' }).select();
 
     if (rmaError) throw rmaError;
 
-    // 4. Update Equipment & Logs (Requirement 3: Logic prevents "double" stock injection)
+    // 3. Update Equipment and log the lifecycle move
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
@@ -218,12 +218,10 @@ if (action === 'return_to_office') {
         action: rmaStatus === 'open' ? 'RETURN_INITIATED' : 'RETURN_RECEIVED',
         from_location: rmaStatus === 'open' ? 'Merchant Site' : 'In Transit',
         to_location: equipLoc,
-        notes: notes // Logs the specific action note
+        notes: notes
     }]);
 
-    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, rma_id: rmaData[0].id });
 }
         // --- ACTION: UPDATE (With Tracking/Status Logs) ---
         if (action === 'update') {
