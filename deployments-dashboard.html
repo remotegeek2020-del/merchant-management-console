@@ -354,42 +354,42 @@ if (document.getElementById('kpi-total')) {
     }
 
     // --- 2. SUBMIT UPDATE & PROCESS RETURN ---
-    async function submitUpdate(event) {
-        event.preventDefault();
-        const btn = document.getElementById('updateBtn');
-        btn.disabled = true;
-        btn.innerText = "UPDATING...";
+  async function submitUpdate(event) {
+    event.preventDefault();
+    const btn = document.getElementById('updateBtn');
+    btn.disabled = true;
+    btn.innerText = "UPDATING...";
 
-        const payload = {
-            deployment_id: document.getElementById('editId').value,
-            status: document.getElementById('editStatus').value,
-            tracking_id: document.getElementById('editTracking').value,
-            target_date: document.getElementById('editDate').value,
-            notes: document.getElementById('editNotes').value
-        };
+    const payload = {
+        deployment_id: document.getElementById('editId').value,
+        status: document.getElementById('editStatus').value,
+        tracking_id: document.getElementById('editTracking').value,
+        target_date: document.getElementById('editDate').value,
+        notes: document.getElementById('editNotes').value
+    };
 
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update', payload })
-            });
-            const result = await res.json();
-            
-            if (result.success) { 
-                Swal.fire({ icon: 'success', title: 'Ticket Updated', timer: 1500, showConfirmButton: false });
-                document.getElementById('editDepModal').style.display = 'none';
-                await fetchDeployments(currentPage); 
-            } else { 
-                Swal.fire('Error', result.message, 'error');
-            }
-        } catch (e) { 
-            Swal.fire('Error', 'System Error', 'error'); 
-        } finally {
-            btn.disabled = false; 
-            btn.innerText = "UPDATE TICKET";
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update', payload }) // Action must be 'update'
+        });
+        const result = await res.json();
+        
+        if (result.success) { 
+            Swal.fire({ icon: 'success', title: 'Ticket Updated', timer: 1500, showConfirmButton: false });
+            document.getElementById('editDepModal').style.display = 'none';
+            await fetchDeployments(currentPage); 
+        } else { 
+            Swal.fire('Error', result.message || 'Update Failed', 'error');
         }
+    } catch (e) { 
+        Swal.fire('Error', 'System Communication Error', 'error'); 
+    } finally {
+        btn.disabled = false; 
+        btn.innerText = "UPDATE TICKET";
     }
+}
 
 async function processReturn() {
     const deploymentId = document.getElementById('editId').value;
