@@ -614,7 +614,16 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // Populate Deployment fields first to avoid blank forms
+    // 1. Reset standard fields and populate data
+    const form = document.getElementById('editDepForm');
+    const inputs = form.querySelectorAll('input, select, textarea, button[type="submit"]');
+    const rmaBadge = document.getElementById('rmaStatusBadge');
+    const returnBox = document.getElementById('returnProcessBox');
+
+    // Re-enable everything by default for new selections
+    inputs.forEach(el => el.disabled = false);
+    document.getElementById('updateBtn').style.display = 'block';
+
     document.getElementById('editId').value = d.id;
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
@@ -623,13 +632,6 @@ async function openEditModal(index) {
     if (d.target_deployment_date) {
         document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
     }
-
-    const rmaBadge = document.getElementById('rmaStatusBadge');
-    const returnBox = document.getElementById('returnProcessBox');
-
-    // Default UI State
-    rmaBadge.style.display = 'none';
-    returnBox.style.display = 'block';
 
     try {
         const res = await fetch('/api/deployments', {
@@ -640,25 +642,35 @@ async function openEditModal(index) {
         const result = await res.json();
         
         if (result.success && result.data) {
-            // RMA Found: Hide the 'Initiate' form
             returnBox.style.display = 'none';
             rmaBadge.style.display = 'block';
-
-            // Display the 'return_id' from the table
-            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
-            // Display the persistent reason
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'N/A'}`;
             document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
+
+            // 2. THE LOCK LOGIC: If Deployment is Closed AND RMA is Closed
+            if (d.status === 'Closed' && result.data.status === 'Closed') {
+                // Disable all inputs
+                inputs.forEach(el => el.disabled = true);
+                // Hide the Update button entirely
+                document.getElementById('updateBtn').style.display = 'none';
+                
+                // Update Badge to show "ARCHIVED"
+                rmaBadge.style.background = '#f1f5f9'; 
+                rmaBadge.style.borderColor = '#cbd5e1';
+                document.getElementById('rmaIdText').innerText += " (ARCHIVED/READ-ONLY)";
+            }
 
             const completeBtn = rmaBadge.querySelector('button');
             if (result.data.status === 'Closed') {
-                rmaBadge.style.background = '#f0fdf4'; // Green for finished
                 if (completeBtn) completeBtn.style.display = 'none';
             } else {
-                rmaBadge.style.background = '#fffbeb'; // Yellow for active
                 if (completeBtn) completeBtn.style.display = 'block';
             }
+        } else {
+            rmaBadge.style.display = 'none';
+            returnBox.style.display = 'block';
         }
-    } catch (e) { console.error("RMA fetch error:", e); }
+    } catch (e) { console.error("Lock Check Error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
