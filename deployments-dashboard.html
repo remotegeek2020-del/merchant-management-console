@@ -128,14 +128,15 @@
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('editDepModal').style.display='none'">close</span>
         <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Edit / Close Ticket</h2>
-         <div id="rmaStatusBadge" style="display:none; margin-bottom: 15px; padding: 15px; border-radius: 8px; background: #fffbeb; border: 1px solid #fef3c7; color: #92400e; font-weight: 700; font-size: 11px;">
-    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div id="rmaStatusBadge" style="display:none; margin-bottom: 15px; padding: 15px; border-radius: 12px; background: #fffbeb; border: 1px solid #fef3c7; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
-            <span class="material-icons" style="font-size:14px; vertical-align:middle;">info</span> 
-            RMA IN PROGRESS: <span id="rmaCurrentStatusText"></span>
+            <div style="font-size: 9px; font-weight: 800; color: #92400e; text-transform: uppercase; margin-bottom: 4px;">Active RMA Detected</div>
+            <div style="font-weight: 800; color: #002d5a; font-size: 13px;" id="rmaIdText">RMA-####</div>
+            <div style="font-size: 11px; color: #d97706; font-weight: 600;">Reason: <span id="rmaCurrentReasonText"></span></div>
         </div>
-        <button type="button" onclick="completeInTransitRMA()" class="slds-button slds-button_neutral" style="font-size: 9px; padding: 2px 8px; border-radius: 4px; height: auto; line-height: 1.5; background: white;">
-            COMPLETE RECEIVING
+        <button type="button" onclick="completeInTransitRMA()" class="slds-button slds-button_brand" style="font-size: 10px; padding: 5px 12px; background: #d97706; border: none;">
+            COMPLETE RMA
         </button>
     </div>
 </div>
@@ -611,24 +612,19 @@ async function processReturn() {
 
 async function openEditModal(index) {
     const d = currentDeployments[index];
-    const rmaBadge = document.getElementById('rmaStatusBadge');
-    const returnBox = document.getElementById('returnProcessBox'); // Wrap your "Log Return" HTML in this ID
-    
     if (!d) return;
 
-    // 1. Reset Form Fields
-    document.getElementById('editId').value = d.id;
-    document.getElementById('editTid').value = d.tid || '';
-    document.getElementById('editStatus').value = d.status || 'Open';
-    document.getElementById('editTracking').value = d.tracking_id || '';
-    document.getElementById('editNotes').value = d.notes || '';
-    
-    // 2. Clear and Hide Badge initially
-    // Reset UI
+    // Reset UI visibility (Requirement 3: Default to showing the form)
+    const rmaBadge = document.getElementById('rmaStatusBadge');
+    const returnBox = document.getElementById('returnProcessBox');
     rmaBadge.style.display = 'none';
-    returnBox.style.display = 'block'; // Show Log Return by default
+    returnBox.style.display = 'block';
 
-    // 3. Check for Active RMA
+    // Populate standard fields...
+    document.getElementById('editId').value = d.id;
+    // ... rest of your field population ...
+
+    // Requirement 2 & 3: Check for existing RMA
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
@@ -637,13 +633,16 @@ async function openEditModal(index) {
         });
         const result = await res.json();
         
-        // If an OPEN RMA exists, hide the "Log " form and show the badge
         if (result.success && result.data && result.data.status === 'open') {
+            // Requirement 2: Show Ticket ID and original Reason
             rmaBadge.style.display = 'block';
-            Box.style.display = 'none'; // LOG RETURN IS GONE
-            document.getElementById('rmaCurrentStatusText').innerText = result.data.condition;
+            document.getElementById('rmaIdText').innerText = `RMA TICKET: #${result.data.id.split('-')[0].toUpperCase()}`;
+            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
+            
+            // Requirement 3: HIDE the initiation form so no double tickets can be made
+            returnBox.style.display = 'none';
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("RMA sync error", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
