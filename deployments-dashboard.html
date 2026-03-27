@@ -614,17 +614,20 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // Reset UI visibility (Requirement 3: Default to showing the form)
+    // 1. DATA PERSISTENCE: Populate fields from existing deployment object
+    document.getElementById('editId').value = d.id;
+    document.getElementById('editTid').value = d.tid || '';
+    document.getElementById('editStatus').value = d.status || 'Open';
+    document.getElementById('editTracking').value = d.tracking_id || '';
+    document.getElementById('editNotes').value = d.notes || '';
+    if (d.target_deployment_date) {
+        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
+    }
+
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
-    rmaBadge.style.display = 'none';
-    returnBox.style.display = 'block';
-
-    // Populate standard fields...
-    document.getElementById('editId').value = d.id;
-    // ... rest of your field population ...
-
-    // Requirement 2 & 3: Check for existing RMA
+    
+    // 2. Check for RMA (Open OR Closed)
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
@@ -633,16 +636,31 @@ async function openEditModal(index) {
         });
         const result = await res.json();
         
-        if (result.success && result.data && result.data.status === 'open') {
-            // Requirement 2: Show Ticket ID and original Reason
+        if (result.success && result.data) {
+            // Requirement 3: If ANY RMA exists (open or closed), hide the initiate form
+            returnBox.style.display = 'none';
             rmaBadge.style.display = 'block';
-            document.getElementById('rmaIdText').innerText = `RMA TICKET: #${result.data.id.split('-')[0].toUpperCase()}`;
+
+            // Requirement 1: Display the actual RMA ID from the returns table
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.id.substring(0,8).toUpperCase()}`;
             document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
             
-            // Requirement 3: HIDE the initiation form so no double tickets can be made
-            returnBox.style.display = 'none';
+            // UI Adjustment: If Closed, change badge color and hide the "Complete" button
+            const completeBtn = rmaBadge.querySelector('button');
+            if (result.data.status === 'Closed') {
+                rmaBadge.style.background = '#f0fdf4'; // Light Green
+                rmaBadge.style.borderColor = '#bbf7d0';
+                completeBtn.style.display = 'none';
+                document.getElementById('rmaIdText').innerText += " (COMPLETED)";
+            } else {
+                rmaBadge.style.background = '#fffbeb'; // Yellow
+                completeBtn.style.display = 'block';
+            }
+        } else {
+            rmaBadge.style.display = 'none';
+            returnBox.style.display = 'block';
         }
-    } catch (e) { console.error("RMA sync error", e); }
+    } catch (e) { console.error("RMA Link Error", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
