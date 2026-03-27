@@ -218,28 +218,51 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // BARE MINIMUM UPSERT TO TEST CONNECTION
+        // 1. Fetch Business Name for the Log
+        let dba = 'Merchant Site';
+        if (merchant_id) {
+            const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).maybeSingle();
+            if (mData?.dba_name) dba = mData.dba_name;
+        }
+
+        // 2. UPSERT RMA (Targeting Deployment ID)
         const { error: rmaError } = await supabase.from('returns').upsert({
             deployment_id: deployment_id,
             equipment_id: equipment_id,
             merchant_id: merchant_id,
             status: 'open',
+            condition: 'In Transit',
+            destination: 'In Transit',
             return_reason: notes
-            // I removed 'condition' and 'destination' temporarily to see if they are the problem
         }, { onConflict: 'deployment_id' });
 
-        if (rmaError) {
-            return res.status(200).json({ success: false, message: "SQL Error: " + rmaError.message });
-        }
+        if (rmaError) throw rmaError;
 
-        // Standard Updates
-        await supabase.from('equipments').update({ status: 'pending_return' }).eq('id', equipment_id);
+        // 3. Update Equipment Status
+        await supabase.from('equipments').update({ 
+            status: 'pending_return',
+            current_location: 'In Transit / RMA'
+        }).eq('id', equipment_id);
+
+        // 4. Create History Log
+        await supabase.from('equipment_logs').insert([{
+            equipment_id,
+            merchant_id,
+            deployment_id,
+            action: 'RMA_INITIATED',
+            from_location: dba,
+            to_location: 'In Transit / RMA',
+            notes: notes
+        }]);
+
+        // 5. Close the Deployment
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
         return res.status(200).json({ success: true });
 
     } catch (e) {
-        return res.status(200).json({ success: false, message: "Crash: " + e.message });
+        console.error("RMA Error:", e.message);
+        return res.status(500).json({ success: false, message: e.message });
     }
 }
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
