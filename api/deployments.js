@@ -9,6 +9,45 @@ export default async function handler(req, res) {
 
     try {
 
+        // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
+if (action === 'update') {
+    const { deployment_id, status, tracking_id, target_date, notes } = payload;
+
+    // 1. Fetch old data to check for changes
+    const { data: oldDep } = await supabase
+        .from('deployments')
+        .select(`status, tracking_id, equipment_id`)
+        .eq('id', deployment_id)
+        .single();
+
+    // 2. Perform the Update
+    const { error: updateError } = await supabase
+        .from('deployments')
+        .update({ 
+            status, 
+            tracking_id, 
+            target_deployment_date: target_date, 
+            notes 
+        })
+        .eq('id', deployment_id);
+
+    if (updateError) throw updateError;
+
+    // 3. Log the Change in History
+    if (oldDep && (oldDep.status !== status || oldDep.tracking_id !== tracking_id)) {
+        await supabase.from('equipment_logs').insert([{
+            equipment_id: oldDep.equipment_id,
+            deployment_id: deployment_id,
+            action: 'TICKET_UPDATED',
+            from_location: 'Merchant Site',
+            to_location: 'Merchant Site',
+            notes: `Status: ${status} | Tracking: ${tracking_id || 'N/A'}`
+        }]);
+    }
+
+    return res.status(200).json({ success: true });
+}
+
       // --- ACTION: check_rma ---
 if (action === 'check_rma') {
     const { deployment_id } = body.payload;
