@@ -394,6 +394,8 @@ if (document.getElementById('kpi-total')) {
 async function processReturn() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
+    if (!d) return;
+
     const reasonDropdown = document.getElementById('returnReason');
     const otherText = document.getElementById('otherReasonText');
     
@@ -402,6 +404,7 @@ async function processReturn() {
 
     if (!finalReason) return Swal.fire('Error', 'Please select a reason', 'warning');
 
+    // Start Spinner
     Swal.fire({ title: 'Processing Logistics...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
@@ -414,22 +417,30 @@ async function processReturn() {
                     equipment_id: d.equipment_id,
                     merchant_id: d.merchant_id,
                     deployment_id: d.id,
-                    return_type: 'In Transit', // Initial State
+                    return_type: 'In Transit',
                     notes: finalReason
                 }
             })
         });
+
         const result = await res.json();
+        
+        // STOP SPINNER
+        Swal.close();
+
         if (result.success) {
-            Swal.fire('In Transit', 'RMA initiated and equipment status updated.', 'success').then(() => {
+            Swal.fire('In Transit', 'RMA initiated.', 'success').then(() => {
                 document.getElementById('editDepModal').style.display = 'none';
                 fetchDeployments(currentPage);
             });
+        } else {
+            // THIS WILL TELL US THE EXACT SQL ERROR
+            Swal.fire('Database Rejected Request', result.message, 'error');
         }
-} catch (err) { 
+    } catch (err) { 
+        Swal.close();
         console.error(err);
-        // This closes the "Processing" spinner and shows the error
-        Swal.fire('System Error', 'The server encountered an error. Check the server logs.', 'error'); 
+        Swal.fire('System Error', 'Check Network Tab (500 Error details)', 'error'); 
     }
 }
     // --- 3. DELETE & HISTORY LOGIC ---
