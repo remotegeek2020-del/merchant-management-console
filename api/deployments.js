@@ -13,12 +13,17 @@ export default async function handler(req, res) {
 if (action === 'update') {
     const { deployment_id, status, tracking_id, target_date, notes } = payload;
 
-    // 1. Fetch old data to check for changes
-    const { data: oldDep } = await supabase
+    // 1. Check if the ticket is already locked
+    const { data: currentDep } = await supabase
         .from('deployments')
-        .select(`status, tracking_id, equipment_id`)
+        .select('status')
         .eq('id', deployment_id)
         .single();
+
+    if (currentDep && currentDep.status === 'Closed') {
+        // Optional: Add logic to check RMA table here for even stricter locking
+        return res.status(403).json({ success: false, message: "This ticket is closed and archived." });
+    }
 
     // 2. Perform the Update
     const { error: updateError } = await supabase
