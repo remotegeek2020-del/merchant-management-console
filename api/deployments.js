@@ -11,12 +11,13 @@ export default async function handler(req, res) {
 
       // --- ACTION: check_rma ---
 if (action === 'check_rma') {
-    const { deployment_id } = body.payload; // Ensure we pull from payload
+    const { deployment_id } = body.payload;
+    // We explicitly fetch 'return_id' which is your custom identifier
     const { data, error } = await supabase
         .from('returns')
-        .select('*')
-        .eq('deployment_id', deployment_id) // The 1:1 Bind
-        .maybeSingle(); // Better than .single() as it doesn't throw error if empty
+        .select('return_id, id, status, return_reason') 
+        .eq('deployment_id', deployment_id)
+        .maybeSingle();
     
     return res.status(200).json({ success: true, data: data || null });
 }
@@ -171,27 +172,35 @@ if (action === 'check_rma') {
 if (action === 'return_to_office') {
     const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-    // Fix 1: Ensure condition is NEVER "unknown"
-    let finalCondition = (return_type === 'In Transit') ? 'In Transit' : return_type;
-    let rmaStatus = (finalCondition.includes('Stock') || finalCondition.includes('Repairs')) ? 'Closed' : 'open';
+    // notes = The Dropdown Reason (Merchant Cancellation, etc.)
+    // return_type = 'In Transit' OR 'Working (Back to Stock)' etc.
 
-    // 1. UPSERT the RMA bound to the deployment_id
+    // 1. Check if an RMA already exists for this deployment
+    const { data: existingRma } = await supabase
+        .from('returns')
+        .select('return_reason, return_id')
+        .eq('deployment_id', deployment_id)
+        .maybeSingle();
+
+    let rmaStatus = (return_type.includes('Stock') || return_type.includes('Repairs')) ? 'Closed' : 'open';
+
+    // 2. UPSERT: Use deployment_id as the anchor
     const { data: rmaData, error: rmaError } = await supabase.from('returns').upsert({
         deployment_id: deployment_id,
         equipment_id: equipment_id,
         merchant_id: merchant_id,
         status: rmaStatus,
-        condition: finalCondition, // Requirement: Save actual state
-        return_reason: notes       // Requirement: Save the dropdown reason
+        condition: return_type,
+        // LOGIC FIX: If existingRma has a reason, KEEP IT. Do not overwrite with 'Manual Completion'.
+        return_reason: (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes
     }, { onConflict: 'deployment_id' }).select();
 
     if (rmaError) throw rmaError;
 
-    // 2. FORCE CLOSE the deployment
+    // 3. Close the Deployment and update Equipment status
     await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
-    // 3. Update Equipment
-    let equipStatus = rmaStatus === 'Closed' ? (finalCondition.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
+    let equipStatus = rmaStatus === 'Closed' ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
     await supabase.from('equipments').update({ 
         status: equipStatus,
         merchant_id: rmaStatus === 'Closed' ? null : merchant_id 
@@ -199,36 +208,6 @@ if (action === 'return_to_office') {
 
     return res.status(200).json({ success: true });
 }
-        // --- ACTION: UPDATE (With Tracking/Status Logs) ---
-        if (action === 'update') {
-            const { deployment_id, status, tracking_id, target_date, notes } = payload;
-
-            const { data: oldDep } = await supabase.from('deployments').select(`
-                status, tracking_id, equipment_id, merchants:merchant_id(dba_name)
-            `).eq('id', deployment_id).single();
-
-            const { error: updateError } = await supabase.from('deployments').update({ 
-                status, tracking_id, target_deployment_date: target_date, notes 
-            }).eq('id', deployment_id);
-
-            if (updateError) throw updateError;
-
-            if (oldDep && (oldDep.status !== status || oldDep.tracking_id !== tracking_id)) {
-                await supabase.from('equipment_logs').insert([{
-                    equipment_id: oldDep.equipment_id,
-                    action: 'Ticket Updated',
-                    from_location: oldDep.merchants?.dba_name || 'Merchant',
-                    to_location: oldDep.merchants?.dba_name || 'Merchant',
-                    notes: `Status changed to ${status}. Tracking: ${tracking_id || 'N/A'}`
-                }]);
-            }
-
-            if (status === 'Closed' && oldDep?.equipment_id) {
-                await supabase.from('equipments').update({ status: 'deployed' }).eq('id', oldDep.equipment_id);
-            }
-
-            return res.status(200).json({ success: true });
-        }
 
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
 if (action === 'getLookups') {
