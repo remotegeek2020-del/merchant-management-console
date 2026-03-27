@@ -629,15 +629,31 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // ... (Your existing field population code for TID, Date, etc.)
+    // 1. POPULATE FIELDS IMMEDIATELY (Fixes the blank fields issue)
+    document.getElementById('editId').value = d.id || '';
+    document.getElementById('editTid').value = d.tid || '';
+    document.getElementById('editStatus').value = d.status || 'Open';
+    document.getElementById('editTracking').value = d.tracking_id || '';
+    document.getElementById('editNotes').value = d.notes || '';
+    
+    if (d.target_deployment_date) {
+        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
+    } else {
+        document.getElementById('editDate').value = '';
+    }
 
+    // 2. RESET UI ELEMENTS
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
+    const completeBtn = rmaBadge.querySelector('button');
     const updateBtn = document.getElementById('updateBtn');
-    
-    // Find the "Complete RMA" button inside the badge
-    const completeRmaBtn = rmaBadge.querySelector('button'); 
 
+    // Default states
+    rmaBadge.style.display = 'none';
+    returnBox.style.display = 'block';
+    if(updateBtn) updateBtn.style.display = 'block';
+
+    // 3. FETCH RMA STATUS
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
@@ -647,37 +663,29 @@ async function openEditModal(index) {
         const result = await res.json();
         
         if (result.success && result.data) {
-            returnBox.style.display = 'none'; // Hide "Initiate" form
-            rmaBadge.style.display = 'block'; // Show "RMA Info" badge
-
+            returnBox.style.display = 'none';
+            rmaBadge.style.display = 'block';
+            
+            // Requirement: Use return_id from table
             document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
-            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
+            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason || 'N/A';
 
-            // --- THE FIX FOR THE LINGERING BUTTON ---
+            // --- THE FIX: Button visibility logic ---
             if (result.data.status === 'Closed') {
-                // 1. Hide the "Complete" button inside the badge
-                if (completeRmaBtn) completeRmaBtn.style.display = 'none';
+                if (completeBtn) completeBtn.style.display = 'none'; // Hide it if closed
+                rmaBadge.style.background = '#f0fdf4'; // Green
                 
-                // 2. Visual styling for a "Finished" ticket
-                rmaBadge.style.background = '#f0fdf4'; // Light Green
-                rmaBadge.style.border = '1px solid #bbf7d0';
-
-                // 3. ARCHIVE LOCK (Requirement 3): Lock the whole ticket if Deployment is also Closed
+                // ARCHIVE LOCK: If both are closed, lock everything
                 if (d.status === 'Closed') {
                     document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
                     if (updateBtn) updateBtn.style.display = 'none';
                 }
             } else {
-                // Ensure it shows if the RMA is still "Open"
-                if (completeRmaBtn) completeRmaBtn.style.display = 'block';
-                rmaBadge.style.background = '#fffbeb'; // Yellow for In Transit
+                if (completeBtn) completeBtn.style.display = 'block'; // Show it if open
+                rmaBadge.style.background = '#fffbeb'; // Yellow
             }
-        } else {
-            // No RMA exists yet
-            rmaBadge.style.display = 'none';
-            returnBox.style.display = 'block';
         }
-    } catch (e) { console.error("RMA UI Error:", e); }
+    } catch (e) { console.error("RMA Load Error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
