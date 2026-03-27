@@ -629,21 +629,14 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // Standard Field Population
-    document.getElementById('editId').value = d.id;
-    document.getElementById('editTid').value = d.tid || '';
-    document.getElementById('editStatus').value = d.status || 'Open';
-    document.getElementById('editTracking').value = d.tracking_id || '';
-    document.getElementById('editNotes').value = d.notes || '';
-    
+    // ... (Your existing field population code for TID, Date, etc.)
+
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
     const updateBtn = document.getElementById('updateBtn');
-    const formInputs = document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea');
-
-    // Default: Unlock everything
-    formInputs.forEach(el => el.disabled = false);
-    updateBtn.style.display = 'block';
+    
+    // Find the "Complete RMA" button inside the badge
+    const completeRmaBtn = rmaBadge.querySelector('button'); 
 
     try {
         const res = await fetch('/api/deployments', {
@@ -654,26 +647,37 @@ async function openEditModal(index) {
         const result = await res.json();
         
         if (result.success && result.data) {
-            returnBox.style.display = 'none';
-            rmaBadge.style.display = 'block';
-            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'N/A'}`;
+            returnBox.style.display = 'none'; // Hide "Initiate" form
+            rmaBadge.style.display = 'block'; // Show "RMA Info" badge
+
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
             document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
 
-            // REQUIREMENT 3: Lock the ticket if both are Closed
-            if (d.status === 'Closed' && result.data.status === 'Closed') {
-                formInputs.forEach(el => el.disabled = true);
-                updateBtn.style.display = 'none'; // Hide update button
+            // --- THE FIX FOR THE LINGERING BUTTON ---
+            if (result.data.status === 'Closed') {
+                // 1. Hide the "Complete" button inside the badge
+                if (completeRmaBtn) completeRmaBtn.style.display = 'none';
                 
-                // Visual Indicator of Lock
-                rmaBadge.style.background = '#f1f5f9'; // Grey
-                rmaBadge.style.border = '1px dashed #cbd5e1';
-                document.getElementById('rmaIdText').innerText += " (ARCHIVED)";
+                // 2. Visual styling for a "Finished" ticket
+                rmaBadge.style.background = '#f0fdf4'; // Light Green
+                rmaBadge.style.border = '1px solid #bbf7d0';
+
+                // 3. ARCHIVE LOCK (Requirement 3): Lock the whole ticket if Deployment is also Closed
+                if (d.status === 'Closed') {
+                    document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
+                    if (updateBtn) updateBtn.style.display = 'none';
+                }
+            } else {
+                // Ensure it shows if the RMA is still "Open"
+                if (completeRmaBtn) completeRmaBtn.style.display = 'block';
+                rmaBadge.style.background = '#fffbeb'; // Yellow for In Transit
             }
         } else {
+            // No RMA exists yet
             rmaBadge.style.display = 'none';
             returnBox.style.display = 'block';
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error("RMA UI Error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
