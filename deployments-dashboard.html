@@ -426,7 +426,9 @@ async function processReturn() {
                 fetchDeployments(currentPage);
             });
         }
-    } catch (err) { Swal.fire('Error', 'API Error', 'error'); }
+  } catch (err) { 
+    console.error(err);
+    Swal.fire('System Error', 'The server failed to respond. Check console.', 'error'); 
 }
     // --- 3. DELETE & HISTORY LOGIC ---
     async function confirmDelete(id, dba, sn, equipId, merchantId) {
