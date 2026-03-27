@@ -66,10 +66,8 @@ if (action === 'check_rma') {
     
     return res.status(200).json({ success: true, data: data || null });
 }
-        // --- ACTION: DELETE (Reset Equipment + Log Activity) ---
-    // --- ACTION: DELETE (Surgical Fix) ---
+       // --- ACTION: DELETE (Fixed for Foreign Key Constraints) ---
 if (action === 'delete') {
-    // Destructure from payload directly to ensure we have the IDs
     const { deployment_id, equipment_id, merchant_id, merchant_name, serial_number } = payload || {};
 
     if (!deployment_id) {
@@ -77,7 +75,16 @@ if (action === 'delete') {
     }
 
     try {
-        // 1. Reset Equipment status if an ID was provided
+        // 1. DELETE LINKED RMA FIRST (Fixes the Foreign Key Error)
+        // This removes the "child" record so we can delete the "parent" deployment
+        const { error: rmaDeleteError } = await supabase
+            .from('returns')
+            .delete()
+            .eq('deployment_id', deployment_id);
+
+        if (rmaDeleteError) throw rmaDeleteError;
+
+        // 2. Reset Equipment status
         if (equipment_id) {
             await supabase.from('equipments').update({ 
                 status: 'stocked', 
@@ -85,32 +92,24 @@ if (action === 'delete') {
                 merchant_id: null 
             }).eq('id', equipment_id);
 
-            // Log the return to stock
+            // Log the reset
             await supabase.from('equipment_logs').insert([{
                 equipment_id: equipment_id,
                 merchant_id: merchant_id,
                 action: 'TICKET_DELETED',
                 from_location: merchant_name || 'Merchant Site',
                 to_location: 'Warsaw Office',
-                notes: `Deployment ticket ${deployment_id} deleted manually. Unit reset to stock.`
+                notes: `Ticket ${deployment_id} and its RMA were deleted. Unit reset to stock.`
             }]);
         }
 
-        // 2. CRITICAL: Delete the deployment ticket
+        // 3. NOW DELETE THE DEPLOYMENT (The "Parent" record)
         const { error: deleteError } = await supabase
             .from('deployments')
             .delete()
             .eq('id', deployment_id);
 
         if (deleteError) throw deleteError;
-
-        // 3. Log administrative activity
-        await supabase.from('activity_logs').insert([{
-            email: 'admin@secureconsole.com',
-            action: 'DELETE_DEPLOYMENT',
-            status: 'Success',
-            details: `Deleted ticket ${deployment_id} for ${merchant_name || 'Unknown'}.`
-        }]);
 
         return res.status(200).json({ success: true });
 
