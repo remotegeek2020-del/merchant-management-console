@@ -218,7 +218,12 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // 1. SAFE MERCHANT LOOKUP (Avoids crash if merchant_id is missing)
+        // 1. SAFETY: Check for required IDs immediately
+        if (!equipment_id || !deployment_id) {
+            return res.status(400).json({ success: false, message: "Missing Hardware or Deployment ID" });
+        }
+
+        // 2. SAFE MERCHANT LOOKUP
         let dba = 'Merchant Site';
         if (merchant_id) {
             const { data: mData } = await supabase
@@ -229,23 +234,23 @@ if (action === 'return_to_office') {
             if (mData?.dba_name) dba = mData.dba_name;
         }
 
-        // 2. FETCH EXISTING RMA REASON (Prevents overwriting with "Manual Completion")
+        // 3. FETCH EXISTING RMA REASON (Preserve what user selected)
         const { data: existingRma } = await supabase
             .from('returns')
             .select('return_reason')
             .eq('deployment_id', deployment_id)
             .maybeSingle();
 
-        const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes;
+        const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : (notes || 'No reason provided');
 
-        // 3. DETERMINE STATE
+        // 4. DETERMINE STATE & DESTINATION
         let rmaStatus = 'open';
         let equipStatus = 'pending_return';
         let currentLoc = 'In Transit / RMA';
         let logAction = 'RMA_INITIATED';
         let fromLoc = dba;
 
-        if (return_type.includes('Stock') || return_type.includes('Repairs')) {
+        if (return_type && (return_type.includes('Stock') || return_type.includes('Repairs'))) {
             rmaStatus = 'Closed';
             equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
             currentLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
@@ -253,46 +258,44 @@ if (action === 'return_to_office') {
             fromLoc = 'In Transit';
         }
 
-        // 4. UPSERT RMA (This creates the return_id)
+        // 5. UPSERT RMA (Matches your returns table schema)
         const { error: rmaError } = await supabase.from('returns').upsert({
-            deployment_id,
-            equipment_id,
-            merchant_id,
+            deployment_id: deployment_id,
+            equipment_id: equipment_id,
+            merchant_id: merchant_id || null, // Allow null if missing
             status: rmaStatus,
-            condition: return_type,
+            condition: return_type || 'In Transit',
             destination: currentLoc,
             return_reason: persistentReason
         }, { onConflict: 'deployment_id' });
 
         if (rmaError) throw rmaError;
 
-        // 5. UPDATE EQUIPMENT
+        // 6. UPDATE EQUIPMENT
         await supabase.from('equipments').update({ 
             status: equipStatus, 
             current_location: currentLoc,
-            merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
+            merchant_id: (rmaStatus === 'Closed' ? null : (merchant_id || null)) 
         }).eq('id', equipment_id);
 
-        // 6. LOG HISTORY (Uses the real Business Name)
+        // 7. LOG HISTORY (Matches image_6b48c2.png schema)
         await supabase.from('equipment_logs').insert([{
-            equipment_id,
-            merchant_id,
-            deployment_id,
+            equipment_id: equipment_id,
+            merchant_id: merchant_id || null,
+            deployment_id: deployment_id,
             action: logAction,
             from_location: fromLoc,
             to_location: currentLoc,
             notes: `Reason: ${persistentReason}`
         }]);
 
-        // 7. CLOSE DEPLOYMENT
+        // 8. CLOSE DEPLOYMENT
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
-        // IMPORTANT: Always send a success response
         return res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error("RMA API ERROR:", error);
-        // This ensures the frontend stops "Processing" and shows the error instead
+        console.error("CRITICAL RMA ERROR:", error);
         return res.status(500).json({ success: false, message: error.message });
     }
 }
