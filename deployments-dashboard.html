@@ -490,33 +490,50 @@ async function processReturn() {
     }
 }
     // --- 3. DELETE & HISTORY LOGIC ---
-    async function confirmDelete(id, dba, sn, equipId, merchantId) {
-        const { value: confirmContent } = await Swal.fire({
-            title: 'Delete Deployment?',
-            html: `Type <b>DELETE</b> to confirm for ${dba}:`,
-            input: 'text',
-            showCancelButton: true,
-            confirmButtonColor: '#e11d48',
-            inputValidator: (v) => v !== 'DELETE' && 'You must type DELETE!'
-        });
+  async function confirmDelete(id, dba, sn, equipId, merchantId) {
+    const { value: confirmContent } = await Swal.fire({
+        title: 'Delete Deployment?',
+        html: `Type <b>DELETE</b> to confirm for ${dba}:`,
+        input: 'text',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        inputValidator: (v) => v !== 'DELETE' && 'You must type DELETE!'
+    });
 
-        if (confirmContent === 'DELETE') {
-            try {
-                const res = await fetch('/api/deployments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'delete', payload: { 
-                        deployment_id: id, equipment_id: equipId, merchant_id: merchantId, merchant_name: dba, serial_number: sn, user_email: 'admin@secureconsole.com' 
-                    }})
-                });
-                const result = await res.json();
-                if (result.success) {
-                    Swal.fire('Deleted!', '', 'success').then(() => fetchDeployments(currentPage));
-                } else { throw new Error(result.message); }
-            } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    if (confirmContent === 'DELETE') {
+        // Show loading state so user knows it's processing
+        Swal.fire({ title: 'Deleting...', didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'delete', 
+                    payload: { 
+                        deployment_id: id,     // This must be the UUID
+                        equipment_id: equipId, 
+                        merchant_id: merchantId, 
+                        merchant_name: dba, 
+                        serial_number: sn 
+                    }
+                })
+            });
+            
+            const result = await res.json();
+            
+            if (result.success) {
+                Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
+                    .then(() => fetchDeployments(currentPage));
+            } else { 
+                // Important: Show the actual error message from the server
+                Swal.fire('Error', result.message || 'Failed to delete record', 'error'); 
+            }
+        } catch (err) { 
+            Swal.fire('Error', 'Communication failure with server', 'error'); 
         }
     }
-
+}
     async function viewHistory(id, sn) {
         const modal = document.getElementById('historyModal');
         const list = document.getElementById('timeline');
