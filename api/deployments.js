@@ -175,49 +175,52 @@ if (action === 'check_rma') {
 if (action === 'return_to_office') {
     const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
+    // 1. Determine Final State
     let equipStatus = 'pending_return'; 
     let equipLoc = 'In Transit / RMA';
     let rmaStatus = 'open';
 
-    // 1. Logic for Final Reception (Requirement 2)
     if (return_type === 'Working (Back to Stock)' || return_type === 'Defective (Received in Repairs)') {
         equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
         equipLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
         rmaStatus = 'Closed';
     }
 
-    // 2. Capture Merchant Name for Logs
-    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-    const dbaName = merchantData?.dba_name || 'Client Site';
+    // 2. Fetch existing RMA to preserve the original Return Reason (Requirement 1)
+    const { data: existingRma } = await supabase
+        .from('returns')
+        .select('return_reason')
+        .eq('equipment_id', equipment_id)
+        .single();
 
-    // 3. Update/Insert RMA Ticket
-    await supabase.from('returns').upsert({
+    // 3. UPSERT RMA (Preserves original reason if it exists)
+    const { error: rmaError } = await supabase.from('returns').upsert({
         equipment_id,
         merchant_id,
         status: rmaStatus,
-        condition: return_type, // Tracks "In Transit" vs Final Destination
-        return_reason: notes
+        condition: rmaStatus === 'open' ? 'In Transit' : return_type,
+        return_reason: existingRma ? existingRma.return_reason : notes // Requirement 1: Keep original reason
     }, { onConflict: 'equipment_id' });
 
-    // 4. Update Equipment Master Record
+    if (rmaError) throw rmaError;
+
+    // 4. Update Equipment & Logs (Requirement 3: Logic prevents "double" stock injection)
     await supabase.from('equipments').update({ 
         status: equipStatus, 
         current_location: equipLoc, 
         merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
     }).eq('id', equipment_id);
 
-    // 5. REQUIREMENT 3: Write to equipment_logs (Lifecycle Tracking)
     await supabase.from('equipment_logs').insert([{
         equipment_id,
         merchant_id,
         deployment_id,
         action: rmaStatus === 'open' ? 'RETURN_INITIATED' : 'RETURN_RECEIVED',
-        from_location: rmaStatus === 'open' ? dbaName : 'In Transit',
+        from_location: rmaStatus === 'open' ? 'Merchant Site' : 'In Transit',
         to_location: equipLoc,
-        notes: notes
+        notes: notes // Logs the specific action note
     }]);
 
-    // Close deployment ticket
     await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
     return res.status(200).json({ success: true });
