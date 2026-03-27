@@ -215,6 +215,52 @@
     let totalPages = 1;
     let lookupTimeout;
 
+    async function completeRMA() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    if (!d) return;
+
+    const { value: type } = await Swal.fire({
+        title: 'Complete Return',
+        input: 'select',
+        inputOptions: {
+            'Working (Back to Stock)': 'Working (Back to Stock)',
+            'Defective (Received in Repairs)': 'Defective (Received in Repairs)'
+        },
+        inputPlaceholder: 'Select condition',
+        showCancelButton: true
+    });
+
+    if (type) {
+        Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'return_to_office',
+                    payload: {
+                        equipment_id: d.equipment_id,
+                        merchant_id: d.merchant_id,
+                        deployment_id: d.id,
+                        return_type: type, // This tells the backend to CLOSE the RMA
+                        notes: 'Manual Completion' // This won't overwrite because of our backend check
+                    }
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Success', 'RMA Completed and Hardware Stocked.', 'success').then(() => {
+                    document.getElementById('editDepModal').style.display = 'none';
+                    fetchDeployments(currentPage);
+                });
+            }
+        } catch (e) {
+            Swal.fire('Error', 'Failed to complete RMA', 'error');
+        }
+    }
+}
+
    async function completeInTransitRMA() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
