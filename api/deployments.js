@@ -67,37 +67,58 @@ if (action === 'check_rma') {
     return res.status(200).json({ success: true, data: data || null });
 }
         // --- ACTION: DELETE (Reset Equipment + Log Activity) ---
-        if (action === 'delete') {
-            const { deployment_id, equipment_id, merchant_id, merchant_name, serial_number, user_email } = payload || {};
+    // --- ACTION: DELETE (Surgical Fix) ---
+if (action === 'delete') {
+    // Destructure from payload directly to ensure we have the IDs
+    const { deployment_id, equipment_id, merchant_id, merchant_name, serial_number } = payload || {};
 
-            if (equipment_id) {
-                await supabase.from('equipments').update({ 
-                    status: 'stocked', 
-                    current_location: 'Warsaw Office',
-                    merchant_id: null 
-                }).eq('id', equipment_id);
+    if (!deployment_id) {
+        return res.status(400).json({ success: false, message: "Missing Deployment ID" });
+    }
 
-                await supabase.from('equipment_logs').insert([{
-                    equipment_id: equipment_id,
-                    merchant_id: merchant_id,
-                    action: 'Ticket Deleted',
-                    from_location: merchant_name || 'Merchant Site',
-                    to_location: 'Warsaw Office',
-                    notes: `Deployment ticket ${deployment_id} deleted. Unit returned to stock.`
-                }]);
-            }
+    try {
+        // 1. Reset Equipment status if an ID was provided
+        if (equipment_id) {
+            await supabase.from('equipments').update({ 
+                status: 'stocked', 
+                current_location: 'Warsaw Office',
+                merchant_id: null 
+            }).eq('id', equipment_id);
 
-            await supabase.from('deployments').delete().eq('id', deployment_id);
-
-            await supabase.from('activity_logs').insert([{
-                email: user_email || 'admin@secureconsole.com',
-                action: 'DELETE_DEPLOYMENT',
-                status: 'Success',
-                details: `Deleted ticket ${deployment_id} for ${merchant_name}. HW ${serial_number} reset to Stock.`
+            // Log the return to stock
+            await supabase.from('equipment_logs').insert([{
+                equipment_id: equipment_id,
+                merchant_id: merchant_id,
+                action: 'TICKET_DELETED',
+                from_location: merchant_name || 'Merchant Site',
+                to_location: 'Warsaw Office',
+                notes: `Deployment ticket ${deployment_id} deleted manually. Unit reset to stock.`
             }]);
-
-            return res.status(200).json({ success: true });
         }
+
+        // 2. CRITICAL: Delete the deployment ticket
+        const { error: deleteError } = await supabase
+            .from('deployments')
+            .delete()
+            .eq('id', deployment_id);
+
+        if (deleteError) throw deleteError;
+
+        // 3. Log administrative activity
+        await supabase.from('activity_logs').insert([{
+            email: 'admin@secureconsole.com',
+            action: 'DELETE_DEPLOYMENT',
+            status: 'Success',
+            details: `Deleted ticket ${deployment_id} for ${merchant_name || 'Unknown'}.`
+        }]);
+
+        return res.status(200).json({ success: true });
+
+    } catch (err) {
+        console.error("Delete Operation Failed:", err.message);
+        return res.status(500).json({ success: false, message: "Database error: " + err.message });
+    }
+}
         
         // --- ACTION: LIST (With Fix for Search & KPI Metrics) ---
         if (action === 'list') {
