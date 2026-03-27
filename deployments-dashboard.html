@@ -614,13 +614,12 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // 1. Populate standard fields first
+    // Populate Deployment fields first to avoid blank forms
     document.getElementById('editId').value = d.id;
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
-    
     if (d.target_deployment_date) {
         document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
     }
@@ -628,41 +627,38 @@ async function openEditModal(index) {
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
 
-    // Reset visibility before check
+    // Default UI State
     rmaBadge.style.display = 'none';
     returnBox.style.display = 'block';
 
-    // 2. Surgical RMA Check by Deployment ID
     try {
-        const response = await fetch('/api/deployments', {
+        const res = await fetch('/api/deployments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'check_rma', payload: { deployment_id: d.id } })
         });
-        const result = await response.json();
+        const result = await res.json();
         
         if (result.success && result.data) {
-            // RMA exists: Hide the "Log Return" form and show the Badge
-            returnBox.style.display = 'none'; 
+            // RMA Found: Hide the 'Initiate' form
+            returnBox.style.display = 'none';
             rmaBadge.style.display = 'block';
 
-            // Pull ID from the returns table
-            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.id.substring(0,8).toUpperCase()}`;
-            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason || 'N/A';
+            // Display the 'return_id' from the table
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
+            // Display the persistent reason
+            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
 
             const completeBtn = rmaBadge.querySelector('button');
             if (result.data.status === 'Closed') {
-                rmaBadge.style.background = '#f0fdf4'; 
-                rmaBadge.style.border = '1px solid #bbf7d0';
+                rmaBadge.style.background = '#f0fdf4'; // Green for finished
                 if (completeBtn) completeBtn.style.display = 'none';
             } else {
-                rmaBadge.style.background = '#fffbeb'; 
+                rmaBadge.style.background = '#fffbeb'; // Yellow for active
                 if (completeBtn) completeBtn.style.display = 'block';
             }
         }
-    } catch (e) {
-        console.error("RMA sync error", e);
-    }
+    } catch (e) { console.error("RMA fetch error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
