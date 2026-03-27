@@ -614,18 +614,26 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // Standard field population (Persists your data)
+    // 1. SET FIELDS FIRST (Fixes the "Blank Fields" issue)
     document.getElementById('editId').value = d.id;
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
 
+    // Fix for Date Fetching: Ensure the date string is formatted for the input type="date"
+    if (d.target_deployment_date) {
+        const dateObj = new Date(d.target_deployment_date);
+        document.getElementById('editDate').value = dateObj.toISOString().split('T')[0];
+    } else {
+        document.getElementById('editDate').value = '';
+    }
+
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
 
+    // 2. FETCH RMA BY DEPLOYMENT_ID (The 1:1 Bind)
     try {
-        // Query RMA by the specific Deployment ID
         const res = await fetch('/api/deployments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -634,28 +642,32 @@ async function openEditModal(index) {
         const result = await res.json();
         
         if (result.success && result.data) {
-            // 1:1 Found: Show the RMA Ticket Info
-            returnBox.style.display = 'none'; // Hide initiation form
+            // Found the Bound RMA Ticket
+            returnBox.style.display = 'none'; 
             rmaBadge.style.display = 'block';
 
-            // Display the ID from the 'returns' table
+            // Use the actual ID from the returns table
             document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.id.split('-')[0].toUpperCase()}`;
             document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
 
-            // Handle UI for Open vs Closed
             const completeBtn = rmaBadge.querySelector('button');
             if (result.data.status === 'Closed') {
-                rmaBadge.style.background = '#f0fdf4'; // Green for finished
-                completeBtn.style.display = 'none';
+                rmaBadge.style.background = '#f0fdf4'; 
+                rmaBadge.style.border = '1px solid #bbf7d0';
+                if (completeBtn) completeBtn.style.display = 'none';
             } else {
-                rmaBadge.style.background = '#fffbeb'; // Yellow for active
-                completeBtn.style.display = 'block';
+                rmaBadge.style.background = '#fffbeb'; 
+                rmaBadge.style.border = '1px solid #fef3c7';
+                if (completeBtn) completeBtn.style.display = 'block';
             }
         } else {
+            // No RMA yet for this deployment
             rmaBadge.style.display = 'none';
             returnBox.style.display = 'block';
         }
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+        console.error("RMA Lookup Error:", e);
+    }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
