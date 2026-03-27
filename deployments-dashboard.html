@@ -426,11 +426,11 @@ async function processReturn() {
                 fetchDeployments(currentPage);
             });
         }
-  } 
-    catch (err) { 
-    console.error(err);
-    Swal.fire('System Error', 'The server failed to respond. Check console.', 'error'); 
-}
+} catch (err) { 
+        console.error(err);
+        // This closes the "Processing" spinner and shows the error
+        Swal.fire('System Error', 'The server encountered an error. Check the server logs.', 'error'); 
+    }
 }
     // --- 3. DELETE & HISTORY LOGIC ---
     async function confirmDelete(id, dba, sn, equipId, merchantId) {
