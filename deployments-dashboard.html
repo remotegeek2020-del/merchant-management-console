@@ -629,29 +629,21 @@ async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
 
-    // 1. Populate standard fields
+    // Standard Field Population
     document.getElementById('editId').value = d.id;
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
-    if (d.target_deployment_date) {
-        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
-    }
-
+    
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
     const updateBtn = document.getElementById('updateBtn');
+    const formInputs = document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea');
 
-    // Reset UI to default
-    rmaBadge.style.display = 'none';
-    returnBox.style.display = 'block';
-    if (updateBtn) {
-        updateBtn.style.display = 'block';
-        updateBtn.disabled = false;
-    }
-    // Re-enable all inputs in case they were locked
-    document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = false);
+    // Default: Unlock everything
+    formInputs.forEach(el => el.disabled = false);
+    updateBtn.style.display = 'block';
 
     try {
         const res = await fetch('/api/deployments', {
@@ -664,19 +656,24 @@ async function openEditModal(index) {
         if (result.success && result.data) {
             returnBox.style.display = 'none';
             rmaBadge.style.display = 'block';
-            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'N/A'}`;
             document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason;
 
-            if (result.data.status === 'Closed') {
-                rmaBadge.style.background = '#f0fdf4'; 
-                if (d.status === 'Closed') {
-                    // ARCHIVE LOCK: Both are closed
-                    document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
-                    if (updateBtn) updateBtn.style.display = 'none';
-                }
+            // REQUIREMENT 3: Lock the ticket if both are Closed
+            if (d.status === 'Closed' && result.data.status === 'Closed') {
+                formInputs.forEach(el => el.disabled = true);
+                updateBtn.style.display = 'none'; // Hide update button
+                
+                // Visual Indicator of Lock
+                rmaBadge.style.background = '#f1f5f9'; // Grey
+                rmaBadge.style.border = '1px dashed #cbd5e1';
+                document.getElementById('rmaIdText').innerText += " (ARCHIVED)";
             }
+        } else {
+            rmaBadge.style.display = 'none';
+            returnBox.style.display = 'block';
         }
-    } catch (e) { console.error("RMA fetch error:", e); }
+    } catch (e) { console.error(e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
