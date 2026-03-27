@@ -218,66 +218,28 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // 1. Check if we actually have the IDs needed
-        if (!equipment_id || !deployment_id) {
-            return res.status(400).json({ success: false, message: `Missing IDs: Equip=${equipment_id}, Dep=${deployment_id}` });
-        }
+        // BARE MINIMUM UPSERT TO TEST CONNECTION
+        const { error: rmaError } = await supabase.from('returns').upsert({
+            deployment_id: deployment_id,
+            equipment_id: equipment_id,
+            merchant_id: merchant_id,
+            status: 'open',
+            return_reason: notes
+            // I removed 'condition' and 'destination' temporarily to see if they are the problem
+        }, { onConflict: 'deployment_id' });
 
-        // 2. Determine States
-        let rmaStatus = (return_type.includes('Stock') || return_type.includes('Repairs')) ? 'Closed' : 'open';
-        let currentLoc = 'In Transit / RMA';
-        if (rmaStatus === 'Closed') {
-            currentLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
-        }
-
-        // 3. UPSERT RMA - We use a simple object first to avoid errors
-        const rmaData = {
-            deployment_id,
-            equipment_id,
-            merchant_id: merchant_id || null,
-            status: rmaStatus,
-            condition: return_type,
-            return_reason: notes,
-            destination: currentLoc
-        };
-
-        const { error: rmaError } = await supabase.from('returns').upsert(rmaData, { onConflict: 'deployment_id' });
-
-        // IF DATABASE REJECTS IT, WE SEND THE ERROR TO THE FRONTEND
         if (rmaError) {
-            return res.status(500).json({ 
-                success: false, 
-                message: `Database Error (Returns): ${rmaError.message}. Hint: ${rmaError.hint || ''}` 
-            });
+            return res.status(200).json({ success: false, message: "SQL Error: " + rmaError.message });
         }
 
-        // 4. Update Equipment
-        const { error: equipError } = await supabase.from('equipments').update({ 
-            status: rmaStatus === 'Closed' ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return', 
-            current_location: currentLoc,
-            merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
-        }).eq('id', equipment_id);
-
-        if (equipError) return res.status(500).json({ success: false, message: `Equip Error: ${equipError.message}` });
-
-        // 5. Log History
-        await supabase.from('equipment_logs').insert([{
-            equipment_id,
-            merchant_id: merchant_id || null,
-            deployment_id,
-            action: rmaStatus === 'Closed' ? 'RMA_RECEIVED' : 'RMA_INITIATED',
-            from_location: 'Merchant Site',
-            to_location: currentLoc,
-            notes: notes
-        }]);
-
-        // 6. Close Deployment
+        // Standard Updates
+        await supabase.from('equipments').update({ status: 'pending_return' }).eq('id', equipment_id);
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
         return res.status(200).json({ success: true });
 
-    } catch (error) {
-        return res.status(500).json({ success: false, message: `Server Crash: ${error.message}` });
+    } catch (e) {
+        return res.status(200).json({ success: false, message: "Crash: " + e.message });
     }
 }
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
