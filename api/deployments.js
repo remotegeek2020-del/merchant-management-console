@@ -215,77 +215,84 @@ if (action === 'check_rma') {
       // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
 // --- ACTION: RETURN TO OFFICE (Robust Version) ---
 if (action === 'return_to_office') {
-    const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+    try {
+        const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-    // 1. Fetch the Business Name (DBA) for the logs
-    const { data: merchantData } = await supabase
-        .from('merchants')
-        .select('dba_name')
-        .eq('id', merchant_id)
-        .single();
-    
-    const dba = merchantData?.dba_name || 'Merchant Site';
+        // 1. SAFE MERCHANT LOOKUP
+        let dba = 'Merchant Site';
+        if (merchant_id) {
+            const { data: mData } = await supabase
+                .from('merchants')
+                .select('dba_name')
+                .eq('id', merchant_id)
+                .maybeSingle();
+            if (mData?.dba_name) dba = mData.dba_name;
+        }
 
-    // 2. Fetch existing RMA to avoid overwriting the reason
-    const { data: existingRma } = await supabase
-        .from('returns')
-        .select('return_reason, id, return_id')
-        .eq('deployment_id', deployment_id)
-        .maybeSingle();
+        // 2. FETCH EXISTING RMA
+        const { data: existingRma } = await supabase
+            .from('returns')
+            .select('return_reason, id')
+            .eq('deployment_id', deployment_id)
+            .maybeSingle();
 
-    const persistentReason = existingRma ? existingRma.return_reason : notes;
+        const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes;
 
-    // 3. Determine States
-    let rmaStatus = 'open';
-    let equipStatus = 'pending_return';
-    let currentLoc = 'In Transit / RMA';
-    let fromLoc = dba; // Start from the Business Name
+        // 3. LOGIC FOR DESTINATION
+        let rmaStatus = 'open';
+        let equipStatus = 'pending_return';
+        let currentLoc = 'In Transit / RMA';
+        let logAction = 'RMA_INITIATED';
+        let fromLoc = dba;
 
-    if (return_type.includes('Stock') || return_type.includes('Repairs')) {
-        rmaStatus = 'Closed';
-        equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
-        currentLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
-        fromLoc = 'In Transit';
+        if (return_type.includes('Stock') || return_type.includes('Repairs')) {
+            rmaStatus = 'Closed';
+            equipStatus = return_type.includes('Repairs') ? 'repairing' : 'stocked';
+            currentLoc = return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office';
+            logAction = 'RMA_RECEIVED';
+            fromLoc = 'In Transit';
+        }
+
+        // 4. UPSERT RMA
+        const { data: rmaRecord, error: rmaError } = await supabase.from('returns').upsert({
+            deployment_id,
+            equipment_id,
+            merchant_id,
+            status: rmaStatus,
+            condition: return_type,
+            destination: currentLoc,
+            return_reason: persistentReason
+        }, { onConflict: 'deployment_id' }).select();
+
+        if (rmaError) throw rmaError;
+
+        // 5. UPDATE EQUIPMENT
+        await supabase.from('equipments').update({ 
+            status: equipStatus, 
+            current_location: currentLoc,
+            merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
+        }).eq('id', equipment_id);
+
+        // 6. LOG HISTORY
+        await supabase.from('equipment_logs').insert([{
+            equipment_id,
+            merchant_id,
+            deployment_id,
+            action: logAction,
+            from_location: fromLoc,
+            to_location: currentLoc,
+            notes: `Reason: ${persistentReason}`
+        }]);
+
+        // 7. CLOSE DEPLOYMENT
+        await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+
+        return res.status(200).json({ success: true });
+
+    } catch (error) {
+        console.error("CRITICAL RMA ERROR:", error);
+        return res.status(500).json({ success: false, message: error.message });
     }
-
-    // 4. THE FIX: Create/Update the RMA Ticket
-    const { data: rmaRecord, error: rmaError } = await supabase.from('returns').upsert({
-        deployment_id,
-        equipment_id,
-        merchant_id,
-        status: rmaStatus,
-        condition: return_type,
-        destination: currentLoc,
-        return_reason: persistentReason
-    }, { onConflict: 'deployment_id' }).select();
-
-    if (rmaError) {
-        console.error("RMA Upsert Error:", rmaError);
-        return res.status(500).json({ success: false, message: "Failed to create RMA ticket" });
-    }
-
-    // 5. Update Equipment Location and Master Status
-    await supabase.from('equipments').update({ 
-        status: equipStatus, 
-        current_location: currentLoc,
-        merchant_id: (rmaStatus === 'Closed' ? null : merchant_id) 
-    }).eq('id', equipment_id);
-
-    // 6. Write to History Logs using the Business Name
-    await supabase.from('equipment_logs').insert([{
-        equipment_id,
-        merchant_id,
-        deployment_id,
-        action: rmaStatus === 'Closed' ? 'RMA_RECEIVED' : 'RMA_INITIATED',
-        from_location: fromLoc,
-        to_location: currentLoc,
-        notes: `Reason: ${persistentReason}`
-    }]);
-
-    // 7. Close the Deployment Ticket
-    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-
-    return res.status(200).json({ success: true, rma_id: rmaRecord[0].return_id });
 }
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
 if (action === 'getLookups') {
