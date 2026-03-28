@@ -300,23 +300,24 @@ async function handleCSVUpload(input) {
         } catch (err) { console.error(err); }
     }
 
-    async function openModal(id) {
+   async function openModal(id) {
     const m = currentRecords.find(r => r.id === id);
     if (!m) return;
     Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
     try {
-       const [nRes, lRes, aRes, sRes] = await Promise.all([
-    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
-    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
-    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) }) // FETCH STAFF
-]);
+        // 1. Fetch all data including the new Staff list from app_users
+        const [nRes, lRes, aRes, sRes] = await Promise.all([
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) })
+        ]);
         
         const notes = (await nRes.json()).data || [];
-const logs = (await lRes.json()).data || [];
-const files = (await aRes.json()).data || [];
-const staff = (await sRes.json()).data || [];
+        const logs = (await lRes.json()).data || [];
+        const files = (await aRes.json()).data || [];
+        const staff = (await sRes.json()).data || []; //
 
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
@@ -427,34 +428,6 @@ const staff = (await sRes.json()).data || [];
                      </div>
                 </div>
 
-                <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                        <div style="grid-column: span 2;">
-                            <label class="edit-label">Task Title</label>
-                            <input id="task-title" placeholder="What needs to be done?" class="modern-input">
-                        </div>
-                        <div>
-                            <label class="edit-label">Due Date</label>
-                            <input type="date" id="task-due" class="modern-input">
-                        </div>
-                        <div>
-           <label class="edit-label">Assign To</label>
-    <select id="task-assign-select" class="modern-input">
-        <option value="">Select Staff...</option>
-        ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
-    </select>
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <label class="edit-label">Task Details</label>
-                            <textarea id="task-body" placeholder="Describe the task..." class="modern-input" style="height:60px;"></textarea>
-                        </div>
-                        <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">CREATE TASK</button>
-                    </div>
-                    <div id="tasks-list" style="max-height:400px; overflow-y:auto;">
-                        <p style="text-align:center; padding:20px; color:#94a3b8;">No pending tasks.</p>
-                    </div>
-                </div>
-
                 <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
                     <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
                         <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
@@ -471,6 +444,34 @@ const staff = (await sRes.json()).data || [];
                             </div>
                         </div>
                     `).join('')}</div>
+                </div>
+
+                <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div style="grid-column: span 2;">
+                            <label class="edit-label">Task Title</label>
+                            <input id="task-title" placeholder="What needs to be done?" class="modern-input">
+                        </div>
+                        <div>
+                            <label class="edit-label">Due Date</label>
+                            <input type="date" id="task-due" class="modern-input">
+                        </div>
+                        <div>
+                            <label class="edit-label">Assign To</label>
+                            <select id="task-assign-select" class="modern-input">
+                                <option value="">Select Staff...</option>
+                                ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <label class="edit-label">Task Details</label>
+                            <textarea id="task-body" placeholder="Describe the task..." class="modern-input" style="height:60px;"></textarea>
+                        </div>
+                        <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">CREATE TASK</button>
+                    </div>
+                    <div id="tasks-list" style="max-height:400px; overflow-y:auto;">
+                        <p style="text-align:center; padding:20px; color:#94a3b8;">No pending tasks.</p>
+                    </div>
                 </div>
 
                 <div id="content-attachments" class="tab-content" style="display:none; text-align:left;">
@@ -511,9 +512,8 @@ const staff = (await sRes.json()).data || [];
             `,
             showConfirmButton: false, showCloseButton: true
         });
-    } catch (err) { Swal.fire('Error', 'Load failed', 'error'); }
+    } catch (err) { Swal.fire('Error', 'Load failed: ' + err.message, 'error'); }
 }
-
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
