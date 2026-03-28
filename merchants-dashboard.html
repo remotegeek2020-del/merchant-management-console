@@ -266,8 +266,9 @@ async function fetchMerchantTasks() {
                                ${t.status === 'Completed' ? 'checked' : ''}>
                     </div>
                 </div>`;
-            }).join('')
-            : '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
+      
+      }).join('') 
+    : '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
 
         listDiv.innerHTML = html;
     } catch (err) { 
