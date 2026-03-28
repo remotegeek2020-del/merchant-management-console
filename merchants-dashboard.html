@@ -146,19 +146,21 @@ async function fetchMerchantTasks() {
         });
         const result = await res.json();
         
-        listDiv.innerHTML = result.data.map(t => `
-            <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                <div>
-                    <div style="font-weight:800; color:#002d5a;">${t.title}</div>
-                    <div style="font-size:11px; color:#64748b;">${t.body || ''}</div>
-                    <div style="margin-top:5px;">
-                        <span class="badge" style="background:#fee2e2; color:#991b1b;">Due: ${t.due_date}</span>
-                        <span style="font-size:10px; color:#94a3b8; margin-left:10px;">Assigned to: ${t.assigned_user?.email || 'Unassigned'}</span>
-                    </div>
-                </div>
-                <input type="checkbox" onclick="toggleTaskStatus('${t.id}')" ${t.status === 'Completed' ? 'checked' : ''}>
+        listDiv.innerHTML = result.data.map(t => 
+            `
+    <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+            <div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div>
+            <div style="font-size:11px; color:#64748b; margin-bottom:5px;">${t.body || ''}</div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">Due: ${t.due_date || 'N/A'}</span>
+                <span style="font-size:10px; color:#94a3b8;">Assignee: <b>${t.assignee_name}</b></span>
             </div>
-        `).join('') || '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
+        </div>
+        <input type="checkbox" style="width:18px; height:18px;" onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" ${t.status === 'Completed' ? 'checked' : ''}>
+    </div>
+`).join('');
+                                            || '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
     } catch (err) { console.error(err); }
 }
 
