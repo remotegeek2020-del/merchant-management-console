@@ -249,24 +249,53 @@ async function fetchMerchantTasks() {
 }
 
 async function addTask(merchantUuid) {
-    const payload = {
-        merchant_uuid: merchantUuid,
-        title: document.getElementById('task-title').value,
-        body: document.getElementById('task-body').value,
-        due_date: document.getElementById('task-due').value,
-        assigned_to: document.getElementById('task-assign').value, // Use a UUID here
-        created_by: sessionStorage.getItem('pp_userid')
-    };
+    console.log("Attempting to create task for:", merchantUuid);
+    
+    const title = document.getElementById('task-title').value;
+    const body = document.getElementById('task-body').value;
+    const due = document.getElementById('task-due').value;
+    const assigned = document.getElementById('task-assign-select').value;
 
-    const res = await fetch('/api/merchants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'add_task', ...payload })
-    });
+    if (!title) {
+        return Swal.fire('Missing Title', 'Please enter a task name.', 'warning');
+    }
 
-    if ((await res.json()).success) {
-        Swal.fire('Task Created', '', 'success');
-        fetchMerchantTasks();
+    Swal.fire({ title: 'Creating Task...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'add_task', 
+                merchant_uuid: merchantUuid, 
+                title: title, 
+                body: body, 
+                due_date: due, 
+                assigned_to: assigned, 
+                created_by: sessionStorage.getItem('pp_userid') || 'System'
+            })
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
+            
+            // Clear inputs
+            document.getElementById('task-title').value = '';
+            document.getElementById('task-body').value = '';
+            document.getElementById('task-due').value = '';
+            document.getElementById('task-assign-select').value = '';
+            
+            // Refresh the list immediately
+            fetchMerchantTasks(); 
+        } else {
+            throw new Error(result.message);
+        }
+    } catch (err) { 
+        console.error("Task creation failed:", err);
+        Swal.fire('Error', 'Failed to save task to database.', 'error'); 
     }
 }
 
@@ -529,7 +558,9 @@ async function handleCSVUpload(input) {
                             <label class="edit-label">Task Details</label>
                             <textarea id="task-body" placeholder="Describe the task..." class="modern-input" style="height:60px;"></textarea>
                         </div>
-                        <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">CREATE TASK</button>
+                   <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">
+    CREATE TASK
+</button>    
                     </div>
                     <div id="tasks-list" style="max-height:400px; overflow-y:auto;">
                         <p style="text-align:center; padding:20px; color:#94a3b8;">No pending tasks.</p>
