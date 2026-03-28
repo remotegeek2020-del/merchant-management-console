@@ -152,6 +152,41 @@
     let currentPage = 0;
     let currentRecords = [];
 
+    async function editTaskPrompt(taskId, currentTitle, currentBody) {
+    const { value: formValues } = await Swal.fire({
+        title: 'Update Task',
+        html:
+            `<input id="swal-task-title" class="swal2-input" placeholder="Title" value="${currentTitle}">` +
+            `<textarea id="swal-task-body" class="swal2-textarea" placeholder="Details">${currentBody}</textarea>`,
+        focusConfirm: false,
+        showCancelButton: true,
+        preConfirm: () => {
+            return {
+                title: document.getElementById('swal-task-title').value,
+                body: document.getElementById('swal-task-body').value
+            }
+        }
+    });
+
+    if (formValues) {
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'update_task', 
+                    task_id: taskId, 
+                    payload: formValues 
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                fetchMerchantTasks(); // Refresh UI
+            }
+        } catch (err) { console.error(err); }
+    }
+}
+
     async function toggleTaskStatus(taskId, merchantUuid) {
     try {
         const res = await fetch('/api/merchants', {
