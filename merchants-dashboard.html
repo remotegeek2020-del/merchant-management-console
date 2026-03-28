@@ -249,6 +249,7 @@ async function handleCSVUpload(input) {
                         <button onclick="switchTab('lifecycle')" id="tab-lifecycle" class="modal-tab-btn">LIFECYCLE</button>
                         <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
                         <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
+                        <button onclick="switchTab('tasks')" id="tab-tasks" class="modal-tab-btn">TASKS</button>
                         <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                     </div>
 
@@ -413,6 +414,7 @@ async function handleCSVUpload(input) {
         document.getElementById('tab-' + tab).classList.add('active-tab');
         if (tab === 'equipment') fetchMerchantEquipment();
         if (tab === 'lifecycle') fetchMerchantLifecycle();
+        if (tab === 'tasks') fetchMerchantTasks();
     };
 
     // SURGICAL ADD: fetchMerchantLifecycle function
