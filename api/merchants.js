@@ -9,18 +9,6 @@ export default async function handler(req, res) {
     
     {
 
-        // --- ACTION: delete_task (api/merchants.js) ---
-if (action === 'delete_task') {
-    const { task_id } = req.body;
-
-    const { error } = await supabase
-        .from('merchant_tasks')
-        .delete()
-        .eq('id', task_id);
-
-    if (error) throw error;
-    return res.status(200).json({ success: true });
-}
         // --- ACTION: add_task (api/merchants.js) ---
 if (action === 'add_task') {
     const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
