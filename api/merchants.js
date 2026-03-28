@@ -28,6 +28,18 @@ if (action === 'add_task') {
     if (error) throw error;
     return res.status(200).json({ success: true, data });
 }
+        // --- ACTION: update_task (api/merchants.js) ---
+if (action === 'update_task') {
+    const { task_id, payload } = req.body; // payload contains the fields to change
+
+    const { error } = await supabase
+        .from('merchant_tasks')
+        .update(payload)
+        .eq('id', task_id);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true });
+}
 
         if (action === 'get_staff') {
     const { data, error } = await supabase
