@@ -142,13 +142,12 @@
         });
         const result = await res.json();
         if (result.success) {
-            fetchMerchantTasks(); // Refresh the task list
+            fetchMerchantTasks(); // Refresh the list
         }
     } catch (err) {
         console.error("Task update failed:", err);
     }
 }
-
 async function fetchMerchantTasks() {
     const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
     if (!saveBtn) return;
