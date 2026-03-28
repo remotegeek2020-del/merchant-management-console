@@ -152,6 +152,37 @@
     let currentPage = 0;
     let currentRecords = [];
 
+    async function deleteTaskConfirm(taskId) {
+    const result = await Swal.fire({
+        title: 'Delete Task?',
+        text: "This action cannot be undone.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#991b1b',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, delete it'
+    });
+
+    if (result.isConfirmed) {
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete_task', task_id: taskId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                Swal.close(); // Close the edit modal
+                fetchMerchantTasks(); // Refresh list
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+                Toast.fire({ icon: 'success', title: 'Task deleted' });
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Could not delete task', 'error');
+        }
+    }
+}
+
 async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
     const { value: formValues, isDismissed } = await Swal.fire({
         title: '<div style="font-weight:800; color:#002d5a;">Update Task</div>',
