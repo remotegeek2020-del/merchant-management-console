@@ -8,22 +8,30 @@ export default async function handler(req, res) {
     
     
     {
-        // --- ACTION: get_tasks ---
+    
+// --- ACTION: get_tasks (Updated for app_users join) ---
 if (action === 'get_tasks') {
     const { merchant_uuid } = req.body;
+    
     const { data, error } = await supabase
         .from('merchant_tasks')
         .select(`
             *,
-            assigned_user:assigned_to ( email ) 
+            assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name, email )
         `)
         .eq('merchant_id', merchant_uuid)
         .order('due_date', { ascending: true });
 
     if (error) throw error;
-    return res.status(200).json({ success: true, data });
-}
 
+    // Format for the frontend
+    const tasks = (data || []).map(t => ({
+        ...t,
+        assignee_name: t.assigned_user ? `${t.assigned_user.first_name} ${t.assigned_user.last_name || ''}`.trim() : 'Unassigned'
+    }));
+
+    return res.status(200).json({ success: true, data: tasks });
+}
 // --- ACTION: add_task ---
 if (action === 'add_task') {
     const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
