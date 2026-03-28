@@ -152,39 +152,54 @@
     let currentPage = 0;
     let currentRecords = [];
 
-  async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
-    const { value: formValues } = await Swal.fire({
-        title: '<div style="font-weight:800; color:#002d5a;">Update Task Details</div>',
+async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
+    const { value: formValues, isDismissed } = await Swal.fire({
+        title: '<div style="font-weight:800; color:#002d5a;">Update Task</div>',
         width: '500px',
         html: `
             <div style="text-align:left; padding:10px;">
                 <label class="edit-label">Task Title</label>
-                <input id="swal-task-title" class="modern-input" placeholder="Title" value="${currentTitle}">
+                <input id="swal-task-title" class="modern-input" value="${currentTitle}">
                 
                 <label class="edit-label" style="margin-top:15px;">Due Date</label>
                 <input type="date" id="swal-task-due" class="modern-input" value="${currentDue || ''}">
                 
                 <label class="edit-label" style="margin-top:15px;">Task Details</label>
-                <textarea id="swal-task-body" class="modern-input" placeholder="Details" style="height:100px; resize:none;">${currentBody}</textarea>
+                <textarea id="swal-task-body" class="modern-input" style="height:80px; resize:none;">${currentBody}</textarea>
+                
+                <hr style="margin: 20px 0 10px 0;">
+                <button type="button" onclick="deleteTaskConfirm('${taskId}')" 
+                        style="width:100%; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; font-size:11px;">
+                    <span class="material-icons" style="font-size:14px; vertical-align:middle;">delete_forever</span>
+                    PERMANENTLY DELETE TASK
+                </button>
             </div>
         `,
-        focusConfirm: false,
         showCancelButton: true,
         confirmButtonColor: '#004990',
         confirmButtonText: 'SAVE CHANGES',
         preConfirm: () => {
-            const title = document.getElementById('swal-task-title').value;
-            if (!title) {
-                Swal.showValidationMessage('Title is required');
-                return false;
-            }
             return {
-                title: title,
+                title: document.getElementById('swal-task-title').value,
                 due_date: document.getElementById('swal-task-due').value,
                 body: document.getElementById('swal-task-body').value
             }
         }
     });
+
+    if (formValues) {
+        // Logic to save updates
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_task', task_id: taskId, payload: formValues })
+        });
+        if ((await res.json()).success) {
+            Swal.fire({ icon: 'success', title: 'Updated', timer: 1000, showConfirmButton: false });
+            fetchMerchantTasks();
+        }
+    }
+}
 
     if (formValues) {
         Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
