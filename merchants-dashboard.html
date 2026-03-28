@@ -133,8 +133,25 @@
     let currentPage = 0;
     let currentRecords = [];
 
+    async function toggleTaskStatus(taskId, merchantUuid) {
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_task_status', task_id: taskId })
+        });
+        const result = await res.json();
+        if (result.success) {
+            fetchMerchantTasks(); // Refresh the task list
+        }
+    } catch (err) {
+        console.error("Task update failed:", err);
+    }
+}
+
 async function fetchMerchantTasks() {
     const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+    if (!saveBtn) return;
     const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
     const listDiv = document.getElementById('tasks-list');
     
@@ -146,22 +163,27 @@ async function fetchMerchantTasks() {
         });
         const result = await res.json();
         
-        listDiv.innerHTML = result.data.map(t => 
-            `
-    <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-        <div>
-            <div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div>
-            <div style="font-size:11px; color:#64748b; margin-bottom:5px;">${t.body || ''}</div>
-            <div style="display:flex; gap:10px; align-items:center;">
-                <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">Due: ${t.due_date || 'N/A'}</span>
-                <span style="font-size:10px; color:#94a3b8;">Assignee: <b>${t.assignee_name}</b></span>
-            </div>
-        </div>
-        <input type="checkbox" style="width:18px; height:18px;" onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" ${t.status === 'Completed' ? 'checked' : ''}>
-    </div>
-`).join('');
-                                            || '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
-    } catch (err) { console.error(err); }
+        // FIX: The logical OR must be inside the assignment
+        const html = result.data && result.data.length > 0 
+            ? result.data.map(t => `
+                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div>
+                        <div style="font-size:11px; color:#64748b; margin-bottom:5px;">${t.body || ''}</div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">Due: ${t.due_date || 'N/A'}</span>
+                            <span style="font-size:10px; color:#94a3b8;">Assignee: <b>${t.assignee_name || 'Unassigned'}</b></span>
+                        </div>
+                    </div>
+                    <input type="checkbox" style="width:18px; height:18px;" onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" ${t.status === 'Completed' ? 'checked' : ''}>
+                </div>`).join('')
+            : '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
+
+        listDiv.innerHTML = html;
+    } catch (err) { 
+        console.error(err); 
+        listDiv.innerHTML = '<p style="text-align:center; color:red;">Error loading tasks.</p>';
+    }
 }
 
 async function addTask(merchantUuid) {
@@ -284,15 +306,17 @@ async function handleCSVUpload(input) {
     Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
     try {
-        const [nRes, lRes, aRes] = await Promise.all([
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) })
-        ]);
+       const [nRes, lRes, aRes, sRes] = await Promise.all([
+    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
+    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
+    fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) }) // FETCH STAFF
+]);
         
         const notes = (await nRes.json()).data || [];
-        const logs = (await lRes.json()).data || [];
-        const files = (await aRes.json()).data || [];
+const logs = (await lRes.json()).data || [];
+const files = (await aRes.json()).data || [];
+const staff = (await sRes.json()).data || [];
 
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
@@ -414,8 +438,11 @@ async function handleCSVUpload(input) {
                             <input type="date" id="task-due" class="modern-input">
                         </div>
                         <div>
-                            <label class="edit-label">Assign To (User ID)</label>
-                            <input id="task-assign" placeholder="User UUID" class="modern-input">
+           <label class="edit-label">Assign To</label>
+    <select id="task-assign-select" class="modern-input">
+        <option value="">Select Staff...</option>
+        ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
+    </select>
                         </div>
                         <div style="grid-column: span 2;">
                             <label class="edit-label">Task Details</label>
