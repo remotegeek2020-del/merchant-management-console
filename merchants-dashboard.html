@@ -282,16 +282,23 @@ async function addTask(merchantUuid) {
 
         const result = await res.json();
         
-        if (result.success) {
-            Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
-            fetchMerchantTasks(); // Refresh the list
-            
-            // Clear the form fields
-            document.getElementById('task-title').value = '';
-            document.getElementById('task-body').value = '';
-            document.getElementById('task-due').value = '';
-            document.getElementById('task-assign-select').value = '';
-        } else {
+       if (result.success) {
+    Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
+    
+    // SAFE RESET: The ?. prevents the "Cannot set properties of null" error
+    document.getElementById('task-title')?.setAttribute('value', ''); 
+    if(document.getElementById('task-title')) document.getElementById('task-title').value = '';
+    
+    document.getElementById('task-body')?.setAttribute('value', '');
+    if(document.getElementById('task-body')) document.getElementById('task-body').value = '';
+    
+    document.getElementById('task-due')?.setAttribute('value', '');
+    if(document.getElementById('task-due')) document.getElementById('task-due').value = '';
+
+    // Refresh the list to show the new task
+    fetchMerchantTasks(); 
+}
+       else {
             // This will show the actual database error (e.g., "invalid input syntax for type uuid")
             throw new Error(result.message || "Database rejected the entry");
         }
