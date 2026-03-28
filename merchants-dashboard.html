@@ -25,7 +25,26 @@
         .status-closed { background: #fee2e2; color: #991b1b; }
         .status-fraud { background: #1e293b; color: #ffffff; }
 
-        .modal-tab-btn { padding: 14px 24px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; }
+        .modal-tab-btn { 
+    padding: 10px 15px; /* Reduced padding slightly */
+    border: none; 
+    background: none; 
+    font-weight: 700; 
+    color: #94a3b8; 
+    cursor: pointer; 
+    border-bottom: 3px solid transparent; 
+    transition: 0.3s;
+    flex: 1; /* This makes all buttons take equal available space */
+    white-space: nowrap; /* Prevents the text from wrapping to a second line */
+    font-size: 11px; /* Uniform font size */
+    text-align: center;
+}
+        #modalTabContainer {
+    display: flex; 
+    border-bottom: 1px solid #e2e8f0; 
+    margin-bottom: 20px;
+    width: 100%;
+}
         .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
         .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.8rem; margin-bottom: 8px; }
         .edit-label { font-size: 9px; font-weight: 700; color: #64748b; margin-bottom: 3px; display: block; text-transform: uppercase; }
@@ -457,10 +476,10 @@ async function handleCSVUpload(input) {
                         </div>
                         <div>
                             <label class="edit-label">Assign To</label>
-                            <select id="task-assign-select" class="modern-input">
-                                <option value="">Select Staff...</option>
-                                ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
-                            </select>
+                          <select id="task-assign-select" class="modern-input">
+    <option value="">Select Staff...</option>
+    ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
+</select>
                         </div>
                         <div style="grid-column: span 2;">
                             <label class="edit-label">Task Details</label>
