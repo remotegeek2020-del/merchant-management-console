@@ -13,31 +13,44 @@ export default async function handler(req, res) {
 if (action === 'update') {
     const { deployment_id, status, tracking_id, target_date, notes } = payload;
 
-    const { data: oldDep } = await supabase
+    // 1. Fetch current data to ensure it exists and to get the equipment_id for logs
+    const { data: oldDep, error: fetchError } = await supabase
         .from('deployments')
-        .select('status, equipment_id, merchant_id')
+        .select('status, tracking_id, equipment_id, merchant_id')
         .eq('id', deployment_id)
         .single();
 
-    // Fetch the DBA Name
-    const { data: mData } = await supabase.from('merchants').select('dba_name').eq('id', oldDep.merchant_id).maybeSingle();
-    const dba = mData?.dba_name || 'Merchant Site';
+    // Safety Check: if the ticket doesn't exist, stop here
+    if (fetchError || !oldDep) {
+        return res.status(404).json({ success: false, message: "Deployment ticket not found." });
+    }
 
-    await supabase.from('deployments').update({ 
-        status, tracking_id, target_deployment_date: target_date, notes 
-    }).eq('id', deployment_id);
+    // 2. Perform the Update
+    const { error: updateError } = await supabase
+        .from('deployments')
+        .update({ 
+            status: status, 
+            tracking_id: tracking_id, 
+            target_deployment_date: target_date, 
+            notes: notes 
+        })
+        .eq('id', deployment_id);
 
-    if (oldDep.status !== status) {
+    if (updateError) throw updateError;
+
+    // 3. Log the change ONLY if status or tracking actually changed
+    if (oldDep.status !== status || oldDep.tracking_id !== tracking_id) {
         await supabase.from('equipment_logs').insert([{
             equipment_id: oldDep.equipment_id,
             merchant_id: oldDep.merchant_id,
             deployment_id: deployment_id,
             action: 'TICKET_UPDATED',
-            from_location: dba, // Use DBA here
-            to_location: dba,   // Use DBA here
-            notes: `Status changed to ${status}`
+            from_location: 'Merchant Site',
+            to_location: 'Merchant Site',
+            notes: `Status changed to ${status}. Tracking: ${tracking_id || 'None'}`
         }]);
     }
+
     return res.status(200).json({ success: true });
 }
 
@@ -180,31 +193,27 @@ if (action === 'delete') {
        if (action === 'create') {
     const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
 
-    // 1. Fetch equipment and its CURRENT merchant association
-    const { data: equip, error: equipErr } = await supabase
+    // 1. SURGICAL ATOMIC CHECK: Verify equipment is still 'stocked' right now
+    const { data: checkEquip, error: checkError } = await supabase
         .from('equipments')
-        .select('status, current_location, merchant_id, serial_number')
+        .select('status, serial_number')
         .eq('id', equipment_id)
         .single();
 
-    if (equipErr || !equip) throw new Error("Hardware not found.");
-    if (equip.status !== 'stocked' && equip.status !== 'deployed') {
-        return res.status(400).json({ success: false, message: "Hardware is currently in an invalid state for deployment." });
+    if (checkError || !checkEquip) throw new Error("Equipment not found.");
+    
+    // If someone else grabbed it 1 second ago, the status won't be 'stocked'
+    if (checkEquip.status !== 'stocked') {
+        return res.status(400).json({ 
+            success: false, 
+            message: `Conflict: Serial ${checkEquip.serial_number} was just deployed by another user.` 
+        });
     }
 
-    // 2. Fetch the New Merchant DBA
-    const { data: newMerchant } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-    const newDba = newMerchant?.dba_name || 'Client Site';
+    // 2. Proceed with creation only if the check passed
+    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    const dbaName = merchantData?.dba_name || 'Client Site';
 
-    // 3. Logic for "From" location
-    let fromLoc = 'Warsaw Office';
-    if (equip.merchant_id && equip.merchant_id !== merchant_id) {
-        // If it's moving from another merchant directly
-        const { data: oldM } = await supabase.from('merchants').select('dba_name').eq('id', equip.merchant_id).maybeSingle();
-        fromLoc = oldM?.dba_name || equip.current_location;
-    }
-
-    // 4. Create the Deployment Ticket
     const { data: newDep, error: depError } = await supabase
         .from('deployments')
         .insert([{ merchant_id, equipment_id, tid, tracking_id, target_deployment_date: target_date, notes, status: 'Open' }])
@@ -212,22 +221,13 @@ if (action === 'delete') {
 
     if (depError) throw depError;
 
-    // 5. Update Equipment to the New Merchant
-    await supabase.from('equipments').update({ 
-        status: 'deployed', 
-        current_location: newDba, 
-        merchant_id: merchant_id 
-    }).eq('id', equipment_id);
+    // 3. Update equipment to 'deployed' so it disappears from other users' lookups
+    await supabase.from('equipments')
+        .update({ status: 'deployed', current_location: dbaName, merchant_id })
+        .eq('id', equipment_id);
 
-    // 6. Log the transition
     await supabase.from('equipment_logs').insert([{
-        equipment_id,
-        merchant_id,
-        deployment_id: newDep[0].id,
-        action: fromLoc === 'Warsaw Office' ? 'DEPLOYED' : 'MERCHANT_TRANSFER',
-        from_location: fromLoc,
-        to_location: newDba,
-        notes: `New Deployment Ticket: ${newDep[0].deployment_id}`
+        equipment_id, merchant_id, action: 'Deployed', from_location: 'Warsaw Office', to_location: dbaName, notes: `Deployment Created. TID: ${tid}`
     }]);
 
     return res.status(200).json({ success: true, data: newDep });
@@ -238,61 +238,59 @@ if (action === 'return_to_office') {
     try {
         const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
 
-        // 1. FETCH THE ACTUAL BUSINESS NAME (Fixes "Merchant Site" issue)
-        let dba = 'Merchant Site'; 
-        if (merchant_id) {
-            const { data: mData } = await supabase
-                .from('merchants')
-                .select('dba_name')
-                .eq('id', merchant_id)
-                .maybeSingle();
-            if (mData?.dba_name) dba = mData.dba_name;
-        }
-
+        // 1. Fetch Existing RMA to preserve the ID and the ORIGINAL Reason
         const { data: existingRma } = await supabase
             .from('returns')
-            .select('return_reason')
+            .select('return_reason, id, status')
             .eq('deployment_id', deployment_id)
             .maybeSingle();
 
+        // 2. LOGIC: If we are "Completing", we keep the old reason. 
+        // If it's brand new, we use the 'notes' from the dropdown.
         const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes;
 
-        let rmaStatus = (return_type.includes('Stock') || return_type.includes('Repairs')) ? 'Closed' : 'open';
-        let isCompleting = rmaStatus === 'Closed';
+        // 3. Determine if this is a "Completion" (Received) or "Initiation" (In Transit)
+        let isCompleting = (return_type.includes('Stock') || return_type.includes('Repairs'));
+        let rmaStatus = isCompleting ? 'Closed' : 'open';
+        let equipStatus = isCompleting ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
         let finalLoc = isCompleting ? (return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office') : 'In Transit / RMA';
 
-        // 2. UPSERT RMA
-        await supabase.from('returns').upsert({
-            deployment_id,
-            equipment_id,
-            merchant_id,
+        // 4. UPSERT RMA: Maintain the link and the reason
+        const { error: rmaError } = await supabase.from('returns').upsert({
+            deployment_id: deployment_id,
+            equipment_id: equipment_id,
+            merchant_id: merchant_id,
             status: rmaStatus,
-            condition: return_type,
+            condition: return_type, // Updated to 'Working' or 'Defective'
             destination: finalLoc,
-            return_reason: persistentReason
+            return_reason: persistentReason // REQUIREMENT 2: Reason never changes
         }, { onConflict: 'deployment_id' });
 
-        // 3. LOG HISTORY (Requirement: Use business name instead of "Merchant Site")
+        if (rmaError) throw rmaError;
+
+        // 5. Update Equipment & Location (Requirement 1: It actually completes now)
+        await supabase.from('equipments').update({ 
+            status: equipStatus, 
+            current_location: finalLoc,
+            merchant_id: isCompleting ? null : merchant_id 
+        }).eq('id', equipment_id);
+
+        // 6. Lifecycle Log
         await supabase.from('equipment_logs').insert([{
             equipment_id,
             merchant_id,
             deployment_id,
             action: isCompleting ? 'RMA_COMPLETED' : 'RMA_INITIATED',
-            from_location: isCompleting ? 'In Transit' : dba, // Use DBA here
+            from_location: isCompleting ? 'In Transit' : 'Merchant Site',
             to_location: finalLoc,
-            notes: `Reason: ${persistentReason}`
+            notes: `Final Condition: ${return_type} | Original Reason: ${persistentReason}`
         }]);
 
-        // 4. UPDATE EQUIPMENT & DEPLOYMENT
-        await supabase.from('equipments').update({ 
-            status: isCompleting ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return', 
-            current_location: finalLoc,
-            merchant_id: isCompleting ? null : merchant_id 
-        }).eq('id', equipment_id);
-
+        // 7. Ensure Deployment is Closed
         await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
 
         return res.status(200).json({ success: true });
+
     } catch (e) {
         return res.status(500).json({ success: false, message: e.message });
     }
