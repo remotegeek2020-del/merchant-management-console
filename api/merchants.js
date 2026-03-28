@@ -80,22 +80,30 @@ if (action === 'get_tasks') {
 
     return res.status(200).json({ success: true, data: tasks });
 }
-// --- ACTION: add_task ---
+// --- ACTION: add_task (api/merchants.js) ---
 if (action === 'add_task') {
     const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
-    const { error } = await supabase
+
+    // We must ensure the column names here match your 'merchant_tasks' table columns
+    const { data, error } = await supabase
         .from('merchant_tasks')
         .insert([{
             merchant_id: merchant_uuid,
-            title,
-            body,
-            due_date,
-            assigned_to,
-            created_by
-        }]);
+            title: title,
+            body: body,
+            due_date: due_date || null,
+            assigned_to: assigned_to || null, // This is the userid (TEXT)
+            created_by: created_by || 'System',
+            status: 'Pending'
+        }])
+        .select();
 
-    if (error) throw error;
-    return res.status(200).json({ success: true });
+    if (error) {
+        console.error("Supabase Insert Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+
+    return res.status(200).json({ success: true, data });
 }
 
         // --- ACTION: bulk_upsert (Create or Update based on merchant_id) ---
