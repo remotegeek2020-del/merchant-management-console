@@ -255,7 +255,7 @@ async function addTask(merchantUuid) {
     const body = document.getElementById('task-body').value;
     const due = document.getElementById('task-due').value;
     const assigned = document.getElementById('task-assign-select').value;
-
+    
     if (!title) {
         return Swal.fire('Missing Title', 'Please enter a task name.', 'warning');
     }
