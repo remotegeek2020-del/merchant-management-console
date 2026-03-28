@@ -152,6 +152,7 @@
     let currentPage = 0;
     let currentRecords = [];
 
+// 1. DELETE CONFIRMATION
 async function deleteTaskConfirm(taskId) {
     const result = await Swal.fire({
         title: 'Delete Task?',
@@ -168,41 +169,32 @@ async function deleteTaskConfirm(taskId) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'delete_task', task_id: taskId })
         });
-        if ((await res.json()).success) {
+        const data = await res.json();
+        if (data.success) {
             Swal.close(); 
             fetchMerchantTasks();
-            Swal.fire('Deleted!', 'Task removed.', 'success');
+            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
+            Toast.fire({ icon: 'success', title: 'Task deleted' });
         }
     }
 }
 
 
-async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
-    const { value: formValues, isDismissed } = await Swal.fire({
-        title: '<div style="font-weight:800; color:#002d5a;">Update Task</div>',
-        width: '500px',
+// 3. EDIT PROMPT (Ensure the payload matches the backend)
+async function editTaskPrompt(taskId, title, body, due) {
+    const { value: formValues } = await Swal.fire({
+        title: 'Update Task',
         html: `
-            <div style="text-align:left; padding:10px;">
-                <label class="edit-label">Task Title</label>
-                <input id="swal-task-title" class="modern-input" value="${currentTitle}">
-                
-                <label class="edit-label" style="margin-top:15px;">Due Date</label>
-                <input type="date" id="swal-task-due" class="modern-input" value="${currentDue || ''}">
-                
-                <label class="edit-label" style="margin-top:15px;">Task Details</label>
-                <textarea id="swal-task-body" class="modern-input" style="height:80px; resize:none;">${currentBody}</textarea>
-                
-                <hr style="margin: 20px 0 10px 0;">
-                <button type="button" onclick="deleteTaskConfirm('${taskId}')" 
-                        style="width:100%; background:#fee2e2; color:#991b1b; border:1px solid #fecaca; padding:10px; border-radius:8px; font-weight:700; cursor:pointer; font-size:11px;">
-                    <span class="material-icons" style="font-size:14px; vertical-align:middle;">delete_forever</span>
-                    PERMANENTLY DELETE TASK
-                </button>
-            </div>
-        `,
+            <div style="text-align:left;">
+                <label class="edit-label">Title</label>
+                <input id="swal-task-title" class="modern-input" value="${title}">
+                <label class="edit-label" style="margin-top:10px;">Due Date</label>
+                <input type="date" id="swal-task-due" class="modern-input" value="${due}">
+                <label class="edit-label" style="margin-top:10px;">Details</label>
+                <textarea id="swal-task-body" class="modern-input" style="height:80px;">${body}</textarea>
+                <button type="button" onclick="deleteTaskConfirm('${taskId}')" style="width:100%; background:#fee2e2; color:#991b1b; border:none; padding:10px; border-radius:8px; margin-top:15px; font-weight:700; cursor:pointer;">DELETE TASK</button>
+            </div>`,
         showCancelButton: true,
-        confirmButtonColor: '#004990',
-        confirmButtonText: 'SAVE CHANGES',
         preConfirm: () => {
             return {
                 title: document.getElementById('swal-task-title').value,
@@ -213,19 +205,14 @@ async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
     });
 
     if (formValues) {
-        // Logic to save updates
         const res = await fetch('/api/merchants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'update_task', task_id: taskId, payload: formValues })
         });
-        if ((await res.json()).success) {
-            Swal.fire({ icon: 'success', title: 'Updated', timer: 1000, showConfirmButton: false });
-            fetchMerchantTasks();
-        }
+        if ((await res.json()).success) fetchMerchantTasks();
     }
 }
-
     if (formValues) {
         Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
         try {
@@ -249,7 +236,8 @@ async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
     }
 }
 
-    async function toggleTaskStatus(taskId, merchantUuid) {
+    // 2. TOGGLE STATUS
+async function toggleTaskStatus(taskId, merchantUuid) {
     try {
         const res = await fetch('/api/merchants', {
             method: 'POST',
@@ -257,13 +245,10 @@ async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
             body: JSON.stringify({ action: 'update_task_status', task_id: taskId })
         });
         const result = await res.json();
-        if (result.success) {
-            fetchMerchantTasks(); // Refresh the list
-        }
-    } catch (err) {
-        console.error("Task update failed:", err);
-    }
+        if (result.success) fetchMerchantTasks();
+    } catch (err) { console.error("Toggle failed", err); }
 }
+    
 async function fetchMerchantTasks() {
     const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
     if (!saveBtn) return;
@@ -279,29 +264,38 @@ async function fetchMerchantTasks() {
         const result = await res.json();
         
         const html = result.data && result.data.length > 0 
-            ? result.data.map(t => `
+            ? result.data.map(t => {
+                // Pre-sanitize strings to prevent breaking the onclick attribute
+                const safeTitle = (t.title || '').replace(/'/g, "\\'");
+                const safeBody = (t.body || '').replace(/'/g, "\\'");
+                const safeDue = t.due_date || '';
+
+                return `
                 <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
                     <div style="flex-grow: 1;">
                         <div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div>
                         <div style="font-size:11px; color:#64748b; margin-bottom:5px;">${t.body || ''}</div>
                         <div style="display:flex; gap:10px; align-items:center;">
-                            <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">Due: ${t.due_date || 'N/A'}</span>
+                            <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">Due: ${safeDue || 'N/A'}</span>
                             <span style="font-size:10px; color:#94a3b8;">Assignee: <b>${t.assignee_name || 'Unassigned'}</b></span>
                         </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:12px;">
-                       <button onclick="editTaskPrompt('${t.id}', '${t.title.replace(/'/g, "\\'")}', '${(t.body || '').replace(/'/g, "\\'")}', '${t.due_date || ''}')" 
-        style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
-    <span class="material-icons" style="font-size:18px;">edit</span>
-</button>
-                        <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" ${t.status === 'Completed' ? 'checked' : ''}>
+                        <button onclick="editTaskPrompt('${t.id}', '${safeTitle}', '${safeBody}', '${safeDue}')" 
+                                style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
+                            <span class="material-icons" style="font-size:18px;">edit</span>
+                        </button>
+                        <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" 
+                               onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" 
+                               ${t.status === 'Completed' ? 'checked' : ''}>
                     </div>
-                </div>`).join('')
+                </div>`;
+            }).join('')
             : '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
 
         listDiv.innerHTML = html;
     } catch (err) { 
-        console.error(err); 
+        console.error("Task Fetch Error:", err); 
         listDiv.innerHTML = '<p style="text-align:center; color:red;">Error loading tasks.</p>';
     }
 }
