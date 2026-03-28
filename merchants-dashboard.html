@@ -249,18 +249,21 @@ async function fetchMerchantTasks() {
 }
 
 async function addTask(merchantUuid) {
-    console.log("Attempting to create task for:", merchantUuid);
-    
-    const title = document.getElementById('task-title').value;
-    const body = document.getElementById('task-body').value;
-    const due = document.getElementById('task-due').value;
-    const assigned = document.getElementById('task-assign-select').value;
-    
+    // 1. Grab values from the Swal modal inputs
+    const title = document.getElementById('task-title')?.value;
+    const body = document.getElementById('task-body')?.value;
+    const due = document.getElementById('task-due')?.value;
+    const assigned = document.getElementById('task-assign-select')?.value;
+
+    // 2. Client-side validation
+    if (!merchantUuid || merchantUuid === 'undefined') {
+        return Swal.fire('Error', 'Internal Error: Merchant ID not found.', 'error');
+    }
     if (!title) {
-        return Swal.fire('Missing Title', 'Please enter a task name.', 'warning');
+        return Swal.fire('Required', 'Please provide a task title.', 'warning');
     }
 
-    Swal.fire({ title: 'Creating Task...', didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: 'Saving Task...', didOpen: () => Swal.showLoading() });
 
     try {
         const res = await fetch('/api/merchants', {
@@ -269,33 +272,32 @@ async function addTask(merchantUuid) {
             body: JSON.stringify({ 
                 action: 'add_task', 
                 merchant_uuid: merchantUuid, 
-                title: title, 
-                body: body, 
-                due_date: due, 
-                assigned_to: assigned, 
+                title, 
+                body, 
+                due_date: due || null, 
+                assigned_to: assigned || null, 
                 created_by: sessionStorage.getItem('pp_userid') || 'System'
             })
         });
-        
+
         const result = await res.json();
         
         if (result.success) {
             Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
+            fetchMerchantTasks(); // Refresh the list
             
-            // Clear inputs
+            // Clear the form fields
             document.getElementById('task-title').value = '';
             document.getElementById('task-body').value = '';
             document.getElementById('task-due').value = '';
             document.getElementById('task-assign-select').value = '';
-            
-            // Refresh the list immediately
-            fetchMerchantTasks(); 
         } else {
-            throw new Error(result.message);
+            // This will show the actual database error (e.g., "invalid input syntax for type uuid")
+            throw new Error(result.message || "Database rejected the entry");
         }
-    } catch (err) { 
-        console.error("Task creation failed:", err);
-        Swal.fire('Error', 'Failed to save task to database.', 'error'); 
+    } catch (err) {
+        console.error("Task Save Error:", err);
+        Swal.fire('Error', 'Failed to save task: ' + err.message, 'error');
     }
 }
 
