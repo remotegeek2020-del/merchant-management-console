@@ -173,12 +173,10 @@ async function deleteTaskConfirm(taskId) {
         if (data.success) {
             Swal.close(); 
             fetchMerchantTasks();
-            const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000 });
-            Toast.fire({ icon: 'success', title: 'Task deleted' });
+            Swal.fire({ icon: 'success', title: 'Task deleted', timer: 1500, showConfirmButton: false });
         }
     }
 }
-
 
 // 3. EDIT PROMPT (Ensure the payload matches the backend)
 async function editTaskPrompt(taskId, title, body, due) {
@@ -211,28 +209,6 @@ async function editTaskPrompt(taskId, title, body, due) {
             body: JSON.stringify({ action: 'update_task', task_id: taskId, payload: formValues })
         });
         if ((await res.json()).success) fetchMerchantTasks();
-    }
-}
-    if (formValues) {
-        Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
-        try {
-            const res = await fetch('/api/merchants', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'update_task', 
-                    task_id: taskId, 
-                    payload: formValues 
-                })
-            });
-            const result = await res.json();
-            if (result.success) {
-                Swal.fire({ icon: 'success', title: 'Task Updated', timer: 1000, showConfirmButton: false });
-                fetchMerchantTasks(); // Refresh list to show new date/title
-            }
-        } catch (err) { 
-            Swal.fire('Error', 'Update failed', 'error');
-        }
     }
 }
 
