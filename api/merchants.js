@@ -8,6 +8,26 @@ export default async function handler(req, res) {
     
     
     {
+        // --- ACTION: add_task (api/merchants.js) ---
+if (action === 'add_task') {
+    const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
+    
+    const { data, error } = await supabase
+        .from('merchant_tasks')
+        .insert([{
+            merchant_id: merchant_uuid,
+            title,
+            body,
+            due_date,
+            assigned_to, // This should be the 'userid' from app_users
+            created_by,   // This should be the 'userid' of the person logged in
+            status: 'Pending'
+        }])
+        .select();
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
 
         if (action === 'get_staff') {
     const { data, error } = await supabase
