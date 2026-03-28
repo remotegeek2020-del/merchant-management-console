@@ -11,21 +11,25 @@ export default async function handler(req, res) {
         // --- ACTION: add_task (api/merchants.js) ---
 if (action === 'add_task') {
     const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
-    
+
     const { data, error } = await supabase
         .from('merchant_tasks')
         .insert([{
-            merchant_id: merchant_uuid,
-            title,
-            body,
-            due_date,
-            assigned_to, // This should be the 'userid' from app_users
-            created_by,   // This should be the 'userid' of the person logged in
+            merchant_id: merchant_uuid, // Must match your SQL column name
+            title: title,
+            body: body,
+            due_date: due_date || null,
+            assigned_to: assigned_to || null,
+            created_by: created_by || 'System',
             status: 'Pending'
         }])
         .select();
 
-    if (error) throw error;
+    if (error) {
+        console.error("DB Error:", error.message);
+        return res.status(200).json({ success: false, message: error.message });
+    }
+
     return res.status(200).json({ success: true, data });
 }
         // --- ACTION: update_task (api/merchants.js) ---
