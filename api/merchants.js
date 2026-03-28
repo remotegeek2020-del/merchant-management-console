@@ -298,61 +298,74 @@ if (action === 'get_merchant_equipment') {
             return res.status(200).json({ success: true });
         }
 
-        if (action === 'list') {
-            const dataReq = supabase
-                .from('merchant_portfolio_view')
-                .select('*', { count: 'exact' });
+    if (action === 'list') {
+    // 1. Base Query from the View
+    const dataReq = supabase
+        .from('merchant_portfolio_view')
+        .select('*', { count: 'exact' });
 
-            if (statusFilter) dataReq.eq('account_status', statusFilter);
+    // 2. Apply Filters
+    if (statusFilter) dataReq.eq('account_status', statusFilter);
 
-            if (query && filterBy) {
-                const colMap = {
-                    'dba_name': 'dba_name',
-                    'merchant_id': 'merchant_id',
-                    'agent_id': 'agent_id',
-                    'company_name': 'company_name',
-                    'partner_name': 'partner_full_name'
-                };
-                const targetCol = colMap[filterBy] || filterBy;
-                dataReq.ilike(targetCol, `%${query}%`);
-            }
+    if (query && filterBy) {
+        const colMap = {
+            'dba_name': 'dba_name',
+            'merchant_id': 'merchant_id',
+            'agent_id': 'agent_id',
+            'company_name': 'company_name',
+            'partner_name': 'partner_full_name'
+        };
+        const targetCol = colMap[filterBy] || filterBy;
+        dataReq.ilike(targetCol, `%${query}%`);
+    }
 
-            const { data, count, error: dataError } = await dataReq
-                .range(page * limit, (page + 1) * limit - 1)
-                .order('created_at', { ascending: false });
+    // 3. Execute Pagination and Ordering
+    const { data, count, error: dataError } = await dataReq
+        .range(page * limit, (page + 1) * limit - 1)
+        .order('created_at', { ascending: false });
 
-            if (dataError) throw dataError;
+    if (dataError) throw dataError;
 
-            let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
-            try {
-                const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
-                    p_status_filter: statusFilter || null, 
-                    p_query: query || null, 
-                    p_filter_by: filterBy || null 
-                });
-                if (mathData && mathData[0]) stats = mathData[0];
-            } catch (rpcErr) {
-                console.error("Metrics RPC Failed, but continuing...", rpcErr);
-            }
+    // 4. Metrics Logic (RPC with Manual Fallback)
+    let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
+    
+    try {
+        const { data: mathData, error: rpcError } = await supabase.rpc('get_merchant_metrics', { 
+            p_status_filter: statusFilter || null, 
+            p_query: query || null, 
+            p_filter_by: filterBy || null 
+        });
 
-            const formattedData = (data || []).map(m => ({
-                ...m,
-                company_name: m.company_name || m.agent_name || '---',
-                partner_name: m.partner_full_name || m.agent_name || '---'
-            }));
-
-            return res.status(200).json({ 
-                success: true, 
-                data: formattedData,
-                count: count || 0,
-                metrics: { 
-                    totalMTD: stats.out_mtd || 0, 
-                    total30D: stats.out_30d || 0, 
-                    total90D: stats.out_90d || 0, 
-                    portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
-                }
-            });
+        if (mathData && mathData[0]) {
+            stats = mathData[0];
+        } else {
+            // FALLBACK: If RPC returns nothing, manually sum the current 'data' array
+            stats.out_mtd = data.reduce((acc, curr) => acc + (Number(curr.volume_mtd) || 0), 0);
+            stats.out_30d = data.reduce((acc, curr) => acc + (Number(curr.volume_30_day) || 0), 0);
+            stats.out_90d = data.reduce((acc, curr) => acc + (Number(curr.volume_90_day) || 0), 0);
         }
+    } catch (rpcErr) {
+        console.error("Metrics RPC Failed, using manual calculation...", rpcErr);
+    }
+
+    const formattedData = (data || []).map(m => ({
+        ...m,
+        company_name: m.company_name || m.agent_name || '---',
+        partner_name: m.partner_full_name || m.agent_name || '---'
+    }));
+
+    return res.status(200).json({ 
+        success: true, 
+        data: formattedData,
+        count: count || 0,
+        metrics: { 
+            totalMTD: stats.out_mtd || 0, 
+            total30D: stats.out_30d || 0, 
+            total90D: stats.out_90d || 0, 
+            portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
+        }
+    });
+}
 
         if (action === 'update') {
             const { data: oldData, error: fetchError } = await supabase
