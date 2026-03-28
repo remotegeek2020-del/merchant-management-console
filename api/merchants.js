@@ -8,6 +8,22 @@ export default async function handler(req, res) {
     
     
     {
+
+        if (action === 'get_staff') {
+    const { data, error } = await supabase
+        .from('app_users')
+        .select('userid, first_name, last_name, email');
+
+    if (error) throw error;
+
+    // We MUST map 'userid' to 'id' and create 'full_name' for the frontend to see it
+    const formatted = (data || []).map(u => ({
+        id: u.userid, 
+        full_name: `${u.first_name} ${u.last_name || ''}`.trim()
+    }));
+
+    return res.status(200).json({ success: true, data: formatted });
+}
     
 // --- ACTION: get_tasks (Updated for app_users join) ---
 if (action === 'get_tasks') {
