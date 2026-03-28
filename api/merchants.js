@@ -8,6 +8,39 @@ export default async function handler(req, res) {
     
     
     {
+        // --- ACTION: get_tasks ---
+if (action === 'get_tasks') {
+    const { merchant_uuid } = req.body;
+    const { data, error } = await supabase
+        .from('merchant_tasks')
+        .select(`
+            *,
+            assigned_user:assigned_to ( email ) 
+        `)
+        .eq('merchant_id', merchant_uuid)
+        .order('due_date', { ascending: true });
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, data });
+}
+
+// --- ACTION: add_task ---
+if (action === 'add_task') {
+    const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
+    const { error } = await supabase
+        .from('merchant_tasks')
+        .insert([{
+            merchant_id: merchant_uuid,
+            title,
+            body,
+            due_date,
+            assigned_to,
+            created_by
+        }]);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true });
+}
 
         // --- ACTION: bulk_upsert (Create or Update based on merchant_id) ---
 if (action === 'bulk_upsert') {
