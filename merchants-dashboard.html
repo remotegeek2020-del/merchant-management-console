@@ -152,18 +152,35 @@
     let currentPage = 0;
     let currentRecords = [];
 
-    async function editTaskPrompt(taskId, currentTitle, currentBody) {
+  async function editTaskPrompt(taskId, currentTitle, currentBody, currentDue) {
     const { value: formValues } = await Swal.fire({
-        title: 'Update Task',
-        html:
-            `<input id="swal-task-title" class="swal2-input" placeholder="Title" value="${currentTitle}">` +
-            `<textarea id="swal-task-body" class="swal2-textarea" placeholder="Details" style="height:100px;">${currentBody}</textarea>`,
+        title: '<div style="font-weight:800; color:#002d5a;">Update Task Details</div>',
+        width: '500px',
+        html: `
+            <div style="text-align:left; padding:10px;">
+                <label class="edit-label">Task Title</label>
+                <input id="swal-task-title" class="modern-input" placeholder="Title" value="${currentTitle}">
+                
+                <label class="edit-label" style="margin-top:15px;">Due Date</label>
+                <input type="date" id="swal-task-due" class="modern-input" value="${currentDue || ''}">
+                
+                <label class="edit-label" style="margin-top:15px;">Task Details</label>
+                <textarea id="swal-task-body" class="modern-input" placeholder="Details" style="height:100px; resize:none;">${currentBody}</textarea>
+            </div>
+        `,
         focusConfirm: false,
         showCancelButton: true,
         confirmButtonColor: '#004990',
+        confirmButtonText: 'SAVE CHANGES',
         preConfirm: () => {
+            const title = document.getElementById('swal-task-title').value;
+            if (!title) {
+                Swal.showValidationMessage('Title is required');
+                return false;
+            }
             return {
-                title: document.getElementById('swal-task-title').value,
+                title: title,
+                due_date: document.getElementById('swal-task-due').value,
                 body: document.getElementById('swal-task-body').value
             }
         }
@@ -183,8 +200,8 @@
             });
             const result = await res.json();
             if (result.success) {
-                Swal.fire({ icon: 'success', title: 'Task Updated', timer: 1500, showConfirmButton: false });
-                fetchMerchantTasks(); 
+                Swal.fire({ icon: 'success', title: 'Task Updated', timer: 1000, showConfirmButton: false });
+                fetchMerchantTasks(); // Refresh list to show new date/title
             }
         } catch (err) { 
             Swal.fire('Error', 'Update failed', 'error');
@@ -233,9 +250,10 @@ async function fetchMerchantTasks() {
                         </div>
                     </div>
                     <div style="display:flex; align-items:center; gap:12px;">
-                        <button onclick="editTaskPrompt('${t.id}', '${t.title.replace(/'/g, "\\'")}', '${(t.body || '').replace(/'/g, "\\'")}')" style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
-                            <span class="material-icons" style="font-size:18px;">edit</span>
-                        </button>
+                        <button onclick="editTaskPrompt('${t.id}', '${t.title.replace(/'/g, "\\'")}', '${(t.body || '').replace(/'/g, "\\'")}', '${t.due_date || ''}')" 
+        style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
+    <span class="material-icons" style="font-size:18px;">edit</span>
+</button>
                         <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" ${t.status === 'Completed' ? 'checked' : ''}>
                     </div>
                 </div>`).join('')
