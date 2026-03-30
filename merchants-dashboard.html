@@ -395,22 +395,22 @@ async function handleCSVUpload(input) {
             });
             const result = await res.json();
             currentRecords = result.data;
-            const myRole = (sessionStorage.getItem('pp_role') || "").toUpperCase();
 
-if (myRole === 'USER') {
-    // Hide the Bulk Update button
-    const bulkBtn = document.querySelector('button[onclick*="csvFileInput"]');
-    if (bulkBtn) bulkBtn.style.display = 'none';
-}
-            if (result.metrics) {
-    const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
-    
-    // Check if these IDs match your HTML precisely
-    document.getElementById('mtd-val').innerText = formatter.format(result.metrics.totalMTD);
-    document.getElementById('30d-val').innerText = formatter.format(result.metrics.total30D);
-    document.getElementById('90d-val').innerText = formatter.format(result.metrics.total90D);
-    document.getElementById('share-val').innerText = result.metrics.portfolioShare + '%';
-}
+        if (result.metrics) {
+            document.getElementById('mtd-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.totalMTD || 0);
+
+            document.getElementById('30d-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.total30D || 0);
+
+            document.getElementById('90d-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.total90D || 0);
+
+            document.getElementById('share-val').innerText = `${result.metrics.portfolioShare || '0.00'}%`;
+        }
             tbody.innerHTML = "";
             currentRecords.forEach(m => {
                 const row = tbody.insertRow();
