@@ -3,11 +3,28 @@ import { createClient } from '@supabase/supabase-js'
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
+    const { action, role } = req.body;
+const userRole = (role || "").toUpperCase();
+
+// Define permission levels
+const isAtLeastAdmin = userRole === 'ADMIN' || userRole === 'SUPER ADMIN';
+const isSuperAdmin = userRole === 'SUPER ADMIN';
 
     try 
     
     
     {
+
+        // Restrict sensitive actions
+if (action === 'delete_task' || action === 'bulk_upsert') {
+    if (!isAtLeastAdmin) {
+        return res.status(403).json({ success: false, message: "Admin access required." });
+    }
+}
+
+if (action === 'update_task_status' || action === 'add_note') {
+    // Regular 'USER' can do these, so no extra check needed unless specified
+}
       // --- ACTION: delete_task (api/merchants.js) ---
 if (action === 'delete_task') {
     const { task_id } = req.body;
