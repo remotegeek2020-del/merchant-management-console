@@ -15,6 +15,17 @@ export default async function handler(req, res) {
     // 2. Handle Actions (POST)
     if (req.method === 'POST') {
       const { action, payload, userid } = req.body;
+      const { action, userid, payload, requestorRole } = req.body; 
+const role = (requestorRole || "").toUpperCase();
+
+      if (action === 'delete' || action === 'updateSingle') {
+    // Fetch the target user first to check their role
+    const { data: targetUser } = await supabase.from('app_users').select('role').eq('userid', userid).single();
+    
+    if (targetUser && targetUser.role === 'SUPER ADMIN' && role !== 'SUPER ADMIN') {
+        return res.status(403).json({ success: false, message: "Cannot modify a Super Admin." });
+    }
+}
 
       if (action === 'updateBatch') {
         for (const uid of Object.keys(payload)) {
