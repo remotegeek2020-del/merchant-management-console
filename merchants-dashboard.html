@@ -395,8 +395,14 @@ async function handleCSVUpload(input) {
             });
             const result = await res.json();
             currentRecords = result.data;
+            const myRole = (sessionStorage.getItem('pp_role') || "").toUpperCase();
 
-     if (result.metrics) {
+if (myRole === 'USER') {
+    // Hide the Bulk Update button
+    const bulkBtn = document.querySelector('button[onclick*="csvFileInput"]');
+    if (bulkBtn) bulkBtn.style.display = 'none';
+}
+            if (result.metrics) {
     const formatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
     
     // Check if these IDs match your HTML precisely
