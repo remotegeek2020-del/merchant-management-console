@@ -1,6 +1,5 @@
 /**
  * cms-logic.js - Secure Frontend Controller
- * Implements 3-tier hierarchy: Super Admin, Admin, User
  */
 let pendingChanges = {};
 
@@ -15,52 +14,26 @@ async function fetchUsers() {
         const tbody = document.getElementById('user-list');
         tbody.innerHTML = ''; 
         
-        // Normalize role for comparison
-        const myRole = (sessionStorage.getItem('pp_role') || "").toUpperCase();
-        const iAmSuper = myRole === 'SUPER ADMIN';
-        const iAmAdmin = myRole === 'ADMIN';
+        const myRole = (sessionStorage.getItem('pp_role') || "").toLowerCase();
+        const iAmSuper = myRole.includes('super');
 
         users.forEach(user => {
-            const targetRole = (user.role || "").toUpperCase();
-            
-            // 1. HIERARCHY: Admins cannot see or manage Super Admins
-            if (!iAmSuper && targetRole === 'SUPER ADMIN') return; 
-
-            // 2. PERMISSIONS: Can this user edit the target? 
-            // Super Admin can edit everyone. Admin can only edit Users.
-            const canManage = iAmSuper || (iAmAdmin && targetRole === 'USER');
+            const targetRole = (user.role || "").toLowerCase();
+            if (!iAmSuper && targetRole.includes('super')) return; 
 
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><strong>${user.first_name || ''}</strong></td>
                 <td>${user.email || '---'}</td>
                 <td><code>${user.passkey || '----'}</code></td>
-                <td style="text-align:center;">
-                    <input type="checkbox" ${!canManage ? 'disabled' : ''} ${user.access_inventory ? 'checked' : ''} 
-                    onchange="queueChange('${user.userid}', 'access_inventory', this.checked)">
-                </td>
-                <td style="text-align:center;">
-                    <input type="checkbox" ${!canManage ? 'disabled' : ''} ${user.access_deployments ? 'checked' : ''} 
-                    onchange="queueChange('${user.userid}', 'access_deployments', this.checked)">
-                </td>
-                <td style="text-align:center;">
-                    <input type="checkbox" ${!canManage ? 'disabled' : ''} ${user.access_returns ? 'checked' : ''} 
-                    onchange="queueChange('${user.userid}', 'access_returns', this.checked)">
-                </td>
-                <td style="text-align:center;">
-                    <input type="checkbox" ${!canManage ? 'disabled' : ''} ${user.access_merchants ? 'checked' : ''} 
-                    onchange="queueChange('${user.userid}', 'access_merchants', this.checked)">
-                </td>
-                <td>
-                    <span class="slds-badge ${targetRole.includes('ADMIN') ? 'slds-badge_info' : ''}">${user.role}</span>
-                </td>
+                <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)"></td>
+                <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)"></td>
+                <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)"></td>
+                <td style="text-align:center;"><input type="checkbox" ${user.access_merchants ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_merchants', this.checked)"></td>
+                <td><span class="slds-badge ${targetRole.includes('admin') ? 'slds-badge_info' : ''}">${user.role}</span></td>
                 <td class="action-btns">
-                    ${canManage ? `
-                        <button class="slds-button slds-button_neutral slds-button_small" 
-                            onclick="editUser('${user.userid}', '${user.first_name}', '${user.email || ''}', '${user.passkey || ''}', '${user.role}')">Edit</button>
-                        <button class="slds-button slds-button_destructive slds-button_small" 
-                            onclick="deleteUser('${user.userid}', '${user.first_name}')">Del</button>
-                    ` : `<span style="font-size:10px; color:#94a3b8; font-style:italic;">Protected</span>`}
+                    <button class="slds-button slds-button_neutral slds-button_small" onclick="editUser('${user.userid}', '${user.first_name}', '${user.email || ''}', '${user.passkey || ''}', '${user.role}')">Edit</button>
+                    <button class="slds-button slds-button_destructive slds-button_small" onclick="deleteUser('${user.userid}', '${user.first_name}')">Del</button>
                 </td>`;
             tbody.appendChild(row);
         });
@@ -83,11 +56,7 @@ async function saveAllChanges() {
         const response = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'updateBatch', 
-                payload: pendingChanges,
-                requestorRole: sessionStorage.getItem('pp_role') // Send role for backend validation
-            })
+            body: JSON.stringify({ action: 'updateBatch', payload: pendingChanges })
         });
         const result = await response.json();
         if (result.success) {
@@ -103,8 +72,6 @@ async function saveAllChanges() {
 }
 
 async function addUser() {
-    const myRole = (sessionStorage.getItem('pp_role') || "").toUpperCase();
-    
     const { value: formValues } = await Swal.fire({
         title: 'Enroll New User',
         html: `
@@ -117,7 +84,6 @@ async function addUser() {
                 <select id="swal-role" class="slds-select">
                     <option value="USER">USER</option>
                     <option value="ADMIN">ADMIN</option>
-                    ${myRole === 'SUPER ADMIN' ? '<option value="SUPER ADMIN">SUPER ADMIN</option>' : ''}
                 </select>
             </div>`,
         confirmButtonColor: '#004990',
@@ -147,8 +113,6 @@ async function addUser() {
 }
 
 async function editUser(uid, name, email, pass, role) {
-    const myRole = (sessionStorage.getItem('pp_role') || "").toUpperCase();
-    
     const { value: formValues } = await Swal.fire({
         title: `Edit User: ${name}`,
         html: `
@@ -160,7 +124,6 @@ async function editUser(uid, name, email, pass, role) {
                 <select id="swal-role" class="slds-select">
                     <option value="USER" ${role==='USER'?'selected':''}>USER</option>
                     <option value="ADMIN" ${role==='ADMIN'?'selected':''}>ADMIN</option>
-                    ${myRole === 'SUPER ADMIN' ? `<option value="SUPER ADMIN" ${role==='SUPER ADMIN'?'selected':''}>SUPER ADMIN</option>` : ''}
                 </select>
             </div>`,
         showCancelButton: true,
@@ -180,12 +143,7 @@ async function editUser(uid, name, email, pass, role) {
         const response = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'updateSingle', 
-                userid: uid, 
-                payload: formValues,
-                requestorRole: sessionStorage.getItem('pp_role')
-            })
+            body: JSON.stringify({ action: 'updateSingle', userid: uid, payload: formValues })
         });
         const result = await response.json();
         if (result.success) {
@@ -209,11 +167,7 @@ async function deleteUser(uid, name) {
         const response = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'delete', 
-                userid: uid,
-                requestorRole: sessionStorage.getItem('pp_role')
-            })
+            body: JSON.stringify({ action: 'delete', userid: uid })
         });
         const resultJson = await response.json();
         if (resultJson.success) {
@@ -224,13 +178,11 @@ async function deleteUser(uid, name) {
 }
 
 window.onload = () => {
-    // Only Admin or Super Admin can enter this page
-    const role = (sessionStorage.getItem('pp_role') || "").toUpperCase();
-    if (role === 'ADMIN' || role === 'SUPER ADMIN') {
+    const role = (sessionStorage.getItem('pp_role') || "").toLowerCase();
+    if (role.includes('admin')) {
         document.getElementById('page-content').style.display = 'block';
         fetchUsers();
     } else {
-        // Regular USERS are kicked back to the home page
         window.location.href = 'index.html';
     }
 };
