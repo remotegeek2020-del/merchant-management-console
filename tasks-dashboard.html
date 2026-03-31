@@ -79,6 +79,25 @@
 <script>
     let currentRecords = []; // Required for openModal to find merchant data
     let taskPage = 0;
+const taskLimit = 20;
+
+    async function loadStaffFilter() {
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_staff' })
+        });
+        const result = await res.json();
+        if (result.success) {
+            const select = document.getElementById('userFilter');
+            const options = result.data.map(s => 
+                `<option value="${s.id}">${s.full_name}</option>`
+            ).join('');
+            select.innerHTML += options; // Append to the "All Assignees" default
+        }
+    } catch (err) { console.error("Staff load failed", err); }
+}
 
     function resetAndFetchTasks() {
     taskPage = 0;
@@ -93,29 +112,81 @@ function changeTaskPage(dir) {
 
 // Update your fetchAllMyTasks to send the new filter values
 async function fetchAllMyTasks() {
-    const payload = {
-        action: 'get_global_tasks',
-        userid: sessionStorage.getItem('pp_userid'),
-        targetUser: document.getElementById('userFilter').value,
-        status: document.getElementById('taskStatusFilter').value,
-        page: taskPage
-    };
-    
-    const res = await fetch('/api/merchants', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-    });
-    const result = await res.json();
-    
-    if (result.success) {
-        // Essential: Map the merchant data so openModal works correctly
-        currentRecords = result.data.map(t => t.merchants); 
-        renderTaskTable(result.data);
-        document.getElementById('taskPageInfo').innerText = `Page ${taskPage + 1}`;
+    const tbody = document.getElementById('global-task-list');
+    const myId = sessionStorage.getItem('pp_userid');
+    const targetUser = document.getElementById('userFilter').value;
+    const status = document.getElementById('taskStatusFilter').value;
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'get_global_tasks', 
+                userid: myId,
+                targetUser: targetUser || null,
+                status: status || null,
+                page: taskPage,
+                limit: taskLimit
+            })
+        });
+        const result = await res.json();
+
+        if (result.success) {
+            // CRITICAL: Map merchant objects into currentRecords for openModal
+            currentRecords = result.data.map(t => ({
+                ...t.merchants,
+                id: t.merchant_id // Ensure the ID matches what openModal expects
+            }));
+
+            renderTaskTable(result.data);
+            
+            // Update Pagination UI
+            const totalFound = result.total || 0;
+            document.getElementById('taskPageInfo').innerHTML = 
+                `Page ${taskPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total: ${totalFound})</span>`;
+        }
+    } catch (err) { console.error(err); }
+}
+    function renderTaskTable(tasks) {
+    const tbody = document.getElementById('global-task-list');
+    if (tasks.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:50px;">No tasks found matching filters.</td></tr>`;
+        return;
     }
+
+    tbody.innerHTML = tasks.map(t => `
+        <tr class="task-row" onclick="openModal('${t.merchant_id}')">
+            <td>
+                <div style="font-weight:700; color:var(--pp-blue);">${t.title}</div>
+                <div style="font-size:11px; color:#64748b;">${t.body || ''}</div>
+            </td>
+            <td><strong>${t.merchants?.dba_name || '---'}</strong></td>
+            <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
+            <td><span class="slds-badge">${t.status}</span></td>
+            <td style="text-align: right;">
+                <button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">MANAGE</button>
+            </td>
+        </tr>
+    `).join('');
 }
 
+function changeTaskPage(dir) {
+    taskPage += dir;
+    if (taskPage < 0) taskPage = 0;
+    fetchAllMyTasks();
+}
+
+function resetAndFetchTasks() {
+    taskPage = 0;
+    fetchAllMyTasks();
+}
+
+// Ensure filters are ready on load
+window.onload = async () => {
+    await loadStaffFilter();
+    fetchAllMyTasks();
+};
      async function openModal(id) {
     const m = currentRecords.find(r => r.id === id);
     if (!m) return;
