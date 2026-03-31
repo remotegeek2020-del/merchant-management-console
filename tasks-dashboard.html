@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>My Tasks | Secure Console</title>
+    <title>Task Center | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -19,11 +19,12 @@
         
         .badge-due { font-weight: 800; font-size: 10px; padding: 4px 10px; border-radius: 4px; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
         
-        /* Modal Styles matching merchants-dashboard.html */
+        /* Modal Styles */
         .modal-tab-btn { padding: 10px 15px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; flex: 1; font-size: 11px; text-align: center; }
         .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
         .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.8rem; margin-bottom: 8px; }
         .edit-label { font-size: 9px; font-weight: 700; color: #64748b; margin-bottom: 3px; display: block; text-transform: uppercase; }
+        .field-section-title { grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -31,30 +32,22 @@
 <body>
 
 <div class="dashboard-container">
- <div class="modern-header">
-    <div style="display: flex; align-items: center; gap: 15px;">
-        <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">HOME</a>
-        <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Task Center</h1>
-    </div>
-    <div style="display: flex; gap: 10px;">
-        <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px;" onchange="resetAndFetchTasks()">
-            <option value="">All Assignees</option>
+    <div class="modern-header">
+        <div style="display: flex; align-items: center; gap: 15px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">HOME</a>
+            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Task Center</h1>
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px;" onchange="resetAndFetchTasks()">
+                <option value="">All Assignees</option>
             </select>
-        <select id="taskStatusFilter" class="slds-select" style="width: 150px; border-radius:10px;" onchange="resetAndFetchTasks()">
-            <option value="Pending">Pending</option>
-            <option value="Completed">Completed</option>
-            <option value="">All Statuses</option>
-        </select>
+            <select id="taskStatusFilter" class="slds-select" style="width: 150px; border-radius:10px;" onchange="resetAndFetchTasks()">
+                <option value="Pending">Pending</option>
+                <option value="Completed">Completed</option>
+                <option value="">All Statuses</option>
+            </select>
+        </div>
     </div>
-</div>
-
-<div style="padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-    <div id="taskPageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</div>
-    <div>
-        <button class="slds-button slds-button_neutral" onclick="changeTaskPage(-1)">Prev</button>
-        <button class="slds-button slds-button_neutral" onclick="changeTaskPage(1)">Next</button>
-    </div>
-</div>
 
     <article class="main-card">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
@@ -68,398 +61,257 @@
                 </tr>
             </thead>
             <tbody id="global-task-list">
-                <tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">Loading your assignments...</td></tr>
+                <tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">Loading assignments...</td></tr>
             </tbody>
         </table>
+        
+        <div style="padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
+            <div id="taskPageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</div>
+            <div>
+                <button class="slds-button slds-button_neutral" onclick="changeTaskPage(-1)">Prev</button>
+                <button class="slds-button slds-button_neutral" onclick="changeTaskPage(1)">Next</button>
+            </div>
+        </div>
     </article>
 </div>
 
-<div id="tasks-list" style="display:none;"></div> 
-
 <script>
-    let currentRecords = []; // Required for openModal to find merchant data
+    let currentRecords = []; 
     let taskPage = 0;
-const taskLimit = 20;
+    const taskLimit = 20;
 
+    // --- 1. STAFF FILTER LOGIC ---
     async function loadStaffFilter() {
-    try {
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_staff' })
-        });
-        const result = await res.json();
-        if (result.success) {
-            const select = document.getElementById('userFilter');
-            const options = result.data.map(s => 
-                `<option value="${s.id}">${s.full_name}</option>`
-            ).join('');
-            select.innerHTML += options; // Append to the "All Assignees" default
-        }
-    } catch (err) { console.error("Staff load failed", err); }
-}
-
-    function resetAndFetchTasks() {
-    taskPage = 0;
-    fetchAllMyTasks();
-}
-
-function changeTaskPage(dir) {
-    taskPage += dir;
-    if (taskPage < 0) taskPage = 0;
-    fetchAllMyTasks();
-}
-
-// Update your fetchAllMyTasks to send the new filter values
-async function fetchAllMyTasks() {
-    const tbody = document.getElementById('global-task-list');
-    const myId = sessionStorage.getItem('pp_userid');
-    const targetUser = document.getElementById('userFilter').value;
-    const status = document.getElementById('taskStatusFilter').value;
-
-    try {
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'get_global_tasks', 
-                userid: myId,
-                targetUser: targetUser || null,
-                status: status || null,
-                page: taskPage,
-                limit: taskLimit
-            })
-        });
-        const result = await res.json();
-
-        if (result.success) {
-            // CRITICAL: Map merchant objects into currentRecords for openModal
-            currentRecords = result.data.map(t => ({
-                ...t.merchants,
-                id: t.merchant_id // Ensure the ID matches what openModal expects
-            }));
-
-            renderTaskTable(result.data);
-            
-            // Update Pagination UI
-            const totalFound = result.total || 0;
-            document.getElementById('taskPageInfo').innerHTML = 
-                `Page ${taskPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total: ${totalFound})</span>`;
-        }
-    } catch (err) { console.error(err); }
-}
-    function renderTaskTable(tasks) {
-    const tbody = document.getElementById('global-task-list');
-    if (tasks.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:50px;">No tasks found matching filters.</td></tr>`;
-        return;
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_staff' })
+            });
+            const result = await res.json();
+            if (result.success) {
+                const select = document.getElementById('userFilter');
+                select.innerHTML = '<option value="">All Assignees</option>' + 
+                    result.data.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+            }
+        } catch (err) { console.error("Staff load failed", err); }
     }
 
-    tbody.innerHTML = tasks.map(t => `
-        <tr class="task-row" onclick="openModal('${t.merchant_id}')">
-            <td>
-                <div style="font-weight:700; color:var(--pp-blue);">${t.title}</div>
-                <div style="font-size:11px; color:#64748b;">${t.body || ''}</div>
-            </td>
-            <td><strong>${t.merchants?.dba_name || '---'}</strong></td>
-            <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
-            <td><span class="slds-badge">${t.status}</span></td>
-            <td style="text-align: right;">
-                <button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">MANAGE</button>
-            </td>
-        </tr>
-    `).join('');
-}
+    // --- 2. DATA FETCHING ---
+    async function fetchAllMyTasks() {
+        const tbody = document.getElementById('global-task-list');
+        const myId = sessionStorage.getItem('pp_userid');
+        const targetUser = document.getElementById('userFilter').value;
+        const status = document.getElementById('taskStatusFilter').value;
 
-function changeTaskPage(dir) {
-    taskPage += dir;
-    if (taskPage < 0) taskPage = 0;
-    fetchAllMyTasks();
-}
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'get_global_tasks', 
+                    userid: myId,
+                    targetUser: targetUser || null,
+                    status: status || null,
+                    page: taskPage,
+                    limit: taskLimit
+                })
+            });
+            const result = await res.json();
 
-function resetAndFetchTasks() {
-    taskPage = 0;
-    fetchAllMyTasks();
-}
+            if (result.success) {
+                // Map merchants for modal compatibility
+                currentRecords = result.data.map(t => ({
+                    ...t.merchants,
+                    id: t.merchant_id 
+                }));
 
-// Ensure filters are ready on load
-window.onload = async () => {
-    await loadStaffFilter();
-    fetchAllMyTasks();
-};
-     async function openModal(id) {
-    const m = currentRecords.find(r => r.id === id);
-    if (!m) return;
-    Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
+                renderTaskTable(result.data);
+                
+                const totalFound = result.total || 0;
+                document.getElementById('taskPageInfo').innerHTML = 
+                    `Page ${taskPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total: ${totalFound})</span>`;
+            }
+        } catch (err) { console.error(err); }
+    }
 
-    try {
-        // 1. Fetch all data including the new Staff list from app_users
-        const [nRes, lRes, aRes, sRes] = await Promise.all([
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) })
-        ]);
-        
-        const notes = (await nRes.json()).data || [];
-        const logs = (await lRes.json()).data || [];
-        const files = (await aRes.json()).data || [];
-        const staff = (await sRes.json()).data || []; //
+    function renderTaskTable(tasks) {
+        const tbody = document.getElementById('global-task-list');
+        if (!tasks || tasks.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:50px;">No tasks found.</td></tr>`;
+            return;
+        }
 
-        Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
-            width: '1100px',
-            html: `
-                <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
-                    <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
-                    <button onclick="switchTab('equipment')" id="tab-equipment" class="modal-tab-btn">EQUIPMENT</button>
-                    <button onclick="switchTab('lifecycle')" id="tab-lifecycle" class="modal-tab-btn">LIFECYCLE</button>
-                    <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
-                    <button onclick="switchTab('tasks')" id="tab-tasks" class="modal-tab-btn">TASKS</button>
-                    <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
-                    <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
-                </div>
+        tbody.innerHTML = tasks.map(t => `
+            <tr class="task-row" onclick="openModal('${t.merchant_id}')">
+                <td>
+                    <div style="font-weight:700; color:var(--pp-blue);">${t.title}</div>
+                    <div style="font-size:11px; color:#64748b;">${t.body || ''}</div>
+                </td>
+                <td><strong>${t.merchants?.dba_name || '---'}</strong></td>
+                <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
+                <td><span class="slds-badge">${t.status}</span></td>
+                <td style="text-align: right;">
+                    <button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">MANAGE</button>
+                </td>
+            </tr>
+        `).join('');
+    }
 
-                <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
-                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Core Identity & Status</div>
-                        <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                        <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
-                        <div>
-                            <label class="edit-label">Account Status</label>
-                            <select id="edit-account_status" class="modern-input">
-                                <option value="${m.account_status}" selected>${m.account_status}</option>
-                                <option value="Approved">Approved</option>
-                                <option value="Approved - Collections">Approved - Collections</option>
-                                <option value="Closed">Closed</option>
-                                <option value="Closed - Collections">Closed - Collections</option>
-                                <option value="Closed - Risk">Closed - Risk</option>
-                                <option value="Collections">Collections</option>
-                                <option value="Declined">Declined</option>
-                                <option value="Enrollment">Enrollment</option>
-                                <option value="Fraud">Fraud</option>
-                                <option value="Pending">Pending</option>
-                                <option value="Withdrawn">Withdrawn</option>
-                            </select>
-                        </div>
-                        <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
-                        <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
-                        <div><label class="edit-label">Major Merchant</label><input id="edit-major_merchant" class="modern-input" value="${m.major_merchant || ''}"></div>
+    // --- 3. PAGINATION HELPERS ---
+    function changeTaskPage(dir) {
+        taskPage += dir;
+        if (taskPage < 0) taskPage = 0;
+        fetchAllMyTasks();
+    }
 
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Contact Information</div>
-                        <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
-                        <div><label class="edit-label">Merchant Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
-                        <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
-                        <div style="grid-column: span 2;"><label class="edit-label">Websites</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
-                        <div><label class="edit-label">ACH Properties</label><input id="edit-ach_properties" class="modern-input" value="${m.ach_properties || ''}"></div>
+    function resetAndFetchTasks() {
+        taskPage = 0;
+        fetchAllMyTasks();
+    }
 
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Processing & Technical</div>
-                        <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
-                        <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="modern-input" value="${m.processor_platform || ''}"></div>
-                        <div><label class="edit-label">Gateway ID</label><input id="edit-gateway_account_id" class="modern-input" value="${m.gateway_account_id || ''}"></div>
-                        <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="modern-input" value="${m.is_edge_enabled || ''}"></div>
-                        <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="modern-input" value="${m.is_pci_compliant || ''}"></div>
-                        <div><label class="edit-label">Mobile</label><input id="edit-is_mobile" class="modern-input" value="${m.is_mobile || ''}"></div>
-                        <div><label class="edit-label">Source</label><input id="edit-source" class="modern-input" value="${m.source || ''}"></div>
-                        <div><label class="edit-label">Activated</label><input id="edit-is_activated" class="modern-input" value="${m.is_activated || ''}"></div>
-                        <div><label class="edit-label">Device Hub</label><input id="edit-is_device_hub_link_enabled" class="modern-input" value="${m.is_device_hub_link_enabled || ''}"></div>
+    // --- 4. MERCHANT MODAL (FULL VERSION) ---
+    async function openModal(id) {
+        const m = currentRecords.find(r => r.id === id);
+        if (!m) return;
+        Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Volume & Financials</div>
-                        <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
-                        <div><label class="edit-label">Vol 30D</label><input id="edit-volume_30_day" class="modern-input" value="${m.volume_30_day || ''}"></div>
-                        <div><label class="edit-label">Vol 90D</label><input id="edit-volume_90_day" class="modern-input" value="${m.volume_90_day || ''}"></div>
-                        <div><label class="edit-label">Total Volume</label><input id="edit-volume" class="modern-input" value="${m.volume || ''}"></div>
-                        <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
-                        <div><label class="edit-label">Commission Code</label><input id="edit-isv_commission_code" class="modern-input" value="${m.isv_commission_code || ''}"></div>
+        try {
+            const [nRes, lRes, aRes, sRes] = await Promise.all([
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
+                fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) })
+            ]);
+            
+            const notes = (await nRes.json()).data || [];
+            const logs = (await lRes.json()).data || [];
+            const files = (await aRes.json()).data || [];
+            const staff = (await sRes.json()).data || [];
 
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Dates & Compliance</div>
-                        <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
-                        <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
-                        <div><label class="edit-label">Batch Date</label><input type="date" id="edit-last_batch_date" class="modern-input" value="${m.last_batch_date || ''}"></div>
-                        <div><label class="edit-label">Status Change</label><input type="date" id="edit-account_status_change_date" class="modern-input" value="${m.account_status_change_date || ''}"></div>
-                        <div><label class="edit-label">Days Approved</label><input id="edit-days_approved" class="modern-input" value="${m.days_approved || ''}"></div>
-                        <div><label class="edit-label">Shipping Status</label><input id="edit-shipping_status" class="modern-input" value="${m.shipping_status || ''}"></div>
-                        <div><label class="edit-label">IRS TIN Status</label><input id="edit-irs_tin_status" class="modern-input" value="${m.irs_tin_status || ''}"></div>
-                        <div><label class="edit-label">NDF</label><input id="edit-ndf" class="modern-input" value="${m.ndf || ''}"></div>
-                        <div><label class="edit-label">Credit Review</label><input id="edit-credit_review" class="modern-input" value="${m.credit_review || ''}"></div>
-
-                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Underwriting Notes</div>
-                        <div style="grid-column: span 3;"><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+            Swal.fire({
+                title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
+                width: '1100px',
+                html: `
+                    <input type="hidden" id="modal-merchant-id" value="${m.id}">
+                    <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
+                        <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+                        <button onclick="switchTab('equipment')" id="tab-equipment" class="modal-tab-btn">EQUIPMENT</button>
+                        <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
+                        <button onclick="switchTab('tasks')" id="tab-tasks" class="modal-tab-btn">TASKS</button>
                     </div>
-                    <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
-                </div>
 
-                <div id="content-equipment" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
-                        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
-                            <thead>
-                                <tr class="slds-line-height_reset">
-                                    <th scope="col" style="font-size:10px;">SERIAL NUMBER</th>
-                                    <th scope="col" style="font-size:10px;">MODEL</th>
-                                    <th scope="col" style="font-size:10px;">STATUS</th>
-                                    <th scope="col" style="font-size:10px;">INSTALLED</th>
-                                </tr>
-                            </thead>
+                    <div id="content-details" class="tab-content" style="text-align:left; max-height:600px; overflow-y:auto; padding-right:10px;">
+                        <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+                            <div class="field-section-title">Core Identity</div>
+                            <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
+                            <div><label class="edit-label">MID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
+                            <div>
+                                <label class="edit-label">Status</label>
+                                <select id="edit-account_status" class="modern-input">
+                                    <option value="${m.account_status}" selected>${m.account_status}</option>
+                                    <option value="Approved">Approved</option>
+                                    <option value="Closed">Closed</option>
+                                    <option value="Pending">Pending</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:20px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
+                    </div>
+
+                    <div id="content-equipment" class="tab-content" style="display:none; text-align:left;">
+                        <table class="slds-table slds-table_bordered">
+                            <thead><tr><th>SERIAL</th><th>MODEL</th><th>STATUS</th></tr></thead>
                             <tbody id="merchant-equip-list"></tbody>
                         </table>
-                        <div id="equip-empty-state" style="padding:40px; text-align:center; color:#94a3b8; display:none;">
-                            <span class="material-icons" style="font-size:48px; display:block; margin-bottom:10px;">devices_other</span>
-                            No equipment assigned to this merchant.
-                        </div>
+                        <div id="equip-empty-state" style="padding:20px; text-align:center; color:#94a3b8; display:none;">No equipment assigned.</div>
                     </div>
-                </div>
 
-                <div id="content-lifecycle" class="tab-content" style="display:none; text-align:left;">
-                     <div id="lifecycle-list" style="max-height:500px; overflow-y:auto; padding:10px;">
-                         <p style="text-align:center; padding:20px; color:#94a3b8;">Loading lifecycle history...</p>
-                     </div>
-                </div>
+                    <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
+                        <div id="tasks-list-internal" style="max-height:400px; overflow-y:auto;">
+                            <p style="text-align:center; padding:20px;">Loading tasks...</p>
+                        </div>
+                    </div>
 
-                <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
-                        <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
-                        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
-                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
+                    <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
+                        <div id="notes-list-box">${notes.map(n => `<div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;"><b>${n.title}</b><p style="font-size:13px;">${n.body}</p></div>`).join('')}</div>
                     </div>
-                    <div id="notes-list">${notes.map(n => `
-                        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-                            <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
-                            <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto; width:100%; resize:none;">${n.body}</textarea>
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-                                <small style="color:#64748b;">By: ${n.created_by || 'Staff'}</small>
-                                <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
-                            </div>
-                        </div>
-                    `).join('')}</div>
-                </div>
+                `,
+                showConfirmButton: false, showCloseButton: true
+            });
+        } catch (err) { Swal.fire('Error', 'Load failed: ' + err.message, 'error'); }
+    }
 
-                <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
-                        <div style="grid-column: span 2;">
-                            <label class="edit-label">Task Title</label>
-                            <input id="task-title" placeholder="What needs to be done?" class="modern-input">
-                        </div>
-                        <div>
-                            <label class="edit-label">Due Date</label>
-                            <input type="date" id="task-due" class="modern-input">
-                        </div>
-                        <div>
-                            <label class="edit-label">Assign To</label>
-                          <select id="task-assign-select" class="modern-input">
-    <option value="">Select Staff...</option>
-    ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
-</select>
-                        </div>
-                        <div style="grid-column: span 2;">
-                            <label class="edit-label">Task Details</label>
-                            <textarea id="task-body" placeholder="Describe the task..." class="modern-input" style="height:60px;"></textarea>
-                        </div>
-                   <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">
-    CREATE TASK
-</button>    
-                    </div>
-                    <div id="tasks-list" style="max-height:400px; overflow-y:auto;">
-                        <p style="text-align:center; padding:20px; color:#94a3b8;">No pending tasks.</p>
-                    </div>
-                </div>
-
-                <div id="content-attachments" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:#f8fafc; border:2px dashed #cbd5e1; border-radius:12px; padding:30px; text-align:center; margin-bottom:20px;">
-                        <span class="material-icons" style="font-size:48px; color:#94a3b8; margin-bottom:10px;">cloud_upload</span>
-                        <p style="font-weight:700; color:#475569; margin-bottom:15px;">Upload Merchant Documents</p>
-                        <input type="file" id="fileInput" style="display:none;" onchange="handleFileUpload('${m.id}')">
-                        <button onclick="document.getElementById('fileInput').click()" class="slds-button slds-button_brand" style="background:var(--pp-blue); border-radius:8px;">
-                            SELECT FILE
-                        </button>
-                        <p style="font-size:10px; color:#94a3b8; margin-top:10px;">PDF, PNG, JPG, or CSV (Max 10MB)</p>
-                    </div>
-                    <div id="attachments-list" style="display:grid; gap:10px;">
-                        ${files.length > 0 ? files.map(f => `
-                            <div style="display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e2e8f0; padding:12px; border-radius:10px;">
-                                <div style="display:flex; align-items:center; gap:10px;">
-                                    <span class="material-icons" style="color:var(--pp-blue);">description</span>
-                                    <div>
-                                        <div style="font-weight:700; font-size:12px;">${f.file_name}</div>
-                                        <div style="font-size:10px; color:#64748b;">${new Date(f.created_at).toLocaleDateString()}</div>
-                                    </div>
-                                </div>
-                                <div style="display:flex; gap:10px;">
-                                    <button onclick="window.open('https://zuzwljjrppyrzngmhdru.supabase.co/storage/v1/object/public/merchant-files/${f.file_path}')" style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
-                                        <span class="material-icons">download</span>
-                                    </button>
-                                </div>
-                            </div>
-                        `).join('') : '<p style="text-align:center; color:#94a3b8; padding:20px;">No attachments found.</p>'}
-                    </div>
-                </div>
-
-                <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
-                        ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
-                    </div>
-                </div>
-            `,
-            showConfirmButton: false, showCloseButton: true
-        });
-    } catch (err) { Swal.fire('Error', 'Load failed: ' + err.message, 'error'); }
-}
+    // --- 5. MODAL HELPERS ---
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
         document.getElementById('content-' + tab).style.display = 'block';
         document.getElementById('tab-' + tab).classList.add('active-tab');
-        if (tab === 'equipment') fetchMerchantEquipment();
-        if (tab === 'lifecycle') fetchMerchantLifecycle();
+        
         if (tab === 'tasks') fetchMerchantTasks();
+        if (tab === 'equipment') fetchMerchantEquipment();
     };
 
-  async function fetchAllMyTasks() {
-    const myId = sessionStorage.getItem('pp_userid');
-    const tbody = document.getElementById('global-task-list');
+    async function fetchMerchantTasks() {
+        const merchantUuid = document.getElementById('modal-merchant-id')?.value;
+        const listDiv = document.getElementById('tasks-list-internal');
+        if (!merchantUuid || !listDiv) return;
 
-    try {
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_global_tasks', userid: myId })
-        });
-        const result = await res.json();
-
-        if (result.success && result.data.length > 0) {
-            // Store merchants in currentRecords so openModal can find them
-            currentRecords = result.data.map(t => ({ 
-                ...t.merchants, 
-                id: t.merchant_id 
-            }));
-
-            tbody.innerHTML = result.data.map(t => `
-                <tr class="task-row" onclick="openModal('${t.merchant_id}')">
-                    <td>
-                        <div style="font-weight:700; color:var(--pp-blue);">${t.title}</div>
-                        <div style="font-size:11px; color:#64748b;">${t.body || 'No details'}</div>
-                    </td>
-                    <td><strong>${t.dba_name}</strong></td>
-                    <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
-                    <td><span class="slds-badge">${t.status}</span></td>
-                    <td style="text-align: right;">
-                        <button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">MANAGE</button>
-                    </td>
-                </tr>
-            `).join('');
-        } else {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">No tasks found.</td></tr>`;
-        }
-    } catch (err) {
-        console.error("Dashboard Load Error:", err);
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_tasks', merchant_uuid: merchantUuid })
+            });
+            const result = await res.json();
+            
+            listDiv.innerHTML = result.data && result.data.length > 0 
+                ? result.data.map(t => `<div style="background:#f8fafc; border:1px solid #e2e8f0; padding:15px; margin-bottom:10px; border-radius:10px;">
+                    <div style="font-weight:700;">${t.title}</div>
+                    <div style="font-size:11px; color:#64748b;">Status: ${t.status} | Due: ${t.due_date || 'N/A'}</div>
+                  </div>`).join('')
+                : '<p style="text-align:center; padding:20px;">No other tasks for this merchant.</p>';
+        } catch (err) { listDiv.innerHTML = 'Error loading tasks.'; }
     }
-}
 
-    // --- REUSED MODAL LOGIC FROM MERCHANTS-DASHBOARD.HTML ---
-    // You should paste your existing 'openModal', 'switchTab', 'fetchMerchantTasks', 
-    // 'fetchMerchantEquipment', 'saveMerchant', etc., here to ensure full functionality.
-    //
+    async function fetchMerchantEquipment() {
+        const merchantUuid = document.getElementById('modal-merchant-id')?.value;
+        const tbody = document.getElementById('merchant-equip-list');
+        const emptyState = document.getElementById('equip-empty-state');
+        if (!merchantUuid || !tbody) return;
 
-    window.onload = () => {
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_equipment', merchant_uuid: merchantUuid })
+            });
+            const result = await res.json();
+            tbody.innerHTML = "";
+            if (!result.data || result.data.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                emptyState.style.display = 'none';
+                result.data.forEach(e => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `<td><b>${e.serial_number}</b></td><td>${e.terminal_type}</td><td>${e.status}</td>`;
+                });
+            }
+        } catch (err) { console.error(err); }
+    }
+
+    window.saveMerchant = async (uuid) => {
+        const payload = { dba_name: document.getElementById('edit-dba_name').value, account_status: document.getElementById('edit-account_status').value };
+        try {
+            const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
+            const result = await res.json();
+            if(result.success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchAllMyTasks(); }
+        } catch (err) { console.error(err); }
+    };
+
+    window.onload = async () => {
+        await loadStaffFilter();
         fetchAllMyTasks();
     };
 </script>
