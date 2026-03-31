@@ -8,6 +8,34 @@ export default async function handler(req, res) {
     
     
     {
+        if (action === 'get_global_tasks') {
+    const { userid } = req.body;
+    
+    const { data, error } = await supabase
+        .from('merchant_tasks')
+        .select(`
+            *,
+            merchants:merchant_id ( dba_name ),
+            assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name )
+        `)
+        .eq('assigned_to', userid)
+        .neq('status', 'Completed') 
+        .order('due_date', { ascending: true });
+
+    if (error) {
+        console.error("Task Fetch Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+
+    // Format data for the dashboard
+    const formattedTasks = (data || []).map(t => ({
+        ...t,
+        dba_name: t.merchants?.dba_name || 'Unknown Merchant',
+        assignee_name: t.assigned_user ? `${t.assigned_user.first_name} ${t.assigned_user.last_name || ''}`.trim() : 'Unassigned'
+    }));
+
+    return res.status(200).json({ success: true, data: formattedTasks });
+}
       // --- ACTION: delete_task (api/merchants.js) ---
 if (action === 'delete_task') {
     const { task_id } = req.body;
