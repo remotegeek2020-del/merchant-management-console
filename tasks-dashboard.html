@@ -65,50 +65,46 @@
 <script>
     let currentRecords = []; // Required for openModal to find merchant data
 
-    async function fetchAllMyTasks() {
-        const myId = sessionStorage.getItem('pp_userid');
-        const myName = sessionStorage.getItem('pp_username') || "User";
-        document.getElementById('user-info').innerText = `LOGGED IN AS: ${myName.toUpperCase()}`;
+  async function fetchAllMyTasks() {
+    const myId = sessionStorage.getItem('pp_userid');
+    const tbody = document.getElementById('global-task-list');
 
-        const tbody = document.getElementById('global-task-list');
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_global_tasks', userid: myId })
+        });
+        const result = await res.json();
 
-        try {
-            const res = await fetch('/api/merchants', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'get_global_tasks', 
-                    userid: myId 
-                })
-            });
-            const result = await res.json();
+        if (result.success && result.data.length > 0) {
+            // Store merchants in currentRecords so openModal can find them
+            currentRecords = result.data.map(t => ({ 
+                ...t.merchants, 
+                id: t.merchant_id 
+            }));
 
-            if (result.success && result.data.length > 0) {
-                // We map 'merchants' object from the join into 'currentRecords' so openModal can read it
-                currentRecords = result.data.map(t => ({ ...t.merchants, id: t.merchant_id }));
-
-                tbody.innerHTML = result.data.map(t => `
-                    <tr class="task-row" onclick="openModal('${t.merchant_id}')">
-                        <td>
-                            <div style="font-weight:700; color:var(--pp-blue);">${t.title}</div>
-                            <div style="font-size:11px; color:#64748b;">${t.body || 'No additional details'}</div>
-                        </td>
-                        <td><strong>${t.merchants?.dba_name || 'Unlinked Merchant'}</strong></td>
-                        <td><span class="badge-due">${t.due_date || 'NO DATE'}</span></td>
-                        <td><span class="slds-badge">${t.status}</span></td>
-                        <td style="text-align: right;">
-                            <button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">OPEN MERCHANT</button>
-                        </td>
-                    </tr>
-                `).join('');
-            } else {
-                tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">You have no pending tasks.</td></tr>`;
-            }
-        } catch (err) {
-            console.error("Task load error:", err);
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; color:red;">Failed to sync tasks.</td></tr>`;
+            tbody.innerHTML = result.data.map(t => `
+                <tr class="task-row" onclick="openModal('${t.merchant_id}')">
+                    <td>
+                        <div style="font-weight:700; color:var(--pp-blue);">${t.title}</div>
+                        <div style="font-size:11px; color:#64748b;">${t.body || 'No details'}</div>
+                    </td>
+                    <td><strong>${t.dba_name}</strong></td>
+                    <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
+                    <td><span class="slds-badge">${t.status}</span></td>
+                    <td style="text-align: right;">
+                        <button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">MANAGE</button>
+                    </td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">No tasks found.</td></tr>`;
         }
+    } catch (err) {
+        console.error("Dashboard Load Error:", err);
     }
+}
 
     // --- REUSED MODAL LOGIC FROM MERCHANTS-DASHBOARD.HTML ---
     // You should paste your existing 'openModal', 'switchTab', 'fetchMerchantTasks', 
