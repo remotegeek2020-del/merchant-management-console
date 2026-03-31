@@ -8,33 +8,37 @@ export default async function handler(req, res) {
     
     
     {
-        if (action === 'get_global_tasks') {
-    const { userid } = req.body;
+     if (action === 'get_global_tasks') {
+    const { userid, targetUser, status, page = 0, limit = 20 } = req.body;
     
-    const { data, error } = await supabase
+    let query = supabase
         .from('merchant_tasks')
         .select(`
             *,
-            merchants:merchant_id ( dba_name ),
+            merchants:merchant_id ( * ),
             assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name )
-        `)
-        .eq('assigned_to', userid)
-        .neq('status', 'Completed') 
-        .order('due_date', { ascending: true });
+        `, { count: 'exact' });
 
-    if (error) {
-        console.error("Task Fetch Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
+    // Filter by target user (or default to logged-in user if no filter selected)
+    if (targetUser) {
+        query = query.eq('assigned_to', targetUser);
+    } else if (userid) {
+        query = query.eq('assigned_to', userid);
     }
 
-    // Format data for the dashboard
-    const formattedTasks = (data || []).map(t => ({
-        ...t,
-        dba_name: t.merchants?.dba_name || 'Unknown Merchant',
-        assignee_name: t.assigned_user ? `${t.assigned_user.first_name} ${t.assigned_user.last_name || ''}`.trim() : 'Unassigned'
-    }));
+    if (status) query = query.eq('status', status);
 
-    return res.status(200).json({ success: true, data: formattedTasks });
+    const { data, count, error } = await query
+        .range(page * limit, (page + 1) * limit - 1)
+        .order('due_date', { ascending: true });
+
+    if (error) throw error;
+
+    return res.status(200).json({ 
+        success: true, 
+        data: data || [], 
+        total: count 
+    });
 }
       // --- ACTION: delete_task (api/merchants.js) ---
 if (action === 'delete_task') {
