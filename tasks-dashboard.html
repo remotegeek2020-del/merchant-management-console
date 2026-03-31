@@ -78,6 +78,43 @@
 
 <script>
     let currentRecords = []; // Required for openModal to find merchant data
+    let taskPage = 0;
+
+    function resetAndFetchTasks() {
+    taskPage = 0;
+    fetchAllMyTasks();
+}
+
+function changeTaskPage(dir) {
+    taskPage += dir;
+    if (taskPage < 0) taskPage = 0;
+    fetchAllMyTasks();
+}
+
+// Update your fetchAllMyTasks to send the new filter values
+async function fetchAllMyTasks() {
+    const payload = {
+        action: 'get_global_tasks',
+        userid: sessionStorage.getItem('pp_userid'),
+        targetUser: document.getElementById('userFilter').value,
+        status: document.getElementById('taskStatusFilter').value,
+        page: taskPage
+    };
+    
+    const res = await fetch('/api/merchants', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    
+    if (result.success) {
+        // Essential: Map the merchant data so openModal works correctly
+        currentRecords = result.data.map(t => t.merchants); 
+        renderTaskTable(result.data);
+        document.getElementById('taskPageInfo').innerText = `Page ${taskPage + 1}`;
+    }
+}
 
      async function openModal(id) {
     const m = currentRecords.find(r => r.id === id);
