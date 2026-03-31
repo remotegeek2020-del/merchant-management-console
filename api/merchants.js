@@ -8,10 +8,11 @@ export default async function handler(req, res) {
     
     
     {
-     if (action === 'get_global_tasks') {
+  if (action === 'get_global_tasks') {
     const { userid, targetUser, status, page = 0, limit = 20 } = req.body;
     
-    let query = supabase
+    // We start a query on merchant_tasks and join the merchants table
+    let queryBuilder = supabase
         .from('merchant_tasks')
         .select(`
             *,
@@ -19,16 +20,21 @@ export default async function handler(req, res) {
             assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name )
         `, { count: 'exact' });
 
-    // Filter by target user (or default to logged-in user if no filter selected)
+    // PRIORITY FILTER: If a specific user is selected in the dropdown
     if (targetUser) {
-        query = query.eq('assigned_to', targetUser);
-    } else if (userid) {
-        query = query.eq('assigned_to', userid);
+        queryBuilder = queryBuilder.eq('assigned_to', targetUser);
+    } 
+    // FALLBACK: If no filter is selected, show only tasks for the logged-in user
+    else if (userid) {
+        queryBuilder = queryBuilder.eq('assigned_to', userid);
     }
 
-    if (status) query = query.eq('status', status);
+    // Apply Status Filter (Pending/Completed)
+    if (status) {
+        queryBuilder = queryBuilder.eq('status', status);
+    }
 
-    const { data, count, error } = await query
+    const { data, count, error } = await queryBuilder
         .range(page * limit, (page + 1) * limit - 1)
         .order('due_date', { ascending: true });
 
