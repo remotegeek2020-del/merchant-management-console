@@ -8,6 +8,63 @@ const parseBool = (val) => {
     return false;
 };
 document.getElementById('initial-loader').style.display = 'none';
+
+async function checkNotifications() {
+    const myId = sessionStorage.getItem('pp_userid');
+    if (!myId) return;
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'get_global_tasks', 
+                userid: myId,
+                status: 'Pending' // Only notify for unfinished tasks
+            })
+        });
+        const result = await res.json();
+        
+        const bellContainer = document.getElementById('notif-bell-container');
+        const bellIcon = document.getElementById('notif-bell');
+        const dot = document.getElementById('notif-dot');
+
+        if (result.success && result.data.length > 0) {
+            // Show the bell UI
+            bellContainer.style.display = 'block';
+            
+            // Filter tasks due today or overdue
+            const today = new Date().toISOString().split('T')[0];
+            const urgentTasks = result.data.filter(t => t.due_date <= today);
+
+            if (urgentTasks.length > 0) {
+                // Trigger animation and red dot
+                bellIcon.classList.add('bell-ringing');
+                dot.style.display = 'block';
+                
+                // Optional: Browser Push Notification
+                if (Notification.permission === "granted") {
+                    new Notification("Task Reminder", {
+                        body: `You have ${urgentTasks.length} urgent task(s) requiring attention!`,
+                        icon: "https://cdn-icons-png.flaticon.com/512/179/179386.png"
+                    });
+                }
+            } else {
+                // Tasks exist but aren't due yet
+                bellIcon.classList.remove('bell-ringing');
+                dot.style.display = 'none';
+            }
+        } else {
+            bellContainer.style.display = 'none';
+        }
+    } catch (err) {
+        console.error("Notification check failed", err);
+    }
+}
+
+// Call this inside your existing authentication success logic
+// and then every 10 minutes
+// setInterval(checkNotifications, 600000);
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
     const urlUserId = params.get('userid');
