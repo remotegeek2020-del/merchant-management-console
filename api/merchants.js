@@ -84,11 +84,17 @@ if (action === 'add_task') {
 }
         // --- ACTION: update_task (api/merchants.js) ---
 if (action === 'update_task') {
-    const { task_id, payload } = req.body; // payload contains the fields to change
+    const { task_id, payload } = req.body; 
 
     const { error } = await supabase
         .from('merchant_tasks')
-        .update(payload)
+        .update({
+            title: payload.title,
+            body: payload.body,
+            due_date: payload.due_date,
+            assigned_to: payload.assigned_to,
+            status: payload.status // "Completed" or "Pending"
+        })
         .eq('id', task_id);
 
     if (error) throw error;
