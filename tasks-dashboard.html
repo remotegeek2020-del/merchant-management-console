@@ -33,7 +33,9 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Task Center</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px;" onchange="resetAndFetchTasks()"><option value="">All Assignees</option></select>
+            <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px; display: none;" onchange="resetAndFetchTasks()">
+                <option value="">All Assignees</option>
+            </select>
             <select id="taskStatusFilter" class="slds-select" style="width: 150px; border-radius:10px;" onchange="resetAndFetchTasks()">
                 <option value="Pending">Pending</option>
                 <option value="Completed">Completed</option>
@@ -53,7 +55,9 @@
                     <th style="width: 15%; text-align: right;">Action</th>
                 </tr>
             </thead>
-            <tbody id="global-task-list"><tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">Loading assignments...</td></tr></tbody>
+            <tbody id="global-task-list">
+                <tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">Loading assignments...</td></tr>
+            </tbody>
         </table>
         <div style="padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
             <div id="taskPageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</div>
@@ -80,9 +84,17 @@
 
     async function fetchAllMyTasks() {
         const myId = sessionStorage.getItem('pp_userid');
+        const userFilterVal = document.getElementById('userFilter').value;
         const res = await fetch('/api/merchants', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_global_tasks', userid: myId, targetUser: document.getElementById('userFilter').value || null, status: document.getElementById('taskStatusFilter').value || null, page: taskPage, limit: taskLimit })
+            body: JSON.stringify({ 
+                action: 'get_global_tasks', 
+                userid: myId, 
+                targetUser: userFilterVal || null, 
+                status: document.getElementById('taskStatusFilter').value || null, 
+                page: taskPage, 
+                limit: taskLimit 
+            })
         });
         const result = await res.json();
         if (result.success) {
@@ -94,8 +106,20 @@
 
     function renderTaskTable(tasks) {
         const tbody = document.getElementById('global-task-list');
-        tbody.innerHTML = tasks.length === 0 ? `<tr><td colspan="5" style="text-align:center; padding:50px;">No tasks found.</td></tr>` : 
-            tasks.map(t => `<tr class="task-row" onclick="openModal('${t.merchant_id}')">
+        
+        // Custom empty state message
+        if (!tasks || tasks.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" style="text-align:center; padding:80px; color:#64748b;">
+                        <span class="material-icons" style="font-size:48px; color:#22c55e; display:block; margin-bottom:15px;">check_circle</span>
+                        <div style="font-size:1.2rem; font-weight:700; color:#002d5a;">Congrats, you don't have a pending task today!</div>
+                    </td>
+                </tr>`;
+            return;
+        }
+
+        tbody.innerHTML = tasks.map(t => `<tr class="task-row" onclick="openModal('${t.merchant_id}')">
                 <td><div style="font-weight:700; color:var(--pp-blue);">${t.title}</div><div style="font-size:11px; color:#64748b;">${t.body || ''}</div></td>
                 <td><strong>${t.merchants?.dba_name || '---'}</strong></td>
                 <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
@@ -132,16 +156,20 @@
                     <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
                         <div class="field-section-title">Core Identity & Status</div>
                         <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                        <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
+                        <div><label class="edit-label">MID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
                         <div><label class="edit-label">Account Status</label><select id="edit-account_status" class="modern-input"><option value="${m.account_status}" selected>${m.account_status}</option><option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Pending">Pending</option></select></div>
                         <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
                         <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
+                        
                         <div class="field-section-title">Contact Information</div>
                         <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
                         <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
+                        <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                        
                         <div class="field-section-title">Volume & Dates</div>
                         <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
                         <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
+                        <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
                     </div>
                     <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
                 </div>
@@ -193,13 +221,20 @@
     }
 
     window.saveMerchant = async (uuid) => {
-        const fields = ['dba_name', 'account_status', 'status_id', 'account_code', 'email', 'merchant_phone', 'volume_mtd', 'enrollment_date'];
+        const fields = ['dba_name', 'account_status', 'status_id', 'account_code', 'email', 'merchant_phone', 'merchant_primary_contact', 'volume_mtd', 'enrollment_date', 'approved_date'];
         const payload = {}; fields.forEach(f => { if(document.getElementById('edit-' + f)) payload[f] = document.getElementById('edit-' + f).value; });
         const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
         if((await res.json()).success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchAllMyTasks(); }
     };
 
-    window.onload = async () => { await loadStaffFilter(); fetchAllMyTasks(); };
+    window.onload = async () => { 
+        const role = (sessionStorage.getItem('pp_role') || "").toUpperCase();
+        if (role === 'ADMIN' || role === 'SUPER ADMIN') {
+            document.getElementById('userFilter').style.display = 'inline-block';
+            await loadStaffFilter();
+        }
+        fetchAllMyTasks();
+    };
 </script>
 </body>
 </html>
