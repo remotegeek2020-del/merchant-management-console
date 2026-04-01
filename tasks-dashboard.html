@@ -15,13 +15,9 @@
         .slds-table thead th { background-color: #f8fafc !important; font-weight: 700 !important; color: #475569 !important; padding: 15px !important; }
         .task-row:hover { background-color: #f8fafc !important; cursor: pointer; }
         .badge-due { font-weight: 800; font-size: 10px; padding: 4px 10px; border-radius: 4px; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .modal-tab-btn { padding: 10px 15px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; flex: 1; font-size: 11px; text-align: center; }
-        .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
-        .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.8rem; margin-bottom: 8px; }
+        .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.8rem; margin-bottom: 12px; }
         .edit-label { font-size: 9px; font-weight: 700; color: #64748b; margin-bottom: 3px; display: block; text-transform: uppercase; }
-        .field-section-title { grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px; }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 </head>
 <body>
@@ -33,7 +29,7 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Task Center</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px; display: none;" onchange="resetAndFetchTasks()">
+            <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px; display:none;" onchange="resetAndFetchTasks()">
                 <option value="">All Assignees</option>
             </select>
             <select id="taskStatusFilter" class="slds-select" style="width: 150px; border-radius:10px;" onchange="resetAndFetchTasks()">
@@ -55,9 +51,7 @@
                     <th style="width: 15%; text-align: right;">Action</th>
                 </tr>
             </thead>
-            <tbody id="global-task-list">
-                <tr><td colspan="5" style="text-align:center; padding:50px; color:#94a3b8;">Loading assignments...</td></tr>
-            </tbody>
+            <tbody id="global-task-list"></tbody>
         </table>
         <div style="padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
             <div id="taskPageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</div>
@@ -70,27 +64,29 @@
 </div>
 
 <script>
-    let currentRecords = []; 
+    let currentTasks = []; 
     let taskPage = 0;
     const taskLimit = 20;
+    let staffList = [];
 
     async function loadStaffFilter() {
         const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) });
         const result = await res.json();
         if (result.success) {
-            document.getElementById('userFilter').innerHTML = '<option value="">All Assignees</option>' + result.data.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
+            staffList = result.data;
+            document.getElementById('userFilter').innerHTML = '<option value="">All Assignees</option>' + 
+                staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
         }
     }
 
     async function fetchAllMyTasks() {
         const myId = sessionStorage.getItem('pp_userid');
-        const userFilterVal = document.getElementById('userFilter').value;
         const res = await fetch('/api/merchants', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 action: 'get_global_tasks', 
                 userid: myId, 
-                targetUser: userFilterVal || null, 
+                targetUser: document.getElementById('userFilter').value || null, 
                 status: document.getElementById('taskStatusFilter').value || null, 
                 page: taskPage, 
                 limit: taskLimit 
@@ -98,142 +94,107 @@
         });
         const result = await res.json();
         if (result.success) {
-            currentRecords = result.data.map(t => ({ ...t.merchants, id: t.merchant_id }));
+            currentTasks = result.data;
             renderTaskTable(result.data);
-            document.getElementById('taskPageInfo').innerHTML = `Page ${taskPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total: ${result.total || 0})</span>`;
+            document.getElementById('taskPageInfo').innerHTML = `Page ${taskPage + 1} (Total: ${result.total || 0})`;
         }
     }
 
     function renderTaskTable(tasks) {
         const tbody = document.getElementById('global-task-list');
-        
-        // Custom empty state message
         if (!tasks || tasks.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="5" style="text-align:center; padding:80px; color:#64748b;">
-                        <span class="material-icons" style="font-size:48px; color:#22c55e; display:block; margin-bottom:15px;">check_circle</span>
-                        <div style="font-size:1.2rem; font-weight:700; color:#002d5a;">Congrats, you don't have a pending task today!</div>
-                    </td>
-                </tr>`;
+            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:80px;"><span class="material-icons" style="font-size:48px; color:#22c55e;">check_circle</span><br><b>Congrats, you don't have a pending task today!</b></td></tr>`;
             return;
         }
-
-        tbody.innerHTML = tasks.map(t => `<tr class="task-row" onclick="openModal('${t.merchant_id}')">
+        tbody.innerHTML = tasks.map(t => `
+            <tr class="task-row" onclick="manageTaskModal('${t.id}')">
                 <td><div style="font-weight:700; color:var(--pp-blue);">${t.title}</div><div style="font-size:11px; color:#64748b;">${t.body || ''}</div></td>
                 <td><strong>${t.merchants?.dba_name || '---'}</strong></td>
                 <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
                 <td><span class="slds-badge">${t.status}</span></td>
-                <td style="text-align: right;"><button class="slds-button slds-button_brand slds-button_small" style="border-radius:8px;">MANAGE</button></td>
+                <td style="text-align: right;"><button class="slds-button slds-button_brand slds-button_small">MANAGE</button></td>
             </tr>`).join('');
     }
 
-    function changeTaskPage(dir) { taskPage += dir; if (taskPage < 0) taskPage = 0; fetchAllMyTasks(); }
-    function resetAndFetchTasks() { taskPage = 0; fetchAllMyTasks(); }
+    async function manageTaskModal(taskId) {
+        const task = currentTasks.find(t => t.id === taskId);
+        if (!task) return;
 
-    async function openModal(id) {
-        const m = currentRecords.find(r => r.id === id);
-        if (!m) return;
-        Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
-
-        const [nRes, sRes] = await Promise.all([
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
-            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) })
-        ]);
-        const staff = (await sRes.json()).data || [];
+        const staffOptions = staffList.map(s => 
+            `<option value="${s.id}" ${s.id === task.assigned_to ? 'selected' : ''}>${s.full_name}</option>`
+        ).join('');
 
         Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
-            width: '1100px',
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Manage Task</div>`,
+            width: '600px',
             html: `
-                <input type="hidden" id="modal-merchant-id" value="${m.id}">
-                <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
-                    <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">MERCHANT DETAILS</button>
-                    <button onclick="switchTab('tasks')" id="tab-tasks" class="modal-tab-btn">TASKS</button>
-                </div>
-
-                <div id="content-details" class="tab-content" style="text-align:left; max-height:600px; overflow-y:auto; padding-right:15px;">
-                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
-                        <div class="field-section-title">Core Identity & Status</div>
-                        <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                        <div><label class="edit-label">MID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
-                        <div><label class="edit-label">Account Status</label><select id="edit-account_status" class="modern-input"><option value="${m.account_status}" selected>${m.account_status}</option><option value="Approved">Approved</option><option value="Closed">Closed</option><option value="Pending">Pending</option></select></div>
-                        <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
-                        <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
-                        
-                        <div class="field-section-title">Contact Information</div>
-                        <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
-                        <div><label class="edit-label">Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
-                        <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
-                        
-                        <div class="field-section-title">Volume & Dates</div>
-                        <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
-                        <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
-                        <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
+                <div style="text-align:left; padding:10px;">
+                    <div style="background:#f8fafc; padding:10px; border-radius:8px; margin-bottom:15px;">
+                        <small style="color:#64748b; font-weight:700;">MERCHANT</small>
+                        <div style="font-weight:800; color:#004990;">${task.merchants?.dba_name || '---'}</div>
                     </div>
-                    <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
-                </div>
 
-                <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
-                    <div id="tasks-list-internal" style="max-height:500px; overflow-y:auto;">Loading...</div>
+                    <label class="edit-label">Task Title</label>
+                    <input id="edit-task-title" class="modern-input" value="${task.title || ''}">
+
+                    <label class="edit-label">Task Details</label>
+                    <textarea id="edit-task-body" class="modern-input" style="height:80px;">${task.body || ''}</textarea>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
+                        <div>
+                            <label class="edit-label">Due Date</label>
+                            <input type="date" id="edit-task-due" class="modern-input" value="${task.due_date || ''}">
+                        </div>
+                        <div>
+                            <label class="edit-label">Assign To</label>
+                            <select id="edit-task-assign" class="modern-input">
+                                ${staffOptions}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:15px; display:flex; align-items:center; gap:10px; background:#f1f5f9; padding:12px; border-radius:8px;">
+                        <input type="checkbox" id="edit-task-complete" style="width:20px; height:20px;" ${task.status === 'Completed' ? 'checked' : ''}>
+                        <label for="edit-task-complete" style="font-weight:700; color:#002d5a; cursor:pointer;">Mark as Completed</label>
+                    </div>
+
+                    <button onclick="saveTaskUpdates('${taskId}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:20px; font-weight:700; cursor:pointer;">SAVE UPDATES</button>
                 </div>`,
             showConfirmButton: false, showCloseButton: true
         });
     }
 
-    window.switchTab = (tab) => {
-        document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
-        document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
-        document.getElementById('content-' + tab).style.display = 'block';
-        document.getElementById('tab-' + tab).classList.add('active-tab');
-        if (tab === 'tasks') fetchMerchantTasks();
-    };
+    async function saveTaskUpdates(taskId) {
+        const payload = {
+            title: document.getElementById('edit-task-title').value,
+            body: document.getElementById('edit-task-body').value,
+            due_date: document.getElementById('edit-task-due').value,
+            assigned_to: document.getElementById('edit-task-assign').value,
+            status: document.getElementById('edit-task-complete').checked ? 'Completed' : 'Pending'
+        };
 
-    async function fetchMerchantTasks() {
-        const id = document.getElementById('modal-merchant-id').value;
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_tasks', merchant_uuid: id }) });
-        const result = await res.json();
-        document.getElementById('tasks-list-internal').innerHTML = result.data.map(t => `
-            <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
-                <div><div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div><div style="font-size:11px; color:#64748b;">${t.body || ''}</div></div>
-                <div style="display:flex; align-items:center; gap:12px;">
-                    <button onclick="editTaskPrompt('${t.id}', '${t.title.replace(/'/g, "\\'")}', '${(t.body || '').replace(/'/g, "\\'")}', '${t.due_date}')" style="background:none; border:none; color:var(--pp-blue); cursor:pointer;"><span class="material-icons" style="font-size:18px;">edit</span></button>
-                    <input type="checkbox" style="width:20px; height:20px;" onclick="toggleTaskStatus('${t.id}')" ${t.status === 'Completed' ? 'checked' : ''}>
-                </div>
-            </div>`).join('') || '<p style="text-align:center;">No tasks found.</p>';
-    }
-
-    async function toggleTaskStatus(taskId) {
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_task_status', task_id: taskId }) });
-        if ((await res.json()).success) { fetchMerchantTasks(); fetchAllMyTasks(); }
-    }
-
-    async function editTaskPrompt(taskId, title, body, due) {
-        const { value: formValues } = await Swal.fire({
-            title: 'Update Task',
-            html: `<div style="text-align:left;"><label class="edit-label">Title</label><input id="swal-task-title" class="modern-input" value="${title}"><label class="edit-label">Due Date</label><input type="date" id="swal-task-due" class="modern-input" value="${due}"><label class="edit-label">Details</label><textarea id="swal-task-body" class="modern-input">${body}</textarea></div>`,
-            showCancelButton: true, preConfirm: () => ({ title: document.getElementById('swal-task-title').value, due_date: document.getElementById('swal-task-due').value, body: document.getElementById('swal-task-body').value })
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_task', task_id: taskId, payload })
         });
-        if (formValues) {
-            const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update_task', task_id: taskId, payload: formValues }) });
-            if ((await res.json()).success) fetchMerchantTasks();
+
+        if ((await res.json()).success) {
+            Swal.fire({ icon: 'success', title: 'Task Updated', timer: 1500, showConfirmButton: false });
+            fetchAllMyTasks();
         }
     }
 
-    window.saveMerchant = async (uuid) => {
-        const fields = ['dba_name', 'account_status', 'status_id', 'account_code', 'email', 'merchant_phone', 'merchant_primary_contact', 'volume_mtd', 'enrollment_date', 'approved_date'];
-        const payload = {}; fields.forEach(f => { if(document.getElementById('edit-' + f)) payload[f] = document.getElementById('edit-' + f).value; });
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
-        if((await res.json()).success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchAllMyTasks(); }
-    };
+    function changeTaskPage(dir) { taskPage += dir; if (taskPage < 0) taskPage = 0; fetchAllMyTasks(); }
+    function resetAndFetchTasks() { taskPage = 0; fetchAllMyTasks(); }
 
     window.onload = async () => { 
         const role = (sessionStorage.getItem('pp_role') || "").toUpperCase();
         if (role === 'ADMIN' || role === 'SUPER ADMIN') {
             document.getElementById('userFilter').style.display = 'inline-block';
-            await loadStaffFilter();
         }
-        fetchAllMyTasks();
+        await loadStaffFilter(); 
+        fetchAllMyTasks(); 
     };
 </script>
 </body>
