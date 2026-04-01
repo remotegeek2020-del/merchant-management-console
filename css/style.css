@@ -131,3 +131,19 @@ body {
     transition: all 0.3s ease;
 }
 .login-btn:hover { background: var(--pp-dark) !important; transform: scale(1.02); }
+/* Bell Ringing Animation */
+@keyframes ring {
+  0% { transform: rotate(0); }
+  10% { transform: rotate(15deg); }
+  20% { transform: rotate(-15deg); }
+  30% { transform: rotate(10deg); }
+  40% { transform: rotate(-10deg); }
+  50% { transform: rotate(5deg); }
+  60% { transform: rotate(-5deg); }
+  100% { transform: rotate(0); }
+}
+
+.bell-ringing {
+  animation: ring 1.5s ease infinite;
+  color: #ffcc00 !important; /* Turns gold when ringing */
+}
