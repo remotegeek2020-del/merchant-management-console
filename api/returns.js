@@ -4,6 +4,32 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
 
     try {
+        if (action === 'getMonthlyReport') {
+    const { startDate, endDate } = req.body;
+
+    const { data, error } = await supabase
+        .from('equipment_logs')
+        .select(`
+            *,
+            merchants:merchant_id (dba_name),
+            equipments:equipment_id (serial_number)
+        `)
+        .in('action', ['return', 'repair', 'decommission'])
+        .gte('created_at', startDate)
+        .lte('created_at', endDate + 'T23:59:59');
+
+    if (error) throw error;
+
+    const flattenedData = data.map(row => ({
+        Date: new Date(row.created_at).toLocaleDateString(),
+        Action: row.action,
+        Merchant: row.merchants?.dba_name || 'N/A',
+        Serial: row.equipments?.serial_number || 'N/A',
+        Note: row.status || ''
+    }));
+
+    return res.status(200).json({ success: true, rawData: flattenedData });
+}
         const supabaseUrl = process.env.SUPABASE_URL;
         const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
         if (!supabaseUrl || !supabaseKey) return res.status(500).json({ success: false, message: "Env variables missing" });
