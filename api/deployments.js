@@ -8,6 +8,41 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
+        if (action === 'getMonthlyReport') {
+    const { startDate, endDate } = req.body;
+
+    // Fetch deployment records within the range
+    const { data, error } = await supabase
+        .from('equipment_logs')
+        .select(`
+            id,
+            action,
+            from_location,
+            to_location,
+            created_at,
+            merchants:merchant_id (dba_name, merchant_id),
+            equipments:equipment_id (serial_number, terminal_type)
+        `)
+        .eq('action', 'deploy') // Only track deployment events
+        .gte('created_at', startDate)
+        .lte('created_at', endDate + 'T23:59:59');
+
+    if (error) throw error;
+
+    // Flatten the data for clean CSV export
+    const flattenedData = data.map(row => ({
+        Date: new Date(row.created_at).toLocaleDateString(),
+        Action: row.action,
+        Merchant: row.merchants?.dba_name || 'N/A',
+        MID: row.merchants?.merchant_id || 'N/A',
+        Serial: row.equipments?.serial_number || 'N/A',
+        Model: row.equipments?.terminal_type || 'N/A',
+        From: row.from_location,
+        To: row.to_location
+    }));
+
+    return res.status(200).json({ success: true, rawData: flattenedData });
+}
 
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
 if (action === 'update') {
