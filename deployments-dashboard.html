@@ -28,6 +28,15 @@
         .timeline { border-left: 2px solid #e2e8f0; margin-left: 20px; padding-left: 30px; position: relative; }
         .timeline-item { margin-bottom: 25px; position: relative; }
         .timeline-dot { position: absolute; left: -41px; width: 20px; height: 20px; background: white; border: 4px solid var(--pp-accent); border-radius: 50%; }
+        /* Ensure SweetAlert date inputs match your design system */
+.swal2-html-container .slds-input {
+    margin-top: 10px;
+    border: 1px solid #dddbda;
+    border-radius: .25rem;
+    padding: 0 1rem;
+    line-height: 1.875rem;
+    min-height: calc(1.875rem + (1px * 2));
+}
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -214,53 +223,7 @@
     let currentPage = 1;
     let totalPages = 1;
     let lookupTimeout;
-async function triggerLogReturn(equipId, merchId, depId) {
-    const { value: formValues } = await Swal.fire({
-        title: 'Initiate Equipment Return',
-        html: `
-            <div style="text-align:left;">
-                <label class="report-label">Initiate Return Date</label>
-                <input type="date" id="ret-initiate-date" class="slds-input slds-m-bottom_small" value="${new Date().toISOString().split('T')[0]}">
-                
-                <label class="report-label">Reason for Return</label>
-                <select id="ret-reason" class="slds-select slds-m-bottom_small">
-                    <option value="Defective">Defective / RMA</option>
-                    <option value="Cancellation">Merchant Cancellation</option>
-                    <option value="Upgrade">Equipment Upgrade</option>
-                </select>
-                
-                <label class="report-label">Notes</label>
-                <textarea id="ret-notes" class="slds-textarea"></textarea>
-            </div>
-        `,
-        focusConfirm: false,
-        showCancelButton: true,
-        confirmButtonText: 'Log Return',
-        preConfirm: () => {
-            return {
-                equipment_id: equipId,
-                merchant_id: merchId,
-                deployment_id: depId,
-                return_date_initiated: document.getElementById('ret-initiate-date').value,
-                reason: document.getElementById('ret-reason').value,
-                notes: document.getElementById('ret-notes').value
-            }
-        }
-    });
 
-    if (formValues) {
-        const res = await fetch('/api/deployments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'log_return', payload: formValues })
-        });
-        const result = await res.json();
-        if (result.success) {
-            Swal.fire('Logged', 'Return record created. Unit is now "In Transit".', 'success');
-            fetchDeployments(); // Refresh the table
-        }
-    }
-}
     async function completeRMA() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
@@ -307,10 +270,21 @@ async function triggerLogReturn(equipId, merchId, depId) {
     }
 }
 
-   async function completeInTransitRMA() {
+  async function completeInTransitRMA() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
     
+    // 1. Ask for the Date Received first
+    const { value: receivedDate } = await Swal.fire({
+        title: 'Confirm Receipt Date',
+        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}">`,
+        showCancelButton: true,
+        preConfirm: () => document.getElementById('swal-receive-date').value
+    });
+
+    if (!receivedDate) return;
+
+    // 2. Ask for the restock location
     const result = await Swal.fire({
         title: 'Complete RMA',
         text: `Confirm receipt for S/N: ${d.equipments?.serial_number}`,
@@ -339,20 +313,20 @@ async function triggerLogReturn(equipId, merchId, depId) {
                     merchant_id: d.merchant_id,
                     deployment_id: d.id,
                     return_type: finalType,
+                    equipment_received_date: receivedDate, // New field
                     notes: 'Unit received at warehouse.'
                 }
             })
         });
         const finalResult = await res.json();
         if (finalResult.success) {
-            Swal.fire('Success', `Unit moved to ${finalType}`, 'success').then(() => {
+            Swal.fire('Success', `Unit received on ${receivedDate}`, 'success').then(() => {
                 document.getElementById('editDepModal').style.display = 'none';
                 fetchDeployments(currentPage);
             });
         }
     } catch (e) { console.error(e); }
 }
-
     // --- 1. FETCH AND RENDER DEPLOYMENTS (With Search & Pagination) ---
     async function fetchDeployments(page = 1) {
         currentPage = page;
@@ -491,12 +465,20 @@ async function processReturn() {
     const reasonDropdown = document.getElementById('returnReason');
     const otherText = document.getElementById('otherReasonText');
     
+    // Add a date input prompt via SweetAlert
+    const { value: initiateDate } = await Swal.fire({
+        title: 'Return Initiation Date',
+        html: `<input type="date" id="swal-init-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}">`,
+        showCancelButton: true,
+        preConfirm: () => document.getElementById('swal-init-date').value
+    });
+
+    if (!initiateDate) return;
+
     let finalReason = reasonDropdown.value;
     if (finalReason === 'Other') finalReason = otherText.value;
-
     if (!finalReason) return Swal.fire('Error', 'Please select a reason', 'warning');
 
-    // Start Spinner
     Swal.fire({ title: 'Processing Logistics...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     
     try {
@@ -510,14 +492,13 @@ async function processReturn() {
                     merchant_id: d.merchant_id,
                     deployment_id: d.id,
                     return_type: 'In Transit',
+                    return_date_initiated: initiateDate, // New field
                     notes: finalReason
                 }
             })
         });
 
         const result = await res.json();
-        
-        // STOP SPINNER
         Swal.close();
 
         if (result.success) {
@@ -526,13 +507,11 @@ async function processReturn() {
                 fetchDeployments(currentPage);
             });
         } else {
-            // THIS WILL TELL US THE EXACT SQL ERROR
-            Swal.fire('Database Rejected Request', result.message, 'error');
+            Swal.fire('Error', result.message, 'error');
         }
     } catch (err) { 
         Swal.close();
-        console.error(err);
-        Swal.fire('System Error', 'Check Network Tab (500 Error details)', 'error'); 
+        Swal.fire('System Error', 'Check Network Tab', 'error'); 
     }
 }
     // --- 3. DELETE & HISTORY LOGIC ---
