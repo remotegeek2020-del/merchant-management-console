@@ -359,40 +359,52 @@ if (action === 'return_to_office') {
 
     try {
         if (return_type === 'In Transit') {
-            // STEP 1: INITIATE RETURN (Save Merchant and Reason)
+            // STEP 1: INITIATE RMA
             const { error } = await supabase
                 .from('returns')
                 .upsert({
                     deployment_id: deployment_id,
                     equipment_id: equipment_id,
-                    merchant_id: merchant_id, // RESTORED
+                    merchant_id: merchant_id,
                     return_reason: notes,
                     return_date_initiated: return_date_initiated,
+                    // NEW: Set exact status/destination for transit
+                    condition: 'IN TRANSIT',
+                    destination: 'In Transit / RMA',
                     status: 'Open'
                 }, { onConflict: 'deployment_id' });
 
             if (error) throw error;
         } else {
-            // STEP 2: COMPLETE RMA (Save Condition and Destination)
-            const destination = return_type.includes('Stock') ? 'Warsaw Office' : 'Warsaw Repairs';
-            const condition = return_type.includes('Stock') ? 'Working' : 'Defective';
+            // STEP 2: COMPLETE RMA
+            // Determine condition and destination based on the button clicked in the frontend
+            let finalCondition = '';
+            let finalDestination = '';
+
+            if (return_type === 'Working (Back to Stock)') {
+                finalCondition = 'Working (Back to Stock)';
+                finalDestination = 'Warsaw Office';
+            } else {
+                finalCondition = 'Defective (Received in Repairs)';
+                finalDestination = 'Warsaw Repairs';
+            }
 
             const { error: returnUpdateError } = await supabase
                 .from('returns')
                 .update({
                     status: 'Closed',
-                    condition: condition, // RESTORED
-                    destination: destination, // RESTORED
+                    condition: finalCondition, // Updated
+                    destination: finalDestination,
                     equipment_received_date: equipment_received_date 
                 })
                 .eq('deployment_id', deployment_id);
 
             if (returnUpdateError) throw returnUpdateError;
 
-            // Move equipment back to warehouse
+            // Move equipment back to warehouse in the equipments table
             await supabase.from('equipments').update({
                 status: 'stocked',
-                current_location: destination,
+                current_location: finalDestination,
                 merchant_id: null
             }).eq('id', equipment_id);
         }
