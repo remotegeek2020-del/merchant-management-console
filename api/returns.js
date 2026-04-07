@@ -13,29 +13,31 @@ export default async function handler(req, res) {
         const body = req.body || {};
         const { action, id, payload, query } = body;
 
-        if (action === 'getMonthlyReport') {
+      if (action === 'getMonthlyReport') {
     const { startDate, endDate } = req.body;
 
     const { data, error } = await supabase
-        .from('returns') // Query the primary returns table
+        .from('returns')
         .select(`
             return_id,
             return_reason,
             condition,
             destination,
             status,
-            created_at,
+            return_date_initiated,
+            equipment_received_date,
             merchants:merchant_id (dba_name),
             equipments:equipment_id (serial_number)
         `)
-        .gte('created_at', startDate)
-        .lte('created_at', endDate + 'T23:59:59'); // Handle timestamp range
+        .gte('return_date_initiated', startDate)
+        .lte('return_date_initiated', endDate);
 
     if (error) throw error;
 
     const rawData = data.map(d => ({
         "Return ID": d.return_id,
-        "Date": new Date(d.created_at).toLocaleDateString(),
+        "Date Initiated": d.return_date_initiated || '---',
+        "Date Received": d.equipment_received_date || 'In Transit',
         "Merchant": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
         "Reason": d.return_reason,
@@ -46,22 +48,29 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true, rawData });
 }
+       if (action === 'list') {
+    const { data, error } = await supabase.from('returns').select(`
+        id, return_id, return_reason, condition, destination, status, created_at,
+        return_date_initiated, equipment_received_date,
+        merchant_id, equipment_id,
+        merchants:merchant_id (dba_name, merchant_id),
+        equipments:equipment_id (serial_number, terminal_type)
+    `).order('return_date_initiated', { ascending: false });
 
-        if (action === 'list') {
-            const { data, error } = await supabase.from('returns').select(`
-                id, return_id, return_reason, condition, destination, status, created_at,
-                merchant_id, equipment_id,
-                merchants:merchant_id (dba_name, merchant_id),
-                equipments:equipment_id (serial_number, terminal_type)
-            `).order('created_at', { ascending: false });
-
-            if (error) throw error;
-            const metrics = {
-                open: data ? data.filter(d => d.status === 'open').length : 0,
-                defective: data ? data.filter(d => d.condition === 'Defective').length : 0
-            };
-            return res.status(200).json({ success: true, data: data || [], metrics, count: data?.length || 0 });
-        }
+    if (error) throw error;
+    
+    const metrics = {
+        open: data ? data.filter(d => d.status.toLowerCase() === 'open').length : 0,
+        defective: data ? data.filter(d => d.condition && d.condition.includes('Defective')).length : 0
+    };
+    
+    return res.status(200).json({ 
+        success: true, 
+        data: data || [], 
+        metrics, 
+        count: data?.length || 0 
+    });
+}
 
         if (action === 'complete_return') {
             const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
