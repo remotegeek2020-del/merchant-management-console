@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Reports Center | Secure Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
+        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
+        .report-container { max-width: 1000px; margin: 0 auto; background: white; border-radius: 16px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        .filter-section { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 30px; padding: 20px; background: #f8fafc; border-radius: 12px; border: 1px solid #e2e8f0; }
+        .report-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+</head>
+<body>
+
+<div class="report-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px;">
+        <div>
+            <h1 style="font-size: 1.8rem; font-weight: 800; color: #002d5a;">Reports Center</h1>
+            <p style="color: #64748b;">Select criteria to generate system-wide exports</p>
+        </div>
+        <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">HOME</a>
+    </div>
+
+    <div class="filter-section">
+        <div>
+            <label class="report-label">Report Type</label>
+            <select id="reportType" class="slds-select" style="border-radius: 8px;">
+                <option value="inventory">Inventory (Stock/Repairs)</option>
+                <option value="deployments">Deployments (Merchant Installs)</option>
+                <option value="returns">Returns (RMAs)</option>
+            </select>
+        </div>
+        <div>
+            <label class="report-label">Start Date</label>
+            <input type="date" id="startDate" class="slds-input" style="border-radius: 8px;">
+        </div>
+        <div>
+            <label class="report-label">End Date</label>
+            <input type="date" id="endDate" class="slds-input" style="border-radius: 8px;">
+        </div>
+    </div>
+
+    <div style="text-align: center;">
+        <button class="slds-button slds-button_brand" style="width: 250px; height: 45px; font-weight: 700; border-radius: 10px;" onclick="runReport()">
+            GENERATE & EXPORT CSV
+        </button>
+    </div>
+</div>
+
+<script>
+    async function runReport() {
+        const type = document.getElementById('reportType').value;
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+
+        if (!start || !end) {
+            Swal.fire('Missing Dates', 'Please select a date range to continue.', 'warning');
+            return;
+        }
+
+        Swal.fire({ title: 'Preparing Data...', didOpen: () => { Swal.showLoading(); } });
+
+        try {
+            // Reusing your equipments.js/deployments.js logic via a central reporting endpoint
+            const res = await fetch(`/api/${type === 'inventory' ? 'equipments' : type}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'getMonthlyReport', // We'll adapt your existing logic
+                    startDate: start,
+                    endDate: end,
+                    exportMode: true 
+                })
+            });
+            const result = await res.json();
+
+            if (result.success && result.rawData) {
+                downloadCSV(result.rawData, `${type}_report_${start}_to_${end}.csv`);
+                Swal.fire('Success', 'Report downloaded successfully.', 'success');
+            } else {
+                Swal.fire('No Data', 'No records found for the selected criteria.', 'info');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Report generation failed.', 'error');
+        }
+    }
+
+    function downloadCSV(data, filename) {
+        if (data.length === 0) return;
+        const headers = Object.keys(data[0]).join(',');
+        const rows = data.map(row => Object.values(row).map(v => `"${v}"`).join(','));
+        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows.join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+</script>
+</body>
+</html>
