@@ -347,65 +347,52 @@ if (action === 'delete') {
       // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
 // --- ACTION: RETURN TO OFFICE (Robust Version) ---
 if (action === 'return_to_office') {
-    try {
-        const { equipment_id, merchant_id, deployment_id, notes, return_type } = payload;
+    const { 
+        equipment_id, 
+        deployment_id, 
+        return_type, 
+        notes, 
+        return_date_initiated, // Step 1 Field
+        equipment_received_date // Step 2 Field
+    } = payload;
 
-        // 1. Fetch Existing RMA to preserve the ID and the ORIGINAL Reason
-        const { data: existingRma } = await supabase
+    // 1. Logic for INITIATING the return (Moving to In Transit)
+    if (return_type === 'In Transit') {
+        const { error } = await supabase
             .from('returns')
-            .select('return_reason, id, status')
-            .eq('deployment_id', deployment_id)
-            .maybeSingle();
+            .upsert({
+                deployment_id: deployment_id,
+                equipment_id: equipment_id,
+                return_reason: notes,
+                return_date_initiated: return_date_initiated, // SAVE TO DB
+                status: 'Open'
+            }, { onConflict: 'deployment_id' });
 
-        // 2. LOGIC: If we are "Completing", we keep the old reason. 
-        // If it's brand new, we use the 'notes' from the dropdown.
-        const persistentReason = (existingRma && existingRma.return_reason) ? existingRma.return_reason : notes;
+        if (error) throw error;
+    } 
+    
+    // 2. Logic for COMPLETING the return (Moving to Office/Repairs)
+    else {
+        const { error: returnUpdateError } = await supabase
+            .from('returns')
+            .update({
+                status: 'Closed',
+                equipment_received_date: equipment_received_date // SAVE TO DB
+            })
+            .eq('deployment_id', deployment_id);
 
-        // 3. Determine if this is a "Completion" (Received) or "Initiation" (In Transit)
-        let isCompleting = (return_type.includes('Stock') || return_type.includes('Repairs'));
-        let rmaStatus = isCompleting ? 'Closed' : 'open';
-        let equipStatus = isCompleting ? (return_type.includes('Repairs') ? 'repairing' : 'stocked') : 'pending_return';
-        let finalLoc = isCompleting ? (return_type.includes('Repairs') ? 'Warsaw Repairs' : 'Warsaw Office') : 'In Transit / RMA';
+        if (returnUpdateError) throw returnUpdateError;
 
-        // 4. UPSERT RMA: Maintain the link and the reason
-        const { error: rmaError } = await supabase.from('returns').upsert({
-            deployment_id: deployment_id,
-            equipment_id: equipment_id,
-            merchant_id: merchant_id,
-            status: rmaStatus,
-            condition: return_type, // Updated to 'Working' or 'Defective'
-            destination: finalLoc,
-            return_reason: persistentReason // REQUIREMENT 2: Reason never changes
-        }, { onConflict: 'deployment_id' });
-
-        if (rmaError) throw rmaError;
-
-        // 5. Update Equipment & Location (Requirement 1: It actually completes now)
-        await supabase.from('equipments').update({ 
-            status: equipStatus, 
-            current_location: finalLoc,
-            merchant_id: isCompleting ? null : merchant_id 
+        // Also update the equipment table to move the unit back to stock
+        const destination = return_type.includes('Stock') ? 'Warsaw Office' : 'Warsaw Repairs';
+        await supabase.from('equipments').update({
+            status: 'stocked',
+            current_location: destination,
+            merchant_id: null
         }).eq('id', equipment_id);
-
-        // 6. Lifecycle Log
-        await supabase.from('equipment_logs').insert([{
-            equipment_id,
-            merchant_id,
-            deployment_id,
-            action: isCompleting ? 'RMA_COMPLETED' : 'RMA_INITIATED',
-            from_location: isCompleting ? 'In Transit' : 'Merchant Site',
-            to_location: finalLoc,
-            notes: `Final Condition: ${return_type} | Original Reason: ${persistentReason}`
-        }]);
-
-        // 7. Ensure Deployment is Closed
-        await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
-
-        return res.status(200).json({ success: true });
-
-    } catch (e) {
-        return res.status(500).json({ success: false, message: e.message });
     }
+
+    return res.status(200).json({ success: true });
 }
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
 if (action === 'getLookups') {
