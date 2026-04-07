@@ -347,52 +347,55 @@ if (action === 'delete') {
       // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
 // --- ACTION: RETURN TO OFFICE (Robust Version) ---
 if (action === 'return_to_office') {
+    // Destructure exactly what the frontend is sending
     const { 
         equipment_id, 
         deployment_id, 
         return_type, 
         notes, 
-        return_date_initiated, // Step 1 Field
-        equipment_received_date // Step 2 Field
-    } = payload;
+        return_date_initiated, 
+        equipment_received_date 
+    } = req.body.payload; 
 
-    // 1. Logic for INITIATING the return (Moving to In Transit)
-    if (return_type === 'In Transit') {
-        const { error } = await supabase
-            .from('returns')
-            .upsert({
-                deployment_id: deployment_id,
-                equipment_id: equipment_id,
-                return_reason: notes,
-                return_date_initiated: return_date_initiated, // SAVE TO DB
-                status: 'Open'
-            }, { onConflict: 'deployment_id' });
+    try {
+        if (return_type === 'In Transit') {
+            // STEP 1: INITIATE RETURN
+            const { error } = await supabase
+                .from('returns')
+                .upsert({
+                    deployment_id: deployment_id,
+                    equipment_id: equipment_id,
+                    return_reason: notes,
+                    return_date_initiated: return_date_initiated, // Matches your SQL
+                    status: 'Open'
+                }, { onConflict: 'deployment_id' });
 
-        if (error) throw error;
-    } 
-    
-    // 2. Logic for COMPLETING the return (Moving to Office/Repairs)
-    else {
-        const { error: returnUpdateError } = await supabase
-            .from('returns')
-            .update({
-                status: 'Closed',
-                equipment_received_date: equipment_received_date // SAVE TO DB
-            })
-            .eq('deployment_id', deployment_id);
+            if (error) throw error;
+        } else {
+            // STEP 2: COMPLETE RMA
+            const { error: returnUpdateError } = await supabase
+                .from('returns')
+                .update({
+                    status: 'Closed',
+                    equipment_received_date: equipment_received_date // Matches your SQL
+                })
+                .eq('deployment_id', deployment_id);
 
-        if (returnUpdateError) throw returnUpdateError;
+            if (returnUpdateError) throw returnUpdateError;
 
-        // Also update the equipment table to move the unit back to stock
-        const destination = return_type.includes('Stock') ? 'Warsaw Office' : 'Warsaw Repairs';
-        await supabase.from('equipments').update({
-            status: 'stocked',
-            current_location: destination,
-            merchant_id: null
-        }).eq('id', equipment_id);
+            // Move equipment back to warehouse
+            const destination = return_type.includes('Stock') ? 'Warsaw Office' : 'Warsaw Repairs';
+            await supabase.from('equipments').update({
+                status: 'stocked',
+                current_location: destination,
+                merchant_id: null
+            }).eq('id', equipment_id);
+        }
+
+        return res.status(200).json({ success: true });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
     }
-
-    return res.status(200).json({ success: true });
 }
         // --- ACTION: LOOKUPS (Updated for MID + DBA search) ---
 if (action === 'getLookups') {
