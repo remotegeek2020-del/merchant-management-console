@@ -8,39 +8,37 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
-       if (action === 'getMonthlyReport') {
+    if (action === 'getMonthlyReport') {
     const { startDate, endDate } = req.body;
 
-    // TARGET: target_deployment_date for Deployments
     const { data, error } = await supabase
-        .from('equipment_logs') 
+        .from('deployments') // Query the primary deployments table
         .select(`
-            id,
-            action,
-            from_location,
-            to_location,
+            deployment_id,
+            tid,
+            tracking_id,
             target_deployment_date,
+            status,
             merchants:merchant_id (dba_name),
             equipments:equipment_id (serial_number, terminal_type)
         `)
-        .eq('action', 'deploy')
         .gte('target_deployment_date', startDate)
         .lte('target_deployment_date', endDate);
 
     if (error) throw error;
 
     const rawData = data.map(d => ({
-        "Deployment Date": d.target_deployment_date,
+        "Deployment ID": d.deployment_id,
+        "Date": d.target_deployment_date,
         "Merchant": d.merchants?.dba_name || 'N/A',
-        "Serial Number": d.equipments?.serial_number || 'N/A',
+        "Serial": d.equipments?.serial_number || 'N/A',
         "Model": d.equipments?.terminal_type || 'N/A',
-        "From": d.from_location,
-        "To": d.to_location
+        "TID": d.tid || 'N/A',
+        "Status": d.status
     }));
 
     return res.status(200).json({ success: true, rawData });
 }
-
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
 if (action === 'update') {
     const { deployment_id, status, tracking_id, target_date, notes } = payload;
