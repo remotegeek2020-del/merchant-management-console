@@ -16,26 +16,32 @@ export default async function handler(req, res) {
         if (action === 'getMonthlyReport') {
     const { startDate, endDate } = req.body;
 
-    // TARGET: created_at for Returns
     const { data, error } = await supabase
-        .from('equipment_logs')
+        .from('returns') // Query the primary returns table
         .select(`
-            *,
+            return_id,
+            return_reason,
+            condition,
+            destination,
+            status,
+            created_at,
             merchants:merchant_id (dba_name),
             equipments:equipment_id (serial_number)
         `)
-        .in('action', ['return', 'repair'])
         .gte('created_at', startDate)
-        // Adding timestamp to end date to ensure the full day is included
-        .lte('created_at', endDate + 'T23:59:59');
+        .lte('created_at', endDate + 'T23:59:59'); // Handle timestamp range
 
     if (error) throw error;
 
     const rawData = data.map(d => ({
-        "Return Date": new Date(d.created_at).toLocaleDateString(),
+        "Return ID": d.return_id,
+        "Date": new Date(d.created_at).toLocaleDateString(),
         "Merchant": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
-        "Condition/Note": d.status || 'N/A'
+        "Reason": d.return_reason,
+        "Condition": d.condition,
+        "Destination": d.destination,
+        "Status": d.status
     }));
 
     return res.status(200).json({ success: true, rawData });
