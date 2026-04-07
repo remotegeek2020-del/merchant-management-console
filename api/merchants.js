@@ -168,12 +168,15 @@ if (action === 'add_task') {
 
         // --- ACTION: bulk_upsert (Create or Update based on merchant_id) ---
 if (action === 'bulk_upsert') {
+    const LEGACY_AGENT_UUID = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+
+    // 1. Map your data exactly as you had it
     const dataToUpsert = payload.map(row => ({
         merchant_id: row.merchant_id?.trim(),
         dba_name: row.dba_name,
         status_id: row.status_id,
         agent_name: row.agent_name,
-        agent_id: row.agent_id,
+        agent_id: row.agent_id, // This is the ID we need to verify
         account_status: row.account_status,
         is_edge_enabled: row.is_edge_enabled,
         is_pci_compliant: row.is_pci_compliant,
@@ -207,35 +210,51 @@ if (action === 'bulk_upsert') {
         merchant_websites: row.merchant_websites,
         merchant_primary_contact: row.merchant_primary_contact,
         merchant_phone: row.merchant_phone
-    })).filter(item => item.merchant_id); // Ensure we don't send rows without IDs
+    })).filter(item => item.merchant_id);
 
-    // Supabase Upsert logic: If merchant_id matches an existing record, update it.
-    // Otherwise, create a new record.
-    const { error } = await supabase
-        .from('merchants')
-        .upsert(dataToUpsert, { onConflict: 'merchant_id' });
+    try {
+        // 2. Extract unique Agent IDs from the mapped data
+        const uniqueAgentIdsFromCsv = [...new Set(dataToUpsert.map(row => row.agent_id).filter(id => id))];
 
-    if (error) throw error;
-    return res.status(200).json({ success: true, count: dataToUpsert.length });
-}
-        if (action === 'get_merchant_history') {
-    const { merchant_id } = req.body; // Pulls directly from body
+        // 3. Check which Agent IDs already exist in the database
+        const { data: existingIdentifiers } = await supabase
+            .from('agent_identifiers')
+            .select('id_string')
+            .in('id_string', uniqueAgentIdsFromCsv);
 
-    if (!merchant_id) {
-        return res.status(400).json({ success: false, message: "Missing Merchant ID" });
+        const existingIdStrings = existingIdentifiers ? existingIdentifiers.map(i => i.id_string) : [];
+        
+        // 4. Identify IDs that are NOT in the database yet
+        const missingIds = uniqueAgentIdsFromCsv.filter(id => !existingIdStrings.includes(id));
+
+        // 5. If there are missing IDs, create them using the Legacy UUID
+        if (missingIds.length > 0) {
+            const newIdentifiers = missingIds.map(id => ({
+                id_string: id, // The value from your CSV
+                agent_id: LEGACY_AGENT_UUID, // The default legacy UUID you provided
+                status: 'active'
+            }));
+
+            const { error: idError } = await supabase
+                .from('agent_identifiers')
+                .insert(newIdentifiers);
+
+            if (idError) throw idError;
+        }
+
+        // 6. Final step: Upsert the merchants (the FK constraint is now satisfied)
+        const { error } = await supabase
+            .from('merchants')
+            .upsert(dataToUpsert, { onConflict: 'merchant_id' });
+
+        if (error) throw error;
+        
+        return res.status(200).json({ success: true, count: dataToUpsert.length });
+
+    } catch (err) {
+        console.error("Bulk Upsert Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
     }
-
-    const { data, error } = await supabase
-        .from('equipment_logs')
-        .select(`
-            *,
-            equipments:equipment_id (serial_number, terminal_type)
-        `)
-        .eq('merchant_id', merchant_id) 
-        .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
 }
         // --- ACTION: get_merchant_history (MATCHES FRONTEND EXACTLY) ---
 if (action === 'get_merchant_history') {
