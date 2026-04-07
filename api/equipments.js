@@ -7,6 +7,31 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
+        if (action === 'getMonthlyReport') {
+    const { startDate, endDate, exportMode } = req.body;
+
+    const { data, error } = await supabase
+        .from('equipments')
+        .select('serial_number, terminal_type, status, current_location, received_date')
+        .gte('received_date', startDate)
+        .lte('received_date', endDate);
+
+    if (error) throw error;
+
+    // If requested by the new Reports page, send back the raw rows for CSV
+    if (exportMode) {
+        return res.status(200).json({ success: true, rawData: data });
+    }
+
+    // Otherwise, send back the summarized counts for the KPI popup
+    const report = {
+        office: data.filter(i => i.current_location === 'Warsaw Office').length,
+        repairs: data.filter(i => i.current_location === 'Warsaw Repairs').length,
+        deployed: data.filter(i => i.status === 'deployed').length,
+        total: data.length
+    };
+    return res.status(200).json({ success: true, data: report });
+}
         if (action === 'getActivityLogs') {
             const { data, error } = await supabase
                 .from('activity_logs')
