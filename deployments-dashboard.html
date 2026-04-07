@@ -214,7 +214,53 @@
     let currentPage = 1;
     let totalPages = 1;
     let lookupTimeout;
+async function triggerLogReturn(equipId, merchId, depId) {
+    const { value: formValues } = await Swal.fire({
+        title: 'Initiate Equipment Return',
+        html: `
+            <div style="text-align:left;">
+                <label class="report-label">Initiate Return Date</label>
+                <input type="date" id="ret-initiate-date" class="slds-input slds-m-bottom_small" value="${new Date().toISOString().split('T')[0]}">
+                
+                <label class="report-label">Reason for Return</label>
+                <select id="ret-reason" class="slds-select slds-m-bottom_small">
+                    <option value="Defective">Defective / RMA</option>
+                    <option value="Cancellation">Merchant Cancellation</option>
+                    <option value="Upgrade">Equipment Upgrade</option>
+                </select>
+                
+                <label class="report-label">Notes</label>
+                <textarea id="ret-notes" class="slds-textarea"></textarea>
+            </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Log Return',
+        preConfirm: () => {
+            return {
+                equipment_id: equipId,
+                merchant_id: merchId,
+                deployment_id: depId,
+                return_date_initiated: document.getElementById('ret-initiate-date').value,
+                reason: document.getElementById('ret-reason').value,
+                notes: document.getElementById('ret-notes').value
+            }
+        }
+    });
 
+    if (formValues) {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'log_return', payload: formValues })
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire('Logged', 'Return record created. Unit is now "In Transit".', 'success');
+            fetchDeployments(); // Refresh the table
+        }
+    }
+}
     async function completeRMA() {
     const deploymentId = document.getElementById('editId').value;
     const d = currentDeployments.find(item => item.id === deploymentId);
