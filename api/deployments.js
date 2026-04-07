@@ -347,9 +347,9 @@ if (action === 'delete') {
       // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
 // --- ACTION: RETURN TO OFFICE (Robust Version) ---
 if (action === 'return_to_office') {
-    // Destructure exactly what the frontend is sending
     const { 
         equipment_id, 
+        merchant_id,
         deployment_id, 
         return_type, 
         notes, 
@@ -359,32 +359,37 @@ if (action === 'return_to_office') {
 
     try {
         if (return_type === 'In Transit') {
-            // STEP 1: INITIATE RETURN
+            // STEP 1: INITIATE RETURN (Save Merchant and Reason)
             const { error } = await supabase
                 .from('returns')
                 .upsert({
                     deployment_id: deployment_id,
                     equipment_id: equipment_id,
+                    merchant_id: merchant_id, // RESTORED
                     return_reason: notes,
-                    return_date_initiated: return_date_initiated, // Matches your SQL
+                    return_date_initiated: return_date_initiated,
                     status: 'Open'
                 }, { onConflict: 'deployment_id' });
 
             if (error) throw error;
         } else {
-            // STEP 2: COMPLETE RMA
+            // STEP 2: COMPLETE RMA (Save Condition and Destination)
+            const destination = return_type.includes('Stock') ? 'Warsaw Office' : 'Warsaw Repairs';
+            const condition = return_type.includes('Stock') ? 'Working' : 'Defective';
+
             const { error: returnUpdateError } = await supabase
                 .from('returns')
                 .update({
                     status: 'Closed',
-                    equipment_received_date: equipment_received_date // Matches your SQL
+                    condition: condition, // RESTORED
+                    destination: destination, // RESTORED
+                    equipment_received_date: equipment_received_date 
                 })
                 .eq('deployment_id', deployment_id);
 
             if (returnUpdateError) throw returnUpdateError;
 
             // Move equipment back to warehouse
-            const destination = return_type.includes('Stock') ? 'Warsaw Office' : 'Warsaw Repairs';
             await supabase.from('equipments').update({
                 status: 'stocked',
                 current_location: destination,
