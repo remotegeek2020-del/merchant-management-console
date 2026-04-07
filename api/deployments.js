@@ -8,6 +8,88 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
+
+        if (action === 'log_return') {
+    const { 
+        equipment_id, 
+        merchant_id, 
+        deployment_id, 
+        reason, 
+        notes, 
+        return_date_initiated 
+    } = payload;
+
+    // 1. Create the Return Record
+    const { data: returnData, error: returnError } = await supabase
+        .from('returns')
+        .insert([{
+            equipment_id,
+            merchant_id,
+            deployment_id,
+            return_reason: reason,
+            notes,
+            return_date_initiated, // Your new field
+            status: 'open'
+        }]);
+
+    if (returnError) throw returnError;
+
+    // 2. Log the event in equipment_logs
+    await supabase.from('equipment_logs').insert([{
+        equipment_id,
+        merchant_id,
+        action: 'return_initiated',
+        from_location: 'Merchant Site',
+        to_location: 'In Transit',
+        notes: `Return initiated: ${reason}`
+    }]);
+
+    return res.status(200).json({ success: true });
+}
+
+        if (action === 'complete_rma') {
+    const { 
+        return_id, 
+        equipment_id, 
+        destination, 
+        equipment_received_date 
+    } = payload;
+
+    // 1. Update the Returns table
+    const { error: updateReturnError } = await supabase
+        .from('returns')
+        .update({ 
+            status: 'completed', 
+            destination,
+            equipment_received_date // Your new field
+        })
+        .eq('id', return_id);
+
+    if (updateReturnError) throw updateReturnError;
+
+    // 2. Update Equipment status and location
+    const { error: equipError } = await supabase
+        .from('equipments')
+        .update({ 
+            status: 'stocked', 
+            current_location: destination,
+            merchant_id: null // Remove from merchant
+        })
+        .eq('id', equipment_id);
+
+    if (equipError) throw equipError;
+
+    // 3. Log the final restock event
+    await supabase.from('equipment_logs').insert([{
+        equipment_id,
+        action: 'rma_completed',
+        from_location: 'In Transit',
+        to_location: destination,
+        notes: `RMA Closed. Received on ${equipment_received_date}`
+    }]);
+
+    return res.status(200).json({ success: true });
+}
     if (action === 'getMonthlyReport') {
     const { startDate, endDate } = req.body;
 
