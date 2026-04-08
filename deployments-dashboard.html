@@ -217,7 +217,7 @@
     </div>
 </div>
 
-    <div id="bulkPreviewModal" class="modal-backdrop" onclick="closeModal(event, 'bulkPreviewModal')">
+   <div id="bulkPreviewModal" class="modal-backdrop" onclick="closeModal(event, 'bulkPreviewModal')">
     <div class="modal-content" style="width: 900px;" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('bulkPreviewModal').style.display='none'">close</span>
         <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:10px;">Bulk Deployment Preview</h2>
@@ -254,78 +254,6 @@
     let totalPages = 1;
     let lookupTimeout;
 
-    async function handleBulkUpload(input) {
-    const file = input.files[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-        const text = e.target.result;
-        const rows = text.split('\n').map(row => row.split(','));
-        const headers = rows[0].map(h => h.trim().toLowerCase());
-        
-        const payload = rows.slice(1).filter(row => row.length > 1).map(row => {
-            const obj = {};
-            headers.forEach((h, i) => obj[h] = row[i]?.trim());
-            return obj;
-        });
-
-        Swal.fire({ title: 'Validating Inventory...', didOpen: () => Swal.showLoading() });
-
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'bulk_validate', payload })
-            });
-            const result = await res.json();
-            Swal.close();
-
-            if (result.success) {
-                renderBulkPreview(result.validationResults);
-            }
-        } catch (err) {
-            Swal.fire('Error', 'Validation failed', 'error');
-        }
-    };
-    reader.readAsText(file);
-    input.value = ''; 
-}
-
-function renderBulkPreview(results) {
-    const tbody = document.getElementById('bulkPreviewTable');
-    const summary = document.getElementById('bulkSummaryText');
-    const confirmBtn = document.getElementById('confirmBulkBtn');
-    
-    tbody.innerHTML = '';
-    let validCount = 0;
-
-    results.forEach(item => {
-        const tr = document.createElement('tr');
-        const isReady = item.status === 'stocked' && item.merchantExists;
-        if (isReady) validCount++;
-
-        tr.innerHTML = `
-            <td><code>${item.serial_number}</code></td>
-            <td>${item.merchant_id}</td>
-            <td>
-                <span class="badge" style="background: ${isReady ? '#f0fdf4' : '#fff1f2'}; color: ${isReady ? '#166534' : '#e11d48'};">
-                    ${item.message}
-                </span>
-            </td>
-            <td style="color: ${isReady ? '#166534' : '#e11d48'}; font-weight: 700;">
-                ${isReady ? 'READY' : 'SKIPPED'}
-            </td>
-        `;
-        tbody.appendChild(tr);
-    });
-
-    summary.innerText = `READY TO CREATE: ${validCount} | BLOCKED: ${results.length - validCount}`;
-    confirmBtn.disabled = validCount === 0;
-    confirmBtn.onclick = () => executeBulk(results.filter(r => r.status === 'stocked' && r.merchantExists));
-    
-    document.getElementById('bulkPreviewModal').style.display = 'flex';
-}
 
 async function executeBulk(validData) {
     Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading() });
@@ -917,6 +845,108 @@ async function openEditModal(index) {
     }
 
     function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
+    // --- BULK UPLOAD LOGIC ---
+
+async function handleBulkUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        // Split rows and handle potential carriage returns
+        const rows = text.split(/\r?\n/).map(row => row.split(','));
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        
+        const payload = rows.slice(1).filter(row => row.length > 1).map(row => {
+            const obj = {};
+            headers.forEach((h, i) => obj[h] = row[i]?.trim());
+            return obj;
+        });
+
+        Swal.fire({ title: 'Validating Inventory...', didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'bulk_validate', payload })
+            });
+            const result = await res.json();
+            Swal.close();
+
+            if (result.success) {
+                renderBulkPreview(result.validationResults);
+            } else {
+                Swal.fire('Error', result.message, 'error');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Validation failed', 'error');
+        }
+    };
+    reader.readAsText(file);
+    input.value = ''; 
+}
+
+function renderBulkPreview(results) {
+    const tbody = document.getElementById('bulkPreviewTable');
+    const summary = document.getElementById('bulkSummaryText');
+    const confirmBtn = document.getElementById('confirmBulkBtn');
+    
+    tbody.innerHTML = '';
+    let validCount = 0;
+
+    results.forEach(item => {
+        const tr = document.createElement('tr');
+        const isReady = item.status === 'stocked' && item.merchantExists;
+        if (isReady) validCount++;
+
+        tr.innerHTML = `
+            <td><code>${item.serial_number}</code></td>
+            <td>${item.merchant_id}</td>
+            <td>
+                <span class="badge" style="background: ${isReady ? '#f0fdf4' : '#fff1f2'}; color: ${isReady ? '#166534' : '#e11d48'};">
+                    ${item.message}
+                </span>
+            </td>
+            <td style="color: ${isReady ? '#166534' : '#e11d48'}; font-weight: 700;">
+                ${isReady ? 'READY' : 'SKIPPED'}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    summary.innerText = `READY: ${validCount} | BLOCKED: ${results.length - validCount}`;
+    confirmBtn.disabled = validCount === 0;
+    
+    // We send only the valid rows to the create action
+    confirmBtn.onclick = () => executeBulk(results.filter(r => r.status === 'stocked' && r.merchantExists));
+    
+    document.getElementById('bulkPreviewModal').style.display = 'flex';
+}
+
+async function executeBulk(validData) {
+    Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'bulk_create', payload: validData })
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            document.getElementById('bulkPreviewModal').style.display = 'none';
+            Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
+            fetchDeployments(); // Refresh main table
+        } else {
+            Swal.fire('Error', result.message, 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Bulk creation failed', 'error');
+    }
+}
 
     window.onload = () => fetchDeployments();
 
