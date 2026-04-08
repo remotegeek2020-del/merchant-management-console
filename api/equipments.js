@@ -7,35 +7,26 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
-       if (action === 'getMonthlyReport') {
-    const { startDate, endDate, subFilter, exportMode } = req.body;
+if (action === 'getMonthlyReport') {
+    const { startDate, endDate, subFilter, offset = 0, limit = 1000 } = req.body;
 
+    // Filter by the location (Warsaw Office / Repairs) and the date received
     let query = supabase
         .from('equipments')
-        .select('serial_number, terminal_type, status, current_location, received_date')
+        .select(`
+            id, terminal_type, serial_number, status, 
+            current_location, condition, received_date,
+            merchants:merchant_id (dba_name)
+        `, { count: 'exact' })
+        .eq('current_location', subFilter)
         .gte('received_date', startDate)
-        .lte('received_date', endDate);
+        .lte('received_date', endDate)
+        .range(offset, offset + limit - 1); // Use range for large datasets
 
-    // Apply the specific location filter
-    if (subFilter) {
-        query = query.eq('current_location', subFilter);
-    }
-
-    const { data, error } = await query;
+    const { data, error, count } = await query;
     if (error) throw error;
 
-    if (exportMode) {
-        // Map keys to match the user-friendly table headers
-        const formatted = data.map(i => ({
-            "Serial Number": i.serial_number,
-            "Model": i.terminal_type,
-            "Status": i.status,
-            "Location": i.current_location,
-            "Date Received": i.received_date
-        }));
-        return res.status(200).json({ success: true, rawData: formatted });
-    }
-    // ... existing KPI logic ...
+    return res.status(200).json({ success: true, rawData: data, totalCount: count });
 }
         if (action === 'getActivityLogs') {
             const { data, error } = await supabase
