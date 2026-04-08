@@ -8,6 +8,40 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
+        if (action === 'bulk_validate') {
+    const validationResults = [];
+
+    for (const row of payload) {
+        // 1. Check Equipment Status
+        const { data: equip } = await supabase
+            .from('equipments')
+            .select('status, id')
+            .eq('serial_number', row.serial_number)
+            .maybeSingle();
+
+        // 2. Check Merchant Existence
+        const { data: merchant } = await supabase
+            .from('merchants')
+            .select('id')
+            .eq('merchant_id', row.merchant_id)
+            .maybeSingle();
+
+        let message = 'Ready';
+        if (!equip) message = 'Serial Not Found';
+        else if (equip.status !== 'stocked') message = `Currently ${equip.status.toUpperCase()}`;
+        else if (!merchant) message = 'Invalid Merchant ID';
+
+        validationResults.push({
+            ...row,
+            status: equip?.status || 'missing',
+            merchantExists: !!merchant,
+            merchantUuid: merchant?.id,
+            equipmentUuid: equip?.id,
+            message: message
+        });
+    }
+    return res.status(200).json({ success: true, validationResults });
+}
 
         if (action === 'log_return') {
     const { 
