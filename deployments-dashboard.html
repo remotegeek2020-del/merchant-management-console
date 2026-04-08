@@ -217,12 +217,130 @@
     </div>
 </div>
 
+    <div id="bulkPreviewModal" class="modal-backdrop" onclick="closeModal(event, 'bulkPreviewModal')">
+    <div class="modal-content" style="width: 900px;" onclick="event.stopPropagation()">
+        <span class="material-icons close-btn" onclick="document.getElementById('bulkPreviewModal').style.display='none'">close</span>
+        <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:10px;">Bulk Deployment Preview</h2>
+        <p style="color:#64748b; margin-bottom:20px; font-size: 0.9rem;">Reviewing CSV data against live inventory stock...</p>
+        
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 20px;">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                <thead>
+                    <tr class="slds-line-height_reset">
+                        <th>Serial Number</th>
+                        <th>Merchant ID</th>
+                        <th>Status Check</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody id="bulkPreviewTable"></tbody>
+            </table>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div id="bulkSummaryText" style="font-weight: 700; color: #002d5a;"></div>
+            <div style="display: flex; gap: 10px;">
+                <button class="slds-button slds-button_neutral" onclick="document.getElementById('bulkPreviewModal').style.display='none'">CANCEL</button>
+                <button id="confirmBulkBtn" class="slds-button slds-button_brand" style="background:var(--pp-blue);" disabled>PROCEED WITH DEPLOYMENT</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
     let currentDeployments = [];
     let searchTimeout; // Declared once at the top level
     let currentPage = 1;
     let totalPages = 1;
     let lookupTimeout;
+
+    async function handleBulkUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        const rows = text.split('\n').map(row => row.split(','));
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        
+        const payload = rows.slice(1).filter(row => row.length > 1).map(row => {
+            const obj = {};
+            headers.forEach((h, i) => obj[h] = row[i]?.trim());
+            return obj;
+        });
+
+        Swal.fire({ title: 'Validating Inventory...', didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'bulk_validate', payload })
+            });
+            const result = await res.json();
+            Swal.close();
+
+            if (result.success) {
+                renderBulkPreview(result.validationResults);
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Validation failed', 'error');
+        }
+    };
+    reader.readAsText(file);
+    input.value = ''; 
+}
+
+function renderBulkPreview(results) {
+    const tbody = document.getElementById('bulkPreviewTable');
+    const summary = document.getElementById('bulkSummaryText');
+    const confirmBtn = document.getElementById('confirmBulkBtn');
+    
+    tbody.innerHTML = '';
+    let validCount = 0;
+
+    results.forEach(item => {
+        const tr = document.createElement('tr');
+        const isReady = item.status === 'stocked' && item.merchantExists;
+        if (isReady) validCount++;
+
+        tr.innerHTML = `
+            <td><code>${item.serial_number}</code></td>
+            <td>${item.merchant_id}</td>
+            <td>
+                <span class="badge" style="background: ${isReady ? '#f0fdf4' : '#fff1f2'}; color: ${isReady ? '#166534' : '#e11d48'};">
+                    ${item.message}
+                </span>
+            </td>
+            <td style="color: ${isReady ? '#166534' : '#e11d48'}; font-weight: 700;">
+                ${isReady ? 'READY' : 'SKIPPED'}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    summary.innerText = `READY TO CREATE: ${validCount} | BLOCKED: ${results.length - validCount}`;
+    confirmBtn.disabled = validCount === 0;
+    confirmBtn.onclick = () => executeBulk(results.filter(r => r.status === 'stocked' && r.merchantExists));
+    
+    document.getElementById('bulkPreviewModal').style.display = 'flex';
+}
+
+async function executeBulk(validData) {
+    Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading() });
+    const res = await fetch('/api/deployments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bulk_create', payload: validData })
+    });
+    const result = await res.json();
+    if (result.success) {
+        document.getElementById('bulkPreviewModal').style.display = 'none';
+        Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
+        fetchDeployments();
+    }
+}
 
     async function completeRMA() {
     const deploymentId = document.getElementById('editId').value;
