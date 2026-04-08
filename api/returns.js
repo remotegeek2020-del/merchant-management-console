@@ -13,40 +13,24 @@ export default async function handler(req, res) {
         const body = req.body || {};
         const { action, id, payload, query } = body;
 
-      if (action === 'getMonthlyReport') {
-    const { startDate, endDate } = req.body;
+if (action === 'getMonthlyReport') {
+    const { startDate, endDate, subFilter, offset = 0, limit = 1000 } = req.body;
+    const dateField = subFilter || 'return_date_initiated'; // Default to initiation date
 
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
         .from('returns')
         .select(`
-            return_id,
-            return_reason,
-            condition,
-            destination,
-            status,
-            return_date_initiated,
-            equipment_received_date,
+            return_id, return_reason, condition, destination, status, 
+            return_date_initiated, equipment_received_date,
             merchants:merchant_id (dba_name),
             equipments:equipment_id (serial_number)
-        `)
-        .gte('return_date_initiated', startDate)
-        .lte('return_date_initiated', endDate);
+        `, { count: 'exact' })
+        .gte(dateField, startDate)
+        .lte(dateField, endDate)
+        .range(offset, offset + limit - 1);
 
     if (error) throw error;
-
-    const rawData = data.map(d => ({
-        "Return ID": d.return_id,
-        "Date Initiated": d.return_date_initiated || '---',
-        "Date Received": d.equipment_received_date || 'In Transit',
-        "Merchant": d.merchants?.dba_name || 'N/A',
-        "Serial": d.equipments?.serial_number || 'N/A',
-        "Reason": d.return_reason,
-        "Condition": d.condition,
-        "Destination": d.destination,
-        "Status": d.status
-    }));
-
-    return res.status(200).json({ success: true, rawData });
+    return res.status(200).json({ success: true, rawData: data, totalCount: count });
 }
        if (action === 'list') {
     const { data, error } = await supabase.from('returns').select(`
