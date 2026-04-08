@@ -150,12 +150,66 @@
         `).join('');
     }
 
-    function handleCSVExport() {
-        const type = document.getElementById('reportType').value;
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-        downloadCSV(currentRawData, `${type}_report_${start}_to_${end}.csv`);
+   async function handleCSVExport() {
+    const type = document.getElementById('reportType').value;
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+    const subFilter = document.getElementById('subFilter').value;
+
+    let allData = [];
+    let offset = 0;
+    const limit = 1000;
+    let totalRecords = 0;
+
+    Swal.fire({
+        title: 'Downloading Inventory...',
+        html: `<div id="exportProgress">Preparing stream...</div>`,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
+
+    try {
+        const apiPath = type === 'inventory' ? '/api/equipments' : `/api/${type}`;
+        
+        while (true) {
+            const res = await fetch(apiPath, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'getMonthlyReport',
+                    startDate: start,
+                    endDate: end,
+                    subFilter: subFilter,
+                    offset: offset,
+                    limit: limit
+                })
+            });
+            const result = await res.json();
+
+            if (!result.success) throw new Error(result.message);
+            
+            allData = allData.concat(result.rawData);
+            totalRecords = result.totalCount;
+            
+            // Update progress in the Swal modal
+            document.getElementById('exportProgress').innerText = 
+                `Fetched ${allData.length} of ${totalRecords} records...`;
+
+            if (allData.length >= totalRecords || result.rawData.length < limit) break;
+            offset += limit;
+        }
+
+        if (allData.length > 0) {
+            downloadCSV(allData, `${type}_full_export.csv`);
+            Swal.fire('Export Complete', `${allData.length} records exported successfully.`, 'success');
+        } else {
+            Swal.fire('No Data', 'No records found for this range.', 'info');
+        }
+    } catch (err) {
+        console.error(err);
+        Swal.fire('Error', 'Export failed: ' + err.message, 'error');
     }
+}
 
     function downloadCSV(data, filename) {
         const headers = Object.keys(data[0]).join(',');
