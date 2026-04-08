@@ -124,36 +124,24 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
 }
-    if (action === 'getMonthlyReport') {
-    const { startDate, endDate } = req.body;
+   if (action === 'getMonthlyReport') {
+    const { startDate, endDate, subFilter, offset = 0, limit = 1000 } = req.body;
+    const dateField = subFilter || 'return_date_initiated'; // Default to initiation date
 
-    const { data, error } = await supabase
-        .from('deployments') // Query the primary deployments table
+    const { data, error, count } = await supabase
+        .from('returns')
         .select(`
-            deployment_id,
-            tid,
-            tracking_id,
-            target_deployment_date,
-            status,
+            return_id, return_reason, condition, destination, status, 
+            return_date_initiated, equipment_received_date,
             merchants:merchant_id (dba_name),
-            equipments:equipment_id (serial_number, terminal_type)
-        `)
-        .gte('target_deployment_date', startDate)
-        .lte('target_deployment_date', endDate);
+            equipments:equipment_id (serial_number)
+        `, { count: 'exact' })
+        .gte(dateField, startDate)
+        .lte(dateField, endDate)
+        .range(offset, offset + limit - 1);
 
     if (error) throw error;
-
-    const rawData = data.map(d => ({
-        "Deployment ID": d.deployment_id,
-        "Date": d.target_deployment_date,
-        "Merchant": d.merchants?.dba_name || 'N/A',
-        "Serial": d.equipments?.serial_number || 'N/A',
-        "Model": d.equipments?.terminal_type || 'N/A',
-        "TID": d.tid || 'N/A',
-        "Status": d.status
-    }));
-
-    return res.status(200).json({ success: true, rawData });
+    return res.status(200).json({ success: true, rawData: data, totalCount: count });
 }
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
 if (action === 'update') {
