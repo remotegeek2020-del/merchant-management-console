@@ -211,18 +211,40 @@
     }
 }
 
-    function downloadCSV(data, filename) {
-        const headers = Object.keys(data[0]).join(',');
-        const rows = data.map(row => Object.values(row).map(v => `"${v}"`).join(','));
-        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows.join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", filename);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+   function downloadCSV(data, filename) {
+    if (!data || data.length === 0) return;
+
+    // Define the specific columns you want in the export
+    const headers = Object.keys(data[0]).filter(k => typeof data[0][k] !== 'object');
+    // Add columns for nested data
+    const allHeaders = [...headers, 'Merchant_Name', 'Serial_Number'];
+
+    const csvRows = [];
+    csvRows.push(allHeaders.join(','));
+
+    for (const row of data) {
+        const values = headers.map(header => {
+            const val = row[header] || '';
+            return `"${val.toString().replace(/"/g, '""')}"`;
+        });
+        
+        // Extract nested values
+        const merchantName = row.merchants?.dba_name || 'N/A';
+        const serialNumber = row.equipments?.serial_number || 'N/A';
+        
+        values.push(`"${merchantName}"`, `"${serialNumber}"`);
+        csvRows.push(values.join(','));
     }
+
+    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
 
     function printReportPDF() {
         window.print();
