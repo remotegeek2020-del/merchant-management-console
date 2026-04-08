@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
-        if (action === 'bulk_validate') {
+       if (action === 'bulk_validate') {
     const validationResults = [];
 
     for (const row of payload) {
