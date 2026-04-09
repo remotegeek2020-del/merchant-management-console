@@ -27,7 +27,7 @@ if (action === 'getMonthlyReport') {
             status,
             return_date_initiated,
             equipment_received_date,
-            merchants:merchant_id (dba_name),
+            merchants:merchant_id (dba_name, merchant_id), -- ADDED merchant_id HERE
             equipments:equipment_id (serial_number)
         `, { count: 'exact' })
         .gte('return_date_initiated', startDate)
@@ -40,12 +40,10 @@ if (action === 'getMonthlyReport') {
     const rawData = data.map(d => ({
         "Return ID": d.return_id,
         "Date Initiated": d.return_date_initiated || '---',
-        "Date Received": d.equipment_received_date || 'In Transit',
-        "Merchant": d.merchants?.dba_name || 'N/A',
+        "Merchant ID": d.merchants?.merchant_id || 'N/A', // ADDED THIS LINE
+        "Merchant Name": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
         "Reason": d.return_reason,
-        "Condition": d.condition,
-        "Destination": d.destination,
         "Status": d.status
     }));
 
