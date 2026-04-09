@@ -131,22 +131,29 @@ if (action === 'getMonthlyReport') {
     return res.status(200).json({ success: true, rawData, totalCount: count });
 }
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
+// Inside api/deployments.js -> action === 'update'
 if (action === 'update') {
-    const { deployment_id, status, tracking_id, target_date, notes } = payload;
+    const { 
+        deployment_id, 
+        status, 
+        tracking_id, 
+        target_date, 
+        notes, 
+        purchase_type // FIXED: Now explicitly defined
+    } = payload; 
 
-    // 1. Fetch current data to ensure it exists and to get the equipment_id for logs
+    // 1. Fetch current data to ensure it exists
     const { data: oldDep, error: fetchError } = await supabase
         .from('deployments')
         .select('status, tracking_id, equipment_id, merchant_id')
         .eq('id', deployment_id)
         .single();
 
-    // Safety Check: if the ticket doesn't exist, stop here
     if (fetchError || !oldDep) {
         return res.status(404).json({ success: false, message: "Deployment ticket not found." });
     }
 
-    // 2. Perform the Update
+    // 2. Perform the Update with the new purchase_type
     const { error: updateError } = await supabase
         .from('deployments')
         .update({ 
@@ -154,14 +161,13 @@ if (action === 'update') {
             tracking_id: tracking_id, 
             target_deployment_date: target_date, 
             notes: notes,
-            purchase_type: purchase_type // Add this line here
-            
+            purchase_type: purchase_type // FIXED: Included in update
         })
         .eq('id', deployment_id);
 
     if (updateError) throw updateError;
 
-    // 3. Log the change ONLY if status or tracking actually changed
+    // 3. Log the change
     if (oldDep.status !== status || oldDep.tracking_id !== tracking_id) {
         await supabase.from('equipment_logs').insert([{
             equipment_id: oldDep.equipment_id,
@@ -170,13 +176,12 @@ if (action === 'update') {
             action: 'TICKET_UPDATED',
             from_location: 'Merchant Site',
             to_location: 'Merchant Site',
-            notes: `Status changed to ${status}. Tracking: ${tracking_id || 'None'}`
+            notes: `Status changed to ${status}. Purchase Type: ${purchase_type || 'N/A'}`
         }]);
     }
 
     return res.status(200).json({ success: true });
 }
-
       // --- ACTION: check_rma ---
 if (action === 'check_rma') {
     const { deployment_id } = body.payload;
