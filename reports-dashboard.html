@@ -89,53 +89,42 @@
 </div>
 
 <script>
-let currentRawData = [];
-let totalRecordsAvailable = 0; // Tracks the database count for the selected filter
+let totalRecordsAvailable = 0;
 
 async function runReport() {
     const type = document.getElementById('reportType').value;
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
 
-    if (!start || !end) {
-        Swal.fire('Missing Dates', 'Please select a date range to continue.', 'warning');
-        return;
-    }
+    if (!start || !end) return Swal.fire('Error', 'Please select a date range.', 'warning');
 
-    Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
+    Swal.fire({ title: 'Scanning Records...', didOpen: () => Swal.showLoading() });
 
     try {
-        // We now point to the unified reports API
         const res = await fetch('/api/reports', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                action: 'getMonthlyReport',
-                reportType: type, // Tells backend which table to use
-                startDate: start,
-                endDate: end,
-                offset: 0,
-                limit: 100 // Only fetch first 100 for the preview table
+                action: 'getMonthlyReport', 
+                reportType: type, 
+                startDate: start, 
+                endDate: end, 
+                offset: 0, 
+                limit: 100 // Fast sample for the preview table
             })
         });
         const result = await res.json();
 
-        if (result.success && result.rawData && result.rawData.length > 0) {
-            currentRawData = result.rawData;
-            totalRecordsAvailable = result.totalCount; // Store the 15,000+ count
-            
+        if (result.success && result.rawData.length > 0) {
+            totalRecordsAvailable = result.totalCount; // The total number from the DB (e.g., 30,000)
             renderPreviewTable(result.rawData);
-            
             document.getElementById('resultsCard').style.display = 'block';
-            document.getElementById('previewTitle').innerText = `Report Preview (Showing 100 of ${result.totalCount} records)`;
+            document.getElementById('previewTitle').innerText = `Preview: Showing 100 of ${result.totalCount} records`;
             Swal.close();
         } else {
-            document.getElementById('resultsCard').style.display = 'none';
-            Swal.fire('No Data', 'No records found for the selected dates.', 'info');
+            Swal.fire('No Data', 'No records found for this range.', 'info');
         }
-    } catch (err) {
-        Swal.fire('Error', 'Report generation failed.', 'error');
-    }
+    } catch (e) { Swal.fire('Error', 'Connection failed.', 'error'); }
 }
 
 async function handleCSVExport() {
@@ -145,83 +134,44 @@ async function handleCSVExport() {
 
     let allData = [];
     let offset = 0;
-    const limit = 1000; // Fetch in chunks of 1000
+    const limit = 1000; // Chunk size for each request
 
     Swal.fire({
-        title: 'Exporting Full Dataset',
-        html: `<div id="progText">Initializing download for ${totalRecordsAvailable} records...</div>`,
+        title: 'Downloading Dataset',
+        html: `<div id="progStatus">Initializing...</div>`,
         allowOutsideClick: false,
-        didOpen: () => { Swal.showLoading(); }
+        didOpen: () => Swal.showLoading()
     });
 
     try {
-        // Loop until we have fetched every record found by the filter
+        // SCALABLE LOOP: Continues until all data is gathered
         while (offset < totalRecordsAvailable) {
             const res = await fetch('/api/reports', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    action: 'getMonthlyReport',
-                    reportType: type,
-                    startDate: start,
-                    endDate: end,
-                    offset: offset,
-                    limit: limit
+                    action: 'getMonthlyReport', 
+                    reportType: type, 
+                    startDate: start, 
+                    endDate: end, 
+                    offset: offset, 
+                    limit: limit 
                 })
             });
             const result = await res.json();
             
-            if (!result.success) throw new Error(result.message);
-
             allData = allData.concat(result.rawData);
             
-            // Update the user on progress
-            const prog = document.getElementById('progText');
-            if (prog) prog.innerText = `Fetched ${allData.length} of ${totalRecordsAvailable} records...`;
-
-            if (result.rawData.length < limit) break; // Safety break
+            // Progress tracker so user knows it hasn't crashed
+            document.getElementById('progStatus').innerText = `Fetched ${allData.length} of ${totalRecordsAvailable} records...`;
+            
+            if (result.rawData.length < limit) break; // Exit if we hit the end early
             offset += limit;
         }
 
-        downloadCSV(allData, `${type}_full_report_${start}_to_${end}.csv`);
-        Swal.fire('Export Complete', `${allData.length} records exported successfully.`, 'success');
-    } catch (err) {
-        Swal.fire('Error', 'Export failed: ' + err.message, 'error');
-    }
-}
-
-// Optimized CSV downloader for large datasets
-function downloadCSV(data, filename) {
-    if (!data || data.length === 0) return;
-
-    // Get headers from the first row
-    const headers = Object.keys(data[0]);
-    const csvRows = [];
-    
-    // Add Header Row
-    csvRows.push(headers.map(h => h.toUpperCase().replace(/_/g, ' ')).join(','));
-
-    // Add Data Rows (Flattening nested objects if they exist)
-    for (const row of data) {
-        const values = headers.map(header => {
-            const val = row[header];
-            // Handle nested objects like merchants: { dba_name: 'Name' }
-            if (val && typeof val === 'object') {
-                return `"${(val.dba_name || val.serial_number || '').toString().replace(/"/g, '""')}"`;
-            }
-            return `"${(val || '').toString().replace(/"/g, '""')}"`;
-        });
-        csvRows.push(values.join(','));
-    }
-
-    const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", filename);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+        downloadCSV(allData, `${type}_report_full.csv`);
+        Swal.fire('Complete', `${allData.length} records exported successfully.`, 'success');
+    } catch (e) { Swal.fire('Error', 'Large export failed.', 'error'); }
 }
 </script>
 
