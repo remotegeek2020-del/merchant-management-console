@@ -99,28 +99,29 @@ if (action === 'getMonthlyReport') {
         .select(`
             deployment_id,
             tid,
+            tracking_id,
             target_deployment_date,
             status,
-            merchants:merchant_id (
-                dba_name, 
-                merchant_id
-            ),
+            purchase_type, -- ADDED THIS LINE
+            merchants:merchant_id (dba_name, merchant_id),
             equipments:equipment_id (serial_number, terminal_type)
-        `, { count: 'exact' }) // Ensure count is 'exact'
+        `, { count: 'exact' })
         .gte('target_deployment_date', startDate)
         .lte('target_deployment_date', endDate)
-        .range(offset, offset + limit - 1);
+        .range(offset, offset + limit - 1)
+        .order('target_deployment_date', { ascending: false });
 
     if (error) throw error;
 
     const rawData = data.map(d => ({
         "Deployment ID": d.deployment_id,
         "Date": d.target_deployment_date,
-        "Merchant ID": d.merchants?.merchant_id || 'N/A', // Pulled from the joined merchants table
+        "Merchant ID": d.merchants?.merchant_id || 'N/A',
         "Merchant Name": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
         "Model": d.equipments?.terminal_type || 'N/A',
         "TID": d.tid || 'N/A',
+        "Purchase Type": d.purchase_type || 'N/A', // ADDED THIS LINE
         "Status": d.status
     }));
 
