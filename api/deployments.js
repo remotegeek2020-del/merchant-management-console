@@ -8,40 +8,6 @@ export default async function handler(req, res) {
     const { action, payload, query } = body;
 
     try {
-       if (action === 'bulk_validate') {
-    const validationResults = [];
-
-    for (const row of payload) {
-        // 1. Check Equipment Status
-        const { data: equip } = await supabase
-            .from('equipments')
-            .select('status, id')
-            .eq('serial_number', row.serial_number)
-            .maybeSingle();
-
-        // 2. Check Merchant Existence
-        const { data: merchant } = await supabase
-            .from('merchants')
-            .select('id')
-            .eq('merchant_id', row.merchant_id)
-            .maybeSingle();
-
-        let message = 'Ready';
-        if (!equip) message = 'Serial Not Found';
-        else if (equip.status !== 'stocked') message = `Currently ${equip.status.toUpperCase()}`;
-        else if (!merchant) message = 'Invalid Merchant ID';
-
-        validationResults.push({
-            ...row,
-            status: equip?.status || 'missing',
-            merchantExists: !!merchant,
-            merchantUuid: merchant?.id,
-            equipmentUuid: equip?.id,
-            message: message
-        });
-    }
-    return res.status(200).json({ success: true, validationResults });
-}
 
         if (action === 'log_return') {
     const { 
@@ -124,7 +90,37 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
 }
-  
+    if (action === 'getMonthlyReport') {
+    const { startDate, endDate } = req.body;
+
+    const { data, error } = await supabase
+        .from('deployments') // Query the primary deployments table
+        .select(`
+            deployment_id,
+            tid,
+            tracking_id,
+            target_deployment_date,
+            status,
+            merchants:merchant_id (dba_name),
+            equipments:equipment_id (serial_number, terminal_type)
+        `)
+        .gte('target_deployment_date', startDate)
+        .lte('target_deployment_date', endDate);
+
+    if (error) throw error;
+
+    const rawData = data.map(d => ({
+        "Deployment ID": d.deployment_id,
+        "Date": d.target_deployment_date,
+        "Merchant": d.merchants?.dba_name || 'N/A',
+        "Serial": d.equipments?.serial_number || 'N/A',
+        "Model": d.equipments?.terminal_type || 'N/A',
+        "TID": d.tid || 'N/A',
+        "Status": d.status
+    }));
+
+    return res.status(200).json({ success: true, rawData });
+}
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
 if (action === 'update') {
     const { deployment_id, status, tracking_id, target_date, notes } = payload;
