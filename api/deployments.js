@@ -90,31 +90,33 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
 }
+// Inside api/deployments.js
 if (action === 'getMonthlyReport') {
-    const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
+    const { startDate, endDate, offset = 0, limit = 1000 } = body;
 
     const { data, error, count } = await supabase
         .from('deployments')
         .select(`
             deployment_id,
             tid,
-            tracking_id,
             target_deployment_date,
             status,
-            merchants:merchant_id (dba_name, merchant_id), -- ADDED merchant_id HERE
+            merchants:merchant_id (
+                dba_name, 
+                merchant_id
+            ),
             equipments:equipment_id (serial_number, terminal_type)
-        `, { count: 'exact' })
+        `, { count: 'exact' }) // Ensure count is 'exact'
         .gte('target_deployment_date', startDate)
         .lte('target_deployment_date', endDate)
-        .range(offset, offset + limit - 1)
-        .order('target_deployment_date', { ascending: false });
+        .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
     const rawData = data.map(d => ({
         "Deployment ID": d.deployment_id,
         "Date": d.target_deployment_date,
-        "Merchant ID": d.merchants?.merchant_id || 'N/A', // ADDED THIS LINE
+        "Merchant ID": d.merchants?.merchant_id || 'N/A', // Pulled from the joined merchants table
         "Merchant Name": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
         "Model": d.equipments?.terminal_type || 'N/A',
