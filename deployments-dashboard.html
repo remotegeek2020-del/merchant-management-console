@@ -850,7 +850,7 @@ async function openEditModal(index) {
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
-    async function saveDeployment(event) {
+async function saveDeployment(event) {
     event.preventDefault();
     const payload = {
         merchant_id: document.getElementById('selectedMerchantId').value,
@@ -858,7 +858,7 @@ async function openEditModal(index) {
         tid: document.getElementById('tidInput').value,
         tracking_id: document.getElementById('trackingInput').value,
         target_date: document.getElementById('dateInput').value,
-        purchase_type: document.getElementById('purchaseType').value, // ADDED THIS
+        purchase_type: document.getElementById('purchaseType').value, // Must match backend name
         notes: document.getElementById('notesInput').value
     };
     
