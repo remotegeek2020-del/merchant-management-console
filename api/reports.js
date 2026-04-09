@@ -8,7 +8,7 @@ export default async function handler(req, res) {
         try {
             let table, dateField, selectQuery;
 
-            // Map the report type to the correct table and specific date field
+            // Define table-specific logic based on your schema
             if (reportType === 'inventory') {
                 table = 'equipments';
                 dateField = 'received_date'; //
@@ -23,6 +23,7 @@ export default async function handler(req, res) {
                 selectQuery = `return_id, return_reason, condition, status, return_date_initiated, equipment_received_date, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)`;
             }
 
+            // Execute query with 'exact' count to handle large datasets
             const { data, error, count } = await supabase
                 .from(table)
                 .select(selectQuery, { count: 'exact' })
