@@ -102,7 +102,7 @@ if (action === 'getMonthlyReport') {
             tracking_id,
             target_deployment_date,
             status,
-            purchase_type, -- ADDED THIS LINE
+            purchase_type,
             merchants:merchant_id (dba_name, merchant_id),
             equipments:equipment_id (serial_number, terminal_type)
         `, { count: 'exact' })
@@ -111,7 +111,10 @@ if (action === 'getMonthlyReport') {
         .range(offset, offset + limit - 1)
         .order('target_deployment_date', { ascending: false });
 
-    if (error) throw error;
+    if (error) {
+        console.error("Report Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
 
     const rawData = data.map(d => ({
         "Deployment ID": d.deployment_id,
@@ -121,7 +124,7 @@ if (action === 'getMonthlyReport') {
         "Serial": d.equipments?.serial_number || 'N/A',
         "Model": d.equipments?.terminal_type || 'N/A',
         "TID": d.tid || 'N/A',
-        "Purchase Type": d.purchase_type || 'N/A', // ADDED THIS LINE
+        "Purchase Type": d.purchase_type || '---',
         "Status": d.status
     }));
 
