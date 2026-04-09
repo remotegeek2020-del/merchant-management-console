@@ -310,34 +310,32 @@ if (action === 'delete') {
             });
         }
 
-        // --- ACTION: CREATE ---
-       if (action === 'create') {
-    const { merchant_id, equipment_id, tid, tracking_id, target_date, notes } = payload;
+   // Inside api/deployments.js -> if (action === 'create')
+if (action === 'create') {
+    const { 
+        merchant_id, 
+        equipment_id, 
+        tid, 
+        tracking_id, 
+        target_date, 
+        notes, 
+        purchase_type // 1. Extract the new field from the payload
+    } = payload;
 
-    // 1. SURGICAL ATOMIC CHECK: Verify equipment is still 'stocked' right now
-    const { data: checkEquip, error: checkError } = await supabase
-        .from('equipments')
-        .select('status, serial_number')
-        .eq('id', equipment_id)
-        .single();
-
-    if (checkError || !checkEquip) throw new Error("Equipment not found.");
-    
-    // If someone else grabbed it 1 second ago, the status won't be 'stocked'
-    if (checkEquip.status !== 'stocked') {
-        return res.status(400).json({ 
-            success: false, 
-            message: `Conflict: Serial ${checkEquip.serial_number} was just deployed by another user.` 
-        });
-    }
-
-    // 2. Proceed with creation only if the check passed
-    const { data: merchantData } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
-    const dbaName = merchantData?.dba_name || 'Client Site';
+    // ... (keep your existing atomic check logic here) ...
 
     const { data: newDep, error: depError } = await supabase
         .from('deployments')
-        .insert([{ merchant_id, equipment_id, tid, tracking_id, target_deployment_date: target_date, notes, status: 'Open' }])
+        .insert([{ 
+            merchant_id, 
+            equipment_id, 
+            tid, 
+            tracking_id, 
+            target_deployment_date: target_date, 
+            notes, 
+            purchase_type, // 2. Add it to the database insert
+            status: 'Open' 
+        }])
         .select();
 
     if (depError) throw depError;
