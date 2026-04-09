@@ -91,6 +91,18 @@
 <script>
 let totalRecordsAvailable = 0;
 
+    function updateReportUI() {
+    const type = document.getElementById('reportType').value;
+    const container = document.getElementById('inventoryFilterContainer');
+    
+    // Only show Category (Location) for Inventory
+    if (type === 'inventory') {
+        container.style.display = 'block';
+    } else {
+        container.style.display = 'none';
+    }
+}
+
 async function runReport() {
     const type = document.getElementById('reportType').value;
     const start = document.getElementById('startDate').value;
