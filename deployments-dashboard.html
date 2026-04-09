@@ -133,6 +133,16 @@
                 <input type="date" id="dateInput" class="slds-input" required>
             </div>
             <input type="text" id="trackingInput" class="slds-input" placeholder="Tracking Number" style="margin-bottom:15px;">
+            div style="margin-bottom: 15px;">
+    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">PURCHASE TYPE</label>
+    <select id="purchaseType" class="slds-select" style="border-radius: 8px;" required>
+        <option value="">Select Purchase Type...</option>
+        <option value="Free Placement">Free Placement</option>
+        <option value="Agent Purchase">Agent Purchase</option>
+        <option value="Rental">Rental</option>
+        <option value="Reprogram">Reprogram</option>
+    </select>
+</div>
             <textarea id="notesInput" class="slds-textarea" placeholder="Internal notes..." style="margin-bottom:20px; height:60px;"></textarea>
             <button type="submit" id="createBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue);">CREATE DEPLOYMENT</button>
         </form>
