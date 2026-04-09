@@ -153,7 +153,9 @@ if (action === 'update') {
             status: status, 
             tracking_id: tracking_id, 
             target_deployment_date: target_date, 
-            notes: notes 
+            notes: notes,
+            purchase_type: purchase_type // Add this line here
+            
         })
         .eq('id', deployment_id);
 
