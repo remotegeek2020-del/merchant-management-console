@@ -13,6 +13,41 @@ export default async function handler(req, res) {
         const body = req.body || {};
         const { action, id, payload, query } = body;
 
+      if (action === 'getMonthlyReport') {
+    const { startDate, endDate } = req.body;
+
+    const { data, error } = await supabase
+        .from('returns')
+        .select(`
+            return_id,
+            return_reason,
+            condition,
+            destination,
+            status,
+            return_date_initiated,
+            equipment_received_date,
+            merchants:merchant_id (dba_name),
+            equipments:equipment_id (serial_number)
+        `)
+        .gte('return_date_initiated', startDate)
+        .lte('return_date_initiated', endDate);
+
+    if (error) throw error;
+
+    const rawData = data.map(d => ({
+        "Return ID": d.return_id,
+        "Date Initiated": d.return_date_initiated || '---',
+        "Date Received": d.equipment_received_date || 'In Transit',
+        "Merchant": d.merchants?.dba_name || 'N/A',
+        "Serial": d.equipments?.serial_number || 'N/A',
+        "Reason": d.return_reason,
+        "Condition": d.condition,
+        "Destination": d.destination,
+        "Status": d.status
+    }));
+
+    return res.status(200).json({ success: true, rawData });
+}
        if (action === 'list') {
     const { data, error } = await supabase.from('returns').select(`
         id, return_id, return_reason, condition, destination, status, created_at,
@@ -71,4 +106,3 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, message: "Server Error: " + err.message });
     }
 }
-
