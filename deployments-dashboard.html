@@ -185,6 +185,16 @@
                 <input type="text" id="editTid" class="slds-input" style="border-radius:8px; background:#f8fafc; color:#64748b;">
             </div>
 
+<div style="margin-bottom:15px;">
+    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">PURCHASE TYPE</label>
+    <select id="editPurchaseType" class="slds-select" style="border-radius:8px;">
+        <option value="Free Placement">Free Placement</option>
+        <option value="Agent Purchase">Agent Purchase</option>
+        <option value="Rental">Rental</option>
+        <option value="Reprogram">Reprogram</option>
+    </select>
+</div>
+
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TICKET STATUS</label>
                 <select id="editStatus" class="slds-select" style="border-radius:8px;">
@@ -506,6 +516,7 @@ if (document.getElementById('kpi-total')) {
         tracking_id: document.getElementById('editTracking').value,
         target_date: document.getElementById('editDate').value,
         notes: document.getElementById('editNotes').value
+        purchase_type: document.getElementById('editPurchaseType').value
     };
 
     try {
@@ -797,6 +808,8 @@ async function openEditModal(index) {
     document.getElementById('editStatus').value = d.status || 'Open';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
+    // ADD THIS LINE:
+    document.getElementById('editPurchaseType').value = d.purchase_type || 'Free Placement';
     
     if (d.target_deployment_date) {
         document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
