@@ -90,22 +90,26 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true });
 }
-    if (action === 'getMonthlyReport') {
-    const { startDate, endDate } = req.body;
+  // Inside api/deployments.js handler
+if (action === 'getMonthlyReport') {
+    const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
-    const { data, error } = await supabase
-        .from('deployments') // Query the primary deployments table
+    const { data, error, count } = await supabase
+        .from('deployments')
         .select(`
             deployment_id,
             tid,
             tracking_id,
             target_deployment_date,
             status,
+            notes,
             merchants:merchant_id (dba_name),
             equipments:equipment_id (serial_number, terminal_type)
-        `)
+        `, { count: 'exact' })
         .gte('target_deployment_date', startDate)
-        .lte('target_deployment_date', endDate);
+        .lte('target_deployment_date', endDate)
+        .range(offset, offset + limit - 1)
+        .order('target_deployment_date', { ascending: false });
 
     if (error) throw error;
 
@@ -116,10 +120,12 @@ export default async function handler(req, res) {
         "Serial": d.equipments?.serial_number || 'N/A',
         "Model": d.equipments?.terminal_type || 'N/A',
         "TID": d.tid || 'N/A',
-        "Status": d.status
+        "Tracking": d.tracking_id || 'N/A',
+        "Status": d.status,
+        "Notes": d.notes || ''
     }));
 
-    return res.status(200).json({ success: true, rawData });
+    return res.status(200).json({ success: true, rawData, totalCount: count });
 }
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
 if (action === 'update') {
