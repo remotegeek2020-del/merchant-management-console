@@ -851,25 +851,31 @@ async function openEditModal(index) {
     document.getElementById('editDepModal').style.display = 'flex';
 }
     async function saveDeployment(event) {
-        event.preventDefault();
-        const payload = {
-            merchant_id: document.getElementById('selectedMerchantId').value,
-            equipment_id: document.getElementById('equipSelect').value,
-            tid: document.getElementById('tidInput').value,
-            tracking_id: document.getElementById('trackingInput').value,
-            target_date: document.getElementById('dateInput').value,
-            notes: document.getElementById('notesInput').value
-        };
-        try {
-            const res = await fetch('/api/deployments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'create', payload }) });
-            const result = await res.json();
-            if (result.success) {
-                Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
-                document.getElementById('newDepModal').style.display = 'none';
-                await fetchDeployments();
-            } else { throw new Error(result.message); }
-        } catch (e) { Swal.fire('Error', e.message, 'error'); }
-    }
+    event.preventDefault();
+    const payload = {
+        merchant_id: document.getElementById('selectedMerchantId').value,
+        equipment_id: document.getElementById('equipSelect').value,
+        tid: document.getElementById('tidInput').value,
+        tracking_id: document.getElementById('trackingInput').value,
+        target_date: document.getElementById('dateInput').value,
+        purchase_type: document.getElementById('purchaseType').value, // ADDED THIS
+        notes: document.getElementById('notesInput').value
+    };
+    
+    try {
+        const res = await fetch('/api/deployments', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ action: 'create', payload }) 
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
+            document.getElementById('newDepModal').style.display = 'none';
+            await fetchDeployments();
+        } else { throw new Error(result.message); }
+    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+}
 
     function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
     // --- BULK UPLOAD LOGIC ---
@@ -973,6 +979,15 @@ async function executeBulk(validData) {
     } catch (err) {
         Swal.fire('Error', 'Bulk creation failed', 'error');
     }
+}
+    function openNewDeploymentModal() {
+    document.getElementById('newDepModal').style.display = 'flex';
+    // Added purchaseType to the list of cleared fields
+    ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput','purchaseType'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = '';
+    });
+    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
 }
 
     window.onload = () => fetchDeployments();
