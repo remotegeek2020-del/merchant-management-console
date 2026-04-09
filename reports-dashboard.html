@@ -107,13 +107,14 @@ async function runReport() {
     const type = document.getElementById('reportType').value;
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
+    const subFilter = document.getElementById('subFilter').value; // 'Warsaw Office' or 'Warsaw Repairs'
 
-    if (!start || !end) return Swal.fire('Error', 'Please select a date range.', 'warning');
+    if (!start || !end) return Swal.fire('Error', 'Select dates', 'warning');
 
     Swal.fire({ title: 'Scanning Records...', didOpen: () => Swal.showLoading() });
 
     try {
-        const res = await fetch('/api/reports', {
+        const res = await fetch('/api/reports', { // Fixed path
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
@@ -121,22 +122,27 @@ async function runReport() {
                 reportType: type, 
                 startDate: start, 
                 endDate: end, 
+                subFilter: type === 'inventory' ? subFilter : null, 
                 offset: 0, 
-                limit: 100 // Fast sample for the preview table
+                limit: 100 
             })
         });
         const result = await res.json();
 
         if (result.success && result.rawData.length > 0) {
-            totalRecordsAvailable = result.totalCount; // The total number from the DB (e.g., 30,000)
+            totalRecordsAvailable = result.totalCount;
             renderPreviewTable(result.rawData);
             document.getElementById('resultsCard').style.display = 'block';
-            document.getElementById('previewTitle').innerText = `Preview: Showing 100 of ${result.totalCount} records`;
+            document.getElementById('previewTitle').innerText = `Preview: 100 of ${result.totalCount} records`;
             Swal.close();
         } else {
-            Swal.fire('No Data', 'No records found for this range.', 'info');
+            document.getElementById('resultsCard').style.display = 'none';
+            Swal.fire('No Data', 'No records found for this criteria.', 'info');
         }
-    } catch (e) { Swal.fire('Error', 'Connection failed.', 'error'); }
+    } catch (e) { 
+        console.error(e);
+        Swal.fire('Error', 'Connection Failed. Ensure /api/reports.js exists.', 'error'); 
+    }
 }
 
 async function handleCSVExport() {
