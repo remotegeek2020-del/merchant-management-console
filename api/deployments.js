@@ -319,11 +319,35 @@ if (action === 'create') {
         tracking_id, 
         target_date, 
         notes, 
-        purchase_type // 1. Extract the new field from the payload
+        purchase_type 
     } = payload;
 
-    // ... (keep your existing atomic check logic here) ...
+    // 1. Verify equipment is still 'stocked'
+    const { data: checkEquip, error: checkError } = await supabase
+        .from('equipments')
+        .select('status, serial_number')
+        .eq('id', equipment_id)
+        .single();
 
+    if (checkError || !checkEquip) throw new Error("Equipment not found.");
+    
+    if (checkEquip.status !== 'stocked') {
+        return res.status(400).json({ 
+            success: false, 
+            message: `Conflict: Serial ${checkEquip.serial_number} was just deployed by another user.` 
+        });
+    }
+
+    // 2. FETCH MERCHANT NAME (Fixes the 'dbaName is not defined' error)
+    const { data: merchantData } = await supabase
+        .from('merchants')
+        .select('dba_name')
+        .eq('id', merchant_id)
+        .single();
+    
+    const dbaName = merchantData?.dba_name || 'Client Site'; // Variable now defined correctly
+
+    // 3. Insert deployment with purchase_type
     const { data: newDep, error: depError } = await supabase
         .from('deployments')
         .insert([{ 
@@ -333,20 +357,26 @@ if (action === 'create') {
             tracking_id, 
             target_deployment_date: target_date, 
             notes, 
-            purchase_type, // 2. Add it to the database insert
+            purchase_type, // Saved to the deployments table
             status: 'Open' 
         }])
         .select();
 
     if (depError) throw depError;
 
-    // 3. Update equipment to 'deployed' so it disappears from other users' lookups
+    // 4. Update equipment status
     await supabase.from('equipments')
         .update({ status: 'deployed', current_location: dbaName, merchant_id })
         .eq('id', equipment_id);
 
+    // 5. Log the event
     await supabase.from('equipment_logs').insert([{
-        equipment_id, merchant_id, action: 'Deployed', from_location: 'Warsaw Office', to_location: dbaName, notes: `Deployment Created. TID: ${tid}`
+        equipment_id, 
+        merchant_id, 
+        action: 'Deployed', 
+        from_location: 'Warsaw Office', 
+        to_location: dbaName, 
+        notes: `Deployment Created. Type: ${purchase_type || 'N/A'}`
     }]);
 
     return res.status(200).json({ success: true, data: newDep });
