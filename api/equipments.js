@@ -7,7 +7,36 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
+       if (action === 'getMonthlyReport') {
+    const { startDate, endDate, subFilter, exportMode } = req.body;
 
+    let query = supabase
+        .from('equipments')
+        .select('serial_number, terminal_type, status, current_location, received_date')
+        .gte('received_date', startDate)
+        .lte('received_date', endDate);
+
+    // Apply the specific location filter
+    if (subFilter) {
+        query = query.eq('current_location', subFilter);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    if (exportMode) {
+        // Map keys to match the user-friendly table headers
+        const formatted = data.map(i => ({
+            "Serial Number": i.serial_number,
+            "Model": i.terminal_type,
+            "Status": i.status,
+            "Location": i.current_location,
+            "Date Received": i.received_date
+        }));
+        return res.status(200).json({ success: true, rawData: formatted });
+    }
+    // ... existing KPI logic ...
+}
         if (action === 'getActivityLogs') {
             const { data, error } = await supabase
                 .from('activity_logs')
