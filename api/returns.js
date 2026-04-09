@@ -14,6 +14,7 @@ export default async function handler(req, res) {
         const { action, id, payload, query } = body;
 
      // Inside api/returns.js handler
+// Inside api/returns.js
 if (action === 'getMonthlyReport') {
     const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
@@ -22,25 +23,24 @@ if (action === 'getMonthlyReport') {
         .select(`
             return_id,
             return_reason,
-            condition,
-            destination,
             status,
             return_date_initiated,
-            equipment_received_date,
-            merchants:merchant_id (dba_name, merchant_id), -- ADDED merchant_id HERE
+            merchants:merchant_id (
+                dba_name, 
+                merchant_id
+            ),
             equipments:equipment_id (serial_number)
         `, { count: 'exact' })
         .gte('return_date_initiated', startDate)
         .lte('return_date_initiated', endDate)
-        .range(offset, offset + limit - 1)
-        .order('return_date_initiated', { ascending: false });
+        .range(offset, offset + limit - 1);
 
     if (error) throw error;
 
     const rawData = data.map(d => ({
         "Return ID": d.return_id,
         "Date Initiated": d.return_date_initiated || '---',
-        "Merchant ID": d.merchants?.merchant_id || 'N/A', // ADDED THIS LINE
+        "Merchant ID": d.merchants?.merchant_id || 'N/A', // Correctly nested
         "Merchant Name": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
         "Reason": d.return_reason,
