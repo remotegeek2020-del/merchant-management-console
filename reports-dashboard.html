@@ -91,17 +91,23 @@
 <script>
 let totalRecordsAvailable = 0;
 
-    function updateReportUI() {
+   function updateReportUI() {
     const type = document.getElementById('reportType').value;
     const container = document.getElementById('inventoryFilterContainer');
     
-    // Only show Category (Location) for Inventory
+    // Check if the element exists to prevent script errors
+    if (!container) return;
+
+    // Use 'none' to hide and remove from layout, 'block' to show
     if (type === 'inventory') {
         container.style.display = 'block';
     } else {
-        container.style.display = 'none';
+        container.style.display = 'none'; // This hides it for Deployments and Returns
     }
 }
+
+// Ensure this is called on page load
+window.onload = updateReportUI;
 
 async function runReport() {
     const type = document.getElementById('reportType').value;
