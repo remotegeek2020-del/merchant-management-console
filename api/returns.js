@@ -13,10 +13,11 @@ export default async function handler(req, res) {
         const body = req.body || {};
         const { action, id, payload, query } = body;
 
-      if (action === 'getMonthlyReport') {
-    const { startDate, endDate } = req.body;
+     // Inside api/returns.js handler
+if (action === 'getMonthlyReport') {
+    const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
-    const { data, error } = await supabase
+    const { data, error, count } = await supabase
         .from('returns')
         .select(`
             return_id,
@@ -28,9 +29,11 @@ export default async function handler(req, res) {
             equipment_received_date,
             merchants:merchant_id (dba_name),
             equipments:equipment_id (serial_number)
-        `)
+        `, { count: 'exact' })
         .gte('return_date_initiated', startDate)
-        .lte('return_date_initiated', endDate);
+        .lte('return_date_initiated', endDate)
+        .range(offset, offset + limit - 1)
+        .order('return_date_initiated', { ascending: false });
 
     if (error) throw error;
 
@@ -46,7 +49,7 @@ export default async function handler(req, res) {
         "Status": d.status
     }));
 
-    return res.status(200).json({ success: true, rawData });
+    return res.status(200).json({ success: true, rawData, totalCount: count });
 }
        if (action === 'list') {
     const { data, error } = await supabase.from('returns').select(`
