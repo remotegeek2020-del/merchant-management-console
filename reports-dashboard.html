@@ -89,114 +89,90 @@
 </div>
 
 <script>
-let totalRecordsAvailable = 0;
+    let currentRawData = [];
 
-   function updateReportUI() {
-    const type = document.getElementById('reportType').value;
-    const container = document.getElementById('inventoryFilterContainer');
-    
-    // Check if the element exists to prevent script errors
-    if (!container) return;
-
-    // Use 'none' to hide and remove from layout, 'block' to show
-    if (type === 'inventory') {
-        container.style.display = 'block';
-    } else {
-        container.style.display = 'none'; // This hides it for Deployments and Returns
+    function toggleInventoryFilters() {
+        const type = document.getElementById('reportType').value;
+        const container = document.getElementById('inventoryFilterContainer');
+        container.style.visibility = (type === 'inventory') ? 'visible' : 'hidden';
     }
-}
 
-// Ensure this is called on page load
-window.onload = updateReportUI;
+    async function runReport() {
+        const type = document.getElementById('reportType').value;
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        const subFilter = document.getElementById('subFilter').value;
 
-async function runReport() {
-    const type = document.getElementById('reportType').value;
-    const start = document.getElementById('startDate').value;
-    const end = document.getElementById('endDate').value;
-    const subFilter = document.getElementById('subFilter').value; // 'Warsaw Office' or 'Warsaw Repairs'
-
-    if (!start || !end) return Swal.fire('Error', 'Select dates', 'warning');
-
-    Swal.fire({ title: 'Scanning Records...', didOpen: () => Swal.showLoading() });
-
-    try {
-        const res = await fetch('/api/reports', { // Fixed path
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'getMonthlyReport', 
-                reportType: type, 
-                startDate: start, 
-                endDate: end, 
-                subFilter: type === 'inventory' ? subFilter : null, 
-                offset: 0, 
-                limit: 100 
-            })
-        });
-        const result = await res.json();
-
-        if (result.success && result.rawData.length > 0) {
-            totalRecordsAvailable = result.totalCount;
-            renderPreviewTable(result.rawData);
-            document.getElementById('resultsCard').style.display = 'block';
-            document.getElementById('previewTitle').innerText = `Preview: 100 of ${result.totalCount} records`;
-            Swal.close();
-        } else {
-            document.getElementById('resultsCard').style.display = 'none';
-            Swal.fire('No Data', 'No records found for this criteria.', 'info');
+        if (!start || !end) {
+            Swal.fire('Missing Dates', 'Please select a date range to continue.', 'warning');
+            return;
         }
-    } catch (e) { 
-        console.error(e);
-        Swal.fire('Error', 'Connection Failed. Ensure /api/reports.js exists.', 'error'); 
-    }
-}
 
-async function handleCSVExport() {
-    const type = document.getElementById('reportType').value;
-    const start = document.getElementById('startDate').value;
-    const end = document.getElementById('endDate').value;
+        Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
 
-    let allData = [];
-    let offset = 0;
-    const limit = 1000; // Chunk size for each request
-
-    Swal.fire({
-        title: 'Downloading Dataset',
-        html: `<div id="progStatus">Initializing...</div>`,
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading()
-    });
-
-    try {
-        // SCALABLE LOOP: Continues until all data is gathered
-        while (offset < totalRecordsAvailable) {
-            const res = await fetch('/api/reports', {
+        try {
+            const apiPath = type === 'inventory' ? '/api/equipments' : `/api/${type}`;
+            const res = await fetch(apiPath, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
-                    action: 'getMonthlyReport', 
-                    reportType: type, 
-                    startDate: start, 
-                    endDate: end, 
-                    offset: offset, 
-                    limit: limit 
+                    action: 'getMonthlyReport',
+                    startDate: start,
+                    endDate: end,
+                    subFilter: type === 'inventory' ? subFilter : null,
+                    exportMode: true 
                 })
             });
             const result = await res.json();
-            
-            allData = allData.concat(result.rawData);
-            
-            // Progress tracker so user knows it hasn't crashed
-            document.getElementById('progStatus').innerText = `Fetched ${allData.length} of ${totalRecordsAvailable} records...`;
-            
-            if (result.rawData.length < limit) break; // Exit if we hit the end early
-            offset += limit;
-        }
 
-        downloadCSV(allData, `${type}_report_full.csv`);
-        Swal.fire('Complete', `${allData.length} records exported successfully.`, 'success');
-    } catch (e) { Swal.fire('Error', 'Large export failed.', 'error'); }
-}
+            if (result.success && result.rawData && result.rawData.length > 0) {
+                currentRawData = result.rawData;
+                renderPreviewTable(result.rawData);
+                document.getElementById('resultsCard').style.display = 'block';
+                Swal.close();
+            } else {
+                document.getElementById('resultsCard').style.display = 'none';
+                Swal.fire('No Data', 'No records found for the selected criteria.', 'info');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Report generation failed.', 'error');
+        }
+    }
+
+    function renderPreviewTable(data) {
+        const head = document.getElementById('reportHead');
+        const body = document.getElementById('reportBody');
+        const keys = Object.keys(data[0]);
+
+        head.innerHTML = `<tr>${keys.map(k => `<th>${k.toUpperCase().replace(/_/g, ' ')}</th>`).join('')}</tr>`;
+        body.innerHTML = data.map(row => `
+            <tr>${keys.map(k => `<td>${row[k] || '---'}</td>`).join('')}</tr>
+        `).join('');
+    }
+
+    function handleCSVExport() {
+        const type = document.getElementById('reportType').value;
+        const start = document.getElementById('startDate').value;
+        const end = document.getElementById('endDate').value;
+        downloadCSV(currentRawData, `${type}_report_${start}_to_${end}.csv`);
+    }
+
+    function downloadCSV(data, filename) {
+        const headers = Object.keys(data[0]).join(',');
+        const rows = data.map(row => Object.values(row).map(v => `"${v}"`).join(','));
+        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows.join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    function printReportPDF() {
+        window.print();
+    }
 </script>
 
 <style type="text/css" media="print">
