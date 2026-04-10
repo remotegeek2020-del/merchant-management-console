@@ -50,15 +50,13 @@
 <script>
     const myId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeId = null;
-    let unreadCounts = {}; 
 
-    // 1. UPDATE USER LIST & BADGES
-   async function syncSystem() {
+    async function syncSystem() {
         try {
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getUserList', sender_id: myId }) // Sending myId updates our last_seen
+                body: JSON.stringify({ action: 'getUserList', sender_id: myId })
             });
             const result = await response.json();
             
@@ -66,17 +64,15 @@
                 const listHtml = result.data
                     .filter(u => u.userid !== myId)
                     .map(u => {
-                        // LOGIC: If last_seen was in the last 60 seconds, they are online
+                        // ONLINE LOGIC: Check if last_seen is within the last 90 seconds
                         let isOnline = false;
                         if (u.last_seen) {
-                            const lastSeenDate = new Date(u.last_seen).getTime();
-                            const now = new Date().getTime();
-                            const secondsAgo = (now - lastSeenDate) / 1000;
-                            if (secondsAgo < 60) isOnline = true; 
+                            const diff = (Date.now() - new Date(u.last_seen).getTime()) / 1000;
+                            if (diff < 90) isOnline = true;
                         }
 
-                        // Get unread count from a local object (or you can add logic to your API to return this)
-                        const count = unreadCounts[u.userid] || 0;
+                        // UNREAD LOGIC: Get count from API response
+                        const count = result.unreadCounts ? result.unreadCounts[u.userid] : 0;
                         
                         return `
                             <div class="user-item ${u.userid === activeId ? 'active' : ''}" onclick="openChat('${u.userid}', '${u.first_name}')">
@@ -90,62 +86,48 @@
                     }).join('');
                 document.getElementById('userList').innerHTML = listHtml;
             }
-        } catch (err) { console.error("Sync Error:", err); }
+        } catch (err) { console.error(err); }
     }
 
-    // 2. OPEN CHAT
+    // Update History AND sync system
     async function openChat(id, name) {
         activeId = id;
-        unreadCounts[id] = 0; // Clear locally
         document.getElementById('chatHeader').innerText = "Chat with " + name;
         
-        const res = await fetch('/api/chat', {
+        await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'getHistory', sender_id: myId, recipient_id: id })
         });
-        const result = await res.json();
         
+        // Refresh messages immediately
+        refreshMessages();
+        // Refresh sidebar to clear badge
+        syncSystem();
+    }
+
+    async function refreshMessages() {
+        if (!activeId) return;
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getHistory', sender_id: myId, recipient_id: activeId })
+        });
+        const result = await res.json();
         const hist = document.getElementById('msgHistory');
         hist.innerHTML = (result.data || []).map(m => `
             <div class="bubble ${m.sender_id === myId ? 'me' : 'them'}">${m.content}</div>
         `).join('');
         hist.scrollTop = hist.scrollHeight;
-        
-        syncSystem(); // Refresh list to remove badge
     }
 
-    // 3. SEND MESSAGE
-    async function send() {
-        const input = document.getElementById('msgInput');
-        if (!input.value || !activeId) return;
-        const content = input.value;
-        input.value = "";
-
-        await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'sendMessage', 
-                sender_id: myId, 
-                recipient_id: activeId, 
-                content: content 
-            })
-        });
-        openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
-    }
-
-    // 4. THE HEARTBEAT (Runs every 4 seconds)
+    // Run every 4 seconds
     setInterval(() => {
         syncSystem();
-        if (activeId) {
-            // Silently update history if chat is open
-            openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
-        }
+        if (activeId) refreshMessages();
     }, 4000);
 
-    init();
-    async function init() { syncSystem(); }
+    syncSystem();
 </script>
 </body>
 </html>
