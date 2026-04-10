@@ -21,7 +21,7 @@
 
 <div class="sidebar">
     <div style="padding:20px; font-weight:bold; border-bottom:1px solid #eee;">CHATS</div>
-    <div id="userList">Initializing...</div>
+    <div id="userList">System Booting...</div>
 </div>
 
 <div class="chat-main">
@@ -36,37 +36,14 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-    const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
-    
-    let supabase;
+    // 1. Basic Setup
     const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeRecipientId = null;
+    let supabase;
 
-    // 1. Initialize Supabase safely
-    try {
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-        
-        // Setup Realtime Listener
-        supabase
-            .channel('chat-room')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-                const newMsg = payload.new;
-                const isRelevant = 
-                    (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
-                    (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId);
-                
-                if (isRelevant) {
-                    appendBubble(newMsg);
-                }
-            })
-            .subscribe();
-    } catch (e) {
-        console.error("Supabase Error:", e);
-    }
-
-    // 2. Load Users (This runs regardless of Realtime status)
+    // 2. Load Users First (The most important part)
     async function loadUsers() {
+        console.log("Fetching users...");
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
@@ -74,6 +51,7 @@
                 body: JSON.stringify({ action: 'getUserList' })
             });
             const result = await res.json();
+            
             if (result.success) {
                 const list = document.getElementById('userList');
                 list.innerHTML = result.data
@@ -85,17 +63,43 @@
                     `).join('');
             }
         } catch (e) {
-            document.getElementById('userList').innerText = "Load failed.";
+            document.getElementById('userList').innerText = "API Error: " + e.message;
         }
     }
 
+    // 3. Connect Realtime Second (So it doesn't block loading)
+    function initRealtime() {
+        try {
+            const SUPA_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+            const SUPA_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+            supabase = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+
+            supabase
+                .channel('chat-room')
+                .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+                    const newMsg = payload.new;
+                    const isRelevant = 
+                        (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
+                        (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId);
+                    
+                    if (isRelevant) {
+                        appendBubble(newMsg);
+                    }
+                })
+                .subscribe();
+            console.log("Realtime Connected.");
+        } catch (e) {
+            console.error("Realtime failed to start:", e);
+        }
+    }
+
+    // 4. Chat Functions
     async function selectUser(id, name) {
         activeRecipientId = id;
         document.getElementById('chatHeader').innerText = "Chat with " + name;
-        
         document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-        const activeEl = document.getElementById(`u-${id}`);
-        if(activeEl) activeEl.classList.add('active');
+        const el = document.getElementById(`u-${id}`);
+        if(el) el.classList.add('active');
 
         const res = await fetch('/api/chat', {
             method: 'POST',
@@ -113,21 +117,16 @@
     async function send() {
         const input = document.getElementById('msgInput');
         if (!input.value || !activeRecipientId) return;
-        
-        const content = input.value;
-        input.value = ""; 
+        const val = input.value;
+        input.value = "";
 
         await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'sendMessage', 
-                sender_id: myUserId, 
-                recipient_id: activeRecipientId, 
-                content: content 
-            })
+            body: JSON.stringify({ action: 'sendMessage', sender_id: myUserId, recipient_id: activeRecipientId, content: val })
         });
-        // Note: Bubble is added by the Realtime listener automatically
+        // If realtime fails, we fallback to a manual refresh here
+        if(!supabase) selectUser(activeRecipientId, "");
     }
 
     function appendBubble(msg) {
@@ -139,7 +138,9 @@
         hist.scrollTop = hist.scrollHeight;
     }
 
+    // Run
     loadUsers();
+    initRealtime();
 </script>
 </body>
 </html>
