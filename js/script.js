@@ -117,6 +117,10 @@ function authorizeUser(user) {
     sessionStorage.setItem('pp_userid', user.userid);
     sessionStorage.setItem('pp_role', user.role);
 
+    // --- ADD THIS LINE FOR THE CHAT SYSTEM ---
+    // This ensures chat.html can identify you even after a page refresh
+    localStorage.setItem('userid', user.userid);
+
     // 2. UI Reset
     if (!isIframe) {
         document.getElementById('logout-btn').style.display = 'inline-block';
