@@ -4,76 +4,74 @@
     <meta charset="UTF-8">
     <title>Messenger | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
-        body { background: #f0f2f5; font-family: 'Inter', sans-serif; margin: 0; display: flex; height: 100vh; }
-        
-        /* Layout Structure */
-        .messenger { display: flex; width: 100%; height: 100%; background: white; }
-        
-        /* Left Side: Contact List */
+        body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: 'Inter', sans-serif; }
+        .messenger { display: flex; width: 100%; background: white; }
         .sidebar { width: 360px; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; }
-        .sidebar-header { padding: 20px; font-size: 1.5rem; font-weight: 800; border-bottom: 1px solid #f3f4f6; }
-        .user-item { padding: 15px 20px; cursor: pointer; display: flex; align-items: center; gap: 12px; transition: 0.2s; }
+        .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #f9f9f9; }
         .user-item:hover { background: #f3f4f6; }
-        .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: 600; }
-        
-        /* Right Side: Chat Window */
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: white; }
-        .chat-header { padding: 15px 25px; border-bottom: 1px solid #f3f4f6; font-weight: 700; font-size: 1.1rem; }
-        .messages-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fff; }
-        
-        /* Chat Bubbles */
-        .bubble { max-width: 65%; padding: 10px 16px; border-radius: 20px; font-size: 0.95rem; line-height: 1.4; }
-        .bubble.me { align-self: flex-end; background: #0084ff; color: white; border-bottom-right-radius: 4px; }
-        .bubble.them { align-self: flex-start; background: #e4e6eb; color: #050505; border-bottom-left-radius: 4px; }
-        
-        /* Input area */
-        .input-bar { padding: 20px; border-top: 1px solid #f3f4f6; display: flex; gap: 10px; align-items: center; }
-        .input-bar input { flex: 1; border-radius: 20px !important; background: #f0f2f5 !important; border: none !important; padding: 10px 20px; }
+        .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+        .bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; }
+        .bubble.me { align-self: flex-end; background: #0084ff; color: white; }
+        .bubble.them { align-self: flex-start; background: #e4e6eb; color: black; }
+        .input-bar { padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; }
     </style>
 </head>
 <body>
-
-<div class="messenger">
-    <div class="sidebar">
-        <div class="sidebar-header">Chats</div>
-        <div id="userList">
-            <p style="padding: 20px; color: #65676b;">Loading users...</p>
+    <div class="messenger">
+        <div class="sidebar"><div style="padding:20px; font-weight:800; font-size:1.5rem;">Chats</div><div id="userList"></div></div>
+        <div class="chat-area">
+            <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:bold;">Select a user</div>
+            <div class="messages" id="msgHistory"></div>
+            <div class="input-bar">
+                <input type="text" id="msgInput" class="slds-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter') send()">
+                <button onclick="send()" class="slds-button slds-button_brand">Send</button>
+            </div>
         </div>
     </div>
 
-    <div class="chat-area">
-        <div class="chat-header" id="currentChatName">Select a user to start</div>
-        <div class="messages-container" id="msgHistory">
-            <div style="text-align: center; margin-top: 50px; color: #bcc0c4;">No conversation selected</div>
-        </div>
-        <div class="input-bar">
-            <input type="text" id="messageInput" class="slds-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter') send()">
-            <button onclick="send()" class="slds-button slds-button_brand" style="border-radius: 20px; padding: 0 20px;">Send</button>
-        </div>
-    </div>
-</div>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+        const supabase = window.supabase.createClient('https://zuzwljjrppyrzngmhdru.supabase.co', 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO');
+        const myUserId = localStorage.getItem('userid'); 
+        let activeRecipientId = null;
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-    const supabase = supabase.createClient('YOUR_URL', 'YOUR_KEY');
-    
-    // IMPORTANT: Replace this with how you store your logged-in user's ID
-    const myUserId = localStorage.getItem('userid'); 
-    let activeRecipientId = null;
+        async function loadUsers() {
+            const res = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'getUserList' }) });
+            const result = await res.json();
+            document.getElementById('userList').innerHTML = result.data.filter(u => u.userid !== myUserId).map(u => 
+                `<div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name}')">${u.first_name} ${u.last_name}</div>`
+            ).join('');
+        }
 
-    // 1. Load users from your app_users table
-    async function init() {
-        const res = await fetch('/api/chat', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'getUserList' }) 
-        });
-        const result = await res.json();
-        
-        const list = document.getElementById('userList');
-        list.innerHTML = result.data
-            .filter(u => u.userid !== myUserId) // Don't chat with yourself
-            .map(u => `
-                <div class="user-item" id="user-${
+        async function selectUser(id, name) {
+            activeRecipientId = id;
+            document.getElementById('chatHeader').innerText = name;
+            document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+            document.getElementById(`u-${id}`).classList.add('active');
+            
+            const res = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) });
+            const result = await res.json();
+            render(result.data);
+        }
+
+        function render(msgs) {
+            const hist = document.getElementById('msgHistory');
+            hist.innerHTML = msgs.map(m => `<div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>`).join('');
+            hist.scrollTop = hist.scrollHeight;
+        }
+
+        async function send() {
+            const input = document.getElementById('msgInput');
+            if (!input.value || !activeRecipientId) return;
+            await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'sendMessage', sender_id: myUserId, recipient_id: activeRecipientId, content: input.value }) });
+            input.value = '';
+            selectUser(activeRecipientId, document.getElementById('chatHeader').innerText);
+        }
+
+        loadUsers();
+    </script>
+</body>
+</html>
