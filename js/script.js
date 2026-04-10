@@ -148,7 +148,10 @@ function authorizeUser(user) {
     Swal.close();
 }
 
-function handleLogout() {
+async function handleLogout() {
+    // Get the ID before we clear storage
+    const uid = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
+
     Swal.fire({
         title: 'Logout?',
         text: "You will need to re-authenticate to access the portal.",
@@ -156,10 +159,25 @@ function handleLogout() {
         showCancelButton: true,
         confirmButtonText: 'Yes, Logout',
         confirmButtonColor: '#d33'
-    }).then((result) => {
+    }).then(async (result) => { // Added 'async' here to allow the fetch
         if (result.isConfirmed) {
+            
+            // --- ADDED FIX FOR ONLINE INDICATOR ---
+            // This tells the API to set last_seen to NULL so the dot turns grey
+            if (uid) {
+                try {
+                    await fetch('/api/chat', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'logout', sender_id: uid })
+                    });
+                } catch (err) {
+                    console.error("Failed to notify server of logout", err);
+                }
+            }
+            // --------------------------------------
+
             sessionStorage.clear();
-            // --- ADD THIS LINE TO CLEAR CHAT ID ---
             localStorage.removeItem('userid');
             location.reload();
         }
