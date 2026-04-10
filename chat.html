@@ -5,13 +5,13 @@
     <title>Staff Messenger</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: 'Inter', sans-serif; overflow: hidden; }
+        body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: 'Inter', sans-serif; }
         .sidebar { width: 350px; border-right: 1px solid #ddd; background: #fff; display: flex; flex-direction: column; }
-        .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s; }
+        .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #eee; }
         .user-item:hover { background: #f0f2f5; }
         .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
         .chat-main { flex: 1; display: flex; flex-direction: column; background: #fff; }
-        .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fff; }
+        .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .bubble { max-width: 70%; padding: 10px 15px; border-radius: 18px; font-size: 14px; }
         .bubble.me { align-self: flex-end; background: #0084ff; color: #fff; }
         .bubble.them { align-self: flex-start; background: #e4e6eb; color: #000; }
@@ -23,7 +23,7 @@
 <div class="sidebar">
     <div style="padding:20px; font-size:1.5rem; font-weight:800; border-bottom:1px solid #eee;">Chats</div>
     <div id="userList" style="flex:1; overflow-y:auto;">
-        <div style="padding:20px; color:#666;">Initializing Messenger...</div>
+        <div style="padding:20px; color:#666;">Loading Users...</div>
     </div>
 </div>
 
@@ -31,7 +31,7 @@
     <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:700;">Select a user</div>
     <div class="msg-container" id="msgHistory"></div>
     <div class="input-bar">
-        <input type="text" id="msgInput" class="slds-input" placeholder="Aa" onkeypress="if(event.key==='Enter') send()">
+        <input type="text" id="msgInput" class="slds-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter') send()">
         <button onclick="send()" class="slds-button slds-button_brand">Send</button>
     </div>
 </div>
@@ -39,111 +39,97 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
+    // Config
     const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // Identify current user
     const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
-    
-    let supabase;
     let activeRecipientId = null;
 
-    window.onload = async function() {
-        if (!window.supabase) return console.error("Library failed");
-        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    console.log("Logged in as:", myUserId);
 
-        // --- REALTIME: Listen for new messages ---
-        supabase
-            .channel('chat_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-                const newMsg = payload.new;
-                // If the message belongs to current open chat, show it
-                if ((newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
-                    (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId)) {
-                    appendBubble(newMsg);
-                }
-            })
-            .subscribe();
-
-        loadUsers();
-    };
-
+    // Load User List
     async function loadUsers() {
-        const res = await fetch('/api/chat', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'getUserList' }) 
-        });
-        const result = await res.json();
-        if (result.success) {
-            document.getElementById('userList').innerHTML = result.data
-                .filter(u => u.userid !== myUserId)
-                .map(u => `
-                    <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name || ''}')">
-                        <strong>${u.first_name} ${u.last_name || ''}</strong>
-                    </div>
-                `).join('');
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getUserList' })
+            });
+            const result = await res.json();
+            
+            if (result.success) {
+                const list = document.getElementById('userList');
+                list.innerHTML = result.data
+                    .filter(u => u.userid !== myUserId)
+                    .map(u => `
+                        <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name || ''}')">
+                            <strong>${u.first_name} ${u.last_name || ''}</strong>
+                        </div>
+                    `).join('');
+            }
+        } catch (e) {
+            console.error("User list error:", e);
         }
     }
 
-    async function selectUser(id, fullName) {
+    // Select User and Get History
+    async function selectUser(id, name) {
         activeRecipientId = id;
-        document.getElementById('chatHeader').innerText = fullName;
+        document.getElementById('chatHeader').innerText = name;
         
         // UI highlight
         document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
         const el = document.getElementById(`u-${id}`);
         if(el) el.classList.add('active');
 
-        // Get History
-        const res = await fetch('/api/chat', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) 
-        });
-        const result = await res.json();
-        render(result.data || []);
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id })
+            });
+            const result = await res.json();
+            const hist = document.getElementById('msgHistory');
+            hist.innerHTML = (result.data || []).map(m => `
+                <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
+            `).join('');
+            hist.scrollTop = hist.scrollHeight;
+        } catch (e) {
+            console.error("History error:", e);
+        }
     }
 
-    function render(msgs) {
-        const hist = document.getElementById('msgHistory');
-        hist.innerHTML = msgs.map(m => `
-            <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
-        `).join('');
-        scrollToBottom();
-    }
-
-    function appendBubble(msg) {
-        const hist = document.getElementById('msgHistory');
-        const div = document.createElement('div');
-        div.className = `bubble ${msg.sender_id === myUserId ? 'me' : 'them'}`;
-        div.innerText = msg.content;
-        hist.appendChild(div);
-        scrollToBottom();
-    }
-
+    // Send Message
     async function send() {
         const input = document.getElementById('msgInput');
         const content = input.value.trim();
+        
         if (!content || !activeRecipientId) return;
+        input.value = ''; // Instant clear
 
-        input.value = ''; // Clear it immediately for that "fast" feel
-
-        await fetch('/api/chat', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({ 
-                action: 'sendMessage', 
-                sender_id: myUserId, 
-                recipient_id: activeRecipientId, 
-                content: content 
-            }) 
-        });
-        // Realtime listener handles showing the bubble
+        try {
+            await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'sendMessage', 
+                    sender_id: myUserId, 
+                    recipient_id: activeRecipientId, 
+                    content: content 
+                })
+            });
+            // Refresh current chat view
+            selectUser(activeRecipientId, document.getElementById('chatHeader').innerText);
+        } catch (e) {
+            console.error("Send error:", e);
+        }
     }
 
-    function scrollToBottom() {
-        const hist = document.getElementById('msgHistory');
-        hist.scrollTop = hist.scrollHeight;
-    }
+    // Initialize
+    loadUsers();
 </script>
 </body>
 </html>
