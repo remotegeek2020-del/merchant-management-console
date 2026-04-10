@@ -2,90 +2,136 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Messenger | PayProtec</title>
+    <title>Staff Messenger</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <style>
-        body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: 'Inter', sans-serif; }
-        .sidebar { width: 360px; border-right: 1px solid #e5e7eb; background: white; }
-        .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #f9f9f9; }
-        .chat-area { flex: 1; display: flex; flex-direction: column; background: white; }
-        .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; background: #e4e6eb; }
-        .bubble.me { align-self: flex-end; background: #0084ff; color: white; }
-        .input-bar { padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: 'Inter', sans-serif; overflow: hidden; }
+        .sidebar { width: 350px; border-right: 1px solid #ddd; background: #fff; display: flex; flex-direction: column; }
+        .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #eee; transition: background 0.2s; }
+        .user-item:hover { background: #f0f2f5; }
+        .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
+        .chat-main { flex: 1; display: flex; flex-direction: column; background: #fff; }
+        .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fff; }
+        .bubble { max-width: 70%; padding: 10px 15px; border-radius: 18px; font-size: 14px; }
+        .bubble.me { align-self: flex-end; background: #0084ff; color: #fff; }
+        .bubble.them { align-self: flex-start; background: #e4e6eb; color: #000; }
+        .input-bar { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
     </style>
 </head>
 <body>
-    <div style="display: flex; width: 100%;">
-        <div class="sidebar">
-            <div style="padding:20px; font-weight:800; font-size:1.5rem;">Chats</div>
-            <div id="userList">Loading...</div>
-        </div>
-        <div class="chat-area">
-            <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:bold;">Select a user</div>
-            <div class="messages" id="msgHistory"></div>
-            <div class="input-bar">
-                <input type="text" id="msgInput" class="slds-input" placeholder="Type a message...">
-                <button onclick="send()" class="slds-button slds-button_brand">Send</button>
-            </div>
-        </div>
+
+<div class="sidebar">
+    <div style="padding:20px; font-size:1.5rem; font-weight:800; border-bottom:1px solid #eee;">Chats</div>
+    <div id="userList" style="flex:1; overflow-y:auto;">
+        <div style="padding:20px; color:#666;">Initializing Messenger...</div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    
-    <script>
-        console.log("Script initializing...");
+<div class="chat-main">
+    <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:700;">Select a user</div>
+    <div class="msg-container" id="msgHistory"></div>
+    <div class="input-bar">
+        <input type="text" id="msgInput" class="slds-input" placeholder="Aa" onkeypress="if(event.key==='Enter') send()">
+        <button onclick="send()" class="slds-button slds-button_brand">Send</button>
+    </div>
+</div>
 
-        const SUPA_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
-        const SUPA_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
-        // Use a try-catch to catch initialization errors
-        let supabase;
+<script>
+    // 1. CONFIGURATION
+    const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    // 2. IDENTITY
+    // We check both sessionStorage and localStorage just in case
+    const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
+    let activeRecipientId = null;
+
+    console.log("System Identity:", myUserId);
+
+    // 3. LOAD USERS
+    async function loadUsers() {
+        console.log("Calling API: /api/chat?action=getUserList");
         try {
-            supabase = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-            console.log("Supabase Client Ready");
-        } catch (e) {
-            console.error("Supabase Init Failed:", e);
-        }
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getUserList' })
+            });
+            const result = await res.json();
+            console.log("API Result:", result);
 
-        const myUserId = localStorage.getItem('userid'); 
-        console.log("My UserID from localStorage:", myUserId);
-
-        async function loadUsers() {
-            console.log("Fetching users from /api/chat...");
-            try {
-                const res = await fetch('/api/chat', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'getUserList' }) 
-                });
+            if (result.success) {
+                const list = document.getElementById('userList');
+                // Filter out current user if ID exists
+                const filtered = result.data.filter(u => u.userid !== myUserId);
                 
-                const result = await res.json();
-                console.log("API Response:", result);
-
-                if (result.success) {
-                    const list = document.getElementById('userList');
-                    list.innerHTML = result.data
-                        .filter(u => u.userid !== myUserId)
-                        .map(u => `<div class="user-item" onclick="selectUser('${u.userid}', '${u.first_name}')">${u.first_name} ${u.last_name}</div>`)
-                        .join('');
-                } else {
-                    console.error("API returned success:false", result.message);
-                }
-            } catch (err) {
-                console.error("Fetch call failed:", err);
+                list.innerHTML = filtered.map(u => `
+                    <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
+                        <div style="font-weight:600;">${u.first_name} ${u.last_name}</div>
+                        <div style="font-size:10px; color:green;">Connected</div>
+                    </div>
+                `).join('');
             }
+        } catch (err) {
+            console.error("Critical API Error:", err);
+            document.getElementById('userList').innerHTML = '<div style="padding:20px; color:red;">Failed to load users. Check Console.</div>';
         }
+    }
 
-        // Auto-run on load
-        if (myUserId) {
-            loadUsers();
-        } else {
-            document.getElementById('userList').innerHTML = '<div style="padding:20px; color:red;">Not logged in. Please re-login.</div>';
-        }
+    // 4. SELECT USER & LOAD HISTORY
+    async function selectUser(id, name) {
+        activeRecipientId = id;
+        document.getElementById('chatHeader').innerText = name;
+        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+        document.getElementById(`u-${id}`).classList.add('active');
 
-        async function selectUser(id, name) { alert("Selected " + name); }
-        async function send() { alert("Sending..."); }
-    </script>
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id })
+            });
+            const result = await res.json();
+            const hist = document.getElementById('msgHistory');
+            hist.innerHTML = result.data.map(m => `
+                <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
+            `).join('');
+            hist.scrollTop = hist.scrollHeight;
+        } catch (err) { console.error("History Error:", err); }
+    }
+
+    // 5. SEND MESSAGE
+    async function send() {
+        const input = document.getElementById('msgInput');
+        if (!input.value.trim() || !activeRecipientId) return;
+
+        const content = input.value;
+        input.value = '';
+
+        await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'sendMessage', 
+                sender_id: myUserId, 
+                recipient_id: activeRecipientId, 
+                content: content 
+            })
+        });
+        
+        // Manual refresh for now
+        selectUser(activeRecipientId, document.getElementById('chatHeader').innerText);
+    }
+
+    // 6. EXECUTION
+    if (!myUserId) {
+        console.warn("User ID missing. Showing all users for debugging.");
+    }
+    loadUsers();
+</script>
+
 </body>
 </html>
