@@ -17,8 +17,6 @@ export default async function handler(req, res) {
         }
 
         if (action === 'sendMessage') {
-            // We use 'is_read: false' here. 
-            // If this fails, ensure the column exists in your Supabase 'messages' table!
             const { data, error } = await supabase
                 .from('messages')
                 .insert([{ 
@@ -46,7 +44,13 @@ export default async function handler(req, res) {
         }
         
         if (action === 'getUserList') {
-            const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name, last_seen');
+            // FIXED: Added .order('first_name') so the list doesn't jump around
+            const { data: users, error: userError } = await supabase
+                .from('app_users')
+                .select('userid, first_name, last_name, last_seen')
+                .order('first_name', { ascending: true });
+            
+            if (userError) throw userError;
             
             const { data: unreadData } = await supabase.from('messages').select('sender_id')
                 .eq('recipient_id', sender_id).eq('is_read', false);
