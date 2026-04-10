@@ -38,13 +38,26 @@
         const myUserId = localStorage.getItem('userid'); 
         let activeRecipientId = null;
 
-        async function loadUsers() {
-            const res = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'getUserList' }) });
-            const result = await res.json();
-            document.getElementById('userList').innerHTML = result.data.filter(u => u.userid !== myUserId).map(u => 
-                `<div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name}')">${u.first_name} ${u.last_name}</div>`
-            ).join('');
-        }
+       // Ensure this matches your chat.html script
+async function loadUsers() {
+    console.log("Attempting to load users...");
+    const res = await fetch('/api/chat', { 
+        method: 'POST', 
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ action: 'getUserList' }) 
+    });
+    const result = await res.json();
+    console.log("Users received:", result);
+
+    if (result.success) {
+        document.getElementById('userList').innerHTML = result.data
+            .filter(u => u.userid !== myUserId)
+            .map(u => `<div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name}')">
+                ${u.first_name} ${u.last_name}
+            </div>`)
+            .join('');
+    }
+}
 
         async function selectUser(id, name) {
             activeRecipientId = id;
