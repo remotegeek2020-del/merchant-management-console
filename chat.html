@@ -9,6 +9,7 @@
         .sidebar { width: 300px; border-right: 1px solid #ddd; background: #fff; overflow-y: auto; }
         .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #eee; }
         .user-item:hover { background: #f0f2f5; }
+        .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
         .chat-main { flex: 1; display: flex; flex-direction: column; background: #fff; }
         .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .bubble { max-width: 70%; padding: 10px; border-radius: 10px; background: #e4e6eb; }
@@ -27,21 +28,49 @@
     <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:bold;">Select User</div>
     <div class="msg-container" id="msgHistory"></div>
     <div class="input-bar">
-        <input type="text" id="msgInput" class="slds-input" placeholder="Type here...">
+        <input type="text" id="msgInput" class="slds-input" placeholder="Type here..." onkeypress="if(event.key==='Enter') send()">
         <button onclick="send()" class="slds-button slds-button_brand">Send</button>
     </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 <script>
-    // 1. Log everything to help us find the bug
+    // 2. INITIALIZE SUPABASE CLIENT
+    const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
     const log = (msg) => {
         console.log(msg);
-        // Also show on sidebar so we can see it on mobile/incognito
-        document.getElementById('userList').innerText = msg;
+        const list = document.getElementById('userList');
+        if(list.innerText.includes("Loading") || list.innerText.includes("Waiting")) list.innerText = msg;
     };
 
     const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeRecipientId = null;
+
+    // 3. START THE REALTIME LISTENER
+    supabase
+        .channel('db-changes')
+        .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'messages' 
+        }, payload => {
+            const newMsg = payload.new;
+            console.log("New message arrived:", newMsg);
+
+            // Logic: Is this message part of the conversation I'm currently looking at?
+            const isCurrentChat = 
+                (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
+                (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId);
+
+            if (isCurrentChat) {
+                appendBubble(newMsg);
+            }
+        })
+        .subscribe();
 
     async function loadUsers() {
         log("Loading users...");
@@ -51,33 +80,29 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'getUserList' })
             });
-            
-            if (!res.ok) throw new Error("API status: " + res.status);
-            
             const result = await res.json();
-            log("API data received.");
-
             if (result.success) {
                 const list = document.getElementById('userList');
                 list.innerHTML = result.data
                     .filter(u => u.userid !== myUserId)
                     .map(u => `
-                        <div class="user-item" onclick="selectUser('${u.userid}', '${u.first_name}')">
+                        <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name}')">
                             ${u.first_name} ${u.last_name || ''}
                         </div>
                     `).join('');
-            } else {
-                log("Error: " + result.message);
             }
-        } catch (e) {
-            log("System Error: " + e.message);
-        }
+        } catch (e) { log("System Error: " + e.message); }
     }
 
     async function selectUser(id, name) {
         activeRecipientId = id;
         document.getElementById('chatHeader').innerText = "Chat with " + name;
         
+        // UI highlight
+        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+        const el = document.getElementById(`u-${id}`);
+        if(el) el.classList.add('active');
+
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
@@ -89,7 +114,17 @@
             hist.innerHTML = (result.data || []).map(m => `
                 <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
             `).join('');
+            scrollToBottom();
         } catch (e) { console.error(e); }
+    }
+
+    function appendBubble(msg) {
+        const hist = document.getElementById('msgHistory');
+        const div = document.createElement('div');
+        div.className = `bubble ${msg.sender_id === myUserId ? 'me' : 'them'}`;
+        div.innerText = msg.content;
+        hist.appendChild(div);
+        scrollToBottom();
     }
 
     async function send() {
@@ -97,8 +132,9 @@
         if (!input.value || !activeRecipientId) return;
         
         const text = input.value;
-        input.value = "";
+        input.value = ""; // Clear input immediately
 
+        // We send to API, and the Listener above will add the bubble to the UI
         await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -109,10 +145,13 @@
                 content: text 
             })
         });
-        selectUser(activeRecipientId, "");
     }
 
-    // Run immediately
+    function scrollToBottom() {
+        const hist = document.getElementById('msgHistory');
+        hist.scrollTop = hist.scrollHeight;
+    }
+
     loadUsers();
 </script>
 </body>
