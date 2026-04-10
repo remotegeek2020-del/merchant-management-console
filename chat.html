@@ -50,6 +50,7 @@
 <script>
     const myId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeId = null;
+    let lastListHtml = ""; // Global variable to store the previous state
 
     async function send() {
     const input = document.getElementById('msgInput');
@@ -79,7 +80,7 @@
     }
 }
 
-   let lastListHtml = ""; // Global variable to store the previous state
+   
 
 async function syncSystem() {
     try {
