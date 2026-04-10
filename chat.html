@@ -2,17 +2,25 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Messenger | Secure Console</title>
+    <title>Staff Messenger</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: sans-serif; }
-        .sidebar { width: 300px; border-right: 1px solid #ddd; background: #fff; display: flex; flex-direction: column; }
-        .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #eee; }
+        .sidebar { width: 320px; border-right: 1px solid #ddd; background: #fff; display: flex; flex-direction: column; }
+        .user-item { padding: 12px 15px; cursor: pointer; border-bottom: 1px solid #eee; display: flex; align-items: center; justify-content: space-between; position: relative; }
         .user-item:hover { background: #f0f2f5; }
         .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
+        
+        /* Online Dot */
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #ccc; margin-right: 10px; border: 2px solid white; }
+        .status-dot.online { background: #31a24c; }
+        
+        /* Notification Badge */
+        .badge { background: #fa3e3e; color: white; border-radius: 50%; padding: 2px 6px; font-size: 10px; font-weight: bold; min-width: 18px; text-align: center; }
+        
         .chat-main { flex: 1; display: flex; flex-direction: column; background: #fff; }
-        .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .bubble { max-width: 70%; padding: 10px; border-radius: 10px; background: #e4e6eb; }
+        .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+        .bubble { max-width: 70%; padding: 10px; border-radius: 15px; background: #e4e6eb; }
         .bubble.me { align-self: flex-end; background: #0084ff; color: #fff; }
         .input-bar { padding: 15px; border-top: 1px solid #eee; display: flex; gap: 10px; }
     </style>
@@ -20,8 +28,11 @@
 <body>
 
 <div class="sidebar">
-    <div style="padding:20px; font-weight:bold; border-bottom:1px solid #eee;">CHATS</div>
-    <div id="userList" style="padding:20px;">System Starting...</div>
+    <div style="padding:20px; font-weight:bold; border-bottom:1px solid #eee; display: flex; justify-content: space-between;">
+        CHATS
+        <span id="globalUnread" class="badge" style="display:none;">0</span>
+    </div>
+    <div id="userList" style="flex:1; overflow-y:auto;">Loading...</div>
 </div>
 
 <div class="chat-main">
@@ -34,67 +45,70 @@
 </div>
 
 <script>
-    // 1. CONFIG
     const myId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeId = null;
+    let unreadCounts = {}; 
 
-    // 2. LOAD USER LIST
-    async function init() {
-        console.log("Starting API call...");
+    // 1. UPDATE USER LIST & BADGES
+    async function syncSystem() {
         try {
+            // We'll use your existing API to get users
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getUserList' })
+                body: JSON.stringify({ action: 'getUserList', myId: myId }) 
             });
             const result = await response.json();
             
             if (result.success) {
                 const listHtml = result.data
                     .filter(u => u.userid !== myId)
-                    .map(u => `
-                        <div class="user-item" id="u-${u.userid}" onclick="openChat('${u.userid}', '${u.first_name}')">
-                            ${u.first_name} ${u.last_name || ''}
-                        </div>
-                    `).join('');
+                    .map(u => {
+                        // Check if user was active in last 2 minutes
+                        const isOnline = u.last_seen && (new Date() - new Date(u.last_seen) < 120000);
+                        const count = unreadCounts[u.userid] || 0;
+                        
+                        return `
+                            <div class="user-item ${u.userid === activeId ? 'active' : ''}" onclick="openChat('${u.userid}', '${u.first_name}')">
+                                <div style="display:flex; align-items:center;">
+                                    <div class="status-dot ${isOnline ? 'online' : ''}"></div>
+                                    <span>${u.first_name} ${u.last_name || ''}</span>
+                                </div>
+                                ${count > 0 ? `<span class="badge">${count}</span>` : ''}
+                            </div>
+                        `;
+                    }).join('');
                 document.getElementById('userList').innerHTML = listHtml;
-            } else {
-                document.getElementById('userList').innerText = "API Error: " + result.message;
             }
-        } catch (err) {
-            document.getElementById('userList').innerText = "Connection Failed. Please Refresh.";
-            console.error(err);
-        }
+        } catch (err) { console.error("Sync Error:", err); }
     }
 
-    // 3. SELECT USER
+    // 2. OPEN CHAT
     async function openChat(id, name) {
         activeId = id;
+        unreadCounts[id] = 0; // Clear locally
         document.getElementById('chatHeader').innerText = "Chat with " + name;
         
-        // Highlight active user
-        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-        const activeEl = document.getElementById(`u-${id}`);
-        if(activeEl) activeEl.classList.add('active');
-
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'getHistory', sender_id: myId, recipient_id: id })
         });
         const result = await res.json();
+        
         const hist = document.getElementById('msgHistory');
         hist.innerHTML = (result.data || []).map(m => `
             <div class="bubble ${m.sender_id === myId ? 'me' : 'them'}">${m.content}</div>
         `).join('');
         hist.scrollTop = hist.scrollHeight;
+        
+        syncSystem(); // Refresh list to remove badge
     }
 
-    // 4. SEND (MANUAL REFRESH FALLBACK)
+    // 3. SEND MESSAGE
     async function send() {
         const input = document.getElementById('msgInput');
         if (!input.value || !activeId) return;
-        
         const content = input.value;
         input.value = "";
 
@@ -108,21 +122,20 @@
                 content: content 
             })
         });
-
-        // Since we removed Supabase library, we refresh the chat manually for now
         openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
     }
 
-    // 5. POLL FOR NEW MESSAGES (Temporary Realtime replacement)
-    // Checks for new messages every 3 seconds
+    // 4. THE HEARTBEAT (Runs every 4 seconds)
     setInterval(() => {
+        syncSystem();
         if (activeId) {
+            // Silently update history if chat is open
             openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
         }
-    }, 3000);
+    }, 4000);
 
-    // Run
     init();
+    async function init() { syncSystem(); }
 </script>
 </body>
 </html>
