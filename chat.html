@@ -39,99 +39,61 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-    // 1. CONFIGURATION
-    const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
-    const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    window.onload = async function() {
+        console.log("Window loaded. Starting Chat...");
 
-    // 2. IDENTITY
-    // We check both sessionStorage and localStorage just in case
-    const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
-    let activeRecipientId = null;
+        // Safety check: is the library here?
+        if (!window.supabase) {
+            console.error("Supabase library failed to load!");
+            document.getElementById('userList').innerHTML = "Error: Library Load Failed";
+            return;
+        }
 
-    console.log("System Identity:", myUserId);
-
-    // 3. LOAD USERS
-    async function loadUsers() {
-        console.log("Calling API: /api/chat?action=getUserList");
+        const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+        const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+        
         try {
+            const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+            const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
+            
+            console.log("Identity found:", myUserId);
+
+            // Fetch users from Vercel API
+            console.log("Fetching users...");
             const res = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'getUserList' })
             });
+
+            if (!res.ok) {
+                console.error("API Error Status:", res.status);
+                document.getElementById('userList').innerHTML = "API Connection Error";
+                return;
+            }
+
             const result = await res.json();
-            console.log("API Result:", result);
+            console.log("Data received:", result);
 
             if (result.success) {
                 const list = document.getElementById('userList');
-                // Filter out current user if ID exists
-                const filtered = result.data.filter(u => u.userid !== myUserId);
-                
-                list.innerHTML = filtered.map(u => `
-                    <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
-                        <div style="font-weight:600;">${u.first_name} ${u.last_name}</div>
-                        <div style="font-size:10px; color:green;">Connected</div>
-                    </div>
-                `).join('');
+                list.innerHTML = result.data
+                    .filter(u => u.userid !== myUserId)
+                    .map(u => `
+                        <div class="user-item" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
+                            <strong>${u.first_name} ${u.last_name}</strong>
+                        </div>
+                    `).join('');
             }
         } catch (err) {
-            console.error("Critical API Error:", err);
-            document.getElementById('userList').innerHTML = '<div style="padding:20px; color:red;">Failed to load users. Check Console.</div>';
+            console.error("Critical Failure:", err);
+            document.getElementById('userList').innerHTML = "Critical System Error";
         }
-    }
+    };
 
-    // 4. SELECT USER & LOAD HISTORY
-    async function selectUser(id, name) {
-        activeRecipientId = id;
-        document.getElementById('chatHeader').innerText = name;
-        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-        document.getElementById(`u-${id}`).classList.add('active');
-
-        try {
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id })
-            });
-            const result = await res.json();
-            const hist = document.getElementById('msgHistory');
-            hist.innerHTML = result.data.map(m => `
-                <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
-            `).join('');
-            hist.scrollTop = hist.scrollHeight;
-        } catch (err) { console.error("History Error:", err); }
-    }
-
-    // 5. SEND MESSAGE
-    async function send() {
-        const input = document.getElementById('msgInput');
-        if (!input.value.trim() || !activeRecipientId) return;
-
-        const content = input.value;
-        input.value = '';
-
-        await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'sendMessage', 
-                sender_id: myUserId, 
-                recipient_id: activeRecipientId, 
-                content: content 
-            })
-        });
-        
-        // Manual refresh for now
-        selectUser(activeRecipientId, document.getElementById('chatHeader').innerText);
-    }
-
-    // 6. EXECUTION
-    if (!myUserId) {
-        console.warn("User ID missing. Showing all users for debugging.");
-    }
-    loadUsers();
+    // Placeholder functions so UI buttons don't crash
+    async function selectUser(id, name) { alert("Selected " + name); }
+    async function send() { alert("Sending..."); }
 </script>
-
 </body>
 </html>
