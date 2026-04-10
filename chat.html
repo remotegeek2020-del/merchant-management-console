@@ -2,108 +2,90 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Messenger | Secure Console</title>
+    <title>Messenger | PayProtec</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <style>
         body { margin: 0; display: flex; height: 100vh; background: #f0f2f5; font-family: 'Inter', sans-serif; }
-        .messenger { display: flex; width: 100%; background: white; }
-        .sidebar { width: 360px; border-right: 1px solid #e5e7eb; display: flex; flex-direction: column; }
+        .sidebar { width: 360px; border-right: 1px solid #e5e7eb; background: white; }
         .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #f9f9f9; }
-        .user-item:hover { background: #f3f4f6; }
-        .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
-        .chat-area { flex: 1; display: flex; flex-direction: column; }
+        .chat-area { flex: 1; display: flex; flex-direction: column; background: white; }
         .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; position: relative; }
-        .bubble.me { align-self: flex-end; background: #0084ff; color: white; border-bottom-right-radius: 4px; }
-        .bubble.them { align-self: flex-start; background: #e4e6eb; color: black; border-bottom-left-radius: 4px; }
+        .bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; background: #e4e6eb; }
+        .bubble.me { align-self: flex-end; background: #0084ff; color: white; }
         .input-bar { padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; }
-        .input-bar input { border-radius: 20px !important; background: #f0f2f5 !important; border: none !important; padding: 10px 15px; }
     </style>
 </head>
 <body>
-    <div class="messenger">
+    <div style="display: flex; width: 100%;">
         <div class="sidebar">
-            <div style="padding:20px; font-weight:800; font-size:1.5rem; display: flex; justify-content: space-between; align-items: center;">
-                Chats
-                <a href="index.html" style="font-size: 12px; font-weight: 400; color: #64748b;">Back</a>
-            </div>
-            <div id="userList"></div>
+            <div style="padding:20px; font-weight:800; font-size:1.5rem;">Chats</div>
+            <div id="userList">Loading...</div>
         </div>
         <div class="chat-area">
             <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:bold;">Select a user</div>
             <div class="messages" id="msgHistory"></div>
             <div class="input-bar">
-                <input type="text" id="msgInput" class="slds-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter') send()">
-                <button onclick="send()" class="slds-button slds-button_brand" style="border-radius: 20px;">Send</button>
+                <input type="text" id="msgInput" class="slds-input" placeholder="Type a message...">
+                <button onclick="send()" class="slds-button slds-button_brand">Send</button>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script>
-    console.log("1. Script Started");
-    
-    // Safety check for credentials
-    const SUPA_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
-    const SUPA_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
+    <script>
+        console.log("Script initializing...");
 
-    const supabase = window.supabase.createClient(SUPA_URL, SUPA_KEY);
-    const myUserId = localStorage.getItem('userid'); 
-    let activeRecipientId = null;
+        const SUPA_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+        const SUPA_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
 
-    console.log("2. My User ID is:", myUserId);
-
-    async function loadUsers() {
-        console.log("3. loadUsers function called");
+        // Use a try-catch to catch initialization errors
+        let supabase;
         try {
-            const res = await fetch('/api/chat', { 
-                method: 'POST', 
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({ action: 'getUserList' }) 
-            });
-            
-            console.log("4. Fetch finished, status:", res.status);
-            const result = await res.json();
-            console.log("5. Data received:", result);
-
-            if (result.success) {
-                const listHtml = result.data
-                    .filter(u => u.userid !== myUserId)
-                    .map(u => `
-                        <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
-                            <div style="font-weight: bold;">${u.first_name} ${u.last_name}</div>
-                        </div>
-                    `).join('');
-                document.getElementById('userList').innerHTML = listHtml;
-            }
-        } catch (err) {
-            console.error("6. FETCH ERROR:", err);
-            alert("API Connection Failed: " + err.message);
+            supabase = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+            console.log("Supabase Client Ready");
+        } catch (e) {
+            console.error("Supabase Init Failed:", e);
         }
-    }
 
-    // This is the trigger
-    console.log("7. Calling loadUsers now...");
-    loadUsers();
+        const myUserId = localStorage.getItem('userid'); 
+        console.log("My UserID from localStorage:", myUserId);
 
-    // Placeholder functions to prevent errors if clicked
-    async function selectUser(id, name) { 
-        console.log("Selected:", name);
-        activeRecipientId = id;
-        document.getElementById('chatHeader').innerText = name;
-        const res = await fetch('/api/chat', { 
-            method: 'POST', 
-            headers: {'Content-Type': 'application/json'}, 
-            body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) 
-        });
-        const result = await res.json();
-        const hist = document.getElementById('msgHistory');
-        hist.innerHTML = result.data.map(m => `<div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>`).join('');
-    }
-    
-    async function send() { console.log("Send clicked"); }
-</script>
+        async function loadUsers() {
+            console.log("Fetching users from /api/chat...");
+            try {
+                const res = await fetch('/api/chat', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'getUserList' }) 
+                });
+                
+                const result = await res.json();
+                console.log("API Response:", result);
+
+                if (result.success) {
+                    const list = document.getElementById('userList');
+                    list.innerHTML = result.data
+                        .filter(u => u.userid !== myUserId)
+                        .map(u => `<div class="user-item" onclick="selectUser('${u.userid}', '${u.first_name}')">${u.first_name} ${u.last_name}</div>`)
+                        .join('');
+                } else {
+                    console.error("API returned success:false", result.message);
+                }
+            } catch (err) {
+                console.error("Fetch call failed:", err);
+            }
+        }
+
+        // Auto-run on load
+        if (myUserId) {
+            loadUsers();
+        } else {
+            document.getElementById('userList').innerHTML = '<div style="padding:20px; color:red;">Not logged in. Please re-login.</div>';
+        }
+
+        async function selectUser(id, name) { alert("Selected " + name); }
+        async function send() { alert("Sending..."); }
+    </script>
 </body>
 </html>
