@@ -50,13 +50,12 @@
     let unreadCounts = {}; 
 
     // 1. UPDATE USER LIST & BADGES
-    async function syncSystem() {
+   async function syncSystem() {
         try {
-            // We'll use your existing API to get users
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getUserList', myId: myId }) 
+                body: JSON.stringify({ action: 'getUserList', sender_id: myId }) // Sending myId updates our last_seen
             });
             const result = await response.json();
             
@@ -64,8 +63,16 @@
                 const listHtml = result.data
                     .filter(u => u.userid !== myId)
                     .map(u => {
-                        // Check if user was active in last 2 minutes
-                        const isOnline = u.last_seen && (new Date() - new Date(u.last_seen) < 120000);
+                        // LOGIC: If last_seen was in the last 60 seconds, they are online
+                        let isOnline = false;
+                        if (u.last_seen) {
+                            const lastSeenDate = new Date(u.last_seen).getTime();
+                            const now = new Date().getTime();
+                            const secondsAgo = (now - lastSeenDate) / 1000;
+                            if (secondsAgo < 60) isOnline = true; 
+                        }
+
+                        // Get unread count from a local object (or you can add logic to your API to return this)
                         const count = unreadCounts[u.userid] || 0;
                         
                         return `
