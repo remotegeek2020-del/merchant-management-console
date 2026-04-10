@@ -79,44 +79,32 @@
     }
 }
 
-    async function syncSystem() {
-        try {
-            const response = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getUserList', sender_id: myId })
-            });
-            const result = await response.json();
-            
-            if (result.success) {
-                const listHtml = result.data
-                    .filter(u => u.userid !== myId)
-                    .map(u => {
-                        // ONLINE LOGIC: Check if last_seen is within the last 90 seconds
-                        let isOnline = false;
-                        if (u.last_seen) {
-                            const diff = (Date.now() - new Date(u.last_seen).getTime()) / 1000;
-                            if (diff < 90) isOnline = true;
-                        }
+   let lastListHtml = ""; // Global variable to store the previous state
 
-                        // UNREAD LOGIC: Get count from API response
-                        const count = result.unreadCounts ? result.unreadCounts[u.userid] : 0;
-                        
-                        return `
-                            <div class="user-item ${u.userid === activeId ? 'active' : ''}" onclick="openChat('${u.userid}', '${u.first_name}')">
-                                <div style="display:flex; align-items:center;">
-                                    <div class="status-dot ${isOnline ? 'online' : ''}"></div>
-                                    <span>${u.first_name} ${u.last_name || ''}</span>
-                                </div>
-                                ${count > 0 ? `<span class="badge">${count}</span>` : ''}
-                            </div>
-                        `;
-                    }).join('');
-                document.getElementById('userList').innerHTML = listHtml;
+async function syncSystem() {
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getUserList', sender_id: myId })
+        });
+        const result = await response.json();
+        
+        if (result.success) {
+            const newListHtml = result.data
+                .filter(u => u.userid !== myId)
+                .map(u => {
+                    // ... your existing mapping logic ...
+                }).join('');
+
+            // ONLY update the DOM if the data has actually changed
+            if (newListHtml !== lastListHtml) {
+                document.getElementById('userList').innerHTML = newListHtml;
+                lastListHtml = newListHtml;
             }
-        } catch (err) { console.error(err); }
-    }
-
+        }
+    } catch (err) { console.error(err); }
+}
     // Update History AND sync system
     async function openChat(id, name) {
         activeId = id;
