@@ -21,7 +21,7 @@
 
 <div class="sidebar">
     <div style="padding:20px; font-weight:bold; border-bottom:1px solid #eee;">CHATS</div>
-    <div id="userList">Waiting for system...</div>
+    <div id="userList">Initializing...</div>
 </div>
 
 <div class="chat-main">
@@ -36,44 +36,37 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
 <script>
-    // 2. INITIALIZE SUPABASE CLIENT
     const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
     const SUPABASE_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
-    const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-    const log = (msg) => {
-        console.log(msg);
-        const list = document.getElementById('userList');
-        if(list.innerText.includes("Loading") || list.innerText.includes("Waiting")) list.innerText = msg;
-    };
-
+    
+    let supabase;
     const myUserId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeRecipientId = null;
 
-    // 3. START THE REALTIME LISTENER
-    supabase
-        .channel('db-changes')
-        .on('postgres_changes', { 
-            event: 'INSERT', 
-            schema: 'public', 
-            table: 'messages' 
-        }, payload => {
-            const newMsg = payload.new;
-            console.log("New message arrived:", newMsg);
+    // 1. Initialize Supabase safely
+    try {
+        supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        
+        // Setup Realtime Listener
+        supabase
+            .channel('chat-room')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+                const newMsg = payload.new;
+                const isRelevant = 
+                    (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
+                    (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId);
+                
+                if (isRelevant) {
+                    appendBubble(newMsg);
+                }
+            })
+            .subscribe();
+    } catch (e) {
+        console.error("Supabase Error:", e);
+    }
 
-            // Logic: Is this message part of the conversation I'm currently looking at?
-            const isCurrentChat = 
-                (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
-                (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId);
-
-            if (isCurrentChat) {
-                appendBubble(newMsg);
-            }
-        })
-        .subscribe();
-
+    // 2. Load Users (This runs regardless of Realtime status)
     async function loadUsers() {
-        log("Loading users...");
         try {
             const res = await fetch('/api/chat', {
                 method: 'POST',
@@ -91,31 +84,50 @@
                         </div>
                     `).join('');
             }
-        } catch (e) { log("System Error: " + e.message); }
+        } catch (e) {
+            document.getElementById('userList').innerText = "Load failed.";
+        }
     }
 
     async function selectUser(id, name) {
         activeRecipientId = id;
         document.getElementById('chatHeader').innerText = "Chat with " + name;
         
-        // UI highlight
         document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-        const el = document.getElementById(`u-${id}`);
-        if(el) el.classList.add('active');
+        const activeEl = document.getElementById(`u-${id}`);
+        if(activeEl) activeEl.classList.add('active');
 
-        try {
-            const res = await fetch('/api/chat', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id })
-            });
-            const result = await res.json();
-            const hist = document.getElementById('msgHistory');
-            hist.innerHTML = (result.data || []).map(m => `
-                <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
-            `).join('');
-            scrollToBottom();
-        } catch (e) { console.error(e); }
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id })
+        });
+        const result = await res.json();
+        const hist = document.getElementById('msgHistory');
+        hist.innerHTML = (result.data || []).map(m => `
+            <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
+        `).join('');
+        hist.scrollTop = hist.scrollHeight;
+    }
+
+    async function send() {
+        const input = document.getElementById('msgInput');
+        if (!input.value || !activeRecipientId) return;
+        
+        const content = input.value;
+        input.value = ""; 
+
+        await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'sendMessage', 
+                sender_id: myUserId, 
+                recipient_id: activeRecipientId, 
+                content: content 
+            })
+        });
+        // Note: Bubble is added by the Realtime listener automatically
     }
 
     function appendBubble(msg) {
@@ -124,31 +136,6 @@
         div.className = `bubble ${msg.sender_id === myUserId ? 'me' : 'them'}`;
         div.innerText = msg.content;
         hist.appendChild(div);
-        scrollToBottom();
-    }
-
-    async function send() {
-        const input = document.getElementById('msgInput');
-        if (!input.value || !activeRecipientId) return;
-        
-        const text = input.value;
-        input.value = ""; // Clear input immediately
-
-        // We send to API, and the Listener above will add the bubble to the UI
-        await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'sendMessage', 
-                sender_id: myUserId, 
-                recipient_id: activeRecipientId, 
-                content: text 
-            })
-        });
-    }
-
-    function scrollToBottom() {
-        const hist = document.getElementById('msgHistory');
         hist.scrollTop = hist.scrollHeight;
     }
 
