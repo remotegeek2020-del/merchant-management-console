@@ -13,77 +13,162 @@
         .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
         .chat-area { flex: 1; display: flex; flex-direction: column; }
         .messages { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-        .bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; }
-        .bubble.me { align-self: flex-end; background: #0084ff; color: white; }
-        .bubble.them { align-self: flex-start; background: #e4e6eb; color: black; }
+        .bubble { max-width: 60%; padding: 10px 15px; border-radius: 18px; position: relative; }
+        .bubble.me { align-self: flex-end; background: #0084ff; color: white; border-bottom-right-radius: 4px; }
+        .bubble.them { align-self: flex-start; background: #e4e6eb; color: black; border-bottom-left-radius: 4px; }
         .input-bar { padding: 20px; border-top: 1px solid #eee; display: flex; gap: 10px; }
+        .input-bar input { border-radius: 20px !important; background: #f0f2f5 !important; border: none !important; padding: 10px 15px; }
     </style>
 </head>
 <body>
     <div class="messenger">
-        <div class="sidebar"><div style="padding:20px; font-weight:800; font-size:1.5rem;">Chats</div><div id="userList"></div></div>
+        <div class="sidebar">
+            <div style="padding:20px; font-weight:800; font-size:1.5rem; display: flex; justify-content: space-between; align-items: center;">
+                Chats
+                <a href="index.html" style="font-size: 12px; font-weight: 400; color: #64748b;">Back</a>
+            </div>
+            <div id="userList"></div>
+        </div>
         <div class="chat-area">
             <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:bold;">Select a user</div>
             <div class="messages" id="msgHistory"></div>
             <div class="input-bar">
                 <input type="text" id="msgInput" class="slds-input" placeholder="Type a message..." onkeypress="if(event.key==='Enter') send()">
-                <button onclick="send()" class="slds-button slds-button_brand">Send</button>
+                <button onclick="send()" class="slds-button slds-button_brand" style="border-radius: 20px;">Send</button>
             </div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    
     <script>
+        // 1. Initialize Supabase
         const supabase = window.supabase.createClient('https://zuzwljjrppyrzngmhdru.supabase.co', 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO');
+        
+        // 2. Identify Current User
         const myUserId = localStorage.getItem('userid'); 
         let activeRecipientId = null;
 
-       // Ensure this matches your chat.html script
-async function loadUsers() {
-    console.log("Attempting to load users...");
-    const res = await fetch('/api/chat', { 
-        method: 'POST', 
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({ action: 'getUserList' }) 
-    });
-    const result = await res.json();
-    console.log("Users received:", result);
+        if (!myUserId) {
+            alert("No User ID found. Please log out and log back in to use Chat.");
+        }
 
-    if (result.success) {
-        document.getElementById('userList').innerHTML = result.data
-            .filter(u => u.userid !== myUserId)
-            .map(u => `<div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name}')">
-                ${u.first_name} ${u.last_name}
-            </div>`)
-            .join('');
-    }
-}
+        // 3. REALTIME: Listen for new messages globally
+        supabase
+            .channel('chat_realtime')
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
+                const newMsg = payload.new;
+                
+                // If I am the recipient of a message from the person I am currently looking at
+                // OR if I am the sender, add the bubble to the screen instantly
+                if (
+                    (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
+                    (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId)
+                ) {
+                    appendBubble(newMsg);
+                }
+            })
+            .subscribe();
 
-        async function selectUser(id, name) {
+        // 4. LOAD THE USER LIST (Sidebar)
+        async function loadUsers() {
+            console.log("Attempting to load users...");
+            try {
+                const res = await fetch('/api/chat', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ action: 'getUserList' }) 
+                });
+                const result = await res.json();
+                
+                if (result.success) {
+                    document.getElementById('userList').innerHTML = result.data
+                        .filter(u => u.userid !== myUserId)
+                        .map(u => `
+                            <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
+                                <div style="font-weight: bold;">${u.first_name} ${u.last_name}</div>
+                                <div style="font-size: 10px; color: #64748b;">Online</div>
+                            </div>
+                        `).join('');
+                }
+            } catch (err) {
+                console.error("Error loading users:", err);
+            }
+        }
+
+        // 5. SELECT A USER (Load History)
+        async function selectUser(id, fullName) {
             activeRecipientId = id;
-            document.getElementById('chatHeader').innerText = name;
+            document.getElementById('chatHeader').innerText = fullName;
+            
+            // Highlight active user in sidebar
             document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
             document.getElementById(`u-${id}`).classList.add('active');
             
-            const res = await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) });
-            const result = await res.json();
-            render(result.data);
+            try {
+                const res = await fetch('/api/chat', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) 
+                });
+                const result = await res.json();
+                render(result.data || []);
+            } catch (err) {
+                console.error("Error loading history:", err);
+            }
         }
 
+        // 6. RENDER HISTORY
         function render(msgs) {
             const hist = document.getElementById('msgHistory');
-            hist.innerHTML = msgs.map(m => `<div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>`).join('');
+            hist.innerHTML = msgs.map(m => `
+                <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
+            `).join('');
+            scrollToBottom();
+        }
+
+        // 7. APPEND SINGLE BUBBLE (For Realtime)
+        function appendBubble(msg) {
+            const hist = document.getElementById('msgHistory');
+            const div = document.createElement('div');
+            div.className = `bubble ${msg.sender_id === myUserId ? 'me' : 'them'}`;
+            div.innerText = msg.content;
+            hist.appendChild(div);
+            scrollToBottom();
+        }
+
+        // 8. SEND MESSAGE
+        async function send() {
+            const input = document.getElementById('msgInput');
+            const content = input.value.trim();
+            
+            if (!content || !activeRecipientId) return;
+            
+            input.value = ''; // Clear input immediately for better feel
+
+            try {
+                await fetch('/api/chat', { 
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ 
+                        action: 'sendMessage', 
+                        sender_id: myUserId, 
+                        recipient_id: activeRecipientId, 
+                        content: content 
+                    }) 
+                });
+                // Note: Realtime listener will handle adding the bubble to the UI
+            } catch (err) {
+                console.error("Error sending message:", err);
+            }
+        }
+
+        function scrollToBottom() {
+            const hist = document.getElementById('msgHistory');
             hist.scrollTop = hist.scrollHeight;
         }
 
-        async function send() {
-            const input = document.getElementById('msgInput');
-            if (!input.value || !activeRecipientId) return;
-            await fetch('/api/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ action: 'sendMessage', sender_id: myUserId, recipient_id: activeRecipientId, content: input.value }) });
-            input.value = '';
-            selectUser(activeRecipientId, document.getElementById('chatHeader').innerText);
-        }
-
+        // START!
         loadUsers();
     </script>
 </body>
