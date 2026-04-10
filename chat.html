@@ -48,102 +48,118 @@
 </div>
 
 <script>
+    // 1. SET UP GLOBAL VARIABLES (Crucial to prevent "Loading..." hang)
     const myId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeId = null;
-    let lastListHtml = ""; // Global variable to store the previous state
+    let currentSidebarHTML = ""; // This stops the flickering
 
-    async function send() {
-    const input = document.getElementById('msgInput');
-    if (!input.value.trim() || !activeId) return;
-    
-    const text = input.value;
-    input.value = ""; // Clear UI immediately
+    // 2. REFRESH MESSAGES FUNCTION
+    async function refreshMessages() {
+        if (!activeId) return;
+        try {
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getHistory', sender_id: myId, recipient_id: activeId })
+            });
+            const result = await res.json();
+            const hist = document.getElementById('msgHistory');
+            
+            // Generate HTML for bubbles
+            const newBubbles = (result.data || []).map(m => `
+                <div class="bubble ${m.sender_id === myId ? 'me' : 'them'}">${m.content}</div>
+            `).join('');
 
-    const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-            action: 'sendMessage', 
-            sender_id: myId, 
-            recipient_id: activeId, 
-            content: text 
-        })
-    });
-    
-    const result = await res.json();
-    if (!result.success) {
-        console.error("Send failed:", result.message);
-        alert("Message failed to send. Check if 'is_read' column exists in your database.");
-    } else {
-        // Refresh chat history to show your new message
-        openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
-    }
-}
-
-   
-
-async function syncSystem() {
-    try {
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getUserList', sender_id: myId })
-        });
-        const result = await response.json();
-        
-        if (result.success) {
-            const newListHtml = result.data
-                .filter(u => u.userid !== myId)
-                .map(u => {
-                    // ... your existing mapping logic ...
-                }).join('');
-
-            // ONLY update the DOM if the data has actually changed
-            if (newListHtml !== lastListHtml) {
-                document.getElementById('userList').innerHTML = newListHtml;
-                lastListHtml = newListHtml;
+            // Only update if messages changed to prevent scrolling jumps
+            if (hist.innerHTML !== newBubbles) {
+                hist.innerHTML = newBubbles;
+                hist.scrollTop = hist.scrollHeight;
             }
-        }
-    } catch (err) { console.error(err); }
-}
-    // Update History AND sync system
+        } catch (e) { console.error("Msg Refresh Error:", e); }
+    }
+
+    // 3. SYNC SIDEBAR (Online dots & Red badges)
+    async function syncSystem() {
+        try {
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getUserList', sender_id: myId })
+            });
+            const result = await response.json();
+            
+            if (result.success) {
+                const listHtml = result.data
+                    .filter(u => u.userid !== myId)
+                    .map(u => {
+                        let isOnline = false;
+                        if (u.last_seen) {
+                            const diff = (Date.now() - new Date(u.last_seen).getTime()) / 1000;
+                            if (diff < 90) isOnline = true;
+                        }
+                        const count = result.unreadCounts ? result.unreadCounts[u.userid] : 0;
+                        
+                        return `
+                            <div class="user-item ${u.userid === activeId ? 'active' : ''}" onclick="openChat('${u.userid}', '${u.first_name}')">
+                                <div style="display:flex; align-items:center;">
+                                    <div class="status-dot ${isOnline ? 'online' : ''}"></div>
+                                    <span>${u.first_name} ${u.last_name || ''}</span>
+                                </div>
+                                ${count > 0 ? `<span class="badge">${count}</span>` : ''}
+                            </div>
+                        `;
+                    }).join('');
+
+                // FLICKER PREVENTION: Only update if the data actually changed
+                if (listHtml !== currentSidebarHTML) {
+                    document.getElementById('userList').innerHTML = listHtml;
+                    currentSidebarHTML = listHtml;
+                }
+            }
+        } catch (err) { console.error("Sidebar Sync Error:", err); }
+    }
+
+    // 4. OPEN CHAT
     async function openChat(id, name) {
         activeId = id;
         document.getElementById('chatHeader').innerText = "Chat with " + name;
         
+        // Mark as read and get history immediately
         await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'getHistory', sender_id: myId, recipient_id: id })
         });
         
-        // Refresh messages immediately
         refreshMessages();
-        // Refresh sidebar to clear badge
-        syncSystem();
+        syncSystem(); // Instantly clears the badge
     }
 
-    async function refreshMessages() {
-        if (!activeId) return;
-        const res = await fetch('/api/chat', {
+    // 5. SEND MESSAGE
+    async function send() {
+        const input = document.getElementById('msgInput');
+        if (!input.value.trim() || !activeId) return;
+        
+        const text = input.value;
+        input.value = "";
+
+        await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getHistory', sender_id: myId, recipient_id: activeId })
+            body: JSON.stringify({ action: 'sendMessage', sender_id: myId, recipient_id: activeId, content: text })
         });
-        const result = await res.json();
-        const hist = document.getElementById('msgHistory');
-        hist.innerHTML = (result.data || []).map(m => `
-            <div class="bubble ${m.sender_id === myId ? 'me' : 'them'}">${m.content}</div>
-        `).join('');
-        hist.scrollTop = hist.scrollHeight;
+        
+        refreshMessages();
     }
 
-    // Run every 4 seconds
-    setInterval(() => {
-        syncSystem();
-        if (activeId) refreshMessages();
-    }, 4000);
+    // 6. LOOPS
+    // Check for new messages every 3 seconds
+    setInterval(refreshMessages, 3000);
+    
+    // Check online status/badges every 6 seconds
+    setInterval(syncSystem, 6000);
 
+    // Initial Start
     syncSystem();
 </script>
 </body>
