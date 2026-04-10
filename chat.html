@@ -51,6 +51,34 @@
     const myId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeId = null;
 
+    async function send() {
+    const input = document.getElementById('msgInput');
+    if (!input.value.trim() || !activeId) return;
+    
+    const text = input.value;
+    input.value = ""; // Clear UI immediately
+
+    const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'sendMessage', 
+            sender_id: myId, 
+            recipient_id: activeId, 
+            content: text 
+        })
+    });
+    
+    const result = await res.json();
+    if (!result.success) {
+        console.error("Send failed:", result.message);
+        alert("Message failed to send. Check if 'is_read' column exists in your database.");
+    } else {
+        // Refresh chat history to show your new message
+        openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
+    }
+}
+
     async function syncSystem() {
         try {
             const response = await fetch('/api/chat', {
