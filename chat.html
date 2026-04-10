@@ -41,135 +41,69 @@
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     
-    <script>
-        // 1. Initialize Supabase
-        const supabase = window.supabase.createClient('https://zuzwljjrppyrzngmhdru.supabase.co', 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO');
-        
-        // 2. Identify Current User
-        const myUserId = localStorage.getItem('userid'); 
-        let activeRecipientId = null;
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+    console.log("1. Script Started");
+    
+    // Safety check for credentials
+    const SUPA_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+    const SUPA_KEY = 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO';
 
-        if (!myUserId) {
-            alert("No User ID found. Please log out and log back in to use Chat.");
-        }
+    const supabase = window.supabase.createClient(SUPA_URL, SUPA_KEY);
+    const myUserId = localStorage.getItem('userid'); 
+    let activeRecipientId = null;
 
-        // 3. REALTIME: Listen for new messages globally
-        supabase
-            .channel('chat_realtime')
-            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-                const newMsg = payload.new;
-                
-                // If I am the recipient of a message from the person I am currently looking at
-                // OR if I am the sender, add the bubble to the screen instantly
-                if (
-                    (newMsg.sender_id === activeRecipientId && newMsg.recipient_id === myUserId) ||
-                    (newMsg.sender_id === myUserId && newMsg.recipient_id === activeRecipientId)
-                ) {
-                    appendBubble(newMsg);
-                }
-            })
-            .subscribe();
+    console.log("2. My User ID is:", myUserId);
 
-        // 4. LOAD THE USER LIST (Sidebar)
-        async function loadUsers() {
-            console.log("Attempting to load users...");
-            try {
-                const res = await fetch('/api/chat', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ action: 'getUserList' }) 
-                });
-                const result = await res.json();
-                
-                if (result.success) {
-                    document.getElementById('userList').innerHTML = result.data
-                        .filter(u => u.userid !== myUserId)
-                        .map(u => `
-                            <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
-                                <div style="font-weight: bold;">${u.first_name} ${u.last_name}</div>
-                                <div style="font-size: 10px; color: #64748b;">Online</div>
-                            </div>
-                        `).join('');
-                }
-            } catch (err) {
-                console.error("Error loading users:", err);
+    async function loadUsers() {
+        console.log("3. loadUsers function called");
+        try {
+            const res = await fetch('/api/chat', { 
+                method: 'POST', 
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ action: 'getUserList' }) 
+            });
+            
+            console.log("4. Fetch finished, status:", res.status);
+            const result = await res.json();
+            console.log("5. Data received:", result);
+
+            if (result.success) {
+                const listHtml = result.data
+                    .filter(u => u.userid !== myUserId)
+                    .map(u => `
+                        <div class="user-item" id="u-${u.userid}" onclick="selectUser('${u.userid}', '${u.first_name} ${u.last_name}')">
+                            <div style="font-weight: bold;">${u.first_name} ${u.last_name}</div>
+                        </div>
+                    `).join('');
+                document.getElementById('userList').innerHTML = listHtml;
             }
+        } catch (err) {
+            console.error("6. FETCH ERROR:", err);
+            alert("API Connection Failed: " + err.message);
         }
+    }
 
-        // 5. SELECT A USER (Load History)
-        async function selectUser(id, fullName) {
-            activeRecipientId = id;
-            document.getElementById('chatHeader').innerText = fullName;
-            
-            // Highlight active user in sidebar
-            document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
-            document.getElementById(`u-${id}`).classList.add('active');
-            
-            try {
-                const res = await fetch('/api/chat', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) 
-                });
-                const result = await res.json();
-                render(result.data || []);
-            } catch (err) {
-                console.error("Error loading history:", err);
-            }
-        }
+    // This is the trigger
+    console.log("7. Calling loadUsers now...");
+    loadUsers();
 
-        // 6. RENDER HISTORY
-        function render(msgs) {
-            const hist = document.getElementById('msgHistory');
-            hist.innerHTML = msgs.map(m => `
-                <div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>
-            `).join('');
-            scrollToBottom();
-        }
-
-        // 7. APPEND SINGLE BUBBLE (For Realtime)
-        function appendBubble(msg) {
-            const hist = document.getElementById('msgHistory');
-            const div = document.createElement('div');
-            div.className = `bubble ${msg.sender_id === myUserId ? 'me' : 'them'}`;
-            div.innerText = msg.content;
-            hist.appendChild(div);
-            scrollToBottom();
-        }
-
-        // 8. SEND MESSAGE
-        async function send() {
-            const input = document.getElementById('msgInput');
-            const content = input.value.trim();
-            
-            if (!content || !activeRecipientId) return;
-            
-            input.value = ''; // Clear input immediately for better feel
-
-            try {
-                await fetch('/api/chat', { 
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ 
-                        action: 'sendMessage', 
-                        sender_id: myUserId, 
-                        recipient_id: activeRecipientId, 
-                        content: content 
-                    }) 
-                });
-                // Note: Realtime listener will handle adding the bubble to the UI
-            } catch (err) {
-                console.error("Error sending message:", err);
-            }
-        }
-
-        function scrollToBottom() {
-            const hist = document.getElementById('msgHistory');
-            hist.scrollTop = hist.scrollHeight;
-        }
-
-        // START!
-        loadUsers();
-    </script>
+    // Placeholder functions to prevent errors if clicked
+    async function selectUser(id, name) { 
+        console.log("Selected:", name);
+        activeRecipientId = id;
+        document.getElementById('chatHeader').innerText = name;
+        const res = await fetch('/api/chat', { 
+            method: 'POST', 
+            headers: {'Content-Type': 'application/json'}, 
+            body: JSON.stringify({ action: 'getHistory', sender_id: myUserId, recipient_id: id }) 
+        });
+        const result = await res.json();
+        const hist = document.getElementById('msgHistory');
+        hist.innerHTML = result.data.map(m => `<div class="bubble ${m.sender_id === myUserId ? 'me' : 'them'}">${m.content}</div>`).join('');
+    }
+    
+    async function send() { console.log("Send clicked"); }
+</script>
 </body>
 </html>
