@@ -9,6 +9,7 @@
         .sidebar { width: 300px; border-right: 1px solid #ddd; background: #fff; display: flex; flex-direction: column; }
         .user-item { padding: 15px; cursor: pointer; border-bottom: 1px solid #eee; }
         .user-item:hover { background: #f0f2f5; }
+        .user-item.active { background: #e7f3ff; color: #0084ff; font-weight: bold; }
         .chat-main { flex: 1; display: flex; flex-direction: column; background: #fff; }
         .msg-container { flex: 1; padding: 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
         .bubble { max-width: 70%; padding: 10px; border-radius: 10px; background: #e4e6eb; }
@@ -20,59 +21,62 @@
 
 <div class="sidebar">
     <div style="padding:20px; font-weight:bold; border-bottom:1px solid #eee;">CHATS</div>
-    <div id="userList" style="padding:20px;">Checking API...</div>
+    <div id="userList" style="padding:20px;">System Starting...</div>
 </div>
 
 <div class="chat-main">
     <div id="chatHeader" style="padding:15px; border-bottom:1px solid #eee; font-weight:bold;">Select User</div>
     <div class="msg-container" id="msgHistory"></div>
     <div class="input-bar">
-        <input type="text" id="msgInput" class="slds-input" placeholder="Type here...">
+        <input type="text" id="msgInput" class="slds-input" placeholder="Type here..." onkeypress="if(event.key==='Enter') send()">
         <button onclick="send()" class="slds-button slds-button_brand">Send</button>
     </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
 <script>
-    // 1. Identity Check
+    // 1. CONFIG
     const myId = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
     let activeId = null;
 
-    // 2. Load Users Function
-    async function start() {
-        const listDiv = document.getElementById('userList');
+    // 2. LOAD USER LIST
+    async function init() {
+        console.log("Starting API call...");
         try {
-            console.log("Fetching from /api/chat...");
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'getUserList' })
             });
-
             const result = await response.json();
             
             if (result.success) {
-                listDiv.innerHTML = result.data
+                const listHtml = result.data
                     .filter(u => u.userid !== myId)
                     .map(u => `
-                        <div class="user-item" onclick="openChat('${u.userid}', '${u.first_name}')">
+                        <div class="user-item" id="u-${u.userid}" onclick="openChat('${u.userid}', '${u.first_name}')">
                             ${u.first_name} ${u.last_name || ''}
                         </div>
                     `).join('');
+                document.getElementById('userList').innerHTML = listHtml;
             } else {
-                listDiv.innerText = "API Error: " + result.message;
+                document.getElementById('userList').innerText = "API Error: " + result.message;
             }
         } catch (err) {
-            listDiv.innerText = "Connection Failed. Check Console.";
+            document.getElementById('userList').innerText = "Connection Failed. Please Refresh.";
             console.error(err);
         }
     }
 
-    // 3. Open Chat / Get History
+    // 3. SELECT USER
     async function openChat(id, name) {
         activeId = id;
         document.getElementById('chatHeader').innerText = "Chat with " + name;
+        
+        // Highlight active user
+        document.querySelectorAll('.user-item').forEach(el => el.classList.remove('active'));
+        const activeEl = document.getElementById(`u-${id}`);
+        if(activeEl) activeEl.classList.add('active');
+
         const res = await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -83,9 +87,10 @@
         hist.innerHTML = (result.data || []).map(m => `
             <div class="bubble ${m.sender_id === myId ? 'me' : 'them'}">${m.content}</div>
         `).join('');
+        hist.scrollTop = hist.scrollHeight;
     }
 
-    // 4. Send Message
+    // 4. SEND (MANUAL REFRESH FALLBACK)
     async function send() {
         const input = document.getElementById('msgInput');
         if (!input.value || !activeId) return;
@@ -103,28 +108,21 @@
                 content: content 
             })
         });
-        // Refresh view
+
+        // Since we removed Supabase library, we refresh the chat manually for now
         openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
     }
 
-    // Run the start function immediately
-    start();
+    // 5. POLL FOR NEW MESSAGES (Temporary Realtime replacement)
+    // Checks for new messages every 3 seconds
+    setInterval(() => {
+        if (activeId) {
+            openChat(activeId, document.getElementById('chatHeader').innerText.replace("Chat with ", ""));
+        }
+    }, 3000);
 
-    // 5. Initialize Realtime AFTER start
-    setTimeout(() => {
-        try {
-            const client = window.supabase.createClient('https://zuzwljjrppyrzngmhdru.supabase.co', 'sb_publishable_DgzVF5uoTSV1A_c0V7jvpQ_v96Ov0bO');
-            client.channel('realtime-chat').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
-                const msg = payload.new;
-                if ((msg.sender_id === activeId && msg.recipient_id === myId) || (msg.sender_id === myId && msg.recipient_id === activeId)) {
-                    const div = document.createElement('div');
-                    div.className = `bubble ${msg.sender_id === myId ? 'me' : 'them'}`;
-                    div.innerText = msg.content;
-                    document.getElementById('msgHistory').appendChild(div);
-                }
-            }).subscribe();
-        } catch(e) { console.log("Realtime failed, falling back to manual refresh."); }
-    }, 2000);
+    // Run
+    init();
 </script>
 </body>
 </html>
