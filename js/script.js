@@ -159,6 +159,8 @@ function handleLogout() {
     }).then((result) => {
         if (result.isConfirmed) {
             sessionStorage.clear();
+            // --- ADD THIS LINE TO CLEAR CHAT ID ---
+            localStorage.removeItem('userid');
             location.reload();
         }
     });
