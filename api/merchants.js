@@ -361,7 +361,7 @@ if (action === 'get_merchant_equipment') {
             return res.status(200).json({ success: true });
         }
 
-    if (action === 'list') {
+if (action === 'list') {
     // 1. Deep Query: Join through Agent Identifiers -> Agents -> Companies/Persons
     const dataReq = supabase
         .from('merchants')
@@ -434,27 +434,6 @@ if (action === 'get_merchant_equipment') {
         };
     });
 
-    return res.status(200).json({ 
-        success: true, 
-        data: formattedData,
-        count: count || 0,
-        metrics: { 
-            totalMTD: stats.out_mtd || 0, 
-            total30D: stats.out_30d || 0, 
-            total90D: stats.out_90d || 0, 
-            portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
-        }
-    });
-}
-
-  // Replace your existing formattedData mapping with this:
-const formattedData = (data || []).map(m => ({
-    ...m,
-    // Extract the prime49 boolean from the join
-    is_prime49: m.agent_identifiers?.prime49 || false,
-    company_name: m.company_name || m.agent_name || '---',
-    partner_name: m.partner_full_name || m.agent_name || '---'
-}));
     return res.status(200).json({ 
         success: true, 
         data: formattedData,
