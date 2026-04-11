@@ -362,39 +362,45 @@ if (action === 'get_merchant_equipment') {
         }
 
     if (action === 'list') {
-    // 1. Base Query from the View
-   const dataReq = supabase
-    .from('merchants') // Switching to base table to ensure join works correctly
-    .select(`
-        *,
-        agent_identifiers!fk_agent_identifier (
-            prime49
-        )
-    `, { count: 'exact' });
+    // 1. Deep Query: Join through Agent Identifiers -> Agents -> Companies/Persons
+    const dataReq = supabase
+        .from('merchants')
+        .select(`
+            *,
+            agent_identifiers!fk_agent_identifier (
+                prime49,
+                agents (
+                    company:companies (company_name),
+                    person:persons (full_name)
+                )
+            )
+        `, { count: 'exact' });
 
-    // 2. Apply Filters
+    // 2. Apply Status Filter
     if (statusFilter) dataReq.eq('account_status', statusFilter);
 
+    // 3. Smart Search Logic
     if (query && filterBy) {
-        const colMap = {
-            'dba_name': 'dba_name',
-            'merchant_id': 'merchant_id',
-            'agent_id': 'agent_id',
-            'company_name': 'company_name',
-            'partner_name': 'partner_full_name'
-        };
-        const targetCol = colMap[filterBy] || filterBy;
-        dataReq.ilike(targetCol, `%${query}%`);
+        if (filterBy === 'company_name') {
+            // Re-routing search to the joined table path
+            dataReq.ilike('agent_identifiers.agents.company.company_name', `%${query}%`);
+        } else if (filterBy === 'partner_name') {
+            // Re-routing search to the joined table path
+            dataReq.ilike('agent_identifiers.agents.person.full_name', `%${query}%`);
+        } else {
+            // Standard columns: dba_name, merchant_id, agent_id
+            dataReq.ilike(filterBy, `%${query}%`);
+        }
     }
 
-    // 3. Execute Pagination and Ordering
+    // 4. Execute Pagination and Ordering
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
 
     if (dataError) throw dataError;
 
-    // 4. Metrics Logic (RPC with Manual Fallback)
+    // 5. Metrics Logic (RPC with Manual Fallback)
     let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
     
     try {
@@ -407,7 +413,6 @@ if (action === 'get_merchant_equipment') {
         if (mathData && mathData[0]) {
             stats = mathData[0];
         } else {
-            // FALLBACK: If RPC returns nothing, manually sum the current 'data' array
             stats.out_mtd = data.reduce((acc, curr) => acc + (Number(curr.volume_mtd) || 0), 0);
             stats.out_30d = data.reduce((acc, curr) => acc + (Number(curr.volume_30_day) || 0), 0);
             stats.out_90d = data.reduce((acc, curr) => acc + (Number(curr.volume_90_day) || 0), 0);
@@ -415,6 +420,32 @@ if (action === 'get_merchant_equipment') {
     } catch (rpcErr) {
         console.error("Metrics RPC Failed, using manual calculation...", rpcErr);
     }
+
+    // 6. Format Data for Frontend (Extracting joined names and Prime49 flag)
+    const formattedData = (data || []).map(m => {
+        const agents = m.agent_identifiers?.agents;
+        return {
+            ...m,
+            // Restore naming so dashboard doesn't show "---"
+            company_name: agents?.company?.company_name || m.agent_name || '---',
+            partner_name: agents?.person?.full_name || m.agent_name || '---',
+            // Assign Prime49 flag for the gold badges
+            is_prime49: m.agent_identifiers?.prime49 || false
+        };
+    });
+
+    return res.status(200).json({ 
+        success: true, 
+        data: formattedData,
+        count: count || 0,
+        metrics: { 
+            totalMTD: stats.out_mtd || 0, 
+            total30D: stats.out_30d || 0, 
+            total90D: stats.out_90d || 0, 
+            portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
+        }
+    });
+}
 
   // Replace your existing formattedData mapping with this:
 const formattedData = (data || []).map(m => ({
