@@ -362,30 +362,29 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    // 1. Query the View (Flat, fast, and large-scale ready)
+    // 1. Query the View (Ensure your SQL View was created with the person mapping)
     let dataReq = supabase
         .from('merchant_portfolio_view')
         .select('*', { count: 'exact' });
 
-    // 2. Apply Status Filter
+    // 2. Apply Filters
     if (statusFilter) {
         dataReq.eq('account_status', statusFilter);
     }
 
-    // 3. Search Logic - Now searching the flat columns in the View
     if (query && filterBy) {
         const colMap = {
             'dba_name': 'dba_name',
             'merchant_id': 'merchant_id',
             'agent_id': 'agent_id',
             'company_name': 'company_name',
-            'partner_name': 'partner_full_name'
+            'partner_name': 'partner_full_name' // Mapping frontend key to View column
         };
         const targetCol = colMap[filterBy] || filterBy;
         dataReq.ilike(targetCol, `%${query}%`);
     }
 
-    // 4. Execution with Pagination
+    // 3. Execute with Pagination
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
@@ -395,7 +394,7 @@ if (action === 'list') {
         throw dataError;
     }
 
-    // 5. Metrics Logic (Reusing your existing RPC and fallback)
+    // 4. Metrics Logic (Existing fallback)
     let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
     try {
         const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
@@ -403,23 +402,20 @@ if (action === 'list') {
             p_query: query || null, 
             p_filter_by: filterBy || null 
         });
-
-        if (mathData && mathData[0]) {
-            stats = mathData[0];
-        } else {
-            stats.out_mtd = data.reduce((acc, curr) => acc + (Number(curr.volume_mtd) || 0), 0);
-            stats.out_30d = data.reduce((acc, curr) => acc + (Number(curr.volume_30_day) || 0), 0);
-            stats.out_90d = data.reduce((acc, curr) => acc + (Number(curr.volume_90_day) || 0), 0);
-        }
-    } catch (rpcErr) {
-        console.error("Metrics skip:", rpcErr);
+        if (mathData && mathData[0]) stats = mathData[0];
+    } catch (e) {
+        console.error("Metrics skipped:", e);
     }
 
-    // 6. Final Return
-    // No mapping needed because the View names match what the frontend expects!
+    // 5. THE FIX: Map 'partner_full_name' to 'partner_name'
+    const formattedData = (data || []).map(m => ({
+        ...m,
+        partner_name: m.partner_full_name || '---' // This makes it visible in your HTML
+    }));
+
     return res.status(200).json({ 
         success: true, 
-        data: data || [], 
+        data: formattedData,
         count: count || 0,
         metrics: { 
             totalMTD: stats.out_mtd || 0, 
