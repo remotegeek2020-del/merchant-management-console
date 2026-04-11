@@ -362,16 +362,18 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    // 1. Query the View (Flat and fast)
+    // 1. Query the View (Flat, fast, and large-scale ready)
     let dataReq = supabase
         .from('merchant_portfolio_view')
         .select('*', { count: 'exact' });
 
-    // 2. Apply Filters
-    if (statusFilter) dataReq.eq('account_status', statusFilter);
+    // 2. Apply Status Filter
+    if (statusFilter) {
+        dataReq.eq('account_status', statusFilter);
+    }
 
+    // 3. Search Logic - Now searching the flat columns in the View
     if (query && filterBy) {
-        // Map frontend labels to view columns
         const colMap = {
             'dba_name': 'dba_name',
             'merchant_id': 'merchant_id',
@@ -383,14 +385,17 @@ if (action === 'list') {
         dataReq.ilike(targetCol, `%${query}%`);
     }
 
-    // 3. Execute
+    // 4. Execution with Pagination
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
 
-    if (dataError) throw dataError;
+    if (dataError) {
+        console.error("View Query Error:", dataError.message);
+        throw dataError;
+    }
 
-    // 4. Metrics Logic (Your existing RPC)
+    // 5. Metrics Logic (Reusing your existing RPC and fallback)
     let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
     try {
         const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
@@ -398,12 +403,23 @@ if (action === 'list') {
             p_query: query || null, 
             p_filter_by: filterBy || null 
         });
-        if (mathData && mathData[0]) stats = mathData[0];
-    } catch (e) {}
 
+        if (mathData && mathData[0]) {
+            stats = mathData[0];
+        } else {
+            stats.out_mtd = data.reduce((acc, curr) => acc + (Number(curr.volume_mtd) || 0), 0);
+            stats.out_30d = data.reduce((acc, curr) => acc + (Number(curr.volume_30_day) || 0), 0);
+            stats.out_90d = data.reduce((acc, curr) => acc + (Number(curr.volume_90_day) || 0), 0);
+        }
+    } catch (rpcErr) {
+        console.error("Metrics skip:", rpcErr);
+    }
+
+    // 6. Final Return
+    // No mapping needed because the View names match what the frontend expects!
     return res.status(200).json({ 
         success: true, 
-        data: data || [], // Data is already formatted by the View
+        data: data || [], 
         count: count || 0,
         metrics: { 
             totalMTD: stats.out_mtd || 0, 
