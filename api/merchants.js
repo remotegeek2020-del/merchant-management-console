@@ -362,16 +362,17 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    // 1. Base Query - Joining through the FKs defined in your SQL
+    // 1. Base Query using the explicit Foreign Key names from your SQL
     let dataReq = supabase
         .from('merchants')
         .select(`
             *,
-            agent_identifiers:agent_id (
+            agent_identifiers!fk_agent_identifier (
                 prime49,
-                agents:agent_id (
-                    company:company_id (company_name),
-                    person:parent_agent_id (full_name)
+                agents!agent_identifiers_agent_id_fkey (
+                    agent_name,
+                    companies!agents_company_id_fkey (company_name),
+                    persons!agents_parent_agent_id_fkey (full_name)
                 )
             )
         `, { count: 'exact' });
@@ -379,28 +380,28 @@ if (action === 'list') {
     // 2. Apply Status Filter
     if (statusFilter) dataReq.eq('account_status', statusFilter);
 
-    // 3. Search Logic - Using the specific paths from your SQL
+    // 3. Search Logic
     if (query && filterBy) {
         if (filterBy === 'company_name') {
-            dataReq.ilike('agent_identifiers.agents.company.company_name', `%${query}%`);
+            dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
         } else if (filterBy === 'partner_name') {
-            dataReq.ilike('agent_identifiers.agents.person.full_name', `%${query}%`);
+            dataReq.ilike('agent_identifiers.agents.persons.full_name', `%${query}%`);
         } else {
             dataReq.ilike(filterBy, `%${query}%`);
         }
     }
 
-    // 4. Pagination
+    // 4. Execution
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
 
     if (dataError) {
-        console.error("Supabase Query Error:", dataError);
-        throw dataError;
+        console.error("Fetch Error:", dataError);
+        return res.status(500).json({ success: false, message: dataError.message });
     }
 
-    // 5. Metrics Calculation (Keeping your existing logic)
+    // 5. Metrics (Your existing logic)
     let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
     try {
         const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
@@ -409,20 +410,18 @@ if (action === 'list') {
             p_filter_by: filterBy || null 
         });
         if (mathData && mathData[0]) stats = mathData[0];
-    } catch (e) { console.error("Metrics fail", e); }
+    } catch (e) { console.error("Metrics skip", e); }
 
-    // 6. Data Formatting
+    // 6. Data Formatting for Frontend
     const formattedData = (data || []).map(m => {
-        // Safe navigation to find names
         const ident = m.agent_identifiers;
         const agent = ident?.agents;
         
         return {
             ...m,
-            // Restore the flat fields the frontend expects
-            company_name: agent?.company?.company_name || m.agent_name || '---',
-            partner_name: agent?.person?.full_name || m.agent_name || '---',
-            // The gold badge trigger
+            // Extracting the names correctly from the nested join
+            company_name: agent?.companies?.company_name || m.agent_name || '---',
+            partner_name: agent?.persons?.full_name || m.agent_name || '---',
             is_prime49: ident?.prime49 || false
         };
     });
