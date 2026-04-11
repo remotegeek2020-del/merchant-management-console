@@ -362,52 +362,66 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    let dataReq = supabase
-        .from('merchant_portfolio_view')
-        .select('*', { count: 'exact' });
+    try {
+        // 1. Query the View
+        let dataReq = supabase
+            .from('merchant_portfolio_view')
+            .select('*', { count: 'exact' });
 
-    if (statusFilter) dataReq.eq('account_status', statusFilter);
+        if (statusFilter) dataReq.eq('account_status', statusFilter);
 
-    if (query && filterBy) {
-        const colMap = {
-            'dba_name': 'dba_name',
-            'merchant_id': 'merchant_id',
-            'agent_id': 'agent_id',
-            'company_name': 'company_name',
-            // CRITICAL: Frontend sends 'partner_name', Database has 'partner_full_name'
-            'partner_name': 'partner_full_name' 
-        };
-        const targetCol = colMap[filterBy] || filterBy;
-        dataReq.ilike(targetCol, `%${query}%`);
-    }
-
-    const { data, count, error: dataError } = await dataReq
-        .range(page * limit, (page + 1) * limit - 1)
-        .order('created_at', { ascending: false });
-
-    if (dataError) throw dataError;
-
-    // Mapping the database results to the frontend fields
-    const formattedData = (data || []).map(m => ({
-        ...m,
-        // Bridge the name back to the table column
-        partner_name: m.partner_full_name || '---',
-        is_prime49: m.is_prime49 || false
-    }));
-
-    // ... handle stats/metrics here ...
-
-    return res.status(200).json({ 
-        success: true, 
-        data: formattedData,
-        count: count || 0,
-        metrics: { 
-            totalMTD: stats.out_mtd || 0, 
-            total30D: stats.out_30d || 0, 
-            total90D: stats.out_90d || 0, 
-            portfolioShare: "0.00" 
+        // 2. Search Logic
+        if (query && filterBy) {
+            const colMap = {
+                'dba_name': 'dba_name',
+                'merchant_id': 'merchant_id',
+                'agent_id': 'agent_id',
+                'company_name': 'company_name',
+                'partner_name': 'partner_full_name'
+            };
+            const targetCol = colMap[filterBy] || filterBy;
+            dataReq.ilike(targetCol, `%${query}%`);
         }
-    });
+
+        const { data, count, error: dataError } = await dataReq
+            .range(page * limit, (page + 1) * limit - 1)
+            .order('created_at', { ascending: false });
+
+        if (dataError) throw dataError;
+
+        // 3. Metrics (Simplified to prevent crashes)
+        let stats = { out_mtd: 0, out_30d: 0, out_90d: 0 };
+        try {
+            const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
+                p_status_filter: statusFilter || null, 
+                p_query: query || null, 
+                p_filter_by: filterBy === 'partner_name' ? 'partner_full_name' : (filterBy || null)
+            });
+            if (mathData && mathData[0]) stats = mathData[0];
+        } catch (e) { console.error("Metrics skipped"); }
+
+        // 4. Format Data for Frontend
+        const formattedData = (data || []).map(m => ({
+            ...m,
+            partner_name: m.partner_full_name || '---',
+            is_prime49: m.is_prime49 || false
+        }));
+
+        return res.status(200).json({ 
+            success: true, 
+            data: formattedData,
+            count: count || 0,
+            metrics: { 
+                totalMTD: stats.out_mtd || 0, 
+                total30D: stats.out_30d || 0, 
+                total90D: stats.out_90d || 0, 
+                portfolioShare: "0.00" 
+            }
+        });
+    } catch (err) {
+        console.error("Critical API Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
+    }
 }
         if (action === 'update') {
             const { data: oldData, error: fetchError } = await supabase
