@@ -363,9 +363,14 @@ if (action === 'get_merchant_equipment') {
 
     if (action === 'list') {
     // 1. Base Query from the View
-    const dataReq = supabase
-        .from('merchant_portfolio_view')
-        .select('*', { count: 'exact' });
+   const dataReq = supabase
+    .from('merchants') // Switching to base table to ensure join works correctly
+    .select(`
+        *,
+        agent_identifiers!fk_agent_identifier (
+            prime49
+        )
+    `, { count: 'exact' });
 
     // 2. Apply Filters
     if (statusFilter) dataReq.eq('account_status', statusFilter);
