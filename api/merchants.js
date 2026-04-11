@@ -416,12 +416,14 @@ if (action === 'get_merchant_equipment') {
         console.error("Metrics RPC Failed, using manual calculation...", rpcErr);
     }
 
-    const formattedData = (data || []).map(m => ({
-        ...m,
-        company_name: m.company_name || m.agent_name || '---',
-        partner_name: m.partner_full_name || m.agent_name || '---'
-    }));
-
+  // Replace your existing formattedData mapping with this:
+const formattedData = (data || []).map(m => ({
+    ...m,
+    // Extract the prime49 boolean from the join
+    is_prime49: m.agent_identifiers?.prime49 || false,
+    company_name: m.company_name || m.agent_name || '---',
+    partner_name: m.partner_full_name || m.agent_name || '---'
+}));
     return res.status(200).json({ 
         success: true, 
         data: formattedData,
