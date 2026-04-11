@@ -362,68 +362,55 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    // 1. Explicit Join using the exact Foreign Key constraints from your SQL
+    // 1. Query the View (Flat and fast)
     let dataReq = supabase
-        .from('merchants')
-        .select(`
-            *,
-            agent_identifiers!fk_agent_identifier (
-                prime49,
-                agents!agent_identifiers_agent_id_fkey (
-                    agent_name,
-                    companies!agents_company_id_fkey (company_name),
-                    persons!agents_parent_agent_id_fkey (full_name)
-                )
-            )
-        `, { count: 'exact' });
+        .from('merchant_portfolio_view')
+        .select('*', { count: 'exact' });
 
-    // 2. Status Filter
+    // 2. Apply Filters
     if (statusFilter) dataReq.eq('account_status', statusFilter);
 
-    // 3. Search Logic
     if (query && filterBy) {
-        if (filterBy === 'company_name') {
-            dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
-        } else if (filterBy === 'partner_name') {
-            dataReq.ilike('agent_identifiers.agents.persons.full_name', `%${query}%`);
-        } else {
-            dataReq.ilike(filterBy, `%${query}%`);
-        }
+        // Map frontend labels to view columns
+        const colMap = {
+            'dba_name': 'dba_name',
+            'merchant_id': 'merchant_id',
+            'agent_id': 'agent_id',
+            'company_name': 'company_name',
+            'partner_name': 'partner_full_name'
+        };
+        const targetCol = colMap[filterBy] || filterBy;
+        dataReq.ilike(targetCol, `%${query}%`);
     }
 
-    // 4. Execute
+    // 3. Execute
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
 
-    if (dataError) {
-        console.error("API Error Log:", dataError.message);
-        // If this still fails, we keep the fallback so the screen isn't blank
-        const fallback = await supabase.from('merchants').select('*', { count: 'exact' })
-            .range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false });
-        return res.status(200).json({ success: true, data: fallback.data, count: fallback.count });
-    }
+    if (dataError) throw dataError;
 
-    // 5. Data Formatting (The "Bridge" back to your frontend)
-    const formattedData = (data || []).map(m => {
-        // Navigate the nested objects carefully
-        const ident = m.agent_identifiers;
-        const agent = ident?.agents;
-        
-        return {
-            ...m,
-            // Link the deep database values to the flat names your table uses
-            company_name: agent?.companies?.company_name || m.agent_name || '---',
-            partner_name: agent?.persons?.full_name || m.agent_name || '---',
-            is_prime49: ident?.prime49 || false
-        };
-    });
+    // 4. Metrics Logic (Your existing RPC)
+    let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
+    try {
+        const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
+            p_status_filter: statusFilter || null, 
+            p_query: query || null, 
+            p_filter_by: filterBy || null 
+        });
+        if (mathData && mathData[0]) stats = mathData[0];
+    } catch (e) {}
 
     return res.status(200).json({ 
         success: true, 
-        data: formattedData,
+        data: data || [], // Data is already formatted by the View
         count: count || 0,
-        metrics: { totalMTD: 0, total30D: 0, total90D: 0, portfolioShare: "0.00" } // Metrics can be added back once names are fixed
+        metrics: { 
+            totalMTD: stats.out_mtd || 0, 
+            total30D: stats.out_30d || 0, 
+            total90D: stats.out_90d || 0, 
+            portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
+        }
     });
 }
         if (action === 'update') {
