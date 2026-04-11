@@ -9,7 +9,43 @@ const parseBool = (val) => {
 };
 document.getElementById('initial-loader').style.display = 'none';
 
+async function checkGlobalNotifications() {
+    // Get the current user ID
+    const uid = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
+    if (!uid) return;
 
+    try {
+        const response = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'getUserList', sender_id: uid })
+        });
+        const result = await response.json();
+
+        if (result.success && result.unreadCounts) {
+            // Calculate total sum of all unread messages from all users
+            const totalUnread = Object.values(result.unreadCounts).reduce((a, b) => a + b, 0);
+            
+            const badge = document.getElementById('nav-msg-badge');
+            if (badge) {
+                if (totalUnread > 0) {
+                    badge.innerText = totalUnread > 99 ? '99+' : totalUnread;
+                    badge.style.display = 'block';
+                } else {
+                    badge.style.display = 'none';
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Notification check failed:", err);
+    }
+}
+
+// Check immediately on load
+checkGlobalNotifications();
+
+// Then check every 10 seconds
+setInterval(checkGlobalNotifications, 10000);
 
 // Call this inside your existing authentication success logic
 // and then every 10 minutes
