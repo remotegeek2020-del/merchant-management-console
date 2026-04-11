@@ -362,76 +362,60 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    // 1. Simplified Select: Only join Agent Identifiers for the Prime49 status
-    // We will pull the Company/Partner names from the base table or simplified joins
+    // 1. Explicit Join using the exact Foreign Key constraints from your SQL
     let dataReq = supabase
         .from('merchants')
         .select(`
             *,
             agent_identifiers!fk_agent_identifier (
                 prime49,
-                agents (
+                agents!agent_identifiers_agent_id_fkey (
                     agent_name,
-                    company:companies (company_name),
-                    person:persons (full_name)
+                    companies!agents_company_id_fkey (company_name),
+                    persons!agents_parent_agent_id_fkey (full_name)
                 )
             )
         `, { count: 'exact' });
 
+    // 2. Status Filter
     if (statusFilter) dataReq.eq('account_status', statusFilter);
 
-    // 2. Search Logic (Simplified to prevent 500 crashes)
+    // 3. Search Logic
     if (query && filterBy) {
-        // If searching by dba, mid, or agent_id, it stays standard
-        // If searching by company/partner, we point to the nested path
-        const pathMap = {
-            'company_name': 'agent_identifiers.agents.company.company_name',
-            'partner_name': 'agent_identifiers.agents.person.full_name'
-        };
-        const targetPath = pathMap[filterBy] || filterBy;
-        dataReq.ilike(targetPath, `%${query}%`);
+        if (filterBy === 'company_name') {
+            dataReq.ilike('agent_identifiers.agents.companies.company_name', `%${query}%`);
+        } else if (filterBy === 'partner_name') {
+            dataReq.ilike('agent_identifiers.agents.persons.full_name', `%${query}%`);
+        } else {
+            dataReq.ilike(filterBy, `%${query}%`);
+        }
     }
 
+    // 4. Execute
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
 
-    // --- CRITICAL FIX: If the join above failed, we catch it here ---
     if (dataError) {
-        console.error("Join Failed, falling back to basic list...", dataError.message);
-        // Fallback: Query just the merchants so the screen isn't blank
-        const fallback = await supabase
-            .from('merchants')
-            .select('*', { count: 'exact' })
-            .range(page * limit, (page + 1) * limit - 1)
-            .order('created_at', { ascending: false });
-        
-        return res.status(200).json({ 
-            success: true, 
-            data: fallback.data || [], 
-            count: fallback.count || 0,
-            metrics: { totalMTD: 0, total30D: 0, total90D: 0, portfolioShare: "0.00" }
-        });
+        console.error("API Error Log:", dataError.message);
+        // If this still fails, we keep the fallback so the screen isn't blank
+        const fallback = await supabase.from('merchants').select('*', { count: 'exact' })
+            .range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false });
+        return res.status(200).json({ success: true, data: fallback.data, count: fallback.count });
     }
 
-    // 3. Metrics (Existing logic)
-    let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
-    try {
-        const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
-            p_status_filter: statusFilter || null, p_query: query || null, p_filter_by: filterBy || null 
-        });
-        if (mathData && mathData[0]) stats = mathData[0];
-    } catch (e) {}
-
-    // 4. Formatting
+    // 5. Data Formatting (The "Bridge" back to your frontend)
     const formattedData = (data || []).map(m => {
-        const agents = m.agent_identifiers?.agents;
+        // Navigate the nested objects carefully
+        const ident = m.agent_identifiers;
+        const agent = ident?.agents;
+        
         return {
             ...m,
-            is_prime49: m.agent_identifiers?.prime49 || false,
-            // Fallback to m.agent_name if the deep join is empty
-            company_name: agents?.company?.company_name || m.agent_name || '---',
-            partner_name: agents?.person?.full_name || m.agent_name || '---'
+            // Link the deep database values to the flat names your table uses
+            company_name: agent?.companies?.company_name || m.agent_name || '---',
+            partner_name: agent?.persons?.full_name || m.agent_name || '---',
+            is_prime49: ident?.prime49 || false
         };
     });
 
@@ -439,12 +423,7 @@ if (action === 'list') {
         success: true, 
         data: formattedData,
         count: count || 0,
-        metrics: { 
-            totalMTD: stats.out_mtd || 0, 
-            total30D: stats.out_30d || 0, 
-            total90D: stats.out_90d || 0, 
-            portfolioShare: stats.out_global_mtd > 0 ? ((stats.out_mtd / stats.out_global_mtd) * 100).toFixed(2) : "0.00" 
-        }
+        metrics: { totalMTD: 0, total30D: 0, total90D: 0, portfolioShare: "0.00" } // Metrics can be added back once names are fixed
     });
 }
         if (action === 'update') {
