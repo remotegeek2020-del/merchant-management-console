@@ -455,17 +455,16 @@ async function handleCSVUpload(input) {
         } catch (err) { console.error(err); }
     }
 
-   async function openModal(id) {
-   const m = currentRecords.find(r => r.id === id);
-const primeBadge = m.is_prime49 ? 
-    `<span style="background:#b45309; color:white; font-size:10px; padding:3px 8px; border-radius:4px; margin-left:10px; vertical-align:middle;">PRIME49 ASSET</span>` 
-    : '';
+  async function openModal(id) {
+    const m = currentRecords.find(r => r.id === id);
+    if (!m) return;
 
-Swal.fire({
-    title: `<div style="text-align:left; font-weight:800; color:#002d5a; display:flex; align-items:center;">
-                ${m.dba_name} ${primeBadge}
-            </div>`,
-    width: '1100px',
+    // Badge for the header
+    const primeBadge = m.is_prime49 ? 
+        `<span style="background:#b45309; color:white; font-size:10px; padding:3px 8px; border-radius:4px; margin-left:10px; vertical-align:middle; display:inline-block;">PRIME49 ASSET</span>` 
+        : '';
+
+    Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
     try {
         // 1. Fetch all data including the new Staff list from app_users
@@ -479,10 +478,10 @@ Swal.fire({
         const notes = (await nRes.json()).data || [];
         const logs = (await lRes.json()).data || [];
         const files = (await aRes.json()).data || [];
-        const staff = (await sRes.json()).data || []; //
+        const staff = (await sRes.json()).data || [];
 
         Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${m.dba_name}</div>`,
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a; display:flex; align-items:center;">${m.dba_name} ${primeBadge}</div>`,
             width: '1100px',
             html: `
                 <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
@@ -620,18 +619,18 @@ Swal.fire({
                         </div>
                         <div>
                             <label class="edit-label">Assign To</label>
-                          <select id="task-assign-select" class="modern-input">
-    <option value="">Select Staff...</option>
-    ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
-</select>
+                            <select id="task-assign-select" class="modern-input">
+                                <option value="">Select Staff...</option>
+                                ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
+                            </select>
                         </div>
                         <div style="grid-column: span 2;">
                             <label class="edit-label">Task Details</label>
                             <textarea id="task-body" placeholder="Describe the task..." class="modern-input" style="height:60px;"></textarea>
                         </div>
-                   <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">
-    CREATE TASK
-</button>    
+                        <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">
+                            CREATE TASK
+                        </button>    
                     </div>
                     <div id="tasks-list" style="max-height:400px; overflow-y:auto;">
                         <p style="text-align:center; padding:20px; color:#94a3b8;">No pending tasks.</p>
@@ -676,7 +675,9 @@ Swal.fire({
             `,
             showConfirmButton: false, showCloseButton: true
         });
-    } catch (err) { Swal.fire('Error', 'Load failed: ' + err.message, 'error'); }
+    } catch (err) { 
+        Swal.fire('Error', 'Load failed: ' + err.message, 'error'); 
+    }
 }
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
