@@ -428,26 +428,44 @@ async function handleCSVUpload(input) {
         }
             tbody.innerHTML = "";
             currentRecords.forEach(m => {
-                const row = tbody.insertRow();
-                const s = (m.account_status || '').toLowerCase();
-                const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : s.includes('fraud') ? 'status-fraud' : '';
-                row.innerHTML = `
-                    <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a></td>
-                    <td><code>${m.merchant_id || '---'}</code></td>
-                    <td>${m.agent_id || '---'}</td>
-                    <td>${m.company_name || '---'}</td>
-                    <td>${m.partner_name || '---'}</td>
-                    <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
-                `;
-            });
+    const row = tbody.insertRow();
+    if (m.is_prime49) row.classList.add('prime-row'); // Highlight row
+    
+    const s = (m.account_status || '').toLowerCase();
+    const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : s.includes('fraud') ? 'status-fraud' : '';
+    
+    // Add the badge next to the DBA name
+    const primeBadge = m.is_prime49 ? `<span class="prime-badge">PRIME49</span>` : '';
+
+    row.innerHTML = `
+        <td>
+            <a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">
+                ${m.dba_name || '---'}
+            </a>
+            ${primeBadge}
+        </td>
+        <td><code>${m.merchant_id || '---'}</code></td>
+        <td>${m.agent_id || '---'}</td>
+        <td>${m.company_name || '---'}</td>
+        <td>${m.partner_name || '---'}</td>
+        <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
+    `;
+});
             document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total Found: ${result.count.toLocaleString()})</span>`;
         } catch (err) { console.error(err); }
     }
 
    async function openModal(id) {
-    const m = currentRecords.find(r => r.id === id);
-    if (!m) return;
-    Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
+   const m = currentRecords.find(r => r.id === id);
+const primeBadge = m.is_prime49 ? 
+    `<span style="background:#b45309; color:white; font-size:10px; padding:3px 8px; border-radius:4px; margin-left:10px; vertical-align:middle;">PRIME49 ASSET</span>` 
+    : '';
+
+Swal.fire({
+    title: `<div style="text-align:left; font-weight:800; color:#002d5a; display:flex; align-items:center;">
+                ${m.dba_name} ${primeBadge}
+            </div>`,
+    width: '1100px',
 
     try {
         // 1. Fetch all data including the new Staff list from app_users
