@@ -362,16 +362,16 @@ if (action === 'get_merchant_equipment') {
         }
 
 if (action === 'list') {
-    // 1. Deep Query: Join through Agent Identifiers -> Agents -> Companies/Persons
-    const dataReq = supabase
+    // 1. Base Query - Joining through the FKs defined in your SQL
+    let dataReq = supabase
         .from('merchants')
         .select(`
             *,
-            agent_identifiers!fk_agent_identifier (
+            agent_identifiers:agent_id (
                 prime49,
-                agents (
-                    company:companies (company_name),
-                    person:persons (full_name)
+                agents:agent_id (
+                    company:company_id (company_name),
+                    person:parent_agent_id (full_name)
                 )
             )
         `, { count: 'exact' });
@@ -379,58 +379,51 @@ if (action === 'list') {
     // 2. Apply Status Filter
     if (statusFilter) dataReq.eq('account_status', statusFilter);
 
-    // 3. Smart Search Logic
+    // 3. Search Logic - Using the specific paths from your SQL
     if (query && filterBy) {
         if (filterBy === 'company_name') {
-            // Re-routing search to the joined table path
             dataReq.ilike('agent_identifiers.agents.company.company_name', `%${query}%`);
         } else if (filterBy === 'partner_name') {
-            // Re-routing search to the joined table path
             dataReq.ilike('agent_identifiers.agents.person.full_name', `%${query}%`);
         } else {
-            // Standard columns: dba_name, merchant_id, agent_id
             dataReq.ilike(filterBy, `%${query}%`);
         }
     }
 
-    // 4. Execute Pagination and Ordering
+    // 4. Pagination
     const { data, count, error: dataError } = await dataReq
         .range(page * limit, (page + 1) * limit - 1)
         .order('created_at', { ascending: false });
 
-    if (dataError) throw dataError;
+    if (dataError) {
+        console.error("Supabase Query Error:", dataError);
+        throw dataError;
+    }
 
-    // 5. Metrics Logic (RPC with Manual Fallback)
+    // 5. Metrics Calculation (Keeping your existing logic)
     let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_global_mtd: 0 };
-    
     try {
-        const { data: mathData, error: rpcError } = await supabase.rpc('get_merchant_metrics', { 
+        const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
             p_status_filter: statusFilter || null, 
             p_query: query || null, 
             p_filter_by: filterBy || null 
         });
+        if (mathData && mathData[0]) stats = mathData[0];
+    } catch (e) { console.error("Metrics fail", e); }
 
-        if (mathData && mathData[0]) {
-            stats = mathData[0];
-        } else {
-            stats.out_mtd = data.reduce((acc, curr) => acc + (Number(curr.volume_mtd) || 0), 0);
-            stats.out_30d = data.reduce((acc, curr) => acc + (Number(curr.volume_30_day) || 0), 0);
-            stats.out_90d = data.reduce((acc, curr) => acc + (Number(curr.volume_90_day) || 0), 0);
-        }
-    } catch (rpcErr) {
-        console.error("Metrics RPC Failed, using manual calculation...", rpcErr);
-    }
-
-    // 6. Format Data for Frontend (Extracting joined names and Prime49 flag)
+    // 6. Data Formatting
     const formattedData = (data || []).map(m => {
-        const agents = m.agent_identifiers?.agents;
+        // Safe navigation to find names
+        const ident = m.agent_identifiers;
+        const agent = ident?.agents;
+        
         return {
             ...m,
-            // Restore naming so dashboard doesn't show "---"
-            company_name: agents?.company?.company_name || m.agent_name || '---',
-            partner_name: agents?.person?.full_name || m.agent_name || '---',
-            // Assign Prime49 flag for the gold badges
-            is_prime49: m.agent_identifiers?.prime49 || false
+            // Restore the flat fields the frontend expects
+            company_name: agent?.company?.company_name || m.agent_name || '---',
+            partner_name: agent?.person?.full_name || m.agent_name || '---',
+            // The gold badge trigger
+            is_prime49: ident?.prime49 || false
         };
     });
 
