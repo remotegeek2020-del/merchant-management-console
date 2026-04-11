@@ -11,6 +11,25 @@
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     
     <link rel="stylesheet" href="css/style.css">
+    <style>
+    /* Messenger Notification Badge */
+    #card-chat { position: relative; }
+    .msg-badge {
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        background: #ff3b30;
+        color: white;
+        border-radius: 50%;
+        padding: 4px 8px;
+        font-size: 12px;
+        font-weight: 800;
+        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        display: none; /* Hidden until a message arrives */
+        z-index: 100;
+        border: 2px solid white;
+    }
+</style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -114,6 +133,8 @@
     <p class="card-desc">Generate and export Salesforce-style reports for Inventory, Deployments, and Returns.</p>
 </a>
                 <a href="chat.html" class="console-card" id="card-chat" style="border-bottom: 4px solid #0084ff;">
+    <span id="nav-msg-badge" class="msg-badge">0</span>
+    
     <div class="card-icon-header" style="background: #e7f3ff; color: #0084ff;">
         <span class="material-icons">forum</span>
     </div>
