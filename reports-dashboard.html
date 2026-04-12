@@ -170,71 +170,95 @@
 
     // UPDATED: Scalable CSV Export loop
     async function handleCSVExport() {
-        const type = document.getElementById('reportType').value;
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-        const subFilter = document.getElementById('subFilter').value;
+    const type = document.getElementById('reportType').value;
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+    const subFilter = document.getElementById('subFilter').value;
 
-        let allData = [];
-        let offset = 0;
-        const limit = 1000;
+    let allData = [];
+    let offset = 0;
+    const limit = 1000;
 
-        Swal.fire({
-            title: 'Exporting Full Dataset',
-            html: `<div id="progText">Fetching ${totalRecordsAvailable} records...</div>`,
-            allowOutsideClick: false,
-            didOpen: () => { Swal.showLoading(); }
-        });
+    Swal.fire({
+        title: 'Exporting Full Dataset',
+        html: `<div id="progText">Fetching ${totalRecordsAvailable} records...</div>`,
+        allowOutsideClick: false,
+        didOpen: () => { Swal.showLoading(); }
+    });
 
-        try {
-            const apiPath = type === 'inventory' ? '/api/equipments' : `/api/${type}`;
-            
-            // Scalable loop for 30,000+ records
-            while (offset < totalRecordsAvailable) {
-                const res = await fetch(apiPath, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'getMonthlyReport',
-                        startDate: start,
-                        endDate: end,
-                        subFilter: type === 'inventory' ? subFilter : null,
-                        offset: offset,
-                        limit: limit
-                    })
-                });
-                const result = await res.json();
-                
-                allData = allData.concat(result.rawData);
-                
-                // Live progress update
-                const prog = document.getElementById('progText');
-                if (prog) prog.innerText = `Fetched ${allData.length} of ${totalRecordsAvailable} records...`;
-
-                if (result.rawData.length < limit) break; 
-                offset += limit;
-            }
-
-            downloadCSV(allData, `${type}_report_${start}_to_${end}.csv`);
-            Swal.fire('Complete', `${allData.length} records exported.`, 'success');
-        } catch (err) {
-            Swal.fire('Error', 'Full export failed.', 'error');
+    try {
+        // ADDED: Explicit path for prime49, keeping others identical
+        let apiPath;
+        if (type === 'inventory') {
+            apiPath = '/api/equipments';
+        } else if (type === 'prime49') {
+            apiPath = '/api/merchants';
+        } else {
+            apiPath = `/api/${type}`;
         }
-    }
+        
+        while (offset < totalRecordsAvailable) {
+            const res = await fetch(apiPath, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'getMonthlyReport',
+                    startDate: start,
+                    endDate: end,
+                    subFilter: type === 'inventory' ? subFilter : null,
+                    offset: offset,
+                    limit: limit
+                })
+            });
+            const result = await res.json();
+            
+            allData = allData.concat(result.rawData);
+            
+            const prog = document.getElementById('progText');
+            if (prog) prog.innerText = `Fetched ${allData.length} of ${totalRecordsAvailable} records...`;
 
-    function downloadCSV(data, filename) {
-        const headers = Object.keys(data[0]).join(',');
-        const rows = data.map(row => Object.values(row).map(v => `"${v}"`).join(','));
-        const csvContent = "data:text/csv;charset=utf-8," + headers + "\n" + rows.join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", filename);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+            if (result.rawData.length < limit) break; 
+            offset += limit;
+        }
 
+        downloadCSV(allData, `${type}_report_${start}_to_${end}.csv`);
+        Swal.fire('Complete', `${allData.length} records exported.`, 'success');
+    } catch (err) {
+        Swal.fire('Error', 'Full export failed.', 'error');
+    }
+}
+
+ function downloadCSV(data, filename) {
+    if (!data || data.length === 0) return;
+
+    const headers = Object.keys(data[0]).join(',');
+    const rows = data.map(row => 
+        Object.values(row).map(v => {
+            // Clean the data: handle nulls and escape double quotes
+            let val = v === null || v === undefined ? "" : String(v);
+            return `"${val.replace(/"/g, '""')}"`;
+        }).join(',')
+    );
+    
+    const csvContent = headers + "\n" + rows.join("\n");
+    
+    // Create a Blob object for the CSV data
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    
+    // Create a temporary URL for the Blob
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", filename);
+    link.style.visibility = 'hidden';
+    
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    
+    // Free up memory by revoking the object URL
+    setTimeout(() => URL.revokeObjectURL(url), 100);
+}
     function printReportPDF() {
         window.print();
     }
