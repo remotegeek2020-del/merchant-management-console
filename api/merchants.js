@@ -13,13 +13,19 @@ export default async function handler(req, res) {
 
     let queryBuilder = supabase
         .from('merchant_portfolio_view')
-        .select('merchant_id, dba_name, company_name, partner_full_name, enrollment_date, account_status', { count: 'exact' })
+        .select(`
+            merchant_id, 
+            dba_name, 
+            agent_id, 
+            partner_id, 
+            company_name, 
+            partner_full_name, 
+            enrollment_date, 
+            account_status
+        `, { count: 'exact' })
         .eq('is_prime49', true); 
 
     if (startDate && endDate) {
-        // We force the range to cover the entire day to match the ISO format
-        // Start: 2026-03-27 -> 2026-03-27T00:00:00.000Z
-        // End:   2026-03-27 -> 2026-03-27T23:59:59.999Z
         queryBuilder = queryBuilder
             .gte('enrollment_date', `${startDate}T00:00:00.000Z`)
             .lte('enrollment_date', `${endDate}T23:59:59.999Z`);
@@ -29,10 +35,7 @@ export default async function handler(req, res) {
         .range(offset, offset + limit - 1)
         .order('enrollment_date', { ascending: false });
 
-    if (error) {
-        console.error("Prime49 Report Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
-    }
+    if (error) return res.status(500).json({ success: false, message: error.message });
 
     return res.status(200).json({ 
         success: true, 
