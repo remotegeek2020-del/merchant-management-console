@@ -39,6 +39,7 @@
                 <option value="inventory">Inventory (Stock/Repairs)</option>
                 <option value="deployments">Deployments (Merchant Installs)</option>
                 <option value="returns">Returns (RMAs)</option>
+                <option value="prime49">Prime49 Merchant List</option> </select>
             </select>
         </div>
         
@@ -98,6 +99,7 @@
         const type = document.getElementById('reportType').value;
         const container = document.getElementById('inventoryFilterContainer');
         container.style.visibility = (type === 'inventory') ? 'visible' : 'hidden';
+        
     }
 
     // Standard runReport with totalCount support
@@ -116,7 +118,10 @@
 
         try {
             // Keeps your working dynamic apiPath
-            const apiPath = type === 'inventory' ? '/api/equipments' : `/api/${type}`;
+            let apiPath;
+    if (type === 'inventory') apiPath = '/api/equipments';
+    else if (type === 'prime49') apiPath = '/api/merchants'; // Reuse the merchants API
+    else apiPath = `/api/${type}`;
             const res = await fetch(apiPath, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
