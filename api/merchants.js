@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     
     
     {
-        if (action === 'getMonthlyReport') {
+       if (action === 'getMonthlyReport') {
     const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
     let queryBuilder = supabase
@@ -17,7 +17,6 @@ export default async function handler(req, res) {
             merchant_id, 
             dba_name, 
             agent_id, 
-            partner_id, 
             company_name, 
             partner_full_name, 
             enrollment_date, 
