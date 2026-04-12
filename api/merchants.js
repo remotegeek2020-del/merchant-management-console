@@ -8,6 +8,35 @@ export default async function handler(req, res) {
     
     
     {
+        if (action === 'getMonthlyReport') {
+    const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
+
+    // We query the View so management gets Company and Partner names automatically
+    let query = supabase
+        .from('merchant_portfolio_view')
+        .select('merchant_id, dba_name, company_name, partner_full_name, enrollment_date, account_status', { count: 'exact' })
+        .eq('is_prime49', true); // Only export Prime49 merchants
+
+    // Filter by the selected date range
+    if (startDate && endDate) {
+        query = query.gte('enrollment_date', startDate).lte('enrollment_date', endDate);
+    }
+
+    const { data, count, error } = await query
+        .range(offset, offset + limit - 1)
+        .order('enrollment_date', { ascending: false });
+
+    if (error) {
+        console.error("Report Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+
+    return res.status(200).json({ 
+        success: true, 
+        rawData: data || [], 
+        totalCount: count || 0 
+    });
+}
   if (action === 'get_global_tasks') {
     const { userid, targetUser, status, page = 0, limit = 20 } = req.body;
     
