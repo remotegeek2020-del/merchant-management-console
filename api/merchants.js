@@ -11,23 +11,26 @@ export default async function handler(req, res) {
         if (action === 'getMonthlyReport') {
     const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
-    // We query the View so management gets Company and Partner names automatically
-    let query = supabase
+    let queryBuilder = supabase
         .from('merchant_portfolio_view')
         .select('merchant_id, dba_name, company_name, partner_full_name, enrollment_date, account_status', { count: 'exact' })
-        .eq('is_prime49', true); // Only export Prime49 merchants
+        .eq('is_prime49', true); 
 
-    // Filter by the selected date range
     if (startDate && endDate) {
-        query = query.gte('enrollment_date', startDate).lte('enrollment_date', endDate);
+        // We force the range to cover the entire day to match the ISO format
+        // Start: 2026-03-27 -> 2026-03-27T00:00:00.000Z
+        // End:   2026-03-27 -> 2026-03-27T23:59:59.999Z
+        queryBuilder = queryBuilder
+            .gte('enrollment_date', `${startDate}T00:00:00.000Z`)
+            .lte('enrollment_date', `${endDate}T23:59:59.999Z`);
     }
 
-    const { data, count, error } = await query
+    const { data, count, error } = await queryBuilder
         .range(offset, offset + limit - 1)
         .order('enrollment_date', { ascending: false });
 
     if (error) {
-        console.error("Report Error:", error.message);
+        console.error("Prime49 Report Error:", error.message);
         return res.status(500).json({ success: false, message: error.message });
     }
 
