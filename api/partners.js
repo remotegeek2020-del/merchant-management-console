@@ -12,6 +12,7 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
+    // 1. Fetch all data sets
     const [pRes, aRes, iRes, cRes] = await Promise.all([
         supabase.from('persons').select('id, full_name'),
         supabase.from('agents').select('id, company_id, parent_agent_id'),
@@ -27,19 +28,23 @@ if (action === 'get_partners_list') {
     const finalData = persons.map(person => {
         const pId = person.id;
         
-        // 1. Get all agents owned by this person
+        // 2. Find ALL agents where this person is the parent
         const myAgents = agents.filter(a => a.parent_agent_id === pId);
+        
+        // If they don't own any agents, we don't show the card
         if (myAgents.length === 0) return null;
 
-        // 2. Group by Company ID (to handle multiple IDs per company)
+        // 3. Map IDs to their Company Names
         const groups = {};
 
         myAgents.forEach(agent => {
+            // Find company name OR use Independent
             const coMatch = companies.find(c => c.id === agent.company_id);
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
             if (!groups[coName]) groups[coName] = [];
 
+            // Get the numeric IDs for this specific agent record
             const myIds = identifiers
                 .filter(i => i.agent_id === agent.id)
                 .map(id => ({
@@ -52,12 +57,14 @@ if (action === 'get_partners_list') {
             groups[coName].push(...myIds);
         });
 
-        // 3. Convert groups object to the array format the UI expects
-        const formattedCompanies = Object.entries(groups).map(([name, ids]) => ({
+        // 4. Transform groups into the Array format for the UI
+        const formattedCompanies = Object.keys(groups).map(name => ({
             name: name,
-            ids: ids
+            ids: groups[name]
         })).filter(g => g.ids.length > 0);
 
+        // Safety check: If they own agents but those agents have no IDs yet, 
+        // we still want to show the card but with an empty list or specific note.
         return {
             id: person.id,
             name: person.full_name,
