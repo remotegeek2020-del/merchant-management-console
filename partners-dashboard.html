@@ -57,37 +57,27 @@
 <script>
     let allPartners = [];
 
-    // The "Brain": Assembles the hierarchy in the browser
     function processPartnerData(payload) {
-        if (!payload || !payload.persons) return [];
         const { persons, agents, identifiers, companies } = payload;
-
-        // 1. Map IDs
         const idMap = {};
+        
         identifiers.forEach(id => {
             idMap[id.id] = { 
-                db_id: id.id,
-                string: id.id_string,
-                rev: id.rev_share || '0%',
-                isPrime: !!id.prime49,
-                agent_id: id.agent_id,
-                sub_ids: [] 
+                db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
+                isPrime: !!id.prime49, sub_ids: [] 
             };
         });
 
-        // 2. Link Sub-Partners
         const rootsByAgent = {};
         identifiers.forEach(id => {
-            const current = idMap[id.id];
             if (id.parent_config_id && idMap[id.parent_config_id]) {
-                idMap[id.parent_config_id].sub_ids.push(current);
+                idMap[id.parent_config_id].sub_ids.push(idMap[id.id]);
             } else {
                 if (!rootsByAgent[id.agent_id]) rootsByAgent[id.agent_id] = [];
-                rootsByAgent[id.agent_id].push(current);
+                rootsByAgent[id.agent_id].push(idMap[id.id]);
             }
         });
 
-        // 3. Assemble Grid
         return persons.map(person => {
             const myAgents = agents.filter(a => a.parent_agent_id === person.id);
             if (myAgents.length === 0) return null;
@@ -95,37 +85,31 @@
             const companyGroups = {};
             myAgents.forEach(agent => {
                 const co = companies.find(c => c.id === agent.company_id);
-                const coName = co ? co.company_name : "Independent / No Company";
-                const agentRoots = rootsByAgent[agent.id] || [];
-                if (agentRoots.length > 0) {
+                const coName = co ? co.company_name : "Independent";
+                const ids = rootsByAgent[agent.id] || [];
+                if (ids.length > 0) {
                     if (!companyGroups[coName]) companyGroups[coName] = [];
-                    companyGroups[coName].push(...agentRoots);
+                    companyGroups[coName].push(...ids);
                 }
             });
 
-            const formattedCompanies = Object.entries(companyGroups).map(([name, ids]) => ({ name, ids }));
-            return formattedCompanies.length > 0 ? { id: person.id, name: person.full_name, companies: formattedCompanies } : null;
+            const groups = Object.entries(companyGroups).map(([name, ids]) => ({ name, ids }));
+            return groups.length > 0 ? { id: person.id, name: person.full_name, companies: groups } : null;
         }).filter(Boolean);
     }
 
     function renderBadge(id) {
-        let html = `
-            <div class="id-badge-container" style="margin-top:4px;">
-                <div class="id-badge ${id.isPrime ? 'prime' : ''}" 
-                     onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                    ${id.string} ${id.isPrime ? '⭐' : ''}
-                </div>
-        `;
-        if (id.sub_ids && id.sub_ids.length > 0) {
-            html += `<div style="margin-left: 15px; border-left: 2px solid #e2e8f0; padding-left: 8px;">`;
-            id.sub_ids.forEach(sub => html += renderBadge(sub));
-            html += `</div>`;
+        let html = `<div class="id-badge ${id.isPrime ? 'prime' : ''}" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
+            ${id.string} ${id.isPrime ? '⭐' : ''}
+        </div>`;
+        if (id.sub_ids.length > 0) {
+            html += `<div style="margin-left:15px; border-left:2px solid #e2e8f0; padding-left:8px;">${id.sub_ids.map(renderBadge).join('')}</div>`;
         }
-        html += `</div>`;
         return html;
     }
 
     async function loadPartners() {
+        document.getElementById('loadingOverlay').style.display = 'flex';
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -134,25 +118,22 @@
             });
             const result = await res.json();
             if (result.success) {
-                // Ensure we handle the nested object 'result.data'
                 allPartners = processPartnerData(result.data);
                 renderGrid(allPartners);
             }
-        } catch (err) { console.error("Loading Error:", err); }
+        } catch (err) { console.error(err); }
+        document.getElementById('loadingOverlay').style.display = 'none';
     }
 
     function renderGrid(data) {
         const grid = document.getElementById('partnerGrid');
-        if (!grid) return;
         grid.innerHTML = data.map(p => `
             <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-                <h2 style="color: #002d5a; font-weight: 800; margin-bottom:15px;">${p.name}</h2>
+                <h2 style="font-weight:800; margin-bottom:15px;">${p.name}</h2>
                 ${p.companies.map(co => `
-                    <div style="margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
-                        <b style="font-size:12px; color:#334155;">${co.name}</b>
-                        <div style="display:flex; flex-direction:column; gap:2px; margin-left:10px; margin-top:5px;">
-                            ${co.ids.map(id => renderBadge(id)).join('')}
-                        </div>
+                    <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
+                        <b style="font-size:12px;">${co.name}</b>
+                        <div style="margin-left:10px; margin-top:5px;">${co.ids.map(renderBadge).join('')}</div>
                     </div>
                 `).join('')}
             </div>
