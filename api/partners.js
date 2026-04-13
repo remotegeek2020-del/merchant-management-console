@@ -20,40 +20,38 @@ if (action === 'get_partners_list') {
     ]);
 
     const finalData = (pRes.data || []).map(person => {
-        // Normalize the Person ID to ensure a match
         const pId = String(person.id || '').toLowerCase().trim();
         
-        // Find every agent record where THIS person is the parent
+        // 1. Find agents owned by this person
         const myAgents = (aRes.data || []).filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
-        // If they don't own any agents in the DB, hide the card
         if (myAgents.length === 0) return null;
 
-        const groups = {};
+        const groupMap = {};
         myAgents.forEach(agent => {
             const coMatch = (cRes.data || []).find(c => 
                 String(c.id).toLowerCase().trim() === String(agent.company_id).toLowerCase().trim()
             );
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!groups[coName]) groups[coName] = { name: coName, ids: [] };
+            if (!groupMap[coName]) groupMap[coName] = { name: coName, ids: [] };
 
-            // Find all badges (numeric IDs) for this specific agent record
+            // 2. Find IDs linked to this agent
             const myIds = (iRes.data || [])
-                .filter(i => String(i.agent_id).toLowerCase().trim() === String(agent.id).toLowerCase().trim())
+                .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === String(agent.id).toLowerCase().trim())
                 .map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
                     isPrime: !!id.prime49
                 }));
 
-            groups[coName].ids.push(...myIds);
+            groupMap[coName].ids.push(...myIds);
         });
 
-        // Convert grouped objects to array and remove empty company headers
-        const formattedCompanies = Object.values(groups).filter(g => g.ids.length > 0);
+        // 3. Only return the person if they have at least one ID badge
+        const formattedCompanies = Object.values(groupMap).filter(g => g.ids.length > 0);
 
         return formattedCompanies.length > 0 ? {
             id: person.id,
