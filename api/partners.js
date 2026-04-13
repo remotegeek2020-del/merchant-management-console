@@ -20,24 +20,29 @@ if (action === 'get_partners_list') {
     ]);
 
     const finalData = (pRes.data || []).map(person => {
-        const pId = String(person.id).toLowerCase().trim();
+        // Normalize the Person ID to ensure a match
+        const pId = String(person.id || '').toLowerCase().trim();
         
-        // Find every agent record where this person is the parent
+        // Find every agent record where THIS person is the parent
         const myAgents = (aRes.data || []).filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
+        // If they don't own any agents in the DB, hide the card
         if (myAgents.length === 0) return null;
 
         const groups = {};
         myAgents.forEach(agent => {
-            const coMatch = (cRes.data || []).find(c => c.id === agent.company_id);
+            const coMatch = (cRes.data || []).find(c => 
+                String(c.id).toLowerCase().trim() === String(agent.company_id).toLowerCase().trim()
+            );
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
             if (!groups[coName]) groups[coName] = { name: coName, ids: [] };
 
+            // Find all badges (numeric IDs) for this specific agent record
             const myIds = (iRes.data || [])
-                .filter(i => i.agent_id === agent.id)
+                .filter(i => String(i.agent_id).toLowerCase().trim() === String(agent.id).toLowerCase().trim())
                 .map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
@@ -47,6 +52,7 @@ if (action === 'get_partners_list') {
             groups[coName].ids.push(...myIds);
         });
 
+        // Convert grouped objects to array and remove empty company headers
         const formattedCompanies = Object.values(groups).filter(g => g.ids.length > 0);
 
         return formattedCompanies.length > 0 ? {
