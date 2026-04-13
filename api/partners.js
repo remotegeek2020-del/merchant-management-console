@@ -11,8 +11,7 @@ export default async function handler(req, res) {
 
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
-       if (action === 'get_partners_list') {
-    // We pull a joined result set to let Postgres do the heavy lifting
+   if (action === 'get_partners_list') {
     const { data: rawMap, error } = await supabase
         .from('persons')
         .select(`
@@ -24,6 +23,7 @@ export default async function handler(req, res) {
                     company_name,
                     agents (
                         id,
+                        parent_agent_id,
                         agent_identifiers (
                             id,
                             id_string,
@@ -38,27 +38,25 @@ export default async function handler(req, res) {
     if (error) throw error;
 
     const finalData = rawMap.map(person => {
-        // Flatten the deep nesting from the Join
+        const pId = person.id; // The unique ID of the person we are currently processing
+
         const formattedCompanies = person.company_person_mapping.map(mapping => {
             const co = mapping.companies;
             
-            // Collect all IDs belonging to agents under this company
-            // Filter logic: In a 10k+ environment, we'd add specific ownership 
-            // tags here if IDs aren't shared.
-            const allIds = co.agents.flatMap(agent => 
-                agent.agent_identifiers.map(id => ({
-                    string: id.id_string,
-                    rev: id.rev_share || '0%',
-                    isPrime: !!id.prime49,
-                    db_id: id.id
-                }))
-            );
+            // STRICT FILTER: Only collect IDs from agents where parent_agent_id matches this Person
+            const myIds = co.agents
+                .filter(agent => agent.parent_agent_id === pId) 
+                .flatMap(agent => 
+                    agent.agent_identifiers.map(id => ({
+                        string: id.id_string,
+                        rev: id.rev_share || '0%',
+                        isPrime: !!id.prime49,
+                        db_id: id.id
+                    }))
+                );
 
-            return {
-                name: co.company_name,
-                ids: allIds
-            };
-        }).filter(c => c.ids.length > 0); // Hide companies with no IDs
+            return myIds.length > 0 ? { name: co.company_name, ids: myIds } : null;
+        }).filter(Boolean);
 
         if (formattedCompanies.length === 0) return null;
 
