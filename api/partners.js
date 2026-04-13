@@ -12,62 +12,61 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    const [pRes, aRes, iRes, cRes] = await Promise.all([
-        supabase.from('persons').select('id, full_name'),
-        supabase.from('agents').select('id, company_id, parent_agent_id'),
-        supabase.from('agent_identifiers').select('agent_id, id_string, rev_share, prime49'),
-        supabase.from('companies').select('id, company_name')
-    ]);
+    // We pull a joined result set to let Postgres do the heavy lifting
+    const { data: rawMap, error } = await supabase
+        .from('persons')
+        .select(`
+            id,
+            full_name,
+            company_person_mapping (
+                companies (
+                    id,
+                    company_name,
+                    agents (
+                        id,
+                        agent_identifiers (
+                            id,
+                            id_string,
+                            rev_share,
+                            prime49
+                        )
+                    )
+                )
+            )
+        `);
 
-    const persons = pRes.data || [];
-    const agents = aRes.data || [];
-    const identifiers = iRes.data || [];
-    const companies = cRes.data || [];
+    if (error) throw error;
 
-    const finalData = persons.map(person => {
-        const pId = String(person.id).toLowerCase().trim();
-        
-        // 1. Get every Agent record that points to this person
-        const myAgents = agents.filter(a => 
-            a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
-        );
-        
-        if (myAgents.length === 0) return null;
-
-        // 2. Map those Agents to their Companies and IDs
-        const groupMap = {};
-
-        myAgents.forEach(agent => {
-            const coMatch = companies.find(c => 
-                String(c.id).toLowerCase().trim() === String(agent.company_id).toLowerCase().trim()
-            );
-            const coName = coMatch ? coMatch.company_name : "Independent / No Company";
+    const finalData = rawMap.map(person => {
+        // Flatten the deep nesting from the Join
+        const formattedCompanies = person.company_person_mapping.map(mapping => {
+            const co = mapping.companies;
             
-            if (!groupMap[coName]) groupMap[coName] = [];
-
-            // 3. Find every ID Badge for this specific agent record
-            const myIds = identifiers
-                .filter(i => String(i.agent_id).toLowerCase().trim() === String(agent.id).toLowerCase().trim())
-                .map(id => ({
+            // Collect all IDs belonging to agents under this company
+            // Filter logic: In a 10k+ environment, we'd add specific ownership 
+            // tags here if IDs aren't shared.
+            const allIds = co.agents.flatMap(agent => 
+                agent.agent_identifiers.map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
-                    isPrime: !!id.prime49
-                }));
+                    isPrime: !!id.prime49,
+                    db_id: id.id
+                }))
+            );
 
-            groupMap[coName].push(...myIds);
-        });
+            return {
+                name: co.company_name,
+                ids: allIds
+            };
+        }).filter(c => c.ids.length > 0); // Hide companies with no IDs
 
-        // 4. Format for UI
-        const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
-            name,
-            ids: ids.filter(item => item.string) // Ensure we only show actual IDs
-        })).filter(g => g.ids.length > 0);
+        if (formattedCompanies.length === 0) return null;
 
-        return formattedCompanies.length > 0 ? {
+        return {
             id: person.id,
             name: person.full_name,
             companies: formattedCompanies
-        } : null;
+        };
     }).filter(Boolean);
 
     return res.status(200).json({ success: true, data: finalData });
