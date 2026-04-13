@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Partner Portfolio | Secure Console</title>
+    <title>Partner Network | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
@@ -12,13 +12,12 @@
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; min-height: 180px; }
+        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; }
         .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
         .id-badge { background: #f1f5f9; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; border: 1px solid #e2e8f0; }
         .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; }
         .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
         .company-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; background: #fafbfc; }
-        .report-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
 </head>
@@ -26,7 +25,7 @@
 
 <div id="loadingOverlay" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
     <span class="material-icons" style="animation: spin 2s linear infinite; font-size: 50px; color: var(--pp-blue);">sync</span>
-    <p style="margin-top:15px; font-weight:700; color: var(--pp-blue);">SYNCING NETWORK...</p>
+    <p style="margin-top:15px; font-weight:700; color: var(--pp-blue);">UPDATING PARTNER NETWORK...</p>
 </div>
 
 <div class="dashboard-container">
@@ -83,7 +82,7 @@
     async function openPartnerDetails(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
         Swal.fire({
-            title: `<div style="text-align:left;">${p.name}</div>`,
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '900px', showConfirmButton: false, showCloseButton: true,
             html: `
                 <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
@@ -93,8 +92,8 @@
                 <div id="p-content-portfolio" class="p-tab-content" style="text-align:left;">
                     ${p.companies.map(co => `
                         <div class="company-box">
-                            <b>${co.name}</b>
-                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:10px; margin-top:10px;">
+                            <b style="color:var(--pp-blue); font-size:13px;">${co.name}</b>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:10px; margin-top:10px;">
                                 ${co.ids.map(id => `
                                     <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
                                         <div>
@@ -119,21 +118,23 @@
 
     window.editIdentifier = async function(id, name, rev, isPrime) {
         const { value: formValues } = await Swal.fire({
-            title: `Edit ID: ${name}`,
+            title: `Settings: ${name}`,
             html: `
                 <div style="text-align:left;">
-                    <label class="report-label">Revenue Share (%)</label>
-                    <input id="swal-rev" class="slds-input" value="${rev}" style="margin-bottom:15px;">
-                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
-                        <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Status
+                    <label style="font-size:11px; font-weight:700; color:#64748b;">Revenue Share (%)</label>
+                    <input id="swal-rev" class="slds-input" value="${rev}" style="margin-bottom:15px; border-radius:8px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700; color:#334155;">
+                        <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge
                     </label>
                 </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'SAVE CHANGES',
             preConfirm: () => ({ rev_share: document.getElementById('swal-rev').value, prime49: document.getElementById('swal-prime').checked })
         });
         if (formValues) {
             const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, 
                 body: JSON.stringify({ action: 'update_identifier', id, payload: formValues }) });
-            if ((await res.json()).success) { loadPartners(); Swal.close(); }
+            if ((await res.json()).success) { loadPartners(); Swal.fire('Saved!', '', 'success'); }
         }
     }
 
@@ -149,10 +150,10 @@
             const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_hierarchy', person_id: personId }) });
             const result = await res.json();
             cont.innerHTML = result.data.length ? result.data.map(s => `
-                <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between;">
-                    <b>${s.agent_name}</b>
+                <div style="padding:12px; border-bottom:1px solid #f1f5f9; display:flex; justify-content:space-between; align-items:center;">
+                    <b style="color:#334155;">${s.agent_name}</b>
                     <div>${s.agent_identifiers.map(i => `<span class="id-badge">${i.id_string}</span>`).join('')}</div>
-                </div>`).join('') : 'No Sub-Agents.';
+                </div>`).join('') : '<p style="text-align:center; padding:20px; color:#94a3b8;">No Sub-Agents assigned.</p>';
         }
     }
 
