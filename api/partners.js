@@ -12,10 +12,11 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
+    // 1. Fetch all datasets flat
     const [pRes, aRes, iRes, cRes] = await Promise.all([
         supabase.from('persons').select('id, full_name'),
         supabase.from('agents').select('id, company_id, parent_agent_id'),
-        supabase.from('agent_identifiers').select('id, agent_id, id_string, rev_share, prime49'),
+        supabase.from('agent_identifiers').select('agent_id, id_string, rev_share, prime49'),
         supabase.from('companies').select('id, company_name')
     ]);
 
@@ -24,56 +25,53 @@ if (action === 'get_partners_list') {
     const identifiers = iRes.data || [];
     const companies = cRes.data || [];
 
+    // 2. Build the list
     const finalData = persons.map(person => {
         const pId = String(person.id).toLowerCase();
         
-        // 1. Find agents owned by this person
-        const myAgents = agents.filter(a => a.parent_agent_id && String(a.parent_agent_id).toLowerCase() === pId);
+        // Find ALL agent records owned by this person
+        const myAgents = agents.filter(a => 
+            a.parent_agent_id && String(a.parent_agent_id).toLowerCase() === pId
+        );
         
+        // If they don't own any agents, skip the card
         if (myAgents.length === 0) return null;
 
-        const groups = {};
+        // Group the IDs by company name
+        const groupMap = {};
+
         myAgents.forEach(agent => {
             const coMatch = companies.find(c => c.id === agent.company_id);
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!groups[coName]) groups[coName] = [];
+            if (!groupMap[coName]) groupMap[coName] = [];
 
             const myIds = identifiers
                 .filter(i => i.agent_id === agent.id)
                 .map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
-                    isPrime: !!id.prime49,
-                    db_id: id.id
+                    isPrime: !!id.prime49
                 }));
 
-            groups[coName].push(...myIds);
+            groupMap[coName].push(...myIds);
         });
 
-        const formattedCompanies = Object.entries(groups)
-            .map(([name, ids]) => ({ name, ids }))
-            .filter(g => g.ids.length > 0);
+        // Convert the groups to the expected UI format
+        const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
+            name: name,
+            ids: ids
+        })).filter(g => g.ids.length > 0);
 
-        return formattedCompanies.length > 0 ? {
+        return {
             id: person.id,
             name: person.full_name,
             companies: formattedCompanies
-        } : null;
+        };
     }).filter(Boolean);
 
     return res.status(200).json({ success: true, data: finalData });
 }
-        // --- ACTION: UPDATE IDENTIFIER ---
-        if (action === 'update_identifier') {
-            const { error } = await supabase
-                .from('agent_identifiers')
-                .update({ rev_share: payload.rev_share, prime49: payload.prime49 })
-                .eq('id', id);
-
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
 
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
