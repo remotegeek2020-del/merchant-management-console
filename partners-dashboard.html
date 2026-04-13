@@ -6,61 +6,40 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
         body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
-        
-        /* Header & Search */
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        
-        /* Partner Grid */
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; overflow: hidden; min-height: 180px; }
+        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; min-height: 180px; }
         .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
-        
-        /* Badges & Tags */
-        .id-badge { background: #f1f5f9; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; font-family: monospace; border: 1px solid #e2e8f0; }
-        .prime-badge { background: #004990; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 800; }
-        
-        /* Modal Tabs */
-        .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; transition: 0.3s; font-size: 12px; }
+        .id-badge { background: #f1f5f9; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; border: 1px solid #e2e8f0; }
+        .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; }
         .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
-        
         .company-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; background: #fafbfc; }
-        .sub-agent-row { display: flex; align-items: center; justify-content: space-between; padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; }
-
+        .report-label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 8px; display: block; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-        
-        /* Loading Overlay Overlay */
-        #loadingOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999; }
     </style>
 </head>
 <body>
 
-<div id="loadingOverlay" style="display:none;">
+<div id="loadingOverlay" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
     <span class="material-icons" style="animation: spin 2s linear infinite; font-size: 50px; color: var(--pp-blue);">sync</span>
-    <p style="margin-top:15px; font-weight:700; color: var(--pp-blue);">MAPPING RELATIONSHIPS...</p>
+    <p style="margin-top:15px; font-weight:700; color: var(--pp-blue);">SYNCING NETWORK...</p>
 </div>
 
 <div class="dashboard-container">
     <div class="modern-header">
         <div style="display: flex; align-items: center; gap: 15px;">
-            <a href="index.html" class="slds-button slds-button_neutral" style="display: flex; align-items: center; gap: 8px; border-radius: 10px;">
-                <span class="material-icons" style="font-size: 18px;">arrow_back</span>
-                <span style="font-weight: 700; font-size: 12px;">BACK</span>
-            </a>
-            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Partner Network</h1>
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">BACK</a>
+            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Partner Network</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="partnerSearch" placeholder="Search Person or Company..." class="slds-input" style="width:300px; border-radius:10px;" onkeyup="filterPartners()">
-            <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);">ADD PARTNER</button>
+            <input type="text" id="partnerSearch" placeholder="Search..." class="slds-input" style="width:300px; border-radius:10px;" onkeyup="filterPartners()">
         </div>
     </div>
-
-    <div id="partnerGrid" class="partner-grid">
-        </div>
+    <div id="partnerGrid" class="partner-grid"></div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -68,164 +47,113 @@
     let allPartners = [];
 
     async function loadPartners() {
-        console.log("🚀 Initializing Load...");
-        const overlay = document.getElementById('loadingOverlay');
-        const grid = document.getElementById('partnerGrid');
-        
-        if(overlay) overlay.style.display = 'flex';
-
+        document.getElementById('loadingOverlay').style.display = 'flex';
         try {
-            const response = await fetch('/api/partners', {
+            const res = await fetch('/api/partners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'get_partners_list' })
             });
-            
-            const result = await response.json();
-            console.log("✅ API Response:", result);
-
+            const result = await res.json();
             if (result.success) {
-                allPartners = result.data; 
+                allPartners = result.data;
                 renderGrid(allPartners);
-            } else {
-                grid.innerHTML = `<div style="color:red; padding:20px; grid-column:1/-1;">Error: ${result.message}</div>`;
             }
-        } catch (err) {
-            console.error("❌ Fetch Error:", err);
-        } finally {
-            if(overlay) overlay.style.display = 'none';
-        }
+        } catch (err) { console.error(err); }
+        document.getElementById('loadingOverlay').style.display = 'none';
     }
 
     function renderGrid(data) {
         const grid = document.getElementById('partnerGrid');
-        if (!grid) return;
-        
-        if (!data || data.length === 0) {
-            grid.innerHTML = '<div style="grid-column:1/-1; text-align:center; padding:50px; color:#94a3b8;">No partners found matching your search.</div>';
-            return;
-        }
-
         grid.innerHTML = data.map(p => `
             <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-                <h2 style="color: #002d5a; margin-bottom: 12px; font-weight: 800; font-size:1.2rem;">${p.name}</h2>
-                
-                <div class="company-list">
-                    ${p.companies.map(co => {
-                        const idCount = co.ids ? co.ids.length : 0;
-                        const displayIds = co.ids ? co.ids.slice(0, 10) : []; 
-                        const extraCount = idCount - 10;
-
-                        return `
-                            <div style="margin-bottom: 12px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
-                                <div style="display:flex; align-items:center; gap:8px;">
-                                    <span class="material-icons" style="font-size:16px; color:#64748b;">business</span>
-                                    <span style="font-weight:700; font-size:13px; color:#334155;">${co.name}</span>
-                                </div>
-                                
-                                <div style="margin-left: 24px; margin-top: 6px; display:flex; flex-wrap:wrap; gap:4px;">
-                                    ${idCount > 0 ? `
-                                        ${displayIds.map(id => `
-                                            <span class="id-badge" style="font-size:10px; padding:1px 6px;">
-                                                ${id.string} <small style="opacity:0.6;">(${id.rev})</small>
-                                            </span>
-                                        `).join('')}
-                                        ${extraCount > 0 ? `
-                                            <span style="font-size:10px; color:var(--pp-accent); font-weight:700; padding:2px 4px;">
-                                                +${extraCount} MORE
-                                            </span>
-                                        ` : ''}
-                                    ` : '<span style="font-size:11px; color:#cbd5e1; font-style:italic;">No IDs assigned</span>'}
-                                </div>
-                            </div>
-                        `;
-                    }).join('')}
-                </div>
+                <h2 style="color: #002d5a; font-weight: 800;">${p.name}</h2>
+                ${p.companies.map(co => `
+                    <div style="margin-top: 10px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                        <b style="font-size:13px; color:#334155;">${co.name}</b>
+                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:5px;">
+                            ${co.ids.map(id => `<span class="id-badge">${id.string} ${id.isPrime ? '⭐' : ''}</span>`).join('')}
+                        </div>
+                    </div>
+                `).join('')}
             </div>
         `).join('');
     }
 
     async function openPartnerDetails(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
-        if (!p) return;
-
         Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
-            width: '900px',
-            showConfirmButton: false,
-            showCloseButton: true,
+            title: `<div style="text-align:left;">${p.name}</div>`,
+            width: '900px', showConfirmButton: false, showCloseButton: true,
             html: `
                 <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
-                    <button onclick="switchPartnerTab('portfolio', '${p.id}')" id="tab-portfolio" class="modal-tab-btn active-tab">PORTFOLIO & IDS</button>
-                    <button onclick="switchPartnerTab('subagents', '${p.id}')" id="tab-subagents" class="modal-tab-btn">SUB-AGENTS</button>
+                    <button onclick="switchTab('portfolio')" id="tab-portfolio" class="modal-tab-btn active-tab">PORTFOLIO & IDS</button>
+                    <button onclick="switchTab('subagents', '${p.id}')" id="tab-subagents" class="modal-tab-btn">SUB-AGENTS</button>
                 </div>
-                <div id="p-content-portfolio" class="p-tab-content" style="text-align:left; max-height:450px; overflow-y:auto;">
+                <div id="p-content-portfolio" class="p-tab-content" style="text-align:left;">
                     ${p.companies.map(co => `
-                        <div class="company-box" style="border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; background: #fafbfc;">
-                            <b style="color:var(--pp-blue); font-size:13px;">${co.name}</b>
-                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap:10px; margin-top:10px;">
+                        <div class="company-box">
+                            <b>${co.name}</b>
+                            <div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap:10px; margin-top:10px;">
                                 ${co.ids.map(id => `
-                                    <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px;">
-                                        <div style="font-size:9px; color:#94a3b8;">ID (${id.rev})</div>
-                                        <div style="font-family:monospace; font-weight:700;">${id.string}</div>
+                                    <div style="background:white; border:1px solid #e2e8f0; padding:10px; border-radius:8px; display:flex; justify-content:space-between; align-items:center;">
+                                        <div>
+                                            <div style="font-size:9px; color:#94a3b8;">REV: ${id.rev}</div>
+                                            <div style="font-weight:700;">${id.string} ${id.isPrime ? '⭐' : ''}</div>
+                                        </div>
+                                        <button onclick="editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})" class="slds-button slds-button_icon">
+                                            <span class="material-icons" style="font-size:18px; color:var(--pp-accent);">settings</span>
+                                        </button>
                                     </div>
                                 `).join('')}
                             </div>
                         </div>
                     `).join('')}
                 </div>
-                <div id="p-content-subagents" class="p-tab-content" style="display:none; text-align:left;">
-                    <div id="subagent-list-container">
-                        <p style="text-align:center; padding:40px; color:#94a3b8;">Select tab to load hierarchy...</p>
-                    </div>
+                <div id="p-content-subagents" class="p-tab-content" style="display:none;">
+                    <div id="subagent-list-container"></div>
                 </div>
             `
         });
     }
 
-    window.switchPartnerTab = async function(tab, personId) {
-        document.querySelectorAll('.modal-tab-btn').forEach(btn => btn.classList.remove('active-tab'));
-        document.getElementById('tab-' + tab).classList.add('active-tab');
+    window.editIdentifier = async function(id, name, rev, isPrime) {
+        const { value: formValues } = await Swal.fire({
+            title: `Edit ID: ${name}`,
+            html: `
+                <div style="text-align:left;">
+                    <label class="report-label">Revenue Share (%)</label>
+                    <input id="swal-rev" class="slds-input" value="${rev}" style="margin-bottom:15px;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                        <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Status
+                    </label>
+                </div>`,
+            preConfirm: () => ({ rev_share: document.getElementById('swal-rev').value, prime49: document.getElementById('swal-prime').checked })
+        });
+        if (formValues) {
+            const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'update_identifier', id, payload: formValues }) });
+            if ((await res.json()).success) { loadPartners(); Swal.close(); }
+        }
+    }
 
-        document.querySelectorAll('.p-tab-content').forEach(content => content.style.display = 'none');
+    window.switchTab = async function(tab, personId) {
+        document.querySelectorAll('.modal-tab-btn').forEach(b => b.classList.remove('active-tab'));
+        document.getElementById('tab-' + tab).classList.add('active-tab');
+        document.querySelectorAll('.p-tab-content').forEach(c => c.style.display = 'none');
         document.getElementById('p-content-' + tab).style.display = 'block';
 
         if (tab === 'subagents') {
-            const container = document.getElementById('subagent-list-container');
-            container.innerHTML = '<div style="text-align:center; padding:30px;"><span class="material-icons" style="animation:spin 2s linear infinite;">sync</span><br>Loading Hierarchy...</div>';
-
-            try {
-                const res = await fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'get_hierarchy', person_id: personId })
-                });
-                const result = await res.json();
-
-                if (!result.data || result.data.length === 0) {
-                    container.innerHTML = '<div style="text-align:center; padding:40px; color:#94a3b8;">No Sub-Agents found.</div>';
-                } else {
-                    container.innerHTML = result.data.map(sub => `
-                        <div style="display:flex; justify-content:space-between; align-items:center; padding:12px; border-bottom:1px solid #f1f5f9;">
-                            <span style="font-weight:700; color:#334155;">${sub.agent_name}</span>
-                            <div style="display:flex; gap:5px;">
-                                ${sub.agent_identifiers.map(ai => `<span class="id-badge">${ai.id_string}</span>`).join('')}
-                            </div>
-                        </div>
-                    `).join('');
-                }
-            } catch (err) {
-                container.innerHTML = '<p style="color:red; text-align:center;">Failed to load hierarchy.</p>';
-            }
+            const cont = document.getElementById('subagent-list-container');
+            cont.innerHTML = 'Loading...';
+            const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_hierarchy', person_id: personId }) });
+            const result = await res.json();
+            cont.innerHTML = result.data.length ? result.data.map(s => `
+                <div style="padding:10px; border-bottom:1px solid #eee; display:flex; justify-content:space-between;">
+                    <b>${s.agent_name}</b>
+                    <div>${s.agent_identifiers.map(i => `<span class="id-badge">${i.id_string}</span>`).join('')}</div>
+                </div>`).join('') : 'No Sub-Agents.';
         }
-    };
-
-    function filterPartners() {
-        const query = document.getElementById('partnerSearch').value.toLowerCase();
-        renderGrid(allPartners.filter(p => 
-            p.name.toLowerCase().includes(query) || 
-            p.companies.some(c => c.name.toLowerCase().includes(query))
-        ));
     }
 
     window.addEventListener('load', loadPartners);
