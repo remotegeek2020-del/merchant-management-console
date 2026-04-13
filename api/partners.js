@@ -12,7 +12,6 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    // 1. Fetch all datasets flat
     const [pRes, aRes, iRes, cRes] = await Promise.all([
         supabase.from('persons').select('id, full_name'),
         supabase.from('agents').select('id, company_id, parent_agent_id'),
@@ -25,19 +24,16 @@ if (action === 'get_partners_list') {
     const identifiers = iRes.data || [];
     const companies = cRes.data || [];
 
-    // 2. Build the list
     const finalData = persons.map(person => {
         const pId = String(person.id).toLowerCase();
         
-        // Find ALL agent records owned by this person
+        // Find agents owned by this person
         const myAgents = agents.filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase() === pId
         );
         
-        // If they don't own any agents, skip the card
-        if (myAgents.length === 0) return null;
-
-        // Group the IDs by company name
+        // Logic: Always show the card if we find it, even if no IDs are assigned yet
+        // This helps us debug "Empty Cards" vs "Missing Cards"
         const groupMap = {};
 
         myAgents.forEach(agent => {
@@ -57,11 +53,13 @@ if (action === 'get_partners_list') {
             groupMap[coName].push(...myIds);
         });
 
-        // Convert the groups to the expected UI format
         const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
             name: name,
             ids: ids
-        })).filter(g => g.ids.length > 0);
+        }));
+
+        // We only hide the card if the person has absolutely no agents linked to them
+        if (myAgents.length === 0) return null;
 
         return {
             id: person.id,
@@ -72,7 +70,6 @@ if (action === 'get_partners_list') {
 
     return res.status(200).json({ success: true, data: finalData });
 }
-
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
