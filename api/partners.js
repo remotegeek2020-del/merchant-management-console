@@ -11,61 +11,66 @@ export default async function handler(req, res) {
 
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
-        if (action === 'get_partners_list') {
-            const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
-                supabase.from('persons').select('id, full_name'),
-                supabase.from('company_person_mapping').select('person_id, company_id'),
-                supabase.from('companies').select('id, company_name'),
-                supabase.from('agents').select('id, company_id, parent_agent_id'),
-                supabase.from('agent_identifiers').select('*') 
-            ]);
+       if (action === 'get_partners_list') {
+    // We pull a joined result set to let Postgres do the heavy lifting
+    const { data: rawMap, error } = await supabase
+        .from('persons')
+        .select(`
+            id,
+            full_name,
+            company_person_mapping (
+                companies (
+                    id,
+                    company_name,
+                    agents (
+                        id,
+                        agent_identifiers (
+                            id,
+                            id_string,
+                            rev_share,
+                            prime49
+                        )
+                    )
+                )
+            )
+        `);
 
-            const persons = pRes.data || [];
-            const mappings = mRes.data || [];
-            const companies = cRes.data || [];
-            const agents = aRes.data || [];
-            const identifiers = iRes.data || [];
+    if (error) throw error;
 
-            const finalData = persons.map(p => {
-                const pId = String(p.id || '').toLowerCase().trim();
-                
-                // 1. Find companies this person is mapped to
-                const myCompanyIds = mappings
-                    .filter(m => String(m.person_id || '').toLowerCase().trim() === pId)
-                    .map(m => String(m.company_id || '').toLowerCase().trim());
-                
-                const myCompanies = companies
-                    .filter(c => myCompanyIds.includes(String(c.id || '').toLowerCase().trim()))
-                    .map(co => {
-                        const coId = String(co.id || '').toLowerCase().trim();
+    const finalData = rawMap.map(person => {
+        // Flatten the deep nesting from the Join
+        const formattedCompanies = person.company_person_mapping.map(mapping => {
+            const co = mapping.companies;
+            
+            // Collect all IDs belonging to agents under this company
+            // Filter logic: In a 10k+ environment, we'd add specific ownership 
+            // tags here if IDs aren't shared.
+            const allIds = co.agents.flatMap(agent => 
+                agent.agent_identifiers.map(id => ({
+                    string: id.id_string,
+                    rev: id.rev_share || '0%',
+                    isPrime: !!id.prime49,
+                    db_id: id.id
+                }))
+            );
 
-                        // 2. Filter agents for this company where THIS person is the parent
-                        const myAgentUuids = agents
-                            .filter(a => 
-                                String(a.company_id || '').toLowerCase().trim() === coId && 
-                                String(a.parent_agent_id || '').toLowerCase().trim() === pId
-                            )
-                            .map(a => String(a.id || '').toLowerCase().trim());
-                        
-                        // 3. Get identifiers for those specific agent records
-                        const myIds = identifiers
-                            .filter(i => i.agent_id && myAgentUuids.includes(String(i.agent_id).toLowerCase().trim()))
-                            .map(id => ({
-                                string: id.id_string || "Missing ID",
-                                rev: id.rev_share || '0%',
-                                isPrime: !!id.prime49,
-                                db_id: id.id 
-                            }));
+            return {
+                name: co.company_name,
+                ids: allIds
+            };
+        }).filter(c => c.ids.length > 0); // Hide companies with no IDs
 
-                        return myIds.length > 0 ? { name: co.company_name, ids: myIds } : null;
-                    }).filter(Boolean);
+        if (formattedCompanies.length === 0) return null;
 
-                if (myCompanies.length === 0) return null;
-                return { id: p.id, name: p.full_name, companies: myCompanies };
-            }).filter(Boolean);
+        return {
+            id: person.id,
+            name: person.full_name,
+            companies: formattedCompanies
+        };
+    }).filter(Boolean);
 
-            return res.status(200).json({ success: true, data: finalData });
-        }
+    return res.status(200).json({ success: true, data: finalData });
+}
 
         // --- ACTION: UPDATE IDENTIFIER ---
         if (action === 'update_identifier') {
