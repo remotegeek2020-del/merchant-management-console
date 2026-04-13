@@ -20,7 +20,9 @@ if (action === 'get_partners_list') {
     ]);
 
     const finalData = (pRes.data || []).map(person => {
-        const pId = String(person.id || '').toLowerCase().trim();
+        const pId = String(person.id).toLowerCase().trim();
+        
+        // Find all agent records owned by this person
         const myAgents = (aRes.data || []).filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
@@ -29,7 +31,7 @@ if (action === 'get_partners_list') {
 
         const groupMap = {};
         myAgents.forEach(agent => {
-            const agentId = String(agent.id || '').toLowerCase().trim();
+            const agentId = String(agent.id).toLowerCase().trim();
             const coMatch = (cRes.data || []).find(c => 
                 String(c.id).toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
             );
@@ -37,7 +39,7 @@ if (action === 'get_partners_list') {
             
             if (!groupMap[coName]) groupMap[coName] = [];
 
-            // Find all IDs specifically linked to this Agent UUID
+            // Pull every numeric ID linked to this specific agent record
             const myIds = (iRes.data || [])
                 .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === agentId)
                 .map(id => ({
@@ -51,7 +53,7 @@ if (action === 'get_partners_list') {
 
         const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
             name,
-            ids: ids.filter(item => item.string) 
+            ids: ids.filter(item => item.string)
         }));
 
         return {
