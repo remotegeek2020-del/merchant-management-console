@@ -19,30 +19,25 @@ if (action === 'get_partners_list') {
         supabase.from('companies').select('id, company_name')
     ]);
 
-    const persons = pRes.data || [];
-    const agents = aRes.data || [];
-    const identifiers = iRes.data || [];
-    const companies = cRes.data || [];
-
-    const finalData = persons.map(person => {
+    const finalData = (pRes.data || []).map(person => {
         const pId = String(person.id).toLowerCase();
         
         // Find agents owned by this person
-        const myAgents = agents.filter(a => 
+        const myAgents = (aRes.data || []).filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase() === pId
         );
         
-        // Logic: Always show the card if we find it, even if no IDs are assigned yet
-        // This helps us debug "Empty Cards" vs "Missing Cards"
-        const groupMap = {};
+        // IF NO AGENTS FOUND: Skip card entirely to keep it clean
+        if (myAgents.length === 0) return null;
 
+        const groupMap = {};
         myAgents.forEach(agent => {
-            const coMatch = companies.find(c => c.id === agent.company_id);
+            const coMatch = (cRes.data || []).find(c => c.id === agent.company_id);
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
             if (!groupMap[coName]) groupMap[coName] = [];
 
-            const myIds = identifiers
+            const myIds = (iRes.data || [])
                 .filter(i => i.agent_id === agent.id)
                 .map(id => ({
                     string: id.id_string,
@@ -54,12 +49,9 @@ if (action === 'get_partners_list') {
         });
 
         const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
-            name: name,
-            ids: ids
+            name,
+            ids
         }));
-
-        // We only hide the card if the person has absolutely no agents linked to them
-        if (myAgents.length === 0) return null;
 
         return {
             id: person.id,
