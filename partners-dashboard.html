@@ -62,23 +62,31 @@
         document.getElementById('loadingOverlay').style.display = 'none';
     }
 
-    function renderGrid(data) {
-        const grid = document.getElementById('partnerGrid');
-        grid.innerHTML = data.map(p => `
-            <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-                <h2 style="color: #002d5a; font-weight: 800;">${p.name}</h2>
-                ${p.companies.map(co => `
-                    <div style="margin-top: 10px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
-                        <b style="font-size:13px; color:#334155;">${co.name}</b>
-                        <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:5px;">
-                            ${co.ids.map(id => `<span class="id-badge">${id.string} ${id.isPrime ? '⭐' : ''}</span>`).join('')}
-                        </div>
+function renderGrid(data) {
+    const grid = document.getElementById('partnerGrid');
+    grid.innerHTML = data.map(p => `
+        <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+            <h2 style="color: #002d5a; font-weight: 800; margin-bottom:15px;">${p.name}</h2>
+            ${p.companies.map(co => `
+                <div style="margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                    <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
+                        <span class="material-icons" style="font-size:14px; color:#94a3b8;">
+                            ${co.name.includes('Independent') ? 'person' : 'business'}
+                        </span>
+                        <b style="font-size:12px; color:#334155;">${co.name}</b>
                     </div>
-                `).join('')}
-            </div>
-        `).join('');
-    }
-
+                    <div style="display:flex; flex-wrap:wrap; gap:4px; margin-left:20px;">
+                        ${co.ids.map(id => `
+                            <span class="id-badge" title="Rev Share: ${id.rev}">
+                                ${id.string} ${id.isPrime ? '⭐' : ''}
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>
+            `).join('')}
+        </div>
+    `).join('');
+}
     async function openPartnerDetails(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
         Swal.fire({
