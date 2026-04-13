@@ -27,12 +27,11 @@ if (action === 'get_partners_list') {
     const finalData = persons.map(person => {
         const pId = String(person.id || '').toLowerCase().trim();
         
-        // 1. Find ALL agents owned by this person (Stamping check)
+        // 1. Get all agents linked to this person
         const myAgents = agents.filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
-        // If they don't own any agents yet, we skip the card
         if (myAgents.length === 0) return null;
 
         const groupMap = {};
@@ -45,7 +44,7 @@ if (action === 'get_partners_list') {
             
             if (!groupMap[coName]) groupMap[coName] = [];
 
-            // 2. Find all numeric IDs for this specific agent
+            // 2. Find ALL identifiers that point to this agent UUID
             const myIds = identifiers
                 .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === agentUuid)
                 .map(id => ({
@@ -59,7 +58,7 @@ if (action === 'get_partners_list') {
 
         const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
             name,
-            ids: ids.filter(item => item.string) // Only include actual IDs
+            ids: ids.filter(item => item.string) 
         }));
 
         return {
