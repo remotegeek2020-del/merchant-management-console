@@ -57,11 +57,12 @@
 <script>
     let allPartners = [];
 
-    // Helper: Build the hierarchy from raw data (Scales to 10k+)
+    // The "Brain": Assembles the hierarchy in the browser
     function processPartnerData(payload) {
+        if (!payload || !payload.persons) return [];
         const { persons, agents, identifiers, companies } = payload;
 
-        // 1. Create a map for all IDs for O(1) lookup
+        // 1. Map IDs
         const idMap = {};
         identifiers.forEach(id => {
             idMap[id.id] = { 
@@ -74,21 +75,19 @@
             };
         });
 
-        // 2. Build the Tree by linking children to parents
+        // 2. Link Sub-Partners
         const rootsByAgent = {};
         identifiers.forEach(id => {
             const current = idMap[id.id];
-            // If it has a parent, nest it
             if (id.parent_config_id && idMap[id.parent_config_id]) {
                 idMap[id.parent_config_id].sub_ids.push(current);
             } else {
-                // If no parent, it's a Root ID for a specific Agent record
                 if (!rootsByAgent[id.agent_id]) rootsByAgent[id.agent_id] = [];
                 rootsByAgent[id.agent_id].push(current);
             }
         });
 
-        // 3. Map Persons to their Agents and nested IDs
+        // 3. Assemble Grid
         return persons.map(person => {
             const myAgents = agents.filter(a => a.parent_agent_id === person.id);
             if (myAgents.length === 0) return null;
@@ -97,7 +96,6 @@
             myAgents.forEach(agent => {
                 const co = companies.find(c => c.id === agent.company_id);
                 const coName = co ? co.company_name : "Independent / No Company";
-                
                 const agentRoots = rootsByAgent[agent.id] || [];
                 if (agentRoots.length > 0) {
                     if (!companyGroups[coName]) companyGroups[coName] = [];
@@ -106,40 +104,28 @@
             });
 
             const formattedCompanies = Object.entries(companyGroups).map(([name, ids]) => ({ name, ids }));
-            
-            return formattedCompanies.length > 0 ? {
-                id: person.id,
-                name: person.full_name,
-                companies: formattedCompanies
-            } : null;
+            return formattedCompanies.length > 0 ? { id: person.id, name: person.full_name, companies: formattedCompanies } : null;
         }).filter(Boolean);
     }
 
-    // Recursive UI: Renders badges inside badges for infinite layers
     function renderBadge(id) {
         let html = `
             <div class="id-badge-container" style="margin-top:4px;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" 
-                     title="Rev Share: ${id.rev}"
                      onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
                     ${id.string} ${id.isPrime ? '⭐' : ''}
                 </div>
         `;
-
         if (id.sub_ids && id.sub_ids.length > 0) {
-            html += `<div style="margin-left: 15px; border-left: 2px solid #e2e8f0; padding-left: 5px;">`;
+            html += `<div style="margin-left: 15px; border-left: 2px solid #e2e8f0; padding-left: 8px;">`;
             id.sub_ids.forEach(sub => html += renderBadge(sub));
             html += `</div>`;
         }
-
         html += `</div>`;
         return html;
     }
 
     async function loadPartners() {
-        const overlay = document.getElementById('loadingOverlay');
-        if(overlay) overlay.style.display = 'flex';
-        
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -147,31 +133,24 @@
                 body: JSON.stringify({ action: 'get_partners_list' })
             });
             const result = await res.json();
-            
             if (result.success) {
-                // We process the raw arrays into a tree on the frontend to avoid 500 errors
+                // Ensure we handle the nested object 'result.data'
                 allPartners = processPartnerData(result.data);
                 renderGrid(allPartners);
             }
-        } catch (err) { console.error("Load Error:", err); }
-        
-        if(overlay) overlay.style.display = 'none';
+        } catch (err) { console.error("Loading Error:", err); }
     }
 
     function renderGrid(data) {
         const grid = document.getElementById('partnerGrid');
+        if (!grid) return;
         grid.innerHTML = data.map(p => `
             <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
                 <h2 style="color: #002d5a; font-weight: 800; margin-bottom:15px;">${p.name}</h2>
                 ${p.companies.map(co => `
                     <div style="margin-top: 12px; border-top: 1px solid #f1f5f9; padding-top: 8px;">
-                        <div style="display:flex; align-items:center; gap:5px; margin-bottom:5px;">
-                            <span class="material-icons" style="font-size:14px; color:#94a3b8;">
-                                ${co.name.includes('Independent') ? 'person' : 'business'}
-                            </span>
-                            <b style="font-size:12px; color:#334155;">${co.name}</b>
-                        </div>
-                        <div style="display:flex; flex-direction:column; gap:2px; margin-left:10px;">
+                        <b style="font-size:12px; color:#334155;">${co.name}</b>
+                        <div style="display:flex; flex-direction:column; gap:2px; margin-left:10px; margin-top:5px;">
                             ${co.ids.map(id => renderBadge(id)).join('')}
                         </div>
                     </div>
@@ -179,9 +158,6 @@
             </div>
         `).join('');
     }
-
-    // Rest of your functions (openPartnerDetails, switchTab, editIdentifier) remain the same.
-    // They will now work with the nested 'allPartners' data.
 
     window.addEventListener('load', loadPartners);
 </script>
