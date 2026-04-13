@@ -12,7 +12,22 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    // Standard fetchAll calls to get all data (handles 10k+ rows)
+    async function fetchAll(table, select) {
+        let allData = [];
+        let from = 0;
+        let finished = false;
+        while (!finished) {
+            const { data, error } = await supabase.from(table).select(select).range(from, from + 999);
+            if (error || !data || data.length === 0) { finished = true; }
+            else {
+                allData = allData.concat(data);
+                from += 1000;
+                if (data.length < 1000) finished = true;
+            }
+        }
+        return allData;
+    }
+
     const [persons, agents, identifiers, companies] = await Promise.all([
         fetchAll('persons', 'id, full_name'),
         fetchAll('agents', 'id, company_id, parent_agent_id'),
@@ -20,7 +35,6 @@ if (action === 'get_partners_list') {
         fetchAll('companies', 'id, company_name')
     ]);
 
-    // CRITICAL: We return the raw objects, not a mapped list
     return res.status(200).json({ 
         success: true, 
         data: { persons, agents, identifiers, companies } 
