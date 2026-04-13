@@ -12,53 +12,60 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    const { data: rawMap, error } = await supabase
-        .from('persons')
-        .select(`
-            id,
-            full_name,
-            company_person_mapping (
-                companies (
-                    id,
-                    company_name,
-                    agents (
-                        id,
-                        parent_agent_id,
-                        agent_identifiers (
-                            id,
-                            id_string,
-                            rev_share,
-                            prime49
-                        )
-                    )
-                )
-            )
-        `);
+    const [pRes, aRes, iRes, cRes] = await Promise.all([
+        supabase.from('persons').select('id, full_name'),
+        supabase.from('agents').select('id, company_id, parent_agent_id'),
+        supabase.from('agent_identifiers').select('agent_id, id_string, rev_share, prime49'),
+        supabase.from('companies').select('id, company_name')
+    ]);
 
-    if (error) throw error;
+    const persons = pRes.data || [];
+    const agents = aRes.data || [];
+    const identifiers = iRes.data || [];
+    const companies = cRes.data || [];
 
-    const finalData = rawMap.map(person => {
-        const pId = person.id; // The unique ID of the person we are currently processing
+    const finalData = persons.map(person => {
+        // Normalize Person ID
+        const pId = String(person.id || '').toLowerCase().trim();
+        
+        // 1. Find all agents owned by this person
+        const myAgents = agents.filter(a => 
+            a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
+        );
+        
+        // If they have no agents linked, skip this card
+        if (myAgents.length === 0) return null;
 
-        const formattedCompanies = person.company_person_mapping.map(mapping => {
-            const co = mapping.companies;
+        const groupMap = {};
+
+        myAgents.forEach(agent => {
+            const agentId = String(agent.id || '').toLowerCase().trim();
             
-            // STRICT FILTER: Only collect IDs from agents where parent_agent_id matches this Person
-            const myIds = co.agents
-                .filter(agent => agent.parent_agent_id === pId) 
-                .flatMap(agent => 
-                    agent.agent_identifiers.map(id => ({
-                        string: id.id_string,
-                        rev: id.rev_share || '0%',
-                        isPrime: !!id.prime49,
-                        db_id: id.id
-                    }))
-                );
+            // Find company name
+            const coMatch = companies.find(c => 
+                String(c.id || '').toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
+            );
+            const coName = coMatch ? coMatch.company_name : "Independent / No Company";
+            
+            if (!groupMap[coName]) groupMap[coName] = [];
 
-            return myIds.length > 0 ? { name: co.company_name, ids: myIds } : null;
-        }).filter(Boolean);
+            // 2. Find every identifier for THIS agent
+            const myIds = identifiers
+                .filter(i => String(i.agent_id || '').toLowerCase().trim() === agentId)
+                .map(id => ({
+                    string: id.id_string,
+                    rev: id.rev_share || '0%',
+                    isPrime: !!id.prime49
+                }));
 
-        if (formattedCompanies.length === 0) return null;
+            groupMap[coName].push(...myIds);
+        });
+
+        // 3. Convert groups to the UI format
+        const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
+            name,
+            ids
+        }));
 
         return {
             id: person.id,
