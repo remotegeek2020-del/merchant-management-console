@@ -12,7 +12,6 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    // 1. Fetch all necessary data with optimized selectors
     const [pRes, aRes, iRes, cRes] = await Promise.all([
         supabase.from('persons').select('id, full_name'),
         supabase.from('agents').select('id, company_id, parent_agent_id'),
@@ -28,22 +27,19 @@ if (action === 'get_partners_list') {
     const finalData = persons.map(person => {
         const pId = person.id;
         
-        // 2. Find every Agent record owned by this person
+        // 1. Get all agents owned by this person
         const myAgents = agents.filter(a => a.parent_agent_id === pId);
-        
         if (myAgents.length === 0) return null;
 
-        // 3. Group IDs by Company
-        const companyGroups = {};
+        // 2. Group by Company ID (to handle multiple IDs per company)
+        const groups = {};
 
         myAgents.forEach(agent => {
-            // Find the company name, or default to "Independent / No Company"
             const coMatch = companies.find(c => c.id === agent.company_id);
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!companyGroups[coName]) companyGroups[coName] = [];
+            if (!groups[coName]) groups[coName] = [];
 
-            // Find all numeric IDs for this specific agent record
             const myIds = identifiers
                 .filter(i => i.agent_id === agent.id)
                 .map(id => ({
@@ -53,14 +49,14 @@ if (action === 'get_partners_list') {
                     db_id: id.id
                 }));
 
-            companyGroups[coName].push(...myIds);
+            groups[coName].push(...myIds);
         });
 
-        // 4. Format for the UI
-        const formattedCompanies = Object.keys(companyGroups).map(name => ({
+        // 3. Convert groups object to the array format the UI expects
+        const formattedCompanies = Object.entries(groups).map(([name, ids]) => ({
             name: name,
-            ids: companyGroups[name]
-        })).filter(group => group.ids.length > 0);
+            ids: ids
+        })).filter(g => g.ids.length > 0);
 
         return {
             id: person.id,
