@@ -12,59 +12,52 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    // Helper function to bypass the 1,000-row limit
-    async function fetchAll(table, select) {
-        let allData = [];
-        let from = 0;
-        let to = 999;
-        let finished = false;
-        while (!finished) {
-            const { data, error } = await supabase.from(table).select(select).range(from, to);
-            if (error || !data || data.length === 0) { finished = true; }
-            else {
-                allData = allData.concat(data);
-                from += 1000; to += 1000;
-                if (data.length < 1000) finished = true;
-            }
-        }
-        return allData;
-    }
-
-    // Fetch full datasets
     const [persons, agents, identifiers, companies] = await Promise.all([
         fetchAll('persons', 'id, full_name'),
         fetchAll('agents', 'id, company_id, parent_agent_id'),
-        fetchAll('agent_identifiers', 'agent_id, id_string, rev_share, prime49'),
+        fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
         fetchAll('companies', 'id, company_name')
     ]);
 
+    // Helper to build the recursive tree for identifiers
+    const buildIdentifierTree = (parentId = null, agentId = null) => {
+        return identifiers
+            .filter(i => {
+                const matchesParent = String(i.parent_config_id || '').toLowerCase().trim() === String(parentId || '').toLowerCase().trim();
+                // If we are looking for top-level IDs, they must belong to the specific agent record
+                return parentId ? matchesParent : (matchesParent && String(i.agent_id).toLowerCase().trim() === String(agentId).toLowerCase().trim());
+            })
+            .map(id => ({
+                string: id.id_string,
+                rev: id.rev_share || '0%',
+                isPrime: !!id.prime49,
+                // RECURSION: Find children of this specific ID anywhere in the table
+                sub_ids: buildIdentifierTree(id.id) 
+            }));
+    };
+
     const finalData = persons.map(person => {
         const pId = String(person.id).toLowerCase().trim();
-        const myAgents = agents.filter(a => 
-            a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
-        );
+        const myAgents = agents.filter(a => String(a.parent_agent_id || '').toLowerCase().trim() === pId);
         
         if (myAgents.length === 0) return null;
 
-        const groups = {};
+        const companyGroups = {};
         myAgents.forEach(agent => {
             const coMatch = companies.find(c => c.id === agent.company_id);
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!groups[coName]) groups[coName] = { name: coName, ids: [] };
+            if (!companyGroups[coName]) companyGroups[coName] = [];
 
-            const myIds = identifiers
-                .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === String(agent.id).toLowerCase().trim())
-                .map(id => ({
-                    string: id.id_string,
-                    rev: id.rev_share || '0%',
-                    isPrime: !!id.prime49
-                }));
-
-            groups[coName].ids.push(...myIds);
+            // Start the tree build from the "root" IDs owned by this agent
+            const idTree = buildIdentifierTree(null, agent.id);
+            companyGroups[coName].push(...idTree);
         });
 
-        const formattedCompanies = Object.values(groups).filter(g => g.ids.length > 0);
+        const formattedCompanies = Object.entries(companyGroups)
+            .map(([name, ids]) => ({ name, ids }))
+            .filter(g => g.ids.length > 0);
+
         return formattedCompanies.length > 0 ? {
             id: person.id,
             name: person.full_name,
