@@ -11,54 +11,56 @@ export default async function handler(req, res) {
 
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
-   if (action === 'get_partners_list') {
-    const { data: rawMap, error } = await supabase
-        .from('persons')
-        .select(`
-            id,
-            full_name,
-            company_person_mapping (
-                companies (
-                    id,
-                    company_name,
-                    agents (
-                        id,
-                        parent_agent_id,
-                        agent_identifiers (
-                            id,
-                            id_string,
-                            rev_share,
-                            prime49
-                        )
-                    )
-                )
-            )
-        `);
+if (action === 'get_partners_list') {
+    // 1. Fetch all necessary data with optimized selectors
+    const [pRes, aRes, iRes, cRes] = await Promise.all([
+        supabase.from('persons').select('id, full_name'),
+        supabase.from('agents').select('id, company_id, parent_agent_id'),
+        supabase.from('agent_identifiers').select('id, agent_id, id_string, rev_share, prime49'),
+        supabase.from('companies').select('id, company_name')
+    ]);
 
-    if (error) throw error;
+    const persons = pRes.data || [];
+    const agents = aRes.data || [];
+    const identifiers = iRes.data || [];
+    const companies = cRes.data || [];
 
-    const finalData = rawMap.map(person => {
-        const pId = person.id; // The unique ID of the person we are currently processing
+    const finalData = persons.map(person => {
+        const pId = person.id;
+        
+        // 2. Find every Agent record owned by this person
+        const myAgents = agents.filter(a => a.parent_agent_id === pId);
+        
+        if (myAgents.length === 0) return null;
 
-        const formattedCompanies = person.company_person_mapping.map(mapping => {
-            const co = mapping.companies;
+        // 3. Group IDs by Company
+        const companyGroups = {};
+
+        myAgents.forEach(agent => {
+            // Find the company name, or default to "Independent / No Company"
+            const coMatch = companies.find(c => c.id === agent.company_id);
+            const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            // STRICT FILTER: Only collect IDs from agents where parent_agent_id matches this Person
-            const myIds = co.agents
-                .filter(agent => agent.parent_agent_id === pId) 
-                .flatMap(agent => 
-                    agent.agent_identifiers.map(id => ({
-                        string: id.id_string,
-                        rev: id.rev_share || '0%',
-                        isPrime: !!id.prime49,
-                        db_id: id.id
-                    }))
-                );
+            if (!companyGroups[coName]) companyGroups[coName] = [];
 
-            return myIds.length > 0 ? { name: co.company_name, ids: myIds } : null;
-        }).filter(Boolean);
+            // Find all numeric IDs for this specific agent record
+            const myIds = identifiers
+                .filter(i => i.agent_id === agent.id)
+                .map(id => ({
+                    string: id.id_string,
+                    rev: id.rev_share || '0%',
+                    isPrime: !!id.prime49,
+                    db_id: id.id
+                }));
 
-        if (formattedCompanies.length === 0) return null;
+            companyGroups[coName].push(...myIds);
+        });
+
+        // 4. Format for the UI
+        const formattedCompanies = Object.keys(companyGroups).map(name => ({
+            name: name,
+            ids: companyGroups[name]
+        })).filter(group => group.ids.length > 0);
 
         return {
             id: person.id,
@@ -69,7 +71,6 @@ export default async function handler(req, res) {
 
     return res.status(200).json({ success: true, data: finalData });
 }
-
         // --- ACTION: UPDATE IDENTIFIER ---
         if (action === 'update_identifier') {
             const { error } = await supabase
