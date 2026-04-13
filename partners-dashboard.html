@@ -58,13 +58,14 @@
     let allPartners = [];
 
     function processPartnerData(payload) {
+        if (!payload || !payload.persons) return [];
         const { persons, agents, identifiers, companies } = payload;
         const idMap = {};
         
         identifiers.forEach(id => {
             idMap[id.id] = { 
                 db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
-                isPrime: !!id.prime49, sub_ids: [] 
+                isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id 
             };
         });
 
@@ -82,29 +83,38 @@
             const myAgents = agents.filter(a => a.parent_agent_id === person.id);
             if (myAgents.length === 0) return null;
 
-            const companyGroups = {};
+            const groups = {};
             myAgents.forEach(agent => {
                 const co = companies.find(c => c.id === agent.company_id);
                 const coName = co ? co.company_name : "Independent";
                 const ids = rootsByAgent[agent.id] || [];
                 if (ids.length > 0) {
-                    if (!companyGroups[coName]) companyGroups[coName] = [];
-                    companyGroups[coName].push(...ids);
+                    if (!groups[coName]) groups[coName] = [];
+                    groups[coName].push(...ids);
                 }
             });
 
-            const groups = Object.entries(companyGroups).map(([name, ids]) => ({ name, ids }));
-            return groups.length > 0 ? { id: person.id, name: person.full_name, companies: groups } : null;
+            const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
+            return formatted.length > 0 ? { id: person.id, name: person.full_name, companies: formatted } : null;
         }).filter(Boolean);
     }
 
     function renderBadge(id) {
-        let html = `<div class="id-badge ${id.isPrime ? 'prime' : ''}" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-            ${id.string} ${id.isPrime ? '⭐' : ''}
-        </div>`;
+        let html = `
+            <div class="id-badge-container" style="margin-top:4px; width: 100%;">
+                <div class="id-badge ${id.isPrime ? 'prime' : ''}" 
+                     style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
+                     onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
+                    <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
+                    <span style="font-size:9px; opacity:0.7;">${id.rev}</span>
+                </div>
+        `;
         if (id.sub_ids.length > 0) {
-            html += `<div style="margin-left:15px; border-left:2px solid #e2e8f0; padding-left:8px;">${id.sub_ids.map(renderBadge).join('')}</div>`;
+            html += `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">
+                ${id.sub_ids.map(renderBadge).join('')}
+            </div>`;
         }
+        html += `</div>`;
         return html;
     }
 
@@ -129,15 +139,66 @@
         const grid = document.getElementById('partnerGrid');
         grid.innerHTML = data.map(p => `
             <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-                <h2 style="font-weight:800; margin-bottom:15px;">${p.name}</h2>
+                <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px;">${p.name}</h2>
                 ${p.companies.map(co => `
                     <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                        <b style="font-size:12px;">${co.name}</b>
-                        <div style="margin-left:10px; margin-top:5px;">${co.ids.map(renderBadge).join('')}</div>
+                        <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
+                        <div style="margin-top:5px;">${co.ids.map(renderBadge).join('')}</div>
                     </div>
                 `).join('')}
             </div>
         `).join('');
+    }
+
+    window.editIdentifier = async function(db_id, name, rev, isPrime) {
+        const { value: formValues } = await Swal.fire({
+            title: `Settings: ${name}`,
+            html: `
+                <div style="text-align:left;">
+                    <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
+                    <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 10px 0;">
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700;">
+                        <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge
+                    </label>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'SAVE CHANGES',
+            preConfirm: () => ({ 
+                rev_share: document.getElementById('swal-rev').value, 
+                prime49: document.getElementById('swal-prime').checked 
+            })
+        });
+
+        if (formValues) {
+            const res = await fetch('/api/partners', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: formValues }) 
+            });
+            if ((await res.json()).success) { loadPartners(); Swal.fire('Updated!', '', 'success'); }
+        }
+    }
+
+    window.openPartnerDetails = function(personId) {
+        const p = allPartners.find(ptr => ptr.id === personId);
+        if(!p) return;
+        
+        Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
+            width: '800px', showConfirmButton: false, showCloseButton: true,
+            html: `
+                <div style="text-align:left; margin-top:20px;">
+                    <h3 style="font-size:14px; border-bottom:1px solid #e2e8f0; padding-bottom:5px;">PORTFOLIO & HIERARCHY</h3>
+                    <div style="background:#f8fafc; padding:15px; border-radius:12px; margin-top:10px;">
+                        ${p.companies.map(co => `
+                            <div style="margin-bottom:15px;">
+                                <b style="color:#64748b; font-size:11px;">${co.name}</b>
+                                <div>${co.ids.map(renderBadge).join('')}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`
+        });
     }
 
     window.addEventListener('load', loadPartners);
