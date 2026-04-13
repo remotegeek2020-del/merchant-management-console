@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     try {
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
-    // Standard fetchAll calls for all tables
+    // Standard fetchAll calls to get all data (handles 10k+ rows)
     const [persons, agents, identifiers, companies] = await Promise.all([
         fetchAll('persons', 'id, full_name'),
         fetchAll('agents', 'id, company_id, parent_agent_id'),
@@ -20,7 +20,7 @@ if (action === 'get_partners_list') {
         fetchAll('companies', 'id, company_name')
     ]);
 
-    // Send the raw arrays. Let the user's computer handle the nesting.
+    // CRITICAL: We return the raw objects, not a mapped list
     return res.status(200).json({ 
         success: true, 
         data: { persons, agents, identifiers, companies } 
