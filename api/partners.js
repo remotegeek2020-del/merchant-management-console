@@ -19,45 +19,54 @@ if (action === 'get_partners_list') {
         supabase.from('companies').select('id, company_name')
     ]);
 
-    const finalData = (pRes.data || []).map(person => {
+    const persons = pRes.data || [];
+    const agents = aRes.data || [];
+    const identifiers = iRes.data || [];
+    const companies = cRes.data || [];
+
+    const finalData = persons.map(person => {
         const pId = String(person.id || '').toLowerCase().trim();
         
-        // 1. Find agents owned by this person
-        const myAgents = (aRes.data || []).filter(a => 
+        // 1. Find ALL agents owned by this person (Stamping check)
+        const myAgents = agents.filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
+        // If they don't own any agents yet, we skip the card
         if (myAgents.length === 0) return null;
 
         const groupMap = {};
         myAgents.forEach(agent => {
-            const coMatch = (cRes.data || []).find(c => 
-                String(c.id).toLowerCase().trim() === String(agent.company_id).toLowerCase().trim()
+            const agentUuid = String(agent.id || '').toLowerCase().trim();
+            const coMatch = companies.find(c => 
+                String(c.id || '').toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
             );
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!groupMap[coName]) groupMap[coName] = { name: coName, ids: [] };
+            if (!groupMap[coName]) groupMap[coName] = [];
 
-            // 2. Find IDs linked to this agent
-            const myIds = (iRes.data || [])
-                .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === String(agent.id).toLowerCase().trim())
+            // 2. Find all numeric IDs for this specific agent
+            const myIds = identifiers
+                .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === agentUuid)
                 .map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
                     isPrime: !!id.prime49
                 }));
 
-            groupMap[coName].ids.push(...myIds);
+            groupMap[coName].push(...myIds);
         });
 
-        // 3. Only return the person if they have at least one ID badge
-        const formattedCompanies = Object.values(groupMap).filter(g => g.ids.length > 0);
+        const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
+            name,
+            ids: ids.filter(item => item.string) // Only include actual IDs
+        }));
 
-        return formattedCompanies.length > 0 ? {
+        return {
             id: person.id,
             name: person.full_name,
             companies: formattedCompanies
-        } : null;
+        };
     }).filter(Boolean);
 
     return res.status(200).json({ success: true, data: finalData });
