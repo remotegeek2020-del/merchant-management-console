@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
-        // --- ACTION: GET PARTNERS LIST (Hybrid Logic) ---
+        // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
         if (action === 'get_partners_list') {
             const [pRes, mRes, cRes, aRes, iRes] = await Promise.all([
                 supabase.from('persons').select('id, full_name'),
@@ -29,31 +29,27 @@ export default async function handler(req, res) {
             const finalData = persons.map(p => {
                 const pId = String(p.id || '').toLowerCase().trim();
                 
-                // Path 1: Via Company Mapping
+                // 1. Find companies this person is mapped to
                 const myCompanyIds = mappings
                     .filter(m => String(m.person_id || '').toLowerCase().trim() === pId)
                     .map(m => String(m.company_id || '').toLowerCase().trim());
                 
-                // Path 2: Via Direct parent_agent_id Link
-                const directAgentIds = agents
-                    .filter(a => String(a.parent_agent_id || '').toLowerCase().trim() === pId)
-                    .map(a => String(a.id || '').toLowerCase().trim());
-
                 const myCompanies = companies
                     .filter(c => myCompanyIds.includes(String(c.id || '').toLowerCase().trim()))
                     .map(co => {
                         const coId = String(co.id || '').toLowerCase().trim();
-                        
-                        // Find agents that belong to the company OR belong directly to the person
-                        const coAgentUuids = agents
+
+                        // 2. Filter agents for this company where THIS person is the parent
+                        const myAgentUuids = agents
                             .filter(a => 
-                                String(a.company_id || '').toLowerCase().trim() === coId || 
-                                directAgentIds.includes(String(a.id).toLowerCase().trim())
+                                String(a.company_id || '').toLowerCase().trim() === coId && 
+                                String(a.parent_agent_id || '').toLowerCase().trim() === pId
                             )
                             .map(a => String(a.id || '').toLowerCase().trim());
                         
+                        // 3. Get identifiers for those specific agent records
                         const myIds = identifiers
-                            .filter(i => i.agent_id && coAgentUuids.includes(String(i.agent_id).toLowerCase().trim()))
+                            .filter(i => i.agent_id && myAgentUuids.includes(String(i.agent_id).toLowerCase().trim()))
                             .map(id => ({
                                 string: id.id_string || "Missing ID",
                                 rev: id.rev_share || '0%',
@@ -61,17 +57,17 @@ export default async function handler(req, res) {
                                 db_id: id.id 
                             }));
 
-                        return { name: co.company_name, ids: myIds };
-                    });
+                        return myIds.length > 0 ? { name: co.company_name, ids: myIds } : null;
+                    }).filter(Boolean);
 
-                if (myCompanies.length === 0 && directAgentIds.length === 0) return null;
+                if (myCompanies.length === 0) return null;
                 return { id: p.id, name: p.full_name, companies: myCompanies };
             }).filter(Boolean);
 
             return res.status(200).json({ success: true, data: finalData });
         }
 
-        // --- ACTION: UPDATE IDENTIFIER (ID Manager) ---
+        // --- ACTION: UPDATE IDENTIFIER ---
         if (action === 'update_identifier') {
             const { error } = await supabase
                 .from('agent_identifiers')
@@ -84,15 +80,13 @@ export default async function handler(req, res) {
 
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
-            const { data: mappings } = await supabase.from('company_person_mapping').select('company_id').eq('person_id', person_id);
-            const coIds = (mappings || []).map(m => m.company_id);
-            const { data: masters } = await supabase.from('agents').select('id').in('company_id', coIds);
-            const masterAgentIds = (masters || []).map(a => a.id);
+            const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
+            const masterIds = (masters || []).map(a => a.id);
 
             const { data: subAgents, error } = await supabase
                 .from('agents')
                 .select(`agent_name, agent_identifiers (id_string, rev_share)`)
-                .in('parent_agent_id', masterAgentIds);
+                .in('parent_agent_id', masterIds);
 
             if (error) throw error;
             return res.status(200).json({ success: true, data: subAgents || [] });
