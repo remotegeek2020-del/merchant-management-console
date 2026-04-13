@@ -19,23 +19,33 @@ if (action === 'get_partners_list') {
         fetchAll('companies', 'id, company_name')
     ]);
 
-    // Helper to build the recursive tree for identifiers
-    const buildIdentifierTree = (parentId = null, agentId = null) => {
-        return identifiers
-            .filter(i => {
-                const matchesParent = String(i.parent_config_id || '').toLowerCase().trim() === String(parentId || '').toLowerCase().trim();
-                // If we are looking for top-level IDs, they must belong to the specific agent record
-                return parentId ? matchesParent : (matchesParent && String(i.agent_id).toLowerCase().trim() === String(agentId).toLowerCase().trim());
-            })
-            .map(id => ({
-                string: id.id_string,
-                rev: id.rev_share || '0%',
-                isPrime: !!id.prime49,
-                // RECURSION: Find children of this specific ID anywhere in the table
-                sub_ids: buildIdentifierTree(id.id) 
-            }));
-    };
+    // 1. Create a fast-lookup map for all identifiers
+    const idMap = {};
+    identifiers.forEach(id => {
+        idMap[id.id] = {
+            ...id,
+            string: id.id_string,
+            rev: id.rev_share || '0%',
+            isPrime: !!id.prime49,
+            sub_ids: [] // Placeholder for children
+        };
+    });
 
+    // 2. Build the tree structure without recursion (Flat-to-Tree)
+    const rootIdsByAgent = {};
+    identifiers.forEach(id => {
+        const current = idMap[id.id];
+        if (id.parent_config_id && idMap[id.parent_config_id]) {
+            // Push this ID into its parent's sub_ids array
+            idMap[id.parent_config_id].sub_ids.push(current);
+        } else {
+            // No parent? It's a root ID for its specific agent record
+            if (!rootIdsByAgent[id.agent_id]) rootIdsByAgent[id.agent_id] = [];
+            rootIdsByAgent[id.agent_id].push(current);
+        }
+    });
+
+    // 3. Assemble the final partner data
     const finalData = persons.map(person => {
         const pId = String(person.id).toLowerCase().trim();
         const myAgents = agents.filter(a => String(a.parent_agent_id || '').toLowerCase().trim() === pId);
@@ -47,16 +57,14 @@ if (action === 'get_partners_list') {
             const coMatch = companies.find(c => c.id === agent.company_id);
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!companyGroups[coName]) companyGroups[coName] = [];
-
-            // Start the tree build from the "root" IDs owned by this agent
-            const idTree = buildIdentifierTree(null, agent.id);
-            companyGroups[coName].push(...idTree);
+            const idsForThisAgent = rootIdsByAgent[agent.id] || [];
+            if (idsForThisAgent.length > 0) {
+                if (!companyGroups[coName]) companyGroups[coName] = [];
+                companyGroups[coName].push(...idsForThisAgent);
+            }
         });
 
-        const formattedCompanies = Object.entries(companyGroups)
-            .map(([name, ids]) => ({ name, ids }))
-            .filter(g => g.ids.length > 0);
+        const formattedCompanies = Object.entries(companyGroups).map(([name, ids]) => ({ name, ids }));
 
         return formattedCompanies.length > 0 ? {
             id: person.id,
