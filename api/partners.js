@@ -19,16 +19,9 @@ if (action === 'get_partners_list') {
         supabase.from('companies').select('id, company_name')
     ]);
 
-    const persons = pRes.data || [];
-    const agents = aRes.data || [];
-    const identifiers = iRes.data || [];
-    const companies = cRes.data || [];
-
-    const finalData = persons.map(person => {
+    const finalData = (pRes.data || []).map(person => {
         const pId = String(person.id || '').toLowerCase().trim();
-        
-        // 1. Get all agents linked to this person
-        const myAgents = agents.filter(a => 
+        const myAgents = (aRes.data || []).filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
@@ -36,17 +29,17 @@ if (action === 'get_partners_list') {
 
         const groupMap = {};
         myAgents.forEach(agent => {
-            const agentUuid = String(agent.id || '').toLowerCase().trim();
-            const coMatch = companies.find(c => 
-                String(c.id || '').toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
+            const agentId = String(agent.id || '').toLowerCase().trim();
+            const coMatch = (cRes.data || []).find(c => 
+                String(c.id).toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
             );
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
             if (!groupMap[coName]) groupMap[coName] = [];
 
-            // 2. Find ALL identifiers that point to this agent UUID
-            const myIds = identifiers
-                .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === agentUuid)
+            // Find all IDs specifically linked to this Agent UUID
+            const myIds = (iRes.data || [])
+                .filter(i => i.agent_id && String(i.agent_id).toLowerCase().trim() === agentId)
                 .map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
