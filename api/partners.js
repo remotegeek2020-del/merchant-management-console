@@ -25,45 +25,46 @@ if (action === 'get_partners_list') {
     const companies = cRes.data || [];
 
     const finalData = persons.map(person => {
-        // Normalize the Person UUID
         const pId = String(person.id || '').toLowerCase().trim();
         
-        // 1. Find all agents owned by this person
+        // 1. Find all agents owned by this person (the manual links you just ran in SQL)
         const myAgents = agents.filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
-        // If they don't own any agents, we hide the card
+        // If they don't own any agent records, hide the card
         if (myAgents.length === 0) return null;
 
-        const companyGroups = {};
+        const groupMap = {};
 
         myAgents.forEach(agent => {
-            const agentUuid = String(agent.id || '').toLowerCase().trim();
+            const agentId = String(agent.id || '').toLowerCase().trim();
+            
+            // 2. Identify Company Name
             const coMatch = companies.find(c => 
                 String(c.id || '').toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
             );
-            
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!companyGroups[coName]) companyGroups[coName] = [];
+            if (!groupMap[coName]) groupMap[coName] = [];
 
-            // 2. Find IDs for this specific agent
+            // 3. Find every numeric ID Badge for this specific agent
             const myIds = identifiers
-                .filter(i => String(i.agent_id || '').toLowerCase().trim() === agentUuid)
+                .filter(i => String(i.agent_id || '').toLowerCase().trim() === agentId)
                 .map(id => ({
                     string: id.id_string,
                     rev: id.rev_share || '0%',
                     isPrime: !!id.prime49
                 }));
 
-            companyGroups[coName].push(...myIds);
+            groupMap[coName].push(...myIds);
         });
 
-        // 3. Format for UI - only show companies that actually have IDs
-        const formattedCompanies = Object.entries(companyGroups)
-            .map(([name, ids]) => ({ name, ids }))
-            .filter(g => g.ids.length > 0);
+        // 4. Format for UI
+        const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
+            name,
+            ids: ids.filter(item => item.string) // Only include actual IDs
+        })).filter(g => g.ids.length > 0);
 
         if (formattedCompanies.length === 0) return null;
 
