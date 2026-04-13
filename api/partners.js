@@ -25,31 +25,29 @@ if (action === 'get_partners_list') {
     const companies = cRes.data || [];
 
     const finalData = persons.map(person => {
-        // Normalize Person ID
         const pId = String(person.id || '').toLowerCase().trim();
         
-        // 1. Find all agents owned by this person
+        // 1. Find ALL agents owned by this person
         const myAgents = agents.filter(a => 
             a.parent_agent_id && String(a.parent_agent_id).toLowerCase().trim() === pId
         );
         
-        // If they have no agents linked, skip this card
         if (myAgents.length === 0) return null;
 
-        const groupMap = {};
+        const companyGroups = {};
 
         myAgents.forEach(agent => {
             const agentId = String(agent.id || '').toLowerCase().trim();
             
-            // Find company name
+            // Determine Company Name
             const coMatch = companies.find(c => 
                 String(c.id || '').toLowerCase().trim() === String(agent.company_id || '').toLowerCase().trim()
             );
             const coName = coMatch ? coMatch.company_name : "Independent / No Company";
             
-            if (!groupMap[coName]) groupMap[coName] = [];
+            if (!companyGroups[coName]) companyGroups[coName] = [];
 
-            // 2. Find every identifier for THIS agent
+            // 2. Grab every identifier for this specific agent record
             const myIds = identifiers
                 .filter(i => String(i.agent_id || '').toLowerCase().trim() === agentId)
                 .map(id => ({
@@ -58,14 +56,16 @@ if (action === 'get_partners_list') {
                     isPrime: !!id.prime49
                 }));
 
-            groupMap[coName].push(...myIds);
+            // 3. Add them to the group (prevents empty company headers)
+            companyGroups[coName].push(...myIds);
         });
 
-        // 3. Convert groups to the UI format
-        const formattedCompanies = Object.entries(groupMap).map(([name, ids]) => ({
-            name,
-            ids
-        }));
+        // 4. Transform into UI format and REMOVE companies that ended up with 0 IDs
+        const formattedCompanies = Object.entries(companyGroups)
+            .map(([name, ids]) => ({ name, ids }))
+            .filter(group => group.ids.length > 0);
+
+        if (formattedCompanies.length === 0) return null;
 
         return {
             id: person.id,
