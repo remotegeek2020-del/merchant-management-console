@@ -57,6 +57,28 @@
 <script>
     let allPartners = [];
 
+    function renderBadge(id) {
+    let html = `
+        <div class="id-badge-wrapper">
+            <div class="id-badge ${id.isPrime ? 'prime' : ''}">
+                <span class="id-text">${id.string}</span>
+                <span class="rev-text">${id.rev}</span>
+            </div>
+    `;
+
+    // If there are sub-partners (recursive layer), render them inside a container
+    if (id.sub_ids && id.sub_ids.length > 0) {
+        html += `<div class="sub-id-container">`;
+        id.sub_ids.forEach(subId => {
+            html += renderBadge(subId); // Recursive UI call is safe for small nested depths
+        });
+        html += `</div>`;
+    }
+
+    html += `</div>`;
+    return html;
+}
+
     async function loadPartners() {
         document.getElementById('loadingOverlay').style.display = 'flex';
         try {
