@@ -13,19 +13,20 @@ export default async function handler(req, res) {
 
 // --- ACTION: GET MERCHANT DATA (Using High-Speed View) ---
 if (action === 'get_merchant_data') {
-    const { identifier_ids } = body; // This is the array of id_strings
-
+    const { identifier_ids } = body;
     try {
         const { data: stats, error } = await supabase
             .from('merchant_stats_by_id')
             .select('*')
-            .in('agent_id', identifier_ids);
+            .in('agent_id', identifier_ids); // identifier_ids must be an array of strings
 
         if (error) throw error;
+        
+        // Log this to your server console to see if the DB is returning more than 1
+        console.log("Stats returned from DB:", stats);
 
         return res.status(200).json({ success: true, data: stats });
     } catch (err) {
-        console.error("View Fetch Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
