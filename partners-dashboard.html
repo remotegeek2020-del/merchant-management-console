@@ -54,14 +54,17 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<script>
+    <script>
     let allPartners = [];
+    // Global raw storage for the Move Tool's lookup logic
+    let identifiersRaw = [];
+    let agentsRaw = [];
+    let personsRaw = [];
 
     function processPartnerData(payload) {
         if (!payload || !payload.persons) return [];
         const { persons, agents, identifiers, companies } = payload;
         
-        // 1. Map all IDs for easy lookup and identify human owners
         const idMap = {};
         identifiers.forEach(id => {
             const myAgent = agents.find(a => a.id === id.agent_id);
@@ -81,22 +84,16 @@
             };
         });
 
-        // 2. Build the Tree and trace Upline info
         identifiers.forEach(id => {
             const current = idMap[id.id];
             if (id.parent_config_id && idMap[id.parent_config_id]) {
                 const parentIdRecord = idMap[id.parent_config_id];
-                
-                // Link for tree structure
                 parentIdRecord.sub_ids.push(current);
-
-                // Set Upline info for the sub-agent's own card
                 current.upline_name = parentIdRecord.owner_name;
                 current.upline_string = parentIdRecord.string;
             }
         });
 
-        // 3. Assemble Grid: Show EVERY person who has an agent record
         return persons.map(person => {
             const myAgents = agents.filter(a => a.parent_agent_id === person.id);
             if (myAgents.length === 0) return null;
@@ -105,10 +102,8 @@
             myAgents.forEach(agent => {
                 const co = companies.find(c => c.id === agent.company_id);
                 const coName = co ? co.company_name : "Independent";
-                
                 const myAgentIds = identifiers.filter(i => i.agent_id === agent.id);
 
-                // Only show IDs that aren't children of OTHER IDs owned by this same person
                 const topLevelForThisPerson = myAgentIds.filter(id => {
                     const parent = identifiers.find(p => p.id === id.parent_config_id);
                     return !(parent && parent.agent_id === id.agent_id);
@@ -129,14 +124,11 @@
 
     function renderBadge(id, isRootOfCard = false) {
         let label = '';
-
         if (isRootOfCard && id.upline_name) {
-            // Label for the sub-agent's own card (who they report to)
             label = `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">
                         Sub-partner of ${id.upline_string} owner ${id.upline_name}
                      </span>`;
         } else if (!isRootOfCard) {
-            // Label for a nested ID inside a parent's card (who owns the sub-ID)
             label = `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">
                         Owner: ${id.owner_name}
                      </span>`;
@@ -174,6 +166,11 @@
             });
             const result = await res.json();
             if (result.success) {
+                // Store raw data globally for use in the Move Tool's selection list
+                identifiersRaw = result.data.identifiers;
+                agentsRaw = result.data.agents;
+                personsRaw = result.data.persons;
+
                 allPartners = processPartnerData(result.data);
                 renderGrid(allPartners);
             }
@@ -198,31 +195,62 @@
     }
 
     window.editIdentifier = async function(db_id, name, rev, isPrime) {
+        // Find the current ID in the raw data to identify its current parent
+        const currentIdData = identifiersRaw.find(i => i.id === db_id);
+
         const { value: formValues } = await Swal.fire({
             title: `Settings: ${name}`,
             html: `
                 <div style="text-align:left;">
                     <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
                     <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 10px 0;">
-                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700;">
+                    
+                    <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:700; margin-bottom:15px;">
                         <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge
                     </label>
+
+                    <label style="font-size:11px; font-weight:700; color:#64748b;">HIERARCHY: MOVE TO NEW PARENT ID</label>
+                    <select id="swal-parent" class="swal2-input" style="width:100%; margin-top:5px; font-size:13px;">
+                        <option value="">-- Set as Root (No Parent) --</option>
+                        ${identifiersRaw
+                            .filter(i => i.id !== db_id) // Filter out self to prevent circular reference
+                            .map(i => {
+                                const ownerAgent = agentsRaw.find(a => a.id === i.agent_id);
+                                const ownerName = personsRaw.find(p => p.id === ownerAgent?.parent_agent_id)?.full_name || 'Unknown';
+                                return `<option value="${i.id}" ${currentIdData?.parent_config_id === i.id ? 'selected' : ''}>
+                                    ${i.id_string} (${ownerName})
+                                </option>`;
+                            }).join('')}
+                    </select>
                 </div>`,
             showCancelButton: true,
             confirmButtonText: 'SAVE CHANGES',
             preConfirm: () => ({ 
                 rev_share: document.getElementById('swal-rev').value, 
-                prime49: document.getElementById('swal-prime').checked 
+                prime49: document.getElementById('swal-prime').checked,
+                new_parent_id: document.getElementById('swal-parent').value || null
             })
         });
 
         if (formValues) {
+            // Update Identifier Settings
+            await fetch('/api/partners', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } }) 
+            });
+
+            // Update Identifier Parent (Move Tool)
             const res = await fetch('/api/partners', { 
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: formValues }) 
+                body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id }) 
             });
-            if ((await res.json()).success) { loadPartners(); Swal.fire('Updated!', '', 'success'); }
+
+            if ((await res.json()).success) { 
+                loadPartners(); 
+                Swal.fire('Changes Saved!', 'Identifier and hierarchy updated successfully.', 'success'); 
+            }
         }
     }
 
