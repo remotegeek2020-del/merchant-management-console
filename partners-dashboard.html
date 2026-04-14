@@ -57,47 +57,65 @@
 <script>
     let allPartners = [];
 
-    function processPartnerData(payload) {
-        if (!payload || !payload.persons) return [];
-        const { persons, agents, identifiers, companies } = payload;
-        const idMap = {};
-        
-        identifiers.forEach(id => {
-            idMap[id.id] = { 
-                db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
-                isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id 
-            };
-        });
+  function processPartnerData(payload) {
+    if (!payload || !payload.persons) return [];
+    const { persons, agents, identifiers, companies } = payload;
+    
+    // 1. Map all IDs for easy lookup
+    const idMap = {};
+    identifiers.forEach(id => {
+        idMap[id.id] = { 
+            db_id: id.id, 
+            string: id.id_string, 
+            rev: id.rev_share || '0%',
+            isPrime: !!id.prime49, 
+            sub_ids: [], 
+            agent_id: id.agent_id,
+            parent_config_id: id.parent_config_id // Keep track of parentage
+        };
+    });
 
-        const rootsByAgent = {};
-        identifiers.forEach(id => {
-            if (id.parent_config_id && idMap[id.parent_config_id]) {
-                idMap[id.parent_config_id].sub_ids.push(idMap[id.id]);
-            } else {
-                if (!rootsByAgent[id.agent_id]) rootsByAgent[id.agent_id] = [];
-                rootsByAgent[id.agent_id].push(idMap[id.id]);
+    // 2. Build the Tree links
+    identifiers.forEach(id => {
+        if (id.parent_config_id && idMap[id.parent_config_id]) {
+            idMap[id.parent_config_id].sub_ids.push(idMap[id.id]);
+        }
+    });
+
+    // 3. Assemble Grid: Show EVERY person who has an agent record
+    return persons.map(person => {
+        const myAgents = agents.filter(a => a.parent_agent_id === person.id);
+        if (myAgents.length === 0) return null;
+
+        const companyGroups = {};
+        myAgents.forEach(agent => {
+            const co = companies.find(c => c.id === agent.company_id);
+            const coName = co ? co.company_name : "Independent";
+            
+            // Find IDs belonging to this agent
+            // We show them here if they are the "top" of this person's branch
+            const myAgentIds = identifiers.filter(i => i.agent_id === agent.id);
+            
+            // Logic change: For this person's card, only show IDs that aren't 
+            // children of OTHER IDs owned by this same person.
+            const topLevelForThisPerson = myAgentIds.filter(id => {
+                const parent = identifiers.find(p => p.id === id.parent_config_id);
+                // Only hide if the parent is ALSO owned by this same person
+                return !(parent && parent.agent_id === id.agent_id);
+            });
+
+            if (topLevelForThisPerson.length > 0) {
+                if (!companyGroups[coName]) companyGroups[coName] = [];
+                topLevelForThisPerson.forEach(id => {
+                    companyGroups[coName].push(idMap[id.id]);
+                });
             }
         });
 
-        return persons.map(person => {
-            const myAgents = agents.filter(a => a.parent_agent_id === person.id);
-            if (myAgents.length === 0) return null;
-
-            const groups = {};
-            myAgents.forEach(agent => {
-                const co = companies.find(c => c.id === agent.company_id);
-                const coName = co ? co.company_name : "Independent";
-                const ids = rootsByAgent[agent.id] || [];
-                if (ids.length > 0) {
-                    if (!groups[coName]) groups[coName] = [];
-                    groups[coName].push(...ids);
-                }
-            });
-
-            const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
-            return formatted.length > 0 ? { id: person.id, name: person.full_name, companies: formatted } : null;
-        }).filter(Boolean);
-    }
+        const formatted = Object.entries(companyGroups).map(([name, ids]) => ({ name, ids }));
+        return formatted.length > 0 ? { id: person.id, name: person.full_name, companies: formatted } : null;
+    }).filter(Boolean);
+}
 
     function renderBadge(id) {
         let html = `
