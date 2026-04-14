@@ -65,7 +65,6 @@
         const { persons, agents, identifiers, companies } = payload;
         const idMap = {};
         
-        // 1. Map all IDs for easy lookup and identify human owners
         identifiers.forEach(id => {
             const myAgent = agents.find(a => a.id === id.agent_id);
             const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
@@ -77,7 +76,6 @@
             };
         });
 
-        // 2. Build the Tree and trace Upline info
         identifiers.forEach(id => {
             const current = idMap[id.id];
             if (id.parent_config_id && idMap[id.parent_config_id]) {
@@ -88,7 +86,6 @@
             }
         });
 
-        // 3. Assemble Grid with added Person metadata (Email, Phone, HL ID)
         return persons.map(person => {
             const myAgents = agents.filter(a => a.parent_agent_id === person.id);
             if (myAgents.length === 0) return null;
@@ -104,7 +101,6 @@
             });
             const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
             
-            // MAP DATA HERE: Using the correct database keys for email, phone_number, and hl_contact_id
             return formatted.length > 0 ? { 
                 id: person.id, 
                 name: person.full_name,
@@ -118,13 +114,19 @@
 
     function renderBadge(id, isRootOfCard = false) {
         let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
-        return `<div class="id-badge-container" style="margin-top:4px; width: 100%;">
-            <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span></div>
-                <span style="font-size:9px; opacity:0.7;">${id.rev}</span>
-            </div>
-            ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
-        </div>`;
+        
+        return `
+            <div class="id-badge-container" style="margin-top:4px; width: 100%;">
+                <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
+                    <div style="text-align:left;">
+                        ${label}
+                        <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
+                        <div id="stats-${id.string}" style="font-size:9px; color:#64748b; margin-top:2px; display:none;"></div>
+                    </div>
+                    <span style="font-size:9px; opacity:0.7;">${id.rev}</span>
+                </div>
+                ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
+            </div>`;
     }
 
     async function loadPartners() {
@@ -161,183 +163,60 @@
             </div>`).join('');
     }
 
-    window.editIdentifier = async function(db_id, name, rev, isPrime) {
-        const currentIdData = identifiersRaw.find(i => i.id === db_id);
-        const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
-            .map(i => {
-                const ownerName = personsRaw.find(p => p.id === agentsRaw.find(a => a.id === i.agent_id)?.parent_agent_id)?.full_name || 'Unknown';
-                return { id: i.id, string: i.id_string, owner: ownerName, label: `${i.id_string} (${ownerName})` };
-            });
-
-        let selectedParentId = currentIdData?.parent_config_id || null;
-
-        const { value: formValues } = await Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Settings: ${name}</div>`,
-            html: `<div style="text-align:left; padding: 10px;">
-                <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
-                <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 8px 0 20px 0; border-radius:8px;">
-                <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-weight:700; margin-bottom:25px;"><input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge</label>
-                <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT PARTNER</label>
-                <div style="position:relative; margin-top:8px;">
-                    <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..." value="${validParents.find(p => p.id === selectedParentId)?.label || ''}" style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
-                    <div id="search-results-box" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
-                </div>
-            </div>`,
-            showCancelButton: true,
-            confirmButtonColor: '#002d5a',
-            didOpen: () => {
-                const searchInput = document.getElementById('swal-parent-search');
-                const resultsBox = document.getElementById('search-results-box');
-                searchInput.addEventListener('input', (e) => {
-                    const val = e.target.value.toLowerCase();
-                    if (!val) { resultsBox.style.display = 'none'; selectedParentId = null; return; }
-                    const matches = validParents.filter(p => p.label.toLowerCase().includes(val)).slice(0, 50);
-                    if (matches.length > 0) {
-                        resultsBox.innerHTML = matches.map(m => `<div class="search-item" data-id="${m.id}" data-label="${m.label}" style="padding:10px 15px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;"><b>${m.string}</b> <span style="color:#94a3b8; margin-left:5px;">${m.owner}</span></div>`).join('');
-                        resultsBox.style.display = 'block';
-                    } else { resultsBox.style.display = 'none'; }
-                });
-                resultsBox.addEventListener('click', (e) => {
-                    const item = e.target.closest('.search-item');
-                    if (item) { selectedParentId = item.dataset.id; searchInput.value = item.dataset.label; resultsBox.style.display = 'none'; }
-                });
-            },
-            preConfirm: () => ({ rev_share: document.getElementById('swal-rev').value, prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId })
-        });
-
-        if (formValues) {
-            Swal.fire({ title: 'Saving Changes...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-            try {
-                const res = await fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'update_identifier_all', 
-                        id: db_id, 
-                        rev_share: formValues.rev_share,
-                        prime49: formValues.prime49,
-                        new_parent_id: formValues.new_parent_id 
-                    })
-                });
-                const result = await res.json();
-                if (result.success) {
-                    await loadPartners();
-                    Swal.fire({ icon: 'success', title: 'Success!', text: 'Partner data updated.', confirmButtonColor: '#002d5a' });
-                } else { throw new Error(result.message); }
-            } catch (err) {
-                console.error("Save Error:", err);
-                Swal.fire('Update Failed', 'Server error or timeout.', 'error');
-            }
-        }
-    }
-
-    window.openPartnerDetails = (id) => {
-        const p = allPartners.find(ptr => ptr.id === id);
-        if(!p) return;
-
-        // Dynamic HighLevel Link
-        const hlLink = p.hl_id 
-            ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}`
-            : null;
-
-        Swal.fire({ 
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`, 
-            width: '800px', showConfirmButton: false, showCloseButton: true,
-            html: `
-                <div style="text-align:left; margin-top:10px; display: flex; flex-direction: column; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0;">
-                    <div style="display:flex; align-items:center; gap:10px; color:#475569; font-size:14px;">
-                        <span class="material-icons" style="font-size:18px;">email</span>
-                        <a href="mailto:${p.email}" style="text-decoration:none; color:#002d5a; font-weight:600;">${p.email}</a>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:10px; color:#475569; font-size:14px;">
-                        <span class="material-icons" style="font-size:18px;">phone</span>
-                        <span style="font-weight:600;">${p.phone}</span>
-                    </div>
-                    ${hlLink ? `
-                        <div style="margin-top:5px;">
-                            <a href="${hlLink}" target="_blank" style="display:inline-flex; align-items:center; gap:5px; background:#f0f9ff; color:#0369a1; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700; border:1px solid #bae6fd;">
-                                <span class="material-icons" style="font-size:16px;">launch</span>
-                                VIEW IN HIGHLEVEL
-                            </a>
-                        </div>
-                    ` : '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-top:5px;">No HighLevel ID linked.</div>'}
-                </div>
-
-                <div style="text-align:left; margin-top:20px;">
-                    <h3 style="font-size:14px; color:#64748b; font-weight:700; margin-bottom:10px;">PORTFOLIO & HIERARCHY</h3>
-                    <div style="background:#f8fafc; padding:15px; border-radius:12px;">
-                        ${p.companies.map(co => `
-                            <div style="margin-bottom:15px;">
-                                <b style="color:#64748b; font-size:11px; text-transform:uppercase;">${co.name}</b>
-                                <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>`
-        });
-    };
-
-     // NEW: Helper to get all sub-IDs in a branch recursively
     function getAllBranchIds(idObj, idList = []) {
-        idList.push(idObj.string); // We need the id_string for the merchants table
+        idList.push(idObj.string);
         if (idObj.sub_ids && idObj.sub_ids.length > 0) {
             idObj.sub_ids.forEach(sub => getAllBranchIds(sub, idList));
         }
         return idList;
     }
 
-    // NEW: Function to Export CSV
-    function exportToCSV(name, data) {
-        const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
-        const rows = data.map(m => [m.merchant_id, m.dba_name, m.account_status, m.volume_30_day, m.agent_id]);
-        let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `${name}_merchants.csv`);
-        document.body.appendChild(link);
-        link.click();
-    }
-
     window.openPartnerDetails = async function(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
         if(!p) return;
 
-        // Gather ALL ids in this person's branch (Self + Sub-partners)
         let branchIdStrings = [];
         p.companies.forEach(co => {
             co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
         });
 
-        // Show the modal first with a loading state for merchants
+        // Restore HighLevel Link
+        const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
+
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '900px', showConfirmButton: false, showCloseButton: true,
             html: `
                 <div id="modal-content-container" style="text-align:left;">
-                    <div style="display: flex; gap: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
-                        <div><small>EMAIL</small><br><b>${p.email}</b></div>
-                        <div><small>PHONE</small><br><b>${p.phone}</b></div>
+                    <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+                        <div style="display:flex; flex-direction:column; gap:5px;">
+                            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                                <span class="material-icons" style="font-size:16px;">email</span>
+                                <a href="mailto:${p.email}" style="text-decoration:none; color:#002d5a; font-weight:600;">${p.email}</a>
+                            </div>
+                            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                                <span class="material-icons" style="font-size:16px;">phone</span>
+                                <span style="font-weight:600;">${p.phone}</span>
+                            </div>
+                            ${hlLink ? `
+                                <a href="${hlLink}" target="_blank" style="display:inline-flex; align-items:center; gap:5px; background:#f0f9ff; color:#0369a1; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700; border:1px solid #bae6fd; margin-top:8px;">
+                                    <span class="material-icons" style="font-size:16px;">launch</span> VIEW IN HIGHLEVEL
+                                </a>
+                            ` : '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-top:8px;">No HighLevel ID linked.</div>'}
+                        </div>
+                        <div id="summary-stats" style="text-align:right;">
+                            <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">$0.00</div>
+                            <div style="font-size:11px; color:#64748b;" id="main-merch-count">0 Merchants Total</div>
+                            <button id="btn-export" disabled style="margin-top:10px; background:#002d5a; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:700;">EXPORT CSV</button>
+                        </div>
                     </div>
 
-                    <div id="merchant-stats-bar" style="margin-top:20px; display:flex; gap:15px;">
-                        <div style="flex:1; background:#f1f5f9; padding:15px; border-radius:10px;">
-                            <small style="color:#64748b;">TOTAL MERCHANTS</small>
-                            <div id="stat-count" style="font-size:20px; font-weight:800;">Loading...</div>
-                        </div>
-                        <div style="flex:1; background:#f1f5f9; padding:15px; border-radius:10px;">
-                            <small style="color:#64748b;">AVG 30-DAY VOL</small>
-                            <div id="stat-avg" style="font-size:20px; font-weight:800; color:#10b981;">Loading...</div>
-                        </div>
-                        <button id="btn-export" disabled style="background:#002d5a; color:white; border:none; padding:10px 20px; border-radius:8px; cursor:pointer;">EXPORT CSV</button>
-                    </div>
-
-                    <div style="margin-top:25px;">
-                        <h3 style="font-size:14px; color:#64748b; font-weight:700;">PORTFOLIO & BRANCH IDS</h3>
-                        <div style="background:#f8fafc; padding:15px; border-radius:12px; margin-top:10px; max-height:300px; overflow-y:auto;">
+                    <div style="margin-top:20px;">
+                        <h3 style="font-size:14px; color:#64748b; font-weight:700; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">Portfolio Breakdown</h3>
+                        <div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
                             ${p.companies.map(co => `
-                                <div style="margin-bottom:15px;">
-                                    <b style="color:#64748b; font-size:11px; text-transform:uppercase;">${co.name}</b>
+                                <div style="margin-bottom:20px;">
+                                    <b style="color:#94a3b8; font-size:10px; text-transform:uppercase; letter-spacing:1px;">${co.name}</b>
                                     <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                                 </div>
                             `).join('')}
@@ -346,7 +225,7 @@
                 </div>`
         });
 
-        // Now Fetch Merchant Data
+        // Fetch Merchant Data and Compute Breakdown
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -356,23 +235,50 @@
             const result = await res.json();
             if (result.success) {
                 const merchants = result.data;
-                const totalCount = merchants.length;
                 
-                // Calculate Average Volume
+                // 1. Calculate Main Summary
+                const totalCount = merchants.length;
                 const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-                const avgVol = totalCount > 0 ? (totalVol / totalCount) : 0;
-
-                // Update UI
-                document.getElementById('stat-count').innerText = totalCount;
-                document.getElementById('stat-avg').innerText = `$${avgVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                
+                document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                document.getElementById('main-merch-count').innerText = `${totalCount} Merchants in Branch`;
                 
                 const exportBtn = document.getElementById('btn-export');
                 exportBtn.disabled = false;
                 exportBtn.onclick = () => exportToCSV(p.name, merchants);
+
+                // 2. Compute Breakdown for EACH ID Badge
+                branchIdStrings.forEach(idStr => {
+                    const idMerchants = merchants.filter(m => m.agent_id === idStr);
+                    const count = idMerchants.length;
+                    const vol = idMerchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+                    const avg = count > 0 ? (vol / count) : 0;
+
+                    const statDiv = document.getElementById(`stats-${idStr}`);
+                    if (statDiv && count > 0) {
+                        statDiv.style.display = 'block';
+                        statDiv.innerHTML = `
+                            <span style="color:#0f172a; font-weight:700;">${count}</span> Merchants • 
+                            Avg Vol: <span style="color:#10b981; font-weight:700;">$${avg.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                        `;
+                    }
+                });
             }
         } catch (err) { console.error(err); }
     };
 
+    function exportToCSV(name, data) {
+        const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
+        const rows = data.map(m => [m.merchant_id, `"${m.dba_name.replace(/"/g, '""')}"`, m.account_status, m.volume_30_day, m.agent_id]);
+        let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${name.replace(/\s+/g, '_')}_Merchants.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
 
     window.addEventListener('load', loadPartners);
 </script>
