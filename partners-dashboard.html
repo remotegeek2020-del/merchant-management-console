@@ -65,6 +65,7 @@
         const { persons, agents, identifiers, companies } = payload;
         const idMap = {};
         
+        // 1. Map all IDs for easy lookup and identify human owners
         identifiers.forEach(id => {
             const myAgent = agents.find(a => a.id === id.agent_id);
             const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
@@ -76,6 +77,7 @@
             };
         });
 
+        // 2. Build the Tree and trace Upline info
         identifiers.forEach(id => {
             const current = idMap[id.id];
             if (id.parent_config_id && idMap[id.parent_config_id]) {
@@ -86,6 +88,7 @@
             }
         });
 
+        // 3. Assemble Grid with added Person metadata (Email, Phone, HL ID)
         return persons.map(person => {
             const myAgents = agents.filter(a => a.parent_agent_id === person.id);
             if (myAgents.length === 0) return null;
@@ -100,7 +103,15 @@
                 }
             });
             const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
-            return formatted.length > 0 ? { id: person.id, name: person.full_name, companies: formatted } : null;
+            
+            return formatted.length > 0 ? { 
+                id: person.id, 
+                name: person.full_name,
+                email: person.email || 'No email provided',
+                phone: person.phone_number || 'No phone provided',
+                hl_id: person.hl_contact_id, // For HighLevel Link
+                companies: formatted 
+            } : null;
         }).filter(Boolean);
     }
 
@@ -149,89 +160,119 @@
             </div>`).join('');
     }
 
- window.editIdentifier = async function(db_id, name, rev, isPrime) {
-    const currentIdData = identifiersRaw.find(i => i.id === db_id);
-    const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
-        .map(i => {
-            const ownerName = personsRaw.find(p => p.id === agentsRaw.find(a => a.id === i.agent_id)?.parent_agent_id)?.full_name || 'Unknown';
-            return { id: i.id, string: i.id_string, owner: ownerName, label: `${i.id_string} (${ownerName})` };
+    window.editIdentifier = async function(db_id, name, rev, isPrime) {
+        const currentIdData = identifiersRaw.find(i => i.id === db_id);
+        const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
+            .map(i => {
+                const ownerName = personsRaw.find(p => p.id === agentsRaw.find(a => a.id === i.agent_id)?.parent_agent_id)?.full_name || 'Unknown';
+                return { id: i.id, string: i.id_string, owner: ownerName, label: `${i.id_string} (${ownerName})` };
+            });
+
+        let selectedParentId = currentIdData?.parent_config_id || null;
+
+        const { value: formValues } = await Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Settings: ${name}</div>`,
+            html: `<div style="text-align:left; padding: 10px;">
+                <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
+                <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 8px 0 20px 0; border-radius:8px;">
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-weight:700; margin-bottom:25px;"><input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge</label>
+                <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT PARTNER</label>
+                <div style="position:relative; margin-top:8px;">
+                    <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..." value="${validParents.find(p => p.id === selectedParentId)?.label || ''}" style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
+                    <div id="search-results-box" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                </div>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonColor: '#002d5a',
+            didOpen: () => {
+                const searchInput = document.getElementById('swal-parent-search');
+                const resultsBox = document.getElementById('search-results-box');
+                searchInput.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase();
+                    if (!val) { resultsBox.style.display = 'none'; selectedParentId = null; return; }
+                    const matches = validParents.filter(p => p.label.toLowerCase().includes(val)).slice(0, 50);
+                    if (matches.length > 0) {
+                        resultsBox.innerHTML = matches.map(m => `<div class="search-item" data-id="${m.id}" data-label="${m.label}" style="padding:10px 15px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;"><b>${m.string}</b> <span style="color:#94a3b8; margin-left:5px;">${m.owner}</span></div>`).join('');
+                        resultsBox.style.display = 'block';
+                    } else { resultsBox.style.display = 'none'; }
+                });
+                resultsBox.addEventListener('click', (e) => {
+                    const item = e.target.closest('.search-item');
+                    if (item) { selectedParentId = item.dataset.id; searchInput.value = item.dataset.label; resultsBox.style.display = 'none'; }
+                });
+            },
+            preConfirm: () => ({ rev_share: document.getElementById('swal-rev').value, prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId })
         });
 
-    let selectedParentId = currentIdData?.parent_config_id || null;
-
-    const { value: formValues } = await Swal.fire({
-        title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Settings: ${name}</div>`,
-        html: `<div style="text-align:left; padding: 10px;">
-            <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
-            <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 8px 0 20px 0; border-radius:8px;">
-            <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-weight:700; margin-bottom:25px;"><input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge</label>
-            <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT PARTNER</label>
-            <div style="position:relative; margin-top:8px;">
-                <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..." value="${validParents.find(p => p.id === selectedParentId)?.label || ''}" style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
-                <div id="search-results-box" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
-            </div>
-        </div>`,
-        showCancelButton: true,
-        confirmButtonColor: '#002d5a',
-        didOpen: () => {
-            const searchInput = document.getElementById('swal-parent-search');
-            const resultsBox = document.getElementById('search-results-box');
-            searchInput.addEventListener('input', (e) => {
-                const val = e.target.value.toLowerCase();
-                if (!val) { resultsBox.style.display = 'none'; selectedParentId = null; return; }
-                const matches = validParents.filter(p => p.label.toLowerCase().includes(val)).slice(0, 50);
-                if (matches.length > 0) {
-                    resultsBox.innerHTML = matches.map(m => `<div class="search-item" data-id="${m.id}" data-label="${m.label}" style="padding:10px 15px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;"><b>${m.string}</b> <span style="color:#94a3b8; margin-left:5px;">${m.owner}</span></div>`).join('');
-                    resultsBox.style.display = 'block';
-                } else { resultsBox.style.display = 'none'; }
-            });
-            resultsBox.addEventListener('click', (e) => {
-                const item = e.target.closest('.search-item');
-                if (item) { selectedParentId = item.dataset.id; searchInput.value = item.dataset.label; resultsBox.style.display = 'none'; }
-            });
-        },
-        preConfirm: () => ({ rev_share: document.getElementById('swal-rev').value, prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId })
-    });
-
-    if (formValues) {
-        Swal.fire({ title: 'Saving Changes...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-        
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'update_identifier_all', 
-                    id: db_id, 
-                    rev_share: formValues.rev_share,
-                    prime49: formValues.prime49,
-                    new_parent_id: formValues.new_parent_id 
-                })
-            });
-
-            const result = await res.json();
-            
-            if (result.success) {
-                await loadPartners();
-                Swal.fire({ icon: 'success', title: 'Success!', text: 'Partner data updated.', confirmButtonColor: '#002d5a' });
-            } else {
-                throw new Error(result.message);
+        if (formValues) {
+            Swal.fire({ title: 'Saving Changes...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            try {
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'update_identifier_all', 
+                        id: db_id, 
+                        rev_share: formValues.rev_share,
+                        prime49: formValues.prime49,
+                        new_parent_id: formValues.new_parent_id 
+                    })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    await loadPartners();
+                    Swal.fire({ icon: 'success', title: 'Success!', text: 'Partner data updated.', confirmButtonColor: '#002d5a' });
+                } else { throw new Error(result.message); }
+            } catch (err) {
+                console.error("Save Error:", err);
+                Swal.fire('Update Failed', 'Server error or timeout.', 'error');
             }
-
-        } catch (err) {
-            console.error("Save Error:", err);
-            Swal.fire('Update Failed', 'Server error or timeout. Please check your network connection.', 'error');
         }
     }
-}
 
     window.openPartnerDetails = (id) => {
         const p = allPartners.find(ptr => ptr.id === id);
         if(!p) return;
-        Swal.fire({ title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`, width: '800px', showConfirmButton: false, showCloseButton: true,
-            html: `<div style="text-align:left; margin-top:20px;"><h3 style="font-size:14px; border-bottom:1px solid #e2e8f0; padding-bottom:5px;">PORTFOLIO</h3><div style="background:#f8fafc; padding:15px; border-radius:12px; margin-top:10px;">
-                ${p.companies.map(co => `<div style="margin-bottom:15px;"><b style="color:#64748b; font-size:11px;">${co.name}</b><div>${co.ids.map(id => renderBadge(id, true)).join('')}</div></div>`).join('')}
-            </div></div>`
+
+        // Dynamic HighLevel Link
+        const hlLink = p.hl_id 
+            ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}`
+            : null;
+
+        Swal.fire({ 
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`, 
+            width: '800px', showConfirmButton: false, showCloseButton: true,
+            html: `
+                <div style="text-align:left; margin-top:10px; display: flex; flex-direction: column; gap: 8px; padding-bottom: 15px; border-bottom: 1px solid #e2e8f0;">
+                    <div style="display:flex; align-items:center; gap:10px; color:#475569; font-size:14px;">
+                        <span class="material-icons" style="font-size:18px;">email</span>
+                        <a href="mailto:${p.email}" style="text-decoration:none; color:#002d5a; font-weight:600;">${p.email}</a>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:10px; color:#475569; font-size:14px;">
+                        <span class="material-icons" style="font-size:18px;">phone</span>
+                        <span style="font-weight:600;">${p.phone}</span>
+                    </div>
+                    ${hlLink ? `
+                        <div style="margin-top:5px;">
+                            <a href="${hlLink}" target="_blank" style="display:inline-flex; align-items:center; gap:5px; background:#f0f9ff; color:#0369a1; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700; border:1px solid #bae6fd;">
+                                <span class="material-icons" style="font-size:16px;">launch</span>
+                                VIEW IN HIGHLEVEL
+                            </a>
+                        </div>
+                    ` : '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-top:5px;">No HighLevel ID linked.</div>'}
+                </div>
+
+                <div style="text-align:left; margin-top:20px;">
+                    <h3 style="font-size:14px; color:#64748b; font-weight:700; margin-bottom:10px;">PORTFOLIO & HIERARCHY</h3>
+                    <div style="background:#f8fafc; padding:15px; border-radius:12px;">
+                        ${p.companies.map(co => `
+                            <div style="margin-bottom:15px;">
+                                <b style="color:#64748b; font-size:11px; text-transform:uppercase;">${co.name}</b>
+                                <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>`
         });
     };
 
