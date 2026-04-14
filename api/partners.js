@@ -11,42 +11,41 @@ export default async function handler(req, res) {
 
     try {
 
-        // --- ACTION: GET MERCHANT DATA (Recursive) ---
+  // --- ACTION: GET MERCHANT DATA (Paginated for Large Portfolios) ---
 if (action === 'get_merchant_data') {
-    const { identifier_ids } = body; // Array of IDs in this partner's branch
+    const { identifier_ids } = body;
 
     try {
-        const { data: merchants, error } = await supabase
-            .from('merchants')
-            .select('merchant_id, dba_name, account_status, volume_30_day, agent_id')
-            .in('agent_id', identifier_ids);
+        let allMerchants = [];
+        let from = 0;
+        let finished = false;
 
-        if (error) throw error;
-        return res.status(200).json({ success: true, data: merchants });
+        while (!finished) {
+            const { data, error } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, account_status, volume_30_day, agent_id')
+                .in('agent_id', identifier_ids)
+                .range(from, from + 999); // Fetch 1000 at a time
+
+            if (error) throw error;
+            
+            if (!data || data.length === 0) {
+                finished = true;
+            } else {
+                allMerchants = allMerchants.concat(data);
+                from += 1000;
+                if (data.length < 1000) finished = true; // No more records left
+            }
+        }
+
+        console.log(`Fetched ${allMerchants.length} merchants for branch.`);
+        return res.status(200).json({ success: true, data: allMerchants });
+
     } catch (err) {
+        console.error("Merchant Fetch Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
-        // --- ACTION: UPDATE IDENTIFIER ALL (Consolidated Update) ---
-        if (action === 'update_identifier_all') {
-            const { id, rev_share, prime49, new_parent_id } = body;
-            
-            const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") 
-                ? null 
-                : new_parent_id;
-
-            const { error } = await supabase
-                .from('agent_identifiers')
-                .update({ 
-                    rev_share: rev_share,
-                    prime49: prime49,
-                    parent_config_id: parentId 
-                })
-                .eq('id', id);
-
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
 
         // --- ACTION: MOVE IDENTIFIER (Legacy/Single Update) ---
         if (action === 'move_identifier') {
