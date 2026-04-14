@@ -61,9 +61,12 @@
         if (!payload || !payload.persons) return [];
         const { persons, agents, identifiers, companies } = payload;
         
-        // 1. Map all IDs for easy lookup
+        // 1. Map all IDs for easy lookup and identify human owners
         const idMap = {};
         identifiers.forEach(id => {
+            const myAgent = agents.find(a => a.id === id.agent_id);
+            const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
+
             idMap[id.id] = { 
                 db_id: id.id, 
                 string: id.id_string, 
@@ -72,27 +75,24 @@
                 sub_ids: [], 
                 agent_id: id.agent_id,
                 parent_config_id: id.parent_config_id,
-                rolled_up_to: null // Placeholder for parent owner name
+                owner_name: myPerson ? myPerson.full_name : 'Unknown',
+                upline_name: null,
+                upline_string: null
             };
         });
 
-        // 2. NEW: Trace Ownership for Sub-IDs
+        // 2. Build the Tree and trace Upline info
         identifiers.forEach(id => {
             const current = idMap[id.id];
             if (id.parent_config_id && idMap[id.parent_config_id]) {
-                // Link the child to the parent's sub_ids array
-                idMap[id.parent_config_id].sub_ids.push(current);
-
-                // Identify the human owner of the Parent ID
                 const parentIdRecord = idMap[id.parent_config_id];
-                const parentAgent = agents.find(a => a.id === parentIdRecord.agent_id);
-                const parentPerson = persons.find(p => p.id === parentAgent?.parent_agent_id);
                 
-                // If the parent owner is NOT the same person, label it
-                const currentAgent = agents.find(a => a.id === current.agent_id);
-                if (parentPerson && parentPerson.id !== currentAgent?.parent_agent_id) {
-                    current.rolled_up_to = parentPerson.full_name;
-                }
+                // Link for tree structure
+                parentIdRecord.sub_ids.push(current);
+
+                // Set Upline info for the sub-agent's own card
+                current.upline_name = parentIdRecord.owner_name;
+                current.upline_string = parentIdRecord.string;
             }
         });
 
@@ -108,7 +108,7 @@
                 
                 const myAgentIds = identifiers.filter(i => i.agent_id === agent.id);
 
-                // Logic: Show IDs that aren't children of OTHER IDs owned by this same person
+                // Only show IDs that aren't children of OTHER IDs owned by this same person
                 const topLevelForThisPerson = myAgentIds.filter(id => {
                     const parent = identifiers.find(p => p.id === id.parent_config_id);
                     return !(parent && parent.agent_id === id.agent_id);
@@ -127,10 +127,20 @@
         }).filter(Boolean);
     }
 
-    function renderBadge(id) {
-        // NEW: Show "Owner: Name" if this ID is rolling up to someone else
-        let rollUpInfo = id.rolled_up_to ? 
-            `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.rolled_up_to}</span>` : '';
+    function renderBadge(id, isRootOfCard = false) {
+        let label = '';
+
+        if (isRootOfCard && id.upline_name) {
+            // Label for the sub-agent's own card (who they report to)
+            label = `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">
+                        Sub-partner of ${id.upline_string} owner ${id.upline_name}
+                     </span>`;
+        } else if (!isRootOfCard) {
+            // Label for a nested ID inside a parent's card (who owns the sub-ID)
+            label = `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">
+                        Owner: ${id.owner_name}
+                     </span>`;
+        }
 
         let html = `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
@@ -138,7 +148,7 @@
                      style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
                      onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
                     <div style="text-align:left;">
-                        ${rollUpInfo}
+                        ${label}
                         <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
                     </div>
                     <span style="font-size:9px; opacity:0.7;">${id.rev}</span>
@@ -146,7 +156,7 @@
         `;
         if (id.sub_ids.length > 0) {
             html += `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">
-                ${id.sub_ids.map(renderBadge).join('')}
+                ${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}
             </div>`;
         }
         html += `</div>`;
@@ -180,7 +190,7 @@
                 ${p.companies.map(co => `
                     <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
                         <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                        <div style="margin-top:5px;">${co.ids.map(renderBadge).join('')}</div>
+                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                     </div>
                 `).join('')}
             </div>
@@ -230,7 +240,7 @@
                         ${p.companies.map(co => `
                             <div style="margin-bottom:15px;">
                                 <b style="color:#64748b; font-size:11px;">${co.name}</b>
-                                <div>${co.ids.map(renderBadge).join('')}</div>
+                                <div>${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                             </div>
                         `).join('')}
                     </div>
