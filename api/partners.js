@@ -10,6 +10,23 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
+
+        // --- ACTION: GET MERCHANT DATA (Recursive) ---
+if (action === 'get_merchant_data') {
+    const { identifier_ids } = body; // Array of IDs in this partner's branch
+
+    try {
+        const { data: merchants, error } = await supabase
+            .from('merchants')
+            .select('merchant_id, dba_name, account_status, volume_30_day, agent_id')
+            .in('agent_id', identifier_ids);
+
+        if (error) throw error;
+        return res.status(200).json({ success: true, data: merchants });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+}
         // --- ACTION: UPDATE IDENTIFIER ALL (Consolidated Update) ---
         if (action === 'update_identifier_all') {
             const { id, rev_share, prime49, new_parent_id } = body;
