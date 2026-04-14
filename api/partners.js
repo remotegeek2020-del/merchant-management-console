@@ -11,15 +11,23 @@ export default async function handler(req, res) {
 
     try {
 // --- Moving Subpartners to Anotehr ID ---
-        if (action === 'move_identifier') {
-    const { identifier_id, new_parent_id } = body; // new_parent_id can be null to make it a root
+    if (action === 'move_identifier') {
+    const { identifier_id, new_parent_id } = body;
     
+    // Ensure we treat an empty string as null for top-level partners
+    const parentId = (new_parent_id === "" || new_parent_id === "null" || !new_parent_id) ? null : new_parent_id;
+
     const { data, error } = await supabase
         .from('agent_identifiers')
-        .update({ parent_config_id: new_parent_id })
-        .eq('id', identifier_id);
+        .update({ parent_config_id: parentId })
+        .eq('id', identifier_id)
+        .select(); // Added select() to ensure data is returned
 
-    if (error) return res.status(500).json({ success: false, message: error.message });
+    if (error) {
+        console.error("Supabase Error:", error);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+
     return res.status(200).json({ success: true, data });
 }
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
