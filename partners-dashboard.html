@@ -236,88 +236,79 @@
     }
 
     window.openPartnerDetails = async function(personId) {
-        const p = allPartners.find(ptr => ptr.id === personId);
-        if(!p) return;
+    const p = allPartners.find(ptr => ptr.id === personId);
+    if(!p) return;
 
-        let branchIdStrings = [];
-        p.companies.forEach(co => {
-            co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
-        });
+    let branchIdStrings = [];
+    p.companies.forEach(co => {
+        co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
+    });
 
-        const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
+    const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
 
-        Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
-            width: '900px', showConfirmButton: false, showCloseButton: true,
-            html: `
-                <div id="modal-content-container" style="text-align:left;">
-                    <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
-                        <div style="display:flex; flex-direction:column; gap:5px;">
-                            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
-                                <span class="material-icons" style="font-size:16px;">email</span>
-                                <a href="mailto:${p.email}" style="text-decoration:none; color:#002d5a; font-weight:600;">${p.email}</a>
-                            </div>
-                            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
-                                <span class="material-icons" style="font-size:16px;">phone</span>
-                                <span style="font-weight:600;">${p.phone}</span>
-                            </div>
-                            ${hlLink ? `
-                                <a href="${hlLink}" target="_blank" style="display:inline-flex; align-items:center; gap:5px; background:#f0f9ff; color:#0369a1; padding:6px 12px; border-radius:6px; text-decoration:none; font-size:12px; font-weight:700; border:1px solid #bae6fd; margin-top:8px;">
-                                    <span class="material-icons" style="font-size:16px;">launch</span> VIEW IN HIGHLEVEL
-                                </a>
-                            ` : '<div style="font-size:11px; color:#94a3b8; font-style:italic; margin-top:8px;">No HighLevel ID linked.</div>'}
-                        </div>
-                        <div id="summary-stats" style="text-align:right;">
-                            <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">$0.00</div>
-                            <div style="font-size:11px; color:#64748b;" id="main-merch-count">0 Merchants Total</div>
-                            <button id="btn-export" disabled style="margin-top:10px; background:#002d5a; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:700;">EXPORT CSV</button>
-                        </div>
+    // Open Modal with Loading State
+    Swal.fire({
+        title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
+        width: '900px', showConfirmButton: false, showCloseButton: true,
+        html: `
+            <div id="modal-content-container" style="text-align:left;">
+                <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+                    <div style="display:flex; flex-direction:column; gap:5px;">
+                        <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;"><span class="material-icons" style="font-size:16px;">email</span>${p.email}</div>
+                        <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;"><span class="material-icons" style="font-size:16px;">phone</span>${p.phone}</div>
+                        ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
                     </div>
-                    <div style="margin-top:20px;">
-                        <h3 style="font-size:14px; color:#64748b; font-weight:700; margin-bottom:10px; text-transform:uppercase;">Portfolio Breakdown</h3>
-                        <div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
-                            ${p.companies.map(co => `
-                                <div style="margin-bottom:20px;">
-                                    <b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b>
-                                    <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
-                                </div>
-                            `).join('')}
-                        </div>
+                    <div id="summary-stats" style="text-align:right;">
+                        <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">Loading...</div>
+                        <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
                     </div>
-                </div>`
+                </div>
+                <div style="margin-top:20px;">
+                    <div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
+                        ${p.companies.map(co => `
+                            <div style="margin-bottom:20px;">
+                                <b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b>
+                                <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>`
+    });
+
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
         });
+        const result = await res.json();
+        
+        if (result.success) {
+            const stats = result.data;
+            let totalVol = 0;
+            let totalCount = 0;
 
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
-            });
-            const result = await res.json();
-            if (result.success) {
-                const merchants = result.data;
-                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-                document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-                document.getElementById('main-merch-count').innerText = `${merchants.length} Merchants in Branch`;
-                
-                const exportBtn = document.getElementById('btn-export');
-                exportBtn.disabled = false;
-                exportBtn.onclick = () => exportToCSV(p.name, merchants);
-
-                branchIdStrings.forEach(idStr => {
-                    const idMerchants = merchants.filter(m => m.agent_id === idStr);
-                    const count = idMerchants.length;
-                    const vol = idMerchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-                    const avg = count > 0 ? (vol / count) : 0;
+            // Apply Stats to the UI
+            branchIdStrings.forEach(idStr => {
+                const s = stats.find(row => row.agent_id === idStr);
+                if (s) {
+                    totalVol += parseFloat(s.total_volume || 0);
+                    totalCount += parseInt(s.merchant_count || 0);
+                    
                     const statDiv = document.getElementById(`stats-${idStr}`);
-                    if (statDiv && count > 0) {
+                    if (statDiv) {
                         statDiv.style.display = 'block';
-                        statDiv.innerHTML = `<span style="color:#0f172a; font-weight:700;">${count}</span> Merch • Avg: <span style="color:#10b981; font-weight:700;">$${avg.toLocaleString(undefined, {maximumFractionDigits:0})}</span>`;
+                        statDiv.innerHTML = `<span style="color:#0f172a; font-weight:700;">${s.merchant_count}</span> Merch • Avg: <span style="color:#10b981; font-weight:700;">$${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>`;
                     }
-                });
-            }
-        } catch (err) { console.error(err); }
-    };
+                }
+            });
+
+            document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('main-merch-count').innerText = `${totalCount} Merchants Total`;
+        }
+    } catch (err) { console.error(err); }
+};
 
     function exportToCSV(name, data) {
         const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
