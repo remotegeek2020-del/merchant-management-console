@@ -10,6 +10,18 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
+// --- Moving Subpartners to Anotehr ID ---
+        if (action === 'move_identifier') {
+    const { identifier_id, new_parent_id } = body; // new_parent_id can be null to make it a root
+    
+    const { data, error } = await supabase
+        .from('agent_identifiers')
+        .update({ parent_config_id: new_parent_id })
+        .eq('id', identifier_id);
+
+    if (error) return res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({ success: true, data });
+}
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
     async function fetchAll(table, select) {
