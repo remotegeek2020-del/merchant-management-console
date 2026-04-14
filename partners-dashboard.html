@@ -72,6 +72,7 @@
                 db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
                 isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
                 owner_name: myPerson ? myPerson.full_name : 'Unknown',
+                parent_config_id: id.parent_config_id,
                 upline_name: null, upline_string: null
             };
         });
@@ -163,6 +164,69 @@
             </div>`).join('');
     }
 
+    // --- MOVE & EDIT LOGIC RESTORED ---
+    window.editIdentifier = async function(db_id, name, rev, isPrime) {
+        const currentIdData = identifiersRaw.find(i => i.id === db_id);
+        const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
+            .map(i => {
+                const ownerName = personsRaw.find(p => p.id === agentsRaw.find(a => a.id === i.agent_id)?.parent_agent_id)?.full_name || 'Unknown';
+                return { id: i.id, string: i.id_string, owner: ownerName, label: `${i.id_string} (${ownerName})` };
+            });
+
+        let selectedParentId = currentIdData?.parent_config_id || null;
+
+        const { value: formValues } = await Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Settings: ${name}</div>`,
+            html: `<div style="text-align:left; padding: 10px;">
+                <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
+                <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 8px 0 20px 0; border-radius:8px;">
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-weight:700; margin-bottom:25px;"><input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge</label>
+                <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT PARTNER</label>
+                <div style="position:relative; margin-top:8px;">
+                    <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..." value="${validParents.find(p => p.id === selectedParentId)?.label || ''}" style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
+                    <div id="search-results-box" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                </div>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonColor: '#002d5a',
+            didOpen: () => {
+                const searchInput = document.getElementById('swal-parent-search');
+                const resultsBox = document.getElementById('search-results-box');
+                searchInput.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase();
+                    if (!val) { resultsBox.style.display = 'none'; selectedParentId = null; return; }
+                    const matches = validParents.filter(p => p.label.toLowerCase().includes(val)).slice(0, 50);
+                    if (matches.length > 0) {
+                        resultsBox.innerHTML = matches.map(m => `<div class="search-item" data-id="${m.id}" data-label="${m.label}" style="padding:10px 15px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;"><b>${m.string}</b> <span style="color:#94a3b8; margin-left:5px;">${m.owner}</span></div>`).join('');
+                        resultsBox.style.display = 'block';
+                    } else { resultsBox.style.display = 'none'; }
+                });
+                resultsBox.addEventListener('click', (e) => {
+                    const item = e.target.closest('.search-item');
+                    if (item) { selectedParentId = item.dataset.id; searchInput.value = item.dataset.label; resultsBox.style.display = 'none'; }
+                });
+            },
+            preConfirm: () => ({ rev_share: document.getElementById('swal-rev').value, prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId })
+        });
+
+        if (formValues) {
+            Swal.fire({ title: 'Saving Changes...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+            try {
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'update_identifier_all', id: db_id, rev_share: formValues.rev_share, prime49: formValues.prime49, new_parent_id: formValues.new_parent_id })
+                });
+                const result = await res.json();
+                if (result.success) {
+                    await loadPartners();
+                    Swal.fire({ icon: 'success', title: 'Success!', text: 'Updated.', confirmButtonColor: '#002d5a' });
+                } else { throw new Error(result.message); }
+            } catch (err) { Swal.fire('Error', err.message, 'error'); }
+        }
+    }
+
+    // --- MERCHANT & MODAL LOGIC ---
     function getAllBranchIds(idObj, idList = []) {
         idList.push(idObj.string);
         if (idObj.sub_ids && idObj.sub_ids.length > 0) {
@@ -180,7 +244,6 @@
             co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
         });
 
-        // Restore HighLevel Link
         const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
 
         Swal.fire({
@@ -210,13 +273,12 @@
                             <button id="btn-export" disabled style="margin-top:10px; background:#002d5a; color:white; border:none; padding:8px 16px; border-radius:6px; cursor:pointer; font-size:11px; font-weight:700;">EXPORT CSV</button>
                         </div>
                     </div>
-
                     <div style="margin-top:20px;">
-                        <h3 style="font-size:14px; color:#64748b; font-weight:700; margin-bottom:10px; text-transform:uppercase; letter-spacing:0.5px;">Portfolio Breakdown</h3>
+                        <h3 style="font-size:14px; color:#64748b; font-weight:700; margin-bottom:10px; text-transform:uppercase;">Portfolio Breakdown</h3>
                         <div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
                             ${p.companies.map(co => `
                                 <div style="margin-bottom:20px;">
-                                    <b style="color:#94a3b8; font-size:10px; text-transform:uppercase; letter-spacing:1px;">${co.name}</b>
+                                    <b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b>
                                     <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                                 </div>
                             `).join('')}
@@ -225,7 +287,6 @@
                 </div>`
         });
 
-        // Fetch Merchant Data and Compute Breakdown
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -235,32 +296,23 @@
             const result = await res.json();
             if (result.success) {
                 const merchants = result.data;
-                
-                // 1. Calculate Main Summary
-                const totalCount = merchants.length;
                 const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-                
                 document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-                document.getElementById('main-merch-count').innerText = `${totalCount} Merchants in Branch`;
+                document.getElementById('main-merch-count').innerText = `${merchants.length} Merchants in Branch`;
                 
                 const exportBtn = document.getElementById('btn-export');
                 exportBtn.disabled = false;
                 exportBtn.onclick = () => exportToCSV(p.name, merchants);
 
-                // 2. Compute Breakdown for EACH ID Badge
                 branchIdStrings.forEach(idStr => {
                     const idMerchants = merchants.filter(m => m.agent_id === idStr);
                     const count = idMerchants.length;
                     const vol = idMerchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
                     const avg = count > 0 ? (vol / count) : 0;
-
                     const statDiv = document.getElementById(`stats-${idStr}`);
                     if (statDiv && count > 0) {
                         statDiv.style.display = 'block';
-                        statDiv.innerHTML = `
-                            <span style="color:#0f172a; font-weight:700;">${count}</span> Merchants • 
-                            Avg Vol: <span style="color:#10b981; font-weight:700;">$${avg.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-                        `;
+                        statDiv.innerHTML = `<span style="color:#0f172a; font-weight:700;">${count}</span> Merch • Avg: <span style="color:#10b981; font-weight:700;">$${avg.toLocaleString(undefined, {maximumFractionDigits:0})}</span>`;
                     }
                 });
             }
