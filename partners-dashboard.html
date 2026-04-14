@@ -54,9 +54,8 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
+   <script>
     let allPartners = [];
-    // Global raw storage for the Move Tool's lookup logic
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [];
@@ -134,7 +133,7 @@
                      </span>`;
         }
 
-        let html = `
+        return `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" 
                      style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;"
@@ -145,14 +144,11 @@
                     </div>
                     <span style="font-size:9px; opacity:0.7;">${id.rev}</span>
                 </div>
-        `;
-        if (id.sub_ids.length > 0) {
-            html += `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">
-                ${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}
+                ${id.sub_ids.length > 0 ? `
+                    <div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">
+                        ${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}
+                    </div>` : ''}
             </div>`;
-        }
-        html += `</div>`;
-        return html;
     }
 
     async function loadPartners() {
@@ -166,11 +162,9 @@
             });
             const result = await res.json();
             if (result.success) {
-                // Store raw data globally for use in the Move Tool's selection list
                 identifiersRaw = result.data.identifiers;
                 agentsRaw = result.data.agents;
                 personsRaw = result.data.persons;
-
                 allPartners = processPartnerData(result.data);
                 renderGrid(allPartners);
             }
@@ -195,8 +189,18 @@
     }
 
     window.editIdentifier = async function(db_id, name, rev, isPrime) {
-        // Find the current ID in the raw data to identify its current parent
         const currentIdData = identifiersRaw.find(i => i.id === db_id);
+        
+        // Filter out Unknowns and the current ID itself
+        const validParents = identifiersRaw.filter(i => {
+            if (i.id === db_id) return false;
+            const agent = agentsRaw.find(a => a.id === i.agent_id);
+            return agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null);
+        }).map(i => {
+            const ownerAgent = agentsRaw.find(a => a.id === i.agent_id);
+            const ownerName = personsRaw.find(p => p.id === ownerAgent?.parent_agent_id)?.full_name || 'Unknown';
+            return { id: i.id, label: `${i.id_string} (${ownerName})`, rawId: i.id_string };
+        });
 
         const { value: formValues } = await Swal.fire({
             title: `Settings: ${name}`,
@@ -209,47 +213,50 @@
                         <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge
                     </label>
 
-                    <label style="font-size:11px; font-weight:700; color:#64748b;">HIERARCHY: MOVE TO NEW PARENT ID</label>
-                    <select id="swal-parent" class="swal2-input" style="width:100%; margin-top:5px; font-size:13px;">
-                        <option value="">-- Set as Root (No Parent) --</option>
-                        ${identifiersRaw
-                            .filter(i => i.id !== db_id) // Filter out self to prevent circular reference
-                            .map(i => {
-                                const ownerAgent = agentsRaw.find(a => a.id === i.agent_id);
-                                const ownerName = personsRaw.find(p => p.id === ownerAgent?.parent_agent_id)?.full_name || 'Unknown';
-                                return `<option value="${i.id}" ${currentIdData?.parent_config_id === i.id ? 'selected' : ''}>
-                                    ${i.id_string} (${ownerName})
-                                </option>`;
-                            }).join('')}
-                    </select>
+                    <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT (Search ID or Name)</label>
+                    <input list="parent-list" id="swal-parent-search" class="swal2-input" 
+                           placeholder="Type to search..." 
+                           value="${validParents.find(p => p.id === currentIdData?.parent_config_id)?.label || ''}"
+                           style="width:100%; margin-top:5px;">
+                    <datalist id="parent-list">
+                        ${validParents.map(p => `<option value="${p.label}" data-id="${p.id}"></option>`).join('')}
+                    </datalist>
                 </div>`,
             showCancelButton: true,
             confirmButtonText: 'SAVE CHANGES',
-            preConfirm: () => ({ 
-                rev_share: document.getElementById('swal-rev').value, 
-                prime49: document.getElementById('swal-prime').checked,
-                new_parent_id: document.getElementById('swal-parent').value || null
-            })
+            preConfirm: () => {
+                const searchVal = document.getElementById('swal-parent-search').value;
+                const matched = validParents.find(p => p.label === searchVal);
+                return { 
+                    rev_share: document.getElementById('swal-rev').value, 
+                    prime49: document.getElementById('swal-prime').checked,
+                    new_parent_id: searchVal === "" ? null : (matched ? matched.id : 'no_change')
+                };
+            }
         });
 
         if (formValues) {
-            // Update Identifier Settings
-            await fetch('/api/partners', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } }) 
-            });
+            try {
+                // Update standard settings
+                await fetch('/api/partners', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } }) 
+                });
 
-            // Update Identifier Parent (Move Tool)
-            const res = await fetch('/api/partners', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id }) 
-            });
+                // Update hierarchy if changed
+                if (formValues.new_parent_id !== 'no_change') {
+                    await fetch('/api/partners', { 
+                        method: 'POST', 
+                        headers: { 'Content-Type': 'application/json' }, 
+                        body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id }) 
+                    });
+                }
 
-            if ((await res.json()).success) { 
                 loadPartners(); 
-                Swal.fire('Changes Saved!', 'Identifier and hierarchy updated successfully.', 'success'); 
+                Swal.fire('Saved!', 'Settings and hierarchy updated.', 'success'); 
+            } catch (err) {
+                Swal.fire('Error', 'Failed to save changes.', 'error');
             }
         }
     }
@@ -257,7 +264,6 @@
     window.openPartnerDetails = function(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
         if(!p) return;
-        
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '800px', showConfirmButton: false, showCloseButton: true,
