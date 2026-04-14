@@ -10,25 +10,36 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
-// --- Moving Subpartners to Anotehr ID ---
-    if (action === 'move_identifier') {
-    const { identifier_id, new_parent_id } = body;
-    
-    // Ensure we treat an empty string as null for top-level partners
-    const parentId = (new_parent_id === "" || new_parent_id === "null" || !new_parent_id) ? null : new_parent_id;
+// --- ACTION: MOVE IDENTIFIER ---
+if (action === 'move_identifier') {
+    try {
+        const { identifier_id, new_parent_id } = body;
+        
+        // Ensure we handle empty strings or "null" strings as actual database NULL
+        const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") 
+            ? null 
+            : new_parent_id;
 
-    const { data, error } = await supabase
-        .from('agent_identifiers')
-        .update({ parent_config_id: parentId })
-        .eq('id', identifier_id)
-        .select(); // Added select() to ensure data is returned
+        console.log(`Moving ID ${identifier_id} to parent ${parentId}`);
 
-    if (error) {
-        console.error("Supabase Error:", error);
-        return res.status(500).json({ success: false, message: error.message });
+        const { data, error } = await supabase
+            .from('agent_identifiers')
+            .update({ parent_config_id: parentId })
+            .eq('id', identifier_id)
+            .select();
+
+        if (error) {
+            console.error("Supabase Update Error:", error);
+            return res.status(500).json({ success: false, message: error.message });
+        }
+
+        // Success! We MUST return a 200 status to close the fetch request
+        return res.status(200).json({ success: true, data });
+
+    } catch (err) {
+        console.error("API Route Crash:", err);
+        return res.status(500).json({ success: false, message: "Internal Server Error" });
     }
-
-    return res.status(200).json({ success: true, data });
 }
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
 if (action === 'get_partners_list') {
