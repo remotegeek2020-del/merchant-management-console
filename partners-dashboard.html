@@ -194,44 +194,45 @@
     });
 
     if (formValues) {
-        Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    
+    try {
+        const fetchWithTimeout = (url, options, timeout = 15000) => {
+            return Promise.race([
+                fetch(url, options),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('Gateway Timeout')), timeout))
+            ]);
+        };
+
+        // 1. Update Rev/Prime
+        const updateRes = await fetchWithTimeout('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } })
+        });
+        console.log("Settings Update Status:", updateRes.status);
+
+        // 2. Update Hierarchy (Move)
+        const moveRes = await fetchWithTimeout('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id })
+        });
         
-        try {
-            // Helper to add a timeout to fetches so they don't stay "pending" forever
-            const fetchWithTimeout = (url, options, timeout = 10000) => {
-                return Promise.race([
-                    fetch(url, options),
-                    new Promise((_, reject) => setTimeout(() => reject(new Error('Request timed out')), timeout))
-                ]);
-            };
+        const moveResult = await moveRes.json();
+        console.log("Move Result:", moveResult);
 
-            // Update Identifier Info
-            const resUpdate = await fetchWithTimeout('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } })
-            });
-
-            // Update Hierarchy (The "Move")
-            const resMove = await fetchWithTimeout('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id })
-            });
-
-            const moveData = await resMove.json();
-            
-            if (moveData.success) {
-                await loadPartners();
-                Swal.fire({ icon: 'success', title: 'Saved!', confirmButtonColor: '#002d5a' });
-            } else {
-                throw new Error(moveData.message || 'Server returned failure');
-            }
-        } catch (err) {
-            console.error("Save Error:", err);
-            Swal.fire('Error', 'The server didn\'t respond. Please check your console or API logs.', 'error');
+        if (moveResult.success) {
+            await loadPartners();
+            Swal.fire({ icon: 'success', title: 'Saved!', confirmButtonColor: '#002d5a' });
+        } else {
+            throw new Error(moveResult.message || 'Database update failed');
         }
+    } catch (err) {
+        console.error("CRITICAL ERROR:", err);
+        Swal.fire('Error', 'Message: ' + err.message, 'error');
     }
+}
 }
 
     window.openPartnerDetails = (id) => {
