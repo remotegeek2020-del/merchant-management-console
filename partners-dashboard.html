@@ -277,6 +277,103 @@
         });
     };
 
+     // NEW: Helper to get all sub-IDs in a branch recursively
+    function getAllBranchIds(idObj, idList = []) {
+        idList.push(idObj.string); // We need the id_string for the merchants table
+        if (idObj.sub_ids && idObj.sub_ids.length > 0) {
+            idObj.sub_ids.forEach(sub => getAllBranchIds(sub, idList));
+        }
+        return idList;
+    }
+
+    // NEW: Function to Export CSV
+    function exportToCSV(name, data) {
+        const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
+        const rows = data.map(m => [m.merchant_id, m.dba_name, m.account_status, m.volume_30_day, m.agent_id]);
+        let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${name}_merchants.csv`);
+        document.body.appendChild(link);
+        link.click();
+    }
+
+    window.openPartnerDetails = async function(personId) {
+        const p = allPartners.find(ptr => ptr.id === personId);
+        if(!p) return;
+
+        // Gather ALL ids in this person's branch (Self + Sub-partners)
+        let branchIdStrings = [];
+        p.companies.forEach(co => {
+            co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
+        });
+
+        // Show the modal first with a loading state for merchants
+        Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
+            width: '900px', showConfirmButton: false, showCloseButton: true,
+            html: `
+                <div id="modal-content-container" style="text-align:left;">
+                    <div style="display: flex; gap: 20px; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+                        <div><small>EMAIL</small><br><b>${p.email}</b></div>
+                        <div><small>PHONE</small><br><b>${p.phone}</b></div>
+                    </div>
+
+                    <div id="merchant-stats-bar" style="margin-top:20px; display:flex; gap:15px;">
+                        <div style="flex:1; background:#f1f5f9; padding:15px; border-radius:10px;">
+                            <small style="color:#64748b;">TOTAL MERCHANTS</small>
+                            <div id="stat-count" style="font-size:20px; font-weight:800;">Loading...</div>
+                        </div>
+                        <div style="flex:1; background:#f1f5f9; padding:15px; border-radius:10px;">
+                            <small style="color:#64748b;">AVG 30-DAY VOL</small>
+                            <div id="stat-avg" style="font-size:20px; font-weight:800; color:#10b981;">Loading...</div>
+                        </div>
+                        <button id="btn-export" disabled style="background:#002d5a; color:white; border:none; padding:10px 20px; border-radius:8px; cursor:pointer;">EXPORT CSV</button>
+                    </div>
+
+                    <div style="margin-top:25px;">
+                        <h3 style="font-size:14px; color:#64748b; font-weight:700;">PORTFOLIO & BRANCH IDS</h3>
+                        <div style="background:#f8fafc; padding:15px; border-radius:12px; margin-top:10px; max-height:300px; overflow-y:auto;">
+                            ${p.companies.map(co => `
+                                <div style="margin-bottom:15px;">
+                                    <b style="color:#64748b; font-size:11px; text-transform:uppercase;">${co.name}</b>
+                                    <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>`
+        });
+
+        // Now Fetch Merchant Data
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
+            });
+            const result = await res.json();
+            if (result.success) {
+                const merchants = result.data;
+                const totalCount = merchants.length;
+                
+                // Calculate Average Volume
+                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+                const avgVol = totalCount > 0 ? (totalVol / totalCount) : 0;
+
+                // Update UI
+                document.getElementById('stat-count').innerText = totalCount;
+                document.getElementById('stat-avg').innerText = `$${avgVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                
+                const exportBtn = document.getElementById('btn-export');
+                exportBtn.disabled = false;
+                exportBtn.onclick = () => exportToCSV(p.name, merchants);
+            }
+        } catch (err) { console.error(err); }
+    };
+
+
     window.addEventListener('load', loadPartners);
 </script>
 </body>
