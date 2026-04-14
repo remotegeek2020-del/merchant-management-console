@@ -284,7 +284,7 @@
         });
         const result = await res.json();
         
-     if (result.success) {
+    if (result.success) {
     const stats = result.data;
     let grandTotalVol = 0;
     let grandTotalCount = 0;
@@ -294,34 +294,34 @@
         const statDiv = document.getElementById(`stats-${idStr}`);
         
         if (s) {
-            // 1. Accumulate Branch-wide Totals
             grandTotalVol += parseFloat(s.total_volume_sum || 0);
             grandTotalCount += parseInt(s.merchant_count || 0);
             
-            // 2. Update the individual badge UI
             if (statDiv) {
                 statDiv.style.display = 'block';
+                // Showing Total Sum, then Count and Average in smaller text
                 statDiv.innerHTML = `
-                    <span style="color:#0f172a; font-weight:700;">${s.merchant_count}</span> Merch • 
-                    Avg: <span style="color:#10b981; font-weight:700;">$${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                    <div style="color:#059669; font-weight:800; font-size:10px;">
+                        Total: $${parseFloat(s.total_volume_sum).toLocaleString(undefined, {maximumFractionDigits:0})}
+                    </div>
+                    <div style="color:#64748b; font-size:9px;">
+                        ${s.merchant_count} Approved • Avg: $${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}
+                    </div>
                 `;
+            }
+        } else {
+            // If an ID has no approved merchants, we can show "0 Approved"
+            const statDiv = document.getElementById(`stats-${idStr}`);
+            if (statDiv) {
+                statDiv.style.display = 'block';
+                statDiv.innerHTML = `<span style="color:#94a3b8; font-style:italic;">0 Approved Merchants</span>`;
             }
         }
     });
 
-    // 3. Final Update to the big header numbers (The $56M+ number)
-    const totalVolElement = document.getElementById('main-total-vol');
-    const totalCountElement = document.getElementById('main-merch-count');
-    
-    if (totalVolElement) {
-        totalVolElement.innerText = `$${grandTotalVol.toLocaleString(undefined, {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2
-        })}`;
-    }
-    if (totalCountElement) {
-        totalCountElement.innerText = `${grandTotalCount.toLocaleString()} Merchants Total`;
-    }
+    // Final Header Update
+    document.getElementById('main-total-vol').innerText = `$${grandTotalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
 }
     } catch (err) { console.error(err); }
 };
