@@ -284,30 +284,44 @@
         });
         const result = await res.json();
         
-      if (result.success) {
+     if (result.success) {
     const stats = result.data;
-    
+    let grandTotalVol = 0;
+    let grandTotalCount = 0;
+
     branchIdStrings.forEach(idStr => {
-        // Force both to strings and trim them for a perfect match
         const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
-        
         const statDiv = document.getElementById(`stats-${idStr}`);
-        if (statDiv && s) {
-            statDiv.style.display = 'block';
-            statDiv.innerHTML = `
-                <span style="color:#0f172a; font-weight:700;">${s.merchant_count}</span> Merch • 
-                Avg: <span style="color:#10b981; font-weight:700;">$${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-            `;
+        
+        if (s) {
+            // 1. Accumulate Branch-wide Totals
+            grandTotalVol += parseFloat(s.total_volume_sum || 0);
+            grandTotalCount += parseInt(s.merchant_count || 0);
             
-            // Add to grand totals
-            totalVol += parseFloat(s.total_volume || 0);
-            totalCount += parseInt(s.merchant_count || 0);
+            // 2. Update the individual badge UI
+            if (statDiv) {
+                statDiv.style.display = 'block';
+                statDiv.innerHTML = `
+                    <span style="color:#0f172a; font-weight:700;">${s.merchant_count}</span> Merch • 
+                    Avg: <span style="color:#10b981; font-weight:700;">$${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                `;
+            }
         }
     });
+
+    // 3. Final Update to the big header numbers (The $56M+ number)
+    const totalVolElement = document.getElementById('main-total-vol');
+    const totalCountElement = document.getElementById('main-merch-count');
     
-    // Final Update to the big header numbers
-    document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-    document.getElementById('main-merch-count').innerText = `${totalCount} Merchants Total`;
+    if (totalVolElement) {
+        totalVolElement.innerText = `$${grandTotalVol.toLocaleString(undefined, {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        })}`;
+    }
+    if (totalCountElement) {
+        totalCountElement.innerText = `${grandTotalCount.toLocaleString()} Merchants Total`;
+    }
 }
     } catch (err) { console.error(err); }
 };
