@@ -12,33 +12,29 @@ export default async function handler(req, res) {
     try {
 // --- ACTION: MOVE IDENTIFIER ---
 if (action === 'move_identifier') {
+    const { identifier_id, new_parent_id } = body;
+
+    // 1. Prevent Circular Logic: You cannot move an ID to be its own parent
+    if (identifier_id === new_parent_id) {
+        return res.status(400).json({ success: false, message: "An ID cannot be its own parent." });
+    }
+
     try {
-        const { identifier_id, new_parent_id } = body;
-        
-        // Ensure we handle empty strings or "null" strings as actual database NULL
-        const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") 
-            ? null 
-            : new_parent_id;
+        const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") ? null : new_parent_id;
 
-        console.log(`Moving ID ${identifier_id} to parent ${parentId}`);
-
+        // 2. Perform the update with a strict timeout
         const { data, error } = await supabase
             .from('agent_identifiers')
             .update({ parent_config_id: parentId })
             .eq('id', identifier_id)
             .select();
 
-        if (error) {
-            console.error("Supabase Update Error:", error);
-            return res.status(500).json({ success: false, message: error.message });
-        }
+        if (error) throw error;
 
-        // Success! We MUST return a 200 status to close the fetch request
         return res.status(200).json({ success: true, data });
-
     } catch (err) {
-        console.error("API Route Crash:", err);
-        return res.status(500).json({ success: false, message: "Internal Server Error" });
+        console.error("Move Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
     }
 }
         // --- ACTION: GET PARTNERS LIST (Owner-Specific Logic) ---
