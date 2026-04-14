@@ -10,28 +10,31 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
-// --- ACTION: MOVE IDENTIFIER ---
+// --- ACTION: MOVE IDENTIFIER (Optimized for Recursive Schema) ---
 if (action === 'move_identifier') {
     const { identifier_id, new_parent_id } = body;
 
-    // 1. Prevent Circular Logic: You cannot move an ID to be its own parent
+    // Safety: prevent self-parenting
     if (identifier_id === new_parent_id) {
-        return res.status(400).json({ success: false, message: "An ID cannot be its own parent." });
+        return res.status(400).json({ success: false, message: "ID cannot be its own parent." });
     }
 
     try {
-        const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") ? null : new_parent_id;
+        const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") 
+            ? null 
+            : new_parent_id;
 
-        // 2. Perform the update with a strict timeout
-        const { data, error } = await supabase
+        // Optimized Update: Remove .select() to prevent recursive read-locks during the write
+        const { error } = await supabase
             .from('agent_identifiers')
             .update({ parent_config_id: parentId })
-            .eq('id', identifier_id)
-            .select();
+            .eq('id', identifier_id);
 
         if (error) throw error;
 
-        return res.status(200).json({ success: true, data });
+        // Return immediately without waiting for a complex data return
+        return res.status(200).json({ success: true });
+
     } catch (err) {
         console.error("Move Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
