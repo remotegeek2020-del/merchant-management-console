@@ -10,6 +10,33 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
+
+        if (action === 'update_identifier_all') {
+    const { id, rev_share, prime49, new_parent_id } = body;
+    
+    try {
+        const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") 
+            ? null 
+            : new_parent_id;
+
+        // Perform all updates in ONE call to prevent locking/timeouts
+        const { error } = await supabase
+            .from('agent_identifiers')
+            .update({ 
+                rev_share: rev_share,
+                prime49: prime49,
+                parent_config_id: parentId 
+            })
+            .eq('id', id);
+
+        if (error) throw error;
+
+        return res.status(200).json({ success: true });
+    } catch (err) {
+        console.error("Update Error:", err.message);
+        return res.status(500).json({ success: false, message: err.message });
+    }
+}
 // --- ACTION: MOVE IDENTIFIER (Optimized for Recursive Schema) ---
 if (action === 'move_identifier') {
     const { identifier_id, new_parent_id } = body;
