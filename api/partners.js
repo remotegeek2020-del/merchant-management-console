@@ -83,6 +83,18 @@ if (action === 'get_merchant_data') {
             });
         }
 
+        if (action === 'get_merchant_data_raw') {
+    const { identifier_id } = body;
+    const { data, error } = await supabase
+        .from('merchants')
+        .select('merchant_id, dba_name, account_status, volume_30_day')
+        .eq('agent_id', identifier_id)
+        .eq('account_status', 'Approved'); // Still filtering for Approved
+
+    if (error) return res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({ success: true, data });
+}
+
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
