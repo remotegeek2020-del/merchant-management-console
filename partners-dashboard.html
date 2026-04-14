@@ -284,29 +284,31 @@
         });
         const result = await res.json();
         
-        if (result.success) {
-            const stats = result.data;
-            let totalVol = 0;
-            let totalCount = 0;
-
-            // Apply Stats to the UI
-            branchIdStrings.forEach(idStr => {
-                const s = stats.find(row => row.agent_id === idStr);
-                if (s) {
-                    totalVol += parseFloat(s.total_volume || 0);
-                    totalCount += parseInt(s.merchant_count || 0);
-                    
-                    const statDiv = document.getElementById(`stats-${idStr}`);
-                    if (statDiv) {
-                        statDiv.style.display = 'block';
-                        statDiv.innerHTML = `<span style="color:#0f172a; font-weight:700;">${s.merchant_count}</span> Merch • Avg: <span style="color:#10b981; font-weight:700;">$${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>`;
-                    }
-                }
-            });
-
-            document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-            document.getElementById('main-merch-count').innerText = `${totalCount} Merchants Total`;
+      if (result.success) {
+    const stats = result.data;
+    
+    branchIdStrings.forEach(idStr => {
+        // Force both to strings and trim them for a perfect match
+        const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
+        
+        const statDiv = document.getElementById(`stats-${idStr}`);
+        if (statDiv && s) {
+            statDiv.style.display = 'block';
+            statDiv.innerHTML = `
+                <span style="color:#0f172a; font-weight:700;">${s.merchant_count}</span> Merch • 
+                Avg: <span style="color:#10b981; font-weight:700;">$${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+            `;
+            
+            // Add to grand totals
+            totalVol += parseFloat(s.total_volume || 0);
+            totalCount += parseInt(s.merchant_count || 0);
         }
+    });
+    
+    // Final Update to the big header numbers
+    document.getElementById('main-total-vol').innerText = `$${totalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+    document.getElementById('main-merch-count').innerText = `${totalCount} Merchants Total`;
+}
     } catch (err) { console.error(err); }
 };
 
