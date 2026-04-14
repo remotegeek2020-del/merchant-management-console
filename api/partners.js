@@ -83,18 +83,36 @@ if (action === 'get_merchant_data') {
             });
         }
 
-        if (action === 'get_merchant_data_raw') {
+     if (action === 'get_merchant_data_raw') {
     const { identifier_id } = body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('merchant_id, dba_name, account_status, volume_30_day')
-        .eq('agent_id', identifier_id)
-        .eq('account_status', 'Approved'); // Still filtering for Approved
+    try {
+        let allMerchants = [];
+        let from = 0;
+        let finished = false;
 
-    if (error) return res.status(500).json({ success: false, message: error.message });
-    return res.status(200).json({ success: true, data });
+        while (!finished) {
+            const { data, error } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, account_status, volume_30_day')
+                .eq('agent_id', identifier_id)
+                .eq('account_status', 'Approved')
+                .range(from, from + 999);
+
+            if (error) throw error;
+            
+            if (!data || data.length === 0) {
+                finished = true;
+            } else {
+                allMerchants = allMerchants.concat(data);
+                from += 1000;
+                if (data.length < 1000) finished = true;
+            }
+        }
+        return res.status(200).json({ success: true, data: allMerchants });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
 }
-
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
