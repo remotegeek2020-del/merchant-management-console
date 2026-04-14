@@ -194,38 +194,33 @@
     });
 
     if (formValues) {
-        Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        Swal.fire({ title: 'Saving Changes...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
         
         try {
-            // Helper with timeout
-            const req = async (action, payload) => {
-                const controller = new AbortController();
-                const id = setTimeout(() => controller.abort(), 12000); // 12s timeout
-                const res = await fetch('/api/partners', {
+            // STEP 1: Update the rev share and prime status
+            const updateRes = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } })
+            });
+            
+            // STEP 2: Only proceed to move the identifier IF the parent has actually changed
+            if (formValues.new_parent_id !== currentIdData.parent_config_id) {
+                const moveRes = await fetch('/api/partners', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    signal: controller.signal,
-                    body: JSON.stringify({ action, ...payload })
+                    body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id })
                 });
-                clearTimeout(id);
-                return res.json();
-            };
-
-            // 1. Update Info
-            await req('update_identifier', { id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } });
-
-            // 2. Move Hierarchy
-            const moveRes = await req('move_identifier', { identifier_id: db_id, new_parent_id: formValues.new_parent_id });
-
-            if (moveRes.success) {
-                await loadPartners();
-                Swal.fire({ icon: 'success', title: 'Saved!', confirmButtonColor: '#002d5a' });
-            } else {
-                throw new Error(moveRes.message || "Failed to move partner.");
+                const moveResult = await moveRes.json();
+                if (!moveResult.success) throw new Error(moveResult.message);
             }
+
+            await loadPartners();
+            Swal.fire({ icon: 'success', title: 'Success!', text: 'Partner updated.', confirmButtonColor: '#002d5a' });
+
         } catch (err) {
             console.error("Save Error:", err);
-            Swal.fire('Error', err.name === 'AbortError' ? 'Server timed out. Check for circular loops!' : err.message, 'error');
+            Swal.fire('Update Failed', err.message, 'error');
         }
     }
 }
