@@ -51,6 +51,11 @@
         </div>
     </div>
     <div id="partnerGrid" class="partner-grid"></div>
+    <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
+    <button id="btnPrev" onclick="changePage(-1)" style="padding:8px 16px; border-radius:8px; border:1px solid #e2e8f0; background:white; cursor:pointer; font-weight:600; color:#002d5a;">Previous</button>
+    <span id="pageIndicator" style="font-weight:700; color:#64748b; font-size:14px;">Page 1 of 1</span>
+    <button id="btnNext" onclick="changePage(1)" style="padding:8px 16px; border-radius:8px; border:1px solid #e2e8f0; background:white; cursor:pointer; font-weight:600; color:#002d5a;">Next</button>
+</div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -59,6 +64,10 @@
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [];
+
+    // --- PAGINATION STATE ---
+    let currentPage = 1;
+    const cardsPerPage = 12; 
 
     function processPartnerData(payload) {
         if (!payload || !payload.persons) return [];
@@ -135,7 +144,6 @@
             </div>`;
     }
 
-    // --- NEW: Global Stat Injector ---
     function updateAllBadgeStats(idStr, s) {
         const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
         statDivs.forEach(div => {
@@ -208,19 +216,33 @@
                 agentsRaw = result.data.agents || [];
                 personsRaw = result.data.persons || [];
                 allPartners = processPartnerData(result.data);
-                renderGrid(allPartners);
                 
-                // Trigger an initial stats load for the background cards if desired
-                // Or wait for modal opens for performance.
+                // Initialize Grid at Page 1
+                currentPage = 1;
+                renderGrid(allPartners);
             }
         } catch (err) { console.error("Loader Error:", err); }
         if (loader) loader.style.display = 'none';
     }
 
+    // --- PAGINATED GRID RENDERER ---
     function renderGrid(data) {
         const grid = document.getElementById('partnerGrid');
+        const prevBtn = document.getElementById('btnPrev');
+        const nextBtn = document.getElementById('btnNext');
+        const indicator = document.getElementById('pageIndicator');
+        
         if (!grid) return;
-        grid.innerHTML = data.map(p => `
+
+        // Math for slicing
+        const totalPages = Math.ceil(data.length / cardsPerPage);
+        if (currentPage > totalPages) currentPage = totalPages || 1;
+        const start = (currentPage - 1) * cardsPerPage;
+        const end = start + cardsPerPage;
+        const paginatedData = data.slice(start, end);
+
+        // Render Cards
+        grid.innerHTML = paginatedData.map(p => `
             <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
                 <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px;">${p.name}</h2>
                 ${p.companies.map(co => `<div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
@@ -228,6 +250,28 @@
                     <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                 </div>`).join('')}
             </div>`).join('');
+
+        // Update Controls UI
+        if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
+        if (prevBtn) {
+            prevBtn.disabled = (currentPage === 1);
+            prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1";
+        }
+        if (nextBtn) {
+            nextBtn.disabled = (currentPage === totalPages || totalPages === 0);
+            nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1";
+        }
+    }
+
+    // Navigation function
+    window.changePage = function(direction) {
+        const totalPages = Math.ceil(allPartners.length / cardsPerPage);
+        const newPage = currentPage + direction;
+        if (newPage >= 1 && newPage <= totalPages) {
+            currentPage = newPage;
+            renderGrid(allPartners);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
     }
 
     window.editIdentifier = async function(db_id, name, rev, isPrime) {
@@ -359,7 +403,6 @@
 
                 branchIdStrings.forEach(idStr => {
                     const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
-                    // Update stats globally (card + modal)
                     updateAllBadgeStats(idStr, s);
                     
                     if (s) {
