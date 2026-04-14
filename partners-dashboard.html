@@ -113,8 +113,11 @@
         }).filter(Boolean);
     }
 
-   function renderBadge(id, isRootOfCard = false) {
+function renderBadge(id, isRootOfCard = false) {
     let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
+    
+    // We use a specific ID pattern so we can update stats in both places
+    const statsId = `stats-${id.string}`;
     
     return `
         <div class="id-badge-container" style="margin-top:4px; width: 100%;">
@@ -122,7 +125,7 @@
                 <div style="text-align:left;">
                     ${label}
                     <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
-                    <div id="modal-stats-${id.string}" style="margin-top:2px; display:none;"></div>
+                    <div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div>
                 </div>
                 <div style="display:flex; align-items:center; gap:10px;">
                     <span style="font-size:10px; opacity:0.7;">${id.rev}</span>
