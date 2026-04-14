@@ -149,7 +149,7 @@
             </div>`).join('');
     }
 
-    window.editIdentifier = async function(db_id, name, rev, isPrime) {
+  window.editIdentifier = async function(db_id, name, rev, isPrime) {
     const currentIdData = identifiersRaw.find(i => i.id === db_id);
     const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
         .map(i => {
@@ -194,45 +194,40 @@
     });
 
     if (formValues) {
-    Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-    
-    try {
-        const fetchWithTimeout = (url, options, timeout = 15000) => {
-            return Promise.race([
-                fetch(url, options),
-                new Promise((_, reject) => setTimeout(() => reject(new Error('Gateway Timeout')), timeout))
-            ]);
-        };
-
-        // 1. Update Rev/Prime
-        const updateRes = await fetchWithTimeout('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } })
-        });
-        console.log("Settings Update Status:", updateRes.status);
-
-        // 2. Update Hierarchy (Move)
-        const moveRes = await fetchWithTimeout('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id })
-        });
+        Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
         
-        const moveResult = await moveRes.json();
-        console.log("Move Result:", moveResult);
+        try {
+            // Helper with timeout
+            const req = async (action, payload) => {
+                const controller = new AbortController();
+                const id = setTimeout(() => controller.abort(), 12000); // 12s timeout
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    signal: controller.signal,
+                    body: JSON.stringify({ action, ...payload })
+                });
+                clearTimeout(id);
+                return res.json();
+            };
 
-        if (moveResult.success) {
-            await loadPartners();
-            Swal.fire({ icon: 'success', title: 'Saved!', confirmButtonColor: '#002d5a' });
-        } else {
-            throw new Error(moveResult.message || 'Database update failed');
+            // 1. Update Info
+            await req('update_identifier', { id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } });
+
+            // 2. Move Hierarchy
+            const moveRes = await req('move_identifier', { identifier_id: db_id, new_parent_id: formValues.new_parent_id });
+
+            if (moveRes.success) {
+                await loadPartners();
+                Swal.fire({ icon: 'success', title: 'Saved!', confirmButtonColor: '#002d5a' });
+            } else {
+                throw new Error(moveRes.message || "Failed to move partner.");
+            }
+        } catch (err) {
+            console.error("Save Error:", err);
+            Swal.fire('Error', err.name === 'AbortError' ? 'Server timed out. Check for circular loops!' : err.message, 'error');
         }
-    } catch (err) {
-        console.error("CRITICAL ERROR:", err);
-        Swal.fire('Error', 'Message: ' + err.message, 'error');
     }
-}
 }
 
     window.openPartnerDetails = (id) => {
