@@ -113,22 +113,69 @@
         }).filter(Boolean);
     }
 
-    function renderBadge(id, isRootOfCard = false) {
-        let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
-        
-        return `
-            <div class="id-badge-container" style="margin-top:4px; width: 100%;">
-                <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                    <div style="text-align:left;">
-                        ${label}
-                        <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
-                        <div id="stats-${id.string}" style="font-size:9px; color:#64748b; margin-top:2px; display:none;"></div>
-                    </div>
-                    <span style="font-size:9px; opacity:0.7;">${id.rev}</span>
+   function renderBadge(id, isRootOfCard = false) {
+    let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
+    
+    return `
+        <div class="id-badge-container" style="margin-top:4px; width: 100%;">
+            <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
+                <div style="text-align:left;">
+                    ${label}
+                    <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
+                    <div id="modal-stats-${id.string}" style="margin-top:2px; display:none;"></div>
                 </div>
-                ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
-            </div>`;
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-size:10px; opacity:0.7;">${id.rev}</span>
+                    <button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;" title="Export ID Data">
+                        <span class="material-icons" style="font-size:16px;">file_download</span>
+                    </button>
+                </div>
+            </div>
+            ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
+        </div>`;
+}
+    async function downloadSingleIdExport(idString) {
+    Swal.fire({ title: 'Preparing Export...', didOpen: () => Swal.showLoading() });
+    
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idString })
+        });
+        const result = await res.json();
+        
+        if (result.success && result.data.length > 0) {
+            const merchants = result.data;
+            const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+            const avgVol = totalVol / merchants.length;
+
+            // Prepare CSV with a Summary Header
+            let csv = `Summary for ID: ${idString}\n`;
+            csv += `Total Approved Merchants,${merchants.length}\n`;
+            csv += `Total 30-Day Volume,$${totalVol.toFixed(2)}\n`;
+            csv += `Average Volume,$${avgVol.toFixed(2)}\n\n`;
+            
+            // Raw Data Headers
+            csv += `Merchant ID,DBA Name,Status,Volume 30D\n`;
+            merchants.forEach(m => {
+                csv += `${m.merchant_id},"${m.dba_name.replace(/"/g, '""')}",${m.account_status},${m.volume_30_day || 0}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.setAttribute('href', url);
+            a.setAttribute('download', `Export_ID_${idString}.csv`);
+            a.click();
+            Swal.close();
+        } else {
+            Swal.fire('No Data', 'No approved merchants found for this ID.', 'info');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Failed to generate export.', 'error');
     }
+}
 
     async function loadPartners() {
         const loader = document.getElementById('loadingOverlay');
@@ -237,19 +284,23 @@
 
     window.openPartnerDetails = async function(personId) {
     const p = allPartners.find(ptr => ptr.id === personId);
-    if(!p) return;
+    if (!p) return;
 
+    // 1. Gather all unique IDs
     let branchIdStrings = [];
     p.companies.forEach(co => {
         co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
     });
+    branchIdStrings = [...new Set(branchIdStrings)]; // Ensure uniqueness
 
     const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
 
-    // Open Modal with Loading State
+    // 2. Open Modal with Loading State
     Swal.fire({
         title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
-        width: '900px', showConfirmButton: false, showCloseButton: true,
+        width: '900px', 
+        showConfirmButton: false, 
+        showCloseButton: true,
         html: `
             <div id="modal-content-container" style="text-align:left;">
                 <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
@@ -268,7 +319,14 @@
                         ${p.companies.map(co => `
                             <div style="margin-bottom:20px;">
                                 <b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b>
-                                <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                                <div style="margin-top:5px;">
+                                    ${co.ids.map(id => `
+                                        <div style="margin-bottom:10px;">
+                                            ${renderBadge(id, true)}
+                                            <div id="modal-stats-${id}" style="display:none; margin-top:4px; padding-left:12px; border-left:2px solid #e2e8f0;"></div>
+                                        </div>
+                                    `).join('')}
+                                </div>
                             </div>
                         `).join('')}
                     </div>
@@ -276,6 +334,7 @@
             </div>`
     });
 
+    // 3. Fetch Data and Update UI
     try {
         const res = await fetch('/api/partners', {
             method: 'POST',
@@ -283,49 +342,47 @@
             body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
         });
         const result = await res.json();
-        
-    if (result.success) {
-    const stats = result.data;
-    let grandTotalVol = 0;
-    let grandTotalCount = 0;
 
-    branchIdStrings.forEach(idStr => {
-        const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
-        const statDiv = document.getElementById(`stats-${idStr}`);
-        
-        if (s) {
-            grandTotalVol += parseFloat(s.total_volume_sum || 0);
-            grandTotalCount += parseInt(s.merchant_count || 0);
-            
-            if (statDiv) {
-                statDiv.style.display = 'block';
-                // Showing Total Sum, then Count and Average in smaller text
-                statDiv.innerHTML = `
-                    <div style="color:#059669; font-weight:800; font-size:10px;">
-                        Total: $${parseFloat(s.total_volume_sum).toLocaleString(undefined, {maximumFractionDigits:0})}
-                    </div>
-                    <div style="color:#64748b; font-size:9px;">
-                        ${s.merchant_count} Approved • Avg: $${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}
-                    </div>
-                `;
-            }
-        } else {
-            // If an ID has no approved merchants, we can show "0 Approved"
-            const statDiv = document.getElementById(`stats-${idStr}`);
-            if (statDiv) {
-                statDiv.style.display = 'block';
-                statDiv.innerHTML = `<span style="color:#94a3b8; font-style:italic;">0 Approved Merchants</span>`;
-            }
+        if (result.success) {
+            const stats = result.data;
+            let grandTotalVol = 0;
+            let grandTotalCount = 0;
+
+            branchIdStrings.forEach(idStr => {
+                const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
+                const modalStatDiv = document.getElementById(`modal-stats-${idStr}`);
+
+                if (modalStatDiv) {
+                    modalStatDiv.style.display = 'block';
+                    if (s) {
+                        const vol = parseFloat(s.total_volume_sum || 0);
+                        const count = parseInt(s.merchant_count || 0);
+                        grandTotalVol += vol;
+                        grandTotalCount += count;
+
+                        modalStatDiv.innerHTML = `
+                            <div style="color:#059669; font-weight:800; font-size:10px;">
+                                Total: $${vol.toLocaleString(undefined, {maximumFractionDigits:0})}
+                            </div>
+                            <div style="color:#64748b; font-size:9px;">
+                                ${count} Approved • Avg: $${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}
+                            </div>`;
+                    } else {
+                        modalStatDiv.innerHTML = `<span style="color:#94a3b8; font-size:9px; font-style:italic;">0 Approved Merchants</span>`;
+                    }
+                }
+            });
+
+            // Update Header Summary
+            document.getElementById('main-total-vol').innerText = `$${grandTotalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+            document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
         }
-    });
-
-    // Final Header Update
-    document.getElementById('main-total-vol').innerText = `$${grandTotalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-    document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
-}
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        console.error("Error loading partner stats:", err);
+        document.getElementById('main-total-vol').innerText = "$0.00";
+        document.getElementById('main-merch-count').innerText = "Data unavailable";
+    }
 };
-
     function exportToCSV(name, data) {
         const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
         const rows = data.map(m => [m.merchant_id, `"${m.dba_name.replace(/"/g, '""')}"`, m.account_status, m.volume_30_day, m.agent_id]);
