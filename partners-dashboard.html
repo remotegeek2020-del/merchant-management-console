@@ -104,12 +104,13 @@
             });
             const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
             
+            // MAP DATA HERE: Using the correct database keys for email, phone_number, and hl_contact_id
             return formatted.length > 0 ? { 
                 id: person.id, 
                 name: person.full_name,
                 email: person.email || 'No email provided',
                 phone: person.phone_number || 'No phone provided',
-                hl_id: person.hl_contact_id, // For HighLevel Link
+                hl_id: person.hl_contact_id, 
                 companies: formatted 
             } : null;
         }).filter(Boolean);
