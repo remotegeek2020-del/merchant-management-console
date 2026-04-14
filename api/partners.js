@@ -11,12 +11,11 @@ export default async function handler(req, res) {
 
     try {
 
-  // --- ACTION: GET MERCHANT DATA (Using the SQL View) ---
+// --- ACTION: GET MERCHANT DATA (Using High-Speed View) ---
 if (action === 'get_merchant_data') {
-    const { identifier_ids } = body;
+    const { identifier_ids } = body; // This is the array of id_strings
 
     try {
-        // We query the VIEW instead of the raw table
         const { data: stats, error } = await supabase
             .from('merchant_stats_by_id')
             .select('*')
@@ -24,13 +23,12 @@ if (action === 'get_merchant_data') {
 
         if (error) throw error;
 
-        // stats will only have 1 row per ID. Very fast!
         return res.status(200).json({ success: true, data: stats });
     } catch (err) {
+        console.error("View Fetch Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
 }
-
         // --- ACTION: MOVE IDENTIFIER (Legacy/Single Update) ---
         if (action === 'move_identifier') {
             const { identifier_id, new_parent_id } = body;
