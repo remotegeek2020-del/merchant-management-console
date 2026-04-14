@@ -149,7 +149,7 @@
             </div>`).join('');
     }
 
-  window.editIdentifier = async function(db_id, name, rev, isPrime) {
+ window.editIdentifier = async function(db_id, name, rev, isPrime) {
     const currentIdData = identifiersRaw.find(i => i.id === db_id);
     const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
         .map(i => {
@@ -197,30 +197,30 @@
         Swal.fire({ title: 'Saving Changes...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
         
         try {
-            // STEP 1: Update the rev share and prime status
-            const updateRes = await fetch('/api/partners', {
+            const res = await fetch('/api/partners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'update_identifier', id: db_id, payload: { rev_share: formValues.rev_share, prime49: formValues.prime49 } })
+                body: JSON.stringify({ 
+                    action: 'update_identifier_all', 
+                    id: db_id, 
+                    rev_share: formValues.rev_share,
+                    prime49: formValues.prime49,
+                    new_parent_id: formValues.new_parent_id 
+                })
             });
-            
-            // STEP 2: Only proceed to move the identifier IF the parent has actually changed
-            if (formValues.new_parent_id !== currentIdData.parent_config_id) {
-                const moveRes = await fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'move_identifier', identifier_id: db_id, new_parent_id: formValues.new_parent_id })
-                });
-                const moveResult = await moveRes.json();
-                if (!moveResult.success) throw new Error(moveResult.message);
-            }
 
-            await loadPartners();
-            Swal.fire({ icon: 'success', title: 'Success!', text: 'Partner updated.', confirmButtonColor: '#002d5a' });
+            const result = await res.json();
+            
+            if (result.success) {
+                await loadPartners();
+                Swal.fire({ icon: 'success', title: 'Success!', text: 'Partner data updated.', confirmButtonColor: '#002d5a' });
+            } else {
+                throw new Error(result.message);
+            }
 
         } catch (err) {
             console.error("Save Error:", err);
-            Swal.fire('Update Failed', err.message, 'error');
+            Swal.fire('Update Failed', 'Server error or timeout. Please check your network connection.', 'error');
         }
     }
 }
