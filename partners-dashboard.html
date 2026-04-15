@@ -320,24 +320,46 @@ function getTrendIndicator(current30, total90) {
             </div>`;
     }
 
-    function updateAllBadgeStats(idStr, s) {
+function updateAllBadgeStats(idStr, s) {
     const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
     statDivs.forEach(div => {
         div.style.display = 'block';
         if (s) {
-            const trend = getTrendIndicator(parseFloat(s.total_volume_sum), parseFloat(s.total_volume_90d_sum));
+            const current30 = parseFloat(s.total_volume_sum || 0);
+            const total90 = parseFloat(s.total_volume_90d_sum || 0);
+            const avgMonthly90 = total90 / 3;
+            
+            // Calculate Variance
+            const percentChange = avgMonthly90 > 0 ? ((current30 - avgMonthly90) / avgMonthly90) * 100 : 0;
+            const diff = percentChange.toFixed(1);
+            
+            // Determine Color and Icon based on Trend
+            let trendColor = '#94a3b8'; // Stable/Grey
+            let trendIcon = 'trending_flat';
+            if (percentChange > 5) { trendColor = '#10b981'; trendIcon = 'trending_up'; }
+            else if (percentChange < -5) { trendColor = '#ef4444'; trendIcon = 'trending_down'; }
+
             div.innerHTML = `
-                <div style="display:flex; align-items:center; gap:5px;">
-                    <div style="color:#059669; font-weight:800; font-size:10px;">
-                        Total: $${parseFloat(s.total_volume_sum).toLocaleString(undefined, {maximumFractionDigits:0})}
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-top: 5px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase;">Current (30d)</span>
+                        <span style="font-size: 11px; font-weight: 800; color: #059669;">$${current30.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
                     </div>
-                    ${trend}
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px dotted #cbd5e1;">
+                        <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase;">Baseline (90d avg)</span>
+                        <span style="font-size: 11px; font-weight: 600; color: #475569;">$${avgMonthly90.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <div style="display: flex; align-items: center; gap: 4px;">
+                            <span class="material-icons" style="font-size: 16px; color: ${trendColor};">${trendIcon}</span>
+                            <span style="font-size: 10px; font-weight: 800; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
+                        </div>
+                        <span style="font-size: 9px; color: #94a3b8; font-weight: 600;">${parseInt(s.merchant_count).toLocaleString()} Merch</span>
+                    </div>
                 </div>
-                <div style="color:#64748b; font-size:9px;">
-                    ${parseInt(s.merchant_count).toLocaleString()} Approved • Avg: $${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}
-                </div>`;
+            `;
         } else {
-            div.innerHTML = `<span style="color:#94a3b8; font-size:9px; font-style:italic;">0 Approved Merchants</span>`;
+            div.innerHTML = `<span style="color:#94a3b8; font-size:9px; font-style:italic;">No production data available</span>`;
         }
     });
 }
