@@ -47,7 +47,8 @@
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Partner Network</h1>
         </div>
         <div style="display: flex; gap: 10px;">
-            <input type="text" id="partnerSearch" placeholder="Search..." class="slds-input" style="width:300px; border-radius:10px;" onkeyup="filterPartners()">
+            <input type="text" id="partnerSearchInput" placeholder="Search by Name, Agent ID, or Merchant ID..." 
+       style="width: 100%; max-width: 400px; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
         </div>
     </div>
     <div id="partnerGrid" class="partner-grid"></div>
@@ -65,9 +66,10 @@
     let agentsRaw = [];
     let personsRaw = [];
 
-    // --- PAGINATION STATE ---
+    // --- PAGINATION & SEARCH STATE ---
     let currentPage = 1;
     const cardsPerPage = 12; 
+    let searchTimeout = null;
 
     function processPartnerData(payload) {
         if (!payload || !payload.persons) return [];
@@ -217,13 +219,55 @@
                 personsRaw = result.data.persons || [];
                 allPartners = processPartnerData(result.data);
                 
-                // Initialize Grid at Page 1
                 currentPage = 1;
                 renderGrid(allPartners);
             }
         } catch (err) { console.error("Loader Error:", err); }
         if (loader) loader.style.display = 'none';
     }
+
+    // --- SEARCH LISTENER ---
+    document.getElementById('partnerSearchInput').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        clearTimeout(searchTimeout);
+
+        searchTimeout = setTimeout(async () => {
+            if (!term) {
+                currentPage = 1;
+                renderGrid(allPartners);
+                return;
+            }
+
+            // Local Search: Name or Agent ID
+            let filtered = allPartners.filter(p => {
+                const matchesName = p.name.toLowerCase().includes(term);
+                const matchesID = p.companies.some(co => 
+                    co.ids.some(id => id.string.toLowerCase().includes(term))
+                );
+                return matchesName || matchesID;
+            });
+
+            // Remote Search: Merchant ID (if term is long enough and no local match)
+            if (filtered.length === 0 && term.length >= 6) {
+                try {
+                    const midRes = await fetch('/api/partners', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'search_by_mid', mid: term })
+                    });
+                    const midData = await midRes.json();
+                    if (midData.success && midData.agent_id) {
+                        filtered = allPartners.filter(p => 
+                            p.companies.some(co => co.ids.some(id => id.string === midData.agent_id))
+                        );
+                    }
+                } catch (e) { console.error("MID search error", e); }
+            }
+
+            currentPage = 1;
+            renderGrid(filtered);
+        }, 300);
+    });
 
     // --- PAGINATED GRID RENDERER ---
     function renderGrid(data) {
@@ -234,14 +278,12 @@
         
         if (!grid) return;
 
-        // Math for slicing
         const totalPages = Math.ceil(data.length / cardsPerPage);
         if (currentPage > totalPages) currentPage = totalPages || 1;
         const start = (currentPage - 1) * cardsPerPage;
         const end = start + cardsPerPage;
         const paginatedData = data.slice(start, end);
 
-        // Render Cards
         grid.innerHTML = paginatedData.map(p => `
             <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
                 <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px;">${p.name}</h2>
@@ -251,7 +293,6 @@
                 </div>`).join('')}
             </div>`).join('');
 
-        // Update Controls UI
         if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
         if (prevBtn) {
             prevBtn.disabled = (currentPage === 1);
@@ -263,13 +304,19 @@
         }
     }
 
-    // Navigation function
+    // Navigation function (Updated to check search term)
     window.changePage = function(direction) {
-        const totalPages = Math.ceil(allPartners.length / cardsPerPage);
+        const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
+        const currentData = term ? allPartners.filter(p => 
+            p.name.toLowerCase().includes(term) || 
+            p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term)))
+        ) : allPartners;
+
+        const totalPages = Math.ceil(currentData.length / cardsPerPage);
         const newPage = currentPage + direction;
         if (newPage >= 1 && newPage <= totalPages) {
             currentPage = newPage;
-            renderGrid(allPartners);
+            renderGrid(currentData);
             window.scrollTo({ top: 0, behavior: 'smooth' });
         }
     }
