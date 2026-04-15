@@ -31,6 +31,72 @@
     font-size: 11px;
     background: #f8fafc;
 }
+        .search-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 40px;
+        position: relative;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+
+    .search-wrapper {
+        position: relative;
+        width: 100%;
+        display: flex;
+        align-items: center;
+    }
+
+    .search-wrapper .material-icons {
+        position: absolute;
+        left: 15px;
+        color: #94a3b8;
+        font-size: 20px;
+    }
+
+    #partnerSearchInput {
+        width: 100%;
+        padding: 14px 20px 14px 45px;
+        font-size: 15px;
+        font-weight: 500;
+        color: #002d5a;
+        background: #ffffff;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        outline: none;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
+
+    #partnerSearchInput:focus {
+        border-color: #002d5a;
+        box-shadow: 0 10px 15px -3px rgba(0, 45, 90, 0.1);
+        background: #fff;
+    }
+
+    #partnerSearchInput::placeholder {
+        color: #94a3b8;
+    }
+
+    .search-label {
+        font-size: 11px;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+        align-self: flex-start;
+        margin-left: 5px;
+    }
+    
+    #searchStats {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 10px;
+        font-weight: 500;
+    }
     </style>
 </head>
 <body>
@@ -46,10 +112,14 @@
             <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">BACK</a>
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Partner Network</h1>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <input type="text" id="partnerSearchInput" placeholder="Search by Name, Agent ID, or Merchant ID..." 
-       style="width: 100%; max-width: 400px; padding: 10px; border-radius: 8px; border: 1px solid #e2e8f0;">
-        </div>
+       <div class="search-container">
+    <label class="search-label">Partner Directory</label>
+    <div class="search-wrapper">
+        <span class="material-icons">search</span>
+        <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or merchant ID...">
+    </div>
+    <div id="searchStats">Showing all partners</div>
+</div>
     </div>
     <div id="partnerGrid" class="partner-grid"></div>
     <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
