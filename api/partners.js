@@ -11,6 +11,19 @@ export default async function handler(req, res) {
 
     try {
 
+        // --- ACTION: SEARCH BY MID ---
+if (action === 'search_by_mid') {
+    const { mid } = body;
+    const { data, error } = await supabase
+        .from('merchants')
+        .select('agent_id')
+        .eq('merchant_id', mid)
+        .limit(1);
+
+    if (error) return res.status(500).json({ success: false });
+    return res.status(200).json({ success: true, agent_id: data[0]?.agent_id });
+}
+
 // --- ACTION: GET MERCHANT DATA (Using High-Speed View) ---
 if (action === 'get_merchant_data') {
     const { identifier_ids } = body;
