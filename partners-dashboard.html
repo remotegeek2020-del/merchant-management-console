@@ -340,26 +340,33 @@ function updateAllBadgeStats(idStr, s) {
             else if (percentChange < -5) { trendColor = '#ef4444'; trendIcon = 'trending_down'; }
 
             div.innerHTML = `
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 8px; margin-top: 5px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-                        <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase;">Current (30d)</span>
+                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-top: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+                        <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px;">Current (30d)</span>
                         <span style="font-size: 11px; font-weight: 800; color: #059669;">$${current30.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
                     </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; padding-bottom: 4px; border-bottom: 1px dotted #cbd5e1;">
-                        <span style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase;">Baseline (90d avg)</span>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dotted #cbd5e1;">
+                        <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase; letter-spacing: 0.3px;">Baseline (90d avg)</span>
                         <span style="font-size: 11px; font-weight: 600; color: #475569;">$${avgMonthly90.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
                     </div>
                     <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 4px;">
-                            <span class="material-icons" style="font-size: 16px; color: ${trendColor};">${trendIcon}</span>
-                            <span style="font-size: 10px; font-weight: 800; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
+                        <div style="display: flex; align-items: center; gap: 4px; background: white; padding: 2px 6px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                            <span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span>
+                            <span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
                         </div>
-                        <span style="font-size: 9px; color: #94a3b8; font-weight: 600;">${parseInt(s.merchant_count).toLocaleString()} Merch</span>
+                        <div style="text-align: right;">
+                            <div style="font-size: 10px; font-weight: 800; color: #1e293b;">${parseInt(s.merchant_count).toLocaleString()}</div>
+                            <div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; line-height: 1;">Approved Merchants</div>
+                        </div>
                     </div>
                 </div>
             `;
         } else {
-            div.innerHTML = `<span style="color:#94a3b8; font-size:9px; font-style:italic;">No production data available</span>`;
+            div.innerHTML = `
+                <div style="padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;">
+                    <span style="color:#64748b; font-size:10px; font-weight:700; text-transform: uppercase;">No Approved Production</span>
+                </div>
+            `;
         }
     });
 }
