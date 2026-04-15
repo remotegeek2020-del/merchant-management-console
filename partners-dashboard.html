@@ -203,8 +203,15 @@
 
 <div class="modern-header">
     <div style="display: flex; align-items: center; gap: 15px;">
-        <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px; font-weight: 700;">BACK</a>
-        <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Partner Network</h1>
+        <div style="display: flex; gap: 10px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px; font-weight: 700;">BACK</a>
+            
+            <button onclick="openOnboardingWizard()" class="pagination-btn" style="background: var(--pp-blue); color: white; border: none; display: flex; align-items: center; gap: 8px;">
+                <span class="material-icons" style="font-size:18px;">person_add</span>
+                <span>ADD PARTNER</span>
+            </button>
+        </div>
+        <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Partner Network</h1>
     </div>
 
     <div class="search-area">
