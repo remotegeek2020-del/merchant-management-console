@@ -97,6 +97,80 @@
         margin-top: 10px;
         font-weight: 500;
     }
+        /* Premium Search Integration */
+.search-area {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* Aligns search to the right of the header */
+    gap: 6px;
+    flex: 0 1 450px;
+}
+
+.search-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.search-wrapper .material-icons {
+    position: absolute;
+    left: 14px;
+    color: #94a3b8;
+    font-size: 20px;
+    pointer-events: none;
+}
+
+#partnerSearchInput {
+    width: 100%;
+    height: 48px;
+    padding: 0 15px 0 45px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #002d5a;
+    background: #f8fafc; /* Subtle light background */
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    outline: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#partnerSearchInput:focus {
+    border-color: #004990; /* Matches your --pp-blue */
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 73, 144, 0.08);
+}
+
+#searchStats {
+    font-size: 10px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 5px;
+}
+
+/* Pagination Button Fix */
+.pagination-btn {
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    cursor: pointer;
+    font-weight: 700;
+    color: #002d5a;
+    transition: 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #004990;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
     </style>
 </head>
 <body>
@@ -107,20 +181,22 @@
 </div>
 
 <div class="dashboard-container">
-    <div class="modern-header">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">BACK</a>
-            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Partner Network</h1>
+
+<div class="modern-header">
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px; font-weight: 700;">BACK</a>
+        <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a;">Partner Network</h1>
+    </div>
+
+    <div class="search-area">
+        <div class="search-wrapper">
+            <span class="material-icons">search</span>
+            <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or MID...">
         </div>
-       <div class="search-container">
-    <label class="search-label">Partner Directory</label>
-    <div class="search-wrapper">
-        <span class="material-icons">search</span>
-        <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or merchant ID...">
+        <div id="searchStats">Showing all partners</div>
     </div>
-    <div id="searchStats">Showing all partners</div>
 </div>
-    </div>
+    
     <div id="partnerGrid" class="partner-grid"></div>
     <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
     <button id="btnPrev" onclick="changePage(-1)" style="padding:8px 16px; border-radius:8px; border:1px solid #e2e8f0; background:white; cursor:pointer; font-weight:600; color:#002d5a;">Previous</button>
