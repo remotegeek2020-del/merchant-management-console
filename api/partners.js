@@ -10,6 +10,54 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
+        if (action === 'search_ghl') {
+    const { query } = body;
+    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=dfg08aPdtlQ1RhIKkCnN&query=${query}`, {
+        headers: {
+            'Authorization': 'Bearer pit-4da3c37b-fcae-4274-a893-7ad7777a4bba',
+            'Version': '2021-07-28'
+        }
+    });
+    const data = await ghlRes.json();
+    return res.status(200).json({ success: true, contacts: data.contacts });
+}
+        if (action === 'complete_onboarding') {
+    const { person, company, identifier } = body;
+    
+    // 1. Upsert Person (by email)
+    const { data: pData, error: pErr } = await supabase
+        .from('persons')
+        .upsert({ 
+            full_name: person.name, 
+            email: person.email, 
+            phone_number: person.phone, 
+            hl_contact_id: person.hl_id 
+        }, { onConflict: 'email' }).select().single();
+
+    // 2. Handle Company
+    let targetCoId = company.id;
+    if (!targetCoId) {
+        const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
+        targetCoId = coData.id;
+    }
+
+    // 3. Create Agent
+    const { data: agentData } = await supabase.from('agents').insert({
+        company_id: targetCoId,
+        agent_name: person.name,
+        parent_agent_id: pData.id
+    }).select().single();
+
+    // 4. Create Identifier
+    const { error: idErr } = await supabase.from('agent_identifiers').insert({
+        agent_id: agentData.id,
+        id_string: identifier.string,
+        rev_share: identifier.rev,
+        prime49: identifier.prime
+    });
+
+    return res.status(200).json({ success: !idErr });
+}
 
         // --- ACTION: SEARCH BY MID ---
 if (action === 'search_by_mid') {
