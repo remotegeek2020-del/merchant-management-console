@@ -10,6 +10,13 @@ export default async function handler(req, res) {
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
     try {
+
+        if (action === 'get_orphan_ids') {
+    const { query } = body;
+    // Returns unassigned merchant IDs that match the search term
+    const { data, error } = await supabase.rpc('get_unassigned_ids', { search_term: query });
+    return res.status(200).json({ data });
+}
         if (action === 'search_ghl') {
     const { query } = body;
     const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=dfg08aPdtlQ1RhIKkCnN&query=${query}`, {
