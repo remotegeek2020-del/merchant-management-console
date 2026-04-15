@@ -265,32 +265,51 @@
     </div>
 
     <div class="step-container" id="step2">
-        <label class="search-label">Company / Firm</label>
-        <select id="companySelect" class="wizard-input"></select>
-        <div id="newCompanyFields" style="margin-top: 10px;">
-            <label class="search-label">New Company Name</label>
-            <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter company name...">
+    <label class="search-label">Company / Firm Association</label>
+    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
+        <option value="none">Independent (No Company)</option>
+        <option value="new">+ Create New Company...</option>
+    </select>
+    
+    <div id="newCompanyFields" style="margin-top: 10px; display: none;">
+        <label class="search-label">New Company Name</label>
+        <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter company name...">
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-top: auto;">
+        <button onclick="goToStep(1)" class="pagination-btn" style="flex: 1;">BACK</button>
+        <button onclick="goToStep(3)" class="pagination-btn" style="flex: 2; background: var(--pp-blue); color:white;">NEXT: IDENTIFIERS</button>
+    </div>
+</div>
+
+<div class="step-container" id="step3">
+    <label class="search-label">Assign Agent Identifiers</label>
+    
+    <div style="display: flex; gap: 8px;">
+        <div style="flex-grow: 1; position: relative;">
+            <input type="text" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs or type new..." oninput="searchIdentifierStrings()">
+            <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 10; display: none; max-height: 150px; overflow-y: auto;"></div>
         </div>
-        <div style="display: flex; gap: 10px; margin-top: auto;">
-            <button onclick="goToStep(1)" class="pagination-btn" style="flex: 1;">BACK</button>
-            <button onclick="goToStep(3)" class="pagination-btn" style="flex: 2; background: var(--pp-blue); color:white;">NEXT: IDENTIFIERS</button>
+        <button onclick="addIdToList()" class="pagination-btn" style="background: var(--pp-blue); color: white; padding: 0 15px;">ADD</button>
+    </div>
+
+    <div id="addedIdsList" style="margin-top: 15px; display: flex; flex-wrap: wrap; gap: 8px; min-height: 50px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1;">
+        <div style="color: #94a3b8; font-size: 11px; width: 100%; text-align: center;">No IDs added yet</div>
+    </div>
+
+    <div style="margin-top: 15px; padding-top: 15px; border-top: 1px solid #f1f5f9;">
+        <label class="search-label">Global Configuration (Applied to all above)</label>
+        <div style="display: flex; gap: 10px;">
+            <input type="text" id="initRev" class="wizard-input" placeholder="Rev Share %" value="0%" style="flex: 1;">
+            <label style="display: flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700;">
+                <input type="checkbox" id="initPrime"> PRIME ⭐
+            </label>
         </div>
     </div>
 
-    <div class="step-container" id="step3">
-        <label class="search-label">Assign Agent ID String</label>
-        <select id="orphanIdSelect" class="wizard-input">
-             <option value="">-- Manual Entry --</option>
-        </select>
-        <input type="text" id="manualIdString" class="wizard-input" placeholder="e.g. 51293" style="margin-top:10px;">
-        
-        <label class="search-label" style="margin-top:15px;">Configuration</label>
-        <input type="text" id="initRev" class="wizard-input" placeholder="Revenue Share (e.g. 60%)" value="0%">
-        <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; margin-top:10px;">
-            <input type="checkbox" id="initPrime"> Prime49 ⭐
-        </label>
-
-        <button onclick="submitOnboarding()" class="pagination-btn" style="width: 100%; margin-top: auto; background: #059669; color: white; border: none;">COMPLETE ONBOARDING</button>
+    <div style="display: flex; gap: 10px; margin-top: auto;">
+        <button onclick="goToStep(2)" class="pagination-btn" style="flex: 1;">BACK</button>
+        <button onclick="submitOnboarding()" class="pagination-btn" style="flex: 2; background: #059669; color: white; border: none;">COMPLETE ONBOARDING</button>
     </div>
 </div>
 
@@ -310,6 +329,73 @@
     // --- ONBOARDING WIZARD LOGIC ---
 let selectedGHLContact = null;
 let companiesRaw = [];
+let pendingIds = [];
+
+    function toggleCompanyInput() {
+    const select = document.getElementById('companySelect');
+    const newFields = document.getElementById('newCompanyFields');
+    newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+}
+
+// Search database for unassigned IDs
+async function searchIdentifierStrings() {
+    const term = document.getElementById('idLookupInput').value.trim();
+    const resultsBox = document.getElementById('idLookupResults');
+    
+    if (term.length < 2) { resultsBox.style.display = 'none'; return; }
+
+    const res = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_orphan_ids', query: term })
+    });
+    const result = await res.json();
+    
+    if (result.data && result.data.length > 0) {
+        resultsBox.style.display = 'block';
+        resultsBox.innerHTML = result.data.map(item => `
+            <div class="ghl-result-item" onclick="pickIdFromLookup('${item.agent_id}')">
+                <b>${item.agent_id}</b> <small>(${item.count} merchants)</small>
+            </div>
+        `).join('');
+    } else {
+        resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">No unassigned ID found. Add "${term}" as new?</div>`;
+        resultsBox.style.display = 'block';
+    }
+}
+
+function pickIdFromLookup(id) {
+    document.getElementById('idLookupInput').value = id;
+    document.getElementById('idLookupResults').style.display = 'none';
+}
+
+function addIdToList() {
+    const input = document.getElementById('idLookupInput');
+    const id = input.value.trim();
+    if (!id || pendingIds.includes(id)) return;
+
+    pendingIds.push(id);
+    input.value = '';
+    renderIdList();
+}
+
+function removeIdFromList(id) {
+    pendingIds = pendingIds.filter(item => item !== id);
+    renderIdList();
+}
+
+function renderIdList() {
+    const container = document.getElementById('addedIdsList');
+    if (pendingIds.length === 0) {
+        container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; width: 100%; text-align: center;">No IDs added yet</div>';
+        return;
+    }
+    container.innerHTML = pendingIds.map(id => `
+        <div class="id-badge" style="background: var(--pp-blue); color: white; display: flex; align-items: center; gap: 8px; padding: 5px 10px;">
+            ${id} <span class="material-icons" style="font-size: 14px; cursor: pointer;" onclick="removeIdFromList('${id}')">close</span>
+        </div>
+    `).join('');
+}
 
 function openOnboardingWizard() {
     document.getElementById('onboardingWizard').classList.add('active');
@@ -388,7 +474,10 @@ async function loadOrphanIds() {
         result.data.map(id => `<option value="${id.agent_id}">${id.agent_id} (${id.count} merchants)</option>`).join('');
 }
 
+// Updated Submission Logic
 async function submitOnboarding() {
+    if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
+
     const payload = {
         action: 'complete_onboarding',
         person: {
@@ -398,17 +487,17 @@ async function submitOnboarding() {
             hl_id: selectedGHLContact.id
         },
         company: {
-            id: document.getElementById('companySelect').value === 'new' ? null : document.getElementById('companySelect').value,
-            name: document.getElementById('newCompanyName').value
+            // "none" means independent, "new" means we use newCompanyName
+            id: (document.getElementById('companySelect').value === 'new' || document.getElementById('companySelect').value === 'none') ? null : document.getElementById('companySelect').value,
+            name: document.getElementById('companySelect').value === 'new' ? document.getElementById('newCompanyName').value : null,
+            isIndependent: document.getElementById('companySelect').value === 'none'
         },
-        identifier: {
-            string: document.getElementById('orphanIdSelect').value || document.getElementById('manualIdString').value,
+        identifiers: pendingIds.map(id => ({
+            string: id,
             rev: document.getElementById('initRev').value,
             prime: document.getElementById('initPrime').checked
-        }
+        }))
     };
-
-    if (!payload.identifier.string) return Swal.fire('Error', 'Please provide an Agent ID', 'error');
 
     Swal.fire({ title: 'Onboarding Partner...', didOpen: () => Swal.showLoading() });
     
@@ -417,14 +506,15 @@ async function submitOnboarding() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
-    const result = await res.json();
     
+    const result = await res.json();
     if (result.success) {
-        Swal.fire('Success', 'Partner registered successfully', 'success');
+        Swal.fire('Success', 'Partner registered with ' + pendingIds.length + ' IDs.', 'success');
+        pendingIds = [];
         closeWizard();
         loadPartners();
     } else {
-        Swal.fire('Error', 'Onboarding failed', 'error');
+        Swal.fire('Error', result.message || 'Onboarding failed', 'error');
     }
 }
 
