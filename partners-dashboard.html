@@ -172,6 +172,24 @@
     opacity: 0.4;
     cursor: not-allowed;
 }
+        /* Onboarding Wizard Styles */
+.wizard-overlay { 
+    position: fixed; top: 0; right: -500px; width: 450px; height: 100%; 
+    background: white; box-shadow: -10px 0 30px rgba(0,0,0,0.1); 
+    z-index: 10000; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+    padding: 30px; display: flex; flex-direction: column; 
+}
+.wizard-overlay.active { right: 0; }
+.step-container { display: none; flex-direction: column; gap: 20px; flex-grow: 1; }
+.step-container.active { display: flex; }
+.wizard-input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; transition: 0.2s; }
+.wizard-input:focus { border-color: var(--pp-blue); box-shadow: 0 0 0 3px rgba(0, 73, 144, 0.1); }
+.step-indicator { display: flex; gap: 10px; margin-bottom: 30px; }
+.dot { flex: 1; height: 6px; background: #e2e8f0; border-radius: 10px; }
+.dot.active { background: var(--pp-blue); }
+
+.ghl-result-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #f1f5f9; transition: 0.2s; }
+.ghl-result-item:hover { background: #f8fafc; color: var(--pp-blue); }
     </style>
 </head>
 <body>
@@ -216,6 +234,60 @@
 </div>
 </div>
 
+    <div id="onboardingWizard" class="wizard-overlay">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="font-weight: 800; color: var(--pp-blue);">New Partner Onboarding</h2>
+        <span class="material-icons" style="cursor: pointer; color: #94a3b8;" onclick="closeWizard()">close</span>
+    </div>
+    
+    <div class="step-indicator">
+        <div class="dot active" id="dot1"></div>
+        <div class="dot" id="dot2"></div>
+        <div class="dot" id="dot3"></div>
+    </div>
+
+    <div class="step-container active" id="step1">
+        <label class="search-label">HighLevel Contact Lookup</label>
+        <div class="search-wrapper">
+            <span class="material-icons">search</span>
+            <input type="text" id="ghlSearch" class="wizard-input" placeholder="Search by name or email..." style="padding-left: 45px;">
+        </div>
+        <div id="ghlResults" style="max-height: 250px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 8px; margin-top:10px;"></div>
+        <div id="selectedContactDisplay" style="padding: 15px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bcf0da; display: none; margin-top: 10px;"></div>
+        <button id="nextToStep2" onclick="goToStep(2)" class="pagination-btn" style="width: 100%; margin-top: auto; display:none; background: var(--pp-blue); color:white;">NEXT: BUSINESS INFO</button>
+    </div>
+
+    <div class="step-container" id="step2">
+        <label class="search-label">Company / Firm</label>
+        <select id="companySelect" class="wizard-input"></select>
+        <div id="newCompanyFields" style="margin-top: 10px;">
+            <label class="search-label">New Company Name</label>
+            <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter company name...">
+        </div>
+        <div style="display: flex; gap: 10px; margin-top: auto;">
+            <button onclick="goToStep(1)" class="pagination-btn" style="flex: 1;">BACK</button>
+            <button onclick="goToStep(3)" class="pagination-btn" style="flex: 2; background: var(--pp-blue); color:white;">NEXT: IDENTIFIERS</button>
+        </div>
+    </div>
+
+    <div class="step-container" id="step3">
+        <label class="search-label">Assign Agent ID String</label>
+        <select id="orphanIdSelect" class="wizard-input">
+             <option value="">-- Manual Entry --</option>
+        </select>
+        <input type="text" id="manualIdString" class="wizard-input" placeholder="e.g. 51293" style="margin-top:10px;">
+        
+        <label class="search-label" style="margin-top:15px;">Configuration</label>
+        <input type="text" id="initRev" class="wizard-input" placeholder="Revenue Share (e.g. 60%)" value="0%">
+        <label style="display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 700; margin-top:10px;">
+            <input type="checkbox" id="initPrime"> Prime49 ⭐
+        </label>
+
+        <button onclick="submitOnboarding()" class="pagination-btn" style="width: 100%; margin-top: auto; background: #059669; color: white; border: none;">COMPLETE ONBOARDING</button>
+    </div>
+</div>
+
+    
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
     let allPartners = [];
@@ -228,6 +300,134 @@
     const cardsPerPage = 12; 
     let searchTimeout = null;
 
+    // --- ONBOARDING WIZARD LOGIC ---
+let selectedGHLContact = null;
+let companiesRaw = [];
+
+function openOnboardingWizard() {
+    document.getElementById('onboardingWizard').classList.add('active');
+    loadWizardCompanies();
+    loadOrphanIds();
+}
+
+function closeWizard() {
+    document.getElementById('onboardingWizard').classList.remove('active');
+    resetWizard();
+}
+
+function goToStep(step) {
+    document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+    document.getElementById('step' + step).classList.add('active');
+    document.getElementById('dot' + step).classList.add('active');
+}
+
+// Step 1: GHL Search
+document.getElementById('ghlSearch').addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    if (query.length < 3) return;
+    
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'search_ghl', query })
+        });
+        const result = await res.json();
+        const container = document.getElementById('ghlResults');
+        container.style.display = 'block';
+        container.innerHTML = result.contacts.map(c => `
+            <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
+                <b>${c.firstName} ${c.lastName}</b><br>
+                <small>${c.email || 'No Email'}</small>
+            </div>
+        `).join('');
+    }, 500);
+});
+
+function selectGHLContact(id, name, email, phone) {
+    selectedGHLContact = { id, name, email, phone };
+    document.getElementById('ghlResults').style.display = 'none';
+    const display = document.getElementById('selectedContactDisplay');
+    display.style.display = 'block';
+    display.innerHTML = `<strong>Selected:</strong> ${name}<br><small>${email}</small>`;
+    document.getElementById('nextToStep2').style.display = 'block';
+}
+
+// Step 2: Company Management
+async function loadWizardCompanies() {
+    const res = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_partners_list' }) // Re-uses main fetch
+    });
+    const result = await res.json();
+    const select = document.getElementById('companySelect');
+    select.innerHTML = '<option value="new">+ Create New Company</option>' + 
+        result.data.companies.map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
+}
+
+// Step 3: Unassigned ID Discovery
+async function loadOrphanIds() {
+    const res = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_orphan_ids' })
+    });
+    const result = await res.json();
+    const select = document.getElementById('orphanIdSelect');
+    select.innerHTML = '<option value="">-- Manual Entry --</option>' + 
+        result.data.map(id => `<option value="${id.agent_id}">${id.agent_id} (${id.count} merchants)</option>`).join('');
+}
+
+async function submitOnboarding() {
+    const payload = {
+        action: 'complete_onboarding',
+        person: {
+            name: selectedGHLContact.name,
+            email: selectedGHLContact.email,
+            phone: selectedGHLContact.phone,
+            hl_id: selectedGHLContact.id
+        },
+        company: {
+            id: document.getElementById('companySelect').value === 'new' ? null : document.getElementById('companySelect').value,
+            name: document.getElementById('newCompanyName').value
+        },
+        identifier: {
+            string: document.getElementById('orphanIdSelect').value || document.getElementById('manualIdString').value,
+            rev: document.getElementById('initRev').value,
+            prime: document.getElementById('initPrime').checked
+        }
+    };
+
+    if (!payload.identifier.string) return Swal.fire('Error', 'Please provide an Agent ID', 'error');
+
+    Swal.fire({ title: 'Onboarding Partner...', didOpen: () => Swal.showLoading() });
+    
+    const res = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const result = await res.json();
+    
+    if (result.success) {
+        Swal.fire('Success', 'Partner registered successfully', 'success');
+        closeWizard();
+        loadPartners();
+    } else {
+        Swal.fire('Error', 'Onboarding failed', 'error');
+    }
+}
+
+function resetWizard() {
+    selectedGHLContact = null;
+    document.getElementById('ghlSearch').value = '';
+    document.getElementById('selectedContactDisplay').style.display = 'none';
+    document.getElementById('nextToStep2').style.display = 'none';
+    goToStep(1);
+}
 function getTrendIndicator(current30, total90) {
     const averageMonthly = total90 / 3;
     if (!averageMonthly || averageMonthly === 0) return '';
@@ -698,5 +898,6 @@ function updateAllBadgeStats(idStr, s) {
 
     window.addEventListener('load', loadPartners);
 </script>
+    
 </body>
 </html>
