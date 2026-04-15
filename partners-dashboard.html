@@ -217,6 +217,21 @@
     const cardsPerPage = 12; 
     let searchTimeout = null;
 
+    function getTrendIndicator(current30, total90) {
+    // We compare current 30-day volume against the 90-day average (total90 / 3)
+    const averageMonthly = total90 / 3;
+    if (!averageMonthly || averageMonthly === 0) return '';
+
+    const percentChange = ((current30 - averageMonthly) / averageMonthly) * 100;
+
+    if (percentChange > 5) {
+        return `<span class="material-icons" style="font-size:14px; color:#10b981; vertical-align:middle;" title="Trending Up: ${percentChange.toFixed(1)}%">trending_up</span>`;
+    } else if (percentChange < -5) {
+        return `<span class="material-icons" style="font-size:14px; color:#ef4444; vertical-align:middle;" title="Trending Down: ${Math.abs(percentChange).toFixed(1)}%">trending_down</span>`;
+    }
+    return `<span class="material-icons" style="font-size:14px; color:#94a3b8; vertical-align:middle;" title="Stable">trending_flat</span>`;
+}
+
     function processPartnerData(payload) {
         if (!payload || !payload.persons) return [];
         const { persons, agents, identifiers, companies } = payload;
@@ -293,22 +308,26 @@
     }
 
     function updateAllBadgeStats(idStr, s) {
-        const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
-        statDivs.forEach(div => {
-            div.style.display = 'block';
-            if (s) {
-                div.innerHTML = `
+    const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
+    statDivs.forEach(div => {
+        div.style.display = 'block';
+        if (s) {
+            const trend = getTrendIndicator(parseFloat(s.total_volume_sum), parseFloat(s.total_volume_90d_sum));
+            div.innerHTML = `
+                <div style="display:flex; align-items:center; gap:5px;">
                     <div style="color:#059669; font-weight:800; font-size:10px;">
                         Total: $${parseFloat(s.total_volume_sum).toLocaleString(undefined, {maximumFractionDigits:0})}
                     </div>
-                    <div style="color:#64748b; font-size:9px;">
-                        ${parseInt(s.merchant_count).toLocaleString()} Approved • Avg: $${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}
-                    </div>`;
-            } else {
-                div.innerHTML = `<span style="color:#94a3b8; font-size:9px; font-style:italic;">0 Approved Merchants</span>`;
-            }
-        });
-    }
+                    ${trend}
+                </div>
+                <div style="color:#64748b; font-size:9px;">
+                    ${parseInt(s.merchant_count).toLocaleString()} Approved • Avg: $${parseFloat(s.avg_volume || 0).toLocaleString(undefined, {maximumFractionDigits:0})}
+                </div>`;
+        } else {
+            div.innerHTML = `<span style="color:#94a3b8; font-size:9px; font-style:italic;">0 Approved Merchants</span>`;
+        }
+    });
+}
 
     async function downloadSingleIdExport(idString) {
         Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
