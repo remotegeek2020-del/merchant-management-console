@@ -331,9 +331,7 @@ let selectedGHLContact = null;
 let companiesRaw = [];
 let pendingIds = [];
 
-   let pendingIds = []; // Now stores objects: { string, rev }
-
-function toggleCompanyInput() {
+   function toggleCompanyInput() {
     const select = document.getElementById('companySelect');
     const newFields = document.getElementById('newCompanyFields');
     newFields.style.display = (select.value === 'new') ? 'block' : 'none';
@@ -367,7 +365,7 @@ async function searchIdentifierStrings() {
         }
     } catch (e) { console.error("Lookup error", e); }
 }
-
+    
 function pickIdFromLookup(id) {
     document.getElementById('idLookupInput').value = id;
     document.getElementById('idLookupResults').style.display = 'none';
@@ -410,6 +408,84 @@ function renderIdList() {
     `).join('');
 }
 
+function openOnboardingWizard() {
+    document.getElementById('onboardingWizard').classList.add('active');
+    loadWizardCompanies();
+    loadOrphanIds();
+}
+
+function closeWizard() {
+    document.getElementById('onboardingWizard').classList.remove('active');
+    resetWizard();
+}
+
+function goToStep(step) {
+    document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
+    document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+    document.getElementById('step' + step).classList.add('active');
+    document.getElementById('dot' + step).classList.add('active');
+}
+
+// Step 1: GHL Search
+document.getElementById('ghlSearch').addEventListener('input', (e) => {
+    const query = e.target.value.trim();
+    if (query.length < 3) return;
+    
+    clearTimeout(searchTimeout);
+    searchTimeout = setTimeout(async () => {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'search_ghl', query })
+        });
+        const result = await res.json();
+        const container = document.getElementById('ghlResults');
+        container.style.display = 'block';
+        container.innerHTML = result.contacts.map(c => `
+            <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
+                <b>${c.firstName} ${c.lastName}</b><br>
+                <small>${c.email || 'No Email'}</small>
+            </div>
+        `).join('');
+    }, 500);
+});
+
+function selectGHLContact(id, name, email, phone) {
+    selectedGHLContact = { id, name, email, phone };
+    document.getElementById('ghlResults').style.display = 'none';
+    const display = document.getElementById('selectedContactDisplay');
+    display.style.display = 'block';
+    display.innerHTML = `<strong>Selected:</strong> ${name}<br><small>${email}</small>`;
+    document.getElementById('nextToStep2').style.display = 'block';
+}
+
+// Step 2: Company Management
+async function loadWizardCompanies() {
+    const res = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_partners_list' }) // Re-uses main fetch
+    });
+    const result = await res.json();
+    const select = document.getElementById('companySelect');
+    select.innerHTML = '<option value="new">+ Create New Company</option>' + 
+        result.data.companies.map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
+}
+
+// Step 3: Unassigned ID Discovery
+async function loadOrphanIds() {
+    const res = await fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_orphan_ids' })
+    });
+    const result = await res.json();
+    const select = document.getElementById('orphanIdSelect');
+    select.innerHTML = '<option value="">-- Manual Entry --</option>' + 
+        result.data.map(id => `<option value="${id.agent_id}">${id.agent_id} (${id.count} merchants)</option>`).join('');
+}
+
+// Updated Submission Logic
 async function submitOnboarding() {
     if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
 
@@ -456,7 +532,6 @@ async function submitOnboarding() {
         Swal.fire('Error', e.message || 'Onboarding failed', 'error');
     }
 }
-
 function resetWizard() {
     selectedGHLContact = null;
     document.getElementById('ghlSearch').value = '';
