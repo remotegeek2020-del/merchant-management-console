@@ -11,6 +11,15 @@ export default async function handler(req, res) {
 
     try {
 
+        if (action === 'update_person_field') {
+    const { id, field, value } = body;
+    const { error } = await supabase
+        .from('persons')
+        .update({ [field]: value })
+        .eq('id', id);
+    return res.status(200).json({ success: !error });
+}
+
    // Example of what your backend logic should look like:
 if (action === 'get_orphan_ids') {
     const { query, placeholder_uuid } = body;
