@@ -498,48 +498,56 @@
 
     // Updated Submission Logic
     async function submitOnboarding() {
-        if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
+    if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
 
-        const companyVal = document.getElementById('companySelect').value;
-        const payload = {
-            action: 'complete_onboarding',
-            person: {
-                name: selectedGHLContact.name,
-                email: selectedGHLContact.email,
-                phone: selectedGHLContact.phone,
-                hl_id: selectedGHLContact.id
-            },
-            company: {
-                id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
-                name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
-                isIndependent: companyVal === 'none'
-            },
-            identifiers: pendingIds // Sending objects {string, rev, prime}
-        };
+    const companySelect = document.getElementById('companySelect');
+    const companyVal = companySelect ? companySelect.value : 'none';
 
-        Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading() });
+    const payload = {
+        action: 'complete_onboarding',
+        person: {
+            name: selectedGHLContact.name,
+            email: selectedGHLContact.email,
+            phone: selectedGHLContact.phone,
+            hl_id: selectedGHLContact.id
+        },
+        company: {
+            // If independent, id is null. If new, id is null but name is provided.
+            id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
+            name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
+            isIndependent: companyVal === 'none'
+        },
+        // Map the IDs to include the individual Prime status captured in the list
+        identifiers: pendingIds.map(item => ({
+            string: item.string,
+            rev: item.rev,
+            prime: item.prime
+        }))
+    };
+
+    Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
         
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const result = await res.json();
-            
-            if (result.success) {
-                Swal.fire('Success', `Partner registered with ${pendingIds.length} IDs.`, 'success');
-                pendingIds = [];
-                closeWizard();
-                loadPartners();
-            } else {
-                throw new Error(result.message);
-            }
-        } catch (e) {
-            Swal.fire('Error', e.message || 'Onboarding failed', 'error');
+        const result = await res.json();
+        
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Partner Onboarded', text: `Registered with ${pendingIds.length} IDs.`, confirmButtonColor: '#004990' });
+            closeWizard();
+            loadPartners(); // Refresh the grid
+        } else {
+            throw new Error(result.message || 'Database insertion failed');
         }
+    } catch (e) {
+        console.error("Onboarding Error:", e);
+        Swal.fire('Error', e.message, 'error');
     }
-
+}
     function resetWizard() {
         selectedGHLContact = null;
         pendingIds = [];
