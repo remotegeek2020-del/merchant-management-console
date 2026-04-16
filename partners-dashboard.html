@@ -313,277 +313,30 @@
     
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
+    // --- GLOBAL STATE ---
     let allPartners = [];
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [];
-
-    // --- PAGINATION & SEARCH STATE ---
     let currentPage = 1;
     const cardsPerPage = 12; 
     let searchTimeout = null;
 
-    // --- ONBOARDING WIZARD LOGIC ---
+    // --- ONBOARDING WIZARD STATE ---
     let selectedGHLContact = null;
-    let companiesRaw = [];
-    let pendingIds = []; // Consolidated declaration
+    let pendingIds = []; // Single declaration for the list of IDs being added
 
-  function toTitleCase(str) {
-    if (!str) return "";
-    return str.toLowerCase().split(' ').map(word => {
-        return word.charAt(0).toUpperCase() + word.slice(1);
-    }).join(' ');
-}
+    // ==========================================
+    // 1. DATA UTILITIES (Formatting & Logic)
+    // ==========================================
 
-    // --- STEP 2: COMPANY LOGIC ---
-    function toggleCompanyInput() {
-        const select = document.getElementById('companySelect');
-        const newFields = document.getElementById('newCompanyFields');
-        // If select is null (not rendered yet), just return
-        if (!select || !newFields) return;
-        newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+    function toTitleCase(str) {
+        if (!str) return "";
+        return str.toLowerCase().split(' ').map(word => {
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
     }
 
-    // --- STEP 3: IDENTIFIER LOGIC ---
-    async function searchIdentifierStrings() {
-        const term = document.getElementById('idLookupInput').value.trim();
-        const resultsBox = document.getElementById('idLookupResults');
-        
-        if (term.length < 1) { 
-            resultsBox.style.display = 'none'; 
-            return; 
-        }
-
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'get_orphan_ids', 
-                    query: term,
-                    placeholder_uuid: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' 
-                })
-            });
-            const result = await res.json();
-            
-            if (result.data && result.data.length > 0) {
-                resultsBox.style.display = 'block';
-                resultsBox.innerHTML = result.data.map(item => `
-                    <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
-                        <b>${item.id_string}</b> <small style="color:#94a3b8; margin-left:5px;">(Unassigned)</small>
-                    </div>
-                `).join('');
-            } else {
-                resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">No unassigned match found.</div>`;
-                resultsBox.style.display = 'block';
-            }
-        } catch (e) { 
-            console.error("ID Lookup Error:", e); 
-        }
-    }
-
-    function renderIdList() {
-        const container = document.getElementById('addedIdsList');
-        if (!container) return;
-        
-        if (pendingIds.length === 0) {
-            container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
-            return;
-        }
-        container.innerHTML = pendingIds.map((item, index) => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:5px;">
-                <div style="font-size:12px;">
-                    <b style="color:var(--pp-blue);">${item.string}</b> 
-                    ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
-                    <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
-                </div>
-                <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
-            </div>
-        `).join('');
-    }
-    
-    function pickIdFromLookup(id) {
-        const input = document.getElementById('idLookupInput');
-        if (input) input.value = id;
-        document.getElementById('idLookupResults').style.display = 'none';
-    }
-
-    function addIdToList() {
-        const idInput = document.getElementById('idLookupInput');
-        const revInput = document.getElementById('idRevInput');
-        const primeInput = document.getElementById('idPrimeInput');
-        
-        const idStr = idInput.value.trim();
-        const revStr = revInput.value.trim() || '0%';
-        const isPrime = primeInput.checked;
-
-        if (!idStr) return;
-        if (pendingIds.some(item => item.string === idStr)) {
-            return Swal.fire('Duplicate', 'This ID is already added.', 'warning');
-        }
-
-        pendingIds.push({ string: idStr, rev: revStr, prime: isPrime });
-        
-        idInput.value = '';
-        revInput.value = '';
-        primeInput.checked = false;
-        renderIdList();
-    }
-
-    function removeIdFromList(index) {
-        pendingIds.splice(index, 1);
-        renderIdList();
-    }
-
-    function openOnboardingWizard() {
-        document.getElementById('onboardingWizard').classList.add('active');
-        loadWizardCompanies();
-        // loadOrphanIds removed as we now use live searchIdentifierStrings
-    }
-
-    function closeWizard() {
-        document.getElementById('onboardingWizard').classList.remove('active');
-        resetWizard();
-    }
-
-    function goToStep(step) {
-        document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
-        document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
-        document.getElementById('step' + step).classList.add('active');
-        document.getElementById('dot' + step).classList.add('active');
-    }
-
-    // Step 1: GHL Search
-    document.getElementById('ghlSearch').addEventListener('input', (e) => {
-        const query = e.target.value.trim();
-        if (query.length < 3) return;
-        
-        clearTimeout(searchTimeout);
-        searchTimeout = setTimeout(async () => {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'search_ghl', query })
-            });
-            const result = await res.json();
-            const container = document.getElementById('ghlResults');
-            container.style.display = 'block';
-            container.innerHTML = result.contacts.map(c => `
-                <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
-                    <b>${c.firstName} ${c.lastName}</b><br>
-                    <small>${c.email || 'No Email'}</small>
-                </div>
-            `).join('');
-        }, 500);
-    });
-
- function selectGHLContact(id, name, email, phone) {
-    // 1. Check if person already exists using Email (the unique constraint in your DB)
-    const exists = personsRaw.find(p => p.email === email);
-    
-    if (exists) {
-        Swal.fire({
-            icon: 'warning',
-            title: 'Partner Already Exists',
-            text: `${name} (${email}) is already registered in the system.`,
-            confirmButtonColor: '#004990'
-        });
-        return; 
-    }
-
-    selectedGHLContact = { 
-        id, 
-        name: toTitleCase(name), 
-        email: email.toLowerCase(), 
-        phone 
-    };
-    
-    document.getElementById('ghlResults').style.display = 'none';
-    const display = document.getElementById('selectedContactDisplay');
-    display.style.display = 'block';
-    display.innerHTML = `<strong>Selected:</strong> ${selectedGHLContact.name}<br><small>${email}</small>`;
-    document.getElementB
-
-    // Step 2: Company Management
-    async function loadWizardCompanies() {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_partners_list' })
-        });
-        const result = await res.json();
-        const select = document.getElementById('companySelect');
-        // Added Independent option back in
-        select.innerHTML = `
-            <option value="none">Independent (No Company)</option>
-            <option value="new">+ Create New Company</option>
-        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
-        toggleCompanyInput(); // Trigger visibility check
-    }
-
-    // Updated Submission Logic
-    async function submitOnboarding() {
-    if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
-
-    const companySelect = document.getElementById('companySelect');
-    const companyVal = companySelect ? companySelect.value : 'none';
-
-    const payload = {
-        action: 'complete_onboarding',
-        person: {
-            name: selectedGHLContact.name,
-            email: selectedGHLContact.email,
-            phone: selectedGHLContact.phone,
-            hl_id: selectedGHLContact.id
-        },
-        company: {
-            // If independent, id is null. If new, id is null but name is provided.
-            id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
-            name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
-            isIndependent: companyVal === 'none'
-        },
-        // Map the IDs to include the individual Prime status captured in the list
-        identifiers: pendingIds.map(item => ({
-            string: item.string,
-            rev: item.rev,
-            prime: item.prime
-        }))
-    };
-
-    Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-    
-    try {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-        });
-        
-        const result = await res.json();
-        
-        if (result.success) {
-            Swal.fire({ icon: 'success', title: 'Partner Onboarded', text: `Registered with ${pendingIds.length} IDs.`, confirmButtonColor: '#004990' });
-            closeWizard();
-            loadPartners(); // Refresh the grid
-        } else {
-            throw new Error(result.message || 'Database insertion failed');
-        }
-    } catch (e) {
-        console.error("Onboarding Error:", e);
-        Swal.fire('Error', e.message, 'error');
-    }
-}
-    function resetWizard() {
-        selectedGHLContact = null;
-        pendingIds = [];
-        document.getElementById('ghlSearch').value = '';
-        document.getElementById('selectedContactDisplay').style.display = 'none';
-        document.getElementById('nextToStep2').style.display = 'none';
-        renderIdList();
-        goToStep(1);
-    }
-
-    // --- REMAINDER OF YOUR EXISTING DASHBOARD FUNCTIONS ---
     function getTrendIndicator(current30, total90) {
         const averageMonthly = total90 / 3;
         if (!averageMonthly || averageMonthly === 0) return '';
@@ -649,6 +402,248 @@
         }).filter(Boolean);
     }
 
+    // ==========================================
+    // 2. WIZARD STEP 1: IDENTITY (GHL SEARCH)
+    // ==========================================
+
+    document.getElementById('ghlSearch').addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 3) return;
+        
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'search_ghl', query })
+            });
+            const result = await res.json();
+            const container = document.getElementById('ghlResults');
+            container.style.display = 'block';
+            container.innerHTML = result.contacts.map(c => `
+                <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
+                    <b>${c.firstName} ${c.lastName}</b><br>
+                    <small>${c.email || 'No Email'}</small>
+                </div>
+            `).join('');
+        }, 500);
+    });
+
+    function selectGHLContact(id, name, email, phone) {
+        // Stop duplicates based on HL ID or Email
+        const exists = personsRaw.find(p => p.hl_contact_id === id || (email && p.email === email));
+        if (exists) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Partner Already Exists',
+                text: `${name} is already registered in the database.`,
+                confirmButtonColor: '#004990'
+            });
+            return;
+        }
+
+        selectedGHLContact = { 
+            id, 
+            name: toTitleCase(name), 
+            email: email ? email.toLowerCase() : '', 
+            phone 
+        };
+        
+        document.getElementById('ghlResults').style.display = 'none';
+        const display = document.getElementById('selectedContactDisplay');
+        display.style.display = 'block';
+        display.innerHTML = `<strong>Selected:</strong> ${selectedGHLContact.name}<br><small>${email}</small>`;
+        document.getElementById('nextToStep2').style.display = 'block';
+    }
+
+    // ==========================================
+    // 3. WIZARD STEP 2: BUSINESS (COMPANY)
+    // ==========================================
+
+    function toggleCompanyInput() {
+        const select = document.getElementById('companySelect');
+        const newFields = document.getElementById('newCompanyFields');
+        if (!select || !newFields) return;
+        newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+    }
+
+    async function loadWizardCompanies() {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_partners_list' })
+        });
+        const result = await res.json();
+        const select = document.getElementById('companySelect');
+        select.innerHTML = `
+            <option value="none">Independent (Individual Partner)</option>
+            <option value="new">+ Create New Company</option>
+        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
+        toggleCompanyInput();
+    }
+
+    // ==========================================
+    // 4. WIZARD STEP 3: ACCESS (IDENTIFIERS)
+    // ==========================================
+
+    async function searchIdentifierStrings() {
+        const term = document.getElementById('idLookupInput').value.trim();
+        const resultsBox = document.getElementById('idLookupResults');
+        if (term.length < 1) { resultsBox.style.display = 'none'; return; }
+
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'get_orphan_ids', 
+                    query: term,
+                    placeholder_uuid: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' 
+                })
+            });
+            const result = await res.json();
+            if (result.data && result.data.length > 0) {
+                resultsBox.style.display = 'block';
+                resultsBox.innerHTML = result.data.map(item => `
+                    <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
+                        <b>${item.id_string}</b> <small style="color:#94a3b8;">(Unassigned)</small>
+                    </div>
+                `).join('');
+            } else {
+                resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">Manual entry ID.</div>`;
+                resultsBox.style.display = 'block';
+            }
+        } catch (e) { console.error("ID Lookup Error:", e); }
+    }
+
+    function pickIdFromLookup(id) {
+        const input = document.getElementById('idLookupInput');
+        if (input) input.value = id;
+        document.getElementById('idLookupResults').style.display = 'none';
+    }
+
+    function addIdToList() {
+        const idInput = document.getElementById('idLookupInput');
+        const revInput = document.getElementById('idRevInput');
+        const primeInput = document.getElementById('idPrimeInput');
+        
+        const idStr = idInput.value.trim();
+        const revStr = revInput.value.trim() || '0%';
+        const isPrime = primeInput.checked;
+
+        if (!idStr) return;
+        if (pendingIds.some(item => item.string === idStr)) {
+            return Swal.fire('Duplicate', 'This ID is already in the list.', 'warning');
+        }
+
+        pendingIds.push({ string: idStr, rev: revStr, prime: isPrime });
+        idInput.value = '';
+        revInput.value = '';
+        primeInput.checked = false;
+        renderIdList();
+    }
+
+    function removeIdFromList(index) {
+        pendingIds.splice(index, 1);
+        renderIdList();
+    }
+
+    function renderIdList() {
+        const container = document.getElementById('addedIdsList');
+        if (!container) return;
+        if (pendingIds.length === 0) {
+            container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
+            return;
+        }
+        container.innerHTML = pendingIds.map((item, index) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:5px;">
+                <div style="font-size:12px;">
+                    <b style="color:var(--pp-blue);">${item.string}</b> 
+                    ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
+                    <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
+                </div>
+                <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
+            </div>
+        `).join('');
+    }
+
+    // ==========================================
+    // 5. WIZARD COMPLETION & SAVE
+    // ==========================================
+
+    async function submitOnboarding() {
+        if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
+
+        const companyVal = document.getElementById('companySelect').value;
+        const payload = {
+            action: 'complete_onboarding',
+            person: {
+                name: selectedGHLContact.name,
+                email: selectedGHLContact.email,
+                phone: selectedGHLContact.phone,
+                hl_id: selectedGHLContact.id
+            },
+            company: {
+                id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
+                name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
+                isIndependent: companyVal === 'none'
+            },
+            identifiers: pendingIds 
+        };
+
+        Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+        
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+            
+            if (result.success) {
+                Swal.fire({ icon: 'success', title: 'Partner Onboarded', text: `Success with ${pendingIds.length} IDs.`, confirmButtonColor: '#004990' });
+                closeWizard();
+                loadPartners(); 
+            } else {
+                throw new Error(result.message || 'Saving failed');
+            }
+        } catch (e) {
+            Swal.fire('Error', e.message, 'error');
+        }
+    }
+
+    function openOnboardingWizard() {
+        document.getElementById('onboardingWizard').classList.add('active');
+        loadWizardCompanies();
+    }
+
+    function closeWizard() {
+        document.getElementById('onboardingWizard').classList.remove('active');
+        resetWizard();
+    }
+
+    function resetWizard() {
+        selectedGHLContact = null;
+        pendingIds = [];
+        document.getElementById('ghlSearch').value = '';
+        document.getElementById('selectedContactDisplay').style.display = 'none';
+        document.getElementById('nextToStep2').style.display = 'none';
+        renderIdList();
+        goToStep(1);
+    }
+
+    function goToStep(step) {
+        document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+        document.getElementById('step' + step).classList.add('active');
+        document.getElementById('dot' + step).classList.add('active');
+    }
+
+    // ==========================================
+    // 6. DASHBOARD RENDERING & STATS
+    // ==========================================
+
     function renderBadge(id, isRootOfCard = false) {
         let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
         return `
@@ -691,44 +686,9 @@
         });
     }
 
-    async function downloadSingleIdExport(idString) {
-        Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idString })
-            });
-            const result = await res.json();
-            
-            if (result.success && result.data.length > 0) {
-                const merchants = result.data;
-                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-                const avgVol = totalVol / merchants.length;
-
-                let csv = `Summary for ID: ${idString}\n`;
-                csv += `Total Approved Merchants,${merchants.length}\n`;
-                csv += `Total 30-Day Volume,$${totalVol.toFixed(2)}\n`;
-                csv += `Average Volume,$${avgVol.toFixed(2)}\n\n`;
-                csv += `Merchant ID,DBA Name,Status,Volume 30D\n`;
-                merchants.forEach(m => {
-                    csv += `${m.merchant_id},"${m.dba_name.replace(/"/g, '""')}",${m.account_status},${m.volume_30_day || 0}\n`;
-                });
-
-                const blob = new Blob([csv], { type: 'text/csv' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.setAttribute('href', url);
-                a.setAttribute('download', `Export_ID_${idString}.csv`);
-                a.click();
-                Swal.close();
-            } else {
-                Swal.fire('No Data', 'No approved merchants found for this ID.', 'info');
-            }
-        } catch (err) {
-            Swal.fire('Error', 'Failed to generate export.', 'error');
-        }
-    }
+    // ==========================================
+    // 7. GRID, PAGINATION & EXPORT FUNCTIONS
+    // ==========================================
 
     async function loadPartners() {
         const loader = document.getElementById('loadingOverlay');
@@ -745,7 +705,6 @@
                 agentsRaw = result.data.agents || [];
                 personsRaw = result.data.persons || [];
                 allPartners = processPartnerData(result.data);
-                
                 currentPage = 1;
                 renderGrid(allPartners);
             }
@@ -753,58 +712,12 @@
         if (loader) loader.style.display = 'none';
     }
 
-    // --- SEARCH LISTENER ---
-    document.getElementById('partnerSearchInput').addEventListener('input', (e) => {
-        const term = e.target.value.toLowerCase().trim();
-        clearTimeout(searchTimeout);
-
-        searchTimeout = setTimeout(async () => {
-            if (!term) {
-                currentPage = 1;
-                renderGrid(allPartners);
-                return;
-            }
-
-            // Local Search: Name or Agent ID
-            let filtered = allPartners.filter(p => {
-                const matchesName = p.name.toLowerCase().includes(term);
-                const matchesID = p.companies.some(co => 
-                    co.ids.some(id => id.string.toLowerCase().includes(term))
-                );
-                return matchesName || matchesID;
-            });
-
-            // Remote Search: Merchant ID (if term is long enough and no local match)
-            if (filtered.length === 0 && term.length >= 6) {
-                try {
-                    const midRes = await fetch('/api/partners', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'search_by_mid', mid: term })
-                    });
-                    const midData = await midRes.json();
-                    if (midData.success && midData.agent_id) {
-                        filtered = allPartners.filter(p => 
-                            p.companies.some(co => co.ids.some(id => id.string === midData.agent_id))
-                        );
-                    }
-                } catch (e) { console.error("MID search error", e); }
-            }
-
-            currentPage = 1;
-            renderGrid(filtered);
-        }, 300);
-    });
-
-    // --- PAGINATED GRID RENDERER ---
     function renderGrid(data) {
         const grid = document.getElementById('partnerGrid');
         const prevBtn = document.getElementById('btnPrev');
         const nextBtn = document.getElementById('btnNext');
         const indicator = document.getElementById('pageIndicator');
-        
         if (!grid) return;
-
         const totalPages = Math.ceil(data.length / cardsPerPage);
         if (currentPage > totalPages) currentPage = totalPages || 1;
         const start = (currentPage - 1) * cardsPerPage;
@@ -821,17 +734,10 @@
             </div>`).join('');
 
         if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
-        if (prevBtn) {
-            prevBtn.disabled = (currentPage === 1);
-            prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1";
-        }
-        if (nextBtn) {
-            nextBtn.disabled = (currentPage === totalPages || totalPages === 0);
-            nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1";
-        }
+        if (prevBtn) { prevBtn.disabled = (currentPage === 1); prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1"; }
+        if (nextBtn) { nextBtn.disabled = (currentPage === totalPages || totalPages === 0); nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1"; }
     }
 
-    // Navigation function (Updated to check search term)
     window.changePage = function(direction) {
         const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
         const currentData = term ? allPartners.filter(p => 
@@ -909,31 +815,43 @@
         }
     }
 
-    function getAllBranchIds(idObj, idList = []) {
-        idList.push(idObj.string);
-        if (idObj.sub_ids && idObj.sub_ids.length > 0) {
-            idObj.sub_ids.forEach(sub => getAllBranchIds(sub, idList));
-        }
-        return idList;
+    async function downloadSingleIdExport(idString) {
+        Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idString })
+            });
+            const result = await res.json();
+            if (result.success && result.data.length > 0) {
+                const merchants = result.data;
+                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+                const avgVol = totalVol / merchants.length;
+                let csv = `Summary for ID: ${idString}\nTotal Approved Merchants,${merchants.length}\nTotal 30-Day Volume,$${totalVol.toFixed(2)}\nAverage Volume,$${avgVol.toFixed(2)}\n\nMerchant ID,DBA Name,Status,Volume 30D\n`;
+                merchants.forEach(m => { csv += `${m.merchant_id},"${m.dba_name.replace(/"/g, '""')}",${m.account_status},${m.volume_30_day || 0}\n`; });
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.setAttribute('href', url);
+                a.setAttribute('download', `Export_ID_${idString}.csv`);
+                a.click();
+                Swal.close();
+            } else { Swal.fire('No Data', 'No approved merchants found.', 'info'); }
+        } catch (err) { Swal.fire('Error', 'Failed to generate export.', 'error'); }
     }
 
     window.openPartnerDetails = async function(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
         if (!p) return;
-
         let branchIdStrings = [];
-        p.companies.forEach(co => {
-            co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings));
-        });
+        p.companies.forEach(co => { co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings)); });
         branchIdStrings = [...new Set(branchIdStrings)];
-
         const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
 
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
-            width: '900px', 
-            showConfirmButton: false, 
-            showCloseButton: true,
+            width: '900px', showConfirmButton: false, showCloseButton: true,
             html: `
                 <div id="modal-content-container" style="text-align:left;">
                     <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
@@ -947,18 +865,9 @@
                             <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
                         </div>
                     </div>
-                    <div style="margin-top:20px;">
-                        <div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
-                            ${p.companies.map(co => `
-                                <div style="margin-bottom:20px;">
-                                    <b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b>
-                                    <div style="margin-top:5px;">
-                                        ${co.ids.map(id => renderBadge(id, true)).join('')}
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    </div>
+                    <div style="margin-top:20px;"><div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
+                            ${p.companies.map(co => `<div style="margin-bottom:20px;"><b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b><div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div></div>`).join('')}
+                        </div></div>
                 </div>`
         });
 
@@ -969,31 +878,25 @@
                 body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
             });
             const result = await res.json();
-
             if (result.success) {
                 const stats = result.data;
-                let grandTotalVol = 0;
-                let grandTotalCount = 0;
-
+                let grandTotalVol = 0; let grandTotalCount = 0;
                 branchIdStrings.forEach(idStr => {
                     const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
                     updateAllBadgeStats(idStr, s);
-                    
-                    if (s) {
-                        grandTotalVol += parseFloat(s.total_volume_sum || 0);
-                        grandTotalCount += parseInt(s.merchant_count || 0);
-                    }
+                    if (s) { grandTotalVol += parseFloat(s.total_volume_sum || 0); grandTotalCount += parseInt(s.merchant_count || 0); }
                 });
-
                 document.getElementById('main-total-vol').innerText = `$${grandTotalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
                 document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
             }
-        } catch (err) {
-            console.error("Error loading partner stats:", err);
-            document.getElementById('main-total-vol').innerText = "$0.00";
-            document.getElementById('main-merch-count').innerText = "Data unavailable";
-        }
+        } catch (err) { console.error("Error loading partner stats:", err); }
     };
+
+    function getAllBranchIds(idObj, idList = []) {
+        idList.push(idObj.string);
+        if (idObj.sub_ids && idObj.sub_ids.length > 0) { idObj.sub_ids.forEach(sub => getAllBranchIds(sub, idList)); }
+        return idList;
+    }
 
     function exportToCSV(name, data) {
         const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
