@@ -703,24 +703,20 @@ function showTrendTable(agentId, movers) {
     // ==========================================
 
     async function submitOnboarding() {
-        if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
+    if (pendingIds.length === 0) return Swal.fire('Error', 'Add an ID first', 'error');
 
-        const companyVal = document.getElementById('companySelect').value;
-        const payload = {
-            action: 'complete_onboarding',
-            person: {
-                name: selectedGHLContact.name,
-                email: selectedGHLContact.email,
-                phone: selectedGHLContact.phone,
-                hl_id: selectedGHLContact.id
-            },
-            company: {
-                id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
-                name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
-                isIndependent: companyVal === 'none'
-            },
-            identifiers: pendingIds 
-        };
+    const payload = {
+        action: 'complete_onboarding',
+        // If internalId exists, it's a "Quick Add"
+        existing_person_id: selectedGHLContact.internalId || null, 
+        person: { ...selectedGHLContact },
+        company: {
+            id: document.getElementById('companySelect').value === 'none' ? null : document.getElementById('companySelect').value,
+            name: document.getElementById('newCompanyName').value,
+            isIndependent: document.getElementById('companySelect').value === 'none'
+        },
+        identifiers: pendingIds
+    };
 
         Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
         
@@ -862,14 +858,22 @@ function showTrendTable(agentId, movers) {
         const end = start + cardsPerPage;
         const paginatedData = data.slice(start, end);
 
-        grid.innerHTML = paginatedData.map(p => `
-            <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-                <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px;">${p.name}</h2>
-                ${p.companies.map(co => `<div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                    <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                    <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
-                </div>`).join('')}
-            </div>`).join('');
+       grid.innerHTML = paginatedData.map(p => `
+    <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px; flex:1;">${p.name}</h2>
+            <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')" 
+                    style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
+                <span class="material-icons" style="font-size:14px;">add</span> ID
+            </button>
+        </div>
+        ${p.companies.map(co => `
+            <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
+                <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
+                <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+            </div>
+        `).join('')}
+    </div>`).join('');
 
         if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
         if (prevBtn) { prevBtn.disabled = (currentPage === 1); prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1"; }
@@ -1081,13 +1085,25 @@ function showTrendTable(agentId, movers) {
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '900px', showConfirmButton: false, showCloseButton: true,
             html: `
-                <div id="modal-content-container" style="text-align:left;">
-                    <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
-                        <div style="display:flex; flex-direction:column; gap:5px;">
-                            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;"><span class="material-icons" style="font-size:16px;">email</span>${p.email}</div>
-                            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;"><span class="material-icons" style="font-size:16px;">phone</span>${p.phone}</div>
-                            ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
-                        </div>
+               <div id="modal-content-container" style="text-align:left;">
+    <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <h1 style="font-size:24px; font-weight:900; color:#002d5a; margin:0;">${p.name}</h1>
+                <span class="material-icons" style="font-size:16px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'full_name', '${p.name}')">edit</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                <span class="material-icons" style="font-size:16px;">email</span>
+                ${p.email}
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'email', '${p.email}')">edit</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                <span class="material-icons" style="font-size:16px;">phone</span>
+                ${p.phone}
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'phone_number', '${p.phone}')">edit</span>
+            </div>
+            ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
+        </div>
                         <div id="summary-stats" style="text-align:right;">
                             <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">Loading...</div>
                             <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
@@ -1138,6 +1154,59 @@ function showTrendTable(agentId, movers) {
         link.click();
         document.body.removeChild(link);
     }
+
+    // --- FEATURE: EDIT PERSON DETAILS ---
+window.editPersonField = async function(personId, field, currentVal) {
+    const label = field.replace('_', ' ').toUpperCase();
+    const { value: newVal } = await Swal.fire({
+        title: `Update ${label}`,
+        input: 'text',
+        inputValue: currentVal,
+        showCancelButton: true,
+        confirmButtonColor: '#002d5a',
+        inputValidator: (value) => { if (!value) return 'Field cannot be empty!' }
+    });
+
+    if (newVal && newVal !== currentVal) {
+        Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'update_person_field', 
+                    id: personId, 
+                    field: field, 
+                    value: (field === 'full_name') ? toTitleCase(newVal) : newVal 
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                await loadPartners(); // Refresh grid
+                Swal.close();
+                // Re-open details to show changes
+                openPartnerDetails(personId); 
+            }
+        } catch (err) { Swal.fire('Error', 'Update failed', 'error'); }
+    }
+};
+
+// --- FEATURE: QUICK ADD ID TO PARTNER ---
+window.quickAddId = async function(personId, name) {
+    // We clear the pending list
+    pendingIds = [];
+    renderIdList();
+    
+    // We "hijack" the onboarding wizard but specifically for this person
+    selectedGHLContact = { id: 'existing', name: name, internalId: personId };
+    
+    // Set wizard to Step 3 directly
+    document.getElementById('onboardingWizard').classList.add('active');
+    goToStep(3);
+    
+    // We need to modify submitOnboarding slightly or use a specific function
+    // For now, I'll update the logic below to handle "existing" partners
+};
  
 
     window.addEventListener('load', loadPartners);
