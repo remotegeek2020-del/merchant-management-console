@@ -745,25 +745,43 @@ function showTrendTable(agentId, movers) {
         }
     }
 
-    function openOnboardingWizard() {
-        document.getElementById('onboardingWizard').classList.add('active');
-        loadWizardCompanies();
-    }
+ function openOnboardingWizard() {
+    // Reset Mode
+    selectedGHLContact = null;
+    pendingIds = [];
+    
+    // UI Reset: Enable all steps
+    document.getElementById('dot1').style.display = 'block';
+    document.getElementById('dot2').style.display = 'block';
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'block'; // Show back button
+    
+    document.getElementById('onboardingWizard').classList.add('active');
+    renderIdList();
+    loadWizardCompanies();
+    goToStep(1); // Start at the beginning
+}
 
     function closeWizard() {
         document.getElementById('onboardingWizard').classList.remove('active');
         resetWizard();
     }
 
-    function resetWizard() {
-        selectedGHLContact = null;
-        pendingIds = [];
-        document.getElementById('ghlSearch').value = '';
-        document.getElementById('selectedContactDisplay').style.display = 'none';
-        document.getElementById('nextToStep2').style.display = 'none';
-        renderIdList();
-        goToStep(1);
-    }
+ function resetWizard() {
+    selectedGHLContact = null;
+    pendingIds = [];
+    
+    // Restore UI visibility for the next run
+    document.getElementById('dot1').style.display = 'block';
+    document.getElementById('dot2').style.display = 'block';
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'block';
+    
+    document.getElementById('ghlSearch').value = '';
+    document.getElementById('selectedContactDisplay').style.display = 'none';
+    document.getElementById('nextToStep2').style.display = 'none';
+    
+    renderIdList();
+    goToStep(1);
+}
 
     function goToStep(step) {
         document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
@@ -1198,19 +1216,28 @@ window.editPersonField = async function(personId, field, currentVal) {
 
 // --- FEATURE: QUICK ADD ID TO PARTNER ---
 window.quickAddId = async function(personId, name) {
-    // We clear the pending list
     pendingIds = [];
     renderIdList();
     
-    // We "hijack" the onboarding wizard but specifically for this person
-    selectedGHLContact = { id: 'existing', name: name, internalId: personId };
+    const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
+    if (!personAgent) return Swal.fire('Error', 'No agent record found.', 'error');
+
+    // Set Mode: IMPORTANT
+    selectedGHLContact = { 
+        name: name, 
+        existingAgentId: personAgent.id, 
+        isQuickAdd: true 
+    };
     
-    // Set wizard to Step 3 directly
+    // UI Logic: Hide Step 1 & 2 dots so user isn't confused
+    document.getElementById('dot1').style.display = 'none';
+    document.getElementById('dot2').style.display = 'none';
+    
+    // Hide the "BACK" button on Step 3 so they can't go back to empty fields
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'none';
+
     document.getElementById('onboardingWizard').classList.add('active');
-    goToStep(3);
-    
-    // We need to modify submitOnboarding slightly or use a specific function
-    // For now, I'll update the logic below to handle "existing" partners
+    goToStep(3); // Jump straight to IDs
 };
 
     window.quickAddId = async function(personId, name) {
