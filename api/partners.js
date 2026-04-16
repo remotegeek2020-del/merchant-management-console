@@ -170,35 +170,15 @@ if (action === 'get_merchant_data') {
             });
         }
 
-     if (action === 'get_merchant_data_raw') {
+ // Inside partners.js
+if (action === 'get_merchant_data_raw') {
     const { identifier_id } = body;
-    try {
-        let allMerchants = [];
-        let from = 0;
-        let finished = false;
-
-        while (!finished) {
-            const { data, error } = await supabase
-                .from('merchants')
-                .select('merchant_id, dba_name, account_status, volume_30_day')
-                .eq('agent_id', identifier_id)
-                .eq('account_status', 'Approved')
-                .range(from, from + 999);
-
-            if (error) throw error;
-            
-            if (!data || data.length === 0) {
-                finished = true;
-            } else {
-                allMerchants = allMerchants.concat(data);
-                from += 1000;
-                if (data.length < 1000) finished = true;
-            }
-        }
-        return res.status(200).json({ success: true, data: allMerchants });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
-    }
+    const { data, error } = await supabase
+        .from('merchants')
+        .select('dba_name, account_status, volume_30_day, volume_90_day') // <-- Ensure volume_90_day is here!
+        .eq('agent_id', identifier_id);
+    
+    return res.status(200).json({ success: true, data });
 }
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
