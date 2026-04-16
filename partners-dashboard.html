@@ -486,7 +486,7 @@
     // 4. WIZARD STEP 3: ACCESS (IDENTIFIERS)
     // ==========================================
 
-    async function searchIdentifierStrings() {
+ async function searchIdentifierStrings() {
         const term = document.getElementById('idLookupInput').value.trim();
         const resultsBox = document.getElementById('idLookupResults');
         if (term.length < 1) { resultsBox.style.display = 'none'; return; }
@@ -502,16 +502,25 @@
                 })
             });
             const result = await res.json();
+            
+            resultsBox.style.display = 'block';
             if (result.data && result.data.length > 0) {
-                resultsBox.style.display = 'block';
                 resultsBox.innerHTML = result.data.map(item => `
                     <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
                         <b>${item.id_string}</b> <small style="color:#94a3b8;">(Unassigned)</small>
                     </div>
                 `).join('');
             } else {
-                resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">Manual entry ID.</div>`;
-                resultsBox.style.display = 'block';
+                // ADDED: "USE MANUAL ENTRY" button to clear the invisible wall
+                resultsBox.innerHTML = `
+                    <div style="padding:12px; text-align:center;">
+                        <div style="color: #64748b; font-size:11px; margin-bottom:8px;">No unassigned ID found.</div>
+                        <button onclick="document.getElementById('idLookupResults').style.display='none'" 
+                                class="slds-button slds-button_neutral" 
+                                style="font-size:10px; padding:4px 8px; border-radius:4px;">
+                            USE MANUAL ENTRY
+                        </button>
+                    </div>`;
             }
         } catch (e) { console.error("ID Lookup Error:", e); }
     }
@@ -737,6 +746,52 @@
         if (prevBtn) { prevBtn.disabled = (currentPage === 1); prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1"; }
         if (nextBtn) { nextBtn.disabled = (currentPage === totalPages || totalPages === 0); nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1"; }
     }
+
+    // --- SEARCH LISTENER (Reacts as you type) ---
+    document.getElementById('partnerSearchInput').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        clearTimeout(searchTimeout);
+
+        searchTimeout = setTimeout(async () => {
+            if (!term) {
+                currentPage = 1;
+                renderGrid(allPartners);
+                return;
+            }
+
+            // Filter logic: Checks Name, Agent ID, and Company Name
+            let filtered = allPartners.filter(p => {
+                const matchesName = p.name.toLowerCase().includes(term);
+                const matchesID = p.companies.some(co => 
+                    co.ids.some(id => id.string.toLowerCase().includes(term))
+                );
+                const matchesCompany = p.companies.some(co => 
+                    co.name.toLowerCase().includes(term)
+                );
+                return matchesName || matchesID || matchesCompany;
+            });
+
+            // Remote Search for Merchant ID if no local results
+            if (filtered.length === 0 && term.length >= 6) {
+                try {
+                    const midRes = await fetch('/api/partners', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'search_by_mid', mid: term })
+                    });
+                    const midData = await midRes.json();
+                    if (midData.success && midData.agent_id) {
+                        filtered = allPartners.filter(p => 
+                            p.companies.some(co => co.ids.some(id => id.string === midData.agent_id))
+                        );
+                    }
+                } catch (e) { console.error("MID search error", e); }
+            }
+
+            currentPage = 1;
+            renderGrid(filtered);
+        }, 300);
+    });
 
     window.changePage = function(direction) {
         const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
