@@ -137,6 +137,18 @@ if (action === 'get_merchant_data') {
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
+        if (action === 'update_identifier_all') {
+    const { id, rev_share, prime49, new_parent_id } = body;
+    const { error } = await supabase
+        .from('agent_identifiers')
+        .update({ 
+            rev_share, 
+            prime49, 
+            parent_config_id: new_parent_id 
+        })
+        .eq('id', id);
+    return res.status(200).json({ success: !error, message: error?.message });
+}
 
         // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
         if (action === 'get_partners_list') {
