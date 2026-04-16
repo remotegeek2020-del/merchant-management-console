@@ -324,252 +324,246 @@
     let searchTimeout = null;
 
     // --- ONBOARDING WIZARD LOGIC ---
-let selectedGHLContact = null;
-let companiesRaw = [];
-let pendingIds = [];
+    let selectedGHLContact = null;
+    let companiesRaw = [];
+    let pendingIds = []; // Consolidated declaration
 
- // --- STEP 2: COMPANY LOGIC ---
-function toggleCompanyInput() {
-    const select = document.getElementById('companySelect');
-    const newFields = document.getElementById('newCompanyFields');
-    // Ensure "new" exactly matches the value in the <option>
-    newFields.style.display = (select.value === 'new') ? 'block' : 'none';
-}
+    // --- STEP 2: COMPANY LOGIC ---
+    function toggleCompanyInput() {
+        const select = document.getElementById('companySelect');
+        const newFields = document.getElementById('newCompanyFields');
+        // If select is null (not rendered yet), just return
+        if (!select || !newFields) return;
+        newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+    }
 
-// --- STEP 3: IDENTIFIER LOGIC ---
-let pendingIds = []; // Stores { string, rev, prime }
-
-async function searchIdentifierStrings() {
-    const term = document.getElementById('idLookupInput').value.trim();
-    const resultsBox = document.getElementById('idLookupResults');
-    
-    if (term.length < 1) { resultsBox.style.display = 'none'; return; }
-
-    try {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'get_orphan_ids', 
-                query: term,
-                placeholder_uuid: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' 
-            })
-        });
-        const result = await res.json();
+    // --- STEP 3: IDENTIFIER LOGIC ---
+    async function searchIdentifierStrings() {
+        const term = document.getElementById('idLookupInput').value.trim();
+        const resultsBox = document.getElementById('idLookupResults');
         
-        if (result.data && result.data.length > 0) {
-            resultsBox.style.display = 'block';
-            resultsBox.innerHTML = result.data.map(item => `
-                <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
-                    <b>${item.id_string}</b> <small style="color:#94a3b8; margin-left:5px;">(Unassigned)</small>
-                </div>
-            `).join('');
-        } else {
-            resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">No unassigned match found.</div>`;
-            resultsBox.style.display = 'block';
+        if (term.length < 1) { 
+            resultsBox.style.display = 'none'; 
+            return; 
         }
-    } catch (e) { console.error("ID Lookup Error:", e); }
-}
+
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'get_orphan_ids', 
+                    query: term,
+                    placeholder_uuid: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' 
+                })
+            });
+            const result = await res.json();
+            
+            if (result.data && result.data.length > 0) {
+                resultsBox.style.display = 'block';
+                resultsBox.innerHTML = result.data.map(item => `
+                    <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
+                        <b>${item.id_string}</b> <small style="color:#94a3b8; margin-left:5px;">(Unassigned)</small>
+                    </div>
+                `).join('');
+            } else {
+                resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">No unassigned match found.</div>`;
+                resultsBox.style.display = 'block';
+            }
+        } catch (e) { 
+            console.error("ID Lookup Error:", e); 
+        }
+    }
+
     function renderIdList() {
-    const container = document.getElementById('addedIdsList');
-    if (pendingIds.length === 0) {
-        container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
-        return;
-    }
-    container.innerHTML = pendingIds.map((item, index) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
-            <div style="font-size:12px;">
-                <b style="color:var(--pp-blue);">${item.string}</b> 
-                ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
-                <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
-            </div>
-            <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
-        </div>
-    `).join('');
-}
-    
-function pickIdFromLookup(id) {
-    document.getElementById('idLookupInput').value = id;
-    document.getElementById('idLookupResults').style.display = 'none';
-}
-
-function addIdToList() {
-    const idInput = document.getElementById('idLookupInput');
-    const revInput = document.getElementById('idRevInput');
-    const primeInput = document.getElementById('idPrimeInput');
-    
-    const idStr = idInput.value.trim();
-    const revStr = revInput.value.trim() || '0%';
-    const isPrime = primeInput.checked;
-
-    if (!idStr) return;
-    if (pendingIds.some(item => item.string === idStr)) {
-        return Swal.fire('Duplicate', 'This ID is already added.', 'warning');
-    }
-
-    pendingIds.push({ string: idStr, rev: revStr, prime: isPrime });
-    
-    // Clear inputs for next ID
-    idInput.value = '';
-    revInput.value = '';
-    primeInput.checked = false;
-    renderIdList();
-}
-
-function removeIdFromList(index) {
-    pendingIds.splice(index, 1);
-    renderIdList();
-}
-
-
-function openOnboardingWizard() {
-    document.getElementById('onboardingWizard').classList.add('active');
-    loadWizardCompanies();
-    loadOrphanIds();
-}
-
-function closeWizard() {
-    document.getElementById('onboardingWizard').classList.remove('active');
-    resetWizard();
-}
-
-function goToStep(step) {
-    document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
-    document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
-    document.getElementById('step' + step).classList.add('active');
-    document.getElementById('dot' + step).classList.add('active');
-}
-
-// Step 1: GHL Search
-document.getElementById('ghlSearch').addEventListener('input', (e) => {
-    const query = e.target.value.trim();
-    if (query.length < 3) return;
-    
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(async () => {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'search_ghl', query })
-        });
-        const result = await res.json();
-        const container = document.getElementById('ghlResults');
-        container.style.display = 'block';
-        container.innerHTML = result.contacts.map(c => `
-            <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
-                <b>${c.firstName} ${c.lastName}</b><br>
-                <small>${c.email || 'No Email'}</small>
+        const container = document.getElementById('addedIdsList');
+        if (!container) return;
+        
+        if (pendingIds.length === 0) {
+            container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
+            return;
+        }
+        container.innerHTML = pendingIds.map((item, index) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:5px;">
+                <div style="font-size:12px;">
+                    <b style="color:var(--pp-blue);">${item.string}</b> 
+                    ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
+                    <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
+                </div>
+                <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
             </div>
         `).join('');
-    }, 500);
-});
-
-function selectGHLContact(id, name, email, phone) {
-    selectedGHLContact = { id, name, email, phone };
-    document.getElementById('ghlResults').style.display = 'none';
-    const display = document.getElementById('selectedContactDisplay');
-    display.style.display = 'block';
-    display.innerHTML = `<strong>Selected:</strong> ${name}<br><small>${email}</small>`;
-    document.getElementById('nextToStep2').style.display = 'block';
-}
-
-// Step 2: Company Management
-async function loadWizardCompanies() {
-    const res = await fetch('/api/partners', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_partners_list' }) // Re-uses main fetch
-    });
-    const result = await res.json();
-    const select = document.getElementById('companySelect');
-    select.innerHTML = '<option value="new">+ Create New Company</option>' + 
-        result.data.companies.map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
-}
-
-// Step 3: Unassigned ID Discovery
-async function loadOrphanIds() {
-    const res = await fetch('/api/partners', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_orphan_ids' })
-    });
-    const result = await res.json();
-    const select = document.getElementById('orphanIdSelect');
-    select.innerHTML = '<option value="">-- Manual Entry --</option>' + 
-        result.data.map(id => `<option value="${id.agent_id}">${id.agent_id} (${id.count} merchants)</option>`).join('');
-}
-
-// Updated Submission Logic
-async function submitOnboarding() {
-    if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
-
-    const payload = {
-        action: 'complete_onboarding',
-        person: {
-            name: selectedGHLContact.name,
-            email: selectedGHLContact.email,
-            phone: selectedGHLContact.phone,
-            hl_id: selectedGHLContact.id
-        },
-        company: {
-            id: (document.getElementById('companySelect').value === 'new' || document.getElementById('companySelect').value === 'none') ? null : document.getElementById('companySelect').value,
-            name: document.getElementById('companySelect').value === 'new' ? document.getElementById('newCompanyName').value : null,
-            isIndependent: document.getElementById('companySelect').value === 'none'
-        },
-        // Now sending IDs with their specific rev shares
-        identifiers: pendingIds.map(item => ({
-            string: item.string,
-            rev: item.rev,
-            prime: document.getElementById('initPrime').checked
-        }))
-    };
-
-    Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading() });
+    }
     
-    try {
+    function pickIdFromLookup(id) {
+        const input = document.getElementById('idLookupInput');
+        if (input) input.value = id;
+        document.getElementById('idLookupResults').style.display = 'none';
+    }
+
+    function addIdToList() {
+        const idInput = document.getElementById('idLookupInput');
+        const revInput = document.getElementById('idRevInput');
+        const primeInput = document.getElementById('idPrimeInput');
+        
+        const idStr = idInput.value.trim();
+        const revStr = revInput.value.trim() || '0%';
+        const isPrime = primeInput.checked;
+
+        if (!idStr) return;
+        if (pendingIds.some(item => item.string === idStr)) {
+            return Swal.fire('Duplicate', 'This ID is already added.', 'warning');
+        }
+
+        pendingIds.push({ string: idStr, rev: revStr, prime: isPrime });
+        
+        idInput.value = '';
+        revInput.value = '';
+        primeInput.checked = false;
+        renderIdList();
+    }
+
+    function removeIdFromList(index) {
+        pendingIds.splice(index, 1);
+        renderIdList();
+    }
+
+    function openOnboardingWizard() {
+        document.getElementById('onboardingWizard').classList.add('active');
+        loadWizardCompanies();
+        // loadOrphanIds removed as we now use live searchIdentifierStrings
+    }
+
+    function closeWizard() {
+        document.getElementById('onboardingWizard').classList.remove('active');
+        resetWizard();
+    }
+
+    function goToStep(step) {
+        document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+        document.getElementById('step' + step).classList.add('active');
+        document.getElementById('dot' + step).classList.add('active');
+    }
+
+    // Step 1: GHL Search
+    document.getElementById('ghlSearch').addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 3) return;
+        
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'search_ghl', query })
+            });
+            const result = await res.json();
+            const container = document.getElementById('ghlResults');
+            container.style.display = 'block';
+            container.innerHTML = result.contacts.map(c => `
+                <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
+                    <b>${c.firstName} ${c.lastName}</b><br>
+                    <small>${c.email || 'No Email'}</small>
+                </div>
+            `).join('');
+        }, 500);
+    });
+
+    function selectGHLContact(id, name, email, phone) {
+        selectedGHLContact = { id, name, email, phone };
+        document.getElementById('ghlResults').style.display = 'none';
+        const display = document.getElementById('selectedContactDisplay');
+        display.style.display = 'block';
+        display.innerHTML = `<strong>Selected:</strong> ${name}<br><small>${email}</small>`;
+        document.getElementById('nextToStep2').style.display = 'block';
+    }
+
+    // Step 2: Company Management
+    async function loadWizardCompanies() {
         const res = await fetch('/api/partners', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
+            body: JSON.stringify({ action: 'get_partners_list' })
         });
         const result = await res.json();
+        const select = document.getElementById('companySelect');
+        // Added Independent option back in
+        select.innerHTML = `
+            <option value="none">Independent (No Company)</option>
+            <option value="new">+ Create New Company</option>
+        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
+        toggleCompanyInput(); // Trigger visibility check
+    }
+
+    // Updated Submission Logic
+    async function submitOnboarding() {
+        if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one Agent ID', 'error');
+
+        const companyVal = document.getElementById('companySelect').value;
+        const payload = {
+            action: 'complete_onboarding',
+            person: {
+                name: selectedGHLContact.name,
+                email: selectedGHLContact.email,
+                phone: selectedGHLContact.phone,
+                hl_id: selectedGHLContact.id
+            },
+            company: {
+                id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
+                name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
+                isIndependent: companyVal === 'none'
+            },
+            identifiers: pendingIds // Sending objects {string, rev, prime}
+        };
+
+        Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading() });
         
-        if (result.success) {
-            Swal.fire('Success', `Partner registered with ${pendingIds.length} IDs.`, 'success');
-            pendingIds = [];
-            closeWizard();
-            loadPartners();
-        } else {
-            throw new Error(result.message);
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const result = await res.json();
+            
+            if (result.success) {
+                Swal.fire('Success', `Partner registered with ${pendingIds.length} IDs.`, 'success');
+                pendingIds = [];
+                closeWizard();
+                loadPartners();
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (e) {
+            Swal.fire('Error', e.message || 'Onboarding failed', 'error');
         }
-    } catch (e) {
-        Swal.fire('Error', e.message || 'Onboarding failed', 'error');
     }
-}
-function resetWizard() {
-    selectedGHLContact = null;
-    document.getElementById('ghlSearch').value = '';
-    document.getElementById('selectedContactDisplay').style.display = 'none';
-    document.getElementById('nextToStep2').style.display = 'none';
-    goToStep(1);
-}
-function getTrendIndicator(current30, total90) {
-    const averageMonthly = total90 / 3;
-    if (!averageMonthly || averageMonthly === 0) return '';
 
-    const percentChange = ((current30 - averageMonthly) / averageMonthly) * 100;
-    const diff = percentChange.toFixed(1);
-
-    if (percentChange > 5) {
-        return `<span class="material-icons" style="font-size:14px; color:#10b981; cursor:help;" 
-                title="Performance: +${diff}% vs 90-day monthly average">trending_up</span>`;
-    } else if (percentChange < -5) {
-        return `<span class="material-icons" style="font-size:14px; color:#ef4444; cursor:help;" 
-                title="Performance: ${diff}% vs 90-day monthly average">trending_down</span>`;
+    function resetWizard() {
+        selectedGHLContact = null;
+        pendingIds = [];
+        document.getElementById('ghlSearch').value = '';
+        document.getElementById('selectedContactDisplay').style.display = 'none';
+        document.getElementById('nextToStep2').style.display = 'none';
+        renderIdList();
+        goToStep(1);
     }
-    return `<span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:help;" 
-            title="Stable: Within 5% of 90-day average">trending_flat</span>`;
-}
+
+    // --- REMAINDER OF YOUR EXISTING DASHBOARD FUNCTIONS ---
+    function getTrendIndicator(current30, total90) {
+        const averageMonthly = total90 / 3;
+        if (!averageMonthly || averageMonthly === 0) return '';
+        const percentChange = ((current30 - averageMonthly) / averageMonthly) * 100;
+        const diff = percentChange.toFixed(1);
+
+        if (percentChange > 5) {
+            return `<span class="material-icons" style="font-size:14px; color:#10b981; cursor:help;" title="Performance: +${diff}% vs 90-day monthly average">trending_up</span>`;
+        } else if (percentChange < -5) {
+            return `<span class="material-icons" style="font-size:14px; color:#ef4444; cursor:help;" title="Performance: ${diff}% vs 90-day monthly average">trending_down</span>`;
+        }
+        return `<span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:help;" title="Stable: Within 5% of 90-day average">trending_flat</span>`;
+    }
 
     function processPartnerData(payload) {
         if (!payload || !payload.persons) return [];
@@ -614,96 +608,56 @@ function getTrendIndicator(current30, total90) {
             const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
             
             return formatted.length > 0 ? { 
-                id: person.id, 
-                name: person.full_name,
+                id: person.id, name: person.full_name,
                 email: person.email || 'No email provided',
                 phone: person.phone_number || 'No phone provided',
-                hl_id: person.hl_contact_id, 
-                companies: formatted 
+                hl_id: person.hl_contact_id, companies: formatted 
             } : null;
         }).filter(Boolean);
     }
 
     function renderBadge(id, isRootOfCard = false) {
         let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
-        
         return `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                    <div style="text-align:left;">
-                        ${label}
-                        <span>${id.string} ${id.isPrime ? '⭐' : ''}</span>
-                        <div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div>
-                    </div>
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span style="font-size:10px; opacity:0.7;">${id.rev}</span>
-                        <button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;" title="Export ID Data">
-                            <span class="material-icons" style="font-size:16px;">file_download</span>
-                        </button>
-                    </div>
+                    <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
+                    <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span><button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
                 </div>
                 ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
             </div>`;
     }
 
-function updateAllBadgeStats(idStr, s) {
-    const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
-    statDivs.forEach(div => {
-        div.style.display = 'block';
-        if (s) {
-            const current30 = parseFloat(s.total_volume_sum || 0);
-            const total90 = parseFloat(s.total_volume_90d_sum || 0);
-            const avgMonthly90 = total90 / 3;
-            
-            // Status Counts
-            const approved = parseInt(s.merchant_count || 0);
-            const pipeline = parseInt(s.pending_count || 0);
-            const lost = parseInt(s.closed_count || 0);
-            const risk = parseInt(s.risk_count || 0);
+    function updateAllBadgeStats(idStr, s) {
+        const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
+        statDivs.forEach(div => {
+            div.style.display = 'block';
+            if (s) {
+                const current30 = parseFloat(s.total_volume_sum || 0);
+                const total90 = parseFloat(s.total_volume_90d_sum || 0);
+                const avgMonthly90 = total90 / 3;
+                const approved = parseInt(s.merchant_count || 0);
+                const pipeline = parseInt(s.pending_count || 0);
+                const lost = parseInt(s.closed_count || 0);
+                const risk = parseInt(s.risk_count || 0);
+                const percentChange = avgMonthly90 > 0 ? ((current30 - avgMonthly90) / avgMonthly90) * 100 : 0;
+                const diff = percentChange.toFixed(1);
+                let trendColor = '#94a3b8'; let trendIcon = 'trending_flat';
+                if (percentChange > 5) { trendColor = '#10b981'; trendIcon = 'trending_up'; }
+                else if (percentChange < -5) { trendColor = '#ef4444'; trendIcon = 'trending_down'; }
+                const tooltipText = `Portfolio Breakdown:\n• ACTIVE: ${approved.toLocaleString()}\n• PIPELINE: ${pipeline.toLocaleString()}\n• CHURN: ${lost.toLocaleString()}\n• RISK: ${risk.toLocaleString()}`;
+                div.innerHTML = `
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-top: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;"><span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Current (30d)</span><span style="font-size: 11px; font-weight: 800; color: #059669;">$${current30.toLocaleString(undefined, {maximumFractionDigits:0})}</span></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dotted #cbd5e1;"><span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Baseline</span><span style="font-size: 11px; font-weight: 600; color: #475569;">$${avgMonthly90.toLocaleString(undefined, {maximumFractionDigits:0})}</span></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;"><div style="display: flex; align-items: center; gap: 4px; background: white; padding: 2px 6px; border-radius: 6px; border: 1px solid #e2e8f0;"><span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span><span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span></div><div style="text-align: right; cursor: help;" title="${tooltipText}"><div style="font-size: 10px; font-weight: 800; color: #1e293b;">${approved.toLocaleString()}</div><div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; line-height: 1; border-bottom: 1px dashed #cbd5e1;">Approved</div></div></div>
+                    </div>`;
+            } else {
+                 div.innerHTML = `<div style="padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;"><span style="color:#64748b; font-size:10px; font-weight:700; text-transform: uppercase;">No Production</span></div>`;
+            }
+        });
+    }
 
-            // Variance Calculation
-            const percentChange = avgMonthly90 > 0 ? ((current30 - avgMonthly90) / avgMonthly90) * 100 : 0;
-            const diff = percentChange.toFixed(1);
-            
-            let trendColor = '#94a3b8'; 
-            let trendIcon = 'trending_flat';
-            if (percentChange > 5) { trendColor = '#10b981'; trendIcon = 'trending_up'; }
-            else if (percentChange < -5) { trendColor = '#ef4444'; trendIcon = 'trending_down'; }
-
-            // Detailed Tooltip
-            const tooltipText = `Portfolio Breakdown:
-• ACTIVE: ${approved.toLocaleString()} (Approved)
-• PIPELINE: ${pipeline.toLocaleString()} (Pending/Enrollment)
-• CHURN: ${lost.toLocaleString()} (Closed/Withdrawn/Declined)
-• RISK: ${risk.toLocaleString()} (Fraud/Collections)`;
-
-            div.innerHTML = `
-                <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-top: 8px; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02);">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-                        <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Current (30d)</span>
-                        <span style="font-size: 11px; font-weight: 800; color: #059669;">$${current30.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; padding-bottom: 5px; border-bottom: 1px dotted #cbd5e1;">
-                        <span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Baseline (90d avg)</span>
-                        <span style="font-size: 11px; font-weight: 600; color: #475569;">$${avgMonthly90.toLocaleString(undefined, {maximumFractionDigits:0})}</span>
-                    </div>
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <div style="display: flex; align-items: center; gap: 4px; background: white; padding: 2px 6px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                            <span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span>
-                            <span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
-                        </div>
-                        <div style="text-align: right; cursor: help;" title="${tooltipText}">
-                            <div style="font-size: 10px; font-weight: 800; color: #1e293b;">${approved.toLocaleString()}</div>
-                            <div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; line-height: 1; border-bottom: 1px dashed #cbd5e1;">Approved Merchants</div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-             div.innerHTML = `<div style="padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;"><span style="color:#64748b; font-size:10px; font-weight:700; text-transform: uppercase;">No Approved Production</span></div>`;
-        }
-    });
-}
     async function downloadSingleIdExport(idString) {
         Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
         try {
