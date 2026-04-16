@@ -33,13 +33,13 @@ if (action === 'get_orphan_ids') {
     const data = await ghlRes.json();
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
-      if (action === 'complete_onboarding') {
+    if (action === 'complete_onboarding') {
     const { person, company, identifiers } = body;
 
-    // Helper to proper case in backend as well
+    // Proper Case formatting
     const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
 
-    // 1. Upsert the Person (Proper Cased)
+    // 1. Upsert Person using 'email' as the conflict target
     const { data: pData, error: pErr } = await supabase
         .from('persons')
         .upsert({ 
@@ -47,27 +47,28 @@ if (action === 'get_orphan_ids') {
             email: person.email, 
             phone_number: person.phone, 
             hl_contact_id: person.hl_id 
-        }, { onConflict: 'hl_contact_id' }) // Conflict check on HL ID
+        }, { onConflict: 'email' }) // Matches your DB unique constraint
         .select().single();
 
-    if (pErr || !pData) return res.status(400).json({ success: false, message: "Duplicate or Error: " + pErr?.message });
+    if (pErr || !pData) return res.status(400).json({ success: false, message: "Person Sync Error: " + pErr?.message });
 
-    // 2. Handle Company (as previously designed)
+    // 2. Handle Company
     let targetCoId = company.id;
     if (!targetCoId && !company.isIndependent && company.name) {
         const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
         targetCoId = coData.id;
     }
 
-    // 3. Create Agent
-    const { data: agentData } = await supabase.from('agents').insert({
+    // 3. Create Agent record
+    const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
         company_id: targetCoId,
         agent_name: properName,
         parent_agent_id: pData.id
     }).select().single();
 
-    // 4. Batch Upsert Identifiers
-    // This will either MOVE an existing placeholder ID or CREATE a brand new one
+    if (agentErr || !agentData) return res.status(400).json({ success: false, message: "Agent Link Error" });
+
+    // 4. Batch Upsert Identifiers (Handles Move and Create New)
     const idInserts = identifiers.map(id => ({
         agent_id: agentData.id,
         id_string: id.string,
@@ -78,11 +79,12 @@ if (action === 'get_orphan_ids') {
 
     const { error: finalErr } = await supabase
         .from('agent_identifiers')
-        .upsert(idInserts, { onConflict: 'id_string' }); 
+        .upsert(idInserts, { onConflict: 'id_string' }); // id_string is unique in your schema
 
-    return res.status(200).json({ success: !finalErr, message: finalErr?.message });
+    if (finalErr) return res.status(400).json({ success: false, message: "Identifier Sync Error: " + finalErr.message });
+
+    return res.status(200).json({ success: true });
 }
-
         // --- ACTION: SEARCH BY MID ---
 if (action === 'search_by_mid') {
     const { mid } = body;
