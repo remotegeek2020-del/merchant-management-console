@@ -33,49 +33,41 @@ if (action === 'get_orphan_ids') {
     const data = await ghlRes.json();
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
-        if (action === 'complete_onboarding') {
+      if (action === 'complete_onboarding') {
     const { person, company, identifiers } = body;
 
-    // 1. Create/Update the Person
+    // Helper to proper case in backend as well
+    const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
+
+    // 1. Upsert the Person (Proper Cased)
     const { data: pData, error: pErr } = await supabase
         .from('persons')
         .upsert({ 
-            full_name: person.name, 
+            full_name: properName, 
             email: person.email, 
             phone_number: person.phone, 
             hl_contact_id: person.hl_id 
-        }, { onConflict: 'email' })
-        .select()
-        .single();
+        }, { onConflict: 'hl_contact_id' }) // Conflict check on HL ID
+        .select().single();
 
-    if (pErr || !pData) return res.status(400).json({ success: false, message: "Person creation failed: " + pErr?.message });
+    if (pErr || !pData) return res.status(400).json({ success: false, message: "Duplicate or Error: " + pErr?.message });
 
-    // 2. Handle Company Logic
+    // 2. Handle Company (as previously designed)
     let targetCoId = company.id;
     if (!targetCoId && !company.isIndependent && company.name) {
-        const { data: coData, error: coErr } = await supabase
-            .from('companies')
-            .insert({ company_name: company.name })
-            .select()
-            .single();
-        if (coErr) return res.status(400).json({ success: false, message: "Company creation failed" });
+        const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
         targetCoId = coData.id;
     }
 
-    // 3. Create the Agent Record
-    const { data: agentData, error: agentErr } = await supabase
-        .from('agents')
-        .insert({
-            company_id: targetCoId, // This is null if 'Independent'
-            agent_name: person.name,
-            parent_agent_id: pData.id
-        })
-        .select()
-        .single();
+    // 3. Create Agent
+    const { data: agentData } = await supabase.from('agents').insert({
+        company_id: targetCoId,
+        agent_name: properName,
+        parent_agent_id: pData.id
+    }).select().single();
 
-    if (agentErr || !agentData) return res.status(400).json({ success: false, message: "Agent creation failed" });
-
-    // 4. Create all Identifiers (Batch)
+    // 4. Batch Upsert Identifiers
+    // This will either MOVE an existing placeholder ID or CREATE a brand new one
     const idInserts = identifiers.map(id => ({
         agent_id: agentData.id,
         id_string: id.string,
@@ -86,11 +78,9 @@ if (action === 'get_orphan_ids') {
 
     const { error: finalErr } = await supabase
         .from('agent_identifiers')
-        .upsert(idInserts, { onConflict: 'id_string' }); // Upsert in case ID already existed under placeholder
+        .upsert(idInserts, { onConflict: 'id_string' }); 
 
-    if (finalErr) return res.status(400).json({ success: false, message: "Identifiers linking failed: " + finalErr.message });
-
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
 
         // --- ACTION: SEARCH BY MID ---
