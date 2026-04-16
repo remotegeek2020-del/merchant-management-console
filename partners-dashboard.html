@@ -549,26 +549,34 @@ async function drillDownTrend(agentId) {
         const result = await res.json();
 
         if (result.success && result.data.length > 0) {
+            console.log("Raw Data Sample:", result.data[0]); // This helps us debug if names are still wrong
+
             const analyzed = result.data.map(m => {
                 const current = parseFloat(m.volume_30_day || 0);
-                const avg90 = (parseFloat(m.volume_90_day || 0) / 3);
+                
+                // IMPORTANT: Ensure this matches your DB column name (usually volume_90_day)
+                // We use || 0 to ensure we don't get NaN
+                const total90 = parseFloat(m.volume_90_day || m.volume_90d || 0);
+                const avg90 = total90 / 3;
+
                 return {
-                    dba: m.dba_name,
-                    status: m.account_status,
+                    dba: m.dba_name || 'Unknown',
+                    status: m.account_status || 'N/A',
                     current: current,
                     baseline: avg90,
                     impact: current - avg90
                 };
             });
 
-            // Sort by impact magnitude so the biggest changes (positive or negative) are at the top
+            // Sort by impact magnitude (Absolute value)
             analyzed.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 
             showTrendTable(agentId, analyzed);
         } else {
-            Swal.fire('No Data', 'No merchant records found for this ID.', 'info');
+            Swal.fire('No Data', 'No merchant records found or columns missing.', 'info');
         }
     } catch (err) {
+        console.error("Variance Error:", err);
         Swal.fire('Error', 'Failed to analyze trend data.', 'error');
     }
 }
