@@ -11,10 +11,15 @@ export default async function handler(req, res) {
 
     try {
 
-        if (action === 'get_orphan_ids') {
-    const { query } = body;
-    // Returns unassigned merchant IDs that match the search term
-    const { data, error } = await supabase.rpc('get_unassigned_ids', { search_term: query });
+   // Example of what your backend logic should look like:
+if (action === 'get_orphan_ids') {
+    const { query, placeholder_uuid } = body;
+    const { data, error } = await supabase
+        .from('agent_identifiers')
+        .select('id_string')
+        .eq('agent_id', placeholder_uuid) // Filter for the "Placeholder Agent"
+        .ilike('id_string', `%${query}%`)  // Search the string
+        .limit(10);
     return res.status(200).json({ data });
 }
         if (action === 'search_ghl') {
