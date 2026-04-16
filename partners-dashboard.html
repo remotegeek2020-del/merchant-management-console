@@ -264,12 +264,12 @@
         <button id="nextToStep2" onclick="goToStep(2)" class="pagination-btn" style="width: 100%; margin-top: auto; display:none; background: var(--pp-blue); color:white;">NEXT: BUSINESS INFO</button>
     </div>
 
-   <div class="step-container" id="step2">
+ <div class="step-container" id="step2">
     <label class="search-label">Company / Firm Association</label>
     <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
         <option value="none">Independent (Individual Partner)</option>
         <option value="new">+ Create New Company...</option>
-    </select>
+        </select>
     
     <div id="newCompanyFields" style="margin-top: 10px; display: none;">
         <label class="search-label">New Company Name</label>
@@ -285,26 +285,23 @@
 <div class="step-container" id="step3">
     <label class="search-label">Assign Agent Identifiers</label>
     
-    <div style="display: flex; flex-direction: column; gap: 8px;">
+    <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <div style="position: relative;">
             <input type="text" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs..." oninput="searchIdentifierStrings()">
-            <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1);"></div>
+            <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
         </div>
         
-        <div style="display: flex; gap: 8px;">
-            <input type="text" id="idRevInput" class="wizard-input" placeholder="Rev % (e.g. 60%)" style="flex: 1;">
-            <button onclick="addIdToList()" class="pagination-btn" style="background: var(--pp-blue); color: white; padding: 0 20px;">ADD ID</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="text" id="idRevInput" class="wizard-input" placeholder="Rev %" style="flex: 1;">
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #64748b; white-space: nowrap;">
+                <input type="checkbox" id="idPrimeInput"> PRIME ⭐
+            </label>
+            <button onclick="addIdToList()" class="pagination-btn" style="background: var(--pp-blue); color: white; padding: 0 15px; height: 40px;">ADD</button>
         </div>
     </div>
 
-    <div id="addedIdsList" style="margin-top: 15px; display: flex; flex-direction: column; gap: 6px; min-height: 80px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px dashed #cbd5e1; max-height: 150px; overflow-y: auto;">
-        <div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 20px;">No IDs added yet</div>
-    </div>
-
-    <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
-        <label style="display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 700; color: #64748b;">
-            <input type="checkbox" id="initPrime"> APPLY PRIME ⭐ STATUS TO ALL
-        </label>
+    <div id="addedIdsList" style="margin-top: 15px; display: flex; flex-direction: column; gap: 6px; min-height: 100px; padding: 10px; background: white; border-radius: 8px; border: 1px dashed #cbd5e1; max-height: 200px; overflow-y: auto;">
+        <div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added to this partner yet</div>
     </div>
 
     <div style="display: flex; gap: 10px; margin-top: auto;">
@@ -331,39 +328,64 @@ let selectedGHLContact = null;
 let companiesRaw = [];
 let pendingIds = [];
 
-   function toggleCompanyInput() {
+ // --- STEP 2: COMPANY LOGIC ---
+function toggleCompanyInput() {
     const select = document.getElementById('companySelect');
     const newFields = document.getElementById('newCompanyFields');
+    // Ensure "new" exactly matches the value in the <option>
     newFields.style.display = (select.value === 'new') ? 'block' : 'none';
 }
 
-// Fixed Lookup: Pings the database for unassigned merchant agent_ids
+// --- STEP 3: IDENTIFIER LOGIC ---
+let pendingIds = []; // Stores { string, rev, prime }
+
 async function searchIdentifierStrings() {
     const term = document.getElementById('idLookupInput').value.trim();
     const resultsBox = document.getElementById('idLookupResults');
     
-    if (term.length < 2) { resultsBox.style.display = 'none'; return; }
+    if (term.length < 1) { resultsBox.style.display = 'none'; return; }
 
     try {
         const res = await fetch('/api/partners', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_orphan_ids', query: term })
+            body: JSON.stringify({ 
+                action: 'get_orphan_ids', 
+                query: term,
+                placeholder_uuid: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' 
+            })
         });
         const result = await res.json();
         
         if (result.data && result.data.length > 0) {
             resultsBox.style.display = 'block';
             resultsBox.innerHTML = result.data.map(item => `
-                <div class="ghl-result-item" onclick="pickIdFromLookup('${item.agent_id}')">
-                    <b>${item.agent_id}</b> <span style="color:#94a3b8; font-size:10px; margin-left:8px;">(${item.count} merchants)</span>
+                <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
+                    <b>${item.id_string}</b> <small style="color:#94a3b8; margin-left:5px;">(Unassigned)</small>
                 </div>
             `).join('');
         } else {
-            resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8; font-style:italic;">No matches. Type to add as new ID.</div>`;
+            resultsBox.innerHTML = `<div class="ghl-result-item" style="color: #94a3b8;">No unassigned match found.</div>`;
             resultsBox.style.display = 'block';
         }
-    } catch (e) { console.error("Lookup error", e); }
+    } catch (e) { console.error("ID Lookup Error:", e); }
+}
+    function renderIdList() {
+    const container = document.getElementById('addedIdsList');
+    if (pendingIds.length === 0) {
+        container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
+        return;
+    }
+    container.innerHTML = pendingIds.map((item, index) => `
+        <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0;">
+            <div style="font-size:12px;">
+                <b style="color:var(--pp-blue);">${item.string}</b> 
+                ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
+                <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
+            </div>
+            <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
+        </div>
+    `).join('');
 }
     
 function pickIdFromLookup(id) {
@@ -374,18 +396,23 @@ function pickIdFromLookup(id) {
 function addIdToList() {
     const idInput = document.getElementById('idLookupInput');
     const revInput = document.getElementById('idRevInput');
+    const primeInput = document.getElementById('idPrimeInput');
     
     const idStr = idInput.value.trim();
     const revStr = revInput.value.trim() || '0%';
+    const isPrime = primeInput.checked;
 
     if (!idStr) return;
     if (pendingIds.some(item => item.string === idStr)) {
-        return Swal.fire('Duplicate', 'This ID is already in your list.', 'warning');
+        return Swal.fire('Duplicate', 'This ID is already added.', 'warning');
     }
 
-    pendingIds.push({ string: idStr, rev: revStr });
+    pendingIds.push({ string: idStr, rev: revStr, prime: isPrime });
+    
+    // Clear inputs for next ID
     idInput.value = '';
     revInput.value = '';
+    primeInput.checked = false;
     renderIdList();
 }
 
@@ -394,19 +421,6 @@ function removeIdFromList(index) {
     renderIdList();
 }
 
-function renderIdList() {
-    const container = document.getElementById('addedIdsList');
-    if (pendingIds.length === 0) {
-        container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 20px;">No IDs added yet</div>';
-        return;
-    }
-    container.innerHTML = pendingIds.map((item, index) => `
-        <div style="display:flex; justify-content:space-between; align-items:center; background:white; padding:6px 10px; border-radius:6px; border:1px solid #e2e8f0; font-size:12px;">
-            <span><b style="color:var(--pp-blue);">${item.string}</b> <span style="color:#94a3b8; margin-left:8px;">Share: ${item.rev}</span></span>
-            <span class="material-icons" style="font-size: 16px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
-        </div>
-    `).join('');
-}
 
 function openOnboardingWizard() {
     document.getElementById('onboardingWizard').classList.add('active');
