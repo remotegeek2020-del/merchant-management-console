@@ -328,6 +328,13 @@
     let companiesRaw = [];
     let pendingIds = []; // Consolidated declaration
 
+    function toTitleCase(str) {
+    if (!str) return "";
+    return str.toLowerCase().split(' ').map(word => {
+        return word.charAt(0).toUpperCase() + word.slice(1);
+    }).join(' ');
+}
+
     // --- STEP 2: COMPANY LOGIC ---
     function toggleCompanyInput() {
         const select = document.getElementById('companySelect');
@@ -470,14 +477,33 @@
         }, 500);
     });
 
-    function selectGHLContact(id, name, email, phone) {
-        selectedGHLContact = { id, name, email, phone };
-        document.getElementById('ghlResults').style.display = 'none';
-        const display = document.getElementById('selectedContactDisplay');
-        display.style.display = 'block';
-        display.innerHTML = `<strong>Selected:</strong> ${name}<br><small>${email}</small>`;
-        document.getElementById('nextToStep2').style.display = 'block';
+   function selectGHLContact(id, name, email, phone) {
+    // 1. Check if person already exists in our local personsRaw array
+    const exists = personsRaw.find(p => p.hl_contact_id === id);
+    
+    if (exists) {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Partner Already Exists',
+            text: `${name} is already registered in the Partner Network.`,
+            confirmButtonColor: '#004990'
+        });
+        return; // Stop filter
     }
+
+    selectedGHLContact = { 
+        id, 
+        name: toTitleCase(name), // Proper Case applied here
+        email, 
+        phone 
+    };
+    
+    document.getElementById('ghlResults').style.display = 'none';
+    const display = document.getElementById('selectedContactDisplay');
+    display.style.display = 'block';
+    display.innerHTML = `<strong>Selected:</strong> ${selectedGHLContact.name}<br><small>${email}</small>`;
+    document.getElementById('nextToStep2').style.display = 'block';
+}
 
     // Step 2: Company Management
     async function loadWizardCompanies() {
