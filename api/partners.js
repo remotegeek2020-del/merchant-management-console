@@ -33,7 +33,7 @@ if (action === 'get_orphan_ids') {
     const data = await ghlRes.json();
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
-    if (action === 'complete_onboarding') {
+if (action === 'complete_onboarding') {
     const { person, company, identifiers } = body;
 
     // Proper Case formatting
