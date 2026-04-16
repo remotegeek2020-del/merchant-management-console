@@ -287,12 +287,14 @@
     
     <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <div style="position: relative;">
-            <input type="text" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs..." oninput="searchIdentifierStrings()">
+            <input type="number" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs..." oninput="searchIdentifierStrings()">
             <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
         </div>
         
         <div style="display: flex; gap: 8px; align-items: center;">
-            <input type="text" id="idRevInput" class="wizard-input" placeholder="Rev %" style="flex: 1;">
+            <input type="number" id="idRevInput" class="wizard-input" 
+               placeholder="Rev Share (Number only)" style="flex: 1;"
+               inputmode="numeric">
             <label style="display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #64748b; white-space: nowrap;">
                 <input type="checkbox" id="idPrimeInput"> PRIME ⭐
             </label>
@@ -531,27 +533,39 @@
         document.getElementById('idLookupResults').style.display = 'none';
     }
 
-    function addIdToList() {
-        const idInput = document.getElementById('idLookupInput');
-        const revInput = document.getElementById('idRevInput');
-        const primeInput = document.getElementById('idPrimeInput');
-        
-        const idStr = idInput.value.trim();
-        const revStr = revInput.value.trim() || '0%';
-        const isPrime = primeInput.checked;
+  function addIdToList() {
+    const idInput = document.getElementById('idLookupInput');
+    const revInput = document.getElementById('idRevInput');
+    const primeInput = document.getElementById('idPrimeInput');
+    
+    // We get the raw value (number)
+    const idStr = idInput.value.trim();
+    const revNum = revInput.value.trim();
+    const isPrime = primeInput.checked;
 
-        if (!idStr) return;
-        if (pendingIds.some(item => item.string === idStr)) {
-            return Swal.fire('Duplicate', 'This ID is already in the list.', 'warning');
-        }
+    if (!idStr) return;
+    
+    // Auto-formatting Rev Share: Add % if it's missing
+    // If they leave it blank, we default to "0%"
+    const formattedRev = revNum ? `${revNum}%` : "0%";
 
-        pendingIds.push({ string: idStr, rev: revStr, prime: isPrime });
-        idInput.value = '';
-        revInput.value = '';
-        primeInput.checked = false;
-        renderIdList();
+    if (pendingIds.some(item => item.string === idStr)) {
+        return Swal.fire('Duplicate', 'This ID is already in your list.', 'warning');
     }
 
+    // Push the formatted string to the list
+    pendingIds.push({ 
+        string: idStr, 
+        rev: formattedRev, 
+        prime: isPrime 
+    });
+    
+    // Reset inputs
+    idInput.value = '';
+    revInput.value = '';
+    primeInput.checked = false;
+    renderIdList();
+}
     function removeIdFromList(index) {
         pendingIds.splice(index, 1);
         renderIdList();
