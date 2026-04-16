@@ -34,9 +34,9 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
         if (action === 'complete_onboarding') {
-    const { person, company, identifier } = body;
-    
-    // 1. Upsert Person (by email)
+    const { person, company, identifiers } = body;
+
+    // 1. Create/Update the Person
     const { data: pData, error: pErr } = await supabase
         .from('persons')
         .upsert({ 
@@ -44,31 +44,53 @@ if (action === 'get_orphan_ids') {
             email: person.email, 
             phone_number: person.phone, 
             hl_contact_id: person.hl_id 
-        }, { onConflict: 'email' }).select().single();
+        }, { onConflict: 'email' })
+        .select()
+        .single();
 
-    // 2. Handle Company
+    if (pErr || !pData) return res.status(400).json({ success: false, message: "Person creation failed: " + pErr?.message });
+
+    // 2. Handle Company Logic
     let targetCoId = company.id;
-    if (!targetCoId) {
-        const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
+    if (!targetCoId && !company.isIndependent && company.name) {
+        const { data: coData, error: coErr } = await supabase
+            .from('companies')
+            .insert({ company_name: company.name })
+            .select()
+            .single();
+        if (coErr) return res.status(400).json({ success: false, message: "Company creation failed" });
         targetCoId = coData.id;
     }
 
-    // 3. Create Agent
-    const { data: agentData } = await supabase.from('agents').insert({
-        company_id: targetCoId,
-        agent_name: person.name,
-        parent_agent_id: pData.id
-    }).select().single();
+    // 3. Create the Agent Record
+    const { data: agentData, error: agentErr } = await supabase
+        .from('agents')
+        .insert({
+            company_id: targetCoId, // This is null if 'Independent'
+            agent_name: person.name,
+            parent_agent_id: pData.id
+        })
+        .select()
+        .single();
 
-    // 4. Create Identifier
-    const { error: idErr } = await supabase.from('agent_identifiers').insert({
+    if (agentErr || !agentData) return res.status(400).json({ success: false, message: "Agent creation failed" });
+
+    // 4. Create all Identifiers (Batch)
+    const idInserts = identifiers.map(id => ({
         agent_id: agentData.id,
-        id_string: identifier.string,
-        rev_share: identifier.rev,
-        prime49: identifier.prime
-    });
+        id_string: id.string,
+        rev_share: id.rev,
+        prime49: id.prime,
+        status: 'active'
+    }));
 
-    return res.status(200).json({ success: !idErr });
+    const { error: finalErr } = await supabase
+        .from('agent_identifiers')
+        .upsert(idInserts, { onConflict: 'id_string' }); // Upsert in case ID already existed under placeholder
+
+    if (finalErr) return res.status(400).json({ success: false, message: "Identifiers linking failed: " + finalErr.message });
+
+    return res.status(200).json({ success: true });
 }
 
         // --- ACTION: SEARCH BY MID ---
