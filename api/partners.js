@@ -47,9 +47,13 @@ if (action === 'complete_onboarding') {
     let finalAgentId = existingAgentId;
 
     if (!isQuickAdd) {
-        // --- ONLY DO THIS FOR NEW PARTNERS ---
+        // --- START NEW PARTNER LOGIC ---
+        // Verify we have person data
+        if (!person || !person.email) return res.status(400).json({ success: false, message: "Missing person data for new partner" });
+
         const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
 
+        // 1. Upsert Person
         const { data: pData, error: pErr } = await supabase
             .from('persons')
             .upsert({ 
@@ -60,23 +64,40 @@ if (action === 'complete_onboarding') {
             }, { onConflict: 'email' })
             .select().single();
 
-        if (pErr) return res.status(400).json({ success: false, message: pErr.message });
+        if (pErr) return res.status(400).json({ success: false, message: "Person failed: " + pErr.message });
 
+        // 2. Handle Company
         let targetCoId = company.id;
         if (!targetCoId && !company.isIndependent && company.name) {
             const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
-            targetCoId = coData.id;
+            targetCoId = coData ? coData.id : null;
         }
 
+        // 3. Create Agent
         const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
             company_id: targetCoId,
             agent_name: properName,
             parent_agent_id: pData.id
         }).select().single();
 
-        if (agentErr) return res.status(400).json({ success: false, message: "Agent creation failed" });
+        if (agentErr) return res.status(400).json({ success: false, message: "Agent creation failed: " + agentErr.message });
         finalAgentId = agentData.id;
+        // --- END NEW PARTNER LOGIC ---
     }
+
+    // Link IDs (This runs for both modes)
+    const idInserts = identifiers.map(id => ({
+        agent_id: finalAgentId,
+        id_string: id.string,
+        rev_share: id.rev,
+        prime49: id.prime,
+        status: 'active'
+    }));
+
+    const { error: finalErr } = await supabase.from('agent_identifiers').upsert(idInserts, { onConflict: 'id_string' });
+
+    return res.status(200).json({ success: !finalErr, message: finalErr?.message });
+}
 
     // --- ALWAYS DO THIS (Link the IDs to the finalAgentId) ---
     const idInserts = identifiers.map(id => ({
