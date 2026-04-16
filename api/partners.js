@@ -43,43 +43,44 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
 if (action === 'complete_onboarding') {
-    const { person, company, identifiers } = body;
+    const { person, company, identifiers, isQuickAdd, existingAgentId } = body;
+    let finalAgentId = existingAgentId;
 
-    // Proper Case formatting
-    const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
+    if (!isQuickAdd) {
+        // --- ONLY DO THIS FOR NEW PARTNERS ---
+        const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
 
-    // 1. Upsert Person using 'email' as the conflict target
-    const { data: pData, error: pErr } = await supabase
-        .from('persons')
-        .upsert({ 
-            full_name: properName, 
-            email: person.email, 
-            phone_number: person.phone, 
-            hl_contact_id: person.hl_id 
-        }, { onConflict: 'email' }) // Matches your DB unique constraint
-        .select().single();
+        const { data: pData, error: pErr } = await supabase
+            .from('persons')
+            .upsert({ 
+                full_name: properName, 
+                email: person.email, 
+                phone_number: person.phone, 
+                hl_contact_id: person.hl_id 
+            }, { onConflict: 'email' })
+            .select().single();
 
-    if (pErr || !pData) return res.status(400).json({ success: false, message: "Person Sync Error: " + pErr?.message });
+        if (pErr) return res.status(400).json({ success: false, message: pErr.message });
 
-    // 2. Handle Company
-    let targetCoId = company.id;
-    if (!targetCoId && !company.isIndependent && company.name) {
-        const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
-        targetCoId = coData.id;
+        let targetCoId = company.id;
+        if (!targetCoId && !company.isIndependent && company.name) {
+            const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
+            targetCoId = coData.id;
+        }
+
+        const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
+            company_id: targetCoId,
+            agent_name: properName,
+            parent_agent_id: pData.id
+        }).select().single();
+
+        if (agentErr) return res.status(400).json({ success: false, message: "Agent creation failed" });
+        finalAgentId = agentData.id;
     }
 
-    // 3. Create Agent record
-    const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
-        company_id: targetCoId,
-        agent_name: properName,
-        parent_agent_id: pData.id
-    }).select().single();
-
-    if (agentErr || !agentData) return res.status(400).json({ success: false, message: "Agent Link Error" });
-
-    // 4. Batch Upsert Identifiers (Handles Move and Create New)
+    // --- ALWAYS DO THIS (Link the IDs to the finalAgentId) ---
     const idInserts = identifiers.map(id => ({
-        agent_id: agentData.id,
+        agent_id: finalAgentId,
         id_string: id.string,
         rev_share: id.rev,
         prime49: id.prime,
@@ -88,11 +89,9 @@ if (action === 'complete_onboarding') {
 
     const { error: finalErr } = await supabase
         .from('agent_identifiers')
-        .upsert(idInserts, { onConflict: 'id_string' }); // id_string is unique in your schema
+        .upsert(idInserts, { onConflict: 'id_string' });
 
-    if (finalErr) return res.status(400).json({ success: false, message: "Identifier Sync Error: " + finalErr.message });
-
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
         // --- ACTION: SEARCH BY MID ---
 if (action === 'search_by_mid') {
