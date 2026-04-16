@@ -536,6 +536,89 @@ input[type=number] {
         } catch (e) { console.error("ID Lookup Error:", e); }
     }
 
+       // --- TREND DRILLER: ANALYZE CONTRIBUTORS ---
+async function drillDownTrend(agentId) {
+    Swal.fire({ title: 'Analyzing Trend Contributors...', text: 'Calculating merchant impact...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: agentId })
+        });
+        const result = await res.json();
+
+        if (result.success && result.data.length > 0) {
+            // Calculate variance for every merchant
+            const analyzed = result.data.map(m => {
+                const current = parseFloat(m.volume_30_day || 0);
+                const baseline = (parseFloat(m.volume_90_day || 0) / 3);
+                return {
+                    dba: m.dba_name,
+                    status: m.account_status,
+                    impact: current - baseline
+                };
+            });
+
+            // Sort by absolute impact (biggest movers first, up or down)
+            analyzed.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+
+            // Take the top 10 contributors to display
+            showTrendTable(agentId, analyzed.slice(0, 10));
+        } else {
+            Swal.fire('No Data', 'Could not find merchant details for this ID.', 'info');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Failed to analyze trend.', 'error');
+    }
+}
+
+// --- TREND DRILLER: UI DISPLAY ---
+function showTrendTable(agentId, movers) {
+    const rows = movers.map(m => {
+        const color = m.impact >= 0 ? '#059669' : '#ef4444';
+        const prefix = m.impact >= 0 ? '+' : '';
+        return `
+            <tr>
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; font-weight: 700; color: #002d5a;">${m.dba}</td>
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #64748b;">
+                   <span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; text-transform:uppercase; font-size:9px; font-weight:800;">${m.status}</span>
+                </td>
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 800; color: ${color}; text-align: right;">
+                    ${prefix}$${m.impact.toLocaleString(undefined, {maximumFractionDigits:0})}
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    Swal.fire({
+        title: `<div style="text-align:left; font-size: 18px; font-weight: 800; color: #002d5a;">Trend Contributors: ${agentId}</div>`,
+        width: '650px',
+        showConfirmButton: true,
+        confirmButtonText: 'CLOSE',
+        confirmButtonColor: '#002d5a',
+        html: `
+            <div style="text-align: left; margin-bottom: 15px; font-size: 12px; color: #64748b; line-height:1.4;">
+                This list shows the <b>top 10 merchants</b> whose volume change (vs. 90-day avg) most heavily influenced the trend for this ID.
+            </div>
+            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead>
+                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px;">Merchant DBA</th>
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px;">Status</th>
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px; text-align: right;">Impact ($)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `
+    });
+}
+
     function pickIdFromLookup(id) {
         const input = document.getElementById('idLookupInput');
         if (input) input.value = id;
@@ -995,88 +1078,7 @@ input[type=number] {
         link.click();
         document.body.removeChild(link);
     }
-    // --- TREND DRILLER: ANALYZE CONTRIBUTORS ---
-async function drillDownTrend(agentId) {
-    Swal.fire({ title: 'Analyzing Trend Contributors...', text: 'Calculating merchant impact...', didOpen: () => Swal.showLoading() });
-
-    try {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: agentId })
-        });
-        const result = await res.json();
-
-        if (result.success && result.data.length > 0) {
-            // Calculate variance for every merchant
-            const analyzed = result.data.map(m => {
-                const current = parseFloat(m.volume_30_day || 0);
-                const baseline = (parseFloat(m.volume_90_day || 0) / 3);
-                return {
-                    dba: m.dba_name,
-                    status: m.account_status,
-                    impact: current - baseline
-                };
-            });
-
-            // Sort by absolute impact (biggest movers first, up or down)
-            analyzed.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
-
-            // Take the top 10 contributors to display
-            showTrendTable(agentId, analyzed.slice(0, 10));
-        } else {
-            Swal.fire('No Data', 'Could not find merchant details for this ID.', 'info');
-        }
-    } catch (err) {
-        Swal.fire('Error', 'Failed to analyze trend.', 'error');
-    }
-}
-
-// --- TREND DRILLER: UI DISPLAY ---
-function showTrendTable(agentId, movers) {
-    const rows = movers.map(m => {
-        const color = m.impact >= 0 ? '#059669' : '#ef4444';
-        const prefix = m.impact >= 0 ? '+' : '';
-        return `
-            <tr>
-                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; font-weight: 700; color: #002d5a;">${m.dba}</td>
-                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #64748b;">
-                   <span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; text-transform:uppercase; font-size:9px; font-weight:800;">${m.status}</span>
-                </td>
-                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 800; color: ${color}; text-align: right;">
-                    ${prefix}$${m.impact.toLocaleString(undefined, {maximumFractionDigits:0})}
-                </td>
-            </tr>
-        `;
-    }).join('');
-
-    Swal.fire({
-        title: `<div style="text-align:left; font-size: 18px; font-weight: 800; color: #002d5a;">Trend Contributors: ${agentId}</div>`,
-        width: '650px',
-        showConfirmButton: true,
-        confirmButtonText: 'CLOSE',
-        confirmButtonColor: '#002d5a',
-        html: `
-            <div style="text-align: left; margin-bottom: 15px; font-size: 12px; color: #64748b; line-height:1.4;">
-                This list shows the <b>top 10 merchants</b> whose volume change (vs. 90-day avg) most heavily influenced the trend for this ID.
-            </div>
-            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
-                <table style="width: 100%; border-collapse: collapse; text-align: left;">
-                    <thead>
-                        <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px;">Merchant DBA</th>
-                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px;">Status</th>
-                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px; text-align: right;">Impact ($)</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rows}
-                    </tbody>
-                </table>
-            </div>
-        `
-    });
-}
+ 
 
     window.addEventListener('load', loadPartners);
 </script>
