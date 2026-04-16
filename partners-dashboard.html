@@ -190,6 +190,15 @@
 
 .ghl-result-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #f1f5f9; transition: 0.2s; }
 .ghl-result-item:hover { background: #f8fafc; color: var(--pp-blue); }
+        /* Removes arrows/spinners from number inputs */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
     </style>
 </head>
 <body>
