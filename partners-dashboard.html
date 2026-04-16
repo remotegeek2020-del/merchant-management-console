@@ -538,7 +538,7 @@ input[type=number] {
 
        // --- TREND DRILLER: ANALYZE CONTRIBUTORS ---
 async function drillDownTrend(agentId) {
-    Swal.fire({ title: 'Analyzing Trend Contributors...', text: 'Calculating merchant impact...', didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: 'Analyzing All Contributors...', text: 'Fetching complete merchant dataset...', didOpen: () => Swal.showLoading() });
 
     try {
         const res = await fetch('/api/partners', {
@@ -549,42 +549,50 @@ async function drillDownTrend(agentId) {
         const result = await res.json();
 
         if (result.success && result.data.length > 0) {
-            // Calculate variance for every merchant
             const analyzed = result.data.map(m => {
                 const current = parseFloat(m.volume_30_day || 0);
-                const baseline = (parseFloat(m.volume_90_day || 0) / 3);
+                const avg90 = (parseFloat(m.volume_90_day || 0) / 3);
                 return {
                     dba: m.dba_name,
                     status: m.account_status,
-                    impact: current - baseline
+                    current: current,
+                    baseline: avg90,
+                    impact: current - avg90
                 };
             });
 
-            // Sort by absolute impact (biggest movers first, up or down)
+            // Sort by impact magnitude so the biggest changes (positive or negative) are at the top
             analyzed.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
 
-            // Take the top 10 contributors to display
-            showTrendTable(agentId, analyzed.slice(0, 10));
+            showTrendTable(agentId, analyzed);
         } else {
-            Swal.fire('No Data', 'Could not find merchant details for this ID.', 'info');
+            Swal.fire('No Data', 'No merchant records found for this ID.', 'info');
         }
     } catch (err) {
-        Swal.fire('Error', 'Failed to analyze trend.', 'error');
+        Swal.fire('Error', 'Failed to analyze trend data.', 'error');
     }
 }
 
 // --- TREND DRILLER: UI DISPLAY ---
 function showTrendTable(agentId, movers) {
     const rows = movers.map(m => {
-        const color = m.impact >= 0 ? '#059669' : '#ef4444';
-        const prefix = m.impact >= 0 ? '+' : '';
+        const isNegative = m.impact < 0;
+        const impactColor = isNegative ? '#ef4444' : '#059669';
+        const prefix = isNegative ? '' : '+';
+        
         return `
             <tr>
-                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; font-weight: 700; color: #002d5a;">${m.dba}</td>
-                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #64748b;">
-                   <span style="background:#f1f5f9; padding:2px 6px; border-radius:4px; text-transform:uppercase; font-size:9px; font-weight:800;">${m.status}</span>
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9;">
+                    <div style="font-size: 12px; font-weight: 700; color: #002d5a;">${m.dba}</div>
+                    <div style="font-size: 9px; color: #94a3b8; text-transform: uppercase; font-weight: 800;">${m.status}</div>
                 </td>
-                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 13px; font-weight: 800; color: ${color}; text-align: right;">
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #475569; text-align: right;">
+                    $${m.baseline.toLocaleString(undefined, {maximumFractionDigits:0})}
+                </td>
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; color: #475569; text-align: right;">
+                    $${m.current.toLocaleString(undefined, {maximumFractionDigits:0})}
+                </td>
+                <td style="padding: 12px 10px; border-bottom: 1px solid #f1f5f9; font-size: 12px; font-weight: 900; color: ${impactColor}; text-align: right; background: ${isNegative ? '#fef2f2' : '#f0fdf4'};">
                     ${prefix}$${m.impact.toLocaleString(undefined, {maximumFractionDigits:0})}
                 </td>
             </tr>
@@ -593,21 +601,22 @@ function showTrendTable(agentId, movers) {
 
     Swal.fire({
         title: `<div style="text-align:left; font-size: 18px; font-weight: 800; color: #002d5a;">Trend Contributors: ${agentId}</div>`,
-        width: '650px',
+        width: '800px', // Wider modal to accommodate more columns
         showConfirmButton: true,
         confirmButtonText: 'CLOSE',
         confirmButtonColor: '#002d5a',
         html: `
-            <div style="text-align: left; margin-bottom: 15px; font-size: 12px; color: #64748b; line-height:1.4;">
-                This list shows the <b>top 10 merchants</b> whose volume change (vs. 90-day avg) most heavily influenced the trend for this ID.
+            <div style="text-align: left; margin-bottom: 15px; font-size: 12px; color: #64748b;">
+                Showing comparison of <b>Current 30-Day Volume</b> vs. <b>90-Day Monthly Average</b> for all merchants.
             </div>
-            <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+            <div style="max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
-                    <thead>
+                    <thead style="position: sticky; top: 0; z-index: 10;">
                         <tr style="background: #f8fafc; border-bottom: 2px solid #e2e8f0;">
-                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px;">Merchant DBA</th>
-                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px;">Status</th>
-                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; letter-spacing:1px; text-align: right;">Impact ($)</th>
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase;">Merchant</th>
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; text-align: right;">Avg (90d)</th>
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; text-align: right;">Current</th>
+                            <th style="padding: 12px 10px; font-size: 10px; color: #94a3b8; text-transform: uppercase; text-align: right;">Variance</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -618,7 +627,6 @@ function showTrendTable(agentId, movers) {
         `
     });
 }
-
     function pickIdFromLookup(id) {
         const input = document.getElementById('idLookupInput');
         if (input) input.value = id;
