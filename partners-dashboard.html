@@ -702,14 +702,19 @@ function showTrendTable(agentId, movers) {
     // 5. WIZARD COMPLETION & SAVE
     // ==========================================
 
-    async function submitOnboarding() {
-    if (pendingIds.length === 0) return Swal.fire('Error', 'Add an ID first', 'error');
+   async function submitOnboarding() {
+    if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one ID', 'error');
 
     const payload = {
         action: 'complete_onboarding',
-        // If internalId exists, it's a "Quick Add"
-        existing_person_id: selectedGHLContact.internalId || null, 
-        person: { ...selectedGHLContact },
+        isQuickAdd: selectedGHLContact.isQuickAdd || false,
+        existingAgentId: selectedGHLContact.existingAgentId || null,
+        person: {
+            name: selectedGHLContact.name,
+            email: selectedGHLContact.email,
+            phone: selectedGHLContact.phone,
+            hl_id: selectedGHLContact.id
+        },
         company: {
             id: document.getElementById('companySelect').value === 'none' ? null : document.getElementById('companySelect').value,
             name: document.getElementById('newCompanyName').value,
@@ -1206,6 +1211,28 @@ window.quickAddId = async function(personId, name) {
     
     // We need to modify submitOnboarding slightly or use a specific function
     // For now, I'll update the logic below to handle "existing" partners
+};
+
+    window.quickAddId = async function(personId, name) {
+    pendingIds = [];
+    renderIdList();
+    
+    // Find the person's first agent record from our local agentsRaw array
+    const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
+    
+    if (!personAgent) {
+        return Swal.fire('Error', 'Could not find an agent record for this partner.', 'error');
+    }
+
+    // Set a "Mode" so the submit function knows NOT to create a new person
+    selectedGHLContact = { 
+        name: name, 
+        existingAgentId: personAgent.id, 
+        isQuickAdd: true 
+    };
+    
+    document.getElementById('onboardingWizard').classList.add('active');
+    goToStep(3); // Jump straight to IDs
 };
  
 
