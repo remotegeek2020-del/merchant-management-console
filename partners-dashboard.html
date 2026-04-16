@@ -702,48 +702,65 @@ function showTrendTable(agentId, movers) {
     // 5. WIZARD COMPLETION & SAVE
     // ==========================================
 
-   async function submitOnboarding() {
+async function submitOnboarding() {
     if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one ID', 'error');
 
-    const payload = {
+    // 1. Determine if we are in Quick Add or New Partner mode
+    const isQuickAdd = !!(selectedGHLContact && selectedGHLContact.isQuickAdd);
+    
+    let payload = {
         action: 'complete_onboarding',
-        isQuickAdd: selectedGHLContact.isQuickAdd || false,
-        existingAgentId: selectedGHLContact.existingAgentId || null,
-        person: {
+        isQuickAdd: isQuickAdd,
+        identifiers: pendingIds
+    };
+
+    if (isQuickAdd) {
+        // Mode A: Just adding IDs to existing partner
+        payload.existingAgentId = selectedGHLContact.existingAgentId;
+    } else {
+        // Mode B: Full Onboarding (Step 1 & 2 must be valid)
+        if (!selectedGHLContact || !selectedGHLContact.id) {
+            return Swal.fire('Error', 'Please complete Step 1 (HighLevel Lookup) first.', 'error');
+        }
+
+        const companyVal = document.getElementById('companySelect').value;
+        payload.person = {
             name: selectedGHLContact.name,
             email: selectedGHLContact.email,
             phone: selectedGHLContact.phone,
             hl_id: selectedGHLContact.id
-        },
-        company: {
-            id: document.getElementById('companySelect').value === 'none' ? null : document.getElementById('companySelect').value,
-            name: document.getElementById('newCompanyName').value,
-            isIndependent: document.getElementById('companySelect').value === 'none'
-        },
-        identifiers: pendingIds
-    };
-
-        Swal.fire({ title: 'Finalizing Partner...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
-        
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(payload)
-            });
-            const result = await res.json();
-            
-            if (result.success) {
-                Swal.fire({ icon: 'success', title: 'Partner Onboarded', text: `Success with ${pendingIds.length} IDs.`, confirmButtonColor: '#004990' });
-                closeWizard();
-                loadPartners(); 
-            } else {
-                throw new Error(result.message || 'Saving failed');
-            }
-        } catch (e) {
-            Swal.fire('Error', e.message, 'error');
-        }
+        };
+        payload.company = {
+            id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
+            name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
+            isIndependent: companyVal === 'none'
+        };
     }
+
+    Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
+            closeWizard();
+            loadPartners(); 
+        } else {
+            // This will show exactly WHY the backend failed (e.g., duplicate email)
+            throw new Error(result.message || 'Database error');
+        }
+    } catch (e) {
+        console.error("Submission Error:", e);
+        Swal.fire('Error', e.message, 'error');
+    }
+}
 
  function openOnboardingWizard() {
     // Reset Mode
