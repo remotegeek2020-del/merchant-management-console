@@ -231,16 +231,19 @@ input[type=number] {
         <div id="searchStats">Showing all partners</div>
     </div>
 </div>
-    <div style="display: flex; gap: 20px; margin-bottom: 15px; padding: 10px 20px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
-    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #64748b;">
-        <span class="material-icons" style="color: #10b981; font-size: 16px;">trending_up</span> GROWTH (>5%)
-    </div>
-    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #64748b;">
-        <span class="material-icons" style="color: #94a3b8; font-size: 16px;">trending_flat</span> STABLE
-    </div>
-    <div style="display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: #64748b;">
-        <span class="material-icons" style="color: #ef4444; font-size: 16px;">trending_down</span> AT RISK (<-5%)
-    </div>
+   <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
+    <button onclick="filterByTrend('growth')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f0fdf4; color: #166534;">
+        <span class="material-icons" style="font-size: 16px;">trending_up</span> GROWTH
+    </button>
+    <button onclick="filterByTrend('stable')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f8fafc; color: #475569;">
+        <span class="material-icons" style="font-size: 16px;">trending_flat</span> STABLE
+    </button>
+    <button onclick="filterByTrend('risk')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #fef2f2; color: #991b1b;">
+        <span class="material-icons" style="font-size: 16px;">trending_down</span> AT RISK
+    </button>
+    <button onclick="filterByTrend('all')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: white; color: var(--pp-blue);">
+        CLEAR FILTER
+    </button>
 </div>
     <div id="partnerGrid" class="partner-grid"></div>
    <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
@@ -332,6 +335,55 @@ input[type=number] {
     let currentPage = 1;
     const cardsPerPage = 12; 
     let searchTimeout = null;
+
+    // --- FEATURE: TREND FILTER CHIPS ---
+let activeTrendFilter = 'all';
+
+window.filterByTrend = function(trend) {
+    activeTrendFilter = trend;
+    const searchInput = document.getElementById('partnerSearchInput');
+    const term = searchInput.value.toLowerCase().trim();
+    
+    // 1. Get current data (respecting search term if exists)
+    let dataToFilter = allPartners;
+    if (term) {
+        dataToFilter = allPartners.filter(p => 
+            p.name.toLowerCase().includes(term) || 
+            p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term))) ||
+            p.companies.some(co => co.name.toLowerCase().includes(term))
+        );
+    }
+
+    // 2. Apply Trend Logic
+    if (trend !== 'all') {
+        dataToFilter = dataToFilter.filter(p => {
+            // We calculate based on the total partner volume
+            // You can also refine this to check if ANY of their IDs are at risk
+            let totalCurrent = 0;
+            let totalBaseline = 0;
+
+            p.companies.forEach(co => {
+                co.ids.forEach(id => {
+                    // Pulling stats from the global raw identifiers if possible, 
+                    // or checking the rendered card status
+                    const stat = identifiersRaw.find(raw => raw.id_string === id.string);
+                    // Note: This requires the stats to be pre-calculated or stored in the partner object
+                    // For the most accurate 'Live' filter, we use the percentage logic:
+                });
+            });
+
+            // Simplified: We'll look at the specific trend indicator
+            // To make this lightning fast, let's update the processPartnerData to include a 'trend' flag
+            return p.statusTrend === trend; 
+        });
+    }
+
+    currentPage = 1;
+    renderGrid(dataToFilter);
+    
+    // Update the "Showing" label
+    document.getElementById('searchStats').innerText = `Filter: ${trend.toUpperCase()} (${dataToFilter.length} partners)`;
+};
 
     // --- ONBOARDING WIZARD STATE ---
     let selectedGHLContact = null;
