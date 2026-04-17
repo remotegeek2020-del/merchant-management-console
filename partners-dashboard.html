@@ -450,12 +450,12 @@ window.filterByTrend = function(trend) {
     activeTrendFilter = trend;
     const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
     
-    // We clear current view and filter from the full list
+    // 1. We ALWAYS filter from the full global list (allPartners)
     let filtered = allPartners.filter(p => {
         let pCurrent = 0;
         let pBaseline = 0;
 
-        // Sum up every ID this partner owns
+        // Sum up every ID this partner owns to get the "Big Picture"
         p.companies.forEach(co => {
             co.ids.forEach(idObj => {
                 const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
@@ -473,10 +473,10 @@ window.filterByTrend = function(trend) {
             else if (pct < -5) pTrend = 'risk';
         }
 
-        // Match against chip selection
+        // Match against the Chip you clicked
         const matchesTrend = (trend === 'all' || pTrend === trend);
         
-        // Match against search if typing
+        // Ensure we don't break the search bar results
         const matchesSearch = !term || (
             p.name.toLowerCase().includes(term) || 
             p.companies.some(co => co.name.toLowerCase().includes(term))
@@ -485,13 +485,16 @@ window.filterByTrend = function(trend) {
         return matchesTrend && matchesSearch;
     });
 
+    // 2. Reset to Page 1 so you don't get stuck on a blank page
     currentPage = 1;
+    
+    // 3. Hand the filtered list to renderGrid to handle the drawing
     renderGrid(filtered);
     
-    document.getElementById('searchStats').innerText = 
-        trend === 'all' ? 'Showing all partners' : `Filter: ${trend.toUpperCase()} (${filtered.length} partners)`;
+    // 4. Update the UI text
+    const label = trend === 'all' ? 'Showing all partners' : `Filter: ${trend.toUpperCase()}`;
+    document.getElementById('searchStats').innerText = `${label} (${filtered.length} partners)`;
 };
-
     // ==========================================
     // 2. WIZARD STEP 1: IDENTITY (GHL SEARCH)
     // ==========================================
