@@ -339,52 +339,6 @@ input[type=number] {
     // --- FEATURE: TREND FILTER CHIPS ---
 let activeTrendFilter = 'all';
 
-window.filterByTrend = function(trend) {
-    activeTrendFilter = trend;
-    const searchInput = document.getElementById('partnerSearchInput');
-    const term = searchInput.value.toLowerCase().trim();
-    
-    // 1. Get current data (respecting search term if exists)
-    let dataToFilter = allPartners;
-    if (term) {
-        dataToFilter = allPartners.filter(p => 
-            p.name.toLowerCase().includes(term) || 
-            p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term))) ||
-            p.companies.some(co => co.name.toLowerCase().includes(term))
-        );
-    }
-
-    // 2. Apply Trend Logic
-    if (trend !== 'all') {
-        dataToFilter = dataToFilter.filter(p => {
-            // We calculate based on the total partner volume
-            // You can also refine this to check if ANY of their IDs are at risk
-            let totalCurrent = 0;
-            let totalBaseline = 0;
-
-            p.companies.forEach(co => {
-                co.ids.forEach(id => {
-                    // Pulling stats from the global raw identifiers if possible, 
-                    // or checking the rendered card status
-                    const stat = identifiersRaw.find(raw => raw.id_string === id.string);
-                    // Note: This requires the stats to be pre-calculated or stored in the partner object
-                    // For the most accurate 'Live' filter, we use the percentage logic:
-                });
-            });
-
-            // Simplified: We'll look at the specific trend indicator
-            // To make this lightning fast, let's update the processPartnerData to include a 'trend' flag
-            return p.statusTrend === trend; 
-        });
-    }
-
-    currentPage = 1;
-    renderGrid(dataToFilter);
-    
-    // Update the "Showing" label
-    document.getElementById('searchStats').innerText = `Filter: ${trend.toUpperCase()} (${dataToFilter.length} partners)`;
-};
-
     // --- ONBOARDING WIZARD STATE ---
     let selectedGHLContact = null;
     let pendingIds = []; // Single declaration for the list of IDs being added
@@ -491,6 +445,34 @@ window.filterByTrend = function(trend) {
         } : null;
     }).filter(Boolean);
 }
+
+    window.filterByTrend = function(trend) {
+    activeTrendFilter = trend;
+    const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
+    
+    let filtered = allPartners;
+
+    // 1. Filter by Search Term
+    if (term) {
+        filtered = filtered.filter(p => 
+            p.name.toLowerCase().includes(term) || 
+            p.companies.some(co => co.name.toLowerCase().includes(term)) ||
+            p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term)))
+        );
+    }
+
+    // 2. Filter by Chip Status
+    if (trend !== 'all') {
+        filtered = filtered.filter(p => p.statusTrend === trend);
+    }
+
+    currentPage = 1;
+    renderGrid(filtered);
+    
+    // Update UI Stats
+    const statsLabel = trend === 'all' ? 'Showing all partners' : `Filter: ${trend.toUpperCase()}`;
+    document.getElementById('searchStats').innerText = `${statsLabel} (${filtered.length} partners)`;
+};
 
     // ==========================================
     // 2. WIZARD STEP 1: IDENTITY (GHL SEARCH)
