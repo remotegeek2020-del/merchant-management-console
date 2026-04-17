@@ -200,7 +200,7 @@ if (action === 'get_merchant_data_raw') {
     const { identifier_id } = body;
     const { data, error } = await supabase
         .from('merchants')
-        .select('dba_name, account_status, volume_30_day, volume_90_day') // <-- Ensure volume_90_day is here!
+        .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, last_batch_date') // Added merchant_id and last_batch_date
         .eq('agent_id', identifier_id);
     
     return res.status(200).json({ success: true, data });
