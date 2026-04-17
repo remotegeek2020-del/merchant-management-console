@@ -415,21 +415,22 @@ window.filterByTrend = function(trend) {
     }
 
     function processPartnerData(payload) {
-        if (!payload || !payload.persons) return [];
-        const { persons, agents, identifiers, companies } = payload;
-        const idMap = {};
-        
-        identifiers.forEach(id => {
-            const myAgent = agents.find(a => a.id === id.agent_id);
-            const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
-            idMap[id.id] = { 
-                db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
-                isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
-                owner_name: myPerson ? myPerson.full_name : 'Unknown',
-                parent_config_id: id.parent_config_id,
-                upline_name: null, upline_string: null
-            };
-        });
+    if (!payload || !payload.persons) return [];
+    const { persons, agents, identifiers, companies, stats } = payload; // stats should be passed here if available
+    const idMap = {};
+    
+    // ... (Keep your existing idMap and parent/child logic at the start) ...
+    identifiers.forEach(id => {
+        const myAgent = agents.find(a => a.id === id.agent_id);
+        const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
+        idMap[id.id] = { 
+            db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
+            isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
+            owner_name: myPerson ? myPerson.full_name : 'Unknown',
+            parent_config_id: id.parent_config_id,
+            upline_name: null, upline_string: null
+        };
+    });
 
         identifiers.forEach(id => {
             const current = idMap[id.id];
@@ -441,29 +442,55 @@ window.filterByTrend = function(trend) {
             }
         });
 
-        return persons.map(person => {
-            const myAgents = agents.filter(a => a.parent_agent_id === person.id);
-            if (myAgents.length === 0) return null;
-            const groups = {};
-            myAgents.forEach(agent => {
-                const co = companies.find(c => c.id === agent.company_id);
-                const coName = co ? co.company_name : "Independent";
-                const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
-                if (myIds.length > 0) {
-                    if (!groups[coName]) groups[coName] = [];
-                    myIds.forEach(id => groups[coName].push(idMap[id.id]));
-                }
-            });
-            const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
+       return persons.map(person => {
+        const myAgents = agents.filter(a => a.parent_agent_id === person.id);
+        if (myAgents.length === 0) return null;
+        
+        let totalCurrent = 0;
+        let totalBaseline = 0;
+        const groups = {};
+
+        myAgents.forEach(agent => {
+            const co = companies.find(c => c.id === agent.company_id);
+            const coName = co ? co.company_name : "Independent";
+            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
             
-            return formatted.length > 0 ? { 
-                id: person.id, name: person.full_name,
-                email: person.email || 'No email provided',
-                phone: person.phone_number || 'No phone provided',
-                hl_id: person.hl_contact_id, companies: formatted 
-            } : null;
-        }).filter(Boolean);
-    }
+            if (myIds.length > 0) {
+                if (!groups[coName]) groups[coName] = [];
+                myIds.forEach(id => {
+                    groups[coName].push(idMap[id.id]);
+                    
+                    // --- TREND CALCULATION LOGIC ---
+                    // Look for stats in the payload to calculate the partner's global trend
+                    const s = (payload.stats || []).find(row => String(row.agent_id) === String(id.id_string));
+                    if (s) {
+                        totalCurrent += parseFloat(s.total_volume_sum || 0);
+                        totalBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                    }
+                });
+            }
+        });
+
+        const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
+        
+        // Assign the Trend String
+        let trend = 'stable';
+        if (totalBaseline > 0) {
+            const diff = ((totalCurrent - totalBaseline) / totalBaseline) * 100;
+            if (diff > 5) trend = 'growth';
+            else if (diff < -5) trend = 'risk';
+        }
+
+        return formatted.length > 0 ? { 
+            id: person.id, name: person.full_name,
+            email: person.email || 'No email provided',
+            phone: person.phone_number || 'No phone provided',
+            hl_id: person.hl_contact_id, 
+            companies: formatted,
+            statusTrend: trend // This is what the filter uses!
+        } : null;
+    }).filter(Boolean);
+}
 
     // ==========================================
     // 2. WIZARD STEP 1: IDENTITY (GHL SEARCH)
