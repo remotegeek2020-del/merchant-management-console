@@ -450,9 +450,8 @@ let activeTrendFilter = 'all';
     activeTrendFilter = trend;
     const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
     
+    // 1. Start with search results if a term is present
     let filtered = allPartners;
-
-    // 1. Filter by Search Term
     if (term) {
         filtered = filtered.filter(p => 
             p.name.toLowerCase().includes(term) || 
@@ -461,17 +460,42 @@ let activeTrendFilter = 'all';
         );
     }
 
-    // 2. Filter by Chip Status
+    // 2. Apply Trend Filtering
     if (trend !== 'all') {
-        filtered = filtered.filter(p => p.statusTrend === trend);
+        filtered = filtered.filter(p => {
+            let pCurrent = 0;
+            let pBaseline = 0;
+
+            // Loop through all IDs belonging to this partner to get their combined volume
+            p.companies.forEach(co => {
+                co.ids.forEach(idObj => {
+                    // Match the ID string against our raw production data
+                    const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                    if (s) {
+                        pCurrent += parseFloat(s.total_volume_sum || 0);
+                        pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                    }
+                });
+            });
+
+            // Calculate the trend for the partner
+            let pTrend = 'stable';
+            if (pBaseline > 0) {
+                const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
+                if (pct > 5) pTrend = 'growth';
+                else if (pct < -5) pTrend = 'risk';
+            }
+
+            return pTrend === trend;
+        });
     }
 
     currentPage = 1;
     renderGrid(filtered);
     
-    // Update UI Stats
-    const statsLabel = trend === 'all' ? 'Showing all partners' : `Filter: ${trend.toUpperCase()}`;
-    document.getElementById('searchStats').innerText = `${statsLabel} (${filtered.length} partners)`;
+    // Update the UI Stats
+    const label = trend === 'all' ? 'Showing all' : `Filter: ${trend.toUpperCase()}`;
+    document.getElementById('searchStats').innerText = `${label} (${filtered.length} partners)`;
 };
 
     // ==========================================
@@ -947,6 +971,9 @@ async function submitOnboarding() {
     async function loadPartners() {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.style.display = 'flex';
+
+        document.getElementById('partnerSearchInput').value = '';
+        
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
