@@ -446,56 +446,50 @@ let activeTrendFilter = 'all';
     }).filter(Boolean);
 }
 
-    window.filterByTrend = function(trend) {
+window.filterByTrend = function(trend) {
     activeTrendFilter = trend;
     const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
     
-    // 1. Start with search results if a term is present
-    let filtered = allPartners;
-    if (term) {
-        filtered = filtered.filter(p => 
-            p.name.toLowerCase().includes(term) || 
-            p.companies.some(co => co.name.toLowerCase().includes(term)) ||
-            p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term)))
-        );
-    }
+    // We clear current view and filter from the full list
+    let filtered = allPartners.filter(p => {
+        let pCurrent = 0;
+        let pBaseline = 0;
 
-    // 2. Apply Trend Filtering
-    if (trend !== 'all') {
-        filtered = filtered.filter(p => {
-            let pCurrent = 0;
-            let pBaseline = 0;
-
-            // Loop through all IDs belonging to this partner to get their combined volume
-            p.companies.forEach(co => {
-                co.ids.forEach(idObj => {
-                    // Match the ID string against our raw production data
-                    const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
-                    if (s) {
-                        pCurrent += parseFloat(s.total_volume_sum || 0);
-                        pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
-                    }
-                });
+        // Sum up every ID this partner owns
+        p.companies.forEach(co => {
+            co.ids.forEach(idObj => {
+                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                if (s) {
+                    pCurrent += parseFloat(s.total_volume_sum || 0);
+                    pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                }
             });
-
-            // Calculate the trend for the partner
-            let pTrend = 'stable';
-            if (pBaseline > 0) {
-                const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
-                if (pct > 5) pTrend = 'growth';
-                else if (pct < -5) pTrend = 'risk';
-            }
-
-            return pTrend === trend;
         });
-    }
+
+        let pTrend = 'stable';
+        if (pBaseline > 0) {
+            const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
+            if (pct > 5) pTrend = 'growth';
+            else if (pct < -5) pTrend = 'risk';
+        }
+
+        // Match against chip selection
+        const matchesTrend = (trend === 'all' || pTrend === trend);
+        
+        // Match against search if typing
+        const matchesSearch = !term || (
+            p.name.toLowerCase().includes(term) || 
+            p.companies.some(co => co.name.toLowerCase().includes(term))
+        );
+
+        return matchesTrend && matchesSearch;
+    });
 
     currentPage = 1;
     renderGrid(filtered);
     
-    // Update the UI Stats
-    const label = trend === 'all' ? 'Showing all' : `Filter: ${trend.toUpperCase()}`;
-    document.getElementById('searchStats').innerText = `${label} (${filtered.length} partners)`;
+    document.getElementById('searchStats').innerText = 
+        trend === 'all' ? 'Showing all partners' : `Filter: ${trend.toUpperCase()} (${filtered.length} partners)`;
 };
 
     // ==========================================
@@ -994,38 +988,75 @@ async function submitOnboarding() {
     }
 
     function renderGrid(data) {
-        const grid = document.getElementById('partnerGrid');
-        const prevBtn = document.getElementById('btnPrev');
-        const nextBtn = document.getElementById('btnNext');
-        const indicator = document.getElementById('pageIndicator');
-        if (!grid) return;
-        const totalPages = Math.ceil(data.length / cardsPerPage);
-        if (currentPage > totalPages) currentPage = totalPages || 1;
-        const start = (currentPage - 1) * cardsPerPage;
-        const end = start + cardsPerPage;
-        const paginatedData = data.slice(start, end);
+    const grid = document.getElementById('partnerGrid');
+    const prevBtn = document.getElementById('btnPrev');
+    const nextBtn = document.getElementById('btnNext');
+    const indicator = document.getElementById('pageIndicator');
+    if (!grid) return;
 
-       grid.innerHTML = paginatedData.map(p => `
-    <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-            <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px; flex:1;">${p.name}</h2>
-            <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')" 
-                    style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
-                <span class="material-icons" style="font-size:14px;">add</span> ID
-            </button>
-        </div>
-        ${p.companies.map(co => `
-            <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
-            </div>
-        `).join('')}
-    </div>`).join('');
+    const totalPages = Math.ceil(data.length / cardsPerPage);
+    if (currentPage > totalPages) currentPage = totalPages || 1;
+    const start = (currentPage - 1) * cardsPerPage;
+    const end = start + cardsPerPage;
+    const paginatedData = data.slice(start, end);
 
-        if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
-        if (prevBtn) { prevBtn.disabled = (currentPage === 1); prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1"; }
-        if (nextBtn) { nextBtn.disabled = (currentPage === totalPages || totalPages === 0); nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1"; }
+    grid.innerHTML = paginatedData.map(p => {
+        // --- INJECTED TREND CALCULATION FOR FILTERING ---
+        let pCurrent = 0;
+        let pBaseline = 0;
+
+        // Sum up volume across all companies and IDs for this partner
+        p.companies.forEach(co => {
+            co.ids.forEach(idObj => {
+                // identifiersRaw was populated during loadPartners
+                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                if (s) {
+                    pCurrent += parseFloat(s.total_volume_sum || 0);
+                    pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                }
+            });
+        });
+
+        // Assign trend to partner object so the filterByTrend function can find it
+        let pTrend = 'stable';
+        if (pBaseline > 0) {
+            const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
+            if (pct > 5) pTrend = 'growth';
+            else if (pct < -5) pTrend = 'risk';
+        }
+        p.statusTrend = pTrend; 
+
+        // Return your existing card HTML
+        return `
+            <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px; flex:1;">${p.name}</h2>
+                    <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')" 
+                            style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
+                        <span class="material-icons" style="font-size:14px;">add</span> ID
+                    </button>
+                </div>
+                ${p.companies.map(co => `
+                    <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
+                        <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
+                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                    </div>
+                `).join('')}
+            </div>`;
+    }).join('');
+
+    if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
+    
+    // Button styling updates
+    if (prevBtn) { 
+        prevBtn.disabled = (currentPage === 1); 
+        prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1"; 
     }
+    if (nextBtn) { 
+        nextBtn.disabled = (currentPage === totalPages || totalPages === 0); 
+        nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1"; 
+    }
+}
 
     // --- SEARCH LISTENER (Reacts as you type) ---
     document.getElementById('partnerSearchInput').addEventListener('input', (e) => {
