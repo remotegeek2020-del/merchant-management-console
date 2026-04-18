@@ -22,14 +22,28 @@
         .status-active { background: #dcfce7; color: #166534; }
         .status-pending { background: #fef3c7; color: #92400e; }
     </style>
-   <script>
+ <script>
     (function() {
         const sessionUser = localStorage.getItem('pp_userid');
         const role = (localStorage.getItem('pp_role') || "").toLowerCase();
+        const isVerified = localStorage.getItem('pp_verified');
 
-        // Check if logged in AND if they have 'admin' in their role string
-        if (!sessionUser || (!role.includes('admin') && !role.includes('super'))) {
-            alert("Access Denied: Administrative Privileges Required.");
+        // Debugging: If you get stuck, uncomment the line below to see what the browser thinks your role is
+        // console.log("Current Role:", role);
+
+        // Check 1: Are you even logged in?
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+            return;
+        }
+
+        // Check 2: Do you have the right rank?
+        // This covers "admin", "super_admin", "operations_admin", etc.
+        const hasAccess = role.includes('admin') || role.includes('super');
+
+        if (!hasAccess) {
+            // Use a simple alert before redirecting so the user knows why they were booted
+            alert("Access Denied: You do not have permission to view this page.");
             window.location.href = 'index.html';
         }
     })();
