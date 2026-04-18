@@ -32,36 +32,56 @@ async function checkGlobalNotifications() {
 // Check every 10 seconds
 setInterval(checkGlobalNotifications, 10000);
 
+/**
+ * REFINED SESSION MANAGEMENT
+ * Uses LocalStorage for multi-tab support with Server-Side Validation.
+ */
+
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
     const urlUserId = params.get('userid');
-    const cachedUserId = sessionStorage.getItem('pp_userid');
+    
+    // Switch to localStorage so sessions persist across tabs
+    const cachedUserId = localStorage.getItem('pp_userid');
 
-    // --- ENFORCEMENT: Only 1 User per Browser Instance ---
-    // If someone tries to switch users via URL while a session is active
+    // 1. SESSION COLLISION GUARD
+    // If a different user tries to enter via URL while another is logged in
     if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
-        console.warn("New user detected. Wiping previous session for security.");
-        sessionStorage.clear();
-        localStorage.clear(); // Clear chat IDs too
-        location.reload(); 
+        console.warn("New user identity detected. Switching sessions.");
+        localStorage.clear();
+        location.reload();
         return;
     }
 
-    // 1. If we are already logged in and no new ID is forced, just show dashboard
-    if (!urlUserId && cachedUserId) {
-        // We still validate the session to ensure the user wasn't deleted
-        validateAndAuthorize(cachedUserId);
-        return;
-    }
+    // 2. IDENTIFY TARGET USER
+    const userId = urlUserId || cachedUserId;
 
-    // 2. If no ID anywhere, show Login UI
-    if (!urlUserId && !cachedUserId) {
+    // 3. NO ID FOUND -> SHOW LOGIN
+    if (!userId) {
         document.getElementById('login-ui').style.display = 'block';
         return;
     }
 
-    // 3. If we have a URL ID, validate it
-    validateAndAuthorize(urlUserId);
+    // 4. VALIDATE SESSION WITH SERVER
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId: userId, action: 'validate' })
+        });
+        const result = await response.json();
+
+        if (result.success && result.user) {
+            authorizeUser(result.user);
+        } else {
+            // If server says no, wipe everything and show login
+            localStorage.clear();
+            document.getElementById('login-ui').style.display = 'block';
+        }
+    } catch (err) {
+        console.error("Gatekeeper validation failed:", err);
+        document.getElementById('login-ui').style.display = 'block';
+    }
 }
 
 async function validateAndAuthorize(userId) {
@@ -120,59 +140,65 @@ async function handleManualLogin() {
 }
 
 function authorizeUser(user) {
-    // 1. Set Session Storage (Active Tab only)
-    sessionStorage.setItem('pp_userid', user.userid);
-    sessionStorage.setItem('pp_role', user.role);
-    sessionStorage.setItem('pp_verified', 'true');
+    // 1. PERSIST SESSION (Now works across tabs)
+    localStorage.setItem('pp_userid', user.userid);
+    localStorage.setItem('pp_role', user.role);
+    localStorage.setItem('userid', user.userid); // For Chat compatibility
+    
+    // Use a flag to bypass the passkey prompt if they are already authenticated
+    localStorage.setItem('pp_verified', 'true');
 
-    // 2. Set Local Storage ONLY for the Chat/Direct Message integration
-    localStorage.setItem('userid', user.userid);
-
-    // 3. UI Toggle
+    // 2. UI UPDATES
     document.getElementById('login-ui').style.display = 'none';
     document.getElementById('page-curtain').style.display = 'block';
     document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
-    document.getElementById('logout-btn').style.display = 'inline-block';
+    
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
-    // 4. Permission Logic
+    // 3. PERMISSIONS
     const role = (user.role || "").toLowerCase();
     const isAdmin = role.includes('admin') || role.includes('super');
     
-    document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
-    document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
+    // Manage visibility of admin cards
+    const cmsCard = document.getElementById('card-cms');
+    const logsCard = document.getElementById('card-logs');
+    if (cmsCard) cmsCard.style.display = isAdmin ? 'flex' : 'none';
+    if (logsCard) logsCard.style.display = isAdmin ? 'flex' : 'none';
 
-    if (!parseBool(user.access_inventory)) document.getElementById('card-inventory').style.display = 'none';
-    if (!parseBool(user.access_deployments)) document.getElementById('card-deployments').style.display = 'none';
-    if (!parseBool(user.access_returns)) document.getElementById('card-returns').style.display = 'none';
-    if (!parseBool(user.access_merchants)) document.getElementById('card-merchants').style.display = 'none';
+    // Manage standard app permissions
+    const permMap = {
+        'card-inventory': user.access_inventory,
+        'card-deployments': user.access_deployments,
+        'card-returns': user.access_returns,
+        'card-merchants': user.access_merchants
+    };
+
+    Object.keys(permMap).forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
+    });
     
     Swal.close();
     checkGlobalNotifications();
 }
 
 async function handleLogout() {
-    const uid = sessionStorage.getItem('pp_userid');
+    const uid = localStorage.getItem('pp_userid');
+    
+    // Optional: Notify server
+    if (uid) {
+        fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'logout', sender_id: uid })
+        });
+    }
 
-    Swal.fire({
-        title: 'Logout?',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Yes, Logout',
-        confirmButtonColor: '#d33'
-    }).then(async (result) => {
-        if (result.isConfirmed) {
-            if (uid) {
-                await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'logout', sender_id: uid })
-                });
-            }
-            sessionStorage.clear();
-            localStorage.clear();
-            location.href = 'index.html';
-        }
-    });
+    // Wipe the entire browser cache for this site
+    localStorage.clear();
+    sessionStorage.clear();
+    location.href = 'index.html';
 }
 
 window.onload = initGatekeeper;
