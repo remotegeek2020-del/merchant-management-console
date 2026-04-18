@@ -1,17 +1,14 @@
 /**
- * SECURITY NOTE: Supabase keys have been removed from the frontend.
- * All database communication now happens via the /api/login endpoint.
+ * SECURITY: Single-User Session Enforcement
+ * Purpose: Prevents account "bleeding" where two users are logged in simultaneously.
  */
 
-const parseBool = (val) => {
-    if (val === true || val === "true" || val === "TRUE") return true;
-    return false;
-};
+const parseBool = (val) => (val === true || val === "true" || val === "TRUE");
 document.getElementById('initial-loader').style.display = 'none';
 
 async function checkGlobalNotifications() {
-    // Priority: Session storage first, then Local for chat persistence
-    const uid = sessionStorage.getItem('pp_userid') || localStorage.getItem('userid');
+    // Only check if we have an active session
+    const uid = sessionStorage.getItem('pp_userid');
     if (!uid) return;
 
     try {
@@ -21,73 +18,72 @@ async function checkGlobalNotifications() {
             body: JSON.stringify({ action: 'getUserList', sender_id: uid })
         });
         const result = await response.json();
-
         if (result.success && result.unreadCounts) {
             const totalUnread = Object.values(result.unreadCounts).reduce((a, b) => a + b, 0);
-            
             const badge = document.getElementById('nav-msg-badge');
             if (badge) {
-                if (totalUnread > 0) {
-                    badge.innerText = totalUnread > 99 ? '99+' : totalUnread;
-                    badge.style.display = 'block';
-                } else {
-                    badge.style.display = 'none';
-                }
+                badge.innerText = totalUnread > 99 ? '99+' : totalUnread;
+                badge.style.display = totalUnread > 0 ? 'block' : 'none';
             }
         }
-    } catch (err) {
-        console.error("Notification check failed:", err);
-    }
+    } catch (err) { console.error("Notification check failed:", err); }
 }
 
-// Check immediately on load and every 10 seconds
-checkGlobalNotifications();
+// Check every 10 seconds
 setInterval(checkGlobalNotifications, 10000);
 
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
     const urlUserId = params.get('userid');
     const cachedUserId = sessionStorage.getItem('pp_userid');
-    
-    // --- SESSION COLLISION GUARD ---
-    // If a different user tries to enter via URL while a session is active, force a wipe
+
+    // --- ENFORCEMENT: Only 1 User per Browser Instance ---
+    // If someone tries to switch users via URL while a session is active
     if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
+        console.warn("New user detected. Wiping previous session for security.");
         sessionStorage.clear();
-        localStorage.removeItem('userid');
-        location.reload();
+        localStorage.clear(); // Clear chat IDs too
+        location.reload(); 
         return;
     }
 
-    // 1. Initial Access Check
+    // 1. If we are already logged in and no new ID is forced, just show dashboard
+    if (!urlUserId && cachedUserId) {
+        // We still validate the session to ensure the user wasn't deleted
+        validateAndAuthorize(cachedUserId);
+        return;
+    }
+
+    // 2. If no ID anywhere, show Login UI
     if (!urlUserId && !cachedUserId) {
         document.getElementById('login-ui').style.display = 'block';
         return;
     }
 
-    const userId = urlUserId || cachedUserId;
+    // 3. If we have a URL ID, validate it
+    validateAndAuthorize(urlUserId);
+}
 
-    // 2. Validate session via the Secure API
+async function validateAndAuthorize(userId) {
     try {
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ userId: userId, action: 'validate' })
         });
-
         const result = await response.json();
 
-        if (!result.success || !result.user) {
+        if (result.success && result.user) {
+            authorizeUser(result.user);
+        } else {
+            // Failure: Wipe and show login
+            sessionStorage.clear();
             document.getElementById('access-denied').style.display = 'block';
-            document.getElementById('denied-reason').innerText = "User not enrolled in registry.";
-            return;
+            document.getElementById('denied-reason').innerText = "Session expired or User not found.";
         }
-
-        // Now that we use real passwords, we skip the old "External Passkey" prompt
-        authorizeUser(result.user);
-
     } catch (err) {
         console.error("Gatekeeper error:", err);
-        Swal.fire('System Error', 'Could not connect to security server.', 'error');
+        document.getElementById('login-ui').style.display = 'block';
     }
 }
 
@@ -96,7 +92,7 @@ async function handleManualLogin() {
     const pass = document.getElementById('login-pass').value;
 
     if (!email || !pass) {
-        Swal.fire('Required', 'Please enter both email and password.', 'warning');
+        Swal.fire('Required', 'Enter email and password.', 'warning');
         return;
     }
 
@@ -108,85 +104,70 @@ async function handleManualLogin() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ email: email, passkey: pass, action: 'login' })
         });
-
         const result = await response.json();
 
         if (result.success) {
+            // Before authorizing new user, wipe everything
+            sessionStorage.clear();
+            localStorage.clear();
             authorizeUser(result.user);
         } else {
             Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
         }
     } catch (error) {
-        console.error("Login error:", error);
-        Swal.fire('Error', 'Connection to security server failed.', 'error');
+        Swal.fire('Error', 'Security server connection failed.', 'error');
     }
 }
 
 function authorizeUser(user) {
-    const isIframe = (window.self !== window.top);
-    const role = (user.role || "").toLowerCase();
-    
-    // 1. Secure Session Storage (Single Source of Truth)
+    // 1. Set Session Storage (Active Tab only)
     sessionStorage.setItem('pp_userid', user.userid);
     sessionStorage.setItem('pp_role', user.role);
     sessionStorage.setItem('pp_verified', 'true');
 
-    // 2. Chat System Integration (Persistent ID)
+    // 2. Set Local Storage ONLY for the Chat/Direct Message integration
     localStorage.setItem('userid', user.userid);
 
-    // 3. UI Reset
-    if (!isIframe) {
-        document.getElementById('logout-btn').style.display = 'inline-block';
-    }
+    // 3. UI Toggle
     document.getElementById('login-ui').style.display = 'none';
     document.getElementById('page-curtain').style.display = 'block';
     document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
+    document.getElementById('logout-btn').style.display = 'inline-block';
 
-    // 4. ADMIN & SUPER_ADMIN ONLY: Show Management Cards
+    // 4. Permission Logic
+    const role = (user.role || "").toLowerCase();
     const isAdmin = role.includes('admin') || role.includes('super');
-    if (isAdmin) {
-        document.getElementById('card-cms').style.display = 'flex';
-        document.getElementById('card-logs').style.display = 'flex';
-    } else {
-        document.getElementById('card-cms').style.display = 'none';
-        document.getElementById('card-logs').style.display = 'none';
-    }
+    
+    document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
 
-    // 5. Standard Permission Checks
     if (!parseBool(user.access_inventory)) document.getElementById('card-inventory').style.display = 'none';
     if (!parseBool(user.access_deployments)) document.getElementById('card-deployments').style.display = 'none';
     if (!parseBool(user.access_returns)) document.getElementById('card-returns').style.display = 'none';
     if (!parseBool(user.access_merchants)) document.getElementById('card-merchants').style.display = 'none';
     
     Swal.close();
+    checkGlobalNotifications();
 }
 
 async function handleLogout() {
-    const uid = sessionStorage.getItem('pp_userid') || localStorage.getItem('userid');
+    const uid = sessionStorage.getItem('pp_userid');
 
     Swal.fire({
         title: 'Logout?',
-        text: "You will need to re-authenticate to access the portal.",
         icon: 'warning',
         showCancelButton: true,
         confirmButtonText: 'Yes, Logout',
         confirmButtonColor: '#d33'
     }).then(async (result) => {
         if (result.isConfirmed) {
-            // Chat Online Status Fix
             if (uid) {
-                try {
-                    await fetch('/api/chat', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'logout', sender_id: uid })
-                    });
-                } catch (err) {
-                    console.error("Failed to notify server of logout", err);
-                }
+                await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'logout', sender_id: uid })
+                });
             }
-
-            // Total Wipe for Security
             sessionStorage.clear();
             localStorage.clear();
             location.href = 'index.html';
