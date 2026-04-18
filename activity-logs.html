@@ -12,6 +12,18 @@
         .status-success { color: #2e7d32; font-weight: bold; }
         .status-failure { color: #d32f2f; font-weight: bold; }
     </style>
+    <script>
+    (function() {
+        // 1. Check if a session exists in LocalStorage
+        const sessionUser = localStorage.getItem('pp_userid');
+        const isVerified = localStorage.getItem('pp_verified');
+
+        // 2. If no session, boot them to the login page immediately
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+        }
+    })();
+</script>
 </head>
 <body>
     <div id="page-content" class="log-container" style="display:none;">
