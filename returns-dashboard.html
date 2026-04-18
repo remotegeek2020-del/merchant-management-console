@@ -22,6 +22,18 @@
         .cond-working { background: #dcfce7; color: #166534; }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
+    <script>
+    (function() {
+        // 1. Check if a session exists in LocalStorage
+        const sessionUser = localStorage.getItem('pp_userid');
+        const isVerified = localStorage.getItem('pp_verified');
+
+        // 2. If no session, boot them to the login page immediately
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+        }
+    })();
+</script>
 </head>
 <body>
 
