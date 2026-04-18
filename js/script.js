@@ -52,13 +52,14 @@ setInterval(checkGlobalNotifications, 10000);
 // setInterval(checkNotifications, 600000);
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
-    const urlUserId = params.get('userid');
+    const urlUserId = params.get('userid'); // Coming from HighLevel
     const cachedUserId = sessionStorage.getItem('pp_userid');
-    const isIframe = (window.self !== window.top);
 
-    // 1. Initial Access Check
-    if (!urlUserId && !cachedUserId) {
-        document.getElementById('login-ui').style.display = 'block';
+    // SECURITY FIX: If we have a session but a different user tries to come in via URL
+    if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
+        console.warn("Session collision detected. Forcing re-authentication.");
+        sessionStorage.clear();
+        location.reload();
         return;
     }
 
