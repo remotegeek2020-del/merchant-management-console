@@ -69,6 +69,18 @@
         .timeline-marker { position: absolute; left: -9px; top: 0; width: 16px; height: 16px; border-radius: 50%; background: white; border: 3px solid var(--pp-accent); }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+    (function() {
+        // 1. Check if a session exists in LocalStorage
+        const sessionUser = localStorage.getItem('pp_userid');
+        const isVerified = localStorage.getItem('pp_verified');
+
+        // 2. If no session, boot them to the login page immediately
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+        }
+    })();
+</script>
 </head>
 <body>
 
