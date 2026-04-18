@@ -8,39 +8,28 @@
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <style>
         body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); min-height: 100vh; font-family: 'Inter', sans-serif; padding: 20px; }
-        .log-container { max-width: 1200px; margin: 40px auto; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05); }
+        .log-container { max-width: 1200px; margin: 40px auto; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05); display: none; }
         .status-success { color: #2e7d32; font-weight: bold; }
         .status-failure { color: #d32f2f; font-weight: bold; }
     </style>
-   <script>
-    (function() {
-        const sessionUser = localStorage.getItem('pp_userid');
-        const role = (localStorage.getItem('pp_role') || "").toLowerCase();
-        const isVerified = localStorage.getItem('pp_verified');
+    
+    <script>
+        // --- CONSOLIDATED ADMIN GUARD ---
+        (function() {
+            const sessionUser = localStorage.getItem('pp_userid');
+            const role = (localStorage.getItem('pp_role') || "").toLowerCase();
+            const isVerified = localStorage.getItem('pp_verified');
 
-        // Debugging: If you get stuck, uncomment the line below to see what the browser thinks your role is
-        // console.log("Current Role:", role);
+            const hasAccess = sessionUser && isVerified === 'true' && (role.includes('admin') || role.includes('super'));
 
-        // Check 1: Are you even logged in?
-        if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
-            return;
-        }
-
-        // Check 2: Do you have the right rank?
-        // This covers "admin", "super_admin", "operations_admin", etc.
-        const hasAccess = role.includes('admin') || role.includes('super');
-
-        if (!hasAccess) {
-            // Use a simple alert before redirecting so the user knows why they were booted
-            alert("Access Denied: You do not have permission to view this page.");
-            window.location.href = 'index.html';
-        }
-    })();
-</script>
+            if (!hasAccess) {
+                window.location.href = 'index.html?reason=denied';
+            }
+        })();
+    </script>
 </head>
 <body>
-    <div id="page-content" class="log-container" style="display:none;">
+    <div id="page-content" class="log-container">
         <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_large" style="justify-content: space-between;">
             <h1 class="slds-text-heading_large" style="color:#004990; font-weight:800;">Activity Audit Trail</h1>
             <button class="slds-button slds-button_neutral" style="border-radius: 50px;" onclick="window.location.href='index.html'">🏠 HOME</button>
@@ -64,31 +53,32 @@
 
     <script>
         async function fetchLogs() {
-            const response = await fetch('/api/logs');
-            const result = await response.json();
-            if (result.success) {
-                const tbody = document.getElementById('log-list');
-                tbody.innerHTML = result.data.map(log => `
-                    <tr>
-                        <td>${new Date(log.created_at).toLocaleString()}</td>
-                        <td><strong>${log.email}</strong></td>
-                        <td><code>${log.action}</code></td>
-                        <td class="status-${log.status.toLowerCase()}">${log.status}</td>
-                        <td>${log.ip_address}</td>
-                    </tr>
-                `).join('');
+            try {
+                const response = await fetch('/api/logs');
+                const result = await response.json();
+                if (result.success) {
+                    const tbody = document.getElementById('log-list');
+                    tbody.innerHTML = result.data.map(log => `
+                        <tr>
+                            <td>${new Date(log.created_at).toLocaleString()}</td>
+                            <td><strong>${log.email || 'System'}</strong></td>
+                            <td><code>${log.action}</code></td>
+                            <td class="status-${(log.status || 'unknown').toLowerCase()}">${log.status}</td>
+                            <td>${log.ip_address || 'N/A'}</td>
+                        </tr>
+                    `).join('');
+                }
+            } catch (err) {
+                console.error("Failed to load logs:", err);
             }
         }
 
-        window.onload = () => {
-            const role = (sessionStorage.getItem('pp_role') || "").toLowerCase();
-            if (role.includes('admin')) {
-                document.getElementById('page-content').style.display = 'block';
-                fetchLogs();
-            } else {
-                window.location.href = 'index.html';
-            }
-        };
+        // Run as soon as DOM is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            // Since the Head script already validated us, we just show content and fetch data
+            document.getElementById('page-content').style.display = 'block';
+            fetchLogs();
+        });
     </script>
 </body>
 </html>
