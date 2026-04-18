@@ -1,5 +1,6 @@
 // api/users.js
 import { createClient } from '@supabase/supabase-js'
+import crypto from 'crypto';
 
 export default async function handler(req, res) {
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -23,7 +24,34 @@ export default async function handler(req, res) {
       } else if (action === 'updateSingle') {
         await supabase.from('app_users').update(payload).eq('userid', userid);
       } else if (action === 'insert') {
-        await supabase.from('app_users').insert([payload]);
+        // --- SECURE ENROLLMENT LOGIC ---
+        
+        // 1. Generate a unique invitation token
+        const invitationToken = crypto.randomUUID();
+        
+        // 2. Prepare the new user object
+        const newUser = {
+            ...payload,
+            invitation_token: invitationToken,
+            is_active: false, // Prevents login until password is set
+            passkey: 'PENDING_SETUP' // Legacy support placeholder
+        };
+
+        // 3. Insert into Supabase
+        const { error } = await supabase.from('app_users').insert([newUser]);
+        
+        if (error) {
+            // Check for duplicate email error specifically
+            if (error.code === '23505') {
+                return res.status(400).json({ success: false, message: 'A user with this email already exists.' });
+            }
+            throw error;
+        }
+
+        // --- FUTURE EMAIL TRIGGER POINT ---
+        // This is where we will eventually add the Resend/SendGrid call
+        // console.log(`Invitation link: /setup-password.html?token=${invitationToken}`);
+
       } else if (action === 'delete') {
         await supabase.from('app_users').delete().eq('userid', userid);
       }
