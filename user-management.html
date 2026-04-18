@@ -24,21 +24,27 @@
         .status-pending { background: #fef3c7; color: #92400e; }
     </style>
 
-    <script>
-        // --- CONSOLIDATED ADMIN GUARD ---
-        (function() {
-            const sessionUser = localStorage.getItem('pp_userid');
-            const role = (localStorage.getItem('pp_role') || "").toLowerCase();
-            const isVerified = localStorage.getItem('pp_verified');
+   <script>
+    (function() {
+        const sessionUser = localStorage.getItem('pp_userid');
+        const role = (localStorage.getItem('pp_role') || "").toLowerCase();
+        const isVerified = localStorage.getItem('pp_verified');
 
-            // Simplified access check
-            const hasAccess = sessionUser && isVerified === 'true' && (role.includes('admin') || role.includes('super'));
+        console.log("GUARD CHECK - User:", sessionUser);
+        console.log("GUARD CHECK - Role:", role);
+        console.log("GUARD CHECK - Verified:", isVerified);
 
-            if (!hasAccess) {
-                window.location.href = 'index.html?reason=denied';
-            }
-        })();
-    </script>
+        // This is the most permissive check possible for an Admin
+        const hasAdminPower = role.includes('admin') || role.includes('super');
+
+        if (!sessionUser || isVerified !== 'true' || !hasAdminPower) {
+            console.error("GUARD REJECTED ACCESS. Redirecting...");
+            window.location.href = 'index.html?reason=denied';
+        } else {
+            console.log("GUARD GRANTED ACCESS.");
+        }
+    })();
+</script>
 </head>
     
 <body class="ui-modern"> 
