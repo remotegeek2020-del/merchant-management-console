@@ -73,41 +73,66 @@ async function saveAllChanges() {
 
 async function addUser() {
     const { value: formValues } = await Swal.fire({
-        title: 'Enroll New User',
+        title: 'Enroll New Staff Member',
         html: `
             <div class="swal-grid">
-                <label>User ID</label><input id="swal-id" class="slds-input" placeholder="e.g. josh123">
-                <label>First Name</label><input id="swal-name" class="slds-input">
-                <label>Email</label><input id="swal-email" class="slds-input">
-                <label>Passkey</label><input id="swal-pass" class="slds-input">
+                <label>First Name</label>
+                <input id="swal-name" class="slds-input">
+                
+                <label>Email</label>
+                <input id="swal-email" type="email" class="slds-input">
+                
                 <label>Role</label>
                 <select id="swal-role" class="slds-select">
-                    <option value="USER">USER</option>
-                    <option value="ADMIN">ADMIN</option>
+                    <option value="Standard User">Standard User</option>
+                    <option value="Operations Admin">Operations Admin</option>
+                    <option value="Super Admin">Super Admin</option>
                 </select>
-            </div>`,
+            </div>
+            <div style="margin-top: 15px; font-size: 12px; color: #64748b; text-align: center;">
+                An invitation email will be sent to the user to set their password.
+            </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: 'Enroll User',
         confirmButtonColor: '#004990',
         preConfirm: () => {
-            return {
-                userid: document.getElementById('swal-id').value,
-                first_name: document.getElementById('swal-name').value,
-                email: document.getElementById('swal-email').value,
-                passkey: document.getElementById('swal-pass').value,
-                role: document.getElementById('swal-role').value
+            const name = document.getElementById('swal-name').value;
+            const email = document.getElementById('swal-email').value;
+            if (!name || !email) {
+                Swal.showValidationMessage('Name and Email are required');
+                return false;
             }
+            return {
+                first_name: name,
+                email: email,
+                role: document.getElementById('swal-role').value,
+                access_inventory: false,
+                access_deployments: false,
+                access_returns: false,
+                access_merchants: false
+            };
         }
     });
 
     if (formValues) {
-        const response = await fetch('/api/users', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'insert', payload: formValues })
-        });
-        const result = await response.json();
-        if (result.success) {
-            Swal.fire('Success', 'User enrolled!', 'success');
-            fetchUsers();
+        try {
+            const res = await fetch('/api/users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'insert', payload: formValues })
+            });
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Enrolled', 'Invitation generated and user added.', 'success');
+                // Refresh the table (assuming you have a loadUsers function)
+                if (typeof loadUsers === 'function') loadUsers();
+            } else {
+                throw new Error(result.message);
+            }
+        } catch (err) {
+            Swal.fire('Error', err.message, 'error');
         }
     }
 }
