@@ -24,24 +24,22 @@
         .status-pending { background: #fef3c7; color: #92400e; }
     </style>
 
-   <script>
+  <script>
     (function() {
+        // 1. Grab data
         const sessionUser = localStorage.getItem('pp_userid');
-        const role = (localStorage.getItem('pp_role') || "").toLowerCase();
+        const rawRole = localStorage.getItem('pp_role') || "";
         const isVerified = localStorage.getItem('pp_verified');
 
-        console.log("GUARD CHECK - User:", sessionUser);
-        console.log("GUARD CHECK - Role:", role);
-        console.log("GUARD CHECK - Verified:", isVerified);
+        // 2. Clean the role string (lowercase and remove spaces/underscores for comparison)
+        const cleanRole = rawRole.toLowerCase().replace(/[\s_]/g, ''); 
 
-        // This is the most permissive check possible for an Admin
-        const hasAdminPower = role.includes('admin') || role.includes('super');
+        // 3. Check for 'admin' or 'super' anywhere in the cleaned string
+        const hasAccess = cleanRole.includes('admin') || cleanRole.includes('super');
 
-        if (!sessionUser || isVerified !== 'true' || !hasAdminPower) {
-            console.error("GUARD REJECTED ACCESS. Redirecting...");
+        if (!sessionUser || isVerified !== 'true' || !hasAccess) {
+            console.error("Access Denied. Role found:", rawRole);
             window.location.href = 'index.html?reason=denied';
-        } else {
-            console.log("GUARD GRANTED ACCESS.");
         }
     })();
 </script>
