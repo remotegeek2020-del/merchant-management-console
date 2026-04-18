@@ -145,19 +145,24 @@ async function handleManualLogin() {
     }
 }
 document.getElementById('initial-loader').style.display = 'none';
+
 function authorizeUser(user) {
     const isIframe = (window.self !== window.top);
     const role = (user.role || "").toLowerCase();
     
-    // 1. Store session data
+    // 1. CLEAR EVERYTHING FIRST to prevent session mixing
+    sessionStorage.clear();
+    localStorage.removeItem('userid'); // Only used for chat, but let's be safe
+
+    // 2. Store session data ONLY in sessionStorage
     sessionStorage.setItem('pp_userid', user.userid);
     sessionStorage.setItem('pp_role', user.role);
-
-    // --- ADD THIS LINE FOR THE CHAT SYSTEM ---
-    // This ensures chat.html can identify you even after a page refresh
+    sessionStorage.setItem('pp_verified', 'true');
+    
+    // For the Chat system specifically:
     localStorage.setItem('userid', user.userid);
 
-    // 2. UI Reset
+    // 3. UI Updates
     if (!isIframe) {
         document.getElementById('logout-btn').style.display = 'inline-block';
     }
