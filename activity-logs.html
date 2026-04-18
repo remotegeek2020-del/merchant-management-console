@@ -12,15 +12,29 @@
         .status-success { color: #2e7d32; font-weight: bold; }
         .status-failure { color: #d32f2f; font-weight: bold; }
     </style>
-    <script>
+   <script>
     (function() {
-        // 1. Check if a session exists in LocalStorage
         const sessionUser = localStorage.getItem('pp_userid');
+        const role = (localStorage.getItem('pp_role') || "").toLowerCase();
         const isVerified = localStorage.getItem('pp_verified');
 
-        // 2. If no session, boot them to the login page immediately
+        // Debugging: If you get stuck, uncomment the line below to see what the browser thinks your role is
+        // console.log("Current Role:", role);
+
+        // Check 1: Are you even logged in?
         if (!sessionUser || isVerified !== 'true') {
             window.location.href = 'index.html?reason=unauthorized';
+            return;
+        }
+
+        // Check 2: Do you have the right rank?
+        // This covers "admin", "super_admin", "operations_admin", etc.
+        const hasAccess = role.includes('admin') || role.includes('super');
+
+        if (!hasAccess) {
+            // Use a simple alert before redirecting so the user knows why they were booted
+            alert("Access Denied: You do not have permission to view this page.");
+            window.location.href = 'index.html';
         }
     })();
 </script>
