@@ -28,6 +28,18 @@
     .status-dot.online { background: #2ecc71 !important; box-shadow: 0 0 5px #2ecc71; }
     .badge { background: #e74c3c; color: white; border-radius: 10px; padding: 2px 8px; font-size: 11px; font-weight: bold; margin-left: auto; }
     </style>
+    <script>
+    (function() {
+        // 1. Check if a session exists in LocalStorage
+        const sessionUser = localStorage.getItem('pp_userid');
+        const isVerified = localStorage.getItem('pp_verified');
+
+        // 2. If no session, boot them to the login page immediately
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+        }
+    })();
+</script>
 </head>
 <body>
 
