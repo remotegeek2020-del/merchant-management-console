@@ -10,8 +10,8 @@ const parseBool = (val) => {
 document.getElementById('initial-loader').style.display = 'none';
 
 async function checkGlobalNotifications() {
-    // Get the current user ID
-    const uid = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
+    // Priority: Session storage first, then Local for chat persistence
+    const uid = sessionStorage.getItem('pp_userid') || localStorage.getItem('userid');
     if (!uid) return;
 
     try {
@@ -23,7 +23,6 @@ async function checkGlobalNotifications() {
         const result = await response.json();
 
         if (result.success && result.unreadCounts) {
-            // Calculate total sum of all unread messages from all users
             const totalUnread = Object.values(result.unreadCounts).reduce((a, b) => a + b, 0);
             
             const badge = document.getElementById('nav-msg-badge');
@@ -41,30 +40,28 @@ async function checkGlobalNotifications() {
     }
 }
 
-// Check immediately on load
+// Check immediately on load and every 10 seconds
 checkGlobalNotifications();
-
-// Then check every 10 seconds
 setInterval(checkGlobalNotifications, 10000);
 
-// Call this inside your existing authentication success logic
-// and then every 10 minutes
-// setInterval(checkNotifications, 600000);
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
-    const urlUserId = params.get('userid'); // Coming from HighLevel
+    const urlUserId = params.get('userid');
     const cachedUserId = sessionStorage.getItem('pp_userid');
-
-    // SECURITY FIX: If we have a session but a different user tries to come in via URL
+    
+    // --- SESSION COLLISION GUARD ---
+    // If a different user tries to enter via URL while a session is active, force a wipe
     if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
-        console.warn("Session collision detected. Forcing re-authentication.");
         sessionStorage.clear();
+        localStorage.removeItem('userid');
         location.reload();
         return;
     }
 
-    if (urlUserId && urlUserId !== cachedUserId) {
-        sessionStorage.clear();
+    // 1. Initial Access Check
+    if (!urlUserId && !cachedUserId) {
+        document.getElementById('login-ui').style.display = 'block';
+        return;
     }
 
     const userId = urlUserId || cachedUserId;
@@ -85,27 +82,8 @@ async function initGatekeeper() {
             return;
         }
 
-        const user = result.user;
-
-        // 3. Handle External Passkey Verification
-        if (!isIframe && !sessionStorage.getItem('pp_verified')) {
-            const { value: enteredPass } = await Swal.fire({
-                title: `Verify Identity`,
-                text: `Please enter your passkey to access outside HighLevel.`,
-                input: 'password',
-                confirmButtonText: 'Verify Identity',
-                confirmButtonColor: '#004990',
-                allowOutsideClick: false
-            });
-
-            if (enteredPass !== user.passkey) {
-                Swal.fire('Access Denied', 'Invalid passkey code.', 'error').then(() => location.reload());
-                return;
-            }
-            sessionStorage.setItem('pp_verified', 'true');
-        }
-
-        authorizeUser(user);
+        // Now that we use real passwords, we skip the old "External Passkey" prompt
+        authorizeUser(result.user);
 
     } catch (err) {
         console.error("Gatekeeper error:", err);
@@ -118,14 +96,13 @@ async function handleManualLogin() {
     const pass = document.getElementById('login-pass').value;
 
     if (!email || !pass) {
-        Swal.fire('Required', 'Please enter both email and passkey.', 'warning');
+        Swal.fire('Required', 'Please enter both email and password.', 'warning');
         return;
     }
 
     Swal.fire({ title: 'Authenticating...', didOpen: () => Swal.showLoading() });
 
     try {
-        // We fetch our OWN Vercel API route now
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -135,7 +112,6 @@ async function handleManualLogin() {
         const result = await response.json();
 
         if (result.success) {
-            sessionStorage.setItem('pp_verified', 'true');
             authorizeUser(result.user);
         } else {
             Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
@@ -145,25 +121,20 @@ async function handleManualLogin() {
         Swal.fire('Error', 'Connection to security server failed.', 'error');
     }
 }
-document.getElementById('initial-loader').style.display = 'none';
 
 function authorizeUser(user) {
     const isIframe = (window.self !== window.top);
     const role = (user.role || "").toLowerCase();
     
-    // 1. CLEAR EVERYTHING FIRST to prevent session mixing
-    sessionStorage.clear();
-    localStorage.removeItem('userid'); // Only used for chat, but let's be safe
-
-    // 2. Store session data ONLY in sessionStorage
+    // 1. Secure Session Storage (Single Source of Truth)
     sessionStorage.setItem('pp_userid', user.userid);
     sessionStorage.setItem('pp_role', user.role);
     sessionStorage.setItem('pp_verified', 'true');
-    
-    // For the Chat system specifically:
+
+    // 2. Chat System Integration (Persistent ID)
     localStorage.setItem('userid', user.userid);
 
-    // 3. UI Updates
+    // 3. UI Reset
     if (!isIframe) {
         document.getElementById('logout-btn').style.display = 'inline-block';
     }
@@ -171,7 +142,7 @@ function authorizeUser(user) {
     document.getElementById('page-curtain').style.display = 'block';
     document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
 
-    // 3. ADMIN & SUPER_ADMIN ONLY: Show Management Cards
+    // 4. ADMIN & SUPER_ADMIN ONLY: Show Management Cards
     const isAdmin = role.includes('admin') || role.includes('super');
     if (isAdmin) {
         document.getElementById('card-cms').style.display = 'flex';
@@ -181,7 +152,7 @@ function authorizeUser(user) {
         document.getElementById('card-logs').style.display = 'none';
     }
 
-    // 4. Standard Permission Checks (for standard Users)
+    // 5. Standard Permission Checks
     if (!parseBool(user.access_inventory)) document.getElementById('card-inventory').style.display = 'none';
     if (!parseBool(user.access_deployments)) document.getElementById('card-deployments').style.display = 'none';
     if (!parseBool(user.access_returns)) document.getElementById('card-returns').style.display = 'none';
@@ -191,8 +162,7 @@ function authorizeUser(user) {
 }
 
 async function handleLogout() {
-    // Get the ID before we clear storage
-    const uid = localStorage.getItem('userid') || sessionStorage.getItem('pp_userid');
+    const uid = sessionStorage.getItem('pp_userid') || localStorage.getItem('userid');
 
     Swal.fire({
         title: 'Logout?',
@@ -201,11 +171,9 @@ async function handleLogout() {
         showCancelButton: true,
         confirmButtonText: 'Yes, Logout',
         confirmButtonColor: '#d33'
-    }).then(async (result) => { // Added 'async' here to allow the fetch
+    }).then(async (result) => {
         if (result.isConfirmed) {
-            
-            // --- ADDED FIX FOR ONLINE INDICATOR ---
-            // This tells the API to set last_seen to NULL so the dot turns grey
+            // Chat Online Status Fix
             if (uid) {
                 try {
                     await fetch('/api/chat', {
@@ -217,16 +185,13 @@ async function handleLogout() {
                     console.error("Failed to notify server of logout", err);
                 }
             }
-            // --------------------------------------
 
+            // Total Wipe for Security
             sessionStorage.clear();
-            localStorage.removeItem('userid');
-            location.reload();
+            localStorage.clear();
+            location.href = 'index.html';
         }
     });
 }
 
 window.onload = initGatekeeper;
-
-
-
