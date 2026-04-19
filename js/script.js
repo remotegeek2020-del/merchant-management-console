@@ -139,33 +139,47 @@ async function handleManualLogin() {
     }
 }
 
-function authorizeUser(user) {
-    // 1. PERSIST SESSION
+async function authorizeUser(user) {
+    // 1. CLEAN SLATE & PERSIST SESSION
+    // We clear first to ensure no old session data interferes
+    localStorage.clear(); 
+    
     localStorage.setItem('pp_userid', user.userid || '');
-    // Ensure we save a string, not 'undefined'
     localStorage.setItem('pp_role', user.role || 'user'); 
     localStorage.setItem('userid', user.userid || '');
     localStorage.setItem('pp_verified', 'true');
 
+    // --- CRITICAL FIX: The "Heartbeat" Delay ---
+    // This gives the browser 100ms to actually write to the disk 
+    // before the next page tries to read it.
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // 2. UI UPDATES
-    document.getElementById('login-ui').style.display = 'none';
-    document.getElementById('page-curtain').style.display = 'block';
-    document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
+    const loginUI = document.getElementById('login-ui');
+    const curtain = document.getElementById('page-curtain');
+    
+    if (loginUI) loginUI.style.display = 'none';
+    if (curtain) curtain.style.display = 'block';
+    
+    const greeting = document.getElementById('user-greeting');
+    if (greeting && user.first_name) {
+        greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
+    }
     
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
-    // 3. PERMISSIONS
+    // 3. PERMISSIONS LOGIC
     const role = (user.role || "").toLowerCase();
     const isAdmin = role.includes('admin') || role.includes('super');
     
-    // Manage visibility of admin cards
+    // Admin Cards
     const cmsCard = document.getElementById('card-cms');
     const logsCard = document.getElementById('card-logs');
     if (cmsCard) cmsCard.style.display = isAdmin ? 'flex' : 'none';
     if (logsCard) logsCard.style.display = isAdmin ? 'flex' : 'none';
 
-    // Manage standard app permissions
+    // Standard App Permissions
     const permMap = {
         'card-inventory': user.access_inventory,
         'card-deployments': user.access_deployments,
@@ -175,11 +189,18 @@ function authorizeUser(user) {
 
     Object.keys(permMap).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
+        if (el) {
+            // parseBool ensures "TRUE" or true both work
+            el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
+        }
     });
     
     Swal.close();
-    checkGlobalNotifications();
+    
+    // Trigger notification check now that we have a UID
+    if (typeof checkGlobalNotifications === 'function') {
+        checkGlobalNotifications();
+    }
 }
 
 async function handleLogout() {
