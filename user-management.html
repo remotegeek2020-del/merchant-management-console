@@ -6,6 +6,25 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <script>
+    (function() {
+        const sessionUser = localStorage.getItem('pp_userid');
+        const rawRole = localStorage.getItem('pp_role') || "";
+        const isVerified = localStorage.getItem('pp_verified');
+
+        // This removes spaces AND underscores, then makes it lowercase
+        // Example: "Operations Admin" becomes "operationsadmin"
+        // Example: "super_admin" becomes "superadmin"
+        const cleanRole = rawRole.toLowerCase().replace(/[\s_]/g, ''); 
+
+        const hasAdminPower = cleanRole.includes('admin') || cleanRole.includes('super');
+
+        if (!sessionUser || isVerified !== 'true' || !hasAdminPower) {
+            console.error("DENIED. Found Role:", rawRole);
+            window.location.href = 'index.html?reason=denied';
+        }
+    })();
+</script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="css/style.css">
     <style>
@@ -24,25 +43,7 @@
         .status-pending { background: #fef3c7; color: #92400e; }
     </style>
 
-  <script>
-    (function() {
-        // 1. Grab data
-        const sessionUser = localStorage.getItem('pp_userid');
-        const rawRole = localStorage.getItem('pp_role') || "";
-        const isVerified = localStorage.getItem('pp_verified');
 
-        // 2. Clean the role string (lowercase and remove spaces/underscores for comparison)
-        const cleanRole = rawRole.toLowerCase().replace(/[\s_]/g, ''); 
-
-        // 3. Check for 'admin' or 'super' anywhere in the cleaned string
-        const hasAccess = cleanRole.includes('admin') || cleanRole.includes('super');
-
-        if (!sessionUser || isVerified !== 'true' || !hasAccess) {
-            console.error("Access Denied. Role found:", rawRole);
-            window.location.href = 'index.html?reason=denied';
-        }
-    })();
-</script>
 </head>
     
 <body class="ui-modern"> 
