@@ -140,12 +140,11 @@ async function handleManualLogin() {
 }
 
 function authorizeUser(user) {
-    // 1. PERSIST SESSION (Now works across tabs)
-    localStorage.setItem('pp_userid', user.userid);
-    localStorage.setItem('pp_role', user.role);
-    localStorage.setItem('userid', user.userid); // For Chat compatibility
-    
-    // Use a flag to bypass the passkey prompt if they are already authenticated
+    // 1. PERSIST SESSION
+    localStorage.setItem('pp_userid', user.userid || '');
+    // Ensure we save a string, not 'undefined'
+    localStorage.setItem('pp_role', user.role || 'user'); 
+    localStorage.setItem('userid', user.userid || '');
     localStorage.setItem('pp_verified', 'true');
 
     // 2. UI UPDATES
