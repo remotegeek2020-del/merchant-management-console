@@ -7,23 +7,18 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
    <script>
-    (async function() {
-        // Wait a tiny bit for the redirect/storage to settle
-        await new Promise(r => setTimeout(r, 150));
-
+    (function() {
         const uid = localStorage.getItem('pp_userid');
         const role = (localStorage.getItem('pp_role') || "").toLowerCase();
         const verified = localStorage.getItem('pp_verified');
 
-        // Check for 'super' or 'admin'
-        const hasAccess = uid && verified === 'true' && (role.includes('admin') || role.includes('super'));
+        // Bulletproof check
+        const isSuper = role.indexOf('super') !== -1;
+        const isAdmin = role.indexOf('admin') !== -1;
+        const hasAuth = uid && verified === 'true' && (isSuper || isAdmin);
 
-        if (!hasAccess) {
-            console.error("Access Denied. Role found:", role);
+        if (!hasAuth) {
             window.location.href = 'index.html?reason=denied';
-        } else {
-            // Reveal the content if authorized
-            document.documentElement.style.visibility = 'visible';
         }
     })();
 </script>
