@@ -6,29 +6,28 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
-    <script>
+   <script>
     (async function() {
-        // Give the browser 100ms to finish writing to localStorage
-        await new Promise(r => setTimeout(r, 100));
+        // Wait a tiny bit for the redirect/storage to settle
+        await new Promise(r => setTimeout(r, 150));
 
-        const sessionUser = localStorage.getItem('pp_userid');
-        const rawRole = localStorage.getItem('pp_role') || "";
-        const isVerified = localStorage.getItem('pp_verified');
+        const uid = localStorage.getItem('pp_userid');
+        const role = (localStorage.getItem('pp_role') || "").toLowerCase();
+        const verified = localStorage.getItem('pp_verified');
 
-        console.log("FINAL GUARD CHECK:", { sessionUser, rawRole, isVerified });
+        // Check for 'super' or 'admin'
+        const hasAccess = uid && verified === 'true' && (role.includes('admin') || role.includes('super'));
 
-        const cleanRole = rawRole.toLowerCase().replace(/[\s_]/g, '');
-        const hasAccess = cleanRole.includes('admin') || cleanRole.includes('super');
-
-        if (!sessionUser || isVerified !== 'true' || !hasAccess) {
-            console.error("ACCESS DENIED. REDIRECTING...");
+        if (!hasAccess) {
+            console.error("Access Denied. Role found:", role);
             window.location.href = 'index.html?reason=denied';
         } else {
-            // Keep the page hidden until we are SURE they are an admin
+            // Reveal the content if authorized
             document.documentElement.style.visibility = 'visible';
         }
     })();
 </script>
+<style> html { visibility: hidden; } </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="css/style.css">
     <style>
