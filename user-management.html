@@ -7,34 +7,33 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <script>
-    (function() {
+    (async function() {
+        // Give the browser 100ms to finish writing to localStorage
+        await new Promise(r => setTimeout(r, 100));
+
         const sessionUser = localStorage.getItem('pp_userid');
-        const rawRole = localStorage.getItem('pp_role');
+        const rawRole = localStorage.getItem('pp_role') || "";
         const isVerified = localStorage.getItem('pp_verified');
 
-        // Debugging logs - Check these in F12 Console
-        console.log("Session ID:", sessionUser);
-        console.log("Raw Role from Storage:", rawRole);
+        console.log("FINAL GUARD CHECK:", { sessionUser, rawRole, isVerified });
 
-        if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
-            return;
-        }
-
-        const cleanRole = (rawRole || "").toLowerCase();
+        const cleanRole = rawRole.toLowerCase().replace(/[\s_]/g, '');
         const hasAccess = cleanRole.includes('admin') || cleanRole.includes('super');
 
-        if (!hasAccess) {
-            console.error("Access Denied for role:", rawRole);
-            // This alert will tell us exactly what is wrong
-            alert("Permission Error: Your role is detected as '" + rawRole + "'. Admins only.");
+        if (!sessionUser || isVerified !== 'true' || !hasAccess) {
+            console.error("ACCESS DENIED. REDIRECTING...");
             window.location.href = 'index.html?reason=denied';
+        } else {
+            // Keep the page hidden until we are SURE they are an admin
+            document.documentElement.style.visibility = 'visible';
         }
     })();
 </script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <link rel="stylesheet" href="css/style.css">
     <style>
+        /* Prevent the page from flashing before the guard finishes */
+    html { visibility: hidden; }
         body { transition: background 0.2s ease; font-family: 'Inter', sans-serif; margin: 0; }
         /* Hidden by default until Admin Guard passes */
         #page-content { display: none; padding: 20px; }
