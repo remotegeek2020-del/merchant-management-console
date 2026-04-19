@@ -1,33 +1,40 @@
 /**
- * PAYPROTEC GATEKEEPER - FINAL COMPILED LOGIC
- * Handles: Login, Multi-tab Session, and Anti-Collision
+ * PAYPROTEC GATEKEEPER 
+ * Robust version to prevent loader hangs.
  */
 
 const parseBool = (val) => (val === true || val === "true" || val === "TRUE");
 
+// This function MUST run to hide the loader
 async function initGatekeeper() {
-    const params = new URLSearchParams(window.location.search);
-    const urlUserId = params.get('userid');
-    const cachedUserId = localStorage.getItem('pp_userid');
-
-    // 1. If we just arrived from a link with a NEW ID, wipe the old one
-    if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
-        localStorage.clear();
-        location.href = window.location.pathname + '?userid=' + urlUserId;
-        return;
-    }
-
-    // 2. Determine who we are checking
-    const userId = urlUserId || cachedUserId;
-
-    // 3. If no ID is found, show the login screen
-    if (!userId) {
-        document.getElementById('login-ui').style.display = 'block';
-        return;
-    }
-
-    // 4. Validate existing session with the server
     try {
+        const params = new URLSearchParams(window.location.search);
+        const urlUserId = params.get('userid');
+        
+        // Safety check for Incognito/Private mode
+        let cachedUserId = null;
+        try {
+            cachedUserId = localStorage.getItem('pp_userid');
+        } catch (e) {
+            console.warn("Storage access denied");
+        }
+
+        // 1. If we have a URL ID and it's different, wipe and reload
+        if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
+            localStorage.clear();
+            window.location.href = window.location.pathname + '?userid=' + urlUserId;
+            return;
+        }
+
+        const userId = urlUserId || cachedUserId;
+
+        // 2. No ID? Show Login and STOP.
+        if (!userId) {
+            showLoginUI();
+            return;
+        }
+
+        // 3. Validate Session
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -39,77 +46,50 @@ async function initGatekeeper() {
             authorizeUser(result.user);
         } else {
             localStorage.clear();
-            document.getElementById('login-ui').style.display = 'block';
+            showLoginUI();
         }
     } catch (err) {
-        console.error("Session validation failed:", err);
-        document.getElementById('login-ui').style.display = 'block';
+        console.error("Gatekeeper Critical Error:", err);
+        showLoginUI(); // Always fall back to login UI on error
     }
 }
 
-async function handleManualLogin() {
-    const email = document.getElementById('login-email').value;
-    const pass = document.getElementById('login-pass').value;
-
-    if (!email || !pass) {
-        Swal.fire('Required', 'Enter email and password.', 'warning');
-        return;
-    }
-
-    Swal.fire({ title: 'Authenticating...', didOpen: () => Swal.showLoading() });
-
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, passkey: pass, action: 'login' })
-        });
-        const result = await response.json();
-
-        if (result.success) {
-            // SUCCESS: Wipe old junk before setting new user
-            localStorage.clear();
-            authorizeUser(result.user);
-        } else {
-            Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
-        }
-    } catch (error) {
-        Swal.fire('Error', 'Security server connection failed.', 'error');
-    }
+function showLoginUI() {
+    const loader = document.getElementById('initial-loader');
+    const loginUI = document.getElementById('login-ui');
+    if (loader) loader.style.display = 'none';
+    if (loginUI) loginUI.style.display = 'block';
 }
 
 function authorizeUser(user) {
-    // 1. SAVE TO STORAGE
-    localStorage.setItem('pp_userid', user.userid || '');
-    localStorage.setItem('pp_role', user.role || 'user'); 
-    localStorage.setItem('pp_verified', 'true');
-    localStorage.setItem('userid', user.userid || ''); // Chat compatibility
+    try {
+        localStorage.setItem('pp_userid', user.userid || '');
+        localStorage.setItem('pp_role', user.role || 'user'); 
+        localStorage.setItem('pp_verified', 'true');
+        localStorage.setItem('userid', user.userid || '');
+    } catch (e) { console.error("Could not save to storage"); }
 
-    // 2. UI UPDATES
+    const loader = document.getElementById('initial-loader');
     const loginUI = document.getElementById('login-ui');
     const curtain = document.getElementById('page-curtain');
     
+    if (loader) loader.style.display = 'none';
     if (loginUI) loginUI.style.display = 'none';
     if (curtain) curtain.style.display = 'block';
     
-    const greeting = document.getElementById('user-greeting');
-    if (greeting && user.first_name) {
-        greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
+    if (user.first_name) {
+        document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     }
     
-    const logoutBtn = document.getElementById('logout-btn');
-    if (logoutBtn) logoutBtn.style.display = 'inline-block';
+    document.getElementById('logout-btn').style.display = 'inline-block';
 
-    // 3. ADMIN PERMISSIONS
-    const roleString = (user.role || "").toLowerCase();
-    const isAdmin = roleString.includes('admin') || roleString.includes('super');
+    // Permissions
+    const role = (user.role || "").toLowerCase();
+    const isAdmin = role.includes('admin') || role.includes('super');
     
-    const cmsCard = document.getElementById('card-cms');
-    const logsCard = document.getElementById('card-logs');
-    if (cmsCard) cmsCard.style.display = isAdmin ? 'flex' : 'none';
-    if (logsCard) logsCard.style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
+    document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
 
-    // 4. APP PERMISSIONS
     const permMap = {
         'card-inventory': user.access_inventory,
         'card-deployments': user.access_deployments,
@@ -123,20 +103,37 @@ function authorizeUser(user) {
     });
     
     if (window.Swal) Swal.close();
-    if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
+}
+
+async function handleManualLogin() {
+    const email = document.getElementById('login-email').value;
+    const pass = document.getElementById('login-pass').value;
+
+    if (!email || !pass) return;
+
+    Swal.fire({ title: 'Authenticating...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, passkey: pass, action: 'login' })
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            authorizeUser(result.user);
+        } else {
+            Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
+        }
+    } catch (error) {
+        Swal.fire('Error', 'Connection failed.', 'error');
+    }
 }
 
 async function handleLogout() {
-    const uid = localStorage.getItem('pp_userid');
-    if (uid) {
-        await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'logout', sender_id: uid })
-        });
-    }
     localStorage.clear();
-    location.href = 'index.html';
+    window.location.href = 'index.html';
 }
 
 window.onload = initGatekeeper;
