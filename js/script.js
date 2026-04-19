@@ -1,68 +1,32 @@
 /**
- * SECURITY: Single-User Session Enforcement
- * Purpose: Prevents account "bleeding" where two users are logged in simultaneously.
+ * PAYPROTEC GATEKEEPER - FINAL COMPILED LOGIC
+ * Handles: Login, Multi-tab Session, and Anti-Collision
  */
 
 const parseBool = (val) => (val === true || val === "true" || val === "TRUE");
-document.getElementById('initial-loader').style.display = 'none';
-
-async function checkGlobalNotifications() {
-    // Only check if we have an active session
-    const uid = sessionStorage.getItem('pp_userid');
-    if (!uid) return;
-
-    try {
-        const response = await fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'getUserList', sender_id: uid })
-        });
-        const result = await response.json();
-        if (result.success && result.unreadCounts) {
-            const totalUnread = Object.values(result.unreadCounts).reduce((a, b) => a + b, 0);
-            const badge = document.getElementById('nav-msg-badge');
-            if (badge) {
-                badge.innerText = totalUnread > 99 ? '99+' : totalUnread;
-                badge.style.display = totalUnread > 0 ? 'block' : 'none';
-            }
-        }
-    } catch (err) { console.error("Notification check failed:", err); }
-}
-
-// Check every 10 seconds
-setInterval(checkGlobalNotifications, 10000);
-
-/**
- * REFINED SESSION MANAGEMENT
- * Uses LocalStorage for multi-tab support with Server-Side Validation.
- */
 
 async function initGatekeeper() {
     const params = new URLSearchParams(window.location.search);
     const urlUserId = params.get('userid');
-    
-    // Switch to localStorage so sessions persist across tabs
     const cachedUserId = localStorage.getItem('pp_userid');
 
-    // 1. SESSION COLLISION GUARD
-    // If a different user tries to enter via URL while another is logged in
+    // 1. If we just arrived from a link with a NEW ID, wipe the old one
     if (urlUserId && cachedUserId && urlUserId !== cachedUserId) {
-        console.warn("New user identity detected. Switching sessions.");
         localStorage.clear();
-        location.reload();
+        location.href = window.location.pathname + '?userid=' + urlUserId;
         return;
     }
 
-    // 2. IDENTIFY TARGET USER
+    // 2. Determine who we are checking
     const userId = urlUserId || cachedUserId;
 
-    // 3. NO ID FOUND -> SHOW LOGIN
+    // 3. If no ID is found, show the login screen
     if (!userId) {
         document.getElementById('login-ui').style.display = 'block';
         return;
     }
 
-    // 4. VALIDATE SESSION WITH SERVER
+    // 4. Validate existing session with the server
     try {
         const response = await fetch('/api/login', {
             method: 'POST',
@@ -74,35 +38,11 @@ async function initGatekeeper() {
         if (result.success && result.user) {
             authorizeUser(result.user);
         } else {
-            // If server says no, wipe everything and show login
             localStorage.clear();
             document.getElementById('login-ui').style.display = 'block';
         }
     } catch (err) {
-        console.error("Gatekeeper validation failed:", err);
-        document.getElementById('login-ui').style.display = 'block';
-    }
-}
-
-async function validateAndAuthorize(userId) {
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId: userId, action: 'validate' })
-        });
-        const result = await response.json();
-
-        if (result.success && result.user) {
-            authorizeUser(result.user);
-        } else {
-            // Failure: Wipe and show login
-            sessionStorage.clear();
-            document.getElementById('access-denied').style.display = 'block';
-            document.getElementById('denied-reason').innerText = "Session expired or User not found.";
-        }
-    } catch (err) {
-        console.error("Gatekeeper error:", err);
+        console.error("Session validation failed:", err);
         document.getElementById('login-ui').style.display = 'block';
     }
 }
@@ -127,8 +67,7 @@ async function handleManualLogin() {
         const result = await response.json();
 
         if (result.success) {
-            // Before authorizing new user, wipe everything
-            sessionStorage.clear();
+            // SUCCESS: Wipe old junk before setting new user
             localStorage.clear();
             authorizeUser(result.user);
         } else {
@@ -139,20 +78,12 @@ async function handleManualLogin() {
     }
 }
 
-async function authorizeUser(user) {
-    // 1. CLEAN SLATE & PERSIST SESSION
-    // We clear first to ensure no old session data interferes
-    localStorage.clear(); 
-    
+function authorizeUser(user) {
+    // 1. SAVE TO STORAGE
     localStorage.setItem('pp_userid', user.userid || '');
     localStorage.setItem('pp_role', user.role || 'user'); 
-    localStorage.setItem('userid', user.userid || '');
     localStorage.setItem('pp_verified', 'true');
-
-    // --- CRITICAL FIX: The "Heartbeat" Delay ---
-    // This gives the browser 100ms to actually write to the disk 
-    // before the next page tries to read it.
-    await new Promise(resolve => setTimeout(resolve, 100));
+    localStorage.setItem('userid', user.userid || ''); // Chat compatibility
 
     // 2. UI UPDATES
     const loginUI = document.getElementById('login-ui');
@@ -169,17 +100,16 @@ async function authorizeUser(user) {
     const logoutBtn = document.getElementById('logout-btn');
     if (logoutBtn) logoutBtn.style.display = 'inline-block';
 
-    // 3. PERMISSIONS LOGIC
-    const role = (user.role || "").toLowerCase();
-    const isAdmin = role.includes('admin') || role.includes('super');
+    // 3. ADMIN PERMISSIONS
+    const roleString = (user.role || "").toLowerCase();
+    const isAdmin = roleString.includes('admin') || roleString.includes('super');
     
-    // Admin Cards
     const cmsCard = document.getElementById('card-cms');
     const logsCard = document.getElementById('card-logs');
     if (cmsCard) cmsCard.style.display = isAdmin ? 'flex' : 'none';
     if (logsCard) logsCard.style.display = isAdmin ? 'flex' : 'none';
 
-    // Standard App Permissions
+    // 4. APP PERMISSIONS
     const permMap = {
         'card-inventory': user.access_inventory,
         'card-deployments': user.access_deployments,
@@ -189,35 +119,23 @@ async function authorizeUser(user) {
 
     Object.keys(permMap).forEach(id => {
         const el = document.getElementById(id);
-        if (el) {
-            // parseBool ensures "TRUE" or true both work
-            el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
-        }
+        if (el) el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
     });
     
-    Swal.close();
-    
-    // Trigger notification check now that we have a UID
-    if (typeof checkGlobalNotifications === 'function') {
-        checkGlobalNotifications();
-    }
+    if (window.Swal) Swal.close();
+    if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
 
 async function handleLogout() {
     const uid = localStorage.getItem('pp_userid');
-    
-    // Optional: Notify server
     if (uid) {
-        fetch('/api/chat', {
+        await fetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'logout', sender_id: uid })
         });
     }
-
-    // Wipe the entire browser cache for this site
     localStorage.clear();
-    sessionStorage.clear();
     location.href = 'index.html';
 }
 
