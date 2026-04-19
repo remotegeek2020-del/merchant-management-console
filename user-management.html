@@ -6,44 +6,51 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
-   <script>
-    (function() {
-        const uid = localStorage.getItem('pp_userid');
-        const role = (localStorage.getItem('pp_role') || "").toLowerCase();
-        const verified = localStorage.getItem('pp_verified');
 
-        // Bulletproof check
-        const isSuper = role.indexOf('super') !== -1;
-        const isAdmin = role.indexOf('admin') !== -1;
-        const hasAuth = uid && verified === 'true' && (isSuper || isAdmin);
+    <script>
+        (function() {
+            // 1. Grab data
+            const uid = localStorage.getItem('pp_userid');
+            const rawRole = localStorage.getItem('pp_role') || "";
+            const verified = localStorage.getItem('pp_verified');
 
-        if (!hasAuth) {
-            window.location.href = 'index.html?reason=denied';
-        }
-    })();
-</script>
-<style> html { visibility: hidden; } </style>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <link rel="stylesheet" href="css/style.css">
-    <style>
-        /* Prevent the page from flashing before the guard finishes */
-    html { visibility: hidden; }
+            // 2. Normalize role for the check
+            const role = rawRole.toLowerCase();
+            const isSuper = role.indexOf('super') !== -1;
+            const isAdmin = role.indexOf('admin') !== -1;
+            
+            // 3. SECURE CHECK: Ensure UID exists, verified is exactly 'true', and role is correct
+            const hasAuth = uid && (verified === 'true') && (isSuper || isAdmin);
+
+            if (!hasAuth) {
+                console.error("Access Denied. Role:", rawRole);
+                window.location.href = 'index.html?reason=denied';
+            } else {
+                // If they are allowed, reveal the HTML instantly
+                document.documentElement.style.visibility = 'visible';
+            }
+        })();
+    </script>
+
+    <style> 
+        /* Start hidden - the script above will flip this to 'visible' if authorized */
+        html { visibility: hidden; } 
+        
         body { transition: background 0.2s ease; font-family: 'Inter', sans-serif; margin: 0; }
-        /* Hidden by default until Admin Guard passes */
         #page-content { display: none; padding: 20px; }
         body.ui-modern { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); min-height: 100vh; }
         .cms-container { max-width: 1250px; margin: 40px auto; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 73, 144, 0.08); }
         .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .save-banner { background: #fff9e6; border: 1px solid #ffcc00; padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; text-align: center; font-weight: bold; }
-        .swal-grid { display: grid; grid-template-columns: 110px 1fr; gap: 15px; align-items: center; text-align: left; padding: 10px; }
         
         /* Status Badges */
         .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
         .status-active { background: #dcfce7; color: #166534; }
         .status-pending { background: #fef3c7; color: #92400e; }
     </style>
-
-
+    
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link rel="stylesheet" href="css/style.css">
 </head>
     
 <body class="ui-modern"> 
@@ -84,14 +91,15 @@
     <script src="js/cms-logic.js"></script>
 
     <script>
-        // Reveal content after security check passes and script loads
-        document.addEventListener('DOMContentLoaded', () => {
+        // Use window.onload to be absolutely sure cms-logic is ready
+        window.onload = () => {
             const content = document.getElementById('page-content');
             if (content) content.style.display = 'block';
             
-            // Trigger the data load (ensure this function exists in cms-logic.js)
-            if (typeof loadUsers === 'function') loadUsers();
-        });
+            if (typeof loadUsers === 'function') {
+                loadUsers();
+            }
+        };
     </script>
 </body>
 </html>
