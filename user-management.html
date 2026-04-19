@@ -9,18 +9,25 @@
     <script>
     (function() {
         const sessionUser = localStorage.getItem('pp_userid');
-        const rawRole = localStorage.getItem('pp_role') || "";
+        const rawRole = localStorage.getItem('pp_role');
         const isVerified = localStorage.getItem('pp_verified');
 
-        // This removes spaces AND underscores, then makes it lowercase
-        // Example: "Operations Admin" becomes "operationsadmin"
-        // Example: "super_admin" becomes "superadmin"
-        const cleanRole = rawRole.toLowerCase().replace(/[\s_]/g, ''); 
+        // Debugging logs - Check these in F12 Console
+        console.log("Session ID:", sessionUser);
+        console.log("Raw Role from Storage:", rawRole);
 
-        const hasAdminPower = cleanRole.includes('admin') || cleanRole.includes('super');
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+            return;
+        }
 
-        if (!sessionUser || isVerified !== 'true' || !hasAdminPower) {
-            console.error("DENIED. Found Role:", rawRole);
+        const cleanRole = (rawRole || "").toLowerCase();
+        const hasAccess = cleanRole.includes('admin') || cleanRole.includes('super');
+
+        if (!hasAccess) {
+            console.error("Access Denied for role:", rawRole);
+            // This alert will tell us exactly what is wrong
+            alert("Permission Error: Your role is detected as '" + rawRole + "'. Admins only.");
             window.location.href = 'index.html?reason=denied';
         }
     })();
