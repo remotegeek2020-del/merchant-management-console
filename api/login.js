@@ -4,7 +4,7 @@ import bcrypt from 'bcryptjs';
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
-  const { email, passkey, userId, action } = req.body; // 'passkey' now acts as the password input
+  const { email, passkey, userId, action } = req.body;
   
   const supabase = createClient(
     process.env.SUPABASE_URL, 
@@ -16,22 +16,19 @@ export default async function handler(req, res) {
     let error = null;
 
     if (action === 'login') {
-      // 1. Fetch user by email only
       const { data, error: fetchError } = await supabase
         .from('app_users')
         .select('*')
         .eq('email', email)
         .single();
       
-      error = fetchError;
-      
-      if (data) {
-        // 2. Check if user is active (set their password)
+      if (fetchError) {
+          error = fetchError;
+      } else if (data) {
         if (!data.is_active) {
-            return res.status(401).json({ success: false, message: 'Account not activated. Please check your email.' });
+            return res.status(401).json({ success: false, message: 'Account not activated.' });
         }
 
-        // 3. Verify the password against the hash
         const isMatch = bcrypt.compareSync(passkey, data.password_hash);
         if (isMatch) {
             user = data;
@@ -49,7 +46,7 @@ export default async function handler(req, res) {
       error = valError;
     }
 
-    // Securely log the attempt
+    // Log attempt
     await supabase.from('activity_logs').insert([{
       email: email || (user ? user.email : 'Unknown'),
       action: action,
@@ -62,11 +59,20 @@ export default async function handler(req, res) {
       return res.status(401).json({ success: false, message: 'Authentication failed' });
     }
 
-    // Remove sensitive data before returning to frontend
-    delete user.password_hash;
-    delete user.invitation_token;
+    // --- CRITICAL FIX: EXPLICITLY RETURN THE CLEAN OBJECT ---
+    // This ensures no properties are 'lost' or accidentally 'deleted' from the reference
+    const cleanUser = {
+        userid: user.userid,
+        first_name: user.first_name,
+        email: user.email,
+        role: user.role, // This is what the Guard script needs!
+        access_inventory: user.access_inventory,
+        access_deployments: user.access_deployments,
+        access_returns: user.access_returns,
+        access_merchants: user.access_merchants
+    };
 
-    return res.status(200).json({ success: true, user });
+    return res.status(200).json({ success: true, user: cleanUser });
 
   } catch (err) {
     console.error(err);
