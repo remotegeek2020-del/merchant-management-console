@@ -61,35 +61,59 @@ function showLoginUI() {
     if (loginUI) loginUI.style.display = 'block';
 }
 
-function authorizeUser(user) {
-    try {
-        localStorage.setItem('pp_userid', user.userid || '');
-        localStorage.setItem('pp_role', user.role || 'user'); 
-        localStorage.setItem('pp_verified', 'true');
-        localStorage.setItem('userid', user.userid || '');
-    } catch (e) { console.error("Could not save to storage"); }
+async function authorizeUser(user) {
+    if (!user) return;
 
-    const loader = document.getElementById('initial-loader');
-    const loginUI = document.getElementById('login-ui');
-    const curtain = document.getElementById('page-curtain');
+    try {
+        // 1. CLEAR & SET SESSION
+        // Clear old junk first to ensure no role-bleeding
+        localStorage.clear();
+
+        localStorage.setItem('pp_userid', user.userid || '');
+        localStorage.setItem('pp_role', user.role || 'Regular User'); 
+        localStorage.setItem('pp_verified', 'true');
+        localStorage.setItem('userid', user.userid || ''); // Legacy Chat Support
+
+        // --- CRITICAL: IO WAIT ---
+        // Forces a tiny pause so the browser actually commits these strings to disk
+        await new Promise(r => setTimeout(r, 100));
+
+    } catch (e) { 
+        console.error("Storage Error:", e); 
+    }
+
+    // 2. UI VISIBILITY
+    const elements = {
+        loader: document.getElementById('initial-loader'),
+        loginUI: document.getElementById('login-ui'),
+        curtain: document.getElementById('page-curtain'),
+        greeting: document.getElementById('user-greeting'),
+        logoutBtn: document.getElementById('logout-btn')
+    };
+
+    if (elements.loader) elements.loader.style.display = 'none';
+    if (elements.loginUI) elements.loginUI.style.display = 'none';
+    if (elements.curtain) elements.curtain.style.display = 'block';
     
-    if (loader) loader.style.display = 'none';
-    if (loginUI) loginUI.style.display = 'none';
-    if (curtain) curtain.style.display = 'block';
-    
-    if (user.first_name) {
-        document.getElementById('user-greeting').innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
+    if (user.first_name && elements.greeting) {
+        elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     }
     
-    document.getElementById('logout-btn').style.display = 'inline-block';
+    if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
 
-    // Permissions
-    const role = (user.role || "").toLowerCase();
-    const isAdmin = role.includes('admin') || role.includes('super');
+    // 3. ROLE-BASED ACCESS
+    // Normalize: lowercase and remove spaces/underscores
+    const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
     
-    document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
-    document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
+    // Super Admin & Operations Admin both contain "admin" or "super"
+    const isAdmin = roleStr.includes('admin') || roleStr.includes('super');
+    
+    const cmsCard = document.getElementById('card-cms');
+    const logsCard = document.getElementById('card-logs');
+    if (cmsCard) cmsCard.style.display = isAdmin ? 'flex' : 'none';
+    if (logsCard) logsCard.style.display = isAdmin ? 'flex' : 'none';
 
+    // 4. FEATURE PERMISSIONS
     const permMap = {
         'card-inventory': user.access_inventory,
         'card-deployments': user.access_deployments,
@@ -99,10 +123,14 @@ function authorizeUser(user) {
 
     Object.keys(permMap).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
+        if (el) {
+            // Using your parseBool helper
+            el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
+        }
     });
     
     if (window.Swal) Swal.close();
+    if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
 
 async function handleManualLogin() {
