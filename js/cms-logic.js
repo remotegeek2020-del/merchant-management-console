@@ -71,13 +71,25 @@ async function saveAllChanges() {
     }
 }
 
-async function addUser() {
-    const { value: formValues } = await Swal.fire({
-        title: 'Enroll New Staff Member',
+function addUser() {
+    const myRole = localStorage.getItem('pp_role');
+    
+    // Rule 2 Enforcement: Hide 'super_admin' from the role dropdown if I am not one
+    let roleOptions = `
+        <option value="Standard User">Standard User</option>
+        <option value="Operations Admin">Operations Admin</option>
+    `;
+    
+    if (myRole === 'super_admin') {
+        roleOptions += `<option value="super_admin">Super Admin (God Mode)</option>`;
+    }
+
+    Swal.fire({
+        title: 'Enroll New Staff',
         html: `
-            <div class="swal-grid">
-                <label>First Name</label>
-                <input id="swal-name" class="slds-input">
+            <input id="new-first" class="swal2-input" placeholder="First Name">
+            <input id="new-email" class="swal2-input" placeholder="Email">
+            <select id="new-role" class="swal2-select">${roleOptions}</select>
                 
                 <label>Email</label>
                 <input id="swal-email" type="email" class="slds-input">
