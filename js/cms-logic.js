@@ -3,7 +3,9 @@
  */
 let pendingChanges = {};
 
-async function fetchUsers() {
+// RULE 3: This function is called by the HTML Guard once authorized
+async function loadUsers() {
+    console.log("Loading users...");
     try {
         const response = await fetch('/api/users?action=list');
         const result = await response.json();
@@ -14,32 +16,34 @@ async function fetchUsers() {
         const tbody = document.getElementById('user-list');
         tbody.innerHTML = ''; 
         
-        const myRole = (sessionStorage.getItem('pp_role') || "").toLowerCase();
+        // Check my own role for UI rules
+        const myRole = (localStorage.getItem('pp_role') || "").toLowerCase();
         const iAmSuper = myRole.includes('super');
 
         users.forEach(user => {
             const targetRole = (user.role || "").toLowerCase();
-            if (!iAmSuper && targetRole.includes('super')) return; 
+            const statusClass = user.is_active ? 'status-active' : 'status-pending';
+            const statusText = user.is_active ? 'Active' : 'Pending';
 
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td><strong>${user.first_name || ''}</strong></td>
                 <td>${user.email || '---'}</td>
-                <td><code>${user.passkey || '----'}</code></td>
+                <td><span class="status-badge ${statusClass}">${statusText}</span></td>
                 <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)"></td>
                 <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)"></td>
                 <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)"></td>
                 <td style="text-align:center;"><input type="checkbox" ${user.access_merchants ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_merchants', this.checked)"></td>
                 <td><span class="slds-badge ${targetRole.includes('admin') ? 'slds-badge_info' : ''}">${user.role}</span></td>
-                <td class="action-btns">
-                    <button class="slds-button slds-button_neutral slds-button_small" onclick="editUser('${user.userid}', '${user.first_name}', '${user.email || ''}', '${user.passkey || ''}', '${user.role}')">Edit</button>
-                    <button class="slds-button slds-button_destructive slds-button_small" onclick="deleteUser('${user.userid}', '${user.first_name}')">Del</button>
+                <td style="text-align:center;">
+                    <button class="slds-button slds-button_neutral slds-button_small" onclick="editUser('${user.userid}', '${user.first_name}', '${user.email}', '${user.role}')">Edit</button>
+                    ${user.role !== 'super_admin' ? `<button class="slds-button slds-button_destructive slds-button_small" onclick="deleteUser('${user.userid}', '${user.first_name}')">Del</button>` : ''}
                 </td>`;
             tbody.appendChild(row);
         });
     } catch (err) {
         console.error("Fetch Error:", err);
-        document.getElementById('user-list').innerHTML = '<tr><td colspan="9" style="color:red;">Failed to load users. Check console.</td></tr>';
+        document.getElementById('user-list').innerHTML = '<tr><td colspan="9" style="color:red; text-align:center;">Failed to load users. Check console.</td></tr>';
     }
 }
 
@@ -63,85 +67,36 @@ async function saveAllChanges() {
             pendingChanges = {};
             document.getElementById('save-all-btn').style.display = 'none';
             document.getElementById('unsaved-warning').style.display = 'none';
-            await fetchUsers();
+            await loadUsers();
             Swal.fire('Saved!', '', 'success');
         }
     } catch (err) {
         Swal.fire('Error', 'Save failed', 'error');
     }
 }
-async function loadUsers() {
-    try {
-        // We call our Vercel API, NOT Supabase directly
-        const response = await fetch('/api/users?action=list');
-        const result = await response.json();
 
-        if (result.success) {
-            const tbody = document.getElementById('user-list');
-            if (!result.data || result.data.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No users found.</td></tr>';
-                return;
-            }
-
-            tbody.innerHTML = result.data.map(user => {
-                const statusClass = user.is_active ? 'status-active' : 'status-pending';
-                const statusText = user.is_active ? 'Active' : 'Pending';
-                
-                return `
-                    <tr>
-                        <td>${user.first_name}</td>
-                        <td>${user.email}</td>
-                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
-                        <td style="text-align:center;">${user.access_inventory ? '✅' : '❌'}</td>
-                        <td style="text-align:center;">${user.access_deployments ? '✅' : '❌'}</td>
-                        <td style="text-align:center;">${user.access_returns ? '✅' : '❌'}</td>
-                        <td style="text-align:center;">${user.access_merchants ? '✅' : '❌'}</td>
-                        <td><strong>${user.role}</strong></td>
-                        <td style="text-align:center;">
-                            <button onclick="editUser('${user.userid}')" class="slds-button slds-button_neutral slds-button_small">Edit</button>
-                            ${user.role !== 'super_admin' ? `<button onclick="deleteUser('${user.userid}')" class="slds-button slds-button_destructive slds-button_small">Del</button>` : ''}
-                        </td>
-                    </tr>
-                `;
-            }).join('');
-        }
-    } catch (err) {
-        console.error("CMS Load Error:", err);
-        document.getElementById('user-list').innerHTML = '<tr><td colspan="9" style="color:red; text-align:center;">Failed to connect to API.</td></tr>';
-    }
-}
-function addUser() {
+async function addUser() {
     const myRole = localStorage.getItem('pp_role');
     
-    // Rule 2 Enforcement: Hide 'super_admin' from the role dropdown if I am not one
+    // RULE 2: Operations Admin cannot grant Super Admin role
     let roleOptions = `
         <option value="Standard User">Standard User</option>
         <option value="Operations Admin">Operations Admin</option>
     `;
-    
     if (myRole === 'super_admin') {
-        roleOptions += `<option value="super_admin">Super Admin (God Mode)</option>`;
+        roleOptions += `<option value="super_admin">super_admin</option>`;
     }
 
-    Swal.fire({
+    const { value: formValues } = await Swal.fire({
         title: 'Enroll New Staff',
         html: `
-            <input id="new-first" class="swal2-input" placeholder="First Name">
-            <input id="new-email" class="swal2-input" placeholder="Email">
-            <select id="new-role" class="swal2-select">${roleOptions}</select>
-                
+            <div class="swal-grid">
+                <label>First Name</label>
+                <input id="swal-name" class="slds-input">
                 <label>Email</label>
                 <input id="swal-email" type="email" class="slds-input">
-                
                 <label>Role</label>
-                <select id="swal-role" class="slds-select">
-                    <option value="Standard User">Standard User</option>
-                    <option value="Operations Admin">Operations Admin</option>
-                    <option value="Super Admin">Super Admin</option>
-                </select>
-            </div>
-            <div style="margin-top: 15px; font-size: 12px; color: #64748b; text-align: center;">
-                An invitation email will be sent to the user to set their password.
+                <select id="swal-role" class="slds-select">${roleOptions}</select>
             </div>
         `,
         focusConfirm: false,
@@ -172,13 +127,16 @@ function addUser() {
             const res = await fetch('/api/users', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'insert', payload: formValues })
+                body: JSON.stringify({ 
+                    action: 'insert', 
+                    payload: formValues,
+                    performerRole: myRole // Send my role to API for verification
+                })
             });
             const result = await res.json();
             if (result.success) {
-                Swal.fire('Enrolled', 'Invitation generated and user added.', 'success');
-                // Refresh the table (assuming you have a loadUsers function)
-                if (typeof loadUsers === 'function') loadUsers();
+                Swal.fire('Enrolled', 'Invitation sent.', 'success');
+                loadUsers();
             } else {
                 throw new Error(result.message);
             }
@@ -188,18 +146,18 @@ function addUser() {
     }
 }
 
-async function editUser(uid, name, email, pass, role) {
+async function editUser(uid, name, email, role) {
     const { value: formValues } = await Swal.fire({
         title: `Edit User: ${name}`,
         html: `
             <div class="swal-grid">
                 <label>First Name</label><input id="swal-name" class="slds-input" value="${name}">
                 <label>Email</label><input id="swal-email" class="slds-input" value="${email}">
-                <label>Passkey</label><input id="swal-pass" class="slds-input" value="${pass}">
                 <label>Role</label>
                 <select id="swal-role" class="slds-select">
-                    <option value="USER" ${role==='USER'?'selected':''}>USER</option>
-                    <option value="ADMIN" ${role==='ADMIN'?'selected':''}>ADMIN</option>
+                    <option value="Standard User" ${role==='Standard User'?'selected':''}>Standard User</option>
+                    <option value="Operations Admin" ${role==='Operations Admin'?'selected':''}>Operations Admin</option>
+                    <option value="super_admin" ${role==='super_admin'?'selected':''}>super_admin</option>
                 </select>
             </div>`,
         showCancelButton: true,
@@ -209,7 +167,6 @@ async function editUser(uid, name, email, pass, role) {
             return {
                 first_name: document.getElementById('swal-name').value,
                 email: document.getElementById('swal-email').value,
-                passkey: document.getElementById('swal-pass').value,
                 role: document.getElementById('swal-role').value
             }
         }
@@ -219,12 +176,12 @@ async function editUser(uid, name, email, pass, role) {
         const response = await fetch('/api/users', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'updateSingle', userid: uid, payload: formValues })
+            body: JSON.stringify({ action: 'updateBatch', payload: { [uid]: formValues } })
         });
         const result = await response.json();
         if (result.success) {
             Swal.fire({ title: 'Updated!', icon: 'success', timer: 1500, showConfirmButton: false });
-            fetchUsers();
+            loadUsers();
         }
     }
 }
@@ -248,17 +205,7 @@ async function deleteUser(uid, name) {
         const resultJson = await response.json();
         if (resultJson.success) {
             Swal.fire('Deleted!', '', 'success');
-            fetchUsers();
+            loadUsers();
         }
     }
 }
-
-window.onload = () => {
-    const role = (sessionStorage.getItem('pp_role') || "").toLowerCase();
-    if (role.includes('admin')) {
-        document.getElementById('page-content').style.display = 'block';
-        fetchUsers();
-    } else {
-        window.location.href = 'index.html';
-    }
-};
