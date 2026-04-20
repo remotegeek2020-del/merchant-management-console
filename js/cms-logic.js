@@ -70,7 +70,46 @@ async function saveAllChanges() {
         Swal.fire('Error', 'Save failed', 'error');
     }
 }
+async function loadUsers() {
+    try {
+        // We call our Vercel API, NOT Supabase directly
+        const response = await fetch('/api/users?action=list');
+        const result = await response.json();
 
+        if (result.success) {
+            const tbody = document.getElementById('user-list');
+            if (!result.data || result.data.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;">No users found.</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = result.data.map(user => {
+                const statusClass = user.is_active ? 'status-active' : 'status-pending';
+                const statusText = user.is_active ? 'Active' : 'Pending';
+                
+                return `
+                    <tr>
+                        <td>${user.first_name}</td>
+                        <td>${user.email}</td>
+                        <td><span class="status-badge ${statusClass}">${statusText}</span></td>
+                        <td style="text-align:center;">${user.access_inventory ? '✅' : '❌'}</td>
+                        <td style="text-align:center;">${user.access_deployments ? '✅' : '❌'}</td>
+                        <td style="text-align:center;">${user.access_returns ? '✅' : '❌'}</td>
+                        <td style="text-align:center;">${user.access_merchants ? '✅' : '❌'}</td>
+                        <td><strong>${user.role}</strong></td>
+                        <td style="text-align:center;">
+                            <button onclick="editUser('${user.userid}')" class="slds-button slds-button_neutral slds-button_small">Edit</button>
+                            ${user.role !== 'super_admin' ? `<button onclick="deleteUser('${user.userid}')" class="slds-button slds-button_destructive slds-button_small">Del</button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+    } catch (err) {
+        console.error("CMS Load Error:", err);
+        document.getElementById('user-list').innerHTML = '<tr><td colspan="9" style="color:red; text-align:center;">Failed to connect to API.</td></tr>';
+    }
+}
 function addUser() {
     const myRole = localStorage.getItem('pp_role');
     
