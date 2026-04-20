@@ -9,33 +9,27 @@
 
     <script>
         (function() {
-            // 1. Grab data
             const uid = localStorage.getItem('pp_userid');
             const rawRole = localStorage.getItem('pp_role') || "";
             const verified = localStorage.getItem('pp_verified');
 
-            // 2. Normalize role for the check
             const role = rawRole.toLowerCase();
             const isSuper = role.indexOf('super') !== -1;
             const isAdmin = role.indexOf('admin') !== -1;
             
-            // 3. SECURE CHECK: Ensure UID exists, verified is exactly 'true', and role is correct
             const hasAuth = uid && (verified === 'true') && (isSuper || isAdmin);
 
             if (!hasAuth) {
                 console.error("Access Denied. Role:", rawRole);
                 window.location.href = 'index.html?reason=denied';
             } else {
-                // If they are allowed, reveal the HTML instantly
                 document.documentElement.style.visibility = 'visible';
             }
         })();
     </script>
 
     <style> 
-        /* Start hidden - the script above will flip this to 'visible' if authorized */
         html { visibility: hidden; } 
-        
         body { transition: background 0.2s ease; font-family: 'Inter', sans-serif; margin: 0; }
         #page-content { display: none; padding: 20px; }
         body.ui-modern { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); min-height: 100vh; }
@@ -43,10 +37,12 @@
         .header-flex { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
         .save-banner { background: #fff9e6; border: 1px solid #ffcc00; padding: 10px; margin-bottom: 15px; border-radius: 4px; display: none; text-align: center; font-weight: bold; }
         
-        /* Status Badges */
         .status-badge { padding: 4px 10px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
         .status-active { background: #dcfce7; color: #166534; }
         .status-pending { background: #fef3c7; color: #92400e; }
+
+        /* Style for disabled buttons to look non-interactive */
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
     </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -62,7 +58,7 @@
             <div class="slds-grid slds-grid_vertical-align-center" style="gap: 12px;">
                 <button class="slds-button slds-button_neutral" style="border-radius: 50px;" onclick="window.location.href='index.html'">🏠 HOME</button>
                 <button id="save-all-btn" class="slds-button slds-button_success" style="display:none; border-radius: 50px;" onclick="saveAllChanges()">💾 SAVE ALL</button>
-                <button class="slds-button slds-button_brand" style="border-radius: 50px;" onclick="addUser()">+ Enroll User</button>
+                <button class="slds-button slds-button_brand" style="border-radius: 50px;" onclick="addUser()">+ Enroll New User</button>
             </div>
         </div>
 
@@ -71,9 +67,7 @@
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-table_fixed-layout">
             <thead>
                 <tr class="slds-line-height_reset">
-                    <th scope="col">Name</th>
-                    <th scope="col">Email</th>
-                    <th scope="col" style="width:110px;">Status</th>
+                    <th scope="col">Full Name</th> <th scope="col">Email Address</th> <th scope="col" style="width:110px;">Status</th>
                     <th scope="col" style="text-align:center; width:60px;">Inv</th>
                     <th scope="col" style="text-align:center; width:60px;">Dep</th>
                     <th scope="col" style="text-align:center; width:60px;">Ret</th>
@@ -83,7 +77,7 @@
                 </tr>
             </thead>
             <tbody id="user-list">
-                <tr><td colspan="9" style="text-align:center;">Loading users...</td></tr>
+                <tr><td colspan="9" style="text-align:center;">Loading user directory...</td></tr>
             </tbody>
         </table>
     </div>
@@ -91,7 +85,6 @@
     <script src="js/cms-logic.js"></script>
 
     <script>
-        // Use window.onload to be absolutely sure cms-logic is ready
         window.onload = () => {
             const content = document.getElementById('page-content');
             if (content) content.style.display = 'block';
