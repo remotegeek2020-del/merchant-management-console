@@ -78,7 +78,6 @@ async function saveAllChanges() {
 async function addUser() {
     const myRole = localStorage.getItem('pp_role');
     
-    // RULE 2: Operations Admin cannot grant Super Admin role
     let roleOptions = `
         <option value="Standard User">Standard User</option>
         <option value="Operations Admin">Operations Admin</option>
@@ -88,14 +87,14 @@ async function addUser() {
     }
 
     const { value: formValues } = await Swal.fire({
-        title: 'Enroll New Staff',
+        title: 'Enroll New Staff Member',
         html: `
             <div class="swal-grid">
-                <label>First Name</label>
-                <input id="swal-name" class="slds-input">
-                <label>Email</label>
-                <input id="swal-email" type="email" class="slds-input">
-                <label>Role</label>
+                <label>Full Name</label>
+                <input id="swal-name" class="slds-input" placeholder="e.g. John Doe">
+                <label>Email Address</label>
+                <input id="swal-email" type="email" class="slds-input" placeholder="e.g. john@payprotec.com">
+                <label>Assigned Role</label>
                 <select id="swal-role" class="slds-select">${roleOptions}</select>
             </div>
         `,
