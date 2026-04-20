@@ -29,6 +29,16 @@ export default async function handler(req, res) {
             // ACTION: ENROLL NEW USER
             if (action === 'insert') {
                 const invitationToken = crypto.randomUUID();
+                // Inside api/users.js -> if (action === 'insert')
+const performerRole = req.body.performerRole; // We will pass this from the CMS
+
+// RULE: Only a super_admin can create another super_admin
+if (payload.role === 'super_admin' && performerRole !== 'super_admin') {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Super Admins can grant God Mode.' });
+}
+
+// RULE: Operations Admin can create other Operations Admins or Users
+// (Already handled by the UI restriction below, but good for API safety)
                 
                 const newUser = {
                     // We omit 'userid' so the DB generates a UUID automatically via DEFAULT
