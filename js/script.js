@@ -177,8 +177,9 @@ async function authorizeUser(user) {
 async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
-    // Retrieve the persistent device token if it exists
-    const deviceToken = localStorage.getItem('pp_device_token'); 
+    
+    // Ensure we use a consistent key name: 'pp_device_token'
+    const currentToken = localStorage.getItem('pp_device_token'); 
 
     if (!email || !pass) return;
 
@@ -188,12 +189,11 @@ async function handleManualLogin() {
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            // Pass the deviceToken to the API to see if we can skip 2FA
             body: JSON.stringify({ 
                 email: email, 
                 passkey: pass, 
                 action: 'login',
-                deviceToken: deviceToken 
+                deviceToken: currentToken // This is the critical piece
             })
         });
         const result = await response.json();
