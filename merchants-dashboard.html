@@ -326,13 +326,14 @@ const safeDue = t.due_date || '';
 }
 
 async function addTask(merchantUuid) {
-    // 1. Grab values from the Swal modal inputs
     const title = document.getElementById('task-title')?.value;
     const body = document.getElementById('task-body')?.value;
     const due = document.getElementById('task-due')?.value;
     const assigned = document.getElementById('task-assign-select')?.value;
 
-    // 2. Client-side validation
+    // FIX: Use the correct localStorage key consistent with your login system
+    const currentAdminEmail = localStorage.getItem('pp_userid'); 
+
     if (!merchantUuid || merchantUuid === 'undefined') {
         return Swal.fire('Error', 'Internal Error: Merchant ID not found.', 'error');
     }
@@ -353,31 +354,26 @@ async function addTask(merchantUuid) {
                 body, 
                 due_date: due || null, 
                 assigned_to: assigned || null, 
-                created_by: sessionStorage.getItem('pp_userid') || 'System'
+                // FIX: Pass the validated admin ID/Email
+                created_by: currentAdminEmail 
             })
         });
 
         const result = await res.json();
         
-       if (result.success) {
-           await logAuditAction('Merchant Task Created', `Task "${title}" assigned for Merchant UUID: ${merchantUuid}`);
-    Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
-    
-    // SAFE RESET: The ?. prevents the "Cannot set properties of null" error
-    document.getElementById('task-title')?.setAttribute('value', ''); 
-    if(document.getElementById('task-title')) document.getElementById('task-title').value = '';
-    
-    document.getElementById('task-body')?.setAttribute('value', '');
-    if(document.getElementById('task-body')) document.getElementById('task-body').value = '';
-    
-    document.getElementById('task-due')?.setAttribute('value', '');
-    if(document.getElementById('task-due')) document.getElementById('task-due').value = '';
+        if (result.success) {
+            // Existing audit log call
+            await logAuditAction('Merchant Task Created', `Task "${title}" assigned for Merchant UUID: ${merchantUuid}`);
+            
+            Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
+            
+            // UI Reset logic
+            if(document.getElementById('task-title')) document.getElementById('task-title').value = '';
+            if(document.getElementById('task-body')) document.getElementById('task-body').value = '';
+            if(document.getElementById('task-due')) document.getElementById('task-due').value = '';
 
-    // Refresh the list to show the new task
-    fetchMerchantTasks(); 
-}
-       else {
-            // This will show the actual database error (e.g., "invalid input syntax for type uuid")
+            fetchMerchantTasks(); 
+        } else {
             throw new Error(result.message || "Database rejected the entry");
         }
     } catch (err) {
@@ -385,7 +381,6 @@ async function addTask(merchantUuid) {
         Swal.fire('Error', 'Failed to save task: ' + err.message, 'error');
     }
 }
-
     
 async function handleCSVUpload(input) {
     const file = input.files[0];
