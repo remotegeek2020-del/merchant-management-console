@@ -851,6 +851,8 @@ async function submitOnboarding() {
 
     if (isQuickAdd) {
         // Mode A: Just adding IDs to existing partner
+        const logMsg = isQuickAdd ? `Added IDs to existing partner: ${selectedGHLContact.name}` : `Onboarded new partner: ${selectedGHLContact.name}`;
+    await logAuditAction('Partner ID Assignment', logMsg);
         payload.existingAgentId = selectedGHLContact.existingAgentId;
     } else {
         // Mode B: Full Onboarding (Step 1 & 2 must be valid)
@@ -884,6 +886,7 @@ async function submitOnboarding() {
         const result = await res.json();
         
         if (result.success) {
+            await logAuditAction('Partner Created', `Onboarded new partner: ${selectedGHLContact.name}`);
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
             closeWizard();
             loadPartners(); 
@@ -1250,6 +1253,7 @@ async function submitOnboarding() {
                 const result = await res.json();
                 
                 if (result.success) {
+                    await logAuditAction('Partner ID Updated', `Modified settings for Agent ID: ${name}`);
                     await loadPartners(); // Refresh the whole dashboard
                     Swal.fire({ icon: 'success', title: 'Updated!', showConfirmButton: false, timer: 1500 });
                 } else { 
@@ -1397,6 +1401,7 @@ window.editPersonField = async function(personId, field, currentVal) {
             });
             const result = await res.json();
             if (result.success) {
+                await logAuditAction('Partner Contact Update', `Changed ${field} for partner ID ${personId}`);
                 await loadPartners(); // Refresh grid
                 Swal.close();
                 // Re-open details to show changes
