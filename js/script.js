@@ -53,6 +53,47 @@ async function initGatekeeper() {
         showLoginUI(); // Always fall back to login UI on error
     }
 }
+/**
+ * GLOBAL NOTIFICATION LISTENER
+ * Updates the 'Direct Messages' badge when new messages arrive.
+ */
+async function checkGlobalNotifications() {
+    const uid = localStorage.getItem('pp_userid');
+    const badge = document.getElementById('nav-msg-badge');
+    
+    if (!uid || !badge) return;
+
+    // 1. Initial count of unread messages for this user
+    const { count, error } = await supabase
+        .from('messages')
+        .select('*', { count: 'exact', head: true })
+        .eq('recipient_id', uid)
+        .eq('is_read', false);
+
+    if (!error && count > 0) {
+        badge.innerText = count > 99 ? '99+' : count;
+        badge.style.display = 'block';
+    }
+
+    // 2. Real-time listener for incoming messages
+    supabase
+        .channel('global-notifications')
+        .on('postgres_changes', { 
+            event: 'INSERT', 
+            schema: 'public', 
+            table: 'messages',
+            filter: `recipient_id=eq.${uid}` 
+        }, (payload) => {
+            // Increment badge count
+            const currentCount = parseInt(badge.innerText) || 0;
+            badge.innerText = currentCount + 1;
+            badge.style.display = 'block';
+            
+            // Optional: Play a subtle notification sound
+            // new Audio('assets/notify.mp3').play();
+        })
+        .subscribe();
+}
 
 function showLoginUI() {
     const loader = document.getElementById('initial-loader');
