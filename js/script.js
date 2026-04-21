@@ -178,8 +178,12 @@ async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
     
-    // Ensure this key matches exactly what you save in verify2FACode
+    // Retrieve the token
     const currentToken = localStorage.getItem('pp_device_token'); 
+    
+    // DEBUG: Look at your console (F12) when you click login. 
+    // If this says 'null', your browser didn't save it.
+    console.log("Device Token found in browser:", currentToken);
 
     if (!email || !pass) return;
 
@@ -193,7 +197,7 @@ async function handleManualLogin() {
                 action: 'login',
                 email: email, 
                 passkey: pass, 
-                deviceToken: currentToken // This MUST be sent to skip 2FA
+                deviceToken: currentToken // MUST match the variable name in login.js
             })
         });
         const result = await response.json();
