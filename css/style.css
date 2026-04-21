@@ -131,3 +131,24 @@ body {
     transition: all 0.3s ease;
 }
 .login-btn:hover { background: var(--pp-dark) !important; transform: scale(1.02); }
+.tfa-input-wrapper {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    margin-top: 20px;
+}
+.tfa-box {
+    width: 45px;
+    height: 55px;
+    text-align: center;
+    font-size: 24px;
+    font-weight: bold;
+    border: 2px solid #cbd5e1;
+    border-radius: 8px;
+    color: #004990;
+}
+.tfa-box:focus {
+    border-color: #004990;
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(0, 73, 144, 0.1);
+}
