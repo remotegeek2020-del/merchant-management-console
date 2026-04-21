@@ -789,7 +789,8 @@ async function handleCSVUpload(input) {
         try {
             const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
             const result = await res.json();
-            if(result.success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchMerchants(); }
+            if(result.success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchMerchants(); 
+                               recordActivity('Merchant Profile Update', `Modified details for ${payload.dba_name}`);}
         } catch (err) { console.error(err); }
     };
 
