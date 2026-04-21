@@ -212,6 +212,7 @@ input[type=number] {
         }
     })();
 </script>
+    
 </head>
 <body>
 
@@ -354,6 +355,27 @@ let activeTrendFilter = 'all';
     // --- ONBOARDING WIZARD STATE ---
     let selectedGHLContact = null;
     let pendingIds = []; // Single declaration for the list of IDs being added
+
+    /**
+ * AUDIT LOGGER 
+ * Sends activity to the central activity_logs table
+ */
+async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); // Using the standardized key from your script.js
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
+    }
+}
 
     // ==========================================
     // 1. DATA UTILITIES (Formatting & Logic)
