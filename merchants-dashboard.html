@@ -179,6 +179,27 @@
     let currentPage = 0;
     let currentRecords = [];
 
+    /**
+ * AUDIT LOGGER 
+ * Sends activity to the central activity_logs table
+ */
+async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
+    }
+}
+
 // 1. DELETE CONFIRMATION
 async function deleteTaskConfirm(taskId) {
     const result = await Swal.fire({
@@ -339,6 +360,7 @@ async function addTask(merchantUuid) {
         const result = await res.json();
         
        if (result.success) {
+           await logAuditAction('Merchant Task Created', `Task "${title}" assigned for Merchant UUID: ${merchantUuid}`);
     Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
     
     // SAFE RESET: The ?. prevents the "Cannot set properties of null" error
@@ -789,7 +811,9 @@ async function handleCSVUpload(input) {
         try {
             const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
             const result = await res.json();
-            if(result.success) { Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchMerchants(); 
+            if(result.success) { 
+                await logAuditAction('Merchant Profile Updated', `Modified details for ${payload.dba_name}`);
+                Swal.fire({icon: 'success', title: 'Saved', timer: 1000, showConfirmButton: false}); fetchMerchants(); 
                                recordActivity('Merchant Profile Update', `Modified details for ${payload.dba_name}`);}
         } catch (err) { console.error(err); }
     };
@@ -810,6 +834,7 @@ async function handleCSVUpload(input) {
             
             const result = await res.json();
             if (result.success) {
+                await logAuditAction('Merchant Note Added', `Subject: ${title} added to Merchant ID: ${uuid}`);
                 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
                 await Toast.fire({ icon: 'success', title: 'New note created' });
                 openModal(uuid); 
@@ -877,6 +902,7 @@ async function handleCSVUpload(input) {
 
             const result = await res.json();
             if (result.success) {
+                await logAuditAction('Merchant File Uploaded', `File "${file.name}" uploaded for Merchant ID: ${merchantId}`);
                 Swal.fire({ icon: 'success', title: 'Uploaded!', timer: 1500, showConfirmButton: false });
                 openModal(merchantId); 
             } else { throw new Error(result.message); }
