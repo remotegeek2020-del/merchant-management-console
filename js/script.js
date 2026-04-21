@@ -230,6 +230,8 @@ async function handleManualLogin() {
         Swal.fire('Error', 'Connection failed.', 'error');
     }
 }
+// js/script.js
+
 async function verify2FACode(uid, code, remember) {
     Swal.fire({ title: 'Verifying...', didOpen: () => Swal.showLoading() });
 
@@ -247,10 +249,13 @@ async function verify2FACode(uid, code, remember) {
         const result = await response.json();
 
         if (result.success) {
-            // If the user chose "Remember this device", save the new token
+            // CRITICAL: Save the token before authorizing
             if (result.newDeviceToken) {
+                console.log("Saving new device token:", result.newDeviceToken);
                 localStorage.setItem('pp_device_token', result.newDeviceToken);
             }
+            
+            // Authorization follows
             authorizeUser(result.user);
         } else {
             Swal.fire('Error', result.message || 'Invalid code.', 'error');
