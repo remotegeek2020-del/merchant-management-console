@@ -89,19 +89,27 @@ export default async function handler(req, res) {
         if (!dbUser.is_active) return res.status(401).json({ success: false, message: 'Account not activated.' });
 
         const isMatch = bcrypt.compareSync(passkey, dbUser.password_hash);
-        if (isMatch) {
-          // --- START 2FA LOGIC ---
-          const { data: trusted } = await supabase
-            .from('trusted_devices')
-            .select('*')
-            .eq('userid', dbUser.userid)
-            .eq('device_token', deviceToken || 'none')
-            .gt('expires_at', new Date().toISOString())
-            .single();
+        // [Inside api/login.js -> action === 'login']
+if (isMatch) {
+    // 1. Check for the token sent from frontend
+    const sentToken = req.body.deviceToken; 
 
-          if (trusted) {
-            user = dbUser; // Trusted device, proceed to login
-          } else {
+    const { data: trusted } = await supabase
+        .from('trusted_devices')
+        .select('*')
+        .eq('userid', dbUser.userid)
+        .eq('device_token', sentToken || 'none') // Ensure it doesn't match empty rows
+        .gt('expires_at', new Date().toISOString())
+        .single();
+
+           if (trusted) {
+        // SUCCESS: Device recognized. Update 'last_used' timestamp
+        await supabase.from('trusted_devices')
+            .update({ last_used: new Date().toISOString() })
+            .eq('id', trusted.id);
+            
+        user = dbUser; // Proceed to login
+    } else {
             const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
             await supabase.from('app_users').update({ tfa_code: tfaCode }).eq('userid', dbUser.userid);
 
