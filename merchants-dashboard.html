@@ -331,7 +331,7 @@ async function addTask(merchantUuid) {
     const due = document.getElementById('task-due')?.value;
     const assigned = document.getElementById('task-assign-select')?.value;
 
-    // FIX: Use the correct localStorage key consistent with your login system
+    // Standardized key from your login system
     const currentAdminEmail = localStorage.getItem('pp_userid'); 
 
     if (!merchantUuid || merchantUuid === 'undefined') {
@@ -350,11 +350,10 @@ async function addTask(merchantUuid) {
             body: JSON.stringify({ 
                 action: 'add_task', 
                 merchant_uuid: merchantUuid, 
-                title, 
-                body, 
+                title: title, 
+                body: body, 
                 due_date: due || null, 
                 assigned_to: assigned || null, 
-                // FIX: Pass the validated admin ID/Email
                 created_by: currentAdminEmail 
             })
         });
@@ -362,12 +361,12 @@ async function addTask(merchantUuid) {
         const result = await res.json();
         
         if (result.success) {
-            // Existing audit log call
-            await logAuditAction('Merchant Task Created', `Task "${title}" assigned for Merchant UUID: ${merchantUuid}`);
+            // Log the creation to Activity Logs
+            await logAuditAction('Merchant Task Created', `Task "${title}" created for Merchant UUID: ${merchantUuid}`);
             
             Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
             
-            // UI Reset logic
+            // Reset UI
             if(document.getElementById('task-title')) document.getElementById('task-title').value = '';
             if(document.getElementById('task-body')) document.getElementById('task-body').value = '';
             if(document.getElementById('task-due')) document.getElementById('task-due').value = '';
