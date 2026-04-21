@@ -63,10 +63,15 @@
             <input type="email" id="login-email" class="slds-input" placeholder="name@payprotec.com" style="border-radius: 8px;">
         </div>
         <div class="slds-form-element slds-m-bottom_large">
-            <label class="slds-form-element__label">Passkey</label>
+            <label class="slds-form-element__label">Password</label>
             <input type="password" id="login-pass" class="slds-input" placeholder="••••••••" style="border-radius: 8px;">
         </div>
+        <button class="slds-button slds-button_brand slds-size_1-of-1 login-btn" onclick="handleManualLogin()">LOGIN</button>
         <button class="slds-button slds-button_brand slds-size_1-of-1 login-btn" onclick="handleManualLogin()">AUTHENTICATE</button>
+
+<div style="text-align: center; margin-top: 15px;">
+    <a href="javascript:void(0)" onclick="handleForgotPassword()" style="color: #004990; font-size: 0.85rem; text-decoration: none; font-weight: 600;">Forgot Password?</a>
+</div>
     </div>
 
     <div id="page-curtain" style="display: none;">
