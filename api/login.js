@@ -60,17 +60,23 @@ export default async function handler(req, res) {
         }
 
         // --- ACTION: VERIFY 2FA CODE ---
-        else if (action === 'verify2FA') {
-            const { data: tfaUser } = await supabase.from('app_users').select('*').eq('userid', userId).single();
+       else if (action === 'verify2FA') {
+    const { data: tfaUser } = await supabase.from('app_users').select('*').eq('userid', userId).single();
 
-            if (tfaUser && tfaUser.tfa_code === code) {
-                if (remember) {
-                    generatedDeviceToken = crypto.randomUUID();
-                    await supabase.from('trusted_devices').insert({
-                        userid: userId,
-                        device_token: generatedDeviceToken
-                    });
-                }
+    if (tfaUser && tfaUser.tfa_code === code) {
+        if (remember) {
+            // Check if we already have a token for this user in this session
+            // though usually, 2FA means we need a BRAND NEW one.
+            generatedDeviceToken = crypto.randomUUID();
+            
+            await supabase.from('trusted_devices').insert({
+                userid: userId,
+                device_token: generatedDeviceToken,
+                last_used: new Date().toISOString(),
+                expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
+            });
+        }
+                
                 await supabase.from('app_users').update({ tfa_code: null }).eq('userid', userId);
                 user = tfaUser;
             } else {
