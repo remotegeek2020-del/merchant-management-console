@@ -15,17 +15,16 @@ export default async function handler(req, res) {
   }
 
   // NEW: RECORD LOGS (Surgical insertion)
-  if (req.method === 'POST') {
+if (req.method === 'POST') {
     const { email, action, status } = req.body;
-    
-    const { error } = await supabase.from('activity_logs').insert([{
+    await supabase.from('activity_logs').insert([{
       email: email,
       action: action,
       status: status,
       user_agent: req.headers['user-agent'],
       ip_address: req.headers['x-forwarded-for'] || 'Internal'
     }]);
-
+  
     if (error) return res.status(500).json({ success: false, message: error.message });
     return res.status(200).json({ success: true });
   }
