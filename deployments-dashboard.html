@@ -652,6 +652,7 @@ async function processReturn() {
             if (result.success) {
                 Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
                     .then(() => fetchDeployments(currentPage));
+                recordActivity('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
             } else { 
                 // Important: Show the actual error message from the server
                 Swal.fire('Error', result.message || 'Failed to delete record', 'error'); 
