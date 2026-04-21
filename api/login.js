@@ -1,5 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto'; // Add this
+import { ServerClient } from 'postmark'; // Add this
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
@@ -20,8 +22,8 @@ if (action === 'login') {
     // ... existing login code ...
 } else if (action === 'validate') {
     // ... existing validate code ...
-} else if (action === 'forgotPassword') {
-    // 1. Fetch user to confirm they exist
+} // [Inside the try block of api/login.js, after the 'validate' check]
+else if (action === 'forgotPassword') {
     const { data: user } = await supabase
         .from('app_users')
         .select('userid, first_name, email')
@@ -29,26 +31,39 @@ if (action === 'login') {
         .single();
 
     if (user) {
-        const resetToken = require('crypto').randomUUID();
-        // 2. Set user to inactive and store reset token
+        const resetToken = crypto.randomUUID(); // Generates the token
+        
+        // Update user: set active to false so they MUST reset
         await supabase
             .from('app_users')
-            .update({ invitation_token: resetToken, is_active: false })
+            .update({ 
+                invitation_token: resetToken, 
+                is_active: false 
+            })
             .eq('userid', user.userid);
 
-        // 3. Send Email via Postmark (Re-using your existing invitation logic)
-        const { ServerClient } = require('postmark');
-        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
-        const setupUrl = `https://${req.headers.host}/setup-password.html?token=${resetToken}`;
-        
-        await client.sendEmail({
-            "From": process.env.EMAIL_FROM,
-            "To": user.email,
-            "Subject": "Reset your PayProtec Portal Password",
-            "HtmlBody": `<p>Hello ${user.first_name},</p><p>Click below to reset your password:</p><a href="${setupUrl}">${setupUrl}</a>`
-        });
+        // Send Email
+        if (process.env.POSTMARK_SERVER_TOKEN) {
+            const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+            const setupUrl = `https://${req.headers.host}/setup-password.html?token=${resetToken}`;
+            
+            await client.sendEmail({
+                "From": process.env.EMAIL_FROM,
+                "To": user.email,
+                "Subject": "Reset your PayProtec Portal Password",
+                "HtmlBody": `
+                    <div style="font-family: sans-serif; padding: 20px;">
+                        <h2>Password Reset Requested</h2>
+                        <p>Hello ${user.first_name},</p>
+                        <p>Click the link below to set a new password for your account:</p>
+                        <a href="${setupUrl}" style="background: #004990; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">Reset Password</a>
+                    </div>`,
+                "MessageStream": "outbound"
+            });
+        }
     }
-    return res.status(200).json({ success: true }); // Always return true for security
+    // Return 200 even if user not found to prevent email scraping
+    return res.status(200).json({ success: true });
 }
 
     if (action === 'login') {
