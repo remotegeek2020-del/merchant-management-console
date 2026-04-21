@@ -863,7 +863,6 @@ async function submitOnboarding() {
         
         if (result.success) {
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
-            recordActivity('Partner Onboarded', `New partner ${selectedGHLContact.name} added to network.`);
             closeWizard();
             loadPartners(); 
         } else {
