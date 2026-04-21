@@ -96,26 +96,35 @@ if (action === 'delete_task') {
 if (action === 'add_task') {
     const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
 
+    // --- CRITICAL FIX ---
+    // If created_by is missing, 'System', or 'undefined', set it to null.
+    // A null value bypasses the Foreign Key check, whereas 'System' triggers a violation.
+    const validCreator = (created_by && created_by !== 'System' && created_by !== 'undefined') 
+        ? created_by 
+        : null;
+
     const { data, error } = await supabase
         .from('merchant_tasks')
         .insert([{
-            merchant_id: merchant_uuid, // Must match your SQL column name
+            merchant_id: merchant_uuid,
             title: title,
             body: body,
             due_date: due_date || null,
             assigned_to: assigned_to || null,
-            created_by: created_by || 'System',
+            created_by: validCreator, // Use the sanitized variable
             status: 'Pending'
         }])
         .select();
 
     if (error) {
         console.error("DB Error:", error.message);
-        return res.status(200).json({ success: false, message: error.message });
+        // Returning 400 or 500 is better for failures so the frontend 'catch' block triggers
+        return res.status(400).json({ success: false, message: error.message });
     }
 
     return res.status(200).json({ success: true, data });
 }
+    
         // --- ACTION: update_task (api/merchants.js) ---
 if (action === 'update_task') {
     const { task_id, payload } = req.body; 
