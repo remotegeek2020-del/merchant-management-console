@@ -36,6 +36,26 @@ async function initGatekeeper() {
         showLoginUI();
     }
 }
+/**
+ * GLOBAL ACTIVITY LOGGER
+ * Records actions into the activity_logs table via the API
+ */
+async function recordActivity(action, statusDetails) {
+    const userEmail = localStorage.getItem('pp_userid'); // Standardized key from your script.js
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'System',
+                action: action,
+                status: statusDetails
+            })
+        });
+    } catch (err) {
+        console.error("Audit Logging Failed:", err);
+    }
+}
 
 async function checkGlobalNotifications() {
     const uid = localStorage.getItem('pp_userid');
