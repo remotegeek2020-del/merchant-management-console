@@ -89,7 +89,20 @@ export default async function handler(req, res) {
                             const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
                             await client.sendEmail({
                                 "From": process.env.EMAIL_FROM, "To": dbUser.email, "Subject": `${tfaCode} Access Code`,
-                                "HtmlBody": `<h1>${tfaCode}</h1>`
+                                "HtmlBody": `
+    <div style="font-family: 'Inter', Arial, sans-serif; max-width: 450px; margin: auto; padding: 40px; border: 1px solid #e2e8f0; border-radius: 24px; color: #1e293b; background-color: #ffffff; text-align: center;">
+        <h2 style="color: #004990; margin-bottom: 10px;">Security Verification</h2>
+        <p style="font-size: 15px; color: #64748b; margin-bottom: 30px;">A login attempt was made from a new device. Use the code below to authorize access:</p>
+        
+        <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
+            <h1 style="font-size: 36px; letter-spacing: 8px; color: #004990; margin: 0; font-family: monospace;">${tfaCode}</h1>
+        </div>
+        
+        <p style="font-size: 12px; color: #94a3b8;">If you did not request this, please change your password immediately.</p>
+        <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 30px 0;">
+        <p style="font-size: 11px; color: #94a3b8;">PayProTec Hardware Management Console</p>
+    </div>
+`
                             });
                         }
                         return res.status(200).json({ success: true, needs2FA: true, userid: dbUser.userid });
