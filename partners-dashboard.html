@@ -865,6 +865,7 @@ async function submitOnboarding() {
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
             closeWizard();
             loadPartners(); 
+            recordActivity('Partner Onboarded', `New partner ${selectedGHLContact.name} added to network.`);
         } else {
             // This will show exactly WHY the backend failed (e.g., duplicate email)
             throw new Error(result.message || 'Database error');
