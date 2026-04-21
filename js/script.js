@@ -160,8 +160,56 @@ async function handleManualLogin() {
 }
 
 async function handleLogout() {
-    localStorage.clear();
-    window.location.href = 'index.html';
+    Swal.fire({
+        title: 'Logout?',
+        text: "You will need to re-authenticate to access the portal.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Yes, Logout',
+        confirmButtonColor: '#d33',
+        cancelButtonColor: '#3085d6'
+    }).then(async (result) => {
+        if (result.isConfirmed) {
+            localStorage.clear();
+            sessionStorage.clear();
+            window.location.href = 'index.html';
+        }
+    });
+}
+async function handleForgotPassword() {
+    const { value: email } = await Swal.fire({
+        title: 'Reset Password',
+        input: 'email',
+        inputLabel: 'Enter your staff email address',
+        inputPlaceholder: 'name@payprotec.com',
+        showCancelButton: true,
+        confirmButtonColor: '#004990'
+    });
+
+    if (email) {
+        Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email: email, action: 'forgotPassword' })
+            });
+            const result = await response.json();
+            Swal.fire('Check your Email', 'A reset link has been sent if the account exists.', 'success');
+        } catch (err) {
+            Swal.fire('Error', 'Connection failed.', 'error');
+        }
+    }
 }
 
 window.onload = initGatekeeper;
+
+// [ADD TO BOTTOM OF script.js]
+document.addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+        const loginUI = document.getElementById('login-ui');
+        if (loginUI && loginUI.style.display !== 'none') {
+            handleManualLogin();
+        }
+    }
+});
