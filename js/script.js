@@ -179,25 +179,21 @@ async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
     
-    // READ TOKEN
-    const currentToken = localStorage.getItem('pp_device_token'); 
-    console.log("SENDING DEVICE TOKEN:", currentToken); // Debug check
+    // Explicitly grab the token
+    const storedToken = localStorage.getItem('pp_device_token');
 
-    if (!email || !pass) return;
+    // ... (Your Swal loading logic)
 
-    Swal.fire({ title: 'Authenticating...', didOpen: () => Swal.showLoading() });
-
-    try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'login',
-                email: email, 
-                passkey: pass, 
-                deviceToken: currentToken // MUST match backend key
-            })
-        });
+    const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'login',
+            email: email, 
+            passkey: pass, 
+            deviceToken: storedToken // Ensure this matches the destructuring in login.js
+        })
+    });
         const result = await response.json();
 
         if (result.success) {
