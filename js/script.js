@@ -72,7 +72,6 @@ function showLoginUI() {
 async function authorizeUser(user) {
     if (!user) return;
     try {
-        // We clear everything EXCEPT the device token
         const deviceToken = localStorage.getItem('pp_device_token');
         localStorage.clear();
         if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
@@ -140,7 +139,6 @@ async function handleManualLogin() {
             if (result.needs2FA) {
                 Swal.close();
                 
-                // NEW: Use custom HTML for the 6-box segmented input
                 const { value: tfaCode, isConfirmed } = await Swal.fire({
                     title: 'Verify Your Identity',
                     html: `
@@ -159,41 +157,34 @@ async function handleManualLogin() {
                             </label>
                         </div>
                     `,
-                    // Inside handleManualLogin -> Swal.fire -> didOpen
-didOpen: () => {
-    const inputs = document.querySelectorAll('.tfa-box');
-    inputs[0].focus();
-    
-    // NEW: Handle Paste Event
-    inputs[0].addEventListener('paste', (e) => {
-        e.preventDefault();
-        const data = e.clipboardData.getData('text').trim();
-        // Check if the pasted content is numeric and at least 6 digits
-        if (/^\d{6}$/.test(data)) {
-            const digits = data.split('');
-            digits.forEach((digit, i) => {
-                if (inputs[i]) inputs[i].value = digit;
-            });
-            // Focus the last box after pasting
-            inputs[5].focus();
-        }
-    });
+                    didOpen: () => {
+                        const inputs = document.querySelectorAll('.tfa-box');
+                        inputs[0].focus();
+                        
+                        inputs[0].addEventListener('paste', (e) => {
+                            e.preventDefault();
+                            const data = e.clipboardData.getData('text').trim();
+                            if (/^\d{6}$/.test(data)) {
+                                const digits = data.split('');
+                                digits.forEach((digit, i) => {
+                                    if (inputs[i]) inputs[i].value = digit;
+                                });
+                                inputs[5].focus();
+                            }
+                        });
 
-    // Handle auto-jumping and backspacing (Keep your existing logic)
-    inputs.forEach((input, index) => {
-        input.addEventListener('input', (e) => {
-            // Only jump if a number was entered (prevents jumping on delete)
-            if (e.target.value && index < 5) inputs[index + 1].focus();
-        });
-        input.addEventListener('keydown', (e) => {
-            if (e.key === 'Backspace' && !e.target.value && index > 0) {
-                inputs[index - 1].focus();
-            }
-        });
-    });
-}
+                        inputs.forEach((input, index) => {
+                            input.addEventListener('input', (e) => {
+                                if (e.target.value && index < 5) inputs[index + 1].focus();
+                            });
+                            input.addEventListener('keydown', (e) => {
+                                if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                                    inputs[index - 1].focus();
+                                }
+                            });
+                        });
+                    }, // Added missing comma here
                     preConfirm: () => {
-                        // Collect all 6 values into a single string
                         const code = Array.from(document.querySelectorAll('.tfa-box')).map(i => i.value).join('');
                         if (code.length < 6) {
                             Swal.showValidationMessage('Please enter all 6 digits');
@@ -254,7 +245,6 @@ async function handleLogout() {
         cancelButtonColor: '#3085d6'
     }).then((result) => {
         if (result.isConfirmed) {
-            // Preserve device token on logout so 2FA isn't required immediately next time
             const deviceToken = localStorage.getItem('pp_device_token');
             localStorage.clear();
             if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
