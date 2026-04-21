@@ -98,22 +98,25 @@ export default async function handler(req, res) {
                 if (!dbUser.is_active) return res.status(401).json({ success: false, message: 'Account not activated.' });
 
                 const isMatch = bcrypt.compareSync(passkey, dbUser.password_hash);
-                if (isMatch) {
-                    // Check if device is trusted
-                    const { data: trusted } = await supabase
-                        .from('trusted_devices')
-                        .select('*')
-                        .eq('userid', dbUser.userid)
-                        .eq('device_token', deviceToken || 'none')
-                        .gt('expires_at', new Date().toISOString())
-                        .single();
+              if (isMatch) {
+    // 1. Get token from request body
+    const sentToken = req.body.deviceToken; 
 
-                    if (trusted) {
-                        // Device trusted, login immediately
-                        user = dbUser;
-                    } else {
-                        // Device not trusted, trigger 2FA
-                        const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
+    // 2. Query trusted devices
+    const { data: trusted, error: trustedError } = await supabase
+        .from('trusted_devices')
+        .select('*')
+        .eq('userid', dbUser.userid)
+        .eq('device_token', sentToken) // If sentToken is null, this naturally fails
+        .gt('expires_at', new Date().toISOString())
+        .maybeSingle(); // Use maybeSingle to avoid 406 errors
+
+    if (trusted && !trustedError) {
+        // SUCCESS: Device recognized.
+        user = dbUser;
+    } else {
+        // NEW DEVICE: Trigger 2FA
+        const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
                         await supabase.from('app_users').update({ tfa_code: tfaCode }).eq('userid', dbUser.userid);
 
                         if (process.env.POSTMARK_SERVER_TOKEN) {
