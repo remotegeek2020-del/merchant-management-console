@@ -177,6 +177,8 @@ async function authorizeUser(user) {
 async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
+    // Retrieve the persistent device token if it exists
+    const deviceToken = localStorage.getItem('pp_device_token'); 
 
     if (!email || !pass) return;
 
@@ -186,17 +188,75 @@ async function handleManualLogin() {
         const response = await fetch('/api/login', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: email, passkey: pass, action: 'login' })
+            // Pass the deviceToken to the API to see if we can skip 2FA
+            body: JSON.stringify({ 
+                email: email, 
+                passkey: pass, 
+                action: 'login',
+                deviceToken: deviceToken 
+            })
         });
         const result = await response.json();
 
         if (result.success) {
-            authorizeUser(result.user);
+            // NEW: Check if the server requires 2FA
+            if (result.needs2FA) {
+                Swal.close(); // Close "Authenticating..." spinner
+                
+                const { value: tfaCode } = await Swal.fire({
+                    title: 'New Device Detected',
+                    text: 'Please enter the 6-digit code sent to your email.',
+                    input: 'text',
+                    inputAttributes: { maxlength: 6, autofocus: 'true' },
+                    footer: '<label style="cursor:pointer;"><input type="checkbox" id="remember-device"> Remember this device for 30 days</label>',
+                    showCancelButton: true,
+                    confirmButtonText: 'Verify Code',
+                    confirmButtonColor: '#004990'
+                });
+
+                if (tfaCode) {
+                    const remember = document.getElementById('remember-device').checked;
+                    verify2FACode(result.userid, tfaCode, remember);
+                }
+            } else {
+                // If device was already trusted, log in immediately
+                authorizeUser(result.user);
+            }
         } else {
             Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
         }
     } catch (error) {
+        console.error("Login Error:", error);
         Swal.fire('Error', 'Connection failed.', 'error');
+    }
+}
+async function verify2FACode(uid, code, remember) {
+    Swal.fire({ title: 'Verifying...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const response = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'verify2FA', 
+                userId: uid, 
+                code: code, 
+                remember: remember 
+            })
+        });
+        const result = await response.json();
+
+        if (result.success) {
+            // If the user chose "Remember this device", save the new token
+            if (result.newDeviceToken) {
+                localStorage.setItem('pp_device_token', result.newDeviceToken);
+            }
+            authorizeUser(result.user);
+        } else {
+            Swal.fire('Error', result.message || 'Invalid code.', 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Verification failed.', 'error');
     }
 }
 
