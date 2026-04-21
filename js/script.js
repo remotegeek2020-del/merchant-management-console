@@ -178,7 +178,7 @@ async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
     
-    // Ensure we use a consistent key name: 'pp_device_token'
+    // Ensure this key matches exactly what you save in verify2FACode
     const currentToken = localStorage.getItem('pp_device_token'); 
 
     if (!email || !pass) return;
@@ -190,10 +190,10 @@ async function handleManualLogin() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
+                action: 'login',
                 email: email, 
                 passkey: pass, 
-                action: 'login',
-                deviceToken: currentToken // This is the critical piece
+                deviceToken: currentToken // This MUST be sent to skip 2FA
             })
         });
         const result = await response.json();
