@@ -174,16 +174,14 @@ async function authorizeUser(user) {
     if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
 
+// 1. Update handleManualLogin to send the token
 async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
     
-    // Retrieve the token
+    // READ TOKEN
     const currentToken = localStorage.getItem('pp_device_token'); 
-    
-    // DEBUG: Look at your console (F12) when you click login. 
-    // If this says 'null', your browser didn't save it.
-    console.log("Device Token found in browser:", currentToken);
+    console.log("SENDING DEVICE TOKEN:", currentToken); // Debug check
 
     if (!email || !pass) return;
 
@@ -197,25 +195,20 @@ async function handleManualLogin() {
                 action: 'login',
                 email: email, 
                 passkey: pass, 
-                deviceToken: currentToken // MUST match the variable name in login.js
+                deviceToken: currentToken // MUST match backend key
             })
         });
         const result = await response.json();
 
         if (result.success) {
-            // NEW: Check if the server requires 2FA
             if (result.needs2FA) {
-                Swal.close(); // Close "Authenticating..." spinner
-                
+                Swal.close();
                 const { value: tfaCode } = await Swal.fire({
-                    title: 'New Device Detected',
-                    text: 'Please enter the 6-digit code sent to your email.',
+                    title: 'Verification Required',
+                    text: 'Enter the 6-digit code sent to your email.',
                     input: 'text',
-                    inputAttributes: { maxlength: 6, autofocus: 'true' },
-                    footer: '<label style="cursor:pointer;"><input type="checkbox" id="remember-device"> Remember this device for 30 days</label>',
-                    showCancelButton: true,
-                    confirmButtonText: 'Verify Code',
-                    confirmButtonColor: '#004990'
+                    footer: '<label><input type="checkbox" id="remember-device"> Remember for 30 days</label>',
+                    showCancelButton: true
                 });
 
                 if (tfaCode) {
@@ -223,19 +216,31 @@ async function handleManualLogin() {
                     verify2FACode(result.userid, tfaCode, remember);
                 }
             } else {
-                // If device was already trusted, log in immediately
                 authorizeUser(result.user);
             }
         } else {
-            Swal.fire('Login Failed', result.message || 'Invalid credentials.', 'error');
+            Swal.fire('Error', result.message, 'error');
         }
-    } catch (error) {
-        console.error("Login Error:", error);
-        Swal.fire('Error', 'Connection failed.', 'error');
+    } catch (err) { console.error(err); }
+}
+
+// 2. Update verify2FACode to save the token
+async function verify2FACode(uid, code, remember) {
+    const response = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'verify2FA', userId: uid, code: code, remember: remember })
+    });
+    const result = await response.json();
+
+    if (result.success) {
+        if (result.newDeviceToken) {
+            // SAVE TOKEN
+            localStorage.setItem('pp_device_token', result.newDeviceToken);
+        }
+        authorizeUser(result.user);
     }
 }
-// js/script.js
-
 async function verify2FACode(uid, code, remember) {
     Swal.fire({ title: 'Verifying...', didOpen: () => Swal.showLoading() });
 
