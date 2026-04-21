@@ -139,17 +139,57 @@ async function handleManualLogin() {
         if (result.success) {
             if (result.needs2FA) {
                 Swal.close();
-                const { value: tfaCode } = await Swal.fire({
-                    title: 'Verification Required',
-                    text: 'Enter the 6-digit code sent to your email.',
-                    input: 'text',
-                    inputAttributes: { maxlength: 6, autofocus: 'true' },
-                    footer: '<label style="cursor:pointer;"><input type="checkbox" id="remember-device"> Remember this device for 30 days</label>',
+                
+                // NEW: Use custom HTML for the 6-box segmented input
+                const { value: tfaCode, isConfirmed } = await Swal.fire({
+                    title: 'Verify Your Identity',
+                    html: `
+                        <p style="color: #64748b; margin-bottom: 20px;">Enter the 6-digit code sent to your email.</p>
+                        <div class="tfa-input-wrapper" id="tfa-inputs">
+                            <input type="text" class="tfa-box" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                            <input type="text" class="tfa-box" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                            <input type="text" class="tfa-box" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                            <input type="text" class="tfa-box" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                            <input type="text" class="tfa-box" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                            <input type="text" class="tfa-box" maxlength="1" pattern="[0-9]*" inputmode="numeric">
+                        </div>
+                        <div style="margin-top: 25px;">
+                            <label style="cursor:pointer; font-size: 14px; color: #1e293b;">
+                                <input type="checkbox" id="remember-device"> Remember this device for 30 days
+                            </label>
+                        </div>
+                    `,
+                    didOpen: () => {
+                        const inputs = document.querySelectorAll('.tfa-box');
+                        inputs[0].focus();
+                        
+                        // Handle auto-jumping and backspacing
+                        inputs.forEach((input, index) => {
+                            input.addEventListener('input', (e) => {
+                                if (e.target.value && index < 5) inputs[index + 1].focus();
+                            });
+                            input.addEventListener('keydown', (e) => {
+                                if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                                    inputs[index - 1].focus();
+                                }
+                            });
+                        });
+                    },
+                    preConfirm: () => {
+                        // Collect all 6 values into a single string
+                        const code = Array.from(document.querySelectorAll('.tfa-box')).map(i => i.value).join('');
+                        if (code.length < 6) {
+                            Swal.showValidationMessage('Please enter all 6 digits');
+                            return false;
+                        }
+                        return code;
+                    },
                     showCancelButton: true,
-                    confirmButtonText: 'Verify Code'
+                    confirmButtonText: 'Verify Account',
+                    confirmButtonColor: '#004990'
                 });
 
-                if (tfaCode) {
+                if (isConfirmed && tfaCode) {
                     const remember = document.getElementById('remember-device').checked;
                     verify2FACode(result.userid, tfaCode, remember);
                 }
@@ -159,7 +199,10 @@ async function handleManualLogin() {
         } else {
             Swal.fire('Error', result.message || 'Invalid credentials.', 'error');
         }
-    } catch (err) { console.error(err); Swal.fire('Error', 'Connection failed', 'error'); }
+    } catch (err) { 
+        console.error(err); 
+        Swal.fire('Error', 'Connection failed', 'error'); 
+    }
 }
 
 async function verify2FACode(uid, code, remember) {
