@@ -329,11 +329,6 @@ async function handleAIFile(input) {
 
             if (result.success) {
                 confirmAIImport(result.data);
-                if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
             } else {
                 Swal.fire('AI Error', 'Could not read the invoice format.', 'error');
             }
@@ -512,11 +507,6 @@ function confirmAIImport(extractedData) {
             if (result.success) {
                 Swal.fire('Retired', 'Unit has been decommissioned.', 'success');
                 fetchInventory();
-                if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
             }
         } catch (err) {
             Swal.fire('Error', 'Action failed', 'error');
@@ -547,11 +537,6 @@ function confirmAIImport(extractedData) {
             if (result.success) {
                 Swal.fire('Deleted!', 'The unit has been removed.', 'success');
                 fetchInventory();
-                if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
             } else {
                 Swal.fire('Error', result.message, 'error');
             }
@@ -658,15 +643,16 @@ function confirmAIImport(extractedData) {
                     timer: 1500, 
                     showConfirmButton: false 
                 });
-                if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
             } else {
                 const msg = result.message || "";
                 if (msg.includes('unique')) {
                     Swal.fire('Duplicate', 'This Serial Number already exists.', 'warning');
+                    if (!selectedId) {
+    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
+} else {
+    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
+}
+                    
                 } else {
                     Swal.fire('Error', result.message, 'error');
                 }
@@ -701,11 +687,6 @@ function confirmAIImport(extractedData) {
                     </div>
                 </div>
             `).join('');
-            if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
         } else {
             container.innerHTML = '<p style="text-align:center; color:#94a3b8; padding:10px;">No manual notes found.</p>';
         }
@@ -730,11 +711,6 @@ async function saveNote() {
         if (result.success) {
             document.getElementById('note-text').value = ''; 
             fetchNotes(); 
-            if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
         }
     } catch (err) { alert("Failed to save note"); }
 }
@@ -762,11 +738,6 @@ async function saveNote() {
         const result = await res.json();
         if (!result.success) {
             tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error: ${result.message}</td></tr>`;
-            if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
             return;
         }
 
