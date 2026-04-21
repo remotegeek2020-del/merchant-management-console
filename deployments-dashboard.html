@@ -304,36 +304,166 @@
 
 <script>
     let currentDeployments = [];
-    let searchTimeout; 
+    let searchTimeout; // Declared once at the top level
     let currentPage = 1;
     let totalPages = 1;
     let lookupTimeout;
 
     /**
-     * AUDIT LOGGER 
-     */
-    async function logAuditAction(action, details) {
-        const userEmail = localStorage.getItem('pp_userid'); 
+ * AUDIT LOGGER 
+ * Sends activity to the central activity_logs table
+ */
+// Ensure this helper is at the top of your <script> in deployments-dashboard.html
+async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
+    }
+}
+
+// Update your confirmDelete success block:
+if (result.success) {
+    Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
+        .then(() => fetchDeployments(currentPage));
+    // CHANGE THIS LINE:
+    await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
+}
+
+async function executeBulk(validData) {
+    Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading() });
+    const res = await fetch('/api/deployments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'bulk_create', payload: validData })
+    });
+    const result = await res.json();
+    if (result.success) {
+        document.getElementById('bulkPreviewModal').style.display = 'none';
+        Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
+        fetchDeployments();
+    }
+}
+
+    async function completeRMA() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    if (!d) return;
+
+    const { value: type } = await Swal.fire({
+        title: 'Complete Return',
+        input: 'select',
+        inputOptions: {
+            'Working (Back to Stock)': 'Working (Back to Stock)',
+            'Defective (Received in Repairs)': 'Defective (Received in Repairs)'
+        },
+        inputPlaceholder: 'Select condition',
+        showCancelButton: true
+    });
+
+    if (type) {
+        Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
         try {
-            await fetch('/api/logs', {
+            const res = await fetch('/api/deployments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    email: userEmail || 'Unknown Admin',
-                    action: action,
-                    status: details
+                    action: 'return_to_office',
+                    payload: {
+                        equipment_id: d.equipment_id,
+                        merchant_id: d.merchant_id,
+                        deployment_id: d.id,
+                        return_type: type, // This tells the backend to CLOSE the RMA
+                        notes: 'Manual Completion' // This won't overwrite because of our backend check
+                    }
                 })
             });
-        } catch (err) {
-            console.error("Failed to log audit trail:", err);
+            const result = await res.json();
+            if (result.success) {
+                Swal.fire('Success', 'RMA Completed and Hardware Stocked.', 'success').then(() => {
+                    document.getElementById('editDepModal').style.display = 'none';
+                    fetchDeployments(currentPage);
+                });
+            }
+        } catch (e) {
+            Swal.fire('Error', 'Failed to complete RMA', 'error');
         }
     }
+}
 
+  async function completeInTransitRMA() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    
+    // 1. Ask for the Date Received first
+    const { value: receivedDate } = await Swal.fire({
+        title: 'Confirm Receipt Date',
+        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}">`,
+        showCancelButton: true,
+        preConfirm: () => document.getElementById('swal-receive-date').value
+    });
+
+    if (!receivedDate) return;
+
+    // 2. Ask for the restock location
+    const result = await Swal.fire({
+        title: 'Complete RMA',
+        text: `Confirm receipt for S/N: ${d.equipments?.serial_number}`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonText: 'Warsaw Office (Stock)',
+        confirmButtonColor: '#004990',
+        denyButtonText: 'Warsaw Repairs',
+        denyButtonColor: '#e11d48',
+        showDenyButton: true
+    });
+
+    let finalType = '';
+    if (result.isConfirmed) finalType = 'Working (Back to Stock)';
+    else if (result.isDenied) finalType = 'Defective (Received in Repairs)';
+    else return;
+
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'return_to_office', 
+                payload: {
+                    equipment_id: d.equipment_id,
+                    merchant_id: d.merchant_id,
+                    deployment_id: d.id,
+                    return_type: finalType,
+                    equipment_received_date: receivedDate, // New field
+                    notes: 'Unit received at warehouse.'
+                }
+            })
+        });
+        const finalResult = await res.json();
+        if (finalResult.success) {
+            Swal.fire('Success', `Unit received on ${receivedDate}`, 'success').then(() => {
+                document.getElementById('editDepModal').style.display = 'none';
+                fetchDeployments(currentPage);
+            });
+        }
+    } catch (e) { console.error(e); }
+}
+    // --- 1. FETCH AND RENDER DEPLOYMENTS (With Search & Pagination) ---
     async function fetchDeployments(page = 1) {
         currentPage = page;
         const tbody = document.getElementById('deploymentTableBody');
         if (!tbody) return;
 
+        // Show loading state
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:#94a3b8;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span><br>Syncing Ledger...</td></tr>`;
 
         clearTimeout(searchTimeout);
@@ -343,15 +473,27 @@
                 const res = await fetch('/api/deployments', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'list', query: queryValue, page: currentPage, limit: 10 })
+                    body: JSON.stringify({ 
+                        action: 'list', 
+                        query: queryValue, 
+                        page: currentPage, 
+                        limit: 10 
+                    })
                 });
                 
                 const result = await res.json();
                 if (!result.success) throw new Error(result.message);
 
-                if (document.getElementById('kpi-active')) document.getElementById('kpi-active').innerText = result.metrics.active;
-                if (document.getElementById('kpi-today')) document.getElementById('kpi-today').innerText = result.metrics.today;
-                if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics.total;
+                // Update KPI Cards surgically
+if (document.getElementById('kpi-active')) {
+    document.getElementById('kpi-active').innerText = result.metrics.active;
+}
+if (document.getElementById('kpi-today')) {
+    document.getElementById('kpi-today').innerText = result.metrics.today;
+}
+if (document.getElementById('kpi-total')) {
+    document.getElementById('kpi-total').innerText = result.metrics.total;
+}
 
                 currentDeployments = result.data || [];
                 totalPages = result.pagination?.totalPages || 1;
@@ -380,10 +522,14 @@
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${serialNum}')"><span class="material-icons" style="font-size:18px;">history</span></button>
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
-                            </td>`;
+                            </td>
+                        `;
                     });
                 }
+
+                if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total || 0;
                 renderPagination();
+
             } catch (err) {
                 console.error("Fetch Error:", err);
                 tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:50px; color:red;">Error loading data: ${err.message}</td></tr>`;
@@ -391,68 +537,528 @@
         }, 300);
     }
 
-    async function confirmDelete(id, dba, sn, equipId, merchantId) {
-        const { value: confirmContent } = await Swal.fire({
-            title: 'Delete Deployment?',
-            html: `Type <b>DELETE</b> to confirm for ${dba}:`,
-            input: 'text',
-            showCancelButton: true,
-            confirmButtonColor: '#e11d48',
-            inputValidator: (v) => v !== 'DELETE' && 'You must type DELETE!'
+    function renderPagination() {
+        const container = document.getElementById('paginationControls');
+        if (!container) return;
+        container.innerHTML = `
+            <div style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:20px; padding:10px; background:#f8fafc; border-radius:8px;">
+                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>Previous</button>
+                <span style="font-weight:700; color:#475569;">Page ${currentPage} of ${totalPages}</span>
+                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
+            </div>
+        `;
+    }
+
+    // --- 2. SUBMIT UPDATE & PROCESS RETURN ---
+  async function submitUpdate(event) {
+    event.preventDefault();
+    const btn = document.getElementById('updateBtn');
+    btn.disabled = true;
+    btn.innerText = "UPDATING...";
+
+    const payload = {
+        deployment_id: document.getElementById('editId').value,
+        status: document.getElementById('editStatus').value,
+        tracking_id: document.getElementById('editTracking').value,
+        target_date: document.getElementById('editDate').value,
+        notes: document.getElementById('editNotes').value,
+        purchase_type: document.getElementById('editPurchaseType').value
+    };
+
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update', payload }) // Action must be 'update'
+        });
+        const result = await res.json();
+        
+        if (result.success) { 
+            await logAuditAction('Deployment Updated', `Ticket ${payload.deployment_id} updated to status: ${payload.status}`);
+            Swal.fire({ icon: 'success', title: 'Ticket Updated', timer: 1500, showConfirmButton: false });
+            document.getElementById('editDepModal').style.display = 'none';
+            await fetchDeployments(currentPage); 
+        } else { 
+            Swal.fire('Error', result.message || 'Update Failed', 'error');
+        }
+    } catch (e) { 
+        Swal.fire('Error', 'System Communication Error', 'error'); 
+    } finally {
+        btn.disabled = false; 
+        btn.innerText = "UPDATE TICKET";
+    }
+}
+
+async function processReturn() {
+    const deploymentId = document.getElementById('editId').value;
+    const d = currentDeployments.find(item => item.id === deploymentId);
+    if (!d) return;
+
+    const reasonDropdown = document.getElementById('returnReason');
+    const otherText = document.getElementById('otherReasonText');
+    
+    // Add a date input prompt via SweetAlert
+    const { value: initiateDate } = await Swal.fire({
+        title: 'Return Initiation Date',
+        html: `<input type="date" id="swal-init-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}">`,
+        showCancelButton: true,
+        preConfirm: () => document.getElementById('swal-init-date').value
+    });
+
+    if (!initiateDate) return;
+
+    let finalReason = reasonDropdown.value;
+    if (finalReason === 'Other') finalReason = otherText.value;
+    if (!finalReason) return Swal.fire('Error', 'Please select a reason', 'warning');
+
+    Swal.fire({ title: 'Processing Logistics...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'return_to_office', 
+                payload: {
+                    equipment_id: d.equipment_id,
+                    merchant_id: d.merchant_id,
+                    deployment_id: d.id,
+                    return_type: 'In Transit',
+                    return_date_initiated: initiateDate, // New field
+                    notes: finalReason
+                }
+            })
         });
 
-        if (confirmContent === 'DELETE') {
-            Swal.fire({ title: 'Deleting...', didOpen: () => Swal.showLoading() });
-            try {
-                const res = await fetch('/api/deployments', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'delete', 
-                        payload: { deployment_id: id, equipment_id: equipId, merchant_id: merchantId, merchant_name: dba, serial_number: sn }
-                    })
-                });
-                const result = await res.json();
-                if (result.success) {
-                    await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
-                    Swal.fire('Deleted!', 'Ticket removed.', 'success').then(() => fetchDeployments(currentPage));
-                } else { 
-                    Swal.fire('Error', result.message || 'Failed to delete', 'error'); 
-                }
-            } catch (err) { Swal.fire('Error', 'Communication failure', 'error'); }
+        const result = await res.json();
+        Swal.close();
+
+        if (result.success) {
+            Swal.fire('In Transit', 'RMA initiated.', 'success').then(() => {
+                document.getElementById('editDepModal').style.display = 'none';
+                fetchDeployments(currentPage);
+            });
+        } else {
+            Swal.fire('Error', result.message, 'error');
+        }
+    } catch (err) { 
+        Swal.close();
+        Swal.fire('System Error', 'Check Network Tab', 'error'); 
+    }
+}
+    // --- 3. DELETE & HISTORY LOGIC ---
+  async function confirmDelete(id, dba, sn, equipId, merchantId) {
+    const { value: confirmContent } = await Swal.fire({
+        title: 'Delete Deployment?',
+        html: `Type <b>DELETE</b> to confirm for ${dba}:`,
+        input: 'text',
+        showCancelButton: true,
+        confirmButtonColor: '#e11d48',
+        inputValidator: (v) => v !== 'DELETE' && 'You must type DELETE!'
+    });
+
+    if (confirmContent === 'DELETE') {
+        // Show loading state so user knows it's processing
+        Swal.fire({ title: 'Deleting...', didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'delete', 
+                    payload: { 
+                        deployment_id: id,     // This must be the UUID
+                        equipment_id: equipId, 
+                        merchant_id: merchantId, 
+                        merchant_name: dba, 
+                        serial_number: sn 
+                    }
+                })
+            });
+            
+            const result = await res.json();
+            
+            if (result.success) {
+                await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) permanently removed.`);
+                Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
+                    .then(() => fetchDeployments(currentPage));
+                recordActivity('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
+            } else { 
+                // Important: Show the actual error message from the server
+                Swal.fire('Error', result.message || 'Failed to delete record', 'error'); 
+            }
+        } catch (err) { 
+            Swal.fire('Error', 'Communication failure with server', 'error'); 
         }
     }
-
-    async function saveDeployment(event) {
-        event.preventDefault();
-        const payload = {
-            merchant_id: document.getElementById('selectedMerchantId').value,
-            equipment_id: document.getElementById('equipSelect').value,
-            tid: document.getElementById('tidInput').value,
-            tracking_id: document.getElementById('trackingInput').value,
-            target_date: document.getElementById('dateInput').value,
-            purchase_type: document.getElementById('purchaseType').value,
-            notes: document.getElementById('notesInput').value
-        };
-        
+}
+    async function viewHistory(id, sn) {
+        const modal = document.getElementById('historyModal');
+        const list = document.getElementById('timeline');
+        document.getElementById('histSubtitle').innerText = `Full history for SN: ${sn}`;
+        modal.style.display = 'flex';
         try {
-            const res = await fetch('/api/deployments', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'create', payload }) 
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getHistory', equipment_id: id })
             });
             const result = await res.json();
-            if (result.success) {
-                await logAuditAction('Deployment Created', `Ticket created for Merchant ID: ${payload.merchant_id}`);
-                Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
-                document.getElementById('newDepModal').style.display = 'none';
-                await fetchDeployments();
-            } else { throw new Error(result.message); }
-        } catch (e) { Swal.fire('Error', e.message, 'error'); }
+            list.innerHTML = (result.data || []).map(log => `
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div style="font-size:0.75rem; color:#94a3b8; font-weight:700;">${new Date(log.created_at).toLocaleString()}</div>
+                    <div style="font-weight:800; color:#002d5a;">${log.action.toUpperCase()}</div>
+                    <div style="font-size:0.85rem; color:#64748b;">${log.from_location} → ${log.to_location}</div>
+                </div>
+            `).join('');
+        } catch (e) { list.innerHTML = 'Error loading history'; }
     }
 
-    // Include your renderPagination, submitUpdate, processReturn, completeInTransitRMA, etc. functions below here...
+    // --- 4. LOOKUPS, MODALS & UTILS ---
+    function generateDeploymentPDF(index) {
+        const d = currentDeployments[index];
+        if (!d) return;
+        const targetDate = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+        const merchantName = d.merchants?.dba_name || '---';
+        const merchantId = d.merchants?.merchant_id || '---';
+        const serialNumber = d.equipments?.serial_number || '---';
+        const terminalType = d.equipments?.terminal_type || '---';
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Packing Slip - ${d.deployment_id}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&display=swap" rel="stylesheet">
+                <style>
+                    body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; line-height: 1.4; }
+                    .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #f97316; padding-bottom: 20px; margin-bottom: 30px; }
+                    .logo-area img { height: 45px; width: auto; }
+                    .slip-title { font-size: 16px; font-weight: 800; text-transform: uppercase; color: #64748b; letter-spacing: 1px; }
+                    .info-section { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-bottom: 40px; }
+                    .info-box h3 { font-size: 10px; text-transform: uppercase; color: #94a3b8; margin-bottom: 8px; border-bottom: 1px solid #f1f5f9; letter-spacing: 0.5px; }
+                    .info-box p { margin: 3px 0; font-size: 14px; font-weight: 700; color: #0f172a; }
+                    .info-box span { color: #64748b; font-weight: 400; }
+                    .item-table { width: 100%; border-collapse: collapse; margin-bottom: 40px; }
+                    .item-table th { background: #f8fafc; text-align: left; padding: 12px; font-size: 10px; text-transform: uppercase; border: 1px solid #e2e8f0; color: #64748b; }
+                    .item-table td { padding: 12px; border: 1px solid #e2e8f0; font-size: 13px; font-weight: 500; }
+                    .notes-area { background: #fff7ed; padding: 15px; border-radius: 8px; border: 1px solid #ffedd5; margin-bottom: 40px; }
+                    .notes-area label { font-size: 10px; font-weight: 800; color: #c2410c; display: block; margin-bottom: 5px; text-transform: uppercase; }
+                    .sign-off { display: grid; grid-template-columns: 1fr 1fr; gap: 60px; margin-top: 60px; }
+                    .signature-line { border-top: 1px solid #cbd5e1; padding-top: 10px; font-size: 11px; text-align: center; color: #64748b; font-weight: 700; text-transform: uppercase; }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo-area"><img src="https://cdn.prod.website-files.com/617aeb477b067ad6d4afee78/63dafce12a177260d7ec306e_pptlogo-orange.svg"></div>
+                    <div class="slip-title">Installation & Packing Slip</div>
+                </div>
+                <div class="info-section">
+                    <div class="info-box"><h3>Merchant Information</h3><p>${merchantName}</p><p><span>MID:</span> ${merchantId}</p></div>
+                    <div class="info-box"><h3>Ticket Details</h3><p><span>ID:</span> ${d.deployment_id || '---'}</p><p><span>Target:</span> ${targetDate}</p><p><span>Tracking:</span> ${d.tracking_id || 'Not Assigned'}</p></div>
+                </div>
+                <table class="item-table">
+                    <thead><tr><th style="width: 25%;">Model</th><th style="width: 35%;">Serial Number</th><th style="width: 20%;">TID</th><th style="width: 20%;">Condition</th></tr></thead>
+                    <tbody><tr><td>${terminalType}</td><td><code>${serialNumber}</code></td><td>${d.tid || '---'}</td><td>New / Verified</td></tr></tbody>
+                </table>
+                <div class="notes-area"><label>Logistics & Setup Notes</label><div style="font-size: 13px; color: #431407;">${d.notes || 'No instructions.'}</div></div>
+                <div class="sign-off"><div class="signature-line">Released By</div><div class="signature-line">Accepted By</div></div>
+                <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 700); }<\/script>
+            </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
+
+  async function handleMerchantSearch(val) {
+    const list = document.getElementById('mSuggestions');
+    if (val.length < 2) { list.style.display = 'none'; return; }
+
+    clearTimeout(lookupTimeout);
+    lookupTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.merchants || []).map(m => `
+                <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong style="color:#004990;">${m.dba_name}</strong>
+                        <div style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</div>
+                    </div>
+                    <span class="material-icons" style="font-size:16px; color:#cbd5e1;">add_circle_outline</span>
+                </div>
+            `).join('');
+            list.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }, 300); // 300ms pause before searching
+}
+
+    function selectMerchant(id, name) {
+        document.getElementById('selectedMerchantId').value = id;
+        document.getElementById('mSearch').value = name;
+        document.getElementById('mSuggestions').style.display = 'none';
+    }
+
+    async function handleEquipSearch(val) {
+    const list = document.getElementById('eSuggestions');
+    if (val.length < 1) { list.style.display = 'none'; return; }
+
+    clearTimeout(lookupTimeout);
+    lookupTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.inventory || []).map(e => `
+                <div class="suggestion-item" onclick="selectEquip('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>${e.serial_number}</strong>
+                        <div style="font-size:10px; color:#64748b;">${e.terminal_type}</div>
+                    </div>
+                    <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">${e.status.toUpperCase()}</span>
+                </div>
+            `).join('');
+            list.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }, 200); // Hardware search can be slightly faster (200ms)
+}
+
+    function selectEquip(id, serial, type) {
+        document.getElementById('equipSelect').value = id;
+        document.getElementById('eSearch').value = `${serial} (${type})`;
+        document.getElementById('eSuggestions').style.display = 'none';
+    }
+
+    function openNewDeploymentModal() {
+        document.getElementById('newDepModal').style.display = 'flex';
+        ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.value = '';
+        });
+        document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+    }
+
+async function openEditModal(index) {
+    const d = currentDeployments[index];
+    if (!d) return;
+
+    // 1. POPULATE FIELDS IMMEDIATELY (Fixes the blank fields issue)
+    document.getElementById('editId').value = d.id || '';
+    document.getElementById('editTid').value = d.tid || '';
+    document.getElementById('editStatus').value = d.status || 'Open';
+    document.getElementById('editTracking').value = d.tracking_id || '';
+    document.getElementById('editNotes').value = d.notes || '';
+    // ADD THIS LINE:
+    document.getElementById('editPurchaseType').value = d.purchase_type || 'Free Placement';
+    
+    if (d.target_deployment_date) {
+        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
+    } else {
+        document.getElementById('editDate').value = '';
+    }
+
+    // 2. RESET UI ELEMENTS
+    const rmaBadge = document.getElementById('rmaStatusBadge');
+    const returnBox = document.getElementById('returnProcessBox');
+    const completeBtn = rmaBadge.querySelector('button');
+    const updateBtn = document.getElementById('updateBtn');
+
+    // Default states
+    rmaBadge.style.display = 'none';
+    returnBox.style.display = 'block';
+    if(updateBtn) updateBtn.style.display = 'block';
+
+    // 3. FETCH RMA STATUS
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'check_rma', payload: { deployment_id: d.id } })
+        });
+        const result = await res.json();
+        
+        if (result.success && result.data) {
+            returnBox.style.display = 'none';
+            rmaBadge.style.display = 'block';
+            
+            // Requirement: Use return_id from table
+            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
+            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason || 'N/A';
+
+            // --- THE FIX: Button visibility logic ---
+            if (result.data.status === 'Closed') {
+                if (completeBtn) completeBtn.style.display = 'none'; // Hide it if closed
+                rmaBadge.style.background = '#f0fdf4'; // Green
+                
+                // ARCHIVE LOCK: If both are closed, lock everything
+                if (d.status === 'Closed') {
+                    document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
+                    if (updateBtn) updateBtn.style.display = 'none';
+                }
+            } else {
+                if (completeBtn) completeBtn.style.display = 'block'; // Show it if open
+                rmaBadge.style.background = '#fffbeb'; // Yellow
+            }
+        }
+    } catch (e) { console.error("RMA Load Error:", e); }
+
+    document.getElementById('editDepModal').style.display = 'flex';
+}
+async function saveDeployment(event) {
+    event.preventDefault();
+    const payload = {
+        merchant_id: document.getElementById('selectedMerchantId').value,
+        equipment_id: document.getElementById('equipSelect').value,
+        tid: document.getElementById('tidInput').value,
+        tracking_id: document.getElementById('trackingInput').value,
+        target_date: document.getElementById('dateInput').value,
+        purchase_type: document.getElementById('purchaseType').value, // Must match backend name
+        notes: document.getElementById('notesInput').value
+    };
+    
+    try {
+        const res = await fetch('/api/deployments', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ action: 'create', payload }) 
+        });
+        const result = await res.json();
+        if (result.success) {
+            await logAuditAction('Deployment Created', `Ticket created for Merchant ID: ${payload.merchant_id} (TID: ${payload.tid || 'N/A'})`);
+            Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
+            document.getElementById('newDepModal').style.display = 'none';
+            await fetchDeployments();
+            recordActivity('Deployment Created', `Ticket created for Merchant ID: ${payload.merchant_id}`);
+        } else { throw new Error(result.message); }
+    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+}
+
+    function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
+    // --- BULK UPLOAD LOGIC ---
+
+async function handleBulkUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        const text = e.target.result;
+        // Split rows and handle potential carriage returns
+        const rows = text.split(/\r?\n/).map(row => row.split(','));
+        const headers = rows[0].map(h => h.trim().toLowerCase());
+        
+        const payload = rows.slice(1).filter(row => row.length > 1).map(row => {
+            const obj = {};
+            headers.forEach((h, i) => obj[h] = row[i]?.trim());
+            return obj;
+        });
+
+        Swal.fire({ title: 'Validating Inventory...', didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'bulk_validate', payload })
+            });
+            const result = await res.json();
+            Swal.close();
+
+            if (result.success) {
+                renderBulkPreview(result.validationResults);
+            } else {
+                Swal.fire('Error', result.message, 'error');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Validation failed', 'error');
+        }
+    };
+    reader.readAsText(file);
+    input.value = ''; 
+}
+
+function renderBulkPreview(results) {
+    const tbody = document.getElementById('bulkPreviewTable');
+    const summary = document.getElementById('bulkSummaryText');
+    const confirmBtn = document.getElementById('confirmBulkBtn');
+    
+    tbody.innerHTML = '';
+    let validCount = 0;
+
+    results.forEach(item => {
+        const tr = document.createElement('tr');
+        const isReady = item.status === 'stocked' && item.merchantExists;
+        if (isReady) validCount++;
+
+        tr.innerHTML = `
+            <td><code>${item.serial_number}</code></td>
+            <td>${item.merchant_id}</td>
+            <td>
+                <span class="badge" style="background: ${isReady ? '#f0fdf4' : '#fff1f2'}; color: ${isReady ? '#166534' : '#e11d48'};">
+                    ${item.message}
+                </span>
+            </td>
+            <td style="color: ${isReady ? '#166534' : '#e11d48'}; font-weight: 700;">
+                ${isReady ? 'READY' : 'SKIPPED'}
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+
+    summary.innerText = `READY: ${validCount} | BLOCKED: ${results.length - validCount}`;
+    confirmBtn.disabled = validCount === 0;
+    
+    // We send only the valid rows to the create action
+    confirmBtn.onclick = () => executeBulk(results.filter(r => r.status === 'stocked' && r.merchantExists));
+    
+    document.getElementById('bulkPreviewModal').style.display = 'flex';
+}
+
+async function executeBulk(validData) {
+    Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    
+    try {
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'bulk_create', payload: validData })
+        });
+        const result = await res.json();
+        
+        if (result.success) {
+            await logAuditAction('Bulk Deployment', `Mass deployed ${result.count} units via CSV upload.`);
+            document.getElementById('bulkPreviewModal').style.display = 'none';
+            Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
+            fetchDeployments(); // Refresh main table
+        } else {
+            Swal.fire('Error', result.message, 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Bulk creation failed', 'error');
+    }
+}
+    function openNewDeploymentModal() {
+    document.getElementById('newDepModal').style.display = 'flex';
+    // Added purchaseType to the list of cleared fields
+    ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput','purchaseType'].forEach(id => {
+        const el = document.getElementById(id);
+        if(el) el.value = '';
+    });
+    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+}
+
     window.onload = () => fetchDeployments();
+
+    
 </script>
 </body>
 </html>
