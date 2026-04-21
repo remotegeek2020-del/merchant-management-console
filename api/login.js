@@ -84,57 +84,65 @@ export default async function handler(req, res) {
             }
         }
 
-        // --- ACTION: INITIAL LOGIN ---
-        else if (action === 'login') {
-            const { data: dbUser, error: fetchError } = await supabase
-                .from('app_users')
-                .select('*')
-                .eq('email', email)
-                .single();
-
-            if (fetchError || !dbUser) {
-                error = { message: 'User not found' };
-            } else {
-                if (!dbUser.is_active) return res.status(401).json({ success: false, message: 'Account not activated.' });
-
-                const isMatch = bcrypt.compareSync(passkey, dbUser.password_hash);
-              if (isMatch) {
-    // 1. Get token from request body
-    const sentToken = req.body.deviceToken; 
-
-    // 2. Query trusted devices
-    const { data: trusted, error: trustedError } = await supabase
-        .from('trusted_devices')
+    else if (action === 'login') {
+    const { data: dbUser, error: fetchError } = await supabase
+        .from('app_users')
         .select('*')
-        .eq('userid', dbUser.userid)
-        .eq('device_token', sentToken) // If sentToken is null, this naturally fails
-        .gt('expires_at', new Date().toISOString())
-        .maybeSingle(); // Use maybeSingle to avoid 406 errors
+        .eq('email', email)
+        .single();
 
-    if (trusted && !trustedError) {
-        // SUCCESS: Device recognized.
-        user = dbUser;
+    if (fetchError || !dbUser) {
+        error = { message: 'User not found' };
     } else {
-        // NEW DEVICE: Trigger 2FA
-        const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
-                        await supabase.from('app_users').update({ tfa_code: tfaCode }).eq('userid', dbUser.userid);
+        if (!dbUser.is_active) return res.status(401).json({ success: false, message: 'Account not activated.' });
 
-                        if (process.env.POSTMARK_SERVER_TOKEN) {
-                            const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
-                            await client.sendEmail({
-                                "From": process.env.EMAIL_FROM,
-                                "To": dbUser.email,
-                                "Subject": `${tfaCode} is your PayProtec access code`,
-                                "HtmlBody": `<div style="font-family:sans-serif; padding:20px;"><h2>Verification Required</h2><p>Your code: <h1 style="letter-spacing:5px; text-align:center;">${tfaCode}</h1></p></div>`
-                            });
-                        }
-                        return res.status(200).json({ success: true, needs2FA: true, userid: dbUser.userid });
-                    }
-                } else {
-                    error = { message: 'Invalid password' };
-                }
+        const isMatch = bcrypt.compareSync(passkey, dbUser.password_hash);
+        if (isMatch) {
+            // --- SURGICAL FIX START ---
+            // Ensure we handle 'null' as a string or empty values correctly
+            const sentToken = (deviceToken && deviceToken !== "null") ? deviceToken : null;
+
+            let trusted = null;
+            if (sentToken) {
+                const { data } = await supabase
+                    .from('trusted_devices')
+                    .select('*')
+                    .eq('userid', dbUser.userid)
+                    .eq('device_token', sentToken)
+                    .gt('expires_at', new Date().toISOString())
+                    .maybeSingle();
+                trusted = data;
             }
+
+            if (trusted) {
+                // Device recognized! Update last_used for auditing
+                await supabase.from('trusted_devices')
+                    .update({ last_used: new Date().toISOString() })
+                    .eq('id', trusted.id);
+                
+                user = dbUser; // This lets the login proceed
+            } else {
+                // NEW DEVICE: Trigger 2FA
+                const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
+                await supabase.from('app_users').update({ tfa_code: tfaCode }).eq('userid', dbUser.userid);
+
+                if (process.env.POSTMARK_SERVER_TOKEN) {
+                    const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                    await client.sendEmail({
+                        "From": process.env.EMAIL_FROM,
+                        "To": dbUser.email,
+                        "Subject": `${tfaCode} is your PayProtec access code`,
+                        "HtmlBody": `<div style="font-family:sans-serif; padding:20px;"><h2>Verification Required</h2><p>Your code: <h1 style="letter-spacing:5px; text-align:center;">${tfaCode}</h1></p></div>`
+                    });
+                }
+                return res.status(200).json({ success: true, needs2FA: true, userid: dbUser.userid });
+            }
+            // --- SURGICAL FIX END ---
+        } else {
+            error = { message: 'Invalid password' };
         }
+    }
+}
 
         // --- LOG ACTIVITY ---
         await supabase.from('activity_logs').insert([{
