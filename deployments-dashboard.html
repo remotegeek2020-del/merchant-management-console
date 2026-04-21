@@ -313,7 +313,7 @@
  * AUDIT LOGGER 
  * Sends activity to the central activity_logs table
  */
-// Ensure this helper is at the top of your <script> in deployments-dashboard.html
+// 1. ADD THIS TO THE TOP OF YOUR SCRIPT TAG
 async function logAuditAction(action, details) {
     const userEmail = localStorage.getItem('pp_userid'); 
     try {
@@ -661,36 +661,25 @@ async function processReturn() {
         // Show loading state so user knows it's processing
         Swal.fire({ title: 'Deleting...', didOpen: () => Swal.showLoading() });
 
-        try {
+     try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     action: 'delete', 
-                    payload: { 
-                        deployment_id: id,     // This must be the UUID
-                        equipment_id: equipId, 
-                        merchant_id: merchantId, 
-                        merchant_name: dba, 
-                        serial_number: sn 
-                    }
+                    payload: { deployment_id: id, equipment_id: equipId, merchant_id: merchantId, merchant_name: dba, serial_number: sn }
                 })
             });
-            
             const result = await res.json();
-            
             if (result.success) {
-                await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) permanently removed.`);
-                Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
-                    .then(() => fetchDeployments(currentPage));
-                recordActivity('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
+await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) permanently removed.`);
+                Swal.fire('Deleted!', 'Ticket removed.', 'success').then(() => fetchDeployments(currentPage));
+                // CHANGE THIS LINE SURGICALLY:
+                await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
             } else { 
-                // Important: Show the actual error message from the server
-                Swal.fire('Error', result.message || 'Failed to delete record', 'error'); 
+                Swal.fire('Error', result.message || 'Failed to delete', 'error'); 
             }
-        } catch (err) { 
-            Swal.fire('Error', 'Communication failure with server', 'error'); 
-        }
+        } catch (err) { Swal.fire('Error', 'Communication failure', 'error'); }
     }
 }
     async function viewHistory(id, sn) {
