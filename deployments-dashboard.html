@@ -309,6 +309,27 @@
     let totalPages = 1;
     let lookupTimeout;
 
+    /**
+ * AUDIT LOGGER 
+ * Sends activity to the central activity_logs table
+ */
+async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
+    }
+}
+
 
 async function executeBulk(validData) {
     Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading() });
@@ -545,6 +566,7 @@ if (document.getElementById('kpi-total')) {
         const result = await res.json();
         
         if (result.success) { 
+            await logAuditAction('Deployment Updated', `Ticket ${payload.deployment_id} updated to status: ${payload.status}`);
             Swal.fire({ icon: 'success', title: 'Ticket Updated', timer: 1500, showConfirmButton: false });
             document.getElementById('editDepModal').style.display = 'none';
             await fetchDeployments(currentPage); 
@@ -650,6 +672,7 @@ async function processReturn() {
             const result = await res.json();
             
             if (result.success) {
+                await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) permanently removed.`);
                 Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
                     .then(() => fetchDeployments(currentPage));
                 recordActivity('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
@@ -902,6 +925,7 @@ async function saveDeployment(event) {
         });
         const result = await res.json();
         if (result.success) {
+            await logAuditAction('Deployment Created', `Ticket created for Merchant ID: ${payload.merchant_id} (TID: ${payload.tid || 'N/A'})`);
             Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
             document.getElementById('newDepModal').style.display = 'none';
             await fetchDeployments();
@@ -1003,6 +1027,7 @@ async function executeBulk(validData) {
         const result = await res.json();
         
         if (result.success) {
+            await logAuditAction('Bulk Deployment', `Mass deployed ${result.count} units via CSV upload.`);
             document.getElementById('bulkPreviewModal').style.display = 'none';
             Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
             fetchDeployments(); // Refresh main table
