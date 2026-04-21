@@ -195,7 +195,6 @@ if (action === 'check_rma') {
     return res.status(200).json({ success: true, data: data || null });
 }
        // --- ACTION: DELETE (Fixed for Foreign Key Constraints) ---
-// api/deployments.js -> action === 'delete' block
 if (action === 'delete') {
     const { deployment_id, equipment_id, merchant_id, merchant_name, serial_number } = payload || {};
 
@@ -204,8 +203,14 @@ if (action === 'delete') {
     }
 
     try {
-        // 1. DELETE LINKED RMA FIRST
-        await supabase.from('returns').delete().eq('deployment_id', deployment_id);
+        // 1. DELETE LINKED RMA FIRST (Fixes the Foreign Key Error)
+        // This removes the "child" record so we can delete the "parent" deployment
+        const { error: rmaDeleteError } = await supabase
+            .from('returns')
+            .delete()
+            .eq('deployment_id', deployment_id);
+
+        if (rmaDeleteError) throw rmaDeleteError;
 
         // 2. Reset Equipment status
         if (equipment_id) {
@@ -215,6 +220,7 @@ if (action === 'delete') {
                 merchant_id: null 
             }).eq('id', equipment_id);
 
+            // Log the reset
             await supabase.from('equipment_logs').insert([{
                 equipment_id: equipment_id,
                 merchant_id: merchant_id,
@@ -225,8 +231,7 @@ if (action === 'delete') {
             }]);
         }
 
-        // --- SURGICAL ADDITION: ACTUAL DELETION ---
-        // This is the part that was likely missing, causing the "failure" message
+        // 3. NOW DELETE THE DEPLOYMENT (The "Parent" record)
         const { error: deleteError } = await supabase
             .from('deployments')
             .delete()
@@ -238,7 +243,7 @@ if (action === 'delete') {
 
     } catch (err) {
         console.error("Delete Operation Failed:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({ success: false, message: "Database error: " + err.message });
     }
 }
         
@@ -313,7 +318,6 @@ if (action === 'delete') {
         }
 
    // Inside api/deployments.js -> if (action === 'create')
-// Inside api/deployments.js -> if (action === 'create')
 if (action === 'create') {
     const { 
         merchant_id, 
@@ -325,71 +329,64 @@ if (action === 'create') {
         purchase_type 
     } = payload;
 
-    try {
-        // 1. Verify equipment is still 'stocked'
-        const { data: checkEquip, error: checkError } = await supabase
-            .from('equipments')
-            .select('status, serial_number')
-            .eq('id', equipment_id)
-            .single();
+    // 1. Verify equipment is still 'stocked'
+    const { data: checkEquip, error: checkError } = await supabase
+        .from('equipments')
+        .select('status, serial_number')
+        .eq('id', equipment_id)
+        .single();
 
-        if (checkError || !checkEquip) throw new Error("Equipment not found.");
-        
-        if (checkEquip.status !== 'stocked') {
-            return res.status(400).json({ 
-                success: false, 
-                message: `Conflict: Serial ${checkEquip.serial_number} is no longer in stock.` 
-            });
-        }
-
-        // 2. Fetch Merchant DBA Name for logging
-        const { data: merchantData } = await supabase
-            .from('merchants')
-            .select('dba_name')
-            .eq('id', merchant_id)
-            .single();
-        
-        const dbaName = merchantData?.dba_name || 'Client Site';
-
-        // 3. Insert the Deployment Ticket
-        const { data: newDep, error: depError } = await supabase
-            .from('deployments')
-            .insert([{ 
-                merchant_id, 
-                equipment_id, 
-                tid, 
-                tracking_id, 
-                target_deployment_date: target_date, 
-                notes, 
-                purchase_type, 
-                status: 'Open' 
-            }])
-            .select();
-
-        if (depError) throw depError;
-
-        // 4. Update equipment status to 'deployed'
-        await supabase.from('equipments')
-            .update({ status: 'deployed', current_location: dbaName, merchant_id })
-            .eq('id', equipment_id);
-
-        // 5. Log the movement in equipment history
-        await supabase.from('equipment_logs').insert([{
-            equipment_id: equipment_id, 
-            merchant_id: merchant_id, 
-            action: 'Deployed', 
-            from_location: 'Warsaw Office', 
-            to_location: dbaName, 
-            notes: `Deployment Created. Type: ${purchase_type || 'N/A'}`
-        }]);
-
-        // --- CRITICAL FIX: RETURN SUCCESS JSON ---
-        return res.status(200).json({ success: true, data: newDep });
-
-    } catch (err) {
-        console.error("Create Deployment Failed:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+    if (checkError || !checkEquip) throw new Error("Equipment not found.");
+    
+    if (checkEquip.status !== 'stocked') {
+        return res.status(400).json({ 
+            success: false, 
+            message: `Conflict: Serial ${checkEquip.serial_number} was just deployed by another user.` 
+        });
     }
+
+    // 2. FETCH MERCHANT NAME (Fixes the 'dbaName is not defined' error)
+    const { data: merchantData } = await supabase
+        .from('merchants')
+        .select('dba_name')
+        .eq('id', merchant_id)
+        .single();
+    
+    const dbaName = merchantData?.dba_name || 'Client Site'; // Variable now defined correctly
+
+    // 3. Insert deployment with purchase_type
+    const { data: newDep, error: depError } = await supabase
+        .from('deployments')
+        .insert([{ 
+            merchant_id, 
+            equipment_id, 
+            tid, 
+            tracking_id, 
+            target_deployment_date: target_date, 
+            notes, 
+            purchase_type, // Saved to the deployments table
+            status: 'Open' 
+        }])
+        .select();
+
+    if (depError) throw depError;
+
+    // 4. Update equipment status
+    await supabase.from('equipments')
+        .update({ status: 'deployed', current_location: dbaName, merchant_id })
+        .eq('id', equipment_id);
+
+    // 5. Log the event
+    await supabase.from('equipment_logs').insert([{
+        equipment_id, 
+        merchant_id, 
+        action: 'Deployed', 
+        from_location: 'Warsaw Office', 
+        to_location: dbaName, 
+        notes: `Deployment Created. Type: ${purchase_type || 'N/A'}`
+    }]);
+
+    return res.status(200).json({ success: true, data: newDep });
 }
       // --- ACTION: RETURN TO OFFICE (Enhanced for 4 States) ---
 // --- ACTION: RETURN TO OFFICE (Robust Version) ---
