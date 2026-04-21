@@ -169,10 +169,10 @@ if (isMatch) {
         access_merchants: user.access_merchants
     };
 
-    return res.status(200).json({ 
+  return res.status(200).json({ 
         success: true, 
         user: cleanUser, 
-        newDeviceToken: (action === 'verify2FA' && remember) ? req.body.newDeviceToken : null 
+        newDeviceToken: req.body.newDeviceToken || null // This sends it to script.js to save
     });
 
   } catch (err) {
