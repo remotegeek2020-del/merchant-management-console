@@ -60,16 +60,30 @@ export default async function handler(req, res) {
 
     // --- ACTION: VERIFY 2FA CODE ---
     else if (action === 'verify2FA') {
+      // 1. Fetch the user from DB to check the stored code
       const { data: tfaUser } = await supabase.from('app_users').select('*').eq('userid', userId).single();
       
+      // FIX: Check 'tfaUser' (the data we just fetched), not 'user'
       if (tfaUser && tfaUser.tfa_code === code) {
         let newDeviceToken = null;
+
+        // 2. If 'Remember Me' is checked, generate and save the token
         if (remember) {
           newDeviceToken = crypto.randomUUID();
-          await supabase.from('trusted_devices').insert({ userid: userId, device_token: newDeviceToken });
+          await supabase.from('trusted_devices').insert({ 
+            userid: userId, 
+            device_token: newDeviceToken 
+          });
         }
+
+        // 3. Clear the 2FA code so it cannot be reused
         await supabase.from('app_users').update({ tfa_code: null }).eq('userid', userId);
+        
+        // 4. Set the 'user' variable so the cleanUser logic at the bottom can process it
         user = tfaUser;
+        
+        // 5. Explicitly attach the newDeviceToken to the response for the frontend
+        req.body.newDeviceToken = newDeviceToken; 
       } else {
         return res.status(401).json({ success: false, message: 'Invalid verification code.' });
       }
