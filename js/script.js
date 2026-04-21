@@ -159,22 +159,39 @@ async function handleManualLogin() {
                             </label>
                         </div>
                     `,
-                    didOpen: () => {
-                        const inputs = document.querySelectorAll('.tfa-box');
-                        inputs[0].focus();
-                        
-                        // Handle auto-jumping and backspacing
-                        inputs.forEach((input, index) => {
-                            input.addEventListener('input', (e) => {
-                                if (e.target.value && index < 5) inputs[index + 1].focus();
-                            });
-                            input.addEventListener('keydown', (e) => {
-                                if (e.key === 'Backspace' && !e.target.value && index > 0) {
-                                    inputs[index - 1].focus();
-                                }
-                            });
-                        });
-                    },
+                    // Inside handleManualLogin -> Swal.fire -> didOpen
+didOpen: () => {
+    const inputs = document.querySelectorAll('.tfa-box');
+    inputs[0].focus();
+    
+    // NEW: Handle Paste Event
+    inputs[0].addEventListener('paste', (e) => {
+        e.preventDefault();
+        const data = e.clipboardData.getData('text').trim();
+        // Check if the pasted content is numeric and at least 6 digits
+        if (/^\d{6}$/.test(data)) {
+            const digits = data.split('');
+            digits.forEach((digit, i) => {
+                if (inputs[i]) inputs[i].value = digit;
+            });
+            // Focus the last box after pasting
+            inputs[5].focus();
+        }
+    });
+
+    // Handle auto-jumping and backspacing (Keep your existing logic)
+    inputs.forEach((input, index) => {
+        input.addEventListener('input', (e) => {
+            // Only jump if a number was entered (prevents jumping on delete)
+            if (e.target.value && index < 5) inputs[index + 1].focus();
+        });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !e.target.value && index > 0) {
+                inputs[index - 1].focus();
+            }
+        });
+    });
+}
                     preConfirm: () => {
                         // Collect all 6 values into a single string
                         const code = Array.from(document.querySelectorAll('.tfa-box')).map(i => i.value).join('');
