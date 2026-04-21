@@ -904,6 +904,7 @@ async function saveDeployment(event) {
             Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
             document.getElementById('newDepModal').style.display = 'none';
             await fetchDeployments();
+            recordActivity('Deployment Created', `Ticket created for Merchant ID: ${payload.merchant_id}`);
         } else { throw new Error(result.message); }
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
 }
