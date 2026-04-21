@@ -313,6 +313,7 @@
  * AUDIT LOGGER 
  * Sends activity to the central activity_logs table
  */
+// Ensure this helper is at the top of your <script> in deployments-dashboard.html
 async function logAuditAction(action, details) {
     const userEmail = localStorage.getItem('pp_userid'); 
     try {
@@ -330,6 +331,13 @@ async function logAuditAction(action, details) {
     }
 }
 
+// Update your confirmDelete success block:
+if (result.success) {
+    Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
+        .then(() => fetchDeployments(currentPage));
+    // CHANGE THIS LINE:
+    await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) removed.`);
+}
 
 async function executeBulk(validData) {
     Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading() });
