@@ -39,27 +39,24 @@ export default async function handler(req, res) {
         
       // Replace the model configuration (approx. lines 44-51)
 // Locate and replace approx. lines 44-55
-const model = genAI.getGenerativeModel({
-    model: "gemini-3-flash",
+// 1. Update to Gemini 3 Flash (approx. line 45)
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-3-flash", // Using the latest Gemini 3 model
     generationConfig: {
         temperature: 0,
         responseMimeType: "application/json",
     }
 });
 
+// 2. Refine the prompt for Gemini 3's multimodal engine (approx. line 56)
 const prompt = `
-    TASK: EXTRACT ALL HARDWARE SERIAL NUMBERS AND MODELS.
-
-    1. Scan the provided document for serial number patterns: 18125..., X5C8..., P125..., P325..., P524..., P17B...
-    2. Identify the corresponding model for each serial (e.g., "Valor VL550", "Dejavoo P3").
-    3. Return ONLY a valid JSON object.
-
-    REQUIRED FORMAT:
-    {
-      "items": [
-        {"serial_number": "SN_HERE", "terminal_type": "MODEL_HERE"}
-      ]
-    }
+    TASK: Multimodal Inventory Extraction.
+    1. Scan the provided document for all hardware serial numbers (look for 18125..., X5C8..., P125..., etc).
+    2. Extract the specific Model Name for each serial (e.g., Pax A920, Dejavoo P3).
+    3. Return ONLY a valid JSON object. Do not include markdown formatting.
+    
+    JSON STRUCTURE:
+    {"items": [{"serial_number": "STRING", "terminal_type": "STRING"}]}
 `;
 
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
