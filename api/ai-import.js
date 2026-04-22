@@ -39,23 +39,27 @@ export default async function handler(req, res) {
         
       // Replace the model configuration (approx. lines 44-51)
 // Locate and replace approx. lines 44-55
-const model = genAI.getGenerativeModel({ 
-    model: "gemini-3-flash-preview", // The latest high-performance model
+const model = genAI.getGenerativeModel({
+    model: "gemini-3-flash",
     generationConfig: {
         temperature: 0,
-        responseMimeType: "application/json", // Forces JSON output
+        responseMimeType: "application/json",
     }
 });
 
 const prompt = `
-    EXTRACT ALL SERIAL NUMBERS AND MODELS. 
-    
-    Scan the document for these patterns: 
-    - Serial Numbers: 18125..., X5C8..., P125..., P325..., P524..., P17B...
-    - Models: "Valor VL550", "Valor VP800", "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17".
+    TASK: EXTRACT ALL HARDWARE SERIAL NUMBERS AND MODELS.
 
-    Return ONLY a JSON object with this exact key:
-    {"items": [{"serial_number": "SN_STRING", "terminal_type": "MODEL_STRING"}]}
+    1. Scan the provided document for serial number patterns: 18125..., X5C8..., P125..., P325..., P524..., P17B...
+    2. Identify the corresponding model for each serial (e.g., "Valor VL550", "Dejavoo P3").
+    3. Return ONLY a valid JSON object.
+
+    REQUIRED FORMAT:
+    {
+      "items": [
+        {"serial_number": "SN_HERE", "terminal_type": "MODEL_HERE"}
+      ]
+    }
 `;
 
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
