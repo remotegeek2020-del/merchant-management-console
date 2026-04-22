@@ -414,13 +414,13 @@ async function handleAIFile(input) {
  */
 function confirmAIImport(extractedData) {
     let tableHtml = `
-        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
             <table class="slds-table slds-table_bordered slds-table_cell-buffer" style="font-size: 12px;">
                 <thead>
                     <tr class="slds-line-height_reset">
                         <th scope="col">Model</th>
                         <th scope="col">Serial Number</th>
-                        <th scope="col">Action</th>
+                        <th scope="col" style="width:50px;"></th>
                     </tr>
                 </thead>
                 <tbody id="ai-review-body">
@@ -429,10 +429,10 @@ function confirmAIImport(extractedData) {
     extractedData.forEach((item, index) => {
         tableHtml += `
             <tr id="ai-row-${index}">
-                <td><input type="text" id="ai-model-${index}" value="${item.terminal_type}" class="slds-input" style="height:30px; font-size:12px;"></td>
-                <td><input type="text" id="ai-serial-${index}" value="${item.serial_number}" class="slds-input" style="height:30px; font-size:12px;"></td>
-                <td><button onclick="document.getElementById('ai-row-${index}').remove()" class="slds-button slds-button_icon slds-button_icon-error" title="Remove">
-                    <span class="material-icons" style="font-size:16px;">delete</span>
+                <td><input type="text" id="ai-model-${index}" value="${item.terminal_type}" class="slds-input" style="height:32px;"></td>
+                <td><input type="text" id="ai-serial-${index}" value="${item.serial_number}" class="slds-input" style="height:32px;"></td>
+                <td><button onclick="this.closest('tr').remove()" class="slds-button slds-button_icon slds-button_icon-error">
+                    <span class="material-icons" style="font-size:18px;">delete</span>
                 </button></td>
             </tr>
         `;
@@ -441,63 +441,44 @@ function confirmAIImport(extractedData) {
     tableHtml += `</tbody></table></div>`;
 
     Swal.fire({
-        title: 'Review Extracted Inventory',
+        title: 'Review Scanned Inventory',
         html: tableHtml,
-        width: '700px',
+        width: '800px',
         showCancelButton: true,
-        confirmButtonText: 'Confirm & Upload All',
+        confirmButtonText: 'Save All to Inventory',
         confirmButtonColor: '#004990',
-        cancelButtonText: 'Discard',
         preConfirm: () => {
-            const finalData = [];
+            const finalItems = [];
             extractedData.forEach((_, index) => {
-                const modelInput = document.getElementById(`ai-model-${index}`);
-                const serialInput = document.getElementById(`ai-serial-${index}`);
-                if (modelInput && serialInput) {
-                    finalData.push({
-                        terminal_type: modelInput.value,
-                        serial_number: serialInput.value
-                    });
+                const modelEl = document.getElementById(`ai-model-${index}`);
+                const serialEl = document.getElementById(`ai-serial-${index}`);
+                if (modelEl && serialEl) {
+                    finalItems.push({ terminal_type: modelEl.value, serial_number: serialEl.value });
                 }
             });
-            if (finalData.length === 0) {
-                Swal.showValidationMessage('No items to import.');
-                return false;
-            }
-            return finalData;
+            return finalItems;
         }
     }).then((result) => {
-        if (result.isConfirmed) {
-            processFinalImport(result.value);
-        }
+        if (result.isConfirmed) processFinalImport(result.value);
     });
 }
 
 async function processFinalImport(items) {
-    Swal.fire({ title: 'Syncing with Stock...', text: `Importing ${items.length} units...`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
-    try {
-        let successCount = 0;
-        for (const item of items) {
-            const res = await fetch('/api/equipments', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'create', 
-                    payload: { ...item, status: 'stocked', current_location: 'Warsaw Office', received_date: new Date().toISOString().split('T')[0] } 
-                })
-            });
-            if ((await res.json()).success) {
-                successCount++;
-                await logAuditAction('AI Inventory Import', `Serial ${item.serial_number} added via Gemini 3 Flash.`);
-            }
+    Swal.fire({ title: 'Syncing...', text: `Adding ${items.length} units to stock`, allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    let count = 0;
+    for (const item of items) {
+        const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', payload: { ...item, status: 'stocked', current_location: 'Warsaw Office' } })
+        });
+        if ((await res.json()).success) {
+            count++;
+            await logAuditAction('AI Import', `Added Serial ${item.serial_number}`);
         }
-        Swal.fire('Complete', `Successfully added ${successCount} units.`, 'success').then(() => fetchInventory());
-    } catch (err) {
-        Swal.fire('Error', 'Communication lost during bulk sync.', 'error');
     }
+    Swal.fire('Complete', `Imported ${count} units successfully.`, 'success').then(() => fetchInventory());
 }
-
     // --- PDF LOGIC ---
     function printPDFReport() {
         const today = new Date().toLocaleDateString();
