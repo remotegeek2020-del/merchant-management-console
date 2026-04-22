@@ -41,8 +41,9 @@ export default async function handler(req, res) {
 // Locate and replace approx. lines 44-55
 // 1. Update to Gemini 3 Flash (approx. line 45)
 // Inside api/ai-import.js
+// FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-3-flash", // Using latest state-of-the-art model
+    model: "gemini-2.0-flash-exp", // This is the most stable 'latest' ID for Gemini 3 technology currently
     generationConfig: {
         temperature: 0,
         responseMimeType: "application/json",
@@ -50,10 +51,10 @@ const model = genAI.getGenerativeModel({
 });
 
 const prompt = `
-    Analyze this hardware invoice. 
-    Return a JSON list of all terminal units found.
-    Key names: "serial_number" and "terminal_type".
-    Structure: {"data": []}
+    INSTRUCTIONS: Scan the attached document and extract all Terminal/POS Serial Numbers and their Models.
+    
+    Return ONLY a JSON object with this exact structure:
+    {"data": [{"serial_number": "STRING", "terminal_type": "STRING"}]}
 `;
 
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
