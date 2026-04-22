@@ -304,6 +304,72 @@
     let totalItems = 0;
     let selectedId = null;
 
+    function toggleAgent() {
+    const sidebar = document.getElementById('aiAgentSidebar');
+    sidebar.style.display = (sidebar.style.display === 'none') ? 'flex' : 'none';
+}
+
+// Override your current triggerAIUpload function
+function triggerAIUpload() {
+    toggleAgent();
+}
+
+async function handleAgentFile(input) {
+    if (!input.files || !input.files[0]) return;
+    const file = input.files[0];
+    const chat = document.getElementById('agentChat');
+    const status = document.getElementById('agentStatus');
+
+    // 1. Show User Message
+    chat.innerHTML += `<div style="align-self:flex-end; background:var(--pp-accent); color:white; padding:10px; border-radius:12px; font-size:13px;">Uploaded: ${file.name}</div>`;
+    status.innerText = "Gemini 3 is analyzing...";
+    
+    const reader = new FileReader();
+    reader.onload = async () => {
+        const base64 = reader.result.split(',')[1];
+        try {
+            const res = await fetch('/api/ai-import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileBase64: base64, model: 'gemini-3-flash' }) // Target the latest model
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                renderAgentReview(result.data);
+                status.innerText = "Extraction complete.";
+            } else {
+                chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;">Error: ${result.message}</div>`;
+                status.innerText = "Error encountered.";
+            }
+        } catch (err) {
+            status.innerText = "Connection failed.";
+        }
+    };
+    reader.readAsDataURL(file);
+}
+
+function renderAgentReview(items) {
+    const chat = document.getElementById('agentChat');
+    let html = `
+        <div style="background:white; padding:15px; border-radius:12px; border:1px solid var(--pp-blue); font-size:12px;">
+            <strong style="display:block; margin-bottom:10px; color:var(--pp-blue);">Review Found Units:</strong>
+            <table style="width:100%; border-collapse:collapse;">
+                ${items.map((item, i) => `
+                    <tr style="border-bottom:1px solid #f1f5f9;">
+                        <td style="padding:5px 0;"><b>${item.terminal_type}</b><br><span style="color:#64748b;">${item.serial_number}</span></td>
+                    </tr>
+                `).join('')}
+            </table>
+            <button onclick='processFinalImport(${JSON.stringify(items)})' class="slds-button slds-button_brand slds-size_1-of-1" style="margin-top:15px; background:#166534; border:none;">
+                CONFIRM & ADD TO STOCK
+            </button>
+        </div>
+    `;
+    chat.innerHTML += html;
+    chat.scrollTop = chat.scrollHeight;
+}
+
     /**
  * PROCESS FINAL IMPORT
  * Pushes reviewed AI data to the database
@@ -1048,5 +1114,30 @@ async function fetchCombinedLogs() {
 
     window.onload = fetchInventory;
 </script>
+
+    <div id="aiAgentSidebar" style="display:none; position:fixed; right:0; top:0; width:450px; height:100vh; background:white; box-shadow:-5px 0 25px rgba(0,0,0,0.15); z-index:11000; flex-direction:column;">
+    <div style="padding:20px; background:var(--pp-blue); color:white; display:flex; justify-content:space-between; align-items:center;">
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="material-icons">auto_awesome</span>
+            <strong style="font-size:1.1rem;">Inventory Agent</strong>
+        </div>
+        <button onclick="toggleAgent()" style="background:none; border:none; color:white; cursor:pointer;"><span class="material-icons">close</span></button>
+    </div>
+    
+    <div id="agentChat" style="flex:1; overflow-y:auto; padding:20px; background:#f8fafc; display:flex; flex-direction:column; gap:15px;">
+        <div style="background:white; padding:12px; border-radius:12px; border:1px solid #e2e8f0; font-size:13px; color:#475569;">
+            Hello! Drop your vendor invoice PDF here. I'll extract the models and serial numbers for you to review.
+        </div>
+    </div>
+
+    <div style="padding:20px; border-top:1px solid #e2e8f0;">
+        <input type="file" id="agentFileInput" accept="application/pdf" style="display:none;" onchange="handleAgentFile(this)">
+        <button onclick="document.getElementById('agentFileInput').click()" class="slds-button slds-button_outline-brand slds-size_1-of-1" style="border-radius:10px; margin-bottom:10px;">
+            <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">attach_file</span>
+            UPLOAD INVOICE
+        </button>
+        <div id="agentStatus" style="font-size:11px; text-align:center; color:#94a3b8;">Ready for file...</div>
+    </div>
+</div>
 </body>
 </html>
