@@ -536,29 +536,7 @@ function confirmAIImport(extractedData) {
     });
 }
 
-/**
- * STAGE 2: Database Sync
- * Pushes the approved data into your equipments table
- */
-async function processFinalImport(items) {
-    Swal.fire({ title: 'Syncing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    let count = 0;
-    for (const item of items) {
-        const res = await fetch('/api/equipments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'create', 
-                payload: { ...item, status: 'stocked', current_location: 'Warsaw Office', received_date: new Date().toISOString().split('T')[0] } 
-            })
-        });
-        if ((await res.json()).success) {
-            count++;
-            await logAuditAction('AI Import', `Serial ${item.serial_number} added via Gemini 3.`);
-        }
-    }
-    Swal.fire('Complete', `Added ${count} units successfully.`, 'success').then(() => fetchInventory());
-}
+
     function printPDFReport() {
         const today = new Date().toLocaleDateString();
         
