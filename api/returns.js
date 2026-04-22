@@ -73,35 +73,52 @@ if (action === 'getMonthlyReport') {
     });
 }
 
-     if (action === 'complete_return') {
+    // Inside api/returns.js -> action === 'complete_return'
+if (action === 'complete_return') {
     const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
     if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
 
-    // 1. Update the Returns table with the specific condition and destination
+    // --- SURGICAL SYNC START ---
+    // 1. Fetch the linked deployment_id before closing the RMA
+    const { data: rmaData } = await supabase
+        .from('returns')
+        .select('deployment_id')
+        .eq('id', rmaId)
+        .single();
+    
+    if (rmaData?.deployment_id) {
+        // 2. Automatically Close the Deployment Ticket since the Hardware is back
+        await supabase
+            .from('deployments')
+            .update({ status: 'Closed' }) 
+            .eq('id', rmaData.deployment_id);
+    }
+    // --- SURGICAL SYNC END ---
+
+    // 3. Original Logic: Close RMA
     await supabase.from('returns').update({ 
-        status: 'closed',
-        condition: condition, // e.g., 'Working (Back to Stock)'
-        destination: destination // e.g., 'Warsaw Office'
+        status: 'closed', // Standardizing to match your 'list' filter if needed
+        condition: condition,
+        destination: destination
     }).eq('id', rmaId);
 
-    // 2. Map condition to internal equipment status
-    // If it's working, it's 'stocked'. Otherwise, it remains 'repairing' or similar.
-    const finalStatus = (condition.includes('Working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
+    // 4. Original Logic: Update Equipment status
+    const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
     
     await supabase.from('equipments').update({ 
         status: finalStatus, 
         current_location: destination,
-        merchant_id: null // Ensure it's unlinked from merchant
+        merchant_id: null 
     }).eq('id', equipment_id);
 
-    // 3. Log the final history event
+    // 5. Original Logic: Log history
     await supabase.from('equipment_logs').insert([{
         equipment_id,
         merchant_id, 
         action: 'RMA Completed',
         from_location: 'In Transit / RMA',
         to_location: destination,
-        notes: `Inspection finished. Unit marked as ${condition} and moved to ${destination}.`
+        notes: `Inspection finished. Unit marked as ${condition}. Deployment ticket auto-closed.`
     }]);
 
     return res.status(200).json({ success: true });
