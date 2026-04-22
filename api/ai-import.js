@@ -39,7 +39,7 @@ export default async function handler(req, res) {
         
       // Replace the model configuration (approx. lines 44-51)
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-3-flash-preview", // High-accuracy model for complex invoice layouts
+    model: "gemini-1.5-pro", // High-accuracy model for complex invoice layouts
     generationConfig: {
         temperature: 0.1,
         responseMimeType: "application/json",
