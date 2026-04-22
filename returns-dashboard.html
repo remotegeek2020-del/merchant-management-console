@@ -86,6 +86,23 @@
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <script>
 
+    async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
+    }
+}
+
     
 
     async function viewHistory(id, sn) {
@@ -184,6 +201,7 @@
                 
                 const result = await res.json();
                 if (result.success) {
+                    await logAuditAction('RMA Completed', `Equipment restocked to ${destination}. Condition: ${condition}`);
                     Swal.fire({
                         icon: 'success',
                         title: 'Restocked Successfully',
