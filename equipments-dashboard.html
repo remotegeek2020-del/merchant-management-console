@@ -375,55 +375,47 @@ function renderAgentReview(items) {
     chat.scrollTop = chat.scrollHeight;
 }
 
-    /**
- * PROCESS FINAL IMPORT
- * Pushes reviewed AI data to the database
- */
-async function processFinalImport(items) {
-    Swal.fire({ 
-        title: 'Syncing with Stock...', 
-        text: `Writing ${items.length} units to global ledger`, 
-        allowOutsideClick: false, 
-        didOpen: () => { Swal.showLoading(); } 
-    });
+ async function processFinalImport(items) {
+    // Show a loading state inside the sidebar or via Swal
+    const status = document.getElementById('agentStatus');
+    status.innerHTML = `<span class="material-icons" style="animation:spin 2s linear infinite; font-size:12px; vertical-align:middle;">sync</span> Saving to database...`;
 
     try {
         let successCount = 0;
-        let failCount = 0;
-
         for (const item of items) {
-            const payload = {
-                serial_number: item.serial_number,
-                terminal_type: item.terminal_type,
-                status: 'stocked',
-                current_location: 'Warsaw Office',
-                received_date: new Date().toISOString().split('T')[0]
-            };
-
             const res = await fetch('/api/equipments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'create', payload })
+                body: JSON.stringify({ 
+                    action: 'create', 
+                    payload: { 
+                        serial_number: item.serial_number,
+                        terminal_type: item.terminal_type,
+                        status: 'stocked',
+                        current_location: 'Warsaw Office',
+                        received_date: new Date().toISOString().split('T')[0]
+                    } 
+                })
             });
-
             const result = await res.json();
             if (result.success) {
                 successCount++;
-                await logAuditAction('AI Inventory Import', `Serial ${item.serial_number} added via Gemini 3 Flash.`);
-            } else {
-                failCount++;
+                // Record the audit log for each new item
+                await logAuditAction('AI Inventory Import', `Serial ${item.serial_number} added via AI Agent.`);
             }
         }
 
-        Swal.fire({
-            icon: successCount > 0 ? 'success' : 'error',
-            title: 'Import Complete',
-            text: `Successfully added ${successCount} units. ${failCount > 0 ? failCount + ' failed (duplicates).' : ''}`,
-            confirmButtonColor: '#004990'
-        }).then(() => fetchInventory());
+        // Final Feedback
+        const chat = document.getElementById('agentChat');
+        chat.innerHTML += `<div style="background:#dcfce7; color:#166534; padding:12px; border-radius:12px; font-size:13px; border:1px solid #bbf7d0;">
+            <strong>Success!</strong> ${successCount} units have been added to the Warsaw Office inventory.
+        </div>`;
+        status.innerText = "Import complete.";
+        fetchInventory(); // Refresh the main table
 
     } catch (err) {
-        Swal.fire('Import Error', 'Connection lost during sync.', 'error');
+        status.innerText = "Database sync failed.";
+        console.error(err);
     }
 }
 
