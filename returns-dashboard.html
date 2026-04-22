@@ -175,48 +175,60 @@
         } catch (err) { console.error("Fetch Error:", err); }
     }
 
-    async function finalizeRMA(id, equipment_id, condition, destination) {
-        const confirm = await Swal.fire({
-            title: 'Complete Inspection?',
-            text: `Physically verify unit. Move to ${destination} and set status to ${condition === 'Defective' ? 'Repairing' : 'Stocked'}?`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#16a34a',
-            cancelButtonColor: '#64748b',
-            confirmButtonText: 'Yes, Restock Unit'
-        });
+  async function finalizeRMA(id, equipment_id, condition, destination) {
+    // Force correct labels for Warsaw Office if current condition is 'Working'
+    const finalCondition = (destination === 'Warsaw Office') ? 'Working (Back to Stock)' : condition;
+    const finalDestination = (destination === 'Warsaw Office') ? 'Warsaw Office' : destination;
 
-        if (confirm.isConfirmed) {
-            Swal.fire({ title: 'Updating Inventory...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    const confirm = await Swal.fire({
+        title: 'Complete Inspection?',
+        // Updated text to reflect specific destination and condition
+        text: `Physically verify unit. Move to ${finalDestination} and set condition to ${finalCondition}?`,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#16a34a',
+        cancelButtonColor: '#64748b',
+        confirmButtonText: 'Yes, Restock Unit'
+    });
 
-            try {
-                const res = await fetch('/api/returns', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'complete_return', 
-                        payload: { id, equipment_id, condition, destination } 
-                    })
-                });
+    if (confirm.isConfirmed) {
+        Swal.fire({ title: 'Updating Inventory...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/returns', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'complete_return', 
+                    payload: { 
+                        id, 
+                        equipment_id, 
+                        condition: finalCondition, // Pass the corrected label
+                        destination: finalDestination // Pass the corrected destination
+                    } 
+                })
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                // Log the action with the corrected labels for the audit trail
+                await logAuditAction('RMA Completed', `Equipment restocked to ${finalDestination}. Condition: ${finalCondition}`);
                 
-                const result = await res.json();
-                if (result.success) {
-                    await logAuditAction('RMA Completed', `Equipment restocked to ${destination}. Condition: ${condition}`);
-                    Swal.fire({
-                        icon: 'success',
-                        title: 'Restocked Successfully',
-                        text: 'The equipment is now back in live inventory.',
-                        timer: 2000,
-                        showConfirmButton: false
-                    }).then(() => fetchReturns());
-                } else {
-                    throw new Error(result.message);
-                }
-            } catch (err) {
-                Swal.fire('Error', 'Failed to complete return: ' + err.message, 'error');
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Restocked Successfully',
+                    text: 'The equipment is now back in live inventory.',
+                    timer: 2000,
+                    showConfirmButton: false
+                }).then(() => fetchReturns());
+            } else {
+                throw new Error(result.message);
             }
+        } catch (err) {
+            Swal.fire('Error', 'Failed to complete return: ' + err.message, 'error');
         }
     }
+}
 
     window.onload = fetchReturns;
 </script>
