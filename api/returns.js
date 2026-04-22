@@ -73,28 +73,39 @@ if (action === 'getMonthlyReport') {
     });
 }
 
-        if (action === 'complete_return') {
-            const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
-            if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
+     if (action === 'complete_return') {
+    const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
+    if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
 
-            await supabase.from('returns').update({ status: 'closed' }).eq('id', rmaId);
+    // 1. Update the Returns table with the specific condition and destination
+    await supabase.from('returns').update({ 
+        status: 'closed',
+        condition: condition, // e.g., 'Working (Back to Stock)'
+        destination: destination // e.g., 'Warsaw Office'
+    }).eq('id', rmaId);
 
-            const finalStatus = condition === 'Defective' ? 'repairing' : 'stocked';
-            await supabase.from('equipments').update({ status: finalStatus, current_location: destination }).eq('id', equipment_id);
+    // 2. Map condition to internal equipment status
+    // If it's working, it's 'stocked'. Otherwise, it remains 'repairing' or similar.
+    const finalStatus = (condition.includes('Working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
+    
+    await supabase.from('equipments').update({ 
+        status: finalStatus, 
+        current_location: destination,
+        merchant_id: null // Ensure it's unlinked from merchant
+    }).eq('id', equipment_id);
 
-            // Final history log linked to the merchant
-            await supabase.from('equipment_logs').insert([{
-                equipment_id,
-                merchant_id, // Link for merchant dashboard history
-                action: 'RMA Completed',
-                from_location: 'In Transit / RMA',
-                to_location: destination,
-                notes: `Inspection finished. Unit marked as ${condition}.`
-            }]);
+    // 3. Log the final history event
+    await supabase.from('equipment_logs').insert([{
+        equipment_id,
+        merchant_id, 
+        action: 'RMA Completed',
+        from_location: 'In Transit / RMA',
+        to_location: destination,
+        notes: `Inspection finished. Unit marked as ${condition} and moved to ${destination}.`
+    }]);
 
-            return res.status(200).json({ success: true });
-        }
-
+    return res.status(200).json({ success: true });
+}
         if (action === 'getHistory') {
             const targetId = body.equipment_id; 
             const { data, error } = await supabase.from('equipment_logs').select('*').eq('equipment_id', targetId).order('created_at', { ascending: false });
