@@ -42,8 +42,9 @@ export default async function handler(req, res) {
 // 1. Update to Gemini 3 Flash (approx. line 45)
 // Inside api/ai-import.js
 // FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
+// FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-exp", // This is the most stable 'latest' ID for Gemini 3 technology currently
+    model: "gemini-3.1-flash-lite", // This is the most stable 'latest' ID for Gemini 3 technology currently
     generationConfig: {
         temperature: 0,
         responseMimeType: "application/json",
@@ -56,7 +57,6 @@ const prompt = `
     Return ONLY a JSON object with this exact structure:
     {"data": [{"serial_number": "STRING", "terminal_type": "STRING"}]}
 `;
-
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
         const aiRequest = callGeminiWithRetry(model, [
             { text: prompt },
