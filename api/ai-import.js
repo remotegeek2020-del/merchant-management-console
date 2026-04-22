@@ -37,23 +37,26 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-      const model = genAI.getGenerativeModel({ 
-    model: "gemini-3-flash-preview", // Updated to latest Gemini 3 model
+      // Replace the model configuration (approx. lines 44-51)
+const model = genAI.getGenerativeModel({ 
+    model: "gemini-3-flash-preview", // High-accuracy model for complex invoice layouts
     generationConfig: {
-        temperature: 0,
+        temperature: 0.1,
         responseMimeType: "application/json",
     }
 });
-        // Prompt optimized for speed and strict JSON structure
-        const prompt = `
-            EXTRACT ALL SERIAL NUMBERS.
-            Patterns: 18125..., X5C8..., P125..., P325..., P524..., P17B...
-            
-            Return JSON in this format:
-            {"items": [{"sn": "SERIAL", "type": "MODEL"}]}
-            
-            Models to use: "Dejavoo P1", "Dejavoo P3", "Dejavoo P5", "Dejavoo P17", "Valor VL550", "Valor VP800".
-        `;
+
+const prompt = `
+    SCAN THIS INVOICE AND EXTRACT ALL TERMINAL MODELS AND SERIAL NUMBERS.
+    
+    Rules:
+    1. Extract every individual serial number (e.g., 18125..., X5C8..., P125...).
+    2. Match each serial to its specific model (e.g., "Valor VL550", "Dejavoo P3").
+    3. If multiple serials are listed under one model header, extract each one separately.
+    
+    Return ONLY a JSON object with this exact structure:
+    {"items": [{"serial_number": "SN_HERE", "terminal_type": "MODEL_HERE"}]}
+`;
 
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
         const aiRequest = callGeminiWithRetry(model, [
