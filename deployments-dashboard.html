@@ -670,14 +670,17 @@ async function processReturn() {
             
             const result = await res.json();
             
-            if (result.success) {
+             if (result.success) {
+                // This call ensures the user's email is recorded in Activity Logs
                 await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) permanently removed.`);
+                
                 Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
                     .then(() => fetchDeployments(currentPage));
             } else { 
-                // Important: Show the actual error message from the server
                 Swal.fire('Error', result.message || 'Failed to delete record', 'error'); 
             }
+            // --- END ADDITION ---
+            
         } catch (err) { 
             Swal.fire('Error', 'Communication failure with server', 'error'); 
         }
