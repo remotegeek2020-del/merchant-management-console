@@ -333,17 +333,19 @@ async function handleAgentFile(input) {
     reader.onload = async () => {
         const base64 = reader.result.split(',')[1];
         try {
-            const res = await fetch('/api/ai-import', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ fileBase64: base64, model: 'gemini-3-flash' }) // Target the latest model
-            });
-            const result = await res.json();
+            // Inside handleAgentFile -> reader.onload -> try block
+const res = await fetch('/api/ai-import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ fileBase64: base64 })
+});
+const result = await res.json();
 
-            if (result.success) {
-                renderAgentReview(result.data);
-                status.innerText = "Extraction complete.";
-            } else {
+if (result.success && result.data) {
+    // Pass result.data specifically to the review renderer
+    renderAgentReview(result.data); 
+    status.innerText = "Data extracted successfully.";
+} else {
                 chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;">Error: ${result.message}</div>`;
                 status.innerText = "Error encountered.";
             }
