@@ -418,6 +418,10 @@ async function handleAIFile(input) {
  * STAGE 1: Review Table
  * Shows the AI results for editing before saving
  */
+/**
+ * STAGE 1: The Review Table
+ * This function triggers automatically when the AI extraction succeeds
+ */
 function confirmAIImport(extractedData) {
     let tableHtml = `
         <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px; margin-top:10px;">
@@ -437,11 +441,8 @@ function confirmAIImport(extractedData) {
             <tr id="ai-row-${index}">
                 <td><input type="text" id="ai-model-${index}" value="${item.terminal_type}" class="slds-input" style="height:32px; font-size:12px;"></td>
                 <td><input type="text" id="ai-serial-${index}" value="${item.serial_number}" class="slds-input" style="height:32px; font-size:12px;"></td>
-                <td><button onclick="this.closest('tr').remove()" class="slds-button slds-button_icon slds-button_icon-error">
-                    <span class="material-icons" style="font-size:16px;">delete</span>
-                </button></td>
-            </tr>
-        `;
+                <td><button onclick="this.closest('tr').remove()" class="slds-button slds-button_icon slds-button_icon-error"><span class="material-icons" style="font-size:16px;">delete</span></button></td>
+            </tr>`;
     });
 
     tableHtml += `</tbody></table></div>`;
@@ -451,16 +452,14 @@ function confirmAIImport(extractedData) {
         html: tableHtml,
         width: '750px',
         showCancelButton: true,
-        confirmButtonText: 'Confirm & Save All',
+        confirmButtonText: 'Confirm & Upload',
         confirmButtonColor: '#004990',
         preConfirm: () => {
             const finalData = [];
             extractedData.forEach((_, index) => {
-                const modelEl = document.getElementById(`ai-model-${index}`);
-                const serialEl = document.getElementById(`ai-serial-${index}`);
-                if (modelEl && serialEl) {
-                    finalData.push({ terminal_type: modelEl.value, serial_number: serialEl.value });
-                }
+                const m = document.getElementById(`ai-model-${index}`);
+                const s = document.getElementById(`ai-serial-${index}`);
+                if (m && s) finalData.push({ terminal_type: m.value, serial_number: s.value });
             });
             return finalData;
         }
@@ -470,11 +469,11 @@ function confirmAIImport(extractedData) {
 }
 
 /**
- * STAGE 2: Bulk Upload
- * Pushes reviewed data to the database with audit logs
+ * STAGE 2: Database Sync
+ * Pushes the approved data into your equipments table
  */
 async function processFinalImport(items) {
-    Swal.fire({ title: 'Syncing with stock...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: 'Syncing...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     let count = 0;
     for (const item of items) {
         const res = await fetch('/api/equipments', {
@@ -482,17 +481,16 @@ async function processFinalImport(items) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 action: 'create', 
-                payload: { ...item, status: 'stocked', current_location: 'Warsaw Office' } 
+                payload: { ...item, status: 'stocked', current_location: 'Warsaw Office', received_date: new Date().toISOString().split('T')[0] } 
             })
         });
         if ((await res.json()).success) {
             count++;
-            await logAuditAction('AI Import', `Serial ${item.serial_number} added via AI.`);
+            await logAuditAction('AI Import', `Serial ${item.serial_number} added via Gemini 3.`);
         }
     }
-    Swal.fire('Complete', `Imported ${count} units successfully.`, 'success').then(() => fetchInventory());
+    Swal.fire('Complete', `Added ${count} units successfully.`, 'success').then(() => fetchInventory());
 }
-    // --- PDF LOGIC ---
     function printPDFReport() {
         const today = new Date().toLocaleDateString();
         
