@@ -304,9 +304,14 @@
     let totalItems = 0;
     let selectedId = null;
 
-    function toggleAgent() {
+   // 1. Toggle function for the sidebar
+function toggleAgent() {
     const sidebar = document.getElementById('aiAgentSidebar');
-    sidebar.style.display = (sidebar.style.display === 'none') ? 'flex' : 'none';
+    if (sidebar.style.display === 'none' || sidebar.style.display === '') {
+        sidebar.style.display = 'flex';
+    } else {
+        sidebar.style.display = 'none';
+    }
 }
 
 // Override your current triggerAIUpload function
@@ -439,9 +444,6 @@ async function processFinalImport(items) {
     }
 }
 
-    function triggerAIUpload() {
-    document.getElementById('ai-file-input').click();
-}
 
 async function handleAIFile(input) {
     if (!input.files || !input.files[0]) return;
