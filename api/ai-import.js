@@ -37,16 +37,13 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Use gemini-2.0-flash-001 for the fastest "Time to First Token".
-        // This is crucial for staying under Vercel's 10s Hobby tier limit.
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-2.0-flash-001",
-            generationConfig: {
-                temperature: 0,
-                responseMimeType: "application/json",
-            }
-        });
-
+       const model = genAI.getGenerativeModel({ 
+    model: "gemini-3-flash-preview", // Updated to latest Gemini 3 model
+    generationConfig: {
+        temperature: 0,
+        responseMimeType: "application/json",
+    }
+});
         // Prompt optimized for speed and strict JSON structure
         const prompt = `
             EXTRACT ALL SERIAL NUMBERS.
