@@ -304,6 +304,75 @@
     let totalItems = 0;
     let selectedId = null;
 
+    /**
+ * PROCESS FINAL IMPORT
+ * Pushes reviewed AI data to the database
+ */
+async function processFinalImport(items) {
+    Swal.fire({ 
+        title: 'Syncing with Stock...', 
+        text: `Writing ${items.length} units to global ledger`, 
+        allowOutsideClick: false, 
+        didOpen: () => { Swal.showLoading(); } 
+    });
+
+    try {
+        let successCount = 0;
+        let failCount = 0;
+
+        for (const item of items) {
+            const payload = {
+                serial_number: item.serial_number,
+                terminal_type: item.terminal_type,
+                status: 'stocked',
+                current_location: 'Warsaw Office',
+                received_date: new Date().toISOString().split('T')[0]
+            };
+
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'create', payload })
+            });
+
+            const result = await res.json();
+            if (result.success) {
+                successCount++;
+                await logAuditAction('AI Inventory Import', `Serial ${item.serial_number} added via Gemini 3 Flash.`);
+            } else {
+                failCount++;
+            }
+        }
+
+        Swal.fire({
+            icon: successCount > 0 ? 'success' : 'error',
+            title: 'Import Complete',
+            text: `Successfully added ${successCount} units. ${failCount > 0 ? failCount + ' failed (duplicates).' : ''}`,
+            confirmButtonColor: '#004990'
+        }).then(() => fetchInventory());
+
+    } catch (err) {
+        Swal.fire('Import Error', 'Connection lost during sync.', 'error');
+    }
+}
+
+    async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
+    }
+}
+
     function triggerAIUpload() {
     document.getElementById('ai-file-input').click();
 }
@@ -505,6 +574,7 @@ function confirmAIImport(extractedData) {
             });
             const result = await res.json();
             if (result.success) {
+                await logAuditAction('Inventory Retired', `Unit ${serial} decommissioned.`); // ADD THIS
                 Swal.fire('Retired', 'Unit has been decommissioned.', 'success');
                 fetchInventory();
             }
@@ -535,6 +605,7 @@ function confirmAIImport(extractedData) {
             const result = await res.json();
 
             if (result.success) {
+                await logAuditAction('Inventory Deleted', `Unit ${serial} permanently removed.`); // ADD THIS
                 Swal.fire('Deleted!', 'The unit has been removed.', 'success');
                 fetchInventory();
             } else {
@@ -635,6 +706,7 @@ function confirmAIImport(extractedData) {
             const result = await res.json();
 
             if (result.success) {
+                await logAuditAction(selectedId ? 'Inventory Updated' : 'Inventory Created', logMsg); // ADD THIS
                 closeModal();
                 fetchInventory(); 
                 Swal.fire({ 
