@@ -43,8 +43,9 @@ export default async function handler(req, res) {
 // Inside api/ai-import.js
 // FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
 // FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
+// Replace the old model line with this verified ID
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.1-flash-lite", // This is the most stable 'latest' ID for Gemini 3 technology currently
+    model: "gemini-2.0-flash-001", // This is the stable ID for the latest Flash technology
     generationConfig: {
         temperature: 0,
         responseMimeType: "application/json",
@@ -52,10 +53,12 @@ const model = genAI.getGenerativeModel({
 });
 
 const prompt = `
-    INSTRUCTIONS: Scan the attached document and extract all Terminal/POS Serial Numbers and their Models.
+    SCAN THE ATTACHED PDF INVOICE.
+    1. EXTRACT ALL SERIAL NUMBERS.
+    2. EXTRACT THE TERMINAL MODEL NAME FOR EACH SERIAL number.
     
-    Return ONLY a JSON object with this exact structure:
-    {"data": [{"serial_number": "STRING", "terminal_type": "STRING"}]}
+    Return ONLY a JSON object:
+    {"data": [{"serial_number": "SN_STRING", "terminal_type": "MODEL_STRING"}]}
 `;
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
         const aiRequest = callGeminiWithRetry(model, [
