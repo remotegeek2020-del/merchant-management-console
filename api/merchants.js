@@ -447,30 +447,35 @@ if (action === 'list') {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
-       if (action === 'update') {
-    // 1. Update the base table directly
-    const { error: updateError } = await supabase
-        .from('merchants')
-        .update(payload) // This payload now includes the address fields from frontend
-        .eq('id', id);
+     if (action === 'update') {
+    // 1. Validate ID
+    if (!id) return res.status(400).json({ success: false, message: "Missing Merchant UUID" });
 
-    if (updateError) {
-        console.error("Update Error:", updateError.message);
-        return res.status(500).json({ success: false, message: updateError.message });
+    // 2. Perform the Update on the BASE TABLE
+    const { data, error } = await supabase
+        .from('merchants') // TARGET THE TABLE, NOT THE VIEW
+        .update(payload) 
+        .eq('id', id)
+        .select(); // Select returns the updated row to verify it worked
+
+    if (error) {
+        console.error("Supabase Update Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
     }
 
-    // 2. Optional: Log changes (keeping your existing logic)
-    // We do the log AFTER the update to ensure the update actually worked
+    // 3. Log the change in merchant_notes for audit trail
     try {
         await supabase.from('merchant_notes').insert([{
             merchant_id: id,
             title: "System Update",
-            body: `Merchant profile updated manually.`,
-            created_by: user || 'System'
+            body: `Manual profile update performed. Fields impacted: ${Object.keys(payload).join(', ')}`,
+            created_by: user || 'Admin'
         }]);
-    } catch (logErr) { console.warn("Log failed, but data saved."); }
+    } catch (noteErr) {
+        console.warn("Update succeeded, but audit note failed:", noteErr.message);
+    }
 
-    return res.status(200).json({ success: true });
+    return res.status(200).json({ success: true, data });
 }
 
         if (action === 'global_logs') {
