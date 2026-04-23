@@ -8,6 +8,20 @@ export default async function handler(req, res) {
     
     
     {
+        if (action === 'check_mids') {
+    const { mids } = req.body;
+    const { data, error } = await supabase
+        .from('merchants')
+        .select('merchant_id')
+        .in('merchant_id', mids);
+
+    if (error) throw error;
+    
+    return res.status(200).json({ 
+        success: true, 
+        existingMids: data.map(m => String(m.merchant_id)) 
+    });
+}
        if (action === 'getMonthlyReport') {
     const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
