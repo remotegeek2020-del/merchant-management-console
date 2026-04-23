@@ -3,471 +3,215 @@ import { createClient } from '@supabase/supabase-js'
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
-    
-    try 
-    
-    
-    {
-        if (action === 'check_mids') {
-    const { mids } = req.body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('merchant_id')
-        .in('merchant_id', mids);
-
-    if (error) throw error;
-    
-    return res.status(200).json({ 
-        success: true, 
-        existingMids: data.map(m => String(m.merchant_id)) 
-    });
-}
-       if (action === 'getMonthlyReport') {
-    const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
-
-    let queryBuilder = supabase
-        .from('merchant_portfolio_view')
-        .select(`
-            merchant_id, 
-            dba_name, 
-            agent_id, 
-            company_name, 
-            partner_full_name, 
-            enrollment_date, 
-            account_status
-        `, { count: 'exact' })
-        .eq('is_prime49', true); 
-
-    if (startDate && endDate) {
-        queryBuilder = queryBuilder
-            .gte('enrollment_date', `${startDate}T00:00:00.000Z`)
-            .lte('enrollment_date', `${endDate}T23:59:59.999Z`);
-    }
-
-    const { data, count, error } = await queryBuilder
-        .range(offset, offset + limit - 1)
-        .order('enrollment_date', { ascending: false });
-
-    if (error) return res.status(500).json({ success: false, message: error.message });
-
-    return res.status(200).json({ 
-        success: true, 
-        rawData: data || [], 
-        totalCount: count || 0 
-    });
-}
-  if (action === 'get_global_tasks') {
-    const { userid, targetUser, status, page = 0, limit = 20 } = req.body;
-    
-    // We start a query on merchant_tasks and join the merchants table
-    let queryBuilder = supabase
-        .from('merchant_tasks')
-        .select(`
-            *,
-            merchants:merchant_id ( * ),
-            assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name )
-        `, { count: 'exact' });
-
-    // PRIORITY FILTER: If a specific user is selected in the dropdown
-    if (targetUser) {
-        queryBuilder = queryBuilder.eq('assigned_to', targetUser);
-    } 
-    // FALLBACK: If no filter is selected, show only tasks for the logged-in user
-    else if (userid) {
-        queryBuilder = queryBuilder.eq('assigned_to', userid);
-    }
-
-    // Apply Status Filter (Pending/Completed)
-    if (status) {
-        queryBuilder = queryBuilder.eq('status', status);
-    }
-
-    const { data, count, error } = await queryBuilder
-        .range(page * limit, (page + 1) * limit - 1)
-        .order('due_date', { ascending: true });
-
-    if (error) throw error;
-
-    return res.status(200).json({ 
-        success: true, 
-        data: data || [], 
-        total: count 
-    });
-}
-      // --- ACTION: delete_task (api/merchants.js) ---
-if (action === 'delete_task') {
-    const { task_id } = req.body;
-
-    const { error } = await supabase
-        .from('merchant_tasks')
-        .delete()
-        .eq('id', task_id);
-
-    if (error) throw error;
-    return res.status(200).json({ success: true });
-}
-        // --- ACTION: add_task (api/merchants.js) ---
-if (action === 'add_task') {
-    const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
-
-    // --- CRITICAL FIX ---
-    // If created_by is missing, 'System', or 'undefined', set it to null.
-    // A null value bypasses the Foreign Key check, whereas 'System' triggers a violation.
-    const validCreator = (created_by && created_by !== 'System' && created_by !== 'undefined') 
-        ? created_by 
-        : null;
-
-    const { data, error } = await supabase
-        .from('merchant_tasks')
-        .insert([{
-            merchant_id: merchant_uuid,
-            title: title,
-            body: body,
-            due_date: due_date || null,
-            assigned_to: assigned_to || null,
-            created_by: validCreator, // Use the sanitized variable
-            status: 'Pending'
-        }])
-        .select();
-
-    if (error) {
-        console.error("DB Error:", error.message);
-        // Returning 400 or 500 is better for failures so the frontend 'catch' block triggers
-        return res.status(400).json({ success: false, message: error.message });
-    }
-
-    return res.status(200).json({ success: true, data });
-}
-    
-        // --- ACTION: update_task (api/merchants.js) ---
-if (action === 'update_task') {
-    const { task_id, payload } = req.body; 
-
-    const { error } = await supabase
-        .from('merchant_tasks')
-        .update({
-            title: payload.title,
-            body: payload.body,
-            due_date: payload.due_date,
-            assigned_to: payload.assigned_to,
-            status: payload.status // "Completed" or "Pending"
-        })
-        .eq('id', task_id);
-
-    if (error) throw error;
-    return res.status(200).json({ success: true });
-}
-
-        if (action === 'get_staff') {
-    const { data, error } = await supabase
-        .from('app_users')
-        .select('userid, first_name, last_name, email');
-
-    if (error) throw error;
-
-    // We MUST map 'userid' to 'id' and create 'full_name' for the frontend to see it
-    const formatted = (data || []).map(u => ({
-        id: u.userid, 
-        full_name: `${u.first_name} ${u.last_name || ''}`.trim()
-    }));
-
-    return res.status(200).json({ success: true, data: formatted });
-}
-    
-// --- ACTION: get_tasks (Updated for app_users join) ---
-if (action === 'get_tasks') {
-    const { merchant_uuid } = req.body;
-    
-    const { data, error } = await supabase
-        .from('merchant_tasks')
-        .select(`
-            *,
-            assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name, email )
-        `)
-        .eq('merchant_id', merchant_uuid)
-        .order('due_date', { ascending: true });
-
-    if (error) throw error;
-
-    // Format for the frontend
-    const tasks = (data || []).map(t => ({
-        ...t,
-        assignee_name: t.assigned_user ? `${t.assigned_user.first_name} ${t.assigned_user.last_name || ''}`.trim() : 'Unassigned'
-    }));
-
-    return res.status(200).json({ success: true, data: tasks });
-}
-if (action === 'bulk_upsert') {
-    // 1. The payload is now pre-mapped by the frontend 
-    // to match your DB column names exactly.
-    const dataToUpsert = payload.filter(item => item.merchant_id);
 
     try {
-        // 2. Perform the Upsert
-        // Existing MIDs get Updated; New MIDs get Created
-        const { error } = await supabase
-            .from('merchants')
-            .upsert(dataToUpsert, { 
-                onConflict: 'merchant_id',
-                ignoreDuplicates: false 
-            });
-
-        if (error) throw error;
-
-        // 3. Optional: Log the bulk action
-        await supabase.from('merchant_notes').insert([{
-            title: "Bulk Import Success",
-            body: `Synchronized ${dataToUpsert.length} records via CSV uploader.`,
-            created_by: user || 'System'
-        }]);
-
-        return res.status(200).json({ success: true, count: dataToUpsert.length });
-
-    } catch (err) {
-        console.error("Bulk Upsert Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
-    }
-}
-
-    
-        // --- ACTION: get_merchant_history (MATCHES FRONTEND EXACTLY) ---
-if (action === 'get_merchant_history') {
-    const { merchant_id } = req.body;
-
-    const { data, error } = await supabase
-        .from('equipment_logs')
-        .select(`
-            *,
-            equipments:equipment_id (serial_number, terminal_type)
-        `)
-        .eq('merchant_id', merchant_id) 
-        .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
-}
-
-        // --- ACTION: getMerchantHistory in merchants.js ---
-if (action === 'getMerchantHistory') {
-    const { merchant_id } = req.body;
-
-    // We query equipment_logs, but we need to join with equipments 
-    // to see WHAT was returned (Serial, Model)
-    const { data, error } = await supabase
-        .from('equipment_logs')
-        .select(`
-            *,
-            equipments:equipment_id (serial_number, terminal_type)
-        `)
-        .eq('merchant_id', merchant_id) // Ensure your logs table has merchant_id
-        .order('created_at', { ascending: false });
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data });
-}
-
-        // --- ADD THIS ACTION TO YOUR merchants.js ---
-if (action === 'get_merchant_equipment') {
-    const { merchant_uuid } = req.body;
-    const { data, error } = await supabase
-        .from('equipments')
-        .select('*')
-        .eq('merchant_id', merchant_uuid)
-        .order('serial_number', { ascending: true });
-
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
-}
-        // --- ACTION: ADD ATTACHMENT RECORD ---
-        if (action === 'add_attachment') {
-            const { merchant_id, file_name, file_path, file_type, file_size, uploaded_by } = req.body;
-            
+        // --- NEW ACTION: check_mids (Supporting the Smart Scan Feature) ---
+        if (action === 'check_mids') {
+            const { mids } = req.body;
             const { data, error } = await supabase
-                .from('merchant_attachments')
-                .insert([{
-                    merchant_id,
-                    file_name,
-                    file_path,
-                    file_type,
-                    file_size,
-                    uploaded_by
+                .from('merchants')
+                .select('merchant_id')
+                .in('merchant_id', mids);
+
+            if (error) throw error;
+            return res.status(200).json({ 
+                success: true, 
+                existingMids: data.map(m => String(m.merchant_id)) 
+            });
+        }
+
+        // --- ENHANCED ACTION: bulk_upsert (Trusting Frontend Field Mapping) ---
+        if (action === 'bulk_upsert') {
+            const dataToUpsert = payload.filter(item => item.merchant_id);
+            try {
+                const { error } = await supabase
+                    .from('merchants')
+                    .upsert(dataToUpsert, { 
+                        onConflict: 'merchant_id',
+                        ignoreDuplicates: false 
+                    });
+
+                if (error) throw error;
+
+                // Log the bulk action for audit purposes
+                await supabase.from('merchant_notes').insert([{
+                    title: "Bulk Import Success",
+                    body: `Synchronized ${dataToUpsert.length} records via mapped CSV uploader.`,
+                    created_by: user || 'System'
                 }]);
 
+                return res.status(200).json({ success: true, count: dataToUpsert.length });
+            } catch (err) {
+                console.error("Bulk Upsert Error:", err.message);
+                return res.status(500).json({ success: false, message: err.message });
+            }
+        }
+
+        // --- ORIGINAL ACTION: getMonthlyReport ---
+        if (action === 'getMonthlyReport') {
+            const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
+            let queryBuilder = supabase.from('merchant_portfolio_view')
+                .select(`merchant_id, dba_name, agent_id, company_name, partner_full_name, enrollment_date, account_status`, { count: 'exact' })
+                .eq('is_prime49', true); 
+
+            if (startDate && endDate) {
+                queryBuilder = queryBuilder.gte('enrollment_date', `${startDate}T00:00:00.000Z`).lte('enrollment_date', `${endDate}T23:59:59.999Z`);
+            }
+            const { data, count, error } = await queryBuilder.range(offset, offset + limit - 1).order('enrollment_date', { ascending: false });
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, rawData: data || [], totalCount: count || 0 });
+        }
+
+        // --- ORIGINAL ACTION: get_global_tasks ---
+        if (action === 'get_global_tasks') {
+            const { userid, targetUser, status } = req.body;
+            let queryBuilder = supabase.from('merchant_tasks')
+                .select(`*, merchants:merchant_id ( * ), assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name )`, { count: 'exact' });
+
+            if (targetUser) { queryBuilder = queryBuilder.eq('assigned_to', targetUser); } 
+            else if (userid) { queryBuilder = queryBuilder.eq('assigned_to', userid); }
+
+            if (status) { queryBuilder = queryBuilder.eq('status', status); }
+
+            const { data, count, error } = await queryBuilder.range(page * limit, (page + 1) * limit - 1).order('due_date', { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [], total: count });
+        }
+
+        // --- ORIGINAL ACTION: delete_task ---
+        if (action === 'delete_task') {
+            const { task_id } = req.body;
+            const { error } = await supabase.from('merchant_tasks').delete().eq('id', task_id);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
-        
-        if (action === 'update_note') {
-            const { note_id, title, body } = req.body;
-            const { error } = await supabase
-                .from('merchant_notes')
-                .update({ title, body, created_at: new Date() })
-                .eq('id', note_id);
 
+        // --- ORIGINAL ACTION: add_task ---
+        if (action === 'add_task') {
+            const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
+            const validCreator = (created_by && created_by !== 'System' && created_by !== 'undefined') ? created_by : null;
+            const { data, error } = await supabase.from('merchant_tasks').insert([{
+                merchant_id: merchant_uuid, title: title, body: body, due_date: due_date || null,
+                assigned_to: assigned_to || null, created_by: validCreator, status: 'Pending'
+            }]).select();
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, data });
+        }
+
+        // --- ORIGINAL ACTION: update_task ---
+        if (action === 'update_task') {
+            const { task_id, payload } = req.body; 
+            const { error } = await supabase.from('merchant_tasks').update({
+                title: payload.title, body: payload.body, due_date: payload.due_date,
+                assigned_to: payload.assigned_to, status: payload.status 
+            }).eq('id', task_id);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
 
-        // --- ACTION: GET ATTACHMENTS ---
+        // --- ORIGINAL ACTION: get_staff ---
+        if (action === 'get_staff') {
+            const { data, error } = await supabase.from('app_users').select('userid, first_name, last_name, email');
+            if (error) throw error;
+            const formatted = (data || []).map(u => ({ id: u.userid, full_name: `${u.first_name} ${u.last_name || ''}`.trim() }));
+            return res.status(200).json({ success: true, data: formatted });
+        }
+    
+        // --- ORIGINAL ACTION: get_tasks ---
+        if (action === 'get_tasks') {
+            const { merchant_uuid } = req.body;
+            const { data, error } = await supabase.from('merchant_tasks')
+                .select(`*, assigned_user:app_users!merchant_tasks_assigned_to_fkey ( first_name, last_name, email )`)
+                .eq('merchant_id', merchant_uuid).order('due_date', { ascending: true });
+            if (error) throw error;
+            const tasks = (data || []).map(t => ({ ...t, assignee_name: t.assigned_user ? `${t.assigned_user.first_name} ${t.assigned_user.last_name || ''}`.trim() : 'Unassigned' }));
+            return res.status(200).json({ success: true, data: tasks });
+        }
+
+        // --- ORIGINAL ACTION: get_merchant_history ---
+        if (action === 'get_merchant_history' || action === 'getMerchantHistory') {
+            const { merchant_id } = req.body;
+            const { data, error } = await supabase.from('equipment_logs')
+                .select(`*, equipments:equipment_id (serial_number, terminal_type)`)
+                .eq('merchant_id', merchant_id).order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        // --- ORIGINAL ACTION: get_merchant_equipment ---
+        if (action === 'get_merchant_equipment') {
+            const { merchant_uuid } = req.body;
+            const { data, error } = await supabase.from('equipments').select('*').eq('merchant_id', merchant_uuid).order('serial_number', { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        // --- ORIGINAL ACTION: attachments logic ---
+        if (action === 'add_attachment') {
+            const { merchant_id, file_name, file_path, file_type, file_size, uploaded_by } = req.body;
+            const { error } = await supabase.from('merchant_attachments').insert([{ merchant_id, file_name, file_path, file_type, file_size, uploaded_by }]);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
         if (action === 'get_attachments') {
             const { merchant_uuid } = req.body;
-            const { data, error } = await supabase
-                .from('merchant_attachments')
-                .select('*')
-                .eq('merchant_id', merchant_uuid)
-                .order('created_at', { ascending: false });
-
+            const { data, error } = await supabase.from('merchant_attachments').select('*').eq('merchant_id', merchant_uuid).order('created_at', { ascending: false });
             if (error) throw error;
             return res.status(200).json({ success: true, data });
         }
 
-        // --- ACTION: DELETE ATTACHMENT ---
-        if (action === 'delete_attachment') {
-            const { file_id, file_path } = req.body;
-            
-            // Delete from Storage
-            await supabase.storage.from('merchant-files').remove([file_path]);
-            
-            // Delete from Database
-            const { error } = await supabase.from('merchant_attachments').delete().eq('id', file_id);
-            
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-
-if (action === 'list') {
-    try {
-        // 1. Query the View
-        let dataReq = supabase
-            .from('merchant_portfolio_view')
-            .select('*', { count: 'exact' });
-
-        if (statusFilter) dataReq.eq('account_status', statusFilter);
-
-        // 2. Search Logic
-        if (query && filterBy) {
-            const colMap = {
-                'dba_name': 'dba_name',
-                'merchant_id': 'merchant_id',
-                'agent_id': 'agent_id',
-                'company_name': 'company_name',
-                'partner_name': 'partner_full_name'
-            };
-            const targetCol = colMap[filterBy] || filterBy;
-            dataReq.ilike(targetCol, `%${query}%`);
-        }
-
-        const { data, count, error: dataError } = await dataReq
-            .range(page * limit, (page + 1) * limit - 1)
-            .order('created_at', { ascending: false });
-
-        if (dataError) throw dataError;
-
-        // 3. Metrics (Simplified to prevent crashes)
-        let stats = { out_mtd: 0, out_30d: 0, out_90d: 0 };
-        try {
-            const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
-                p_status_filter: statusFilter || null, 
-                p_query: query || null, 
-                p_filter_by: filterBy === 'partner_name' ? 'partner_full_name' : (filterBy || null)
-            });
-            if (mathData && mathData[0]) stats = mathData[0];
-        } catch (e) { console.error("Metrics skipped"); }
-
-        // 4. Format Data for Frontend
-        const formattedData = (data || []).map(m => ({
-            ...m,
-            partner_name: m.partner_full_name || '---',
-            is_prime49: m.is_prime49 || false
-        }));
-
-        return res.status(200).json({ 
-            success: true, 
-            data: formattedData,
-            count: count || 0,
-            metrics: { 
-                totalMTD: stats.out_mtd || 0, 
-                total30D: stats.out_30d || 0, 
-                total90D: stats.out_90d || 0, 
-                portfolioShare: "0.00" 
+        // --- ORIGINAL ACTION: list (Dashboard Table) ---
+        if (action === 'list') {
+            let dataReq = supabase.from('merchant_portfolio_view').select('*', { count: 'exact' });
+            if (statusFilter) dataReq.eq('account_status', statusFilter);
+            if (query && filterBy) {
+                const colMap = { 'dba_name': 'dba_name', 'merchant_id': 'merchant_id', 'agent_id': 'agent_id', 'company_name': 'company_name', 'partner_name': 'partner_full_name' };
+                dataReq.ilike(colMap[filterBy] || filterBy, `%${query}%`);
             }
-        });
-    } catch (err) {
-        console.error("Critical API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
-    }
-}
-     if (action === 'update') {
-    // 1. Validate ID
-    if (!id) return res.status(400).json({ success: false, message: "Missing Merchant UUID" });
+            const { data, count, error: dataError } = await dataReq.range(page * limit, (page + 1) * limit - 1).order('created_at', { ascending: false });
+            if (dataError) throw dataError;
 
-    // 2. Perform the Update on the BASE TABLE
-    const { data, error } = await supabase
-        .from('merchants') // TARGET THE TABLE, NOT THE VIEW
-        .update(payload) 
-        .eq('id', id)
-        .select(); // Select returns the updated row to verify it worked
+            let stats = { out_mtd: 0, out_30d: 0, out_90d: 0 };
+            try {
+                const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
+                    p_status_filter: statusFilter || null, p_query: query || null, p_filter_by: filterBy === 'partner_name' ? 'partner_full_name' : (filterBy || null)
+                });
+                if (mathData && mathData[0]) stats = mathData[0];
+            } catch (e) { console.error("Metrics skipped"); }
 
-    if (error) {
-        console.error("Supabase Update Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
-    }
+            const formattedData = (data || []).map(m => ({ ...m, partner_name: m.partner_full_name || '---', is_prime49: m.is_prime49 || false }));
+            return res.status(200).json({ success: true, data: formattedData, count: count || 0, metrics: { totalMTD: stats.out_mtd || 0, total30D: stats.out_30d || 0, total90D: stats.out_90d || 0, portfolioShare: "0.00" } });
+        }
 
-    // 3. Log the change in merchant_notes for audit trail
-    try {
-        await supabase.from('merchant_notes').insert([{
-            merchant_id: id,
-            title: "System Update",
-            body: `Manual profile update performed. Fields impacted: ${Object.keys(payload).join(', ')}`,
-            created_by: user || 'Admin'
-        }]);
-    } catch (noteErr) {
-        console.warn("Update succeeded, but audit note failed:", noteErr.message);
-    }
-
-    return res.status(200).json({ success: true, data });
-}
-
-        if (action === 'global_logs') {
-            const { data, error } = await supabase
-                .from('merchant_notes')
-                .select(`*, merchants(dba_name)`)
-                .order('created_at', { ascending: false })
-                .limit(100);
-
+        // --- ORIGINAL ACTION: update (Profile Edit) ---
+        if (action === 'update') {
+            if (!id) return res.status(400).json({ success: false, message: "Missing Merchant UUID" });
+            const { data, error } = await supabase.from('merchants').update(payload).eq('id', id).select();
             if (error) throw error;
+            try {
+                await supabase.from('merchant_notes').insert([{
+                    merchant_id: id, title: "System Update", created_by: user || 'Admin',
+                    body: `Manual profile update performed. Fields impacted: ${Object.keys(payload).join(', ')}`
+                }]);
+            } catch (noteErr) { console.warn("Audit note failed"); }
             return res.status(200).json({ success: true, data });
         }
 
-   if (action === 'get_notes') {
-    const { merchant_uuid, type } = req.body;
-    let queryBuilder = supabase
-        .from('merchant_notes')
-        .select('*') // Simple select to ensure it doesn't fail
-        .eq('merchant_id', merchant_uuid);
-
-    if (type === 'manual') {
-        queryBuilder = queryBuilder.neq('title', 'System Update');
-    } else if (type === 'system') {
-        queryBuilder = queryBuilder.eq('title', 'System Update');
-    }
-
-    const { data, error } = await queryBuilder.order('created_at', { ascending: false });
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
-}
+        // --- ORIGINAL ACTION: notes logic ---
+        if (action === 'get_notes') {
+            const { merchant_uuid, type } = req.body;
+            let q = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
+            if (type === 'manual') { q = q.neq('title', 'System Update'); } 
+            else if (type === 'system') { q = q.eq('title', 'System Update'); }
+            const { data, error } = await q.order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
 
         if (action === 'add_note') {
             const { merchant_uuid, title, body, created_by, userId } = req.body;
-            const { error } = await supabase
-                .from('merchant_notes')
-                .insert([{ 
-                    merchant_id: merchant_uuid, 
-                    title: title, 
-                    body: body, 
-                    created_by: created_by || userId || 'Staff' 
-                }]);
-
+            const { error } = await supabase.from('merchant_notes').insert([{ merchant_id: merchant_uuid, title, body, created_by: created_by || userId || 'Staff' }]);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
@@ -478,4 +222,4 @@ if (action === 'list') {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
-} // End of handler function
+}
