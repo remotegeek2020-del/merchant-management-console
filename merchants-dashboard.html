@@ -803,8 +803,8 @@ async function handleCSVUpload(input) {
         }
     }
 
-    window.saveMerchant = async (uuid) => {
-    // Corrected list: fixed missing quotes and commas
+window.saveMerchant = async (uuid) => {
+    // These strings MUST match the 'id' attributes in your HTML input tags
     const fields = [
         'dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant', 
         'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 
@@ -820,8 +820,12 @@ async function handleCSVUpload(input) {
     const payload = {}; 
     fields.forEach(f => { 
         const el = document.getElementById('edit-' + f); 
-        if (el) payload[f] = el.value; 
+        if (el) {
+            payload[f] = el.value; 
+        }
     });
+
+    console.log("Saving Payload:", payload); // Debug: Check your console to see if address is here
 
     try {
         const res = await fetch('/api/merchants', { 
@@ -830,16 +834,15 @@ async function handleCSVUpload(input) {
             body: JSON.stringify({ action: 'update', id: uuid, payload }) 
         });
         const result = await res.json();
+        
         if (result.success) { 
-            await logAuditAction('Merchant Updated', `Details saved for ${payload.dba_name}`);
-            Swal.fire({ icon: 'success', title: 'Saved Successfully', timer: 1500, showConfirmButton: false }); 
-            fetchMerchants(); 
+            Swal.fire({ icon: 'success', title: 'Saved to Database', timer: 1500, showConfirmButton: false }); 
+            fetchMerchants(); // Refresh the table
         } else {
-            Swal.fire('Error', 'Technical failure: ' + result.message, 'error');
+            Swal.fire('Update Failed', result.message, 'error');
         }
     } catch (err) { 
-        console.error(err);
-        Swal.fire('Error', 'Connection failed', 'error');
+        Swal.fire('Connection Error', 'Could not reach the server', 'error');
     }
 };
 
