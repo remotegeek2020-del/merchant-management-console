@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js'
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
-
+    
     try 
     
     
@@ -183,31 +183,7 @@ if (action === 'get_tasks') {
 
     return res.status(200).json({ success: true, data: tasks });
 }
-// --- ACTION: add_task (api/merchants.js) ---
-if (action === 'add_task') {
-    const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
 
-    // We must ensure the column names here match your 'merchant_tasks' table columns
-    const { data, error } = await supabase
-        .from('merchant_tasks')
-        .insert([{
-            merchant_id: merchant_uuid,
-            title: title,
-            body: body,
-            due_date: due_date || null,
-            assigned_to: assigned_to || null, // This is the userid (TEXT)
-            created_by: created_by || 'System',
-            status: 'Pending'
-        }])
-        .select();
-
-    if (error) {
-        console.error("Supabase Insert Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
-    }
-
-    return res.status(200).json({ success: true, data });
-}
 
         // --- ACTION: bulk_upsert (Create or Update based on merchant_id) ---
 if (action === 'bulk_upsert') {
@@ -252,7 +228,12 @@ if (action === 'bulk_upsert') {
         major_merchant: row.major_merchant,
         merchant_websites: row.merchant_websites,
         merchant_primary_contact: row.merchant_primary_contact,
-        merchant_phone: row.merchant_phone
+        merchant_phone: row.merchant_phone,
+        merchant_address: row.merchant_address,
+    merchant_city: row.merchant_city,
+    merchant_state: row.merchant_state,
+    merchant_zip: row.merchant_zip,
+    merchant_country: row.merchant_country
     })).filter(item => item.merchant_id);
 
     try {
@@ -466,38 +447,36 @@ if (action === 'list') {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
-        if (action === 'update') {
-            const { data: oldData, error: fetchError } = await supabase
-                .from('merchants')
-                .select('*')
-                .eq('id', id)
-                .single();
+     if (action === 'update') {
+    // 1. Validate ID
+    if (!id) return res.status(400).json({ success: false, message: "Missing Merchant UUID" });
 
-            if (fetchError) throw fetchError;
+    // 2. Perform the Update on the BASE TABLE
+    const { data, error } = await supabase
+        .from('merchants') // TARGET THE TABLE, NOT THE VIEW
+        .update(payload) 
+        .eq('id', id)
+        .select(); // Select returns the updated row to verify it worked
 
-            let changes = [];
-            for (let key in payload) {
-                let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
-                let newVal = payload[key] ? String(payload[key]).trim() : "empty";
-                if (oldVal !== newVal) {
-                    const label = key.replace(/_/g, ' ').toUpperCase();
-                    changes.push(`${label}: "${oldVal}" → "${newVal}"`);
-                }
-            }
+    if (error) {
+        console.error("Supabase Update Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
 
-            const { error: updateError } = await supabase.from('merchants').update(payload).eq('id', id);
-            if (updateError) throw updateError;
+    // 3. Log the change in merchant_notes for audit trail
+    try {
+        await supabase.from('merchant_notes').insert([{
+            merchant_id: id,
+            title: "System Update",
+            body: `Manual profile update performed. Fields impacted: ${Object.keys(payload).join(', ')}`,
+            created_by: user || 'Admin'
+        }]);
+    } catch (noteErr) {
+        console.warn("Update succeeded, but audit note failed:", noteErr.message);
+    }
 
-            if (changes.length > 0) {
-                await supabase.from('merchant_notes').insert([{
-                    merchant_id: id,
-                    title: "System Update",
-                    body: `Field Changes:\n${changes.join('\n')}`,
-                    created_by: user || 'System'
-                }]);
-            }
-            return res.status(200).json({ success: true });
-        }
+    return res.status(200).json({ success: true, data });
+}
 
         if (action === 'global_logs') {
             const { data, error } = await supabase
@@ -549,4 +528,4 @@ if (action === 'list') {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
-}
+} // End of handler function
