@@ -45,7 +45,7 @@ export default async function handler(req, res) {
 // FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
 // Replace the old model line with this verified ID
 const model = genAI.getGenerativeModel({ 
-    model: "gemini-2.0-flash-001", // This is the stable ID for the latest Flash technology
+    model: "gemini-3.1-flash-lite-preview", // This is the stable ID for the latest Flash technology
     generationConfig: {
         temperature: 0,
         responseMimeType: "application/json",
