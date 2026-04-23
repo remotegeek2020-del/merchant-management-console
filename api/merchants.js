@@ -447,38 +447,46 @@ if (action === 'list') {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
-        if (action === 'update') {
-            const { data: oldData, error: fetchError } = await supabase
-                .from('merchants')
-                .select('*')
-                .eq('id', id)
-                .single();
+       if (action === 'update') {
+    // 1. Fetch old data to compare for the audit log
+    const { data: oldData, error: fetchError } = await supabase
+        .from('merchants')
+        .select('*')
+        .eq('id', id)
+        .single();
 
-            if (fetchError) throw fetchError;
+    if (fetchError) throw fetchError;
 
-            let changes = [];
-            for (let key in payload) {
-                let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
-                let newVal = payload[key] ? String(payload[key]).trim() : "empty";
-                if (oldVal !== newVal) {
-                    const label = key.replace(/_/g, ' ').toUpperCase();
-                    changes.push(`${label}: "${oldVal}" → "${newVal}"`);
-                }
-            }
-
-            const { error: updateError } = await supabase.from('merchants').update(payload).eq('id', id);
-            if (updateError) throw updateError;
-
-            if (changes.length > 0) {
-                await supabase.from('merchant_notes').insert([{
-                    merchant_id: id,
-                    title: "System Update",
-                    body: `Field Changes:\n${changes.join('\n')}`,
-                    created_by: user || 'System'
-                }]);
-            }
-            return res.status(200).json({ success: true });
+    // 2. Log changes for the internal 'System Update' note
+    let changes = [];
+    for (let key in payload) {
+        let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
+        let newVal = payload[key] ? String(payload[key]).trim() : "empty";
+        if (oldVal !== newVal) {
+            const label = key.replace(/_/g, ' ').toUpperCase();
+            changes.push(`${label}: "${oldVal}" → "${newVal}"`);
         }
+    }
+
+    // 3. ACTUAL UPDATE - Ensure we are hitting the 'merchants' table, NOT the 'view'
+    const { error: updateError } = await supabase
+        .from('merchants') // Must be the base table
+        .update(payload) 
+        .eq('id', id);
+
+    if (updateError) throw updateError;
+
+    // 4. Create the audit note if changes occurred
+    if (changes.length > 0) {
+        await supabase.from('merchant_notes').insert([{
+            merchant_id: id,
+            title: "System Update",
+            body: `Field Changes:\n${changes.join('\n')}`,
+            created_by: user || 'System'
+        }]);
+    }
+    return res.status(200).json({ success: true });
+}
 
         if (action === 'global_logs') {
             const { data, error } = await supabase
