@@ -179,135 +179,734 @@
     let currentPage = 0;
     let currentRecords = [];
 
-    // --- RESTORED: Audit & Task Management ---
-    async function logAuditAction(action, details) {
-        const userEmail = localStorage.getItem('pp_userid');
-        try {
-            await fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ email: userEmail || 'Unknown Admin', action: action, status: details })});
-        } catch (err) { console.error(err); }
+    /**
+ * AUDIT LOGGER 
+ * Sends activity to the central activity_logs table
+ */
+async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); 
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
+    } catch (err) {
+        console.error("Failed to log audit trail:", err);
     }
+}
+
+// 1. DELETE CONFIRMATION
+async function deleteTaskConfirm(taskId) {
+    const result = await Swal.fire({
+        title: 'Delete Task?',
+        text: "This action cannot be undone.",
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#991b1b',
+        confirmButtonText: 'Yes, delete it'
+    });
+
+    if (result.isConfirmed) {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete_task', task_id: taskId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            Swal.close(); 
+            fetchMerchantTasks();
+            Swal.fire({ icon: 'success', title: 'Task deleted', timer: 1500, showConfirmButton: false });
+        }
+    }
+}
+
+// 3. EDIT PROMPT (Ensure the payload matches the backend)
+async function editTaskPrompt(taskId, title, body, due) {
+    const { value: formValues } = await Swal.fire({
+        title: 'Update Task',
+        html: `
+            <div style="text-align:left;">
+                <label class="edit-label">Title</label>
+                <input id="swal-task-title" class="modern-input" value="${title}">
+                <label class="edit-label" style="margin-top:10px;">Due Date</label>
+                <input type="date" id="swal-task-due" class="modern-input" value="${due}">
+                <label class="edit-label" style="margin-top:10px;">Details</label>
+                <textarea id="swal-task-body" class="modern-input" style="height:80px;">${body}</textarea>
+                <button type="button" onclick="deleteTaskConfirm('${taskId}')" style="width:100%; background:#fee2e2; color:#991b1b; border:none; padding:10px; border-radius:8px; margin-top:15px; font-weight:700; cursor:pointer;">DELETE TASK</button>
+            </div>`,
+        showCancelButton: true,
+        preConfirm: () => {
+            return {
+                title: document.getElementById('swal-task-title').value,
+                due_date: document.getElementById('swal-task-due').value,
+                body: document.getElementById('swal-task-body').value
+            }
+        }
+    });
+
+    if (formValues) {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_task', task_id: taskId, payload: formValues })
+        });
+        if ((await res.json()).success) fetchMerchantTasks();
+    }
+}
+
+    // 2. TOGGLE STATUS
+async function toggleTaskStatus(taskId, merchantUuid) {
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_task_status', task_id: taskId })
+        });
+        const result = await res.json();
+        if (result.success) fetchMerchantTasks();
+    } catch (err) { console.error("Toggle failed", err); }
+}
+    
+async function fetchMerchantTasks() {
+    const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+    if (!saveBtn) return;
+    const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+    const listDiv = document.getElementById('tasks-list');
+    
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_tasks', merchant_uuid: merchantUuid })
+        });
+        const result = await res.json();
+        
+        const html = result.data && result.data.length > 0 
+            ? result.data.map(t => {
+                // Pre-sanitize strings to prevent breaking the onclick attribute
+                const safeTitle = (t.title || '').replace(/'/g, "\\'");
+const safeBody = (t.body || '').replace(/'/g, "\\'");
+const safeDue = t.due_date || '';
+
+                return `
+                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="flex-grow: 1;">
+                        <div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div>
+                        <div style="font-size:11px; color:#64748b; margin-bottom:5px;">${t.body || ''}</div>
+                        <div style="display:flex; gap:10px; align-items:center;">
+                            <span class="badge" style="background:#fee2e2; color:#991b1b; border:1px solid #fecaca;">Due: ${safeDue || 'N/A'}</span>
+                            <span style="font-size:10px; color:#94a3b8;">Assignee: <b>${t.assignee_name || 'Unassigned'}</b></span>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:12px;">
+                      <button onclick="editTaskPrompt('${t.id}', '${safeTitle}', '${safeBody}', '${safeDue}')"
+                                style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
+                            <span class="material-icons" style="font-size:18px;">edit</span>
+                        </button>
+                        <input type="checkbox" style="width:20px; height:20px; cursor:pointer;" 
+                               onclick="toggleTaskStatus('${t.id}', '${merchantUuid}')" 
+                               ${t.status === 'Completed' ? 'checked' : ''}>
+                    </div>
+                </div>`;
+      
+      }).join('') 
+    : '<p style="text-align:center; color:#94a3b8; padding:20px;">No pending tasks.</p>';
+
+        listDiv.innerHTML = html;
+    } catch (err) { 
+        console.error("Task Fetch Error:", err); 
+        listDiv.innerHTML = '<p style="text-align:center; color:red;">Error loading tasks.</p>';
+    }
+}
+
+async function addTask(merchantUuid) {
+    const title = document.getElementById('task-title')?.value;
+    const body = document.getElementById('task-body')?.value;
+    const due = document.getElementById('task-due')?.value;
+    const assigned = document.getElementById('task-assign-select')?.value;
+
+    // Standardized key from your login system
+    const currentAdminEmail = localStorage.getItem('pp_userid'); 
+
+    if (!merchantUuid || merchantUuid === 'undefined') {
+        return Swal.fire('Error', 'Internal Error: Merchant ID not found.', 'error');
+    }
+    if (!title) {
+        return Swal.fire('Required', 'Please provide a task title.', 'warning');
+    }
+
+    Swal.fire({ title: 'Saving Task...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'add_task', 
+                merchant_uuid: merchantUuid, 
+                title: title, 
+                body: body, 
+                due_date: due || null, 
+                assigned_to: assigned || null, 
+                created_by: currentAdminEmail 
+            })
+        });
+
+        const result = await res.json();
+        
+        if (result.success) {
+            // Log the creation to Activity Logs
+            await logAuditAction('Merchant Task Created', `Task "${title}" created for Merchant UUID: ${merchantUuid}`);
+            
+            Swal.fire({ icon: 'success', title: 'Task Created', timer: 1500, showConfirmButton: false });
+            
+            // Reset UI
+            if(document.getElementById('task-title')) document.getElementById('task-title').value = '';
+            if(document.getElementById('task-body')) document.getElementById('task-body').value = '';
+            if(document.getElementById('task-due')) document.getElementById('task-due').value = '';
+
+            fetchMerchantTasks(); 
+        } else {
+            throw new Error(result.message || "Database rejected the entry");
+        }
+    } catch (err) {
+        console.error("Task Save Error:", err);
+        Swal.fire('Error', 'Failed to save task: ' + err.message, 'error');
+    }
+}
+    
 
     async function fetchMerchants() {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">Synchronizing Ledger...</td></tr>`;
+        
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
+            <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
+            Synchronizing Ledger...
+        </td></tr>`;
 
         try {
             const res = await fetch('/api/merchants', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value })
             });
             const result = await res.json();
             currentRecords = result.data;
-            renderMerchantTable(result);
+
+        if (result.metrics) {
+            document.getElementById('mtd-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.totalMTD || 0);
+
+            document.getElementById('30d-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.total30D || 0);
+
+            document.getElementById('90d-val').innerText = new Intl.NumberFormat('en-US', {
+                style: 'currency', currency: 'USD'
+            }).format(result.metrics.total90D || 0);
+
+            document.getElementById('share-val').innerText = `${result.metrics.portfolioShare || '0.00'}%`;
+        }
+            tbody.innerHTML = "";
+            currentRecords.forEach(m => {
+    const row = tbody.insertRow();
+    if (m.is_prime49) row.classList.add('prime-row'); // Highlight row
+    
+    const s = (m.account_status || '').toLowerCase();
+    const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : s.includes('fraud') ? 'status-fraud' : '';
+    
+    // Add the badge next to the DBA name
+    const primeBadge = m.is_prime49 ? `<span class="prime-badge">PRIME49</span>` : '';
+
+    row.innerHTML = `
+        <td>
+            <a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">
+                ${m.dba_name || '---'}
+            </a>
+            ${primeBadge}
+        </td>
+        <td><code>${m.merchant_id || '---'}</code></td>
+        <td>${m.agent_id || '---'}</td>
+        <td>${m.company_name || '---'}</td>
+        <td>${m.partner_name || '---'}</td>
+        <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
+    `;
+});
+            document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total Found: ${result.count.toLocaleString()})</span>`;
         } catch (err) { console.error(err); }
     }
 
-    function renderMerchantTable(result) {
-        const tbody = document.getElementById('merchantTableBody');
-        tbody.innerHTML = "";
-        currentRecords.forEach(m => {
-            const row = tbody.insertRow();
-            if (m.is_prime49) row.classList.add('prime-row');
-            const s = (m.account_status || '').toLowerCase();
-            const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : s.includes('fraud') ? 'status-fraud' : '';
-            
-            // RESTORED: DBA, MID, Partner ID, COMPANY, Partner Name, Status
-            row.innerHTML = `
-                <td><a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">${m.dba_name || '---'}</a> ${m.is_prime49 ? '<span class="prime-badge">PRIME49</span>' : ''}</td>
-                <td><code>${m.merchant_id || '---'}</code></td>
-                <td>${m.agent_id || '---'}</td>
-                <td>${m.company_name || '---'}</td> 
-                <td>${m.partner_name || '---'}</td>
-                <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
-            `;
-        });
-        document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span>(Total: ${result.count.toLocaleString()})</span>`;
-    }
+  async function openModal(id) {
+    const m = currentRecords.find(r => r.id === id);
+    if (!m) return;
 
-    // --- NEW: CSV Manual Mapping & Smart Scan Logic ---
-    async function handleCSVUpload(input) {
-        const file = input.files[0];
-        if (!file) return;
-        Papa.parse(file, { header: true, skipEmptyLines: true, complete: function(results) { showMapperModal(results.data, results.meta.fields); }});
-    }
+    // Badge for the header
+    const primeBadge = m.is_prime49 ? 
+        `<span style="background:#b45309; color:white; font-size:10px; padding:3px 8px; border-radius:4px; margin-left:10px; vertical-align:middle; display:inline-block;">PRIME49 ASSET</span>` 
+        : '';
 
-    function showMapperModal(data, csvHeaders) {
-        const dbFields = [
-            {key: 'merchant_id', label: 'MID (Required)'},
-            {key: 'dba_name', label: 'DBA Name'},
-            {key: 'company_name', label: 'Company Name'},
-            {key: 'merchant_address', label: 'Street Address'},
-            {key: 'merchant_city', label: 'City'},
-            {key: 'merchant_state', label: 'State'},
-            {key: 'merchant_zip', label: 'Zip Code'},
-            {key: 'merchant_phone', label: 'Phone'}
-        ];
-        let mapperHtml = `<div style="text-align:left; font-size:12px; color:#64748b; margin-bottom:15px;">Link your CSV columns to the system fields:</div>`;
-        dbFields.forEach(field => {
-            mapperHtml += `<div style="margin-bottom:10px; display:grid; grid-template-columns: 1fr 1fr; gap:10px; align-items:center;">
-                <label style="font-weight:700; font-size:11px;">${field.label}</label>
-                <select id="map-${field.key}" class="slds-select" style="height:32px; border-radius:8px;">
-                    <option value="">-- Ignore --</option>
-                    ${csvHeaders.map(h => `<option value="${h}" ${h.toLowerCase() === field.key.toLowerCase() ? 'selected' : ''}>${h}</option>`).join('')}
-                </select>
-            </div>`;
-        });
-        Swal.fire({ title: 'Map CSV Columns', html: mapperHtml, showCancelButton: true, preConfirm: () => {
-            const mapping = {}; dbFields.forEach(f => { mapping[f.key] = document.getElementById(`map-${f.key}`).value; });
-            if (!mapping.merchant_id) return Swal.showValidationMessage('MID is required');
-            return mapping;
-        }}).then((r) => { if (r.isConfirmed) processScanAndReview(data, r.value); });
-    }
+    Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
-    async function processScanAndReview(csvData, mapping) {
-        Swal.fire({ title: 'Scanning Database...', didOpen: () => Swal.showLoading() });
-        const mappedData = csvData.map(row => {
-            let item = {}; for (let key in mapping) { if (mapping[key]) item[key] = row[mapping[key]]; }
-            return item;
-        }).filter(i => i.merchant_id);
-
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ action: 'check_mids', mids: mappedData.map(m => m.merchant_id) })});
-        const { existingMids } = await res.json();
-
-        let updates = mappedData.filter(m => existingMids.includes(String(m.merchant_id)));
-        let creates = mappedData.filter(m => !existingMids.includes(String(m.merchant_id)));
+    try {
+        // 1. Fetch all data including the new Staff list from app_users
+        const [nRes, lRes, aRes, sRes] = await Promise.all([
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) })
+        ]);
+        
+        const notes = (await nRes.json()).data || [];
+        const logs = (await lRes.json()).data || [];
+        const files = (await aRes.json()).data || [];
+        const staff = (await sRes.json()).data || [];
 
         Swal.fire({
-            title: 'Confirm Bulk Sync',
-            width: '800px',
-            html: `<div style="display:grid; grid-template-columns:1fr 1fr; gap:15px; margin-bottom:20px;">
-                <div style="background:#f0f9ff; padding:15px; border-radius:12px;"><b>${updates.length}</b> Updates</div>
-                <div style="background:#f0fdf4; padding:15px; border-radius:12px;"><b>${creates.length}</b> New Records</div>
-            </div>`,
-            showCancelButton: true, confirmButtonText: 'Start Sync'
-        }).then((r) => { if (r.isConfirmed) executeFinalUpsert(mappedData); });
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a; display:flex; align-items:center;">${m.dba_name} ${primeBadge}</div>`,
+            width: '1100px',
+            html: `
+                <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:20px;">
+                    <button onclick="switchTab('details')" id="tab-details" class="modal-tab-btn active-tab">DETAILS</button>
+                    <button onclick="switchTab('equipment')" id="tab-equipment" class="modal-tab-btn">EQUIPMENT</button>
+                    <button onclick="switchTab('lifecycle')" id="tab-lifecycle" class="modal-tab-btn">LIFECYCLE</button>
+                    <button onclick="switchTab('notes')" id="tab-notes" class="modal-tab-btn">INTERNAL NOTES</button>
+                    <button onclick="switchTab('tasks')" id="tab-tasks" class="modal-tab-btn">TASKS</button>
+                    <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
+                    <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
+                </div>
+
+                <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
+                    <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
+                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Core Identity & Status</div>
+                        <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
+                        <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
+                        <div>
+                            <label class="edit-label">Account Status</label>
+                            <select id="edit-account_status" class="modern-input">
+                                <option value="${m.account_status}" selected>${m.account_status}</option>
+                                <option value="Approved">Approved</option>
+                                <option value="Approved - Collections">Approved - Collections</option>
+                                <option value="Closed">Closed</option>
+                                <option value="Closed - Collections">Closed - Collections</option>
+                                <option value="Closed - Risk">Closed - Risk</option>
+                                <option value="Collections">Collections</option>
+                                <option value="Declined">Declined</option>
+                                <option value="Enrollment">Enrollment</option>
+                                <option value="Fraud">Fraud</option>
+                                <option value="Pending">Pending</option>
+                                <option value="Withdrawn">Withdrawn</option>
+                            </select>
+                        </div>
+                        <div><label class="edit-label">Status ID</label><input id="edit-status_id" class="modern-input" value="${m.status_id || ''}"></div>
+                        <div><label class="edit-label">Account Code</label><input id="edit-account_code" class="modern-input" value="${m.account_code || ''}"></div>
+                        <div><label class="edit-label">Major Merchant</label><input id="edit-major_merchant" class="modern-input" value="${m.major_merchant || ''}"></div>
+
+                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Contact Information</div>
+                        <div><label class="edit-label">Email</label><input id="edit-email" class="modern-input" value="${m.email || ''}"></div>
+                        <div><label class="edit-label">Merchant Phone</label><input id="edit-merchant_phone" class="modern-input" value="${m.merchant_phone || ''}"></div>
+                        <div><label class="edit-label">Primary Contact</label><input id="edit-merchant_primary_contact" class="modern-input" value="${m.merchant_primary_contact || ''}"></div>
+                        <div style="grid-column: span 2;"><label class="edit-label">Street Address</label><input id="edit-merchant_address" class="modern-input" value="${m.merchant_address || ''}"></div>
+<div><label class="edit-label">City</label><input id="edit-merchant_city" class="modern-input" value="${m.merchant_city || ''}"></div>
+<div><label class="edit-label">State</label><input id="edit-merchant_state" class="modern-input" value="${m.merchant_state || ''}"></div>
+<div><label class="edit-label">Zip Code</label><input id="edit-merchant_zip" class="modern-input" value="${m.merchant_zip || ''}"></div>
+<div><label class="edit-label">Country</label><input id="edit-merchant_country" class="modern-input" value="${m.merchant_country || 'USA'}"></div>
+                        <div style="grid-column: span 2;"><label class="edit-label">Websites</label><input id="edit-merchant_websites" class="modern-input" value="${m.merchant_websites || ''}"></div>
+                        <div><label class="edit-label">ACH Properties</label><input id="edit-ach_properties" class="modern-input" value="${m.ach_properties || ''}"></div>
+
+                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Processing & Technical</div>
+                        <div><label class="edit-label">Processor</label><input id="edit-processor" class="modern-input" value="${m.processor || ''}"></div>
+                        <div><label class="edit-label">Platform</label><input id="edit-processor_platform" class="modern-input" value="${m.processor_platform || ''}"></div>
+                        <div><label class="edit-label">Gateway ID</label><input id="edit-gateway_account_id" class="modern-input" value="${m.gateway_account_id || ''}"></div>
+                        <div><label class="edit-label">Edge Enabled</label><input id="edit-is_edge_enabled" class="modern-input" value="${m.is_edge_enabled || ''}"></div>
+                        <div><label class="edit-label">PCI Compliant</label><input id="edit-is_pci_compliant" class="modern-input" value="${m.is_pci_compliant || ''}"></div>
+                        <div><label class="edit-label">Mobile</label><input id="edit-is_mobile" class="modern-input" value="${m.is_mobile || ''}"></div>
+                        <div><label class="edit-label">Source</label><input id="edit-source" class="modern-input" value="${m.source || ''}"></div>
+                        <div><label class="edit-label">Activated</label><input id="edit-is_activated" class="modern-input" value="${m.is_activated || ''}"></div>
+                        <div><label class="edit-label">Device Hub</label><input id="edit-is_device_hub_link_enabled" class="modern-input" value="${m.is_device_hub_link_enabled || ''}"></div>
+
+                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Volume & Financials</div>
+                        <div><label class="edit-label">Vol MTD</label><input id="edit-volume_mtd" class="modern-input" value="${m.volume_mtd || ''}"></div>
+                        <div><label class="edit-label">Vol 30D</label><input id="edit-volume_30_day" class="modern-input" value="${m.volume_30_day || ''}"></div>
+                        <div><label class="edit-label">Vol 90D</label><input id="edit-volume_90_day" class="modern-input" value="${m.volume_90_day || ''}"></div>
+                        <div><label class="edit-label">Total Volume</label><input id="edit-volume" class="modern-input" value="${m.volume || ''}"></div>
+                        <div><label class="edit-label">Buy Rate Tier</label><input id="edit-fresno_buy_rate_tier" class="modern-input" value="${m.fresno_buy_rate_tier || ''}"></div>
+                        <div><label class="edit-label">Commission Code</label><input id="edit-isv_commission_code" class="modern-input" value="${m.isv_commission_code || ''}"></div>
+
+                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Dates & Compliance</div>
+                        <div><label class="edit-label">Enroll Date</label><input type="date" id="edit-enrollment_date" class="modern-input" value="${m.enrollment_date || ''}"></div>
+                        <div><label class="edit-label">Approve Date</label><input type="date" id="edit-approved_date" class="modern-input" value="${m.approved_date || ''}"></div>
+                        <div><label class="edit-label">Batch Date</label><input type="date" id="edit-last_batch_date" class="modern-input" value="${m.last_batch_date || ''}"></div>
+                        <div><label class="edit-label">Status Change</label><input type="date" id="edit-account_status_change_date" class="modern-input" value="${m.account_status_change_date || ''}"></div>
+                        <div><label class="edit-label">Days Approved</label><input id="edit-days_approved" class="modern-input" value="${m.days_approved || ''}"></div>
+                        <div><label class="edit-label">Shipping Status</label><input id="edit-shipping_status" class="modern-input" value="${m.shipping_status || ''}"></div>
+                        <div><label class="edit-label">IRS TIN Status</label><input id="edit-irs_tin_status" class="modern-input" value="${m.irs_tin_status || ''}"></div>
+                        <div><label class="edit-label">NDF</label><input id="edit-ndf" class="modern-input" value="${m.ndf || ''}"></div>
+                        <div><label class="edit-label">Credit Review</label><input id="edit-credit_review" class="modern-input" value="${m.credit_review || ''}"></div>
+
+                        <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Underwriting Notes</div>
+                        <div style="grid-column: span 3;"><textarea id="edit-underwriting_decision_note" class="modern-input" style="height:80px;">${m.underwriting_decision_note || ''}</textarea></div>
+                    </div>
+                    <button onclick="saveMerchant('${m.id}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:25px; font-weight:700; cursor:pointer;">SAVE CHANGES</button>
+                </div>
+
+                <div id="content-equipment" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th scope="col" style="font-size:10px;">SERIAL NUMBER</th>
+                                    <th scope="col" style="font-size:10px;">MODEL</th>
+                                    <th scope="col" style="font-size:10px;">STATUS</th>
+                                    <th scope="col" style="font-size:10px;">INSTALLED</th>
+                                </tr>
+                            </thead>
+                            <tbody id="merchant-equip-list"></tbody>
+                        </table>
+                        <div id="equip-empty-state" style="padding:40px; text-align:center; color:#94a3b8; display:none;">
+                            <span class="material-icons" style="font-size:48px; display:block; margin-bottom:10px;">devices_other</span>
+                            No equipment assigned to this merchant.
+                        </div>
+                    </div>
+                </div>
+
+                <div id="content-lifecycle" class="tab-content" style="display:none; text-align:left;">
+                     <div id="lifecycle-list" style="max-height:500px; overflow-y:auto; padding:10px;">
+                         <p style="text-align:center; padding:20px; color:#94a3b8;">Loading lifecycle history...</p>
+                     </div>
+                </div>
+
+                <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
+                        <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
+                        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
+                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
+                    </div>
+                    <div id="notes-list">${notes.map(n => `
+                        <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
+                            <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
+                            <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto; width:100%; resize:none;">${n.body}</textarea>
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
+                                <small style="color:#64748b;">By: ${n.created_by || 'Staff'}</small>
+                                <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
+                            </div>
+                        </div>
+                    `).join('')}</div>
+                </div>
+
+                <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px; display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <div style="grid-column: span 2;">
+                            <label class="edit-label">Task Title</label>
+                            <input id="task-title" placeholder="What needs to be done?" class="modern-input">
+                        </div>
+                        <div>
+                            <label class="edit-label">Due Date</label>
+                            <input type="date" id="task-due" class="modern-input">
+                        </div>
+                        <div>
+                            <label class="edit-label">Assign To</label>
+                            <select id="task-assign-select" class="modern-input">
+                                <option value="">Select Staff...</option>
+                                ${staff.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('')}
+                            </select>
+                        </div>
+                        <div style="grid-column: span 2;">
+                            <label class="edit-label">Task Details</label>
+                            <textarea id="task-body" placeholder="Describe the task..." class="modern-input" style="height:60px;"></textarea>
+                        </div>
+                        <button onclick="addTask('${m.id}')" style="grid-column: span 2; background:var(--pp-blue); color:white; padding:10px; border-radius:8px; border:none; cursor:pointer; font-weight:700;">
+                            CREATE TASK
+                        </button>    
+                    </div>
+                    <div id="tasks-list" style="max-height:400px; overflow-y:auto;">
+                        <p style="text-align:center; padding:20px; color:#94a3b8;">No pending tasks.</p>
+                    </div>
+                </div>
+
+                <div id="content-attachments" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:#f8fafc; border:2px dashed #cbd5e1; border-radius:12px; padding:30px; text-align:center; margin-bottom:20px;">
+                        <span class="material-icons" style="font-size:48px; color:#94a3b8; margin-bottom:10px;">cloud_upload</span>
+                        <p style="font-weight:700; color:#475569; margin-bottom:15px;">Upload Merchant Documents</p>
+                        <input type="file" id="fileInput" style="display:none;" onchange="handleFileUpload('${m.id}')">
+                        <button onclick="document.getElementById('fileInput').click()" class="slds-button slds-button_brand" style="background:var(--pp-blue); border-radius:8px;">
+                            SELECT FILE
+                        </button>
+                        <p style="font-size:10px; color:#94a3b8; margin-top:10px;">PDF, PNG, JPG, or CSV (Max 10MB)</p>
+                    </div>
+                    <div id="attachments-list" style="display:grid; gap:10px;">
+                        ${files.length > 0 ? files.map(f => `
+                            <div style="display:flex; justify-content:space-between; align-items:center; background:white; border:1px solid #e2e8f0; padding:12px; border-radius:10px;">
+                                <div style="display:flex; align-items:center; gap:10px;">
+                                    <span class="material-icons" style="color:var(--pp-blue);">description</span>
+                                    <div>
+                                        <div style="font-weight:700; font-size:12px;">${f.file_name}</div>
+                                        <div style="font-size:10px; color:#64748b;">${new Date(f.created_at).toLocaleDateString()}</div>
+                                    </div>
+                                </div>
+                                <div style="display:flex; gap:10px;">
+                                    <button onclick="window.open('https://zuzwljjrppyrzngmhdru.supabase.co/storage/v1/object/public/merchant-files/${f.file_path}')" style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
+                                        <span class="material-icons">download</span>
+                                    </button>
+                                </div>
+                            </div>
+                        `).join('') : '<p style="text-align:center; color:#94a3b8; padding:20px;">No attachments found.</p>'}
+                    </div>
+                </div>
+
+                <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
+                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                        ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
+                    </div>
+                </div>
+            `,
+            showConfirmButton: false, showCloseButton: true
+        });
+    } catch (err) { 
+        Swal.fire('Error', 'Load failed: ' + err.message, 'error'); 
     }
-
-    async function executeFinalUpsert(payload) {
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ action: 'bulk_upsert', payload })});
-        if ((await res.json()).success) { Swal.fire('Success', 'Sync complete', 'success'); fetchMerchants(); }
-    }
-
-    // --- RESTORED: Modal, Tabs, Save Logic ---
-    window.saveMerchant = async (uuid) => {
-        const fields = ['dba_name', 'account_status', 'email', 'merchant_phone', 'merchant_address', 'merchant_city', 'merchant_state', 'merchant_zip', 'merchant_country'];
-        const payload = {}; fields.forEach(f => { const el = document.getElementById('edit-' + f); if(el) payload[f] = el.value; });
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'update', id: uuid, payload }) });
-        if ((await res.json()).success) { Swal.fire('Saved', '', 'success'); fetchMerchants(); }
-    };
-
+}
     window.switchTab = (tab) => {
         document.querySelectorAll('.tab-content').forEach(c => c.style.display = 'none');
         document.querySelectorAll('.modal-tab-btn').forEach(t => t.classList.remove('active-tab'));
         document.getElementById('content-' + tab).style.display = 'block';
         document.getElementById('tab-' + tab).classList.add('active-tab');
+        if (tab === 'equipment') fetchMerchantEquipment();
+        if (tab === 'lifecycle') fetchMerchantLifecycle();
+        if (tab === 'tasks') fetchMerchantTasks();
     };
 
-    window.onload = fetchMerchants;
+    // SURGICAL ADD: fetchMerchantLifecycle function
+   async function fetchMerchantLifecycle() {
+    // We grab the UUID from the Save button attribute or the hidden input
+    const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+    if (!saveBtn) return;
+    const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+    
+    const listDiv = document.getElementById('lifecycle-list');
+    listDiv.innerHTML = '<p style="text-align:center; padding:20px;">Consulting logs...</p>';
+
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'get_merchant_history', // Matches backend
+                merchant_id: merchantUuid        // Sent directly in the body
+            })
+        });
+        const result = await res.json();
+        
+        if (!result.data || result.data.length === 0) {
+            listDiv.innerHTML = '<p style="text-align:center; padding:20px; color:#94a3b8;">No history found for this merchant.</p>';
+            return;
+        }
+
+        listDiv.innerHTML = result.data.map(log => `
+            <div class="lifecycle-item" style="border-left: 2px solid #e2e8f0; margin-left: 10px; padding-left: 20px; padding-bottom: 20px; position: relative;">
+                <div class="lifecycle-dot" style="position: absolute; left: -6px; top: 0; width: 10px; height: 10px; background: #004990; border-radius: 50%;"></div>
+                <div style="font-weight:800; color:#004990; font-size:11px; text-transform:uppercase;">${log.action}</div>
+                <div style="font-size:10px; color:#94a3b8; margin-bottom:5px;">${new Date(log.created_at).toLocaleString()}</div>
+                <div style="font-size:12px; font-weight:600;">${log.equipments?.terminal_type || 'Device'} (${log.equipments?.serial_number || 'S/N Missing'})</div>
+                <div style="font-size:11px; color:#64748b; margin-top:2px;">
+                    Movement: <b>${log.from_location}</b> → <b>${log.to_location}</b>
+                </div>
+                <div style="font-size:11px; color:#475569; font-style:italic; margin-top:4px; background:#f8fafc; padding:4px; border-radius:4px;">
+                    "${log.notes || '---'}"
+                </div>
+            </div>
+        `).join('');
+    } catch (err) {
+        listDiv.innerHTML = '<p style="text-align:center; color:red;">History load error.</p>';
+    }
+}
+    async function fetchMerchantEquipment() {
+        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+        if (!saveBtn) return;
+        const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+        const tbody = document.getElementById('merchant-equip-list');
+        const emptyState = document.getElementById('equip-empty-state');
+        
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">Loading assets...</td></tr>';
+        emptyState.style.display = 'none';
+
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_equipment', merchant_uuid: merchantUuid })
+            });
+            const result = await res.json();
+            
+            tbody.innerHTML = "";
+            if (!result.data || result.data.length === 0) {
+                emptyState.style.display = 'block';
+            } else {
+                result.data.forEach(e => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
+                        <td style="font-weight:700; color:var(--pp-blue); font-size:12px;">${e.serial_number}</td>
+                        <td style="font-size:12px;">${e.terminal_type}</td>
+                        <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${e.status}</span></td>
+                        <td style="font-size:11px; color:#64748b;">${e.received_date ? new Date(e.received_date).toLocaleDateString() : '---'}</td>
+                    `;
+                });
+            }
+        } catch (err) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Failed to load equipment.</td></tr>';
+        }
+    }
+
+window.saveMerchant = async (uuid) => {
+    // These strings MUST match the 'id' attributes in your HTML input tags
+    const fields = [
+        'dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant', 
+        'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 
+        'ach_properties', 'processor', 'processor_platform', 'gateway_account_id', 
+        'is_edge_enabled', 'is_pci_compliant', 'is_mobile', 'source', 'is_activated', 
+        'is_device_hub_link_enabled', 'volume_mtd', 'volume_30_day', 'volume_90_day', 
+        'volume', 'fresno_buy_rate_tier', 'isv_commission_code', 'enrollment_date', 
+        'approved_date', 'last_batch_date', 'account_status_change_date', 'days_approved', 
+        'shipping_status', 'irs_tin_status', 'ndf', 'credit_review', 'underwriting_decision_note',
+        'merchant_address', 'merchant_city', 'merchant_state', 'merchant_zip', 'merchant_country'
+    ];
+
+    const payload = {}; 
+    fields.forEach(f => { 
+        const el = document.getElementById('edit-' + f); 
+        if (el) {
+            payload[f] = el.value; 
+        }
+    });
+
+    console.log("Saving Payload:", payload); // Debug: Check your console to see if address is here
+
+    try {
+        const res = await fetch('/api/merchants', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ action: 'update', id: uuid, payload }) 
+        });
+        const result = await res.json();
+        
+        if (result.success) { 
+            Swal.fire({ icon: 'success', title: 'Saved to Database', timer: 1500, showConfirmButton: false }); 
+            fetchMerchants(); // Refresh the table
+        } else {
+            Swal.fire('Update Failed', result.message, 'error');
+        }
+    } catch (err) { 
+        Swal.fire('Connection Error', 'Could not reach the server', 'error');
+    }
+};
+
+    window.addNote = async function(uuid) {
+        try {
+            const title = document.getElementById('new-note-title').value;
+            const body = document.getElementById('new-note-body').value;
+            const currentUserId = sessionStorage.getItem('pp_userid') || '00000000-0000-0000-0000-000000000000'; 
+
+            if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
+
+            const res = await fetch('/api/merchants', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title: title, body: body, userId: currentUserId, created_by: currentUserId }) 
+            });
+            
+            const result = await res.json();
+            if (result.success) {
+                await logAuditAction('Merchant Note Added', `Subject: ${title} added to Merchant ID: ${uuid}`);
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
+                await Toast.fire({ icon: 'success', title: 'New note created' });
+                openModal(uuid); 
+            } else { throw new Error(result.message || 'Database rejected the entry'); }
+        } catch (err) { Swal.fire('Error', 'Failed to add note: ' + err.message, 'error'); }
+    };
+
+    window.updateNote = async function(noteId, merchantId) {
+        const title = document.getElementById(`note-title-${noteId}`).value;
+        const body = document.getElementById(`note-body-${noteId}`).value;
+        try {
+            const res = await fetch('/api/merchants', { 
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' }, 
+                body: JSON.stringify({ action: 'update_note', note_id: noteId, title: title, body: body }) 
+            });
+            const result = await res.json();
+            if(result.success) {
+                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true });
+                Toast.fire({ icon: 'success', title: 'Note updated successfully' });
+            } else { Swal.fire('Error', 'Could not save note: ' + result.message, 'error'); }
+        } catch (err) { Swal.fire('Error', 'Network error while saving note', 'error'); }
+    };
+
+    window.handleFileUpload = async function(merchantId) {
+        const fileInput = document.getElementById('fileInput');
+        const file = fileInput.files[0];
+        if (!file) return;
+
+        if (file.size > 10 * 1024 * 1024) {
+            return Swal.fire('Error', 'File is too large (Max 10MB)', 'error');
+        }
+        Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+        try {
+            const fileExt = file.name.split('.').pop();
+            const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
+            const filePath = `${merchantId}/${fileName}`;
+
+            const supabaseUrl = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+            const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow';
+            
+            const sbClient = supabase.createClient(supabaseUrl, supabaseKey);
+
+            const { data: storageData, error: storageError } = await sbClient.storage
+                .from('merchant-files')
+                .upload(filePath, file);
+
+            if (storageError) throw storageError;
+
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'add_attachment',
+                    merchant_id: merchantId,
+                    file_name: file.name,
+                    file_path: filePath,
+                    file_type: file.type,
+                    file_size: file.size,
+                    uploaded_by: sessionStorage.getItem('pp_username') || 'System'
+                })
+            });
+
+            const result = await res.json();
+            if (result.success) {
+                await logAuditAction('Merchant File Uploaded', `File "${file.name}" uploaded for Merchant ID: ${merchantId}`);
+                Swal.fire({ icon: 'success', title: 'Uploaded!', timer: 1500, showConfirmButton: false });
+                openModal(merchantId); 
+            } else { throw new Error(result.message); }
+        } catch (err) {
+            console.error("Upload Error Detail:", err);
+            Swal.fire('Upload Failed', err.message, 'error');
+        }
+    };
+
+    function changePage(dir) { currentPage += dir; fetchMerchants(); }
+    function resetAndFetch() { currentPage = 0; fetchMerchants(); }
+    
+    window.onload = () => {
+        Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+        fetchMerchants().then(() => { Swal.close(); });
+    };
 </script>
 </body>
 </html>
