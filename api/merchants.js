@@ -252,7 +252,12 @@ if (action === 'bulk_upsert') {
         major_merchant: row.major_merchant,
         merchant_websites: row.merchant_websites,
         merchant_primary_contact: row.merchant_primary_contact,
-        merchant_phone: row.merchant_phone
+        merchant_phone: row.merchant_phone,
+        merchant_address: row.merchant_address,
+    merchant_city: row.merchant_city,
+    merchant_state: row.merchant_state,
+    merchant_zip: row.merchant_zip,
+    merchant_country: row.merchant_country
     })).filter(item => item.merchant_id);
 
     try {
