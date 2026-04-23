@@ -804,7 +804,17 @@ async function handleCSVUpload(input) {
     }
 
     window.saveMerchant = async (uuid) => {
-        const fields = ['dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant', 'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 'ach_properties', 'processor', 'processor_platform', 'gateway_account_id', 'is_edge_enabled', 'is_pci_compliant', 'is_mobile', 'source', 'is_activated', 'is_device_hub_link_enabled', 'volume_mtd', 'volume_30_day', 'volume_90_day', 'volume', 'fresno_buy_rate_tier', 'isv_commission_code', 'enrollment_date', 'approved_date', 'last_batch_date', 'account_status_change_date', 'days_approved', 'shipping_status', 'irs_tin_status', 'ndf', 'credit_review', 'underwriting_decision_note',merchant_address', 'merchant_city', 'merchant_state', 'merchant_zip', 'merchant_country'];
+        const fields = [
+        'dba_name', 'account_status', 'status_id', 'account_code', 'major_merchant', 
+        'email', 'merchant_phone', 'merchant_primary_contact', 'merchant_websites', 
+        'ach_properties', 'processor', 'processor_platform', 'gateway_account_id', 
+        'is_edge_enabled', 'is_pci_compliant', 'is_mobile', 'source', 'is_activated', 
+        'is_device_hub_link_enabled', 'volume_mtd', 'volume_30_day', 'volume_90_day', 
+        'volume', 'fresno_buy_rate_tier', 'isv_commission_code', 'enrollment_date', 
+        'approved_date', 'last_batch_date', 'account_status_change_date', 'days_approved', 
+        'shipping_status', 'irs_tin_status', 'ndf', 'credit_review', 'underwriting_decision_note',
+        'merchant_address', 'merchant_city', 'merchant_state', 'merchant_zip', 'merchant_country'
+    ];
         const payload = {}; 
         fields.forEach(f => { const el = document.getElementById('edit-' + f); if(el) payload[f] = el.value; });
         try {
@@ -866,7 +876,6 @@ async function handleCSVUpload(input) {
         if (file.size > 10 * 1024 * 1024) {
             return Swal.fire('Error', 'File is too large (Max 10MB)', 'error');
         }
-
         Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
 
         try {
