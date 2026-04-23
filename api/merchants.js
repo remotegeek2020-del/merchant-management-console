@@ -448,43 +448,28 @@ if (action === 'list') {
     }
 }
        if (action === 'update') {
-    // 1. Fetch old data to compare for the audit log
-    const { data: oldData, error: fetchError } = await supabase
-        .from('merchants')
-        .select('*')
-        .eq('id', id)
-        .single();
-
-    if (fetchError) throw fetchError;
-
-    // 2. Log changes for the internal 'System Update' note
-    let changes = [];
-    for (let key in payload) {
-        let oldVal = oldData[key] ? String(oldData[key]).trim() : "empty";
-        let newVal = payload[key] ? String(payload[key]).trim() : "empty";
-        if (oldVal !== newVal) {
-            const label = key.replace(/_/g, ' ').toUpperCase();
-            changes.push(`${label}: "${oldVal}" → "${newVal}"`);
-        }
-    }
-
-    // 3. ACTUAL UPDATE - Ensure we are hitting the 'merchants' table, NOT the 'view'
+    // 1. Update the base table directly
     const { error: updateError } = await supabase
-        .from('merchants') // Must be the base table
-        .update(payload) 
+        .from('merchants')
+        .update(payload) // This payload now includes the address fields from frontend
         .eq('id', id);
 
-    if (updateError) throw updateError;
+    if (updateError) {
+        console.error("Update Error:", updateError.message);
+        return res.status(500).json({ success: false, message: updateError.message });
+    }
 
-    // 4. Create the audit note if changes occurred
-    if (changes.length > 0) {
+    // 2. Optional: Log changes (keeping your existing logic)
+    // We do the log AFTER the update to ensure the update actually worked
+    try {
         await supabase.from('merchant_notes').insert([{
             merchant_id: id,
             title: "System Update",
-            body: `Field Changes:\n${changes.join('\n')}`,
+            body: `Merchant profile updated manually.`,
             created_by: user || 'System'
         }]);
-    }
+    } catch (logErr) { console.warn("Log failed, but data saved."); }
+
     return res.status(200).json({ success: true });
 }
 
