@@ -325,32 +325,34 @@ async function handleAgentFile(input) {
     const chat = document.getElementById('agentChat');
     const status = document.getElementById('agentStatus');
 
-    // 1. Show User Message
     chat.innerHTML += `<div style="align-self:flex-end; background:var(--pp-accent); color:white; padding:10px; border-radius:12px; font-size:13px;">Uploaded: ${file.name}</div>`;
-    status.innerText = "Gemini 3 is analyzing...";
+    status.innerText = "Analyzing...";
     
     const reader = new FileReader();
     reader.onload = async () => {
         const base64 = reader.result.split(',')[1];
         try {
-            // Inside handleAgentFile -> reader.onload -> try block
-const res = await fetch('/api/ai-import', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fileBase64: base64 })
-});
-const result = await res.json();
+            const res = await fetch('/api/ai-import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ fileBase64: base64 })
+            });
+            
+            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
+            
+            const result = await res.json();
 
-if (result.success && result.data) {
-    // Pass result.data specifically to the review renderer
-    renderAgentReview(result.data); 
-    status.innerText = "Data extracted successfully.";
-} else {
-                chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;">Error: ${result.message}</div>`;
-                status.innerText = "Error encountered.";
+            if (result.success) {
+                // IMPORTANT: Ensure result is passed entirely
+                confirmAIImport(result); 
+                status.innerText = "Ready for review.";
+            } else {
+                chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;">${result.message}</div>`;
+                status.innerText = "Processing failed.";
             }
         } catch (err) {
-            status.innerText = "Connection failed.";
+            console.error("Detailed Error:", err);
+            status.innerText = "Connection failed: " + err.message; // Added detail to status
         }
     };
     reader.readAsDataURL(file);
