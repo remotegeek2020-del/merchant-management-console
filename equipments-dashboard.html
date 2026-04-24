@@ -440,91 +440,81 @@ async function handleAIFile(input) {
  * STAGE 1: The Review Table
  * This function triggers automatically when the AI extraction succeeds
  */
-// Step 1: Review Table (Now includes Date and Duplicate UI)
-function confirmAIImport(result) {
+// STEP 1: Comparison & Categorization
+async function confirmAIImport(result) {
     const extractedData = result.data;
     const invoiceDate = result.invoice_date || new Date().toISOString().split('T')[0];
 
-    let tableHtml = `
-        <div style="margin-bottom:15px; padding:10px; background:#f0f9ff; border-radius:8px; border:1px solid #00a1e0;">
-            <p style="font-size:12px; color:#0369a1; font-weight:700;">
-                <span class="material-icons" style="font-size:14px; vertical-align:middle;">calendar_today</span> 
-                Invoice Date Detected: ${invoiceDate}
-            </p>
+    // Fetch existing serials to find duplicates BEFORE showing the review
+    const checkRes = await fetch('/api/equipments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list', limit: 10000 }) 
+    });
+    const checkResult = await checkRes.json();
+    const existingSerials = new Set((checkResult.data || []).map(i => i.serial_number.toUpperCase()));
+
+    const newItems = [];
+    const duplicates = [];
+
+    extractedData.forEach(item => {
+        if (existingSerials.has(item.serial_number.toUpperCase())) {
+            duplicates.push(item);
+        } else {
+            newItems.push({ ...item, received_date: invoiceDate });
+        }
+    });
+
+    // Generate the Review HTML
+    let html = `
+        <div style="text-align:left; font-size:13px;">
+            <div style="margin-bottom:15px; padding:10px; background:#f0f9ff; border-radius:8px; border:1px solid #00a1e0; color:#0369a1;">
+                <b>Invoice Date:</b> ${invoiceDate}
+            </div>
+            
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
+                <div style="background:#dcfce7; padding:10px; border-radius:8px; border:1px solid #166534; color:#166534;">
+                    <b style="font-size:18px;">${newItems.length}</b><br>New Units to Create
+                </div>
+                <div style="background:#f1f5f9; padding:10px; border-radius:8px; border:1px solid #cbd5e1; color:#64748b;">
+                    <b style="font-size:18px;">${duplicates.length}</b><br>Existing (Will be Skipped)
+                </div>
+            </div>
+
+            ${newItems.length > 0 ? `
+                <b style="color:#1e293b;">New Items to be Added:</b>
+                <div style="max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; margin-top:5px; background:white;">
+                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                        ${newItems.map(item => `<tr><td><b>${item.terminal_type}</b></td><td>${item.serial_number}</td></tr>`).join('')}
+                    </table>
+                </div>
+            ` : `<p style="color:#e11d48; font-weight:700;">No new units found to add.</p>`}
         </div>
-        <div style="max-height: 400px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
-            <table class="slds-table slds-table_bordered slds-table_cell-buffer">
-                <thead>
-                    <tr class="slds-line-height_reset">
-                        <th scope="col">Model</th>
-                        <th scope="col">Serial Number</th>
-                        <th scope="col" style="width:40px;"></th>
-                    </tr>
-                </thead>
-                <tbody>
     `;
 
-    extractedData.forEach((item, index) => {
-        tableHtml += `
-            <tr id="ai-row-${index}">
-                <td><input type="text" id="ai-model-${index}" value="${item.terminal_type}" class="slds-input" style="height:32px; font-size:12px;"></td>
-                <td><input type="text" id="ai-serial-${index}" value="${item.serial_number}" class="slds-input" style="height:32px; font-size:12px;"></td>
-                <td><button onclick="this.closest('tr').remove()" class="slds-button slds-button_icon slds-button_icon-error"><span class="material-icons" style="font-size:16px;">delete</span></button></td>
-            </tr>`;
-    });
-
-    tableHtml += `</tbody></table></div>`;
-
     Swal.fire({
-        title: 'Review Extracted Inventory',
-        html: tableHtml,
-        width: '750px',
+        title: 'Comparison Results',
+        html: html,
+        width: '600px',
         showCancelButton: true,
-        confirmButtonText: 'Confirm & Upload',
+        confirmButtonText: newItems.length > 0 ? 'Proceed with Import' : 'Close',
         confirmButtonColor: '#004990',
-        preConfirm: () => {
-            const finalData = [];
-            extractedData.forEach((_, index) => {
-                const m = document.getElementById(`ai-model-${index}`);
-                const s = document.getElementById(`ai-serial-${index}`);
-                if (m && s) finalData.push({ 
-                    terminal_type: m.value, 
-                    serial_number: s.value,
-                    received_date: invoiceDate 
-                });
-            });
-            return finalData;
-        }
+        cancelButtonText: 'Cancel'
     }).then((result) => {
-        if (result.isConfirmed) processFinalImport(result.value);
+        if (result.isConfirmed && newItems.length > 0) {
+            processFinalImport(newItems);
+        }
     });
 }
-    // Step 2: Final Import (Now checks for duplicates first)
-async function processFinalImport(items) {
+
+// STEP 2: Final Batch Creation
+async function processFinalImport(itemsToCreate) {
     const status = document.getElementById('agentStatus');
-    status.innerHTML = `<span class="material-icons" style="animation:spin 2s linear infinite; font-size:12px; vertical-align:middle;">sync</span> Checking duplicates & saving...`;
+    status.innerHTML = `<span class="material-icons" style="animation:spin 2s linear infinite; font-size:12px; vertical-align:middle;">sync</span> Creating ${itemsToCreate.length} records...`;
 
     try {
-        // 1. Get all existing serials to compare
-        const checkRes = await fetch('/api/equipments', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'list', limit: 5000 }) // Fetch all for comparison
-        });
-        const checkResult = await checkRes.json();
-        const existingSerials = new Set((checkResult.data || []).map(i => i.serial_number.toUpperCase()));
-
         let addedCount = 0;
-        let skippedCount = 0;
-
-        for (const item of items) {
-            // 2. DUPLICATE CHECK
-            if (existingSerials.has(item.serial_number.toUpperCase())) {
-                skippedCount++;
-                continue;
-            }
-
-            // 3. CREATE NEW ENTRY
+        for (const item of itemsToCreate) {
             const res = await fetch('/api/equipments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -535,31 +525,24 @@ async function processFinalImport(items) {
                         terminal_type: item.terminal_type,
                         status: 'stocked',
                         current_location: 'Warsaw Office',
-                        received_date: item.received_date // Using Invoice Date
+                        received_date: item.received_date 
                     } 
                 })
             });
-            
             const result = await res.json();
-            if (result.success) {
-                addedCount++;
-                await logAuditAction('AI Inventory Import', `Serial ${item.serial_number} added via AI.`);
-            }
+            if (result.success) addedCount++;
         }
 
-        // 4. Detailed Feedback
         const chat = document.getElementById('agentChat');
         chat.innerHTML += `
-            <div style="background:white; padding:12px; border-radius:12px; border:1px solid #bbf7d0; font-size:13px;">
-                <strong style="color:#166534;">Import Report:</strong><br>
-                ✅ ${addedCount} New Units Added<br>
-                ⏭️ ${skippedCount} Duplicates Skipped
+            <div style="background:#dcfce7; color:#166534; padding:12px; border-radius:12px; border:1px solid #bbf7d0; font-size:13px; margin-top:10px;">
+                <strong>Success!</strong> ${addedCount} units have been added to the Warsaw Office.
             </div>`;
-        status.innerText = "Done.";
-        fetchInventory();
+        status.innerText = "Import complete.";
+        fetchInventory(); // Refresh the main table
 
     } catch (err) {
-        status.innerText = "Sync error.";
+        status.innerText = "Sync failed.";
         console.error(err);
     }
 }
