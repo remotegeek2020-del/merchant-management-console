@@ -179,6 +179,32 @@
     let currentPage = 0;
     let currentRecords = [];
 
+    function renderMerchantTable(result) {
+    const tbody = document.getElementById('merchantTableBody');
+    tbody.innerHTML = "";
+    currentRecords.forEach(m => {
+        const row = tbody.insertRow();
+        if (m.is_prime49) row.classList.add('prime-row');
+        const s = (m.account_status || '').toLowerCase();
+        const statusClass = s.includes('approved') ? 'status-approved' : s.includes('closed') ? 'status-closed' : s.includes('fraud') ? 'status-fraud' : '';
+        
+        row.innerHTML = `
+            <td>
+                <a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">
+                    ${m.dba_name || '---'}
+                </a>
+                ${m.is_prime49 ? '<span class="prime-badge">PRIME49</span>' : ''}
+            </td>
+            <td><code>${m.merchant_id || '---'}</code></td>
+            <td>${m.agent_id || '---'}</td>
+            <td>${m.company_name || '---'}</td> 
+            <td>${m.partner_name || '---'}</td>
+            <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
+        `;
+    });
+    document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span>(Total: ${result.count.toLocaleString()})</span>`;
+}
+
     /**
  * AUDIT LOGGER 
  * Sends activity to the central activity_logs table
