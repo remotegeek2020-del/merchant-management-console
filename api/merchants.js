@@ -409,11 +409,16 @@ if (action === 'list') {
             return res.status(200).json({ success: true, data });
         }
 
-   if (action === 'get_notes') {
+if (action === 'get_notes') {
     const { merchant_uuid, type } = req.body;
+    
+    // We join app_users exactly like your get_tasks action does
     let queryBuilder = supabase
         .from('merchant_notes')
-        .select('*') // Simple select to ensure it doesn't fail
+        .select(`
+            *,
+            author:app_users!merchant_notes_created_by_fkey ( first_name, last_name )
+        `)
         .eq('merchant_id', merchant_uuid);
 
     if (type === 'manual') {
@@ -423,62 +428,31 @@ if (action === 'list') {
     }
 
     const { data, error } = await queryBuilder.order('created_at', { ascending: false });
+    
     if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
+
+    // Map the joined data so the frontend sees a clean "created_by" name
+    const formattedNotes = (data || []).map(n => ({
+        ...n,
+        display_name: n.author ? `${n.author.first_name} ${n.author.last_name || ''}`.trim() : 'Unknown Staff'
+    }));
+
+    return res.status(200).json({ success: true, data: formattedNotes });
 }
 
     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by } = req.body;
-
-    // 1. Basic Validation
-    if (!merchant_uuid || !title || !body) {
-        return res.status(400).json({ success: false, message: "Missing required fields." });
-    }
-
-    let finalAuthor = 'Unknown Staff';
-
-    // 2. Identify if 'created_by' is the UUID from your local storage
-    const isUuid = /^[0-9a-fA-F]+$/.test(created_by) && created_by.length > 20;
-
-    if (isUuid) {
-        try {
-            // 3. Perform the Name Lookup
-            const { data: userData, error: userError } = await supabase
-                .from('app_users')
-                .select('first_name, last_name')
-                .eq('userid', created_by)
-                .maybeSingle();
-
-            if (userError) {
-                console.error("Supabase Lookup Error:", userError.message);
-            } else if (userData) {
-                finalAuthor = `${userData.first_name} ${userData.last_name || ''}`.trim();
-            } else {
-                console.warn("No user found for ID:", created_by);
-            }
-        } catch (e) {
-            console.error("Internal Name Lookup Crash:", e.message);
-        }
-    } else {
-        // Fallback if frontend sends a name string instead of an ID
-        finalAuthor = created_by || 'Admin Staff';
-    }
-
-    // 4. Final Insert with the mapped Name string
+    // We save the UUID (pp_userid) directly into the created_by column
     const { error } = await supabase
         .from('merchant_notes')
         .insert([{ 
             merchant_id: merchant_uuid, 
             title: title, 
             body: body, 
-            created_by: finalAuthor 
+            created_by: created_by // This is the UUID from localStorage
         }]);
 
-    if (error) {
-        console.error("Note Insert Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
-    }
-
+    if (error) throw error;
     return res.status(200).json({ success: true });
 }
 
