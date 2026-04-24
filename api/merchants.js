@@ -428,19 +428,42 @@ if (action === 'list') {
 }
 
          if (action === 'add_note') {
-            const { merchant_uuid, title, body, created_by, userId } = req.body;
-            const { error } = await supabase
-                .from('merchant_notes')
-                .insert([{ 
-                    merchant_id: merchant_uuid, 
-                    title: title, 
-                    body: body, 
-                    created_by: created_by || userId || 'Staff' 
-                }]);
+    const { merchant_uuid, title, body, created_by } = req.body;
 
-            if (error) throw error;
-            return res.status(200).json({ success: true });
+    let finalAuthor = 'Unknown Staff';
+
+    // 1. Check if the 'created_by' sent is a UUID (your pp_userid)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(created_by);
+
+    if (isUuid) {
+        // 2. Fetch the name from app_users table
+        const { data: userData } = await supabase
+            .from('app_users')
+            .select('first_name, last_name')
+            .eq('userid', created_by)
+            .single();
+
+        if (userData) {
+            finalAuthor = `${userData.first_name} ${userData.last_name || ''}`.trim();
         }
+    } else {
+        // If it's already a name string, use it
+        finalAuthor = created_by || 'Admin Staff';
+    }
+
+    // 3. Insert the note with the actual name
+    const { error } = await supabase
+        .from('merchant_notes')
+        .insert([{ 
+            merchant_id: merchant_uuid, 
+            title: title, 
+            body: body, 
+            created_by: finalAuthor 
+        }]);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true });
+}
 
         return res.status(400).json({ success: false, message: "Unknown action" });
 
