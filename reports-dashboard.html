@@ -207,12 +207,12 @@ async function runReport() {
         }
         
         while (offset < totalRecordsAvailable) {
-           const res = await fetch('/api/reports', {
+        const res = await fetch('/api/reports', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
             action: 'getMonthlyReport',
-            reportType: type,
+            reportType: type, // Matches reports.js expectation
             startDate: start,
             endDate: end,
             subFilter: subFilter,
