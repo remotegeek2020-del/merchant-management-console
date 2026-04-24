@@ -2,45 +2,49 @@ import { createClient } from '@supabase/supabase-js';
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    // Use 'reportType' from the body as intended in your dashboard
     const { action, reportType, startDate, endDate, subFilter, offset = 0, limit = 100 } = req.body;
 
     if (action === 'getMonthlyReport') {
         try {
-            let table, dateField, selectQuery;
             let queryBuilder;
+            let dateField;
+            let selectQuery;
 
-            // 1. Define Logic per Table
+            // 1. Restore Inventory Logic
             if (reportType === 'inventory') {
-                table = 'equipments';
-                dateField = 'received_date'; //
+                dateField = 'received_date';
                 selectQuery = `serial_number, terminal_type, status, current_location, condition, received_date`;
-                
-                // Initialize query and apply location filter
-                queryBuilder = supabase.from(table).select(selectQuery, { count: 'exact' })
+                queryBuilder = supabase.from('equipments').select(selectQuery, { count: 'exact' })
                     .eq('current_location', subFilter); 
-            } else if (reportType === 'deployments') {
-                table = 'deployments';
-                dateField = 'target_deployment_date'; //
+            } 
+            // 2. Restore Deployments Logic
+            else if (reportType === 'deployments') {
+                dateField = 'target_deployment_date';
                 selectQuery = `deployment_id, tid, tracking_id, target_deployment_date, status, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)`;
-                queryBuilder = supabase.from(table).select(selectQuery, { count: 'exact' });
-            } else if (reportType === 'returns') {
-                table = 'returns';
-                dateField = 'return_date_initiated'; //
+                queryBuilder = supabase.from('deployments').select(selectQuery, { count: 'exact' });
+            } 
+            // 3. Restore Returns Logic
+            else if (reportType === 'returns') {
+                dateField = 'return_date_initiated';
                 selectQuery = `return_id, return_reason, condition, status, return_date_initiated, equipment_received_date, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)`;
-                queryBuilder = supabase.from(table).select(selectQuery, { count: 'exact' });
+                queryBuilder = supabase.from('returns').select(selectQuery, { count: 'exact' });
             }
-            // ADDED: Logic for Prime49
+            // 4. FIX: Add Prime49 Logic using the new view
             else if (reportType === 'prime49') {
                 dateField = 'enrollment_date';
+                selectQuery = `merchant_id, dba_name, agent_id, company_display_name, partner_full_name, enrollment_date, account_status`;
                 queryBuilder = supabase.from('merchant_portfolio_view')
-                    .select(`merchant_id, dba_name, agent_id, company_display_name, partner_full_name, enrollment_date, account_status`, { count: 'exact' })
+                    .select(selectQuery, { count: 'exact' })
                     .eq('is_prime49', true);
             }
 
-            // 2. Execute Scalable Query
+            if (!queryBuilder) return res.status(400).json({ success: false, message: "Unsupported report type" });
+
+            // 2. Execute Query with proper date formatting
             const { data, error, count } = await queryBuilder
-                .gte(dateField, startDate)
-                .lte(dateField, endDate)
+                .gte(dateField, `${startDate}T00:00:00.000Z`)
+                .lte(dateField, `${endDate}T23:59:59.999Z`)
                 .range(offset, offset + limit - 1)
                 .order(dateField, { ascending: false });
 
