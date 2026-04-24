@@ -53,12 +53,11 @@ const model = genAI.getGenerativeModel({
 });
 
 const prompt = `
-    SCAN THE ATTACHED PDF INVOICE.
-    1. EXTRACT ALL SERIAL NUMBERS.
-    2. EXTRACT THE TERMINAL MODEL NAME FOR EACH SERIAL number.
-    
-    Return ONLY a JSON object:
-    {"data": [{"serial_number": "SN_STRING", "terminal_type": "MODEL_STRING"}]}
+    ACT AS A FAST OCR.
+    Find Invoice Date (YYYY-MM-DD).
+    Extract Serial Number and Model.
+    Strict JSON only:
+    {"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "SN", "terminal_type": "MODEL"}]}
 `;
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
         const aiRequest = callGeminiWithRetry(model, [
