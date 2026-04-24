@@ -395,17 +395,18 @@ if (action === 'list') {
         if (statusFilter) dataReq.eq('account_status', statusFilter);
 
         // 2. Search Logic
-        if (query && filterBy) {
-            const colMap = {
-                'dba_name': 'dba_name',
-                'merchant_id': 'merchant_id',
-                'agent_id': 'agent_id',
-                'company_name': 'company_name',
-                'partner_name': 'partner_full_name'
-            };
-            const targetCol = colMap[filterBy] || filterBy;
-            dataReq.ilike(targetCol, `%${query}%`);
-        }
+       if (query && filterBy) {
+    const colMap = {
+        'dba_name': 'dba_name',
+        'merchant_id': 'merchant_id',
+        'agent_id': 'agent_id',
+        // FIX: Point the search to the actual column name in the view
+        'company_name': 'company_display_name', 
+        'partner_name': 'partner_full_name'
+    };
+    const targetCol = colMap[filterBy] || filterBy;
+    dataReq.ilike(targetCol, `%${query}%`);
+}
 
         const { data, count, error: dataError } = await dataReq
             .range(page * limit, (page + 1) * limit - 1)
