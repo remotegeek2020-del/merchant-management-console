@@ -36,9 +36,9 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
-        // Using stable flash model for document processing
+        // UPGRADED: Using the latest Gemini 2.0 Flash model
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash", 
+            model: "gemini-2.0-flash", 
             generationConfig: {
                 temperature: 0,
                 responseMimeType: "application/json",
@@ -74,7 +74,7 @@ export default async function handler(req, res) {
             rawText = response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
-                return sendJsonError(504, "Connection timed out. Please try a smaller file.");
+                return sendJsonError(504, "Connection timed out. Gemini 2.0 is still processing. Try a single page.");
             }
             throw err;
         }
@@ -88,17 +88,17 @@ export default async function handler(req, res) {
 
             const rawArray = parsed.data || parsed.items || (Array.isArray(parsed) ? parsed : []);
             rawArray.forEach(item => {
-                const sn = String(item.sn || item.serial_number || "").replace(/[.,\s]/g, "").toUpperCase();
+                const sn = String(item.serial_number || item.sn || "").replace(/[.,\s]/g, "").toUpperCase();
                 if (sn.length >= 8 && !seenSerials.has(sn)) {
                     items.push({ 
                         serial_number: sn, 
-                        terminal_type: item.type || item.terminal_type || "Terminal" 
+                        terminal_type: item.terminal_type || item.type || "Terminal" 
                     });
                     seenSerials.add(sn);
                 }
             });
         } catch (e) {
-            console.warn("Regex recovery triggered.");
+            console.warn("JSON Parse failed, falling back to regex.");
         }
 
         // Regex patterns for Dejavoo and Valor
