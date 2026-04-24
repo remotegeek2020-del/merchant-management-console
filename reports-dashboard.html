@@ -126,16 +126,16 @@ async function runReport() {
         return;
     }
 
-    Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
+   Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
 
-   try {
-        // FIXED: Point everything to /api/reports so reports.js can handle it
+    try {
+        // FIXED: Point to the central reports API
         const res = await fetch('/api/reports', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 action: 'getMonthlyReport',
-                reportType: type, // This matches the 'reportType' variable in reports.js
+                reportType: type, // Pass the type in the body
                 startDate: start,
                 endDate: end,
                 subFilter: subFilter,
@@ -143,13 +143,28 @@ async function runReport() {
                 limit: 100 
             })
         });
-
         const result = await res.json();
-        // ... (rest of your existing success/fail logic)
-    } catch (err) {
-        Swal.fire('Error', 'Report generation failed.', 'error');
+       if (result.success && result.rawData && result.rawData.length > 0) {
+                currentRawData = result.rawData;
+                totalRecordsAvailable = result.totalCount || result.rawData.length; // Save scale
+                
+                renderPreviewTable(result.rawData);
+                document.getElementById('resultsCard').style.display = 'block';
+                
+                // Update title with record count
+                document.getElementById('previewTitle').innerText = 
+                    `Preview: Showing 100 of ${totalRecordsAvailable} records`;
+                
+                Swal.close();
+            } else {
+                document.getElementById('resultsCard').style.display = 'none';
+                Swal.fire('No Data', 'No records found for the selected criteria.', 'info');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Report generation failed.', 'error');
+        }
     }
-}
+
 
     function renderPreviewTable(data) {
         const head = document.getElementById('reportHead');
