@@ -1040,20 +1040,19 @@ window.saveMerchant = async (uuid) => {
 };
 
  window.addNote = async function(uuid) {
+    const titleEl = document.getElementById('new-note-title');
+    const bodyEl = document.getElementById('new-note-body');
+    
+    // 1. Capture values safely before showing the "Saving" spinner
+    const title = titleEl ? titleEl.value : '';
+    const body = bodyEl ? bodyEl.value : '';
+    const currentUserName = localStorage.getItem('pp_username') || 'Admin Staff'; 
+
+    if (!title || !body) return Swal.fire('Required', 'Subject and Body are required.', 'warning');
+
+    Swal.fire({ title: 'Saving Note...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
     try {
-        const title = document.getElementById('new-note-title').value;
-        const body = document.getElementById('new-note-body').value;
-        
-        // 1. Check BOTH possible keys used in your system
-        const currentUserName = localStorage.getItem('pp_username') || 
-                                sessionStorage.getItem('pp_username') || 
-                                'Admin Staff'; 
-
-        if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
-
-        // Show a loading state so the user knows something is happening
-        Swal.fire({ title: 'Saving Note...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
         const res = await fetch('/api/merchants', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
@@ -1068,27 +1067,23 @@ window.saveMerchant = async (uuid) => {
         
         const result = await res.json();
         if (result.success) {
-            // 2. ADD SUCCESS FEEDBACK
+            // 2. Clear inputs ONLY if they still exist in the DOM
+            if (titleEl) titleEl.value = '';
+            if (bodyEl) bodyEl.value = '';
+
             await Swal.fire({
                 icon: 'success',
                 title: 'Note Saved',
-                text: 'Internal commentary has been added to the ledger.',
                 timer: 1500,
                 showConfirmButton: false
             });
 
-            // 3. Log the action to audit history
-            await logAuditAction('Merchant Note Added', `Subject: ${title} added for MID lookup.`);
-
-            // Clear inputs and refresh the modal
-            document.getElementById('new-note-title').value = '';
-            document.getElementById('new-note-body').value = '';
+            // 3. Refresh modal to show the new note
             openModal(uuid); 
-        } else {
-            throw new Error(result.message);
         }
     } catch (err) { 
-        Swal.fire('Error', 'Failed to save note: ' + err.message, 'error'); 
+        console.error("Note Save Error:", err);
+        Swal.fire('Error', 'Failed to save note.', 'error'); 
     }
 };
     window.updateNote = async function(noteId, merchantId) {
