@@ -7,6 +7,21 @@ export default async function handler(req, res) {
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
+
+        // --- ADDED: NEW ACTION FOR AI COMPARISON ---
+        if (action === 'getAllSerials') {
+            const { data, error } = await supabase
+                .from('equipments')
+                .select('serial_number'); // Light query: only fetch the strings we need
+            
+            if (error) throw error;
+            
+            // Return a flat array of strings
+            return res.status(200).json({ 
+                success: true, 
+                serials: data.map(i => i.serial_number) 
+            });
+        }
       // Inside api/equipments.js handler
 if (action === 'getMonthlyReport') {
     const { startDate, endDate, subFilter, offset = 0, limit = 1000 } = req.body;
@@ -161,6 +176,7 @@ if (action === 'getMonthlyReport') {
 
             return res.status(200).json({ success: true, data: data || [], count: count || 0, metrics });
         }
+        
 
 
         if (action === 'create') {
