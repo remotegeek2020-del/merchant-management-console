@@ -447,68 +447,70 @@ async function confirmAIImport(result) {
     const extractedData = result.data;
     const invoiceDate = result.invoice_date || new Date().toISOString().split('T')[0];
 
-    // Fetch existing serials to find duplicates BEFORE showing the review
+    // 1. PULL LIVE DATA: Get every serial number currently in the database
     const checkRes = await fetch('/api/equipments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'list', limit: 10000 }) 
+        body: JSON.stringify({ action: 'list', limit: 10000 }) // Fetch all to ensure accuracy
     });
     const checkResult = await checkRes.json();
-    const existingSerials = new Set((checkResult.data || []).map(i => i.serial_number.toUpperCase()));
+    
+    // 2. CREATE A SEARCH SET: Normalize to Uppercase for exact matching
+    const existingSerials = new Set((checkResult.data || []).map(i => i.serial_number.toUpperCase().trim()));
 
     const newItems = [];
     const duplicates = [];
 
+    // 3. CROSS-REFERENCE: Compare AI extraction vs Database
     extractedData.forEach(item => {
-        if (existingSerials.has(item.serial_number.toUpperCase())) {
+        const cleanSN = item.serial_number.toUpperCase().trim();
+        if (existingSerials.has(cleanSN)) {
             duplicates.push(item);
         } else {
             newItems.push({ ...item, received_date: invoiceDate });
         }
     });
 
-    // Generate the Review HTML
+    // 4. RENDER ACCURATE UI
     let html = `
         <div style="text-align:left; font-size:13px;">
             <div style="margin-bottom:15px; padding:10px; background:#f0f9ff; border-radius:8px; border:1px solid #00a1e0; color:#0369a1;">
-                <b>Invoice Date:</b> ${invoiceDate}
+                <b>Invoice Date Identified:</b> ${invoiceDate}
             </div>
             
             <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
                 <div style="background:#dcfce7; padding:10px; border-radius:8px; border:1px solid #166534; color:#166534;">
-                    <b style="font-size:18px;">${newItems.length}</b><br>New Units to Create
+                    <b style="font-size:18px;">${newItems.length}</b><br>New to Create
                 </div>
                 <div style="background:#f1f5f9; padding:10px; border-radius:8px; border:1px solid #cbd5e1; color:#64748b;">
-                    <b style="font-size:18px;">${duplicates.length}</b><br>Existing (Will be Skipped)
+                    <b style="font-size:18px;">${duplicates.length}</b><br>Already in DB
                 </div>
             </div>
 
             ${newItems.length > 0 ? `
-                <b style="color:#1e293b;">New Items to be Added:</b>
-                <div style="max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; margin-top:5px; background:white;">
-                    <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                <b style="color:#1e293b;">Items to be Added:</b>
+                <div style="max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; margin-top:5px;">
+                    <table class="slds-table slds-table_bordered">
                         ${newItems.map(item => `<tr><td><b>${item.terminal_type}</b></td><td>${item.serial_number}</td></tr>`).join('')}
                     </table>
                 </div>
-            ` : `<p style="color:#e11d48; font-weight:700;">No new units found to add.</p>`}
+            ` : `<p style="color:#e11d48; font-weight:700;">All units in this file already exist in your inventory.</p>`}
         </div>
     `;
 
     Swal.fire({
-        title: 'Comparison Results',
+        title: 'Database Comparison',
         html: html,
         width: '600px',
         showCancelButton: true,
-        confirmButtonText: newItems.length > 0 ? 'Proceed with Import' : 'Close',
-        confirmButtonColor: '#004990',
-        cancelButtonText: 'Cancel'
+        confirmButtonText: newItems.length > 0 ? 'Proceed' : 'Close',
+        confirmButtonColor: '#004990'
     }).then((result) => {
         if (result.isConfirmed && newItems.length > 0) {
             processFinalImport(newItems);
         }
     });
 }
-
 // STEP 2: Final Batch Creation
 async function processFinalImport(itemsToCreate) {
     const status = document.getElementById('agentStatus');
