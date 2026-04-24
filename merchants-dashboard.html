@@ -1042,11 +1042,23 @@ window.saveMerchant = async (uuid) => {
  window.addNote = async function(uuid) {
     const titleEl = document.getElementById('new-note-title');
     const bodyEl = document.getElementById('new-note-body');
+     const userId = localStorage.getItem('pp_userid'); 
     
     // 1. Capture values safely before showing the "Saving" spinner
     const title = titleEl ? titleEl.value : '';
     const body = bodyEl ? bodyEl.value : '';
     const currentUserName = localStorage.getItem('pp_username') || 'Admin Staff'; 
+     const res = await fetch('/api/merchants', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ 
+            action: 'add_note', 
+            merchant_uuid: uuid, 
+            title: title, 
+            body: body, 
+            created_by: userId // Sending the UUID for the backend to look up
+        }) 
+    });
 
     if (!title || !body) return Swal.fire('Required', 'Subject and Body are required.', 'warning');
 
