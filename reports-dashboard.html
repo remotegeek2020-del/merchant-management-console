@@ -115,59 +115,40 @@
     }
 
     // Standard runReport with totalCount support
-    async function runReport() {
-        const type = document.getElementById('reportType').value;
-        const start = document.getElementById('startDate').value;
-        const end = document.getElementById('endDate').value;
-        const subFilter = document.getElementById('subFilter').value;
+async function runReport() {
+    const type = document.getElementById('reportType').value;
+    const start = document.getElementById('startDate').value;
+    const end = document.getElementById('endDate').value;
+    const subFilter = document.getElementById('subFilter').value;
 
-        if (!start || !end) {
-            Swal.fire('Missing Dates', 'Please select a date range to continue.', 'warning');
-            return;
-        }
-
-        Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
-
-        try {
-            // Keeps your working dynamic apiPath
-            let apiPath;
-    if (type === 'inventory') apiPath = '/api/equipments';
-    else if (type === 'prime49') apiPath = '/api/merchants'; // Reuse the merchants API
-    else apiPath = `/api/${type}`;
-            const res = await fetch(apiPath, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'getMonthlyReport',
-                    startDate: start,
-                    endDate: end,
-                    subFilter: type === 'inventory' ? subFilter : null,
-                    offset: 0, 
-                    limit: 100 // Fetch a fast preview
-                })
-            });
-            const result = await res.json();
-
-            if (result.success && result.rawData && result.rawData.length > 0) {
-                currentRawData = result.rawData;
-                totalRecordsAvailable = result.totalCount || result.rawData.length; // Save scale
-                
-                renderPreviewTable(result.rawData);
-                document.getElementById('resultsCard').style.display = 'block';
-                
-                // Update title with record count
-                document.getElementById('previewTitle').innerText = 
-                    `Preview: Showing 100 of ${totalRecordsAvailable} records`;
-                
-                Swal.close();
-            } else {
-                document.getElementById('resultsCard').style.display = 'none';
-                Swal.fire('No Data', 'No records found for the selected criteria.', 'info');
-            }
-        } catch (err) {
-            Swal.fire('Error', 'Report generation failed.', 'error');
-        }
+    if (!start || !end) {
+        Swal.fire('Missing Dates', 'Please select a date range to continue.', 'warning');
+        return;
     }
+
+    Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
+
+    try {
+        // ALWAYS use /api/reports for the Reports Center
+        const res = await fetch('/api/reports', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'getMonthlyReport',
+                reportType: type, // This tells the backend which table to hit
+                startDate: start,
+                endDate: end,
+                subFilter: subFilter,
+                offset: 0, 
+                limit: 100 
+            })
+        });
+        const result = await res.json();
+        // ... (rest of your existing success/fail logic)
+    } catch (err) {
+        Swal.fire('Error', 'Report generation failed.', 'error');
+    }
+}
 
     function renderPreviewTable(data) {
         const head = document.getElementById('reportHead');
@@ -210,18 +191,20 @@
         }
         
         while (offset < totalRecordsAvailable) {
-            const res = await fetch(apiPath, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    action: 'getMonthlyReport',
-                    startDate: start,
-                    endDate: end,
-                    subFilter: type === 'inventory' ? subFilter : null,
-                    offset: offset,
-                    limit: limit
-                })
-            });
+           const res = await fetch('/api/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+            action: 'getMonthlyReport',
+            reportType: type,
+            startDate: start,
+            endDate: end,
+            subFilter: subFilter,
+            offset: offset,
+            limit: limit
+        })
+    });
+
             const result = await res.json();
             
             allData = allData.concat(result.rawData);
