@@ -51,18 +51,20 @@ const model = genAI.getGenerativeModel({
         responseMimeType: "application/json",
     }
 });
+        // 1. Increase the Watchdog slightly (closer to Vercel's 10s limit)
+const timeoutPromise = new Promise((_, reject) => 
+    setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 9200)
+);
 
+// 2. Streamline the prompt for faster processing
 const prompt = `
-    SCAN THE ATTACHED PDF INVOICE.
-    1. EXTRACT THE INVOICE DATE (format as YYYY-MM-DD).
-    2. EXTRACT ALL SERIAL NUMBERS.
-    3. EXTRACT THE TERMINAL MODEL NAME FOR EACH SERIAL.
-    
-    Return ONLY a JSON object:
-    {
-      "invoice_date": "YYYY-MM-DD",
-      "data": [{"serial_number": "SN_STRING", "terminal_type": "MODEL_STRING"}]
-    }
+    INVOICE DATA EXTRACTION:
+    1. Find Invoice Date (YYYY-MM-DD).
+    2. List every Serial Number and its corresponding Model Name.
+    3. Ignore non-hardware items (like 'Shipping' or 'KeyLoad').
+
+    OUTPUT ONLY VALID JSON:
+    {"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "SN", "terminal_type": "MODEL"}]}
 `;
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
         const aiRequest = callGeminiWithRetry(model, [
