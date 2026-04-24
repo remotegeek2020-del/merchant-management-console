@@ -427,31 +427,39 @@ if (action === 'list') {
     return res.status(200).json({ success: true, data: data || [] });
 }
 
-         if (action === 'add_note') {
+       if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by } = req.body;
+
+    // 1. Input Validation: Ensure we aren't saving empty data
+    if (!merchant_uuid || !title || !body) {
+        return res.status(400).json({ success: false, message: "Missing required note fields." });
+    }
 
     let finalAuthor = 'Unknown Staff';
 
-    // 1. Check if the 'created_by' sent is a UUID (your pp_userid)
+    // 2. Optimized Lookup: Regex check for UUID format
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(created_by);
 
     if (isUuid) {
-        // 2. Fetch the name from app_users table
-        const { data: userData } = await supabase
-            .from('app_users')
-            .select('first_name, last_name')
-            .eq('userid', created_by)
-            .single();
+        try {
+            // Fetch only necessary columns from app_users
+            const { data: userData, error: userError } = await supabase
+                .from('app_users')
+                .select('first_name, last_name')
+                .eq('userid', created_by)
+                .maybeSingle(); // maybeSingle is safer than single() as it won't throw 406 on 0 rows
 
-        if (userData) {
-            finalAuthor = `${userData.first_name} ${userData.last_name || ''}`.trim();
+            if (userData && !userError) {
+                finalAuthor = `${userData.first_name} ${userData.last_name || ''}`.trim();
+            }
+        } catch (e) {
+            console.error("Name lookup failed:", e.message);
         }
     } else {
-        // If it's already a name string, use it
         finalAuthor = created_by || 'Admin Staff';
     }
 
-    // 3. Insert the note with the actual name
+    // 3. Clean Insert: Performs the final write to the ledger
     const { error } = await supabase
         .from('merchant_notes')
         .insert([{ 
