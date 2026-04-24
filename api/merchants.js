@@ -428,6 +428,7 @@ if (action === 'list') {
         const formattedData = (data || []).map(m => ({
             ...m,
             partner_name: m.partner_full_name || '---',
+            company_name: m.company_display_name || '---', 
             is_prime49: m.is_prime49 || false
         }));
 
