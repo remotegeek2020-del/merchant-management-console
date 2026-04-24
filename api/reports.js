@@ -29,6 +29,13 @@ export default async function handler(req, res) {
                 selectQuery = `return_id, return_reason, condition, status, return_date_initiated, equipment_received_date, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)`;
                 queryBuilder = supabase.from(table).select(selectQuery, { count: 'exact' });
             }
+            // ADDED: Logic for Prime49
+            else if (reportType === 'prime49') {
+                dateField = 'enrollment_date';
+                queryBuilder = supabase.from('merchant_portfolio_view')
+                    .select(`merchant_id, dba_name, agent_id, company_display_name, partner_full_name, enrollment_date, account_status`, { count: 'exact' })
+                    .eq('is_prime49', true);
+            }
 
             // 2. Execute Scalable Query
             const { data, error, count } = await queryBuilder
