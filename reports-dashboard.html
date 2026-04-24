@@ -164,9 +164,7 @@ async function runReport() {
             Swal.fire('Error', 'Report generation failed.', 'error');
         }
     }
-
-
-   function renderPreviewTable(data) {
+function renderPreviewTable(data) {
     const head = document.getElementById('reportHead');
     const body = document.getElementById('reportBody');
     
@@ -177,7 +175,7 @@ async function runReport() {
     // 1. Create Headers
     head.innerHTML = `<tr>${keys.map(k => `<th>${k.toUpperCase().replace(/_/g, ' ')}</th>`).join('')}</tr>`;
     
-    // 2. Create Body with Object Flattening
+    // 2. Create Body with Object Flattening and Empty String Check
     body.innerHTML = data.map(row => {
         return `<tr>${keys.map(k => {
             let val = row[k];
@@ -192,14 +190,20 @@ async function runReport() {
                 val = val.serial_number || '---';
             }
 
-            // Fallback for null/undefined
-            if (val === null || val === undefined) val = '---';
+            /**
+             * FIX: Robust check for empty values
+             * This catches null, undefined, AND empty strings "" or "  "
+             */
+            const isActuallyEmpty = val === null || 
+                                    val === undefined || 
+                                    (typeof val === 'string' && val.trim() === "");
 
-            return `<td>${val}</td>`;
+            const finalDisplay = isActuallyEmpty ? '---' : val;
+
+            return `<td>${finalDisplay}</td>`;
         }).join('')}</tr>`;
     }).join('');
 }
-
     // UPDATED: Scalable CSV Export loop
     async function handleCSVExport() {
     const type = document.getElementById('reportType').value;
