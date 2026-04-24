@@ -179,6 +179,27 @@
     let currentPage = 0;
     let currentRecords = [];
 
+    /**
+ * STEP 1: INITIAL CSV PARSE
+ */
+async function handleCSVUpload(input) {
+    const file = input.files[0];
+    if (!file) return;
+    console.log("CSV File Detected:", file.name); // Troubleshooting log
+
+    Papa.parse(file, {
+        header: true,
+        skipEmptyLines: true,
+        complete: function(results) {
+            console.log("CSV Parsed. Headers found:", results.meta.fields);
+            showMapperModal(results.data, results.meta.fields);
+        },
+        error: function(err) {
+            Swal.fire('Error', 'Failed to read CSV: ' + err.message, 'error');
+        }
+    });
+}
+
     async function processScanAndReview(csvData, mapping) {
     Swal.fire({ title: 'Scanning Database...', didOpen: () => Swal.showLoading() });
 
