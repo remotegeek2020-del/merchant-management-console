@@ -412,12 +412,12 @@ if (action === 'list') {
 if (action === 'get_notes') {
     const { merchant_uuid, type } = req.body;
     
-    // We join app_users exactly like your get_tasks action does
+    // We use a broader select to ensure notes aren't filtered out if the user is missing
     let queryBuilder = supabase
         .from('merchant_notes')
         .select(`
             *,
-            author:app_users!merchant_notes_created_by_fkey ( first_name, last_name )
+            author:app_users ( first_name, last_name )
         `)
         .eq('merchant_id', merchant_uuid);
 
@@ -431,15 +431,25 @@ if (action === 'get_notes') {
     
     if (error) throw error;
 
-    // Map the joined data so the frontend sees a clean "created_by" name
-    const formattedNotes = (data || []).map(n => ({
-        ...n,
-        display_name: n.author ? `${n.author.first_name} ${n.author.last_name || ''}`.trim() : 'Unknown Staff'
-    }));
+    // We format the data to handle cases where the author join might be null
+    const formattedNotes = (data || []).map(n => {
+        let nameToDisplay = 'Unknown Staff';
+        
+        if (n.author) {
+            nameToDisplay = `${n.author.first_name} ${n.author.last_name || ''}`.trim();
+        } else if (n.created_by && n.created_by.length < 30) {
+            // If created_by is already a name (not a UUID), use it as a fallback
+            nameToDisplay = n.created_by;
+        }
+
+        return {
+            ...n,
+            display_name: nameToDisplay
+        };
+    });
 
     return res.status(200).json({ success: true, data: formattedNotes });
 }
-
     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by } = req.body;
     // We save the UUID (pp_userid) directly into the created_by column
