@@ -60,11 +60,10 @@ const prompt = `
     {"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "SN", "terminal_type": "MODEL"}]}
 `;
         // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
-        const aiRequest = callGeminiWithRetry(model, [
-            { text: prompt },
-            { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
-        ]);
-
+     const aiRequest = model.generateContent([
+    { text: prompt },
+    { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
+]);
         const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 8800)
         );
