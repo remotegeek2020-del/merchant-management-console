@@ -166,16 +166,39 @@ async function runReport() {
     }
 
 
-    function renderPreviewTable(data) {
-        const head = document.getElementById('reportHead');
-        const body = document.getElementById('reportBody');
-        const keys = Object.keys(data[0]);
+   function renderPreviewTable(data) {
+    const head = document.getElementById('reportHead');
+    const body = document.getElementById('reportBody');
+    
+    if (!data || data.length === 0) return;
+    
+    const keys = Object.keys(data[0]);
 
-        head.innerHTML = `<tr>${keys.map(k => `<th>${k.toUpperCase().replace(/_/g, ' ')}</th>`).join('')}</tr>`;
-        body.innerHTML = data.map(row => `
-            <tr>${keys.map(k => `<td>${row[k] || '---'}</td>`).join('')}</tr>
-        `).join('');
-    }
+    // 1. Create Headers
+    head.innerHTML = `<tr>${keys.map(k => `<th>${k.toUpperCase().replace(/_/g, ' ')}</th>`).join('')}</tr>`;
+    
+    // 2. Create Body with Object Flattening
+    body.innerHTML = data.map(row => {
+        return `<tr>${keys.map(k => {
+            let val = row[k];
+            
+            // Handle Nested Merchant Objects
+            if (k === 'merchants' && val && typeof val === 'object') {
+                val = val.dba_name || '---';
+            }
+            
+            // Handle Nested Equipment Objects
+            if (k === 'equipments' && val && typeof val === 'object') {
+                val = val.serial_number || '---';
+            }
+
+            // Fallback for null/undefined
+            if (val === null || val === undefined) val = '---';
+
+            return `<td>${val}</td>`;
+        }).join('')}</tr>`;
+    }).join('');
+}
 
     // UPDATED: Scalable CSV Export loop
     async function handleCSVExport() {
@@ -244,12 +267,20 @@ async function runReport() {
 
     const headers = Object.keys(data[0]).join(',');
     const rows = data.map(row => 
-        Object.values(row).map(v => {
-            // Clean the data: handle nulls and escape double quotes
-            let val = v === null || v === undefined ? "" : String(v);
-            return `"${val.replace(/"/g, '""')}"`;
-        }).join(',')
-    );
+       Object.keys(row).map(k => {
+        let val = row[k];
+        
+        // Flatten objects for CSV export
+        if (val && typeof val === 'object') {
+            if (k === 'merchants') val = val.dba_name;
+            else if (k === 'equipments') val = val.serial_number;
+            else val = JSON.stringify(val); // Fallback
+        }
+        
+        let str = val === null || val === undefined ? "" : String(val);
+        return `"${str.replace(/"/g, '""')}"`;
+    }).join(',')
+);
     
     const csvContent = headers + "\n" + rows.join("\n");
     
