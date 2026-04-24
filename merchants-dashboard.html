@@ -338,6 +338,52 @@ async function handleCSVUpload(input) {
         if (result.isConfirmed) processScanAndReview(data, result.value);
     });
 }
+    /**
+ * STEP 4: FINAL EXECUTION
+ * Sends the mapped payload to the API and refreshes the dashboard
+ */
+async function executeFinalUpsert(payload) {
+    // 1. Show the loading spinner so the user knows it's working
+    Swal.fire({ 
+        title: 'Executing Bulk Sync...', 
+        html: 'Writing records to the merchant ledger...',
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+
+    try {
+        // 2. Send the mapped payload to the merchants API
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                action: 'bulk_upsert', 
+                payload: payload 
+            })
+        });
+
+        const result = await res.json();
+        
+        if (result.success) {
+            // 3. Provide the final results popup
+            await Swal.fire({
+                icon: 'success',
+                title: 'Sync Complete',
+                text: `Successfully processed ${payload.length} records.`,
+                timer: 2000,
+                showConfirmButton: false
+            });
+            
+            // 4. Refresh the table to show the new data/address changes
+            fetchMerchants();
+        } else {
+            throw new Error(result.message || 'Database rejected the upsert.');
+        }
+    } catch (err) {
+        console.error("Sync Error:", err);
+        Swal.fire('Sync Failed', err.message, 'error');
+    }
+}
 
     function renderMerchantTable(result) {
     const tbody = document.getElementById('merchantTableBody');
