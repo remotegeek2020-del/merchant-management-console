@@ -821,7 +821,6 @@ async function addTask(merchantUuid) {
                         <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
                         <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
                     </div>
-                // Inside openModal -> content-notes mapping loop
 <div id="notes-list">${notes.map(n => {
     // Look for n.created_at (the actual DB column name)
     const rawDate = n.created_at; 
