@@ -427,39 +427,44 @@ if (action === 'list') {
     return res.status(200).json({ success: true, data: data || [] });
 }
 
-       if (action === 'add_note') {
+     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by } = req.body;
 
-    // 1. Input Validation: Ensure we aren't saving empty data
+    // 1. Basic Validation
     if (!merchant_uuid || !title || !body) {
-        return res.status(400).json({ success: false, message: "Missing required note fields." });
+        return res.status(400).json({ success: false, message: "Missing required fields." });
     }
 
     let finalAuthor = 'Unknown Staff';
 
-    // 2. Optimized Lookup: Regex check for UUID format
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(created_by);
+    // 2. Identify if 'created_by' is the UUID from your local storage
+    const isUuid = /^[0-9a-fA-F]+$/.test(created_by) && created_by.length > 20;
 
     if (isUuid) {
         try {
-            // Fetch only necessary columns from app_users
+            // 3. Perform the Name Lookup
             const { data: userData, error: userError } = await supabase
                 .from('app_users')
                 .select('first_name, last_name')
                 .eq('userid', created_by)
-                .maybeSingle(); // maybeSingle is safer than single() as it won't throw 406 on 0 rows
+                .maybeSingle();
 
-            if (userData && !userError) {
+            if (userError) {
+                console.error("Supabase Lookup Error:", userError.message);
+            } else if (userData) {
                 finalAuthor = `${userData.first_name} ${userData.last_name || ''}`.trim();
+            } else {
+                console.warn("No user found for ID:", created_by);
             }
         } catch (e) {
-            console.error("Name lookup failed:", e.message);
+            console.error("Internal Name Lookup Crash:", e.message);
         }
     } else {
+        // Fallback if frontend sends a name string instead of an ID
         finalAuthor = created_by || 'Admin Staff';
     }
 
-    // 3. Clean Insert: Performs the final write to the ledger
+    // 4. Final Insert with the mapped Name string
     const { error } = await supabase
         .from('merchant_notes')
         .insert([{ 
@@ -469,7 +474,11 @@ if (action === 'list') {
             created_by: finalAuthor 
         }]);
 
-    if (error) throw error;
+    if (error) {
+        console.error("Note Insert Error:", error.message);
+        return res.status(500).json({ success: false, message: error.message });
+    }
+
     return res.status(200).json({ success: true });
 }
 
