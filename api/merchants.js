@@ -411,44 +411,32 @@ if (action === 'list') {
 
 if (action === 'get_notes') {
     const { merchant_uuid, type } = req.body;
-    
-    // We use a broader select to ensure notes aren't filtered out if the user is missing
-    let queryBuilder = supabase
-        .from('merchant_notes')
-        .select(`
-            *,
-            author:app_users ( first_name, last_name )
-        `)
-        .eq('merchant_id', merchant_uuid);
 
-    if (type === 'manual') {
-        queryBuilder = queryBuilder.neq('title', 'System Update');
-    } else if (type === 'system') {
-        queryBuilder = queryBuilder.eq('title', 'System Update');
+    // 1. Fetch the notes simply (No JOINs to break the query)
+    let q = supabase.from('merchant_notes').select('*').eq('merchant_id', merchant_uuid);
+    if (type === 'manual') q = q.neq('title', 'System Update');
+    else if (type === 'system') q = q.eq('title', 'System Update');
+    
+    const { data: notes, error: nErr } = await q.order('created_at', { ascending: false });
+    if (nErr) throw nErr;
+
+    // 2. Fetch all users to create a Name Map
+    const { data: users } = await supabase.from('app_users').select('userid, first_name, last_name');
+    const userMap = {};
+    if (users) {
+        users.forEach(u => {
+            userMap[u.userid] = `${u.first_name} ${u.last_name || ''}`.trim();
+        });
     }
 
-    const { data, error } = await queryBuilder.order('created_at', { ascending: false });
-    
-    if (error) throw error;
+    // 3. Map the names manually
+    const formattedData = (notes || []).map(n => ({
+        ...n,
+        // If created_by matches a UUID in our map, use the name; otherwise, keep the original string
+        display_name: userMap[n.created_by] || n.created_by || 'Unknown Staff'
+    }));
 
-    // We format the data to handle cases where the author join might be null
-    const formattedNotes = (data || []).map(n => {
-        let nameToDisplay = 'Unknown Staff';
-        
-        if (n.author) {
-            nameToDisplay = `${n.author.first_name} ${n.author.last_name || ''}`.trim();
-        } else if (n.created_by && n.created_by.length < 30) {
-            // If created_by is already a name (not a UUID), use it as a fallback
-            nameToDisplay = n.created_by;
-        }
-
-        return {
-            ...n,
-            display_name: nameToDisplay
-        };
-    });
-
-    return res.status(200).json({ success: true, data: formattedNotes });
+    return res.status(200).json({ success: true, data: formattedData });
 }
     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by } = req.body;
