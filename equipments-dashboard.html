@@ -447,23 +447,28 @@ async function confirmAIImport(result) {
     const extractedData = result.data;
     const invoiceDate = result.invoice_date || new Date().toISOString().split('T')[0];
 
-    // 1. PULL LIVE DATA: Get every serial number currently in the database
+    // 1. PULL LIVE DATA: Call the new 'getAllSerials' action for 100% visibility
     const checkRes = await fetch('/api/equipments', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'list', limit: 10000 }) // Fetch all to ensure accuracy
+        body: JSON.stringify({ action: 'getAllSerials' }) 
     });
     const checkResult = await checkRes.json();
     
-    // 2. CREATE A SEARCH SET: Normalize to Uppercase for exact matching
-    const existingSerials = new Set((checkResult.data || []).map(i => i.serial_number.toUpperCase().trim()));
+    if (!checkResult.success) {
+        Swal.fire('Sync Error', 'Could not fetch current inventory for comparison.', 'error');
+        return;
+    }
+
+    // 2. CREATE A SEARCH SET: Normalize strings to prevent "invisible" mismatches
+    const existingSerials = new Set((checkResult.serials || []).map(sn => sn.toString().toUpperCase().trim()));
 
     const newItems = [];
     const duplicates = [];
 
-    // 3. CROSS-REFERENCE: Compare AI extraction vs Database
+    // 3. CROSS-REFERENCE: Compare AI extraction vs. the global list
     extractedData.forEach(item => {
-        const cleanSN = item.serial_number.toUpperCase().trim();
+        const cleanSN = item.serial_number.toString().toUpperCase().trim();
         if (existingSerials.has(cleanSN)) {
             duplicates.push(item);
         } else {
@@ -471,7 +476,7 @@ async function confirmAIImport(result) {
         }
     });
 
-    // 4. RENDER ACCURATE UI
+    // 4. RENDER ACCURATE UI: Only show the "Proceed" button if there is something new to add
     let html = `
         <div style="text-align:left; font-size:13px;">
             <div style="margin-bottom:15px; padding:10px; background:#f0f9ff; border-radius:8px; border:1px solid #00a1e0; color:#0369a1;">
@@ -488,13 +493,15 @@ async function confirmAIImport(result) {
             </div>
 
             ${newItems.length > 0 ? `
-                <b style="color:#1e293b;">Items to be Added:</b>
-                <div style="max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; margin-top:5px;">
+                <b style="color:#1e293b;">New Items Found:</b>
+                <div style="max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; margin-top:5px; background:white;">
                     <table class="slds-table slds-table_bordered">
                         ${newItems.map(item => `<tr><td><b>${item.terminal_type}</b></td><td>${item.serial_number}</td></tr>`).join('')}
                     </table>
                 </div>
-            ` : `<p style="color:#e11d48; font-weight:700;">All units in this file already exist in your inventory.</p>`}
+            ` : `<p style="color:#e11d48; font-weight:700; text-align:center; padding:10px; background:#fff1f2; border-radius:8px;">
+                    Duplicate Detected: All units in this invoice are already in your database.
+                 </p>`}
         </div>
     `;
 
@@ -503,8 +510,10 @@ async function confirmAIImport(result) {
         html: html,
         width: '600px',
         showCancelButton: true,
-        confirmButtonText: newItems.length > 0 ? 'Proceed' : 'Close',
-        confirmButtonColor: '#004990'
+        showConfirmButton: newItems.length > 0, // Hide 'Proceed' if there's nothing to do
+        confirmButtonText: 'Proceed with Import',
+        confirmButtonColor: '#004990',
+        cancelButtonText: 'Cancel'
     }).then((result) => {
         if (result.isConfirmed && newItems.length > 0) {
             processFinalImport(newItems);
