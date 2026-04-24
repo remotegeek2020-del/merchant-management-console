@@ -1042,29 +1042,24 @@ window.saveMerchant = async (uuid) => {
  window.addNote = async function(uuid) {
     const titleEl = document.getElementById('new-note-title');
     const bodyEl = document.getElementById('new-note-body');
-     const userId = localStorage.getItem('pp_userid'); 
     
-    // 1. Capture values safely before showing the "Saving" spinner
-    const title = titleEl ? titleEl.value : '';
-    const body = bodyEl ? bodyEl.value : '';
-    const currentUserName = localStorage.getItem('pp_username') || 'Admin Staff'; 
-     const res = await fetch('/api/merchants', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
-            action: 'add_note', 
-            merchant_uuid: uuid, 
-            title: title, 
-            body: body, 
-            created_by: userId // Sending the UUID for the backend to look up
-        }) 
-    });
+    // 1. Get the UUID for the backend lookup
+    const userId = localStorage.getItem('pp_userid'); 
+    
+    // 2. Capture values
+    const title = titleEl ? titleEl.value.trim() : '';
+    const body = bodyEl ? bodyEl.value.trim() : '';
 
-    if (!title || !body) return Swal.fire('Required', 'Subject and Body are required.', 'warning');
+    // 3. VALIDATE FIRST (Stop the function if empty)
+    if (!title || !body) {
+        return Swal.fire('Required', 'Subject and Body are required.', 'warning');
+    }
 
+    // 4. SHOW SPINNER (Gives user feedback)
     Swal.fire({ title: 'Saving Note...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
+        // 5. FETCH ONLY ONCE (Using the userId/UUID)
         const res = await fetch('/api/merchants', { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
@@ -1073,13 +1068,14 @@ window.saveMerchant = async (uuid) => {
                 merchant_uuid: uuid, 
                 title: title, 
                 body: body, 
-                created_by: currentUserName 
+                created_by: userId // Send the UUID so backend can look up the name
             }) 
         });
         
         const result = await res.json();
+        
         if (result.success) {
-            // 2. Clear inputs ONLY if they still exist in the DOM
+            // 6. CLEAN UP
             if (titleEl) titleEl.value = '';
             if (bodyEl) bodyEl.value = '';
 
@@ -1090,12 +1086,14 @@ window.saveMerchant = async (uuid) => {
                 showConfirmButton: false
             });
 
-            // 3. Refresh modal to show the new note
+            // 7. REFRESH MODAL
             openModal(uuid); 
+        } else {
+            throw new Error(result.message || "Database rejected note");
         }
     } catch (err) { 
         console.error("Note Save Error:", err);
-        Swal.fire('Error', 'Failed to save note.', 'error'); 
+        Swal.fire('Error', 'Failed to save note: ' + err.message, 'error'); 
     }
 };
     window.updateNote = async function(noteId, merchantId) {
