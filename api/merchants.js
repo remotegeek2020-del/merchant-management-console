@@ -427,7 +427,7 @@ if (action === 'list') {
     return res.status(200).json({ success: true, data: data || [] });
 }
 
-        if (action === 'add_note') {
+         if (action === 'add_note') {
             const { merchant_uuid, title, body, created_by, userId } = req.body;
             const { error } = await supabase
                 .from('merchant_notes')
