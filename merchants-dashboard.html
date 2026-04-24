@@ -1039,29 +1039,35 @@ window.saveMerchant = async (uuid) => {
     }
 };
 
-    window.addNote = async function(uuid) {
-        try {
-            const title = document.getElementById('new-note-title').value;
-            const body = document.getElementById('new-note-body').value;
-            const currentUserId = sessionStorage.getItem('pp_userid') || '00000000-0000-0000-0000-000000000000'; 
+   window.addNote = async function(uuid) {
+    try {
+        const title = document.getElementById('new-note-title').value;
+        const body = document.getElementById('new-note-body').value;
+        
+        // 1. Get the actual name from localStorage instead of just the ID
+        const currentUserName = localStorage.getItem('pp_username') || 'Unknown Staff'; 
 
-            if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
+        if (!title || !body) return Swal.fire('Error', 'Subject and Body are required.', 'warning');
 
-            const res = await fetch('/api/merchants', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'add_note', merchant_uuid: uuid, title: title, body: body, userId: currentUserId, created_by: currentUserId }) 
-            });
-            
-            const result = await res.json();
-            if (result.success) {
-                await logAuditAction('Merchant Note Added', `Subject: ${title} added to Merchant ID: ${uuid}`);
-                const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 1500, timerProgressBar: true });
-                await Toast.fire({ icon: 'success', title: 'New note created' });
-                openModal(uuid); 
-            } else { throw new Error(result.message || 'Database rejected the entry'); }
-        } catch (err) { Swal.fire('Error', 'Failed to add note: ' + err.message, 'error'); }
-    };
+        const res = await fetch('/api/merchants', { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ 
+                action: 'add_note', 
+                merchant_uuid: uuid, 
+                title: title, 
+                body: body, 
+                created_by: currentUserName // 2. Send the actual name string
+            }) 
+        });
+        
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Note added', timer: 1000, showConfirmButton: false });
+            openModal(uuid); // Refresh modal to show new note with name
+        }
+    } catch (err) { Swal.fire('Error', 'Failed to add note', 'error'); }
+};
 
     window.updateNote = async function(noteId, merchantId) {
         const title = document.getElementById(`note-title-${noteId}`).value;
