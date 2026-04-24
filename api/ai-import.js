@@ -23,8 +23,8 @@ async function callGeminiWithRetry(model, content, retries = 2) {
 }
 
 export default async function handler(req, res) {
-    const sendJsonError = (status, message, details = null) => {
-        return res.status(status).json({ success: false, message, details });
+    const sendJsonError = (status, message) => {
+        return res.status(status).json({ success: false, message });
     };
 
     if (req.method !== 'POST') return sendJsonError(405, 'Method Not Allowed');
@@ -36,15 +36,16 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         
+        // Using stable flash model for document processing
         const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash", // Using standard flash for better PDF support
+            model: "gemini-1.5-flash", 
             generationConfig: {
                 temperature: 0,
                 responseMimeType: "application/json",
             }
         });
 
-        // FIXED: Only one timeoutPromise declaration
+        // FIXED: Only ONE declaration of timeoutPromise allowed
         const timeoutPromise = new Promise((_, reject) => 
             setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 9200)
         );
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
         ]);
 
         let rawText = "";
-        let invoiceDate = new Date().toISOString().split('T')[0]; // Default fallback
+        let invoiceDate = new Date().toISOString().split('T')[0];
 
         try {
             const result = await Promise.race([aiRequest, timeoutPromise]);
@@ -73,7 +74,7 @@ export default async function handler(req, res) {
             rawText = response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
-                return sendJsonError(504, "Connection timed out. For invoices with 100+ units, please upload page 2 separately.");
+                return sendJsonError(504, "Connection timed out. Please try a smaller file.");
             }
             throw err;
         }
@@ -83,8 +84,6 @@ export default async function handler(req, res) {
 
         try {
             const parsed = JSON.parse(rawText);
-            
-            // Capture the invoice date from AI
             if (parsed.invoice_date) invoiceDate = parsed.invoice_date;
 
             const rawArray = parsed.data || parsed.items || (Array.isArray(parsed) ? parsed : []);
@@ -99,10 +98,10 @@ export default async function handler(req, res) {
                 }
             });
         } catch (e) {
-            console.warn("JSON Parse failed, attempting regex recovery...");
+            console.warn("Regex recovery triggered.");
         }
 
-        // Regex recovery for common vendor patterns
+        // Regex patterns for Dejavoo and Valor
         const patterns = [
             { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
             { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
@@ -124,11 +123,6 @@ export default async function handler(req, res) {
             }
         });
 
-        if (items.length === 0) {
-            return sendJsonError(422, "No serials identified in this document.");
-        }
-
-        // FIXED: Returning both the date and the items array
         return res.status(200).json({ 
             success: true, 
             invoice_date: invoiceDate, 
@@ -136,7 +130,6 @@ export default async function handler(req, res) {
         });
 
     } catch (err) {
-        console.error("AI Import Exception:", err);
         return sendJsonError(500, `AI System Error: ${err.message}`);
     }
 }
