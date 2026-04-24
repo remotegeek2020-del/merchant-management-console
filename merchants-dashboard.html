@@ -821,16 +821,32 @@ async function addTask(merchantUuid) {
                         <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
                         <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
                     </div>
-                   <div id="notes-list">${notes.map(n => `
+                  <div id="notes-list">${notes.map(n => {
+    // Format the date nicely (e.g., Apr 24, 2026, 7:51 PM)
+    const noteDate = n.date_created ? new Date(n.date_created).toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    }) : 'No date available';
+
+    return `
     <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-        <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0;">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:8px;">
+            <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0; flex-grow:1;">
+            <span style="font-size:10px; color:#94a3b8; display:flex; align-items:center; gap:4px; white-space:nowrap;">
+                <span class="material-icons" style="font-size:12px;">schedule</span>
+                ${noteDate}
+            </span>
+        </div>
         <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto; width:100%; resize:none;">${n.body}</textarea>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-            <small style="color:#64748b;">By: ${n.display_name || n.created_by}</small>
-            <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer;">UPDATE NOTE</button>
+            <small style="color:#64748b;">By: <b>${n.display_name}</b></small>
+            <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer; font-size:11px;">UPDATE NOTE</button>
         </div>
-    </div>
-`).join('')}</div>
+    </div>`;
+}).join('')}</div>
                 </div>
 
                 <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
