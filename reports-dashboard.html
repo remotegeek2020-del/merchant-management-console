@@ -128,14 +128,14 @@ async function runReport() {
 
     Swal.fire({ title: 'Preparing Preview...', didOpen: () => { Swal.showLoading(); } });
 
-    try {
-        // ALWAYS use /api/reports for the Reports Center
+   try {
+        // FIXED: Point everything to /api/reports so reports.js can handle it
         const res = await fetch('/api/reports', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 action: 'getMonthlyReport',
-                reportType: type, // This tells the backend which table to hit
+                reportType: type, // This matches the 'reportType' variable in reports.js
                 startDate: start,
                 endDate: end,
                 subFilter: subFilter,
@@ -143,6 +143,7 @@ async function runReport() {
                 limit: 100 
             })
         });
+
         const result = await res.json();
         // ... (rest of your existing success/fail logic)
     } catch (err) {
