@@ -108,19 +108,13 @@ async function authorizeUser(user) {
         loginUI: document.getElementById('login-ui'),
         curtain: document.getElementById('page-curtain'),
         greeting: document.getElementById('user-greeting'),
-        logoutBtn: document.getElementById('logout-btn'),
-        secretDungeon: document.getElementById('card-secret') // Add this line
+        logoutBtn: document.getElementById('logout-btn')
     };
 
     if (elements.loader) elements.loader.style.display = 'none';
     if (elements.loginUI) elements.loginUI.style.display = 'none';
     if (elements.curtain) elements.curtain.style.display = 'block';
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
-    // THE REVEAL
-if (userData.role === 'super_admin' && elements.secretDungeon) {
-    elements.secretDungeon.classList.remove('slds-hide');
-    console.log("🔓 Secret Dungeon access authorized for " + userData.email);
-}
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
 
     const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
@@ -311,74 +305,3 @@ document.addEventListener('keypress', function (e) {
         if (loginUI && loginUI.style.display !== 'none') handleManualLogin();
     }
 });
-// This should run after your user session is verified
-function authorizeSecretDungeon() {
-    const role = localStorage.getItem('pp_role'); // Ensure your login saves the role here
-    const secretCard = document.getElementById('card-secret');
-    
-    if (role === 'super_admin' && secretCard) {
-        secretCard.classList.remove('slds-hide');
-        console.log("🔐 Secret Dungeon Access Granted.");
-    }
-}
-function openSecretDungeon() {
-    Swal.fire({
-        title: '<span style="color:#4338ca; font-weight:800;">SECRET DUNGEON</span>',
-        html: `
-            <div style="text-align: left; font-size: 13px; color: #475569;">
-                <p style="margin-bottom: 15px;">Welcome, High Commander. Choose your administrative exploit:</p>
-                
-                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px;">
-                    <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
-                        <span class="material-icons" style="color: #6366f1;">description</span>
-                        <strong style="color: #1e293b;">Merchant Note Injector</strong>
-                    </div>
-                    <p style="font-size: 11px; margin-bottom: 10px;">Upload a CSV with <b>merchant_id</b>, <b>title</b>, and <b>body</b>. Notes will be linked via UUID automatically.</p>
-                    <button onclick="triggerBulkNoteUpload()" class="slds-button slds-button_brand" style="width: 100%; background: #6366f1;">
-                        UPLOAD CSV & INJECT
-                    </button>
-                </div>
-
-                <div style="margin-top: 15px; opacity: 0.5; text-align: center; font-family: monospace; font-size: 10px;">
-                    SESSION_ID: ${localStorage.getItem('pp_userid') || 'ANONYMOUS'}
-                </div>
-            </div>
-        `,
-        showConfirmButton: false,
-        showCancelButton: true,
-        cancelButtonText: 'CLOSE PORTAL',
-        background: '#f8fafc',
-        width: '500px'
-    });
-}
-function triggerBulkNoteUpload() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.csv';
-    
-    input.onchange = async (e) => {
-        const file = e.target.files[0];
-        // 1. You will need a library like PapaParse or a custom CSV parser here
-        // 2. Loop through the rows and call your /api/bulk-notes endpoint
-        Swal.fire('Processing', `Injecting notes from ${file.name}...`, 'info');
-    };
-    
-    input.click();
-}
-function checkDungeonAccess() {
-    // 1. Get the role (Make sure your login process actually sets this!)
-    const role = localStorage.getItem('pp_role'); 
-    const secretCard = document.getElementById('card-secret');
-    
-    console.log("Current User Role:", role); // Check your console (F12) to see what this says
-
-    if (role === 'super_admin' && secretCard) {
-        secretCard.classList.remove('slds-hide');
-        console.log("Secret Dungeon initialized.");
-    }
-}
-
-// 2. Ensure this runs AFTER the loader is gone
-// Find where your code hides 'initial-loader' and shows 'page-curtain'
-// Add checkDungeonAccess() right after that line.
-
