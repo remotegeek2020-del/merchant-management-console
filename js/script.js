@@ -273,6 +273,16 @@ async function handleLogout() {
         }
     });
 }
+// This should run after your user session is verified
+function authorizeSecretDungeon() {
+    const role = localStorage.getItem('pp_role'); // Ensure your login saves the role here
+    const secretCard = document.getElementById('card-secret');
+    
+    if (role === 'super_admin' && secretCard) {
+        secretCard.classList.remove('slds-hide');
+        console.log("🔐 Secret Dungeon Access Granted.");
+    }
+}
 
 async function handleForgotPassword() {
     const { value: email } = await Swal.fire({
