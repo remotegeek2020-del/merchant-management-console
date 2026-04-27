@@ -116,6 +116,11 @@ async function authorizeUser(user) {
     if (elements.loginUI) elements.loginUI.style.display = 'none';
     if (elements.curtain) elements.curtain.style.display = 'block';
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
+    // THE REVEAL
+if (userData.role === 'super_admin' && elements.secretDungeon) {
+    elements.secretDungeon.classList.remove('slds-hide');
+    console.log("🔓 Secret Dungeon access authorized for " + userData.email);
+}
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
 
     const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
