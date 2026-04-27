@@ -273,16 +273,6 @@ async function handleLogout() {
         }
     });
 }
-// This should run after your user session is verified
-function authorizeSecretDungeon() {
-    const role = localStorage.getItem('pp_role'); // Ensure your login saves the role here
-    const secretCard = document.getElementById('card-secret');
-    
-    if (role === 'super_admin' && secretCard) {
-        secretCard.classList.remove('slds-hide');
-        console.log("🔐 Secret Dungeon Access Granted.");
-    }
-}
 
 async function handleForgotPassword() {
     const { value: email } = await Swal.fire({
@@ -315,3 +305,43 @@ document.addEventListener('keypress', function (e) {
         if (loginUI && loginUI.style.display !== 'none') handleManualLogin();
     }
 });
+// This should run after your user session is verified
+function authorizeSecretDungeon() {
+    const role = localStorage.getItem('pp_role'); // Ensure your login saves the role here
+    const secretCard = document.getElementById('card-secret');
+    
+    if (role === 'super_admin' && secretCard) {
+        secretCard.classList.remove('slds-hide');
+        console.log("🔐 Secret Dungeon Access Granted.");
+    }
+}
+function openSecretDungeon() {
+    Swal.fire({
+        title: 'Welcome to the Secret Dungeon',
+        text: 'Select your administrative hack below:',
+        icon: 'info',
+        showCancelButton: true,
+        confirmButtonText: 'Bulk Note Injector',
+        confirmButtonColor: '#6366f1',
+        cancelButtonText: 'Exit Dungeon'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            triggerBulkNoteUpload();
+        }
+    });
+}
+
+function triggerBulkNoteUpload() {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv';
+    
+    input.onchange = async (e) => {
+        const file = e.target.files[0];
+        // 1. You will need a library like PapaParse or a custom CSV parser here
+        // 2. Loop through the rows and call your /api/bulk-notes endpoint
+        Swal.fire('Processing', `Injecting notes from ${file.name}...`, 'info');
+    };
+    
+    input.click();
+}
