@@ -108,7 +108,8 @@ async function authorizeUser(user) {
         loginUI: document.getElementById('login-ui'),
         curtain: document.getElementById('page-curtain'),
         greeting: document.getElementById('user-greeting'),
-        logoutBtn: document.getElementById('logout-btn')
+        logoutBtn: document.getElementById('logout-btn'),
+        secretDungeon: document.getElementById('card-secret') // Add this line
     };
 
     if (elements.loader) elements.loader.style.display = 'none';
@@ -359,15 +360,20 @@ function triggerBulkNoteUpload() {
     
     input.click();
 }
-// Run this inside your window.onload or session check
 function checkDungeonAccess() {
-    const role = localStorage.getItem('pp_role'); // Role from app_users table
+    // 1. Get the role (Make sure your login process actually sets this!)
+    const role = localStorage.getItem('pp_role'); 
     const secretCard = document.getElementById('card-secret');
     
+    console.log("Current User Role:", role); // Check your console (F12) to see what this says
+
     if (role === 'super_admin' && secretCard) {
         secretCard.classList.remove('slds-hide');
+        console.log("Secret Dungeon initialized.");
     }
 }
 
-// Call it on load
-window.addEventListener('load', checkDungeonAccess);
+// 2. Ensure this runs AFTER the loader is gone
+// Find where your code hides 'initial-loader' and shows 'page-curtain'
+// Add checkDungeonAccess() right after that line.
+
