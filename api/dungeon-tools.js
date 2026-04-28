@@ -4,18 +4,24 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { notes } = req.body;
 
-    let results = { success: 0, failed: 0 };
+    let results = { success: 0, failed: 0, skipped_ids: [] };
 
     for (const note of notes) {
         try {
-            // 1. Resolve Merchant UUID
+            // Check if merchant exists
             const { data: mData } = await supabase
                 .from('merchants')
                 .select('id')
                 .eq('merchant_id', note.merchant_id)
                 .single();
 
-            // 2. Resolve Author Name from userid
+            if (!mData) {
+                results.failed++;
+                results.skipped_ids.push(note.merchant_id);
+                continue; // Skip to next note
+            }
+
+            // Resolve Author Name
             let authorName = 'System';
             if (note.userid) {
                 const { data: uData } = await supabase
@@ -26,25 +32,23 @@ export default async function handler(req, res) {
                 if (uData) authorName = `${uData.first_name} ${uData.last_name}`;
             }
 
-            if (mData) {
-                // 3. Insert Note with correct mapping
-                const insertData = {
-                    merchant_id: mData.id,
-                    title: note.title,
-                    body: note.body,
-                    created_by: authorName,
-                    // Use the date from CSV if provided, else Supabase default
-                    created_at: note.created_at || new Date().toISOString()
-                };
+            // Insert
+            const { error } = await supabase.from('merchant_notes').insert([{
+                merchant_id: mData.id,
+                title: note.title,
+                body: note.body,
+                created_by: authorName,
+                created_at: note.created_at || new Date().toISOString()
+            }]);
 
-                const { error } = await supabase.from('merchant_notes').insert([insertData]);
-                if (!error) results.success++;
-                else results.failed++;
-            } else {
+            if (!error) results.success++;
+            else {
                 results.failed++;
+                results.skipped_ids.push(note.merchant_id);
             }
         } catch (err) {
             results.failed++;
+            results.skipped_ids.push(note.merchant_id);
         }
     }
 
