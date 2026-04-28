@@ -170,19 +170,26 @@
     </div>
 
     <script src="js/script.js"></script>
-    <div id="jarvis-sidebar" class="oracle-sidebar" style="display: none;">
+<div id="jarvis-sidebar" class="oracle-sidebar">
     <div class="oracle-header">
-        <span class="material-icons">blur_on</span>
-        <span>JARVIS</span>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span class="material-icons" style="color: #38bdf8;">blur_on</span>
+            <span style="font-weight: 800; letter-spacing: 1px;">JARVIS</span>
+        </div>
+        <button onclick="toggleJarvis()" style="background:none; border:none; color:white; cursor:pointer;">
+            <span class="material-icons">close</span>
+        </button>
     </div>
-    <div id="jarvis-messages" class="oracle-chat-body"></div>
+    <div id="jarvis-messages" class="oracle-chat-body">
+        <div class="ai-bubble">Welcome back, Sir. System core is online. How can I assist?</div>
+    </div>
     <div class="oracle-footer">
         <input type="text" id="jarvis-input" placeholder="Ask Jarvis..." onkeypress="if(event.key==='Enter') askJarvis()">
         <button onclick="askJarvis()"><span class="material-icons">send</span></button>
     </div>
 </div>
 
-<button id="jarvis-trigger" class="oracle-float-btn" style="display: none;" onclick="toggleJarvis()">
+<button id="jarvis-trigger" class="oracle-float-btn" onclick="toggleJarvis()" style="display:none;">
     <span class="material-icons">blur_on</span>
 </button>
     
