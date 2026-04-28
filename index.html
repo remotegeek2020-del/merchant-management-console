@@ -29,28 +29,7 @@
         z-index: 100;
         border: 2px solid white;
     }
-        /* Update these in your style.css */
-.oracle-sidebar {
-    position: fixed; 
-    top: 0; 
-    right: -400px; /* Hide completely off-screen */
-    width: 350px; 
-    height: 100vh;
-    background: #ffffff; 
-    box-shadow: -5px 0 15px rgba(0,0,0,0.1);
-    transition: transform 0.3s ease; 
-    z-index: 10000;
-    display: none; /* Add this to kill it until authorized */
-}
-
-.oracle-sidebar.active {
-    display: flex; /* Show when active class is added */
-    transform: translateX(-400px);
-}
-
-.oracle-float-btn {
-    display: none; /* Hide the trigger button initially */
-}
+   
 </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
