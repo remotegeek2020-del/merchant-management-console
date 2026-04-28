@@ -156,3 +156,27 @@ body {
     outline: none;
     box-shadow: 0 0 0 3px rgba(0, 73, 144, 0.1);
 }
+/* Update these in your CSS file */
+#jarvis-sidebar {
+    display: none; /* Keeps it dead until authorizeUser runs */
+    position: fixed;
+    top: 0;
+    right: -400px; /* Hidden off-screen */
+    width: 350px;
+    height: 100vh;
+    background: white;
+    z-index: 10000;
+    transition: transform 0.3s ease;
+}
+
+#jarvis-sidebar.active {
+    transform: translateX(-400px); /* Slides it into view */
+}
+
+#jarvis-trigger {
+    display: none; /* Keeps the button hidden until login */
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    z-index: 9999;
+}
