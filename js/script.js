@@ -333,10 +333,27 @@ async function handleLogout() {
         cancelButtonColor: '#3085d6'
     }).then((result) => {
         if (result.isConfirmed) {
+            // 1. Save device token if needed
             const deviceToken = localStorage.getItem('pp_device_token');
+            
+            // 2. Clear all session data
             localStorage.clear();
-            if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
             sessionStorage.clear();
+            
+            if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
+
+            // --- 3. JARVIS CLEANUP (Place it here) ---
+            const jarvisBtn = document.getElementById('jarvis-trigger');
+            const jarvisSidebar = document.getElementById('jarvis-sidebar');
+            
+            if (jarvisBtn) jarvisBtn.style.display = 'none'; // Hide the button
+            if (jarvisSidebar) {
+                jarvisSidebar.classList.remove('active'); // Slide it out if open
+                jarvisSidebar.style.display = 'none';    // Kill the container
+            }
+            // -----------------------------------------
+
+            // 4. Return to login
             window.location.href = 'index.html';
         }
     });
