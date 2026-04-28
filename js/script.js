@@ -108,21 +108,31 @@ async function authorizeUser(user) {
         loginUI: document.getElementById('login-ui'),
         curtain: document.getElementById('page-curtain'),
         greeting: document.getElementById('user-greeting'),
-        logoutBtn: document.getElementById('logout-btn')
+        logoutBtn: document.getElementById('logout-btn'),
+        secretDungeon: document.getElementById('card-secret') // Added
     };
 
+   // Use Optional Chaining or IF checks to prevent crashes
     if (elements.loader) elements.loader.style.display = 'none';
     if (elements.loginUI) elements.loginUI.style.display = 'none';
     if (elements.curtain) elements.curtain.style.display = 'block';
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
-
-    const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
-    const isAdmin = roleStr.includes('admin') || roleStr.includes('super');
     
+    // Role Logic
+    const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
+    const isSuperAdmin = roleStr.includes('super');
+    const isAdmin = roleStr.includes('admin') || isSuperAdmin;
+    
+    // Manage Admin Cards
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-logs')) document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
-
+// THE REVEAL: Only try to show the dungeon if the card actually exists
+    if (isSuperAdmin && elements.secretDungeon) {
+        elements.secretDungeon.classList.remove('slds-hide');
+        elements.secretDungeon.style.display = 'flex';
+        console.log("🔓 Secret Dungeon access authorized.");
+    }
     const permMap = {
         'card-inventory': user.access_inventory,
         'card-deployments': user.access_deployments,
