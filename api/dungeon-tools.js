@@ -1,3 +1,55 @@
+import { createClient } from '@supabase/supabase-js';
+
+export default async function handler(req, res) {
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    const { notes } = req.body;
+
+    let results = { success: 0, failed: 0 };
+
+    for (const note of notes) {
+        try {
+            // 1. Resolve Merchant UUID
+            const { data: mData } = await supabase
+                .from('merchants')
+                .select('id')
+                .eq('merchant_id', note.merchant_id)
+                .single();
+
+            // 2. Resolve Author Name from userid
+            let authorName = 'System';
+            if (note.userid) {
+                const { data: uData } = await supabase
+                    .from('app_users')
+                    .select('first_name, last_name')
+                    .eq('userid', note.userid)
+                    .single();
+                if (uData) authorName = `${uData.first_name} ${uData.last_name}`;
+            }
+
+            if (mData) {
+                // 3. Insert Note with correct mapping
+                const insertData = {
+                    merchant_id: mData.id,
+                    title: note.title,
+                    body: note.body,
+                    created_by: authorName,
+                    // Use the date from CSV if provided, else Supabase default
+                    created_at: note.created_at || new Date().toISOString()
+                };
+
+                const { error } = await supabase.from('merchant_notes').insert([insertData]);
+                if (!error) results.success++;
+                else results.failed++;
+            } else {
+                results.failed++;
+            }
+        } catch (err) {
+            results.failed++;
+        }
+    }
+
+    return res.status(200).json(results);
+}
 async function triggerBulkNoteUpload() {
     const { value: file } = await Swal.fire({
         title: 'Select CSV File',
