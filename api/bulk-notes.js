@@ -25,15 +25,22 @@ export default async function handler(req, res) {
             }
 
             // 2. Resolve the Author Name from the userid provided
-            let authorName = 'System Injector';
-            if (note.userid) {
-                const { data: uData } = await supabase
-                    .from('app_users')
-                    .select('first_name, last_name')
-                    .eq('userid', note.userid)
-                    .single();
-                if (uData) authorName = `${uData.first_name} ${uData.last_name}`;
-            }
+          // Resolve Author Name from userid 
+let authorName = 'System Injector';
+if (note.userid) {
+    const { data: uData } = await supabase
+        .from('app_users')
+        .select('first_name, last_name')
+        .eq('userid', note.userid)
+        .single();
+    
+    if (uData) {
+        // Cleanly combine names and remove 'null' or 'undefined' 
+        authorName = [uData.first_name, uData.last_name]
+            .filter(name => name && name !== 'null') 
+            .join(' ') || 'Unknown User';
+    }
+}
 
             // 3. Inject the Note
             const { error: insertError } = await supabase.from('merchant_notes').insert([{
