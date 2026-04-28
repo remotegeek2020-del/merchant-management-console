@@ -148,7 +148,58 @@ async function authorizeUser(user) {
     if (window.Swal) Swal.close();
     if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
+function openSecretDungeon() {
+    Swal.fire({
+        title: '<span style="color:#4338ca; font-weight:800;">SECRET DUNGEON</span>',
+        html: `
+            <div style="text-align: left; font-size: 13px;">
+                <p style="margin-bottom: 15px; color: #475569;">Administrator Override Console Active.</p>
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px;">
+                    <strong style="color: #1e293b; display: block; margin-bottom: 5px;">Bulk Merchant Note Injector</strong>
+                    <p style="font-size: 11px; margin-bottom: 10px; color: #64748b;">Upload a CSV with: merchant_id, title, body</p>
+                    <button onclick="triggerBulkNoteUpload()" class="slds-button slds-button_brand" style="width: 100%; background: #6366f1;">
+                        UPLOAD CSV
+                    </button>
+                </div>
+            </div>
+        `,
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: 'CLOSE PORTAL'
+    });
+}
 
+async function triggerBulkNoteUpload() {
+    const { value: file } = await Swal.fire({
+        title: 'Select CSV File',
+        input: 'file',
+        inputAttributes: { 'accept': '.csv' }
+    });
+
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const text = e.target.result;
+            // Simple split for Merchant ID (col 0), Title (col 1), Body (col 2)
+            const rows = text.split('\n').slice(1).filter(r => r.trim()); 
+            const notes = rows.map(r => {
+                const cols = r.split(',');
+                return { merchant_id: cols[0]?.trim(), title: cols[1]?.trim(), body: cols[2]?.trim() };
+            });
+
+            Swal.fire({ title: 'Injecting...', didOpen: () => Swal.showLoading() });
+            
+            const res = await fetch('/api/bulk-notes', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ notes, author: localStorage.getItem('pp_userid') })
+            });
+            const result = await res.json();
+            Swal.fire('Hack Success', `Added: ${result.success} | Failed: ${result.failed}`, 'success');
+        };
+        reader.readAsText(file);
+    }
+}
 async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
