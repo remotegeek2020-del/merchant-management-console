@@ -334,6 +334,40 @@ async function handleLogout() {
         }
     });
 }
+function toggleJarvis() {
+    document.getElementById('jarvis-sidebar').classList.toggle('active');
+}
+
+async function askJarvis() {
+    const input = document.getElementById('jarvis-input');
+    const container = document.getElementById('jarvis-messages');
+    const query = input.value.trim();
+    if (!query) return;
+
+    container.innerHTML += `<div class="user-bubble" style="background: #334155;">${query}</div>`;
+    input.value = '';
+    container.scrollTop = container.scrollHeight;
+
+    const loadingId = 'jarvis-' + Date.now();
+    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">Consulting database...</div>`;
+
+    try {
+        const res = await fetch('/api/oracle-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                query,
+                userId: localStorage.getItem('pp_userid'),
+                userName: localStorage.getItem('pp_user_first_name') // Ensure this is stored on login
+            })
+        });
+        const data = await res.json();
+        document.getElementById(loadingId).innerText = data.answer;
+    } catch (err) {
+        document.getElementById(loadingId).innerText = "Jarvis is offline. Check API connectivity.";
+    }
+    container.scrollTop = container.scrollHeight;
+}
 
 async function handleForgotPassword() {
     const { value: email } = await Swal.fire({
