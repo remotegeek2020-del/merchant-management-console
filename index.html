@@ -169,6 +169,28 @@
     </div>
 
     <script src="js/script.js"></script>
+    <div id="jarvis-sidebar" class="oracle-sidebar">
+    <div class="oracle-header" style="background: #1e293b;">
+        <div class="oracle-title">
+            <span class="material-icons" style="color: #38bdf8;">precision_manufacturing</span>
+            <span style="font-weight: 800; letter-spacing: 1px; color: white;">JARVIS</span>
+        </div>
+        <button onclick="toggleJarvis()" class="oracle-close">
+            <span class="material-icons" style="color: white;">close</span>
+        </button>
+    </div>
+    <div id="jarvis-messages" class="oracle-chat-body">
+        <div class="ai-bubble">Welcome back. I have mapped the PayProTec portal and database schema. How can I assist you today?</div>
+    </div>
+    <div class="oracle-footer">
+        <input type="text" id="jarvis-input" placeholder="Ask Jarvis..." onkeypress="if(event.key==='Enter') askJarvis()">
+        <button onclick="askJarvis()" style="background: #38bdf8;"><span class="material-icons">send</span></button>
+    </div>
+</div>
+
+<button id="jarvis-trigger" class="oracle-float-btn" style="background: #1e293b; border: 2px solid #38bdf8;" onclick="toggleJarvis()">
+    <span class="material-icons" style="color: #38bdf8;">blur_on</span>
+</button>
 </body>
 </html>
 
