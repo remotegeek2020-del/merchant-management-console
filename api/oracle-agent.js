@@ -7,7 +7,7 @@ export default async function handler(req, res) {
     
     // Initialize Gemini 3 Flash
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     // Defining the Jarvis Persona with Gemini 3 Intelligence
     const systemPrompt = `
