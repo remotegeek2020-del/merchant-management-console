@@ -180,3 +180,11 @@ body {
     right: 20px;
     z-index: 9999;
 }
+.oracle-sidebar {
+    right: -400px; /* Hidden off-screen */
+    transition: 0.3s ease;
+}
+
+.oracle-sidebar.active {
+    right: 0; /* Slides into view */
+}
