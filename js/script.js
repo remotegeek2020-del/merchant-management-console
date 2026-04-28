@@ -118,11 +118,18 @@ async function authorizeUser(user) {
     if (elements.curtain) elements.curtain.style.display = 'block';
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
+    // --- JARVIS ACTIVATION ---
+    // Only show Jarvis for authenticated users
+    if (elements.jarvisBtn && elements.jarvisSidebar) {
+        elements.jarvisBtn.style.display = 'block';
+        elements.jarvisSidebar.style.display = 'flex'; 
+    }
     
     // Role Logic
     const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
     const isSuperAdmin = roleStr.includes('super');
     const isAdmin = roleStr.includes('admin') || isSuperAdmin;
+    
     
     // Manage Admin Cards
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
