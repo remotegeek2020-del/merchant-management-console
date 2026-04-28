@@ -110,7 +110,15 @@ async function authorizeUser(user) {
         greeting: document.getElementById('user-greeting'),
         logoutBtn: document.getElementById('logout-btn'),
         secretDungeon: document.getElementById('card-secret') // Added
+        jarvisBtn: document.getElementById('jarvis-trigger'),
+    jarvisSidebar: document.getElementById('jarvis-sidebar')
     };
+// Check if the elements exist and reveal them
+if (elements.jarvisBtn && elements.jarvisSidebar) {
+    elements.jarvisBtn.style.display = 'block'; 
+    elements.jarvisSidebar.style.display = 'flex';
+    console.log("🤖 Jarvis Online.");
+}
 
    // Use Optional Chaining or IF checks to prevent crashes
     if (elements.loader) elements.loader.style.display = 'none';
