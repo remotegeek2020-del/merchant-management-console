@@ -109,9 +109,9 @@ async function authorizeUser(user) {
         curtain: document.getElementById('page-curtain'),
         greeting: document.getElementById('user-greeting'),
         logoutBtn: document.getElementById('logout-btn'),
-        secretDungeon: document.getElementById('card-secret') // Added
+        secretDungeon: document.getElementById('card-secret'), // Fixed: Added missing comma here
         jarvisBtn: document.getElementById('jarvis-trigger'),
-    jarvisSidebar: document.getElementById('jarvis-sidebar')
+        jarvisSidebar: document.getElementById('jarvis-sidebar')
     };
 // Check if the elements exist and reveal them
 if (elements.jarvisBtn && elements.jarvisSidebar) {
