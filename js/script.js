@@ -381,7 +381,7 @@ async function askJarvis() {
     container.scrollTop = container.scrollHeight;
 
     const loadingId = 'jarvis-' + Date.now();
-    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">Consulting database...</div>`;
+    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">One moment, Sir...</div>`;
 
     try {
         const res = await fetch('/api/oracle-agent', {
