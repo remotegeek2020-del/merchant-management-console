@@ -400,6 +400,10 @@ async function askJarvis() {
     }
     container.scrollTop = container.scrollHeight;
 }
+function toggleJarvis() {
+    const sidebar = document.getElementById('jarvis-sidebar');
+    if (sidebar) sidebar.classList.toggle('active'); // This toggles the slide-in
+}
 
 async function handleForgotPassword() {
     const { value: email } = await Swal.fire({
