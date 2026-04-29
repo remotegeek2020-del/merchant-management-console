@@ -209,19 +209,25 @@ async function submitTraining() {
     Swal.fire({ title: 'Injecting...', didOpen: () => Swal.showLoading() });
 
     try {
-        await fetch('/api/train-jarvis', {
+        const res = await fetch('/api/train-jarvis', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-                topic, 
-                logic, 
-                category: 'manual_training',
+                topic: topic, 
+                logic: logic, // This must match the 'logic' variable name in the API handler
                 userId: localStorage.getItem('pp_userid')
             })
         });
-        Swal.fire('Success', 'Jarvis has updated his core logic.', 'success');
+        
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire('Success', 'Knowledge injected into core memory.', 'success');
+            // Optional: refresh the dungeon view if needed
+        } else {
+            throw new Error(result.message);
+        }
     } catch (e) {
-        Swal.fire('Error', 'Injection failed.', 'error');
+        Swal.fire('Error', `Injection failed: ${e.message}`, 'error');
     }
 }
 
