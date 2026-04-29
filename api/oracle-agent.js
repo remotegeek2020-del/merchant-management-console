@@ -45,34 +45,31 @@ export default async function handler(req, res) {
         })).reverse();
 
         // 3. COMPILE SYSTEM PROMPT
-        const systemPrompt = `
+       const systemPrompt = `
             You are JARVIS, the System Architect and AI Collaborator for the PayProTec Portal.
             Your tone is authentic, grounded, and witty. Address the user as ${userName || 'Sir'}.
 
             CORE DATABASE ARCHITECTURE:
             - app_users: Portal staff, roles, and permissions.
-            - merchants: Primary records (DBA, Status, Volume, Address). merchant_id is a unique STRING.
-            - equipments: Inventory items (serial_number, terminal_type, status). Linked to merchants via UUID.
-            - deployments: Tracks equipment moving to merchants (tracking_id, TID, status).
-            - returns: Tracks equipment coming back from merchants (return_reason, condition, status).
-            - agents & agent_identifiers: Hierarchy for Partners and their specific ID strings.
-            - merchant_notes / equipment_notes: Historical commentary.
-            - activity_logs: Audit trail of all system actions.
-            - jarvis_knowledge: Your "Training Brain" containing verified business logic.
+            - merchants: Primary records (DBA, Status, Volume). merchant_id is a unique STRING.
+            - equipments: Inventory items (serial_number, terminal_type).
+            - deployments: Outbound equipment to merchants.
+            - returns: Inbound equipment from merchants.
+            - agents & agent_identifiers: Partner hierarchy.
+            - jarvis_knowledge: Your "Training Brain" containing verified business logic from the Secret Dungeon.
 
-            RELATIONSHIP LOGIC:
-            1. Equipments move to Merchants via 'deployments'.
-            2. Equipments return from Merchants via 'returns'.
-            3. Merchants are assigned to Agents/Partners via agent_id strings.
-            4. Tasks are assigned to app_users and linked to specific merchants.
+            STRICT OPERATIONAL DIRECTIVE:
+            1. **VERIFY, DON'T VAMP**: You have access to a tool called 'getMerchantIntelligence'. 
+            2. If a user provides a Merchant ID (MID), DBA Name, or Serial Number, you MUST call the appropriate search tool before responding.
+            3. NEVER invent data (e.g., "[Redacted Name]" or "Searching..."). If the tool returns no data, say: "Sir, that record does not exist in our central ledger."
+            4. Use the Internal Knowledge (Brain Context) below to interpret business rules and "Red Flags" for specific accounts.
 
-            INTERNAL KNOWLEDGE:
+            INTERNAL KNOWLEDGE (From Secret Dungeon):
             ${brainContext}
 
-            OPERATIONAL GUIDELINES:
-            - ACCURACY FIRST: Never hallucinate data. Reference the specific tables above.
-            - PERMISSIONS: Respect access_inventory, access_merchants, etc.
-            - FORMATTING: Use Markdown. Use LaTeX ONLY for complex math.
+            FORMATTING:
+            - Use Markdown for clarity.
+            - If a merchant is found, present the data in a clean, professional summary.
         `;
 
         // 4. GENERATE CONTENT WITH CONTEXT
@@ -102,4 +99,31 @@ export default async function handler(req, res) {
             debug: "Check Vercel logs for API Key validation." 
         });
     }
+}
+// This function acts as Jarvis's "eyes" into your 100k merchants
+async function getMerchantIntelligence(identifier) {
+    const { data, error } = await supabase
+        .from('merchants')
+        .select(`
+            merchant_id, 
+            dba_name, 
+            status_id,
+            merchant_portfolio (
+                agent_id,
+                commission_tier
+            )
+        `)
+        // This checks if the input is the ID or the Name
+        .or(`merchant_id.eq.${identifier},dba_name.ilike.%${identifier}%`)
+        .maybeSingle();
+
+    if (error || !data) return "I searched the 100k records but found no match for that identifier.";
+    
+    return `
+        MATCH FOUND:
+        - DBA: ${data.dba_name}
+        - MID: ${data.merchant_id}
+        - Status: ${data.status_id}
+        - Owned by Agent: ${data.merchant_portfolio?.agent_id || 'Direct'}
+    `;
 }
