@@ -15,7 +15,7 @@ export default async function handler(req, res) {
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     // Using Flash for speed and intelligence
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     try {
         // 1. FETCH INTERNAL KNOWLEDGE (BRAIN)
