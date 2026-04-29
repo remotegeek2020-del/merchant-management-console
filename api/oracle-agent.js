@@ -104,28 +104,31 @@ export default async function handler(req, res) {
 
 // Fixed function: Added 'supabase' as a parameter so it can access the client
 async function getMerchantIntelligence(identifier, supabase) {
+    // Clean the input: remove any non-numeric characters if it's an ID search
     const cleanId = identifier.toString().trim();
 
-    // STEP 1: Just get the merchant record first (Safe Mode)
     const { data, error } = await supabase
         .from('merchants')
-        .select('merchant_id, dba_name, status_id, agent_id') // Try agent_id directly if it exists in merchants
-        .or(`merchant_id.eq.'${cleanId}',dba_name.ilike.%${cleanId}%`)
+        .select('merchant_id, dba_name, status_id, agent_id')
+        // Use .ilike for both so it finds the ID even if there are hidden spaces
+        .or(`merchant_id.ilike.%${cleanId}%,dba_name.ilike.%${cleanId}%`)
+        .limit(1)
         .maybeSingle();
 
     if (error) {
-        console.error("Supabase Error:", error);
-        // We tell the AI EXACTLY what the database said
-        return `DATABASE_ERROR: ${error.message} (Hint: Check if merchant_id is the correct column name)`;
+        return `DATABASE_ERROR: ${error.message}`;
     }
 
-    if (!data) return "No record found for that specific ID in the merchants table.";
+    if (!data) {
+        // This is for you to see in the chat if it's actually searching what you think
+        return `No record found for input: "${cleanId}". Checked merchant_id and dba_name columns.`;
+    }
     
     return `
         MATCH FOUND:
         - DBA: ${data.dba_name}
         - MID: ${data.merchant_id}
         - Status: ${data.status_id}
-        - Agent/Owner: ${data.agent_id || 'Refer to Portfolio Table'}
+        - Agent/Owner: ${data.agent_id || 'Direct'}
     `;
 }
