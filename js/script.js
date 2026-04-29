@@ -99,6 +99,7 @@ async function authorizeUser(user) {
         localStorage.setItem('pp_userid', user.userid || '');
         localStorage.setItem('pp_role', user.role || 'Regular User'); 
         localStorage.setItem('pp_verified', 'true');
+        localStorage.setItem('pp_user_first_name', user.first_name || 'Sir');
         localStorage.setItem('userid', user.userid || ''); 
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
@@ -128,10 +129,16 @@ if (elements.jarvisBtn && elements.jarvisSidebar) {
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
     // --- JARVIS ACTIVATION ---
     // Only show Jarvis for authenticated users
-    if (elements.jarvisBtn && elements.jarvisSidebar) {
-        elements.jarvisBtn.style.display = 'block';
-        elements.jarvisSidebar.style.display = 'flex'; 
-    }
+  const hasJarvisAccess = isSuperAdmin || (user.access_jarvis === true || user.access_jarvis === "true");
+
+if (hasJarvisAccess && elements.jarvisBtn && elements.jarvisSidebar) {
+    elements.jarvisBtn.style.display = 'block';
+    elements.jarvisSidebar.style.display = 'flex';
+    console.log("🤖 Jarvis Online.");
+} else {
+    if (elements.jarvisBtn) elements.jarvisBtn.style.display = 'none';
+    if (elements.jarvisSidebar) elements.jarvisSidebar.style.display = 'none';
+}
     
     // Role Logic
     const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
@@ -149,11 +156,12 @@ if (elements.jarvisBtn && elements.jarvisSidebar) {
         console.log("🔓 Secret Dungeon access authorized.");
     }
     const permMap = {
-        'card-inventory': user.access_inventory,
-        'card-deployments': user.access_deployments,
-        'card-returns': user.access_returns,
-        'card-merchants': user.access_merchants
-    };
+    'card-inventory': isSuperAdmin || parseBool(user.access_inventory),
+    'card-deployments': isSuperAdmin || parseBool(user.access_deployments),
+    'card-returns': isSuperAdmin || parseBool(user.access_returns),
+    'card-merchants': isSuperAdmin || parseBool(user.access_merchants),
+    'card-partners': isSuperAdmin || parseBool(user.access_partners) // Added Partners here too
+};
 
     Object.keys(permMap).forEach(id => {
         const el = document.getElementById(id);
