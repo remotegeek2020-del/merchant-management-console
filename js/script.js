@@ -99,9 +99,15 @@ async function authorizeUser(user) {
         localStorage.setItem('pp_userid', user.userid || '');
         localStorage.setItem('pp_role', user.role || 'Regular User'); 
         localStorage.setItem('pp_verified', 'true');
+        localStorage.setItem('pp_user_first_name', user.first_name || 'Sir'); // Added for Jarvis persona
         localStorage.setItem('userid', user.userid || ''); 
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
+
+    // Role Logic: Normalized for flexible role strings
+    const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
+    const isSuperAdmin = roleStr.includes('super');
+    const isAdmin = roleStr.includes('admin') || isSuperAdmin;
 
     const elements = {
         loader: document.getElementById('initial-loader'),
@@ -109,71 +115,76 @@ async function authorizeUser(user) {
         curtain: document.getElementById('page-curtain'),
         greeting: document.getElementById('user-greeting'),
         logoutBtn: document.getElementById('logout-btn'),
-        secretDungeon: document.getElementById('card-secret'), // Fixed: Added missing comma here
+        secretDungeon: document.getElementById('card-secret'),
         jarvisBtn: document.getElementById('jarvis-trigger'),
         jarvisSidebar: document.getElementById('jarvis-sidebar')
     };
-// Check if the elements exist and reveal them
-if (elements.jarvisBtn && elements.jarvisSidebar) {
-    elements.jarvisBtn.style.display = 'block'; 
-    elements.jarvisSidebar.style.display = 'flex';
-    console.log("🤖 Jarvis Online.");
-}
 
-   // Use Optional Chaining or IF checks to prevent crashes
     if (elements.loader) elements.loader.style.display = 'none';
     if (elements.loginUI) elements.loginUI.style.display = 'none';
     if (elements.curtain) elements.curtain.style.display = 'block';
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
-    // --- JARVIS ACTIVATION ---
-    // Only show Jarvis for authenticated users
-    if (elements.jarvisBtn && elements.jarvisSidebar) {
+
+    // --- JARVIS ACTIVATION (Master Key Applied) ---
+    // Super Admins see Jarvis always; others need the 'access_jarvis' checkbox
+    const hasJarvisAccess = isSuperAdmin || parseBool(user.access_jarvis);
+    if (hasJarvisAccess && elements.jarvisBtn && elements.jarvisSidebar) {
         elements.jarvisBtn.style.display = 'block';
         elements.jarvisSidebar.style.display = 'flex'; 
+        console.log("🤖 Jarvis Online.");
+    } else {
+        if (elements.jarvisBtn) elements.jarvisBtn.style.display = 'none';
+        if (elements.jarvisSidebar) elements.jarvisSidebar.style.display = 'none';
     }
-    
-    // Role Logic
-    const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
-    const isSuperAdmin = roleStr.includes('super');
-    const isAdmin = roleStr.includes('admin') || isSuperAdmin;
-    
     
     // Manage Admin Cards
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-logs')) document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
-// THE REVEAL: Only try to show the dungeon if the card actually exists
+
+    // THE REVEAL: Secret Dungeon
     if (isSuperAdmin && elements.secretDungeon) {
         elements.secretDungeon.classList.remove('slds-hide');
         elements.secretDungeon.style.display = 'flex';
         console.log("🔓 Secret Dungeon access authorized.");
     }
+
+    // Permission Override: Super Admins see all modules regardless of checkboxes
     const permMap = {
-        'card-inventory': user.access_inventory,
-        'card-deployments': user.access_deployments,
-        'card-returns': user.access_returns,
-        'card-merchants': user.access_merchants
+        'card-inventory': isSuperAdmin || parseBool(user.access_inventory),
+        'card-deployments': isSuperAdmin || parseBool(user.access_deployments),
+        'card-returns': isSuperAdmin || parseBool(user.access_returns),
+        'card-merchants': isSuperAdmin || parseBool(user.access_merchants),
+        'card-partners': isSuperAdmin || parseBool(user.access_partners)
     };
 
     Object.keys(permMap).forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = parseBool(permMap[id]) ? 'flex' : 'none';
+        if (el) el.style.display = permMap[id] ? 'flex' : 'none';
     });
     
     if (window.Swal) Swal.close();
     if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
+
 function openSecretDungeon() {
     Swal.fire({
         title: '<span style="color:#4338ca; font-weight:800;">SECRET DUNGEON</span>',
         html: `
             <div style="text-align: left; font-size: 13px;">
-                <p style="margin-bottom: 15px; color: #475569;">Administrator Override Console Active.</p>
-                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px;">
+                <div style="background: white; border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom:15px;">
                     <strong style="color: #1e293b; display: block; margin-bottom: 5px;">Bulk Merchant Note Injector</strong>
-                    <p style="font-size: 11px; margin-bottom: 10px; color: #64748b;">Upload a CSV with: merchant_id, title, body</p>
                     <button onclick="triggerBulkNoteUpload()" class="slds-button slds-button_brand" style="width: 100%; background: #6366f1;">
                         UPLOAD CSV
+                    </button>
+                </div>
+
+                <div style="background: #0f172a; border: 1px solid #38bdf8; border-radius: 12px; padding: 15px; color: white;">
+                    <strong style="color: #38bdf8; display: block; margin-bottom: 5px;">JARVIS NEURAL TRAINING</strong>
+                    <input type="text" id="train-topic" placeholder="Topic (e.g. Return Policy)" style="width:100%; margin-bottom:8px; padding:8px; border-radius:4px; border:none; color:black;">
+                    <textarea id="train-logic" placeholder="The factual truth..." style="width:100%; height:60px; margin-bottom:8px; padding:8px; border-radius:4px; border:none; color:black;"></textarea>
+                    <button onclick="submitTraining()" class="slds-button" style="width: 100%; background: #38bdf8; color: #0f172a; font-weight:bold;">
+                        INJECT KNOWLEDGE
                     </button>
                 </div>
             </div>
@@ -182,6 +193,31 @@ function openSecretDungeon() {
         showCancelButton: true,
         cancelButtonText: 'CLOSE PORTAL'
     });
+}
+// Handler for the training submission
+async function submitTraining() {
+    const topic = document.getElementById('train-topic').value;
+    const logic = document.getElementById('train-logic').value;
+
+    if (!topic || !logic) return Swal.showValidationMessage('Both fields are required');
+
+    Swal.fire({ title: 'Injecting...', didOpen: () => Swal.showLoading() });
+
+    try {
+        await fetch('/api/train-jarvis', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                topic, 
+                logic, 
+                category: 'manual_training',
+                userId: localStorage.getItem('pp_userid')
+            })
+        });
+        Swal.fire('Success', 'Jarvis has updated his core logic.', 'success');
+    } catch (e) {
+        Swal.fire('Error', 'Injection failed.', 'error');
+    }
 }
 
 async function triggerBulkNoteUpload() {
@@ -406,12 +442,10 @@ async function askJarvis() {
     const query = input.value.trim();
     if (!query) return;
 
-    // 1. Show User Message
     container.innerHTML += `<div class="user-bubble">${query}</div>`;
     input.value = '';
     container.scrollTop = container.scrollHeight;
 
-    // 2. Show Loading State
     const loadingId = 'jarvis-' + Date.now();
     container.innerHTML += `<div class="ai-bubble" id="${loadingId}">Thinking...</div>`;
     container.scrollTop = container.scrollHeight;
@@ -427,18 +461,10 @@ async function askJarvis() {
             })
         });
         const data = await res.json();
-        
-        // 3. Inject the Response WITH the Teach Button
         const loadingEl = document.getElementById(loadingId);
-        loadingEl.innerHTML = `
-            <div>${data.answer}</div>
-            <div style="margin-top: 10px; border-top: 1px solid #334155; padding-top: 5px; text-align: right;">
-                <button onclick="teachJarvis('${query.replace(/'/g, "\\'")}', '${data.answer.replace(/'/g, "\\'")}')" 
-                        style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:4px;">
-                    <span class="material-icons" style="font-size:12px;">psychology</span> TEACH JARVIS
-                </button>
-            </div>
-        `;
+        
+        // Clean UI: The text only, training moved to the Dungeon
+        loadingEl.innerHTML = `<div>${data.answer}</div>`;
     } catch (err) {
         document.getElementById(loadingId).innerText = "Jarvis is offline. Check API connectivity.";
     }
