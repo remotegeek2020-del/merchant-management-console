@@ -28,12 +28,13 @@ async function loadUsers() {
             // SECURITY: Disable Edit/Del if target is Super Admin and I am not Super Admin
             const disableActions = isTargetSuper && !iAmSuper;
 
-            const row = document.createElement('tr');
-            // Inside result.data.forEach(user => { ... }) in cms-logic.js
+           // Inside result.data.forEach(user => { ... }) in cms-logic.js
+const row = document.createElement('tr');
 row.innerHTML = `
     <td><strong>${user.first_name || ''}</strong></td>
     <td>${user.email || '---'}</td>
     <td><span class="status-badge ${statusClass}">${user.is_active ? 'Active' : 'Pending'}</span></td>
+    
     <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)" ${disableActions ? 'disabled' : ''}></td>
     <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)" ${disableActions ? 'disabled' : ''}></td>
     <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)" ${disableActions ? 'disabled' : ''}></td>
@@ -51,7 +52,7 @@ row.innerHTML = `
             onclick="deleteUser('${user.userid}', '${user.first_name}')" 
             ${disableActions ? 'disabled' : ''}>Del</button>
     </td>`;
-            tbody.appendChild(row);
+tbody.appendChild(row);
         });
     } catch (err) {
         console.error("Fetch Error:", err);
