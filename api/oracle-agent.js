@@ -104,6 +104,9 @@ export default async function handler(req, res) {
 
 // Fixed function: Added 'supabase' as a parameter so it can access the client
 async function getMerchantIntelligence(identifier, supabase) {
+    // Clean the identifier (remove spaces or extra quotes)
+    const cleanId = identifier.toString().trim();
+
     const { data, error } = await supabase
         .from('merchants')
         .select(`
@@ -114,10 +117,16 @@ async function getMerchantIntelligence(identifier, supabase) {
                 agent_id
             )
         `)
-        .or(`merchant_id.eq.${identifier},dba_name.ilike.%${identifier}%`)
+        // Wrap cleanId in single quotes for the merchant_id check
+        .or(`merchant_id.eq.'${cleanId}',dba_name.ilike.%${cleanId}%`)
         .maybeSingle();
 
-    if (error || !data) return "No record found for that identifier in the 100k ledger.";
+    if (error) {
+        console.error("Supabase Query Error:", error);
+        return `Database Error: ${error.message}`;
+    }
+
+    if (!data) return "No record found. I checked the 100k ledger for that specific ID/DBA and it returned null.";
     
     return `
         MATCH FOUND:
