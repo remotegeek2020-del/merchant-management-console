@@ -29,23 +29,28 @@ async function loadUsers() {
             const disableActions = isTargetSuper && !iAmSuper;
 
             const row = document.createElement('tr');
-            row.innerHTML = `
-                <td><strong>${user.first_name || ''}</strong></td>
-                <td>${user.email || '---'}</td>
-                <td><span class="status-badge ${statusClass}">${user.is_active ? 'Active' : 'Pending'}</span></td>
-                <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-                <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-                <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-                <td style="text-align:center;"><input type="checkbox" ${user.access_merchants ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_merchants', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-                <td><strong>${user.role}</strong></td>
-                <td style="text-align:center;">
-                    <button class="slds-button slds-button_neutral slds-button_small" 
-                        onclick="editUser('${user.userid}', '${user.first_name}', '${user.email}', '${user.role}')" 
-                        ${disableActions ? 'disabled' : ''}>Edit</button>
-                    <button class="slds-button slds-button_destructive slds-button_small" 
-                        onclick="deleteUser('${user.userid}', '${user.first_name}')" 
-                        ${disableActions ? 'disabled' : ''}>Del</button>
-                </td>`;
+            // Inside result.data.forEach(user => { ... }) in cms-logic.js
+row.innerHTML = `
+    <td><strong>${user.first_name || ''}</strong></td>
+    <td>${user.email || '---'}</td>
+    <td><span class="status-badge ${statusClass}">${user.is_active ? 'Active' : 'Pending'}</span></td>
+    <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+    <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+    <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+    <td style="text-align:center;"><input type="checkbox" ${user.access_merchants ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_merchants', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+    
+    <td style="text-align:center;"><input type="checkbox" ${user.access_jarvis ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_jarvis', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+    <td style="text-align:center;"><input type="checkbox" ${user.access_partners ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_partners', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+    
+    <td><strong>${user.role}</strong></td>
+    <td style="text-align:center;">
+        <button class="slds-button slds-button_neutral slds-button_small" 
+            onclick="editUser('${user.userid}', '${user.first_name}', '${user.email}', '${user.role}')" 
+            ${disableActions ? 'disabled' : ''}>Edit</button>
+        <button class="slds-button slds-button_destructive slds-button_small" 
+            onclick="deleteUser('${user.userid}', '${user.first_name}')" 
+            ${disableActions ? 'disabled' : ''}>Del</button>
+    </td>`;
             tbody.appendChild(row);
         });
     } catch (err) {
