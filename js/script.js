@@ -376,12 +376,15 @@ async function askJarvis() {
     const query = input.value.trim();
     if (!query) return;
 
-    container.innerHTML += `<div class="user-bubble" style="background: #334155;">${query}</div>`;
+    // 1. Show User Message
+    container.innerHTML += `<div class="user-bubble">${query}</div>`;
     input.value = '';
     container.scrollTop = container.scrollHeight;
 
+    // 2. Show Loading State
     const loadingId = 'jarvis-' + Date.now();
-    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">One moment, Sir...</div>`;
+    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">Thinking...</div>`;
+    container.scrollTop = container.scrollHeight;
 
     try {
         const res = await fetch('/api/oracle-agent', {
@@ -390,11 +393,22 @@ async function askJarvis() {
             body: JSON.stringify({ 
                 query,
                 userId: localStorage.getItem('pp_userid'),
-                userName: localStorage.getItem('pp_user_first_name') // Ensure this is stored on login
+                userName: localStorage.getItem('pp_user_first_name')
             })
         });
         const data = await res.json();
-        document.getElementById(loadingId).innerText = data.answer;
+        
+        // 3. Inject the Response WITH the Teach Button
+        const loadingEl = document.getElementById(loadingId);
+        loadingEl.innerHTML = `
+            <div>${data.answer}</div>
+            <div style="margin-top: 10px; border-top: 1px solid #334155; padding-top: 5px; text-align: right;">
+                <button onclick="teachJarvis('${query.replace(/'/g, "\\'")}', '${data.answer.replace(/'/g, "\\'")}')" 
+                        style="background:none; border:none; color:#38bdf8; cursor:pointer; font-size:10px; display:inline-flex; align-items:center; gap:4px;">
+                    <span class="material-icons" style="font-size:12px;">psychology</span> TEACH JARVIS
+                </button>
+            </div>
+        `;
     } catch (err) {
         document.getElementById(loadingId).innerText = "Jarvis is offline. Check API connectivity.";
     }
