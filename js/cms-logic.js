@@ -106,15 +106,15 @@ async function addUser() {
             return {
                 first_name: document.getElementById('swal-name').value,
                 email: document.getElementById('swal-email').value,
-                role: document.getElementById('swal-role').value
-                 // Default values for new enrollments
-        access_jarvis: false,
-        access_partners: false,
-        access_inventory: false,
-        access_deployments: false,
-        access_returns: false,
-        access_merchants: false
-            }
+                role: document.getElementById('swal-role').value,
+                // Default values for new enrollments
+                access_jarvis: false,
+                access_partners: false,
+                access_inventory: false,
+                access_deployments: false,
+                access_returns: false,
+                access_merchants: false
+            }; // Added the closing brace and semicolon here
         }
     });
 
