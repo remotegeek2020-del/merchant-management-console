@@ -170,7 +170,8 @@
     </div>
 
     <script src="js/script.js"></script>
-<div id="jarvis-sidebar" class="oracle-sidebar">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<div id="jarvis-sidebar" class="oracle-sidebar" style="display: none;">
     <div class="oracle-header">
         <div style="display:flex; align-items:center; gap:10px;">
             <span class="material-icons" style="color: #38bdf8;">blur_on</span>
@@ -180,19 +181,23 @@
             <span class="material-icons">close</span>
         </button>
     </div>
+
     <div id="jarvis-messages" class="oracle-chat-body">
-        <div class="ai-bubble">Welcome back, Sir. System core is online. How can I assist?</div>
+        <div class="ai-bubble">System core online. How can I assist you, Sir?</div>
     </div>
+
     <div class="oracle-footer">
-        <input type="text" id="jarvis-input" placeholder="Ask Jarvis..." onkeypress="if(event.key==='Enter') askJarvis()">
-        <button onclick="askJarvis()"><span class="material-icons">send</span></button>
+        <input type="text" id="jarvis-input" placeholder="Ask Jarvis..." 
+               onkeypress="if(event.key==='Enter') askJarvis()">
+        <button onclick="askJarvis()" style="background: #38bdf8; border: none; border-radius: 4px; cursor: pointer; padding: 5px 10px;">
+            <span class="material-icons" style="color: #0f172a;">send</span>
+        </button>
     </div>
 </div>
 
 <button id="jarvis-trigger" class="oracle-float-btn" onclick="toggleJarvis()" style="display:none;">
     <span class="material-icons">blur_on</span>
 </button>
-    
 </body>
 </html>
 
