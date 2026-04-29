@@ -132,3 +132,15 @@ async function getMerchantIntelligence(identifier, supabase) {
         - Agent/Owner: ${data.agent_id || 'Direct'}
     `;
 }
+async function getMerchantHistory(mid, supabase) {
+    const { data, error } = await supabase
+        .from('deployments')
+        .select('tracking_id, terminal_type, status, created_at')
+        .eq('merchant_id', mid)
+        .order('created_at', { ascending: false })
+        .limit(3);
+
+    if (error || !data.length) return "No recent deployment history found for this MID.";
+    
+    return data.map(d => `- ${d.created_at}: ${d.terminal_type} (${d.status}) - Track: ${d.tracking_id}`).join('\n');
+}
