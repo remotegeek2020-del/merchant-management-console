@@ -99,14 +99,14 @@ async function authorizeUser(user) {
         localStorage.setItem('pp_userid', user.userid || '');
         localStorage.setItem('pp_role', user.role || 'Regular User'); 
         localStorage.setItem('pp_verified', 'true');
-        localStorage.setItem('pp_user_first_name', user.first_name || 'Sir'); // Added for Jarvis persona
+        localStorage.setItem('pp_user_first_name', user.first_name || 'Sir'); 
         localStorage.setItem('userid', user.userid || ''); 
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
 
-    // Role Logic: Normalized for flexible role strings
+    // --- 1. ROLE LOGIC ---
     const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
-    const isSuperAdmin = roleStr.includes('super');
+    const isSuperAdmin = roleStr.includes('super'); // This identifies YOU
     const isAdmin = roleStr.includes('admin') || isSuperAdmin;
 
     const elements = {
@@ -126,8 +126,8 @@ async function authorizeUser(user) {
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
 
-    // --- JARVIS ACTIVATION (Master Key Applied) ---
-    // Super Admins see Jarvis always; others need the 'access_jarvis' checkbox
+    // --- 2. JARVIS ACTIVATION ---
+    // Access is togglable via DB for users, but Super Admin always has it.
     const hasJarvisAccess = isSuperAdmin || parseBool(user.access_jarvis);
     if (hasJarvisAccess && elements.jarvisBtn && elements.jarvisSidebar) {
         elements.jarvisBtn.style.display = 'block';
@@ -138,18 +138,23 @@ async function authorizeUser(user) {
         if (elements.jarvisSidebar) elements.jarvisSidebar.style.display = 'none';
     }
     
-    // Manage Admin Cards
+    // Manage General Admin Cards
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-logs')) document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
 
-    // THE REVEAL: Secret Dungeon
-    if (isSuperAdmin && elements.secretDungeon) {
-        elements.secretDungeon.classList.remove('slds-hide');
-        elements.secretDungeon.style.display = 'flex';
-        console.log("🔓 Secret Dungeon access authorized.");
+    // --- 3. THE DUNGEON LOCKDOWN (Surgical Fix) ---
+    // This ensures ONLY the Super Admin sees the training/injector portal.
+    if (elements.secretDungeon) {
+        if (isSuperAdmin) {
+            elements.secretDungeon.classList.remove('slds-hide');
+            elements.secretDungeon.style.display = 'flex';
+            console.log("🔓 Secret Dungeon authorized for Super Admin.");
+        } else {
+            elements.secretDungeon.style.display = 'none'; // Explicitly hide for regular admins
+        }
     }
 
-    // Permission Override: Super Admins see all modules regardless of checkboxes
+    // --- 4. PERMISSION OVERRIDE ---
     const permMap = {
         'card-inventory': isSuperAdmin || parseBool(user.access_inventory),
         'card-deployments': isSuperAdmin || parseBool(user.access_deployments),
