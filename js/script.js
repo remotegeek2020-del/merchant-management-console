@@ -74,3 +74,37 @@ async function authorizeUser(user) {
     if (window.Swal) Swal.close();
     if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
+async function askJarvis() {
+    const input = document.getElementById('jarvis-input');
+    const container = document.getElementById('jarvis-messages');
+    const query = input.value.trim();
+    if (!query) return;
+
+    container.innerHTML += `<div class="user-bubble">${query}</div>`;
+    input.value = '';
+    container.scrollTop = container.scrollHeight;
+
+    const loadingId = 'jarvis-' + Date.now();
+    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">Thinking...</div>`;
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        const res = await fetch('/api/oracle-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                query,
+                userId: localStorage.getItem('pp_userid'),
+                userName: localStorage.getItem('pp_user_first_name')
+            })
+        });
+        const data = await res.json();
+        
+        // CLEAN UI: Teach button removed from bubble
+        const loadingEl = document.getElementById(loadingId);
+        loadingEl.innerHTML = `<div>${data.answer}</div>`;
+    } catch (err) {
+        document.getElementById(loadingId).innerText = "Jarvis is offline. Check API connectivity.";
+    }
+    container.scrollTop = container.scrollHeight;
+}
