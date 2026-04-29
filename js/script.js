@@ -414,6 +414,7 @@ async function askJarvis() {
     }
     container.scrollTop = container.scrollHeight;
 }
+
 function toggleJarvis() {
     const sidebar = document.getElementById('jarvis-sidebar');
     if (sidebar) sidebar.classList.toggle('active'); // This toggles the slide-in
@@ -439,6 +440,36 @@ async function handleForgotPassword() {
             });
             Swal.fire('Check your Email', 'A reset link has been sent if the account exists.', 'success');
         } catch (err) { Swal.fire('Error', 'Connection failed.', 'error'); }
+    }
+}
+async function teachJarvis(userQuestion, wrongAnswer) {
+    const { value: correction } = await Swal.fire({
+        title: 'Correct Jarvis',
+        text: `You asked: "${userQuestion}"`,
+        input: 'textarea',
+        inputLabel: 'What is the correct factual information?',
+        inputPlaceholder: 'e.g. The correct Merchant ID for Kenosha Raceway is K-9988...',
+        showCancelButton: true,
+        confirmButtonColor: '#38bdf8'
+    });
+
+    if (correction) {
+        Swal.fire({ title: 'Ingesting Knowledge...', didOpen: () => Swal.showLoading() });
+        try {
+            await fetch('/api/train-jarvis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    topic: userQuestion, 
+                    logic: correction,
+                    category: 'correction',
+                    userId: localStorage.getItem('pp_userid')
+                })
+            });
+            Swal.fire('Learned!', 'Jarvis has updated his core logic for this topic.', 'success');
+        } catch (e) {
+            Swal.fire('Error', 'Failed to update brain.', 'error');
+        }
     }
 }
 
