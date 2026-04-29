@@ -104,32 +104,41 @@ export default async function handler(req, res) {
 
 // Fixed function: Added 'supabase' as a parameter so it can access the client
 async function getMerchantIntelligence(identifier, supabase) {
-    // Clean the input: remove any non-numeric characters if it's an ID search
     const cleanId = identifier.toString().trim();
 
-    const { data, error } = await supabase
+    // 1. First, find the merchant
+    const { data: merchant, error: mErr } = await supabase
         .from('merchants')
-        .select('merchant_id, dba_name, status_id, agent_id')
-        // Use .ilike for both so it finds the ID even if there are hidden spaces
-        .or(`merchant_id.ilike.%${cleanId}%,dba_name.ilike.%${cleanId}%`)
+        .select('merchant_id, dba_name, status_id')
+        .or(`merchant_id.eq.'${cleanId}',dba_name.ilike.%${cleanId}%`)
+        .maybeSingle();
+
+    if (mErr || !merchant) return "No merchant found with that identifier.";
+
+    // 2. NEW: Look for the equipment currently deployed to this merchant
+    // We scan the 'deployments' table to find the linked serial number
+    const { data: deploy, error: dErr } = await supabase
+        .from('deployments')
+        .select('serial_number, terminal_type, status, tracking_id')
+        .eq('merchant_id', merchant.merchant_id)
+        .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
 
-    if (error) {
-        return `DATABASE_ERROR: ${error.message}`;
+    let hardwareInfo = "\n- Hardware: No active deployment records found.";
+    if (deploy) {
+        hardwareInfo = `
+- Deployed Equipment: ${deploy.terminal_type}
+- Serial Number: ${deploy.serial_number}
+- Tracking: ${deploy.tracking_id || 'N/A'}
+- Deployment Status: ${deploy.status}`;
     }
 
-    if (!data) {
-        // This is for you to see in the chat if it's actually searching what you think
-        return `No record found for input: "${cleanId}". Checked merchant_id and dba_name columns.`;
-    }
-    
     return `
-        MATCH FOUND:
-        - DBA: ${data.dba_name}
-        - MID: ${data.merchant_id}
-        - Status: ${data.status_id}
-        - Agent/Owner: ${data.agent_id || 'Direct'}
+MATCH FOUND:
+- DBA: ${merchant.dba_name}
+- MID: ${merchant.merchant_id}
+- Status: ${merchant.status_id} ${hardwareInfo}
     `;
 }
 async function getMerchantHistory(mid, supabase) {
