@@ -7,29 +7,27 @@ export default async function handler(req, res) {
     }
 
     const { query, userId, userName } = req.body;
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
     if (!process.env.GEMINI_API_KEY) {
-        return res.status(500).json({ 
-            answer: "Sir, the GEMINI_API_KEY is missing from the server environment.",
-            debug: "Ensure the key is added in Vercel and the project is redeployed." 
-        });
+        return res.status(500).json({ answer: "Sir, the GEMINI_API_KEY is missing." });
     }
 
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    // Using Flash for speed and intelligence
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     try {
         // 1. FETCH INTERNAL KNOWLEDGE (BRAIN)
         const { data: knowledge } = await supabase
             .from('jarvis_knowledge')
             .select('topic, correct_logic')
-            .or(`topic.ilike.%${query}%`) // Basic keyword matching for relevance
+            .or(`topic.ilike.%${query}%`) 
             .limit(5);
 
         const brainContext = knowledge?.length > 0 
             ? knowledge.map(k => `Fact on ${k.topic}: ${k.correct_logic}`).join('\n')
-            : "No specific internal rules found for this query.";
+            : "No specific internal rules found.";
 
         // 2. FETCH CHAT HISTORY (MEMORY)
         const { data: history } = await supabase
@@ -45,34 +43,21 @@ export default async function handler(req, res) {
         })).reverse();
 
         // 3. COMPILE SYSTEM PROMPT
-       const systemPrompt = `
-            You are JARVIS, the System Architect and AI Collaborator for the PayProTec Portal.
-            Your tone is authentic, grounded, and witty. Address the user as ${userName || 'Sir'}.
-
-            CORE DATABASE ARCHITECTURE:
-            - app_users: Portal staff, roles, and permissions.
-            - merchants: Primary records (DBA, Status, Volume). merchant_id is a unique STRING.
-            - equipments: Inventory items (serial_number, terminal_type).
-            - deployments: Outbound equipment to merchants.
-            - returns: Inbound equipment from merchants.
-            - agents & agent_identifiers: Partner hierarchy.
-            - jarvis_knowledge: Your "Training Brain" containing verified business logic from the Secret Dungeon.
+        const systemPrompt = `
+            You are JARVIS, System Architect for PayProTec. 
+            Tone: Authentic, grounded, witty. Address user as ${userName || 'Sir'}.
 
             STRICT OPERATIONAL DIRECTIVE:
-            1. **VERIFY, DON'T VAMP**: You have access to a tool called 'getMerchantIntelligence'. 
-            2. If a user provides a Merchant ID (MID), DBA Name, or Serial Number, you MUST call the appropriate search tool before responding.
-            3. NEVER invent data (e.g., "[Redacted Name]" or "Searching..."). If the tool returns no data, say: "Sir, that record does not exist in our central ledger."
-            4. Use the Internal Knowledge (Brain Context) below to interpret business rules and "Red Flags" for specific accounts.
+            1. If asked about a merchant, MID, or owner, you MUST use the search tool.
+            2. To search, output EXACTLY this JSON and NOTHING ELSE:
+               {"action": "getMerchantIntelligence", "action_input": {"identifier": "VALUE_HERE"}}
+            3. Once you get the result, interpret it for the user. NEVER make up data.
 
-            INTERNAL KNOWLEDGE (From Secret Dungeon):
+            INTERNAL KNOWLEDGE:
             ${brainContext}
-
-            FORMATTING:
-            - Use Markdown for clarity.
-            - If a merchant is found, present the data in a clean, professional summary.
         `;
 
-        // 4. GENERATE CONTENT WITH CONTEXT
+        // 4. GENERATE CONTENT (Pass 1: Reasoning)
         const chat = model.startChat({
             history: [
                 { role: "user", parts: [{ text: systemPrompt }] },
@@ -80,11 +65,30 @@ export default async function handler(req, res) {
             ]
         });
 
-        const result = await chat.sendMessage(query);
-        const response = await result.response;
-        const finalAnswer = response.text();
+        let result = await chat.sendMessage(query);
+        let finalAnswer = result.response.text();
 
-        // 5. ASYNC LOGGING (Don't wait for this to finish to respond)
+        // --- 5. THE INTERCEPTOR (The Bridge to Supabase) ---
+        if (finalAnswer.includes('getMerchantIntelligence')) {
+            try {
+                const jsonMatch = finalAnswer.match(/\{.*\}/s);
+                if (jsonMatch) {
+                    const toolRequest = JSON.parse(jsonMatch[0]);
+                    const id = toolRequest.action_input.identifier;
+
+                    // EXECUTE THE REAL QUERY
+                    const realData = await getMerchantIntelligence(id, supabase);
+
+                    // Pass 2: Final factual answer
+                    const secondResult = await chat.sendMessage(`SYSTEM_DATABASE_RESULT: ${realData}`);
+                    finalAnswer = secondResult.response.text();
+                }
+            } catch (e) {
+                console.error("Tool Error:", e);
+            }
+        }
+
+        // 6. LOGGING & RESPONSE
         supabase.from('chat_history').insert([
             { userid: userId, role: 'user', content: query },
             { userid: userId, role: 'assistant', content: finalAnswer }
@@ -93,15 +97,13 @@ export default async function handler(req, res) {
         return res.status(200).json({ answer: finalAnswer });
 
     } catch (err) {
-        console.error("Jarvis Core Error:", err);
-        return res.status(500).json({ 
-            answer: `Jarvis Internal Error: ${err.message}`,
-            debug: "Check Vercel logs for API Key validation." 
-        });
+        console.error("Jarvis Error:", err);
+        return res.status(500).json({ answer: "System logic interruption, Sir." });
     }
 }
-// This function acts as Jarvis's "eyes" into your 100k merchants
-async function getMerchantIntelligence(identifier) {
+
+// Fixed function: Added 'supabase' as a parameter so it can access the client
+async function getMerchantIntelligence(identifier, supabase) {
     const { data, error } = await supabase
         .from('merchants')
         .select(`
@@ -109,21 +111,19 @@ async function getMerchantIntelligence(identifier) {
             dba_name, 
             status_id,
             merchant_portfolio (
-                agent_id,
-                commission_tier
+                agent_id
             )
         `)
-        // This checks if the input is the ID or the Name
         .or(`merchant_id.eq.${identifier},dba_name.ilike.%${identifier}%`)
         .maybeSingle();
 
-    if (error || !data) return "I searched the 100k records but found no match for that identifier.";
+    if (error || !data) return "No record found for that identifier in the 100k ledger.";
     
     return `
         MATCH FOUND:
         - DBA: ${data.dba_name}
         - MID: ${data.merchant_id}
         - Status: ${data.status_id}
-        - Owned by Agent: ${data.merchant_portfolio?.agent_id || 'Direct'}
+        - Owner (Agent): ${data.merchant_portfolio?.agent_id || 'Direct Merchant'}
     `;
 }
