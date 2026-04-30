@@ -70,34 +70,24 @@ export default async function handler(req, res) {
         let finalAnswer = result.response.text();
 
         // --- 5. THE INTERCEPTOR (Routing to merchants.js) ---
-        if (finalAnswer.includes('"action"')) {
-            try {
-                const jsonMatch = finalAnswer.match(/\{.*\}/s);
-                if (jsonMatch) {
-                    const toolRequest = JSON.parse(jsonMatch[0]);
-                    
-                    // Route to your existing merchants.js handler logic
-                    const mockReq = { 
-                        body: { 
-                            ...toolRequest.action_input, 
-                            action: toolRequest.action || 'list' 
-                        } 
-                    };
+ / --- 5. THE INTERCEPTOR ---
+if (finalAnswer.includes('"action"')) {
+    try {
+        const jsonMatch = finalAnswer.match(/\{.*\}/s);
+        if (jsonMatch) {
+            const toolRequest = JSON.parse(jsonMatch[0]);
 
-                    // We wrap the call to handle the response correctly
-                    const internalData = await merchantHandler(mockReq, {
-                        status: () => ({ json: (data) => data }) 
-                    });
+            // Call our new bridge instead of calling merchants.js directly
+            const internalData = await smartMerchantBridge(toolRequest, merchantHandler);
 
-                    // Pass 2: Feed real data back to Gemini
-                    const secondResult = await chat.sendMessage(`SYSTEM_RESULT: ${JSON.stringify(internalData)}`);
-                    finalAnswer = secondResult.response.text();
-                }
-            } catch (e) {
-                console.error("Routing Error:", e);
-                finalAnswer = "Sir, I had trouble accessing the merchant ledger.";
-            }
+            // Pass 2: Feed the cleaned data back to Gemini
+            const secondResult = await chat.sendMessage(`SYSTEM_RESULT: ${JSON.stringify(internalData)}`);
+            finalAnswer = secondResult.response.text();
         }
+    } catch (e) {
+        console.error("Bridge Error:", e);
+    }
+}
 
         // 6. LOGGING & RESPONSE
         await supabase.from('chat_history').insert([
@@ -111,4 +101,27 @@ export default async function handler(req, res) {
         console.error("Jarvis Error:", err);
         return res.status(500).json({ answer: "System logic interruption, Sir." });
     }
+}
+// NEW: A dedicated bridge that doesn't touch merchants.js
+async function smartMerchantBridge(toolRequest, merchantHandler) {
+    const { query } = toolRequest.action_input;
+    
+    // 1. Auto-detect what the user is sending
+    const isNumeric = /^\d+$/.test(query);
+    const filterBy = isNumeric ? 'merchant_id' : 'dba_name';
+
+    // 2. Format the request exactly how your existing merchants.js wants it
+    const mockReq = { 
+        body: { 
+            action: 'list',
+            query: query,
+            filterBy: filterBy, // Forces the filter so merchants.js doesn't fail
+            limit: 5 
+        } 
+    };
+
+    // 3. Call your production handler without modifying it
+    return await merchantHandler(mockReq, {
+        status: () => ({ json: (data) => data }) 
+    });
 }
