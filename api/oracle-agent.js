@@ -1,6 +1,7 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { createClient } from '@supabase/supabase-js';
-import merchantHandler from './merchants.js'; // Ensure this path is correct
+// CRITICAL: This import connects Jarvis to your existing merchant logic
+import merchantHandler from './merchants.js'; 
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') {
@@ -15,7 +16,7 @@ export default async function handler(req, res) {
     }
 
     const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
     try {
         // 1. FETCH INTERNAL KNOWLEDGE
@@ -48,16 +49,16 @@ export default async function handler(req, res) {
             Address the user as ${userName || 'Sir'}.
 
             STRICT OPERATIONAL DIRECTIVE:
-            1. If a user provides an ID (MID) or name, you MUST first execute a search.
+            1. If a user provides an ID (MID) or name, you MUST execute a search first.
             2. To search, output ONLY this JSON block and stop:
                {"action": "list", "action_input": {"query": "VALUE", "filterBy": "merchant_id"}}
-            3. Once you receive the SYSTEM_RESULT, explain the data to the user.
+            3. Once you receive the SYSTEM_RESULT, explain the data. NEVER make up merchant details.
 
             INTERNAL KNOWLEDGE:
             ${brainContext}
         `;
 
-        // 4. START CHAT & PASS 1 (Reasoning)
+        // 4. START CHAT
         const chat = model.startChat({
             history: [
                 { role: "user", parts: [{ text: systemPrompt }] },
@@ -68,15 +69,14 @@ export default async function handler(req, res) {
         let result = await chat.sendMessage(query);
         let finalAnswer = result.response.text();
 
-        // --- 5. THE INTERCEPTOR (The Bridge to merchants.js) ---
-        // We look for any action JARVIS wants to take
+        // --- 5. THE INTERCEPTOR (Routing to merchants.js) ---
         if (finalAnswer.includes('"action"')) {
             try {
                 const jsonMatch = finalAnswer.match(/\{.*\}/s);
                 if (jsonMatch) {
                     const toolRequest = JSON.parse(jsonMatch[0]);
                     
-                    // Route to your existing merchants.js handler
+                    // Route to your existing merchants.js handler logic
                     const mockReq = { 
                         body: { 
                             ...toolRequest.action_input, 
@@ -84,6 +84,7 @@ export default async function handler(req, res) {
                         } 
                     };
 
+                    // We wrap the call to handle the response correctly
                     const internalData = await merchantHandler(mockReq, {
                         status: () => ({ json: (data) => data }) 
                     });
@@ -93,15 +94,16 @@ export default async function handler(req, res) {
                     finalAnswer = secondResult.response.text();
                 }
             } catch (e) {
-                console.error("Traffic Controller Error:", e);
+                console.error("Routing Error:", e);
+                finalAnswer = "Sir, I had trouble accessing the merchant ledger.";
             }
         }
 
         // 6. LOGGING & RESPONSE
-        supabase.from('chat_history').insert([
+        await supabase.from('chat_history').insert([
             { userid: userId, role: 'user', content: query },
             { userid: userId, role: 'assistant', content: finalAnswer }
-        ]).then(() => {});
+        ]);
 
         return res.status(200).json({ answer: finalAnswer });
 
