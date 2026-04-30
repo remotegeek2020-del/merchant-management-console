@@ -51,7 +51,7 @@ export default async function handler(req, res) {
             STRICT OPERATIONAL DIRECTIVE:
             1. If a user provides an ID (MID) or name, you MUST execute a search first.
             2. To search, output ONLY this JSON block and stop:
-               {"action": "list", "action_input": {"query": "VALUE", "filterBy": "merchant_id"}}
+               {"action": "list", "action_input": {"query": "VALUE"}}
             3. Once you receive the SYSTEM_RESULT, explain the data. NEVER make up merchant details.
 
             INTERNAL KNOWLEDGE:
@@ -69,25 +69,25 @@ export default async function handler(req, res) {
         let result = await chat.sendMessage(query);
         let finalAnswer = result.response.text();
 
-        // --- 5. THE INTERCEPTOR (Routing to merchants.js) ---
- / --- 5. THE INTERCEPTOR ---
-if (finalAnswer.includes('"action"')) {
-    try {
-        const jsonMatch = finalAnswer.match(/\{.*\}/s);
-        if (jsonMatch) {
-            const toolRequest = JSON.parse(jsonMatch[0]);
+        // --- 5. THE INTERCEPTOR (Routing via Bridge) ---
+        if (finalAnswer.includes('"action"')) {
+            try {
+                const jsonMatch = finalAnswer.match(/\{.*\}/s);
+                if (jsonMatch) {
+                    const toolRequest = JSON.parse(jsonMatch[0]);
 
-            // Call our new bridge instead of calling merchants.js directly
-            const internalData = await smartMerchantBridge(toolRequest, merchantHandler);
+                    // Call the bridge function defined below to handle the merchants.js call
+                    const internalData = await smartMerchantBridge(toolRequest, merchantHandler);
 
-            // Pass 2: Feed the cleaned data back to Gemini
-            const secondResult = await chat.sendMessage(`SYSTEM_RESULT: ${JSON.stringify(internalData)}`);
-            finalAnswer = secondResult.response.text();
+                    // Pass 2: Feed the factual search results back to the AI for interpretation
+                    const secondResult = await chat.sendMessage(`SYSTEM_RESULT: ${JSON.stringify(internalData)}`);
+                    finalAnswer = secondResult.response.text();
+                }
+            } catch (e) {
+                console.error("Bridge Error:", e);
+                finalAnswer = "Sir, I encountered a snag in the database bridge.";
+            }
         }
-    } catch (e) {
-        console.error("Bridge Error:", e);
-    }
-}
 
         // 6. LOGGING & RESPONSE
         await supabase.from('chat_history').insert([
@@ -102,25 +102,29 @@ if (finalAnswer.includes('"action"')) {
         return res.status(500).json({ answer: "System logic interruption, Sir." });
     }
 }
-// NEW: A dedicated bridge that doesn't touch merchants.js
+
+/**
+ * NEW: A dedicated bridge that doesn't touch merchants.js
+ * This handles the "Fuzzy Search" logic that the AI needs but the production API doesn't have.
+ */
 async function smartMerchantBridge(toolRequest, merchantHandler) {
     const { query } = toolRequest.action_input;
     
-    // 1. Auto-detect what the user is sending
+    // 1. Auto-detect what the user is sending (Numbers = MID, Text = Name)
     const isNumeric = /^\d+$/.test(query);
     const filterBy = isNumeric ? 'merchant_id' : 'dba_name';
 
-    // 2. Format the request exactly how your existing merchants.js wants it
+    // 2. Format the request exactly how your existing merchants.js expects it
     const mockReq = { 
         body: { 
             action: 'list',
             query: query,
-            filterBy: filterBy, // Forces the filter so merchants.js doesn't fail
+            filterBy: filterBy, 
             limit: 5 
         } 
     };
 
-    // 3. Call your production handler without modifying it
+    // 3. Call your production merchant handler and return its JSON response
     return await merchantHandler(mockReq, {
         status: () => ({ json: (data) => data }) 
     });
