@@ -43,20 +43,44 @@ export default async function handler(req, res) {
         })).reverse();
 
         // 3. COMPILE SYSTEM PROMPT
-        const systemPrompt = `
-            You are JARVIS, System Architect for PayProTec. 
-            Tone: Authentic, grounded, witty. Address user as ${userName || 'Sir'}.
+    const systemPrompt = `
+    You are JARVIS, the System Architect for PayProTec. 
+    Address the user as ${userName || 'Sir'}.
 
-            STRICT OPERATIONAL DIRECTIVE:
-            1. If asked about a merchant, MID, or owner, you MUST use the search tool.
-            2. To search, output EXACTLY this JSON and NOTHING ELSE:
-               {"action": "getMerchantIntelligence", "action_input": {"identifier": "VALUE_HERE"}}
-            3. Once you get the result, interpret it for the user. NEVER make up data.
+    STRICT OPERATIONAL DIRECTIVE:
+    1. If a user provides an ID (MID) or name, you ARE NOT ALLOWED to say "I searched" or "It is empty" yet.
+    2. You MUST first execute a search by outputting ONLY this JSON:
+       {"action": "list", "action_input": {"query": "VALUE", "filterBy": "merchant_id"}}
+    3. I repeat: DO NOT TALK. Output the JSON block first.
+    4. Once you receive the SYSTEM_RESULT, then you may explain the data to the user.
+`;
+        // 3. UPDATED INTERCEPTOR: CATCH THE "LIST" ACTION
+if (aiResponse.includes('"action"')) {
+    try {
+        const jsonMatch = aiResponse.match(/\{.*\}/s);
+        if (jsonMatch) {
+            const toolRequest = JSON.parse(jsonMatch[0]);
+            
+            // We route "list" action specifically for searches
+            const mockReq = { 
+                body: { 
+                    ...toolRequest.action_input, 
+                    action: toolRequest.action || 'list' 
+                } 
+            };
 
-            INTERNAL KNOWLEDGE:
-            ${brainContext}
-        `;
+            const internalData = await merchantHandler(mockReq, {
+                status: () => ({ json: (data) => data }) 
+            });
 
+            // Feed the REAL data from merchants.js back to the AI
+            const secondResult = await chat.sendMessage(`SYSTEM_RESULT: ${JSON.stringify(internalData)}`);
+            aiResponse = secondResult.response.text();
+        }
+    } catch (e) {
+        console.error("Traffic Controller Error:", e);
+    }
+}
         // 4. GENERATE CONTENT (Pass 1: Reasoning)
         const chat = model.startChat({
             history: [
