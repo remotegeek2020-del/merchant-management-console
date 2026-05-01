@@ -345,6 +345,7 @@ input[type=number] {
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [];
+    let statsRaw = []; // ✅ Global stats for trend calculation
     let currentPage = 1;
     const cardsPerPage = 12; 
     let searchTimeout = null;
@@ -492,7 +493,7 @@ window.filterByTrend = function(trend) {
         // Sum up every ID this partner owns to get the "Big Picture"
         p.companies.forEach(co => {
             co.ids.forEach(idObj => {
-                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                const s = statsRaw.find(raw => String(raw.agent_id).trim() === String(idObj.string).trim());
                 if (s) {
                     pCurrent += parseFloat(s.total_volume_sum || 0);
                     pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
@@ -1002,30 +1003,7 @@ async function submitOnboarding() {
     // 7. GRID, PAGINATION & EXPORT FUNCTIONS
     // ==========================================
 
-    async function loadPartners() {
-        const loader = document.getElementById('loadingOverlay');
-        if (loader) loader.style.display = 'flex';
-
-        document.getElementById('partnerSearchInput').value = '';
-        
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_partners_list' })
-            });
-            const result = await res.json();
-            if (result.success && result.data.persons) {
-                identifiersRaw = result.data.identifiers || [];
-                agentsRaw = result.data.agents || [];
-                personsRaw = result.data.persons || [];
-                allPartners = processPartnerData(result.data);
-                currentPage = 1;
-                renderGrid(allPartners);
-            }
-        } catch (err) { console.error("Loader Error:", err); }
-        if (loader) loader.style.display = 'none';
-    }
+    
 
     function renderGrid(data) {
     const grid = document.getElementById('partnerGrid');
@@ -1459,6 +1437,66 @@ window.quickAddId = async function(personId, name) {
     goToStep(3); // Jump straight to IDs
 };
  
+
+    // --- LOAD PARTNERS WITH STATS ---
+    async function loadPartners() {
+        try {
+            // Fetch partners list and stats in parallel
+            const [partnersRes, statsRes] = await Promise.all([
+                fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_partners_list' })
+                }),
+                fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_all_stats' })
+                })
+            ]);
+
+            const partnersData = await partnersRes.json();
+            const statsData = await statsRes.json();
+
+            if (!partnersData.success) throw new Error(partnersData.message);
+
+            // Store raw data globally
+            personsRaw = partnersData.data.persons || [];
+            agentsRaw = partnersData.data.agents || [];
+            identifiersRaw = partnersData.data.identifiers || [];
+            const companiesRaw = partnersData.data.companies || [];
+            statsRaw = statsData.success ? statsData.data : []; // Store globally for filterByTrend
+
+            // Populate company dropdown in wizard
+            const companySelect = document.getElementById('companySelect');
+            if (companySelect) {
+                const existingOptions = companySelect.innerHTML;
+                companiesRaw.forEach(co => {
+                    const opt = document.createElement('option');
+                    opt.value = co.id;
+                    opt.textContent = co.company_name;
+                    companySelect.appendChild(opt);
+                });
+            }
+
+            // Process with stats for trend calculation
+            allPartners = processPartnerData({
+                persons: personsRaw,
+                agents: agentsRaw,
+                identifiers: identifiersRaw,
+                companies: companiesRaw,
+                stats: statsRaw  // ✅ Now stats are passed in
+            });
+
+            currentPage = 1;
+            renderGrid();
+
+        } catch (err) {
+            console.error("Failed to load partners:", err);
+            document.getElementById('partnerGrid').innerHTML = 
+                `<div style="padding:40px; text-align:center; color:#ef4444;">Failed to load partners: ${err.message}</div>`;
+        }
+    }
 
     window.addEventListener('load', loadPartners);
 </script>
