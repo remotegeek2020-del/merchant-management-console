@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Portal | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --teal: #0d9488; --teal-dark: #0f766e; --teal-light: #ccfbf1;
+            --navy: #001e3c; --border: #e2e8f0;
+            --text: #0a1628; --muted: #94a3b8;
+        }
+        body {
+            margin: 0; padding: 0;
+            font-family: 'DM Sans', sans-serif;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #001e3c 0%, #0f3460 50%, #0d9488 100%);
+            display: flex; align-items: center; justify-content: center;
+            -webkit-font-smoothing: antialiased;
+        }
+        .card {
+            background: white; border-radius: 24px;
+            width: 100%; max-width: 420px;
+            padding: 44px 40px;
+            box-shadow: 0 40px 80px rgba(0,0,0,0.3);
+            animation: slideUp 0.5s ease both;
+        }
+        @keyframes slideUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: translateY(0); } }
+        .logo { display:block; height:32px; margin:0 auto 28px; }
+        .portal-tag {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: var(--teal-light); color: var(--teal-dark);
+            padding: 4px 12px; border-radius: 99px;
+            font-size: 10px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 1px;
+            margin-bottom: 12px;
+        }
+        h1 { font-size: 1.5rem; font-weight: 800; color: var(--text); margin: 0 0 4px; letter-spacing: -0.3px; }
+        p.sub { font-size: 13px; color: var(--muted); margin: 0 0 28px; }
+        label { display:block; font-size:11px; font-weight:700; color:#475569; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; }
+        .input-wrap { position: relative; margin-bottom: 16px; }
+        .input-wrap .material-icons { position:absolute; left:12px; top:50%; transform:translateY(-50%); color:var(--muted); font-size:18px; }
+        input[type=email], input[type=password], input[type=text] {
+            width: 100%; padding: 11px 14px 11px 40px;
+            border: 1.5px solid var(--border); border-radius: 10px;
+            font-size: 14px; font-family: 'DM Sans', sans-serif;
+            color: var(--text); background: #f8fafc;
+            outline: none; transition: all 0.2s;
+        }
+        input:focus { border-color: var(--teal); background: white; box-shadow: 0 0 0 3px rgba(13,148,136,0.1); }
+        .btn {
+            width: 100%; padding: 13px;
+            background: var(--teal); color: white;
+            border: none; border-radius: 10px;
+            font-size: 14px; font-weight: 700;
+            font-family: 'DM Sans', sans-serif;
+            cursor: pointer; transition: all 0.2s;
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            margin-top: 4px;
+        }
+        .btn:hover { background: var(--teal-dark); transform: translateY(-1px); box-shadow: 0 8px 20px rgba(13,148,136,0.25); }
+        .btn:disabled { opacity: 0.6; cursor: not-allowed; transform: none; }
+        .forgot { display:block; text-align:center; margin-top:16px; font-size:12px; color:var(--muted); cursor:pointer; font-weight:600; }
+        .forgot:hover { color: var(--teal); }
+        .divider { display:flex; align-items:center; gap:12px; margin:20px 0; }
+        .divider::before, .divider::after { content:''; flex:1; height:1px; background:var(--border); }
+        .divider span { font-size:11px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.5px; }
+        .footer-note { text-align:center; margin-top:28px; font-size:11px; color:var(--muted); }
+        .strength-bar { height:4px; border-radius:99px; background:#f1f5f9; margin-top:6px; overflow:hidden; }
+        .strength-fill { height:100%; border-radius:99px; transition:all 0.3s; }
+        .view-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); cursor:pointer; color:var(--muted); font-size:18px; user-select:none; }
+        /* Setup page extras */
+        .requirements { font-size:11px; color:var(--muted); margin-top:8px; }
+        .req-item { display:flex; align-items:center; gap:6px; margin-bottom:4px; }
+        .req-item .material-icons { font-size:14px; }
+        .req-item.met { color: var(--teal); }
+    </style>
+</head>
+<body>
+
+<div class="card" id="loginCard">
+    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+    <div style="text-align:center;">
+        <span class="portal-tag"><span class="material-icons" style="font-size:12px;">handshake</span> Partner Portal</span>
+        <h1>Sign in</h1>
+        <p class="sub">Access your merchant portfolio</p>
+    </div>
+
+    <div>
+        <label>Email Address</label>
+        <div class="input-wrap">
+            <span class="material-icons">email</span>
+            <input type="email" id="loginEmail" placeholder="your@email.com" autocomplete="email">
+        </div>
+        <label>Password</label>
+        <div class="input-wrap">
+            <span class="material-icons">lock</span>
+            <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password">
+            <span class="view-toggle material-icons" onclick="togglePass('loginPass', this)">visibility_off</span>
+        </div>
+        <button class="btn" onclick="handleLogin()" id="loginBtn">
+            <span class="material-icons" style="font-size:18px;">login</span>
+            Sign In
+        </button>
+        <span class="forgot" onclick="handleForgot()">Forgot your password?</span>
+    </div>
+
+    <div class="footer-note">
+        PayProTec Partner Portal · Secure Access<br>
+        <span style="color:#cbd5e1;">Need access? Contact your PayProTec representative.</span>
+    </div>
+</div>
+
+<script>
+    // Check if already logged in
+    const existingToken = localStorage.getItem('pp_partner_token');
+    if (existingToken) {
+        fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'validate', token: existingToken }) })
+            .then(r => r.json()).then(result => { if (result.success) window.location.href = 'dashboard.html'; });
+    }
+
+    // Check for invite/reset token in URL
+    const params = new URLSearchParams(window.location.search);
+    const inviteToken = params.get('token');
+    const mode = params.get('mode');
+    if (inviteToken) showSetupForm(inviteToken, mode);
+
+    function togglePass(inputId, icon) {
+        const input = document.getElementById(inputId);
+        if (input.type === 'password') { input.type = 'text'; icon.innerText = 'visibility'; }
+        else { input.type = 'password'; icon.innerText = 'visibility_off'; }
+    }
+
+    async function handleLogin() {
+        const email = document.getElementById('loginEmail').value.trim();
+        const pass = document.getElementById('loginPass').value;
+        if (!email || !pass) return Swal.fire({ icon: 'warning', title: 'Required', text: 'Please enter your email and password.', confirmButtonColor: '#0d9488' });
+        
+        const btn = document.getElementById('loginBtn');
+        btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:18px;">sync</span> Signing in...';
+
+        try {
+            const res = await fetch('/api/partner-auth', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'login', email, password: pass })
+            });
+            const result = await res.json();
+            if (result.success) {
+                localStorage.setItem('pp_partner_token', result.token);
+                localStorage.setItem('pp_partner_name', result.partner.name);
+                localStorage.setItem('pp_partner_id', result.partner.id);
+                window.location.href = 'dashboard.html';
+            } else {
+                Swal.fire({ icon: 'error', title: 'Sign In Failed', text: result.message, confirmButtonColor: '#0d9488' });
+                btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">login</span> Sign In';
+            }
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Connection Error', text: 'Could not reach the server. Please try again.', confirmButtonColor: '#0d9488' });
+            btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">login</span> Sign In';
+        }
+    }
+
+    async function handleForgot() {
+        const { value: email } = await Swal.fire({
+            title: 'Reset Password',
+            input: 'email',
+            inputLabel: 'Enter your partner email address',
+            inputPlaceholder: 'your@email.com',
+            showCancelButton: true,
+            confirmButtonColor: '#0d9488',
+            confirmButtonText: 'Send Reset Link'
+        });
+        if (email) {
+            Swal.fire({ title: 'Sending...', didOpen: () => Swal.showLoading() });
+            await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'forgot_password', email }) });
+            Swal.fire({ icon: 'success', title: 'Email Sent', text: 'If an account exists, you\'ll receive a reset link shortly.', confirmButtonColor: '#0d9488' });
+        }
+    }
+
+    function showSetupForm(token, mode) {
+        const isReset = mode === 'reset';
+        document.getElementById('loginCard').innerHTML = `
+            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="logo" alt="PayProTec">
+            <div style="text-align:center;">
+                <span class="portal-tag"><span class="material-icons" style="font-size:12px;">${isReset ? 'lock_reset' : 'celebration'}</span> ${isReset ? 'Reset Password' : 'Account Setup'}</span>
+                <h1>${isReset ? 'New Password' : 'Welcome!'}</h1>
+                <p class="sub">${isReset ? 'Enter your new password below' : 'Set up your password to get started'}</p>
+            </div>
+            <label>New Password</label>
+            <div class="input-wrap" style="margin-bottom:6px;">
+                <span class="material-icons">lock</span>
+                <input type="password" id="setupPass" placeholder="Minimum 8 characters" oninput="checkStrength(this.value)" autocomplete="new-password">
+                <span class="view-toggle material-icons" onclick="togglePass('setupPass', this)">visibility_off</span>
+            </div>
+            <div class="strength-bar"><div class="strength-fill" id="strengthFill" style="width:0%; background:#ef4444;"></div></div>
+            <div class="requirements">
+                <div class="req-item" id="req-len"><span class="material-icons">radio_button_unchecked</span> At least 8 characters</div>
+                <div class="req-item" id="req-upper"><span class="material-icons">radio_button_unchecked</span> One uppercase letter</div>
+                <div class="req-item" id="req-num"><span class="material-icons">radio_button_unchecked</span> One number</div>
+            </div>
+            <label style="margin-top:16px;">Confirm Password</label>
+            <div class="input-wrap">
+                <span class="material-icons">lock_outline</span>
+                <input type="password" id="confirmPass" placeholder="Repeat password" autocomplete="new-password">
+            </div>
+            <button class="btn" onclick="handleSetup('${token}')" id="setupBtn" style="margin-top:8px;">
+                <span class="material-icons" style="font-size:18px;">${isReset ? 'lock_reset' : 'check_circle'}</span>
+                ${isReset ? 'Reset Password' : 'Create My Account'}
+            </button>
+            <div class="footer-note">PayProTec Partner Portal · Secure Setup</div>
+        `;
+    }
+
+    function checkStrength(val) {
+        const len = val.length >= 8;
+        const upper = /[A-Z]/.test(val);
+        const num = /[0-9]/.test(val);
+        const score = [len, upper, num].filter(Boolean).length;
+        const fill = document.getElementById('strengthFill');
+        const colors = ['#ef4444', '#f59e0b', '#10b981'];
+        fill.style.width = (score / 3 * 100) + '%';
+        fill.style.background = colors[score - 1] || '#ef4444';
+        const setReq = (id, met) => {
+            const el = document.getElementById(id);
+            if (!el) return;
+            el.className = 'req-item' + (met ? ' met' : '');
+            el.querySelector('.material-icons').innerText = met ? 'check_circle' : 'radio_button_unchecked';
+        };
+        setReq('req-len', len); setReq('req-upper', upper); setReq('req-num', num);
+    }
+
+    async function handleSetup(token) {
+        const pass = document.getElementById('setupPass').value;
+        const confirm = document.getElementById('confirmPass').value;
+        if (pass.length < 8) return Swal.fire({ icon: 'warning', title: 'Too short', text: 'Password must be at least 8 characters.', confirmButtonColor: '#0d9488' });
+        if (pass !== confirm) return Swal.fire({ icon: 'warning', title: 'Mismatch', text: 'Passwords do not match.', confirmButtonColor: '#0d9488' });
+        const btn = document.getElementById('setupBtn');
+        btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:18px;">sync</span> Setting up...';
+        try {
+            const res = await fetch('/api/partner-auth', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'setup_password', token, password: pass })
+            });
+            const result = await res.json();
+            if (result.success) {
+                localStorage.setItem('pp_partner_token', result.token);
+                localStorage.setItem('pp_partner_name', result.partner.name);
+                localStorage.setItem('pp_partner_id', result.partner.id);
+                await Swal.fire({ icon: 'success', title: 'Welcome!', text: 'Your account is ready. Taking you to your dashboard...', timer: 2000, showConfirmButton: false, confirmButtonColor: '#0d9488' });
+                window.location.href = 'dashboard.html';
+            } else {
+                Swal.fire({ icon: 'error', title: 'Setup Failed', text: result.message, confirmButtonColor: '#0d9488' });
+                btn.disabled = false;
+            }
+        } catch (err) {
+            Swal.fire({ icon: 'error', title: 'Error', text: 'Connection failed. Please try again.', confirmButtonColor: '#0d9488' });
+            btn.disabled = false;
+        }
+    }
+
+    document.addEventListener('keypress', e => { if (e.key === 'Enter') { if (document.getElementById('loginEmail')) handleLogin(); } });
+</script>
+<style>
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 480px) {
+    body { align-items: flex-start; padding: 20px 16px; }
+    .card { padding: 32px 24px; border-radius: 16px; }
+}
+</style>
+</body>
+</html>

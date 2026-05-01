@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Messages | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root { --teal:#0d9488;--teal-dark:#0f766e;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--shadow-sm:0 1px 3px rgba(0,0,0,0.06); }
+        body { margin:0;padding:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased; }
+        .sidebar { position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;padding:0;box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px;filter:brightness(0) invert(1);display:block;margin-bottom:16px; }
+        .sidebar-partner { display:flex;align-items:center;gap:10px; }
+        .sidebar-avatar { width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:white;flex-shrink:0; }
+        .sidebar-name { font-size:13px;font-weight:700;color:white;line-height:1.3; }
+        .sidebar-tag { font-size:10px;color:rgba(255,255,255,0.4);font-weight:500; }
+        .sidebar-nav { flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px; }
+        .nav-item { display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif; }
+        .nav-item:hover { background:rgba(255,255,255,0.08);color:white; }
+        .nav-item.active { background:var(--teal);color:white; }
+        .nav-item .material-icons { font-size:20px;flex-shrink:0; }
+        .nav-divider { height:1px;background:rgba(255,255,255,0.08);margin:8px 0; }
+        .main { margin-left:240px;min-height:100vh; }
+        .topbar { background:white;padding:16px 28px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50; }
+        .topbar-title { font-size:1.2rem;font-weight:800;color:var(--text);margin:0; }
+        .content { padding:28px;max-width:800px; }
+        .btn { display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all 0.2s; }
+        .btn-teal { background:var(--teal);color:white; }
+        .btn-teal:hover { background:var(--teal-dark); }
+        .message-card {
+            background:white;border:1px solid var(--border);border-radius:14px;padding:20px;margin-bottom:12px;
+            box-shadow:var(--shadow-sm);transition:box-shadow 0.2s;
+        }
+        .message-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.07); }
+        .message-header { display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px; }
+        .message-subject { font-weight:700;font-size:14px;color:var(--text); }
+        .message-date { font-size:11px;color:var(--muted); }
+        .message-meta { font-size:11px;color:var(--muted);margin-bottom:8px; }
+        .message-body { font-size:13px;color:var(--secondary);line-height:1.6;background:#f8fafc;border-radius:8px;padding:12px;white-space:pre-wrap; }
+        .sent-tag { display:inline-flex;align-items:center;gap:4px;background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700; }
+        .empty { padding:60px;text-align:center;color:var(--muted); }
+        .empty .material-icons { font-size:48px;opacity:0.3;display:block;margin-bottom:12px; }
+        @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
+    </style>
+</head>
+<body>
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-tag">Partner Portal</div></div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="dashboard.html"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="merchants.html"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item active" href="messages.html"><span class="material-icons">forum</span> Messages</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+    <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;">PayProTec Partner Portal v1.0</div>
+</div>
+<div class="main">
+    <div class="topbar">
+        <h1 class="topbar-title">Messages</h1>
+        <button class="btn btn-teal" onclick="composeMessage()">
+            <span class="material-icons" style="font-size:16px;">edit</span> New Message
+        </button>
+    </div>
+    <div class="content">
+        <div id="messagesList">
+            <div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto 12px;"></div><p>Loading messages...</p></div>
+        </div>
+    </div>
+</div>
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = 'index.html';
+let myId = localStorage.getItem('pp_partner_id');
+
+async function init() {
+    const auth = await fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'validate',token})}).then(r=>r.json());
+    if (!auth.success) { localStorage.clear(); window.location.href='index.html'; return; }
+    const initials = auth.partner.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('sidebarAvatar').innerText = initials;
+    document.getElementById('sidebarName').innerText = auth.partner.name;
+    myId = auth.partner.id;
+    loadMessages();
+}
+
+async function loadMessages() {
+    const res = await fetch('/api/partner-data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'get_messages',token})});
+    const data = await res.json();
+    const container = document.getElementById('messagesList');
+    if (!data.success || !data.data.length) {
+        container.innerHTML = '<div class="empty"><span class="material-icons">forum</span><p>No messages yet. Send a message to your PayProTec team!</p></div>';
+        return;
+    }
+    container.innerHTML = data.data.map(m => {
+        const isSent = m.sender_id === myId;
+        return `<div class="message-card">
+            <div class="message-header">
+                <div>
+                    <div class="message-subject">${m.subject || 'Message'}</div>
+                    <div class="message-meta">${isSent ? '<span class="sent-tag"><span class="material-icons" style="font-size:10px;">send</span> Sent by you</span>' : '<span style="font-size:11px;color:#0d9488;font-weight:700;">From: PayProTec Team</span>'}</div>
+                </div>
+                <div class="message-date">${new Date(m.created_at).toLocaleString()}</div>
+            </div>
+            <div class="message-body">${m.body || ''}</div>
+        </div>`;
+    }).join('');
+}
+
+async function composeMessage() {
+    const { value: form } = await Swal.fire({
+        title: 'Message PayProTec Team', showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'Send Message',
+        html: `
+            <input id="msgSubject" class="swal2-input" placeholder="Subject">
+            <textarea id="msgBody" class="swal2-textarea" placeholder="Your message..." style="height:150px;"></textarea>`,
+        preConfirm: () => {
+            const body = document.getElementById('msgBody').value;
+            if (!body) { Swal.showValidationMessage('Please enter a message'); return false; }
+            return { subject: document.getElementById('msgSubject').value || 'Partner Inquiry', body };
+        }
+    });
+    if (form) {
+        const res = await fetch('/api/partner-data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'send_message',token,...form})});
+        const result = await res.json();
+        if (result.success) { Swal.fire({icon:'success',title:'Sent!',text:'Your message has been delivered.',timer:1500,showConfirmButton:false}); loadMessages(); }
+        else Swal.fire({icon:'error',title:'Failed',text:result.message,confirmButtonColor:'#0d9488'});
+    }
+}
+
+async function handleLogout() {
+    await fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})});
+    localStorage.clear(); window.location.href='index.html';
+}
+
+window.onload = init;
+</script>
+<style>@keyframes spin{to{transform:rotate(360deg);}}</style>
+</body>
+</html>
