@@ -139,6 +139,28 @@ if (action === 'add_task') {
     return res.status(200).json({ success: true, data });
 }
     
+        // --- ACTION: update_task_status ---
+if (action === 'update_task_status') {
+    const { task_id } = req.body;
+
+    // Fetch current status first
+    const { data: task } = await supabase
+        .from('merchant_tasks')
+        .select('status')
+        .eq('id', task_id)
+        .single();
+
+    const newStatus = task?.status === 'Completed' ? 'Pending' : 'Completed';
+
+    const { error } = await supabase
+        .from('merchant_tasks')
+        .update({ status: newStatus })
+        .eq('id', task_id);
+
+    if (error) throw error;
+    return res.status(200).json({ success: true, status: newStatus });
+}
+
         // --- ACTION: update_task (api/merchants.js) ---
 if (action === 'update_task') {
     const { task_id, payload } = req.body; 
@@ -216,7 +238,7 @@ if (action === 'bulk_upsert') {
     }
 }
         // --- ACTION: getMerchantHistory in merchants.js ---
-if (action === 'getMerchantHistory') {
+if (action === 'get_merchant_history') {
     const { merchant_id } = req.body;
 
     // We query equipment_logs, but we need to join with equipments 
