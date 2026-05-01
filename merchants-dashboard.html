@@ -343,10 +343,13 @@ async function handleCSVUpload(input) {
  * Sends the mapped payload to the API and refreshes the dashboard
  */
 async function executeFinalUpsert(payload) {
-    // 1. Show the loading spinner so the user knows it's working
+    const total = payload.length;
+    
+    // 1. Show progress spinner with record count
     Swal.fire({ 
         title: 'Executing Bulk Sync...', 
-        html: 'Writing records to the merchant ledger...',
+        html: `Writing <b>${total.toLocaleString()}</b> records to the merchant ledger...<br>
+               <small style="color:#64748b;">Large uploads may take up to 30 seconds.</small>`,
         allowOutsideClick: false, 
         didOpen: () => Swal.showLoading() 
     });
@@ -362,19 +365,33 @@ async function executeFinalUpsert(payload) {
             })
         });
 
+        // Handle non-JSON responses (e.g. Vercel size limit errors)
+        const contentType = res.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+            const text = await res.text();
+            throw new Error(`Server error: ${text.substring(0, 100)}`);
+        }
+
         const result = await res.json();
         
         if (result.success) {
-            // 3. Provide the final results popup
+            // 3. Show results with partial error info if any
             await Swal.fire({
-                icon: 'success',
-                title: 'Sync Complete',
-                text: `Successfully processed ${payload.length} records.`,
-                timer: 2000,
-                showConfirmButton: false
+                icon: result.errors ? 'warning' : 'success',
+                title: result.errors ? 'Sync Completed with Warnings' : 'Sync Complete ✅',
+                html: `
+                    <div style="text-align:left;">
+                        <div style="background:#dcfce7; border-radius:8px; padding:12px; margin-bottom:10px;">
+                            <b style="color:#166534;">✓ ${result.count.toLocaleString()} records synced successfully</b>
+                        </div>
+                        ${result.errors ? `<div style="background:#fee2e2; border-radius:8px; padding:12px; font-size:11px; color:#991b1b;">
+                            ⚠ ${result.errors.join('<br>')}
+                        </div>` : ''}
+                    </div>`,
+                confirmButtonColor: '#004990'
             });
             
-            // 4. Refresh the table to show the new data/address changes
+            // 4. Refresh the table
             fetchMerchants();
         } else {
             throw new Error(result.message || 'Database rejected the upsert.');
