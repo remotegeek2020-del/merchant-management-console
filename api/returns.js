@@ -78,31 +78,32 @@ if (action === 'complete_return') {
     const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
     if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
 
-    // --- SURGICAL SYNC START ---
-    // 1. Fetch the linked deployment_id before closing the RMA
+    // 1. Fetch the linked deployment_id and merchant_id before closing the RMA
     const { data: rmaData } = await supabase
         .from('returns')
-        .select('deployment_id')
+        .select('deployment_id, merchant_id')
         .eq('id', rmaId)
         .single();
     
+    // Use merchant_id from payload, fallback to what's stored in the return record
+    const resolved_merchant_id = merchant_id || rmaData?.merchant_id || null;
+
     if (rmaData?.deployment_id) {
-        // 2. Automatically Close the Deployment Ticket since the Hardware is back
+        // 2. Automatically close the linked deployment ticket
         await supabase
             .from('deployments')
             .update({ status: 'Closed' }) 
             .eq('id', rmaData.deployment_id);
     }
-    // --- SURGICAL SYNC END ---
 
-    // 3. Original Logic: Close RMA
+    // 3. Close RMA
     await supabase.from('returns').update({ 
-        status: 'closed', // Standardizing to match your 'list' filter if needed
+        status: 'closed',
         condition: condition,
         destination: destination
     }).eq('id', rmaId);
 
-    // 4. Original Logic: Update Equipment status
+    // 4. Update Equipment status
     const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
     
     await supabase.from('equipments').update({ 
@@ -111,10 +112,10 @@ if (action === 'complete_return') {
         merchant_id: null 
     }).eq('id', equipment_id);
 
-    // 5. Original Logic: Log history
+    // 5. Log history — with resolved merchant_id ✅
     await supabase.from('equipment_logs').insert([{
         equipment_id,
-        merchant_id, 
+        merchant_id: resolved_merchant_id,
         action: 'RMA Completed',
         from_location: 'In Transit / RMA',
         to_location: destination,
