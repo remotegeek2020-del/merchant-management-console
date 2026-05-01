@@ -354,16 +354,24 @@ if (action === 'list') {
 
         if (dataError) throw dataError;
 
-        // 3. Metrics (Simplified to prevent crashes)
-        let stats = { out_mtd: 0, out_30d: 0, out_90d: 0 };
+        // 3. Metrics
+        let stats = { out_mtd: 0, out_30d: 0, out_90d: 0, out_abs_mtd: 0 };
         try {
-            const { data: mathData } = await supabase.rpc('get_merchant_metrics', { 
+            const { data: mathData, error: metricsError } = await supabase.rpc('get_merchant_metrics', { 
                 p_status_filter: statusFilter || null, 
                 p_query: query || null, 
                 p_filter_by: filterBy === 'partner_name' ? 'partner_full_name' : (filterBy || null)
             });
+            if (metricsError) console.error("Metrics error:", metricsError.message);
             if (mathData && mathData[0]) stats = mathData[0];
-        } catch (e) { console.error("Metrics skipped"); }
+        } catch (e) { console.error("Metrics skipped:", e.message); }
+
+        // Calculate portfolio share: filtered MTD / total portfolio MTD * 100
+        const filteredMTD = parseFloat(stats.out_mtd) || 0;
+        const totalMTD = parseFloat(stats.out_abs_mtd) || 0;
+        const portfolioShare = totalMTD > 0 
+            ? ((filteredMTD / totalMTD) * 100).toFixed(2)
+            : "0.00";
 
         // 4. Format Data for Frontend
         const formattedData = (data || []).map(m => ({
@@ -378,10 +386,10 @@ if (action === 'list') {
             data: formattedData,
             count: count || 0,
             metrics: { 
-                totalMTD: stats.out_mtd || 0, 
-                total30D: stats.out_30d || 0, 
-                total90D: stats.out_90d || 0, 
-                portfolioShare: "0.00" 
+                totalMTD: filteredMTD,
+                total30D: parseFloat(stats.out_30d) || 0,
+                total90D: parseFloat(stats.out_90d) || 0,
+                portfolioShare
             }
         });
     } catch (err) {
