@@ -1006,6 +1006,7 @@ async function submitOnboarding() {
     
 
     function renderGrid(data) {
+    if (!data) data = allPartners; // fallback to global
     const grid = document.getElementById('partnerGrid');
     const prevBtn = document.getElementById('btnPrev');
     const nextBtn = document.getElementById('btnNext');
@@ -1440,6 +1441,8 @@ window.quickAddId = async function(personId, name) {
 
     // --- LOAD PARTNERS WITH STATS ---
     async function loadPartners() {
+        const loader = document.getElementById('loadingOverlay');
+        if (loader) loader.style.display = 'flex';
         try {
             // Fetch partners list and stats in parallel
             const [partnersRes, statsRes] = await Promise.all([
@@ -1495,6 +1498,9 @@ window.quickAddId = async function(personId, name) {
             console.error("Failed to load partners:", err);
             document.getElementById('partnerGrid').innerHTML = 
                 `<div style="padding:40px; text-align:center; color:#ef4444;">Failed to load partners: ${err.message}</div>`;
+        } finally {
+            // Always hide the loader whether success or error
+            if (loader) loader.style.display = 'none';
         }
     }
 
