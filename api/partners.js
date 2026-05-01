@@ -163,6 +163,31 @@ if (action === 'get_merchant_data') {
     return res.status(200).json({ success: !error, message: error?.message });
 }
 
+        // --- ACTION: GET ALL STATS (for page-level trend calculation) ---
+if (action === 'get_all_stats') {
+    try {
+        // Fetch all stats from the view in chunks to avoid timeouts
+        let allStats = [];
+        let from = 0;
+        let finished = false;
+        while (!finished) {
+            const { data, error } = await supabase
+                .from('merchant_stats_by_id')
+                .select('agent_id, merchant_count, total_volume_sum, total_volume_90d_sum, pending_count, closed_count, risk_count')
+                .range(from, from + 999);
+            if (error || !data || data.length === 0) { finished = true; }
+            else {
+                allStats = allStats.concat(data);
+                from += 1000;
+                if (data.length < 1000) finished = true;
+            }
+        }
+        return res.status(200).json({ success: true, data: allStats });
+    } catch (err) {
+        return res.status(500).json({ success: false, message: err.message });
+    }
+}
+
         // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
         if (action === 'get_partners_list') {
             async function fetchAll(table, select) {
