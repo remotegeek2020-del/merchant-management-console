@@ -368,15 +368,35 @@ async function executeFinalUpsert(payload) {
     });
 
     try {
-        for (let i = 0; i < chunks.length; i++) {
+        // Deduplicate by merchant_id — keep last occurrence (most recent data wins)
+        const seen = new Map();
+        payload.forEach(row => { if (row.merchant_id) seen.set(String(row.merchant_id).trim(), row); });
+        const deduped = Array.from(seen.values());
+        
+        if (deduped.length < payload.length) {
+            console.log(`Deduped ${payload.length - deduped.length} duplicate MIDs from CSV`);
+        }
+
+        // Re-chunk after dedup
+        const dedupedChunks = [];
+        for (let i = 0; i < deduped.length; i += CHUNK_SIZE) {
+            dedupedChunks.push(deduped.slice(i, i + CHUNK_SIZE));
+        }
+        const dedupedTotal = deduped.length;
+
+        // Update UI with deduped count
+        const bar = document.getElementById('sync-bar');
+        const label = document.getElementById('sync-label');
+        if (label) label.innerText = `${dedupedTotal.toLocaleString()} unique records ready...`;
+
+        for (let i = 0; i < dedupedChunks.length; i++) {
+            const chunk = dedupedChunks[i];
             const chunk = chunks[i];
-            const pct = Math.round(((i) / chunks.length) * 100);
+            const pct = Math.round(((i) / dedupedChunks.length) * 100);
 
             // Update progress bar
-            const bar = document.getElementById('sync-bar');
-            const label = document.getElementById('sync-label');
             if (bar) bar.style.width = pct + '%';
-            if (label) label.innerText = `Batch ${i + 1} of ${chunks.length} (${totalProcessed.toLocaleString()} done)`;
+            if (label) label.innerText = `Batch ${i + 1} of ${dedupedChunks.length} (${totalProcessed.toLocaleString()} done)`;
 
             const res = await fetch('/api/merchants', {
                 method: 'POST',
@@ -400,6 +420,7 @@ async function executeFinalUpsert(payload) {
         }
 
         // Final result
+        const dupeCount = total - dedupedTotal;
         await Swal.fire({
             icon: totalErrors.length > 0 && totalProcessed === 0 ? 'error' : totalErrors.length > 0 ? 'warning' : 'success',
             title: totalErrors.length === 0 ? 'Sync Complete ✅' : totalProcessed > 0 ? 'Sync Completed with Warnings' : 'Sync Failed',
@@ -407,11 +428,15 @@ async function executeFinalUpsert(payload) {
                 <div style="text-align:left;">
                     ${totalProcessed > 0 ? `
                     <div style="background:#dcfce7; border-radius:8px; padding:12px; margin-bottom:10px;">
-                        <b style="color:#166534;">✓ ${totalProcessed.toLocaleString()} of ${total.toLocaleString()} records synced</b>
+                        <b style="color:#166534;">✓ ${totalProcessed.toLocaleString()} records synced successfully</b>
+                    </div>` : ''}
+                    ${dupeCount > 0 ? `
+                    <div style="background:#fef9c3; border-radius:8px; padding:10px; margin-bottom:8px; font-size:11px; color:#854d0e;">
+                        ⚠ ${dupeCount.toLocaleString()} duplicate MIDs found in CSV — last row kept for each.
                     </div>` : ''}
                     ${totalErrors.length > 0 ? `
                     <div style="background:#fee2e2; border-radius:8px; padding:12px; font-size:11px; color:#991b1b; max-height:150px; overflow-y:auto;">
-                        ⚠ ${totalErrors.join('<br>')}
+                        ✗ ${totalErrors.join('<br>')}
                     </div>` : ''}
                 </div>`,
             confirmButtonColor: '#004990'
