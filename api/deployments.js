@@ -61,27 +61,37 @@ export default async function handler(req, res) {
         .update({ 
             status: 'completed', 
             destination,
-            equipment_received_date // Your new field
+            equipment_received_date
         })
         .eq('id', return_id);
 
     if (updateReturnError) throw updateReturnError;
 
-    // 2. Update Equipment status and location
+    // 2. Fetch merchant_id from the return record before nulling the equipment
+    const { data: returnRecord } = await supabase
+        .from('returns')
+        .select('merchant_id')
+        .eq('id', return_id)
+        .single();
+
+    const recovered_merchant_id = returnRecord?.merchant_id || null;
+
+    // 3. Update Equipment status and location
     const { error: equipError } = await supabase
         .from('equipments')
         .update({ 
             status: 'stocked', 
             current_location: destination,
-            merchant_id: null // Remove from merchant
+            merchant_id: null
         })
         .eq('id', equipment_id);
 
     if (equipError) throw equipError;
 
-    // 3. Log the final restock event
+    // 4. Log the final restock event — now with merchant_id ✅
     await supabase.from('equipment_logs').insert([{
         equipment_id,
+        merchant_id: recovered_merchant_id,
         action: 'rma_completed',
         from_location: 'In Transit',
         to_location: destination,
@@ -412,16 +422,26 @@ if (action === 'return_to_office') {
                     merchant_id: merchant_id,
                     return_reason: notes,
                     return_date_initiated: return_date_initiated,
-                    // NEW: Set exact status/destination for transit
                     condition: 'IN TRANSIT',
                     destination: 'In Transit / RMA',
                     status: 'Open'
                 }, { onConflict: 'deployment_id' });
 
             if (error) throw error;
+
+            // Log the transit initiation ✅
+            await supabase.from('equipment_logs').insert([{
+                equipment_id,
+                merchant_id,
+                deployment_id,
+                action: 'RMA Initiated',
+                from_location: 'Merchant Site',
+                to_location: 'In Transit / RMA',
+                notes: `Unit marked In Transit. Reason: ${notes || 'N/A'}`
+            }]);
+
         } else {
             // STEP 2: COMPLETE RMA
-            // Determine condition and destination based on the button clicked in the frontend
             let finalCondition = '';
             let finalDestination = '';
 
@@ -437,7 +457,7 @@ if (action === 'return_to_office') {
                 .from('returns')
                 .update({
                     status: 'Closed',
-                    condition: finalCondition, // Updated
+                    condition: finalCondition,
                     destination: finalDestination,
                     equipment_received_date: equipment_received_date 
                 })
@@ -445,12 +465,23 @@ if (action === 'return_to_office') {
 
             if (returnUpdateError) throw returnUpdateError;
 
-            // Move equipment back to warehouse in the equipments table
+            // Move equipment back to warehouse
             await supabase.from('equipments').update({
                 status: 'stocked',
                 current_location: finalDestination,
                 merchant_id: null
             }).eq('id', equipment_id);
+
+            // Log the RMA completion with merchant_id ✅
+            await supabase.from('equipment_logs').insert([{
+                equipment_id,
+                merchant_id,
+                deployment_id,
+                action: 'RMA Completed',
+                from_location: 'In Transit / RMA',
+                to_location: finalDestination,
+                notes: `Inspection finished. Unit marked as ${finalCondition}. Received: ${equipment_received_date || 'N/A'}`
+            }]);
         }
 
         return res.status(200).json({ success: true });
