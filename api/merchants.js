@@ -14,16 +14,26 @@ export default async function handler(req, res) {
 
         if (action === 'check_mids') {
     const { mids } = req.body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('merchant_id')
-        .in('merchant_id', mids);
+    if (!mids || mids.length === 0) {
+        return res.status(200).json({ success: true, existingMids: [] });
+    }
 
-    if (error) throw error;
-    return res.status(200).json({ 
-        success: true, 
-        existingMids: data.map(m => String(m.merchant_id)) 
-    });
+    // Chunk MID lookup to avoid Supabase URL length limits
+    const CHUNK_SIZE = 500;
+    let existingMids = [];
+
+    for (let i = 0; i < mids.length; i += CHUNK_SIZE) {
+        const chunk = mids.slice(i, i + CHUNK_SIZE);
+        const { data, error } = await supabase
+            .from('merchants')
+            .select('merchant_id')
+            .in('merchant_id', chunk);
+
+        if (error) throw error;
+        if (data) existingMids = existingMids.concat(data.map(m => String(m.merchant_id)));
+    }
+
+    return res.status(200).json({ success: true, existingMids });
 }
        if (action === 'getMonthlyReport') {
     const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
