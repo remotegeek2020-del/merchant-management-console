@@ -242,11 +242,75 @@ if (action === 'bulk_upsert') {
     }
 
     try {
-        // Process in chunks of 500 to avoid DB timeouts on large CSVs
         const CHUNK_SIZE = 500;
         let totalProcessed = 0;
         let errors = [];
 
+        // ── STEP 1: AUTO-CREATE MISSING AGENT IDENTIFIERS ──────────────────
+        // Collect all unique agent_ids from the CSV
+        const csvAgentIds = [...new Set(
+            dataToUpsert
+                .map(r => r.agent_id)
+                .filter(id => id && String(id).trim() !== '')
+                .map(id => String(id).trim())
+        )];
+
+        if (csvAgentIds.length > 0) {
+            // Find which ones already exist in agent_identifiers
+            const existingIds = new Set();
+            for (let i = 0; i < csvAgentIds.length; i += CHUNK_SIZE) {
+                const chunk = csvAgentIds.slice(i, i + CHUNK_SIZE);
+                const { data: existing } = await supabase
+                    .from('agent_identifiers')
+                    .select('id_string')
+                    .in('id_string', chunk);
+                if (existing) existing.forEach(r => existingIds.add(r.id_string));
+            }
+
+            // Find the missing ones
+            const missingAgentIds = csvAgentIds.filter(id => !existingIds.has(id));
+
+            if (missingAgentIds.length > 0) {
+                // For each missing agent_id, create a placeholder agent + identifier
+                // We group by agent_name if available in the CSV, otherwise use the ID as name
+                const agentNameMap = {};
+                dataToUpsert.forEach(r => {
+                    if (r.agent_id && r.agent_name) {
+                        agentNameMap[String(r.agent_id).trim()] = r.agent_name;
+                    }
+                });
+
+                for (const agentId of missingAgentIds) {
+                    // 1. Create the agent record
+                    const agentName = agentNameMap[agentId] || `Agent ${agentId}`;
+                    const { data: newAgent, error: agentError } = await supabase
+                        .from('agents')
+                        .insert({ agent_name: agentName, is_active: true })
+                        .select('id')
+                        .single();
+
+                    if (agentError) {
+                        console.error(`Failed to create agent ${agentId}:`, agentError.message);
+                        continue;
+                    }
+
+                    // 2. Create the agent_identifier linking the string ID to the agent
+                    const { error: identError } = await supabase
+                        .from('agent_identifiers')
+                        .insert({
+                            agent_id: newAgent.id,
+                            id_string: agentId,
+                            status: 'Active'
+                        });
+
+                    if (identError) {
+                        console.error(`Failed to create identifier for agent ${agentId}:`, identError.message);
+                    }
+                }
+            }
+        }
+
+        // ── STEP 2: UPSERT MERCHANTS IN CHUNKS ─────────────────────────────
         for (let i = 0; i < dataToUpsert.length; i += CHUNK_SIZE) {
             const chunk = dataToUpsert.slice(i, i + CHUNK_SIZE);
             const { error } = await supabase
