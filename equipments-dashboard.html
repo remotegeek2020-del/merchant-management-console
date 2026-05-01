@@ -4,69 +4,37 @@
     <meta charset="UTF-8">
     <title>Inventory Management | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/pp-system.css">
     <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; --pp-repair: #e11d48; }
-        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
         .dashboard-container { max-width: 1600px; margin: 0 auto; }
-        
-        /* Fixed Header: Flexbox spacing for title and controls */
-        .modern-header { 
-            background: white; 
-            border-radius: 16px; 
-            padding: 20px 25px; 
-            margin-bottom: 20px; 
-            display: flex; 
-            justify-content: space-between; 
-            align-items: center; 
-            box-shadow: 0 4px 20px rgba(0,0,0,0.05); 
-        }
-        
-        /* KPI Grid: Changed to 6 columns to fit Critical Alerts & Retired Units */
-        .summary-bar { 
-            display: grid; 
-            grid-template-columns: repeat(6, 1fr); 
-            gap: 15px; 
-            margin-bottom: 20px; 
-        }
-
-        .kpi-card { background: white; padding: 15px; border-radius: 16px; border: 1px solid #e2e8f0; display: flex; align-items: center; }
-        .kpi-val { font-size: 1.2rem; font-weight: 800; color: #002d5a; display: block; }
-        .kpi-label { font-size: 0.6rem; font-weight: 700; color: #64748b; text-transform: uppercase; }
-
-        .location-toggle { display: flex; background: #e2e8f0; padding: 4px; border-radius: 10px; }
-        .toggle-btn { padding: 6px 12px; border: none; border-radius: 7px; font-size: 10px; font-weight: 700; cursor: pointer; transition: 0.3s; color: #64748b; }
-        .toggle-btn.active { background: white; color: var(--pp-blue); box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-
-        .main-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .slds-table thead th { background-color: #f8fafc !important; font-weight: 700 !important; color: #475569 !important; padding: 12px !important; }
-        
-        .badge { font-weight: 800; font-size: 9px; padding: 4px 10px; border-radius: 4px; text-transform: uppercase; }
-        .loc-office { background: #dcfce7; color: #166534; }
-        .loc-repair { background: #fee2e2; color: #991b1b; }
-        .loc-deployed { background: #e0f2fe; color: #0369a1; }
-
-        #customModal {
-            display: none; 
-            position: fixed;
-            top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: rgba(0, 0, 0, 0.75);
-            z-index: 10000;
-            align-items: center;
-            justify-content: center;
-        }
+        .modern-header { background: white; border-radius: 16px; padding: 16px 24px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+        .summary-bar { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 16px; }
+        .kpi-card { background: white; padding: 16px; border-radius: 14px; border: 1px solid var(--border); display: flex; align-items: center; gap: 10px; box-shadow: var(--shadow-sm); }
+        .kpi-val { font-size: 1.4rem; font-weight: 800; color: var(--text-primary); display: block; font-family: 'DM Mono', monospace; letter-spacing: -0.3px; }
+        .kpi-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; }
+        .location-toggle { display: flex; background: var(--surface-3); padding: 3px; border-radius: 10px; }
+        .toggle-btn { padding: 7px 14px; border: none; border-radius: 7px; font-size: 10px; font-weight: 700; cursor: pointer; transition: 0.2s; color: var(--text-muted); font-family: 'DM Sans', sans-serif; letter-spacing: 0.3px; }
+        .toggle-btn.active { background: white; color: var(--pp-blue); box-shadow: var(--shadow-sm); }
+        .main-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+        .slds-table thead th { background: #f8fafc !important; font-size: 10px !important; font-weight: 700 !important; color: var(--text-muted) !important; text-transform: uppercase !important; letter-spacing: 0.6px !important; padding: 12px !important; }
+        .slds-table tbody tr:hover td { background: var(--surface-2) !important; }
+        .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        .loc-office { background: var(--green-bg); color: var(--green-text); }
+        .loc-repair { background: var(--red-bg); color: var(--red-text); }
+        .loc-deployed { background: var(--blue-bg); color: var(--blue-text); }
+        #customModal { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.6); z-index:10000; align-items:center; justify-content:center; }
         #customModal.is-open { display: flex !important; }
-        .modal-box { background: white; border-radius: 12px; width: 95%; max-width: 550px; overflow: hidden; box-shadow: 0 20px 25px rgba(0,0,0,0.3); }
+        .modal-box { background:white; border-radius:16px; width:95%; max-width:550px; overflow:hidden; box-shadow:0 30px 60px rgba(0,0,0,0.25); }
         .slds-hide { display: none !important; }
         .slds-show { display: block !important; }
+        .timeline-item { position:relative; padding-left:28px; margin-bottom:18px; border-left:2px solid var(--border); margin-left:10px; }
+        .timeline-marker { position:absolute; left:-9px; top:0; width:16px; height:16px; border-radius:50%; background:white; border:3px solid var(--pp-accent); }
+        @media (max-width: 900px) { .summary-bar { grid-template-columns: repeat(3, 1fr); } .modern-header { flex-direction: column; align-items: stretch; } }
+        @media (max-width: 600px) { .summary-bar { grid-template-columns: repeat(2, 1fr); } .main-card { overflow-x: auto; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-
-        /* Timeline Styles Added */
-        .timeline-item { position: relative; padding-left: 30px; margin-bottom: 20px; border-left: 2px solid #e2e8f0; margin-left: 10px; }
-        .timeline-marker { position: absolute; left: -9px; top: 0; width: 16px; height: 16px; border-radius: 50%; background: white; border: 3px solid var(--pp-accent); }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
