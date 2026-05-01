@@ -54,25 +54,17 @@
     </div>
 
     <div id="login-ui" style="display: none;">
-        <div style="text-align:center; margin-bottom: 35px;">
-            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:40px; margin-bottom: 10px;">
-            <h2 style="font-size: 1.5rem; color: var(--pp-blue); font-weight: 800; letter-spacing: -0.5px;">PayProTec Portal</h2>
-            <p style="color: #6e7e91; font-size: 0.9rem;">PayProTec Portal</p>
+        <div class="login-card">
+            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="login-logo" alt="PayProTec">
+            <h2 class="login-title">PayProTec Portal</h2>
+            <p class="login-sub">Central Operations Console</p>
+            <label class="login-label">Email Address</label>
+            <input type="email" id="login-email" class="login-input" placeholder="name@payprotec.com">
+            <label class="login-label">Password</label>
+            <input type="password" id="login-pass" class="login-input" placeholder="••••••••">
+            <button class="login-btn" onclick="handleManualLogin()">SIGN IN</button>
+            <a href="javascript:void(0)" onclick="handleForgotPassword()" class="login-forgot">Forgot Password?</a>
         </div>
-        <div class="slds-form-element slds-m-bottom_medium">
-            <label class="slds-form-element__label">Email Address</label>
-            <input type="email" id="login-email" class="slds-input" placeholder="name@payprotec.com" style="border-radius: 8px;">
-        </div>
-        <div class="slds-form-element slds-m-bottom_large">
-            <label class="slds-form-element__label">Password</label>
-            <input type="password" id="login-pass" class="slds-input" placeholder="••••••••" style="border-radius: 8px;">
-        </div>
-        
-        <button class="slds-button slds-button_brand slds-size_1-of-1 login-btn" onclick="handleManualLogin()">LOGIN</button>
-
-<div style="text-align: center; margin-top: 15px;">
-    <a href="javascript:void(0)" onclick="handleForgotPassword()" style="color: #004990; font-size: 0.85rem; text-decoration: none; font-weight: 600;">Forgot Password?</a>
-</div>
     </div>
 
     <div id="page-curtain" style="display: none;">
@@ -84,9 +76,11 @@
                     Logout
                 </button>
             </div>
-            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProtec" class="logo-img">
-            <h1 style="font-size: 2.5rem; font-weight: 800; letter-spacing: -1px;">PayProTec Portal</h1>
-            <p style="opacity: 0.8; font-weight: 300;">Central Operations Console</p>
+            <div class="brand-center">
+                <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProtec" class="logo-img">
+                <h1 class="brand-title">PayProTec Portal</h1>
+                <p class="brand-sub">Central Operations Console</p>
+            </div>
         </div>
 
         <div class="main-container">
@@ -170,7 +164,6 @@
     </div>
 
     <script src="js/script.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <div id="jarvis-sidebar" class="oracle-sidebar" style="display: none;">
     <div class="oracle-header">
         <div style="display:flex; align-items:center; gap:10px;">
@@ -200,6 +193,3 @@
 </button>
 </body>
 </html>
-
-
-
