@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js'
 
+// Increase body size limit to 50MB for large CSV bulk uploads
+export const config = { api: { bodyParser: { sizeLimit: '50mb' } } };
+
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
@@ -223,16 +226,42 @@ if (action === 'get_tasks') {
 
      // --- UPDATED ACTION: bulk_upsert ---
 if (action === 'bulk_upsert') {
-    // payload is the array of mapped objects from the frontend
-    const dataToUpsert = payload.filter(item => item.merchant_id);
+    const dataToUpsert = (payload || []).filter(item => item.merchant_id);
+    if (dataToUpsert.length === 0) {
+        return res.status(400).json({ success: false, message: 'No valid records found. Ensure Merchant ID column is mapped.' });
+    }
 
     try {
-        const { error } = await supabase
-            .from('merchants')
-            .upsert(dataToUpsert, { onConflict: 'merchant_id' }); //
+        // Process in chunks of 500 to avoid DB timeouts on large CSVs
+        const CHUNK_SIZE = 500;
+        let totalProcessed = 0;
+        let errors = [];
 
-        if (error) throw error;
-        return res.status(200).json({ success: true, count: dataToUpsert.length });
+        for (let i = 0; i < dataToUpsert.length; i += CHUNK_SIZE) {
+            const chunk = dataToUpsert.slice(i, i + CHUNK_SIZE);
+            const { error } = await supabase
+                .from('merchants')
+                .upsert(chunk, { onConflict: 'merchant_id', ignoreDuplicates: false });
+
+            if (error) {
+                errors.push(`Chunk ${Math.floor(i/CHUNK_SIZE) + 1}: ${error.message}`);
+            } else {
+                totalProcessed += chunk.length;
+            }
+        }
+
+        if (errors.length > 0 && totalProcessed === 0) {
+            return res.status(500).json({ success: false, message: errors[0] });
+        }
+
+        return res.status(200).json({ 
+            success: true, 
+            count: totalProcessed,
+            errors: errors.length > 0 ? errors : undefined,
+            message: errors.length > 0 
+                ? `Processed ${totalProcessed} records with ${errors.length} chunk error(s).`
+                : `Successfully synced ${totalProcessed} records.`
+        });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }
@@ -332,7 +361,7 @@ if (action === 'list') {
             .from('merchant_portfolio_view')
             .select('*', { count: 'exact' });
 
-        if (statusFilter) dataReq.eq('account_status', statusFilter);
+        if (statusFilter) dataReq = dataReq.eq('account_status', statusFilter);
 
         // 2. Search Logic
        if (query && filterBy) {
