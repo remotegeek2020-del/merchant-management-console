@@ -3,6 +3,26 @@
  */
 const parseBool = (val) => (val === true || val === "true" || val === "TRUE");
 
+// ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
+// Initialized once here so all functions share the same client instance.
+// Replace these values with your actual project URL and anon key.
+const SUPABASE_URL = window.__PP_SUPABASE_URL__ || 'https://zuzwljjrppyrzngmhdru.supabase.co';
+const SUPABASE_ANON_KEY = window.__PP_SUPABASE_ANON_KEY__ || 'YOUR_ANON_KEY_HERE';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ── RLS SESSION SYNC ──────────────────────────────────────────────────────────
+// After the API validates a user, we call this to register the userid
+// with the Supabase session so all RLS policies work correctly.
+// This calls the set_app_user_id() DB function we created in the migration.
+async function syncRLSSession(userId) {
+    if (!userId) return;
+    try {
+        await supabase.rpc('set_app_user_id', { p_user_id: userId });
+    } catch (err) {
+        console.warn('RLS session sync failed:', err);
+    }
+}
+
 async function initGatekeeper() {
     try {
         const params = new URLSearchParams(window.location.search);
@@ -26,6 +46,8 @@ async function initGatekeeper() {
         const result = await response.json();
 
         if (result.success && result.user) {
+            // ✅ NEW: Sync RLS session so Supabase queries from this page are authorized
+            await syncRLSSession(result.user.userid);
             authorizeUser(result.user);
         } else {
             localStorage.clear();
@@ -36,12 +58,13 @@ async function initGatekeeper() {
         showLoginUI();
     }
 }
+
 /**
  * GLOBAL ACTIVITY LOGGER
  * Records actions into the activity_logs table via the API
  */
 async function recordActivity(action, statusDetails) {
-    const userEmail = localStorage.getItem('pp_userid'); // Standardized key from your script.js
+    const userEmail = localStorage.getItem('pp_userid');
     try {
         await fetch('/api/logs', {
             method: 'POST',
@@ -106,7 +129,7 @@ async function authorizeUser(user) {
 
     // --- 1. ROLE LOGIC ---
     const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
-    const isSuperAdmin = roleStr.includes('super'); // This identifies YOU
+    const isSuperAdmin = roleStr.includes('super');
     const isAdmin = roleStr.includes('admin') || isSuperAdmin;
 
     const elements = {
@@ -127,7 +150,6 @@ async function authorizeUser(user) {
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
 
     // --- 2. JARVIS ACTIVATION ---
-    // Access is togglable via DB for users, but Super Admin always has it.
     const hasJarvisAccess = isSuperAdmin || parseBool(user.access_jarvis);
     if (hasJarvisAccess && elements.jarvisBtn && elements.jarvisSidebar) {
         elements.jarvisBtn.style.display = 'block';
@@ -142,15 +164,14 @@ async function authorizeUser(user) {
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-logs')) document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
 
-    // --- 3. THE DUNGEON LOCKDOWN (Surgical Fix) ---
-    // This ensures ONLY the Super Admin sees the training/injector portal.
+    // --- 3. THE DUNGEON LOCKDOWN ---
     if (elements.secretDungeon) {
         if (isSuperAdmin) {
             elements.secretDungeon.classList.remove('slds-hide');
             elements.secretDungeon.style.display = 'flex';
             console.log("🔓 Secret Dungeon authorized for Super Admin.");
         } else {
-            elements.secretDungeon.style.display = 'none'; // Explicitly hide for regular admins
+            elements.secretDungeon.style.display = 'none';
         }
     }
 
@@ -199,7 +220,7 @@ function openSecretDungeon() {
         cancelButtonText: 'CLOSE PORTAL'
     });
 }
-// Handler for the training submission
+
 async function submitTraining() {
     const topic = document.getElementById('train-topic').value;
     const logic = document.getElementById('train-logic').value;
@@ -214,7 +235,7 @@ async function submitTraining() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 topic: topic, 
-                logic: logic, // This must match the 'logic' variable name in the API handler
+                logic: logic,
                 userId: localStorage.getItem('pp_userid')
             })
         });
@@ -222,7 +243,6 @@ async function submitTraining() {
         const result = await res.json();
         if (result.success) {
             Swal.fire('Success', 'Knowledge injected into core memory.', 'success');
-            // Optional: refresh the dungeon view if needed
         } else {
             throw new Error(result.message);
         }
@@ -242,7 +262,6 @@ async function triggerBulkNoteUpload() {
         const reader = new FileReader();
         reader.onload = async (e) => {
             const text = e.target.result;
-            // Simple split for Merchant ID (col 0), Title (col 1), Body (col 2)
             const rows = text.split('\n').slice(1).filter(r => r.trim()); 
             const notes = rows.map(r => {
                 const cols = r.split(',');
@@ -262,6 +281,7 @@ async function triggerBulkNoteUpload() {
         reader.readAsText(file);
     }
 }
+
 async function handleManualLogin() {
     const email = document.getElementById('login-email').value;
     const pass = document.getElementById('login-pass').value;
@@ -326,7 +346,7 @@ async function handleManualLogin() {
                                 }
                             });
                         });
-                    }, // Added missing comma here
+                    },
                     preConfirm: () => {
                         const code = Array.from(document.querySelectorAll('.tfa-box')).map(i => i.value).join('');
                         if (code.length < 6) {
@@ -345,6 +365,8 @@ async function handleManualLogin() {
                     verify2FACode(result.userid, tfaCode, remember);
                 }
             } else {
+                // ✅ NEW: Sync RLS session after direct login (trusted device / no 2FA)
+                await syncRLSSession(result.user?.userid);
                 authorizeUser(result.user);
             }
         } else {
@@ -370,6 +392,8 @@ async function verify2FACode(uid, code, remember) {
             if (result.newDeviceToken) {
                 localStorage.setItem('pp_device_token', result.newDeviceToken);
             }
+            // ✅ NEW: Sync RLS session after 2FA verification
+            await syncRLSSession(result.user?.userid);
             authorizeUser(result.user);
         } else {
             Swal.fire('Error', result.message || 'Invalid code.', 'error');
@@ -388,34 +412,32 @@ async function handleLogout() {
         cancelButtonColor: '#3085d6'
     }).then((result) => {
         if (result.isConfirmed) {
-            // 1. Save device token if needed
             const deviceToken = localStorage.getItem('pp_device_token');
             
-            // 2. Clear all session data
             localStorage.clear();
             sessionStorage.clear();
             
             if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
 
-            // --- 3. JARVIS CLEANUP (Place it here) ---
             const jarvisBtn = document.getElementById('jarvis-trigger');
             const jarvisSidebar = document.getElementById('jarvis-sidebar');
             
-            if (jarvisBtn) jarvisBtn.style.display = 'none'; // Hide the button
+            if (jarvisBtn) jarvisBtn.style.display = 'none';
             if (jarvisSidebar) {
-                jarvisSidebar.classList.remove('active'); // Slide it out if open
-                jarvisSidebar.style.display = 'none';    // Kill the container
+                jarvisSidebar.classList.remove('active');
+                jarvisSidebar.style.display = 'none';
             }
-            // -----------------------------------------
 
-            // 4. Return to login
             window.location.href = 'index.html';
         }
     });
 }
+
 function toggleJarvis() {
-    document.getElementById('jarvis-sidebar').classList.toggle('active');
+    const sidebar = document.getElementById('jarvis-sidebar');
+    if (sidebar) sidebar.classList.toggle('active');
 }
+
 async function teachJarvis(userQuestion, wrongAnswer) {
     const { value: correction } = await Swal.fire({
         title: 'Correct Jarvis',
@@ -473,18 +495,11 @@ async function askJarvis() {
         });
         const data = await res.json();
         const loadingEl = document.getElementById(loadingId);
-        
-        // Clean UI: The text only, training moved to the Dungeon
         loadingEl.innerHTML = `<div>${data.answer}</div>`;
     } catch (err) {
         document.getElementById(loadingId).innerText = "Jarvis is offline. Check API connectivity.";
     }
     container.scrollTop = container.scrollHeight;
-}
-
-function toggleJarvis() {
-    const sidebar = document.getElementById('jarvis-sidebar');
-    if (sidebar) sidebar.classList.toggle('active'); // This toggles the slide-in
 }
 
 async function handleForgotPassword() {
@@ -500,7 +515,7 @@ async function handleForgotPassword() {
     if (email) {
         Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
         try {
-            const response = await fetch('/api/login', {
+            await fetch('/api/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email: email, action: 'forgotPassword' })
@@ -509,7 +524,6 @@ async function handleForgotPassword() {
         } catch (err) { Swal.fire('Error', 'Connection failed.', 'error'); }
     }
 }
-
 
 window.onload = initGatekeeper;
 
