@@ -391,7 +391,6 @@ async function executeFinalUpsert(payload) {
 
         for (let i = 0; i < dedupedChunks.length; i++) {
             const chunk = dedupedChunks[i];
-            const chunk = chunks[i];
             const pct = Math.round(((i) / dedupedChunks.length) * 100);
 
             // Update progress bar
