@@ -3,23 +3,17 @@
  */
 const parseBool = (val) => (val === true || val === "true" || val === "TRUE");
 
-// ── SUPABASE CLIENT ───────────────────────────────────────────────────────────
-// Initialized once here so all functions share the same client instance.
-// Replace these values with your actual project URL and anon key.
-const SUPABASE_URL = window.__PP_SUPABASE_URL__ || 'https://zuzwljjrppyrzngmhdru.supabase.co';
-const SUPABASE_ANON_KEY = window.__PP_SUPABASE_ANON_KEY__ || 'YOUR_ANON_KEY_HERE';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-
 // ── RLS SESSION SYNC ──────────────────────────────────────────────────────────
 // After the API validates a user, we call this to register the userid
 // with the Supabase session so all RLS policies work correctly.
-// This calls the set_app_user_id() DB function we created in the migration.
+// Non-blocking: if supabase isn't ready or the call fails, login still proceeds.
 async function syncRLSSession(userId) {
     if (!userId) return;
     try {
+        if (typeof supabase === 'undefined' || !supabase) return;
         await supabase.rpc('set_app_user_id', { p_user_id: userId });
     } catch (err) {
-        console.warn('RLS session sync failed:', err);
+        console.warn('RLS session sync failed (non-critical):', err);
     }
 }
 
