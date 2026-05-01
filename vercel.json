@@ -3,6 +3,8 @@
   "trailingSlash": false,
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/partner", "dest": "/partner/index.html" },
+    { "src": "/partner/(.*)", "dest": "/partner/$1.html" },
     { "src": "/(.*).html", "dest": "/$1.html" },
     { "src": "/(.*)", "dest": "/$1.html" }
   ]
