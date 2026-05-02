@@ -116,6 +116,34 @@ await client.sendEmail({
                 if (error) throw error;
                 return res.status(200).json({ success: true });
             }
+
+            if (action === 'change_password') {
+                const { userid: uid, current_password, new_password } = req.body;
+                if (!current_password || !new_password) return res.status(400).json({ success: false, message: 'Both passwords required.' });
+                if (new_password.length < 8) return res.status(400).json({ success: false, message: 'New password must be at least 8 characters.' });
+
+                // Get current passkey
+                const { data: user } = await supabase.from('app_users').select('passkey, first_name').eq('userid', uid).single();
+                if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+
+                // Verify current password (SHA256 hash)
+                const currentHash = crypto.createHash('sha256').update(current_password).digest('hex');
+                if (user.passkey !== current_password && user.passkey !== currentHash) {
+                    return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
+                }
+
+                // Save new password (store as hash)
+                const newHash = crypto.createHash('sha256').update(new_password).digest('hex');
+                await supabase.from('app_users').update({ passkey: newHash }).eq('userid', uid);
+
+                // Log it
+                await supabase.from('activity_logs').insert({
+                    email: uid, action: 'Changed own password',
+                    status: 'success', category: 'auth', severity: 'info'
+                });
+
+                return res.status(200).json({ success: true });
+            }
         }
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
