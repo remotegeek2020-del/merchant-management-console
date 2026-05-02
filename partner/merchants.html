@@ -3,60 +3,118 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Merchants | PayProTec Partner Portal</title>
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <title>My Dashboard | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         *, *::before, *::after { box-sizing: border-box; }
-        :root { --teal:#0d9488;--teal-dark:#0f766e;--teal-light:#ccfbf1;--teal-bg:#f0fdfa;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--green-bg:#dcfce7;--green:#166534;--red-bg:#fee2e2;--red:#991b1b;--amber-bg:#fef3c7;--amber:#92400e;--blue-bg:#e0f2fe;--blue:#0369a1;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);--shadow-md:0 4px 16px rgba(0,0,0,0.07); }
-        body { margin:0;padding:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased; }
-        .sidebar { position:fixed;top:0;left:0;width:240px;height:100vh;background:var(--navy);display:flex;flex-direction:column;z-index:100;padding:0;box-shadow:4px 0 20px rgba(0,0,0,0.15); }
-        .sidebar-header { padding:24px 20px 20px;border-bottom:1px solid rgba(255,255,255,0.08); }
-        .sidebar-logo { height:28px;filter:brightness(0) invert(1);display:block;margin-bottom:16px; }
-        .sidebar-partner { display:flex;align-items:center;gap:10px; }
-        .sidebar-avatar { width:36px;height:36px;border-radius:50%;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:14px;color:white;flex-shrink:0; }
-        .sidebar-name { font-size:13px;font-weight:700;color:white;line-height:1.3; }
-        .sidebar-tag { font-size:10px;color:rgba(255,255,255,0.4);font-weight:500; }
-        .sidebar-nav { flex:1;padding:16px 12px;display:flex;flex-direction:column;gap:4px; }
-        .nav-item { display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;font-size:13px;font-weight:600;color:rgba(255,255,255,0.6);text-decoration:none;cursor:pointer;transition:all 0.2s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif; }
-        .nav-item:hover { background:rgba(255,255,255,0.08);color:white; }
-        .nav-item.active { background:var(--teal);color:white; }
-        .nav-item .material-icons { font-size:20px;flex-shrink:0; }
-        .nav-divider { height:1px;background:rgba(255,255,255,0.08);margin:8px 0; }
-        .main { margin-left:240px;min-height:100vh; }
-        .topbar { background:white;padding:16px 28px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:50;gap:12px;flex-wrap:wrap; }
-        .topbar-title { font-size:1.2rem;font-weight:800;color:var(--text);margin:0;letter-spacing:-0.2px; }
-        .content { padding:28px; }
-        .toolbar { display:flex;gap:10px;margin-bottom:20px;flex-wrap:wrap; }
-        .search-wrap { position:relative;flex:1;min-width:200px; }
-        .search-wrap .material-icons { position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:18px; }
-        .search-wrap input { width:100%;padding:9px 14px 9px 36px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:white;outline:none;transition:border-color 0.2s; }
-        .search-wrap input:focus { border-color:var(--teal); }
-        select { padding:9px 14px;border:1px solid var(--border);border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);background:white;outline:none;cursor:pointer; }
-        .btn { display:inline-flex;align-items:center;gap:6px;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all 0.2s; }
-        .btn-teal { background:var(--teal);color:white; }
+        :root {
+            --teal:#0d9488; --teal-dark:#0f766e; --teal-light:#ccfbf1; --teal-bg:#f0fdfa;
+            --navy:#001e3c; --border:#e2e8f0; --surface:#f8fafc; --white:#ffffff;
+            --text:#0a1628; --secondary:#475569; --muted:#94a3b8;
+            --green:#10b981; --green-bg:#dcfce7; --green-text:#166534;
+            --red:#ef4444; --red-bg:#fee2e2; --red-text:#991b1b;
+            --amber:#f59e0b; --amber-bg:#fef3c7; --amber-text:#92400e;
+            --blue-bg:#e0f2fe; --blue-text:#0369a1;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.06); --shadow-md:0 4px 16px rgba(0,0,0,0.07);
+        }
+        body { margin:0; padding:0; font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+        .sidebar { position:fixed; top:0; left:0; width:240px; height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:100; box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px; filter:brightness(0) invert(1); display:block; margin-bottom:16px; }
+        .sidebar-partner { display:flex; align-items:center; gap:10px; }
+        .sidebar-avatar { width:36px; height:36px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:white; flex-shrink:0; }
+        .sidebar-name { font-size:13px; font-weight:700; color:white; line-height:1.3; }
+        .sidebar-tag { font-size:10px; color:rgba(255,255,255,0.4); font-weight:500; }
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
+        .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); text-decoration:none; cursor:pointer; transition:all 0.2s; border:none; background:none; width:100%; font-family:'DM Sans',sans-serif; }
+        .nav-item:hover { background:rgba(255,255,255,0.08); color:white; }
+        .nav-item.active { background:var(--teal); color:white; }
+        .nav-item .material-icons { font-size:20px; flex-shrink:0; }
+        .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+        .main { margin-left:240px; min-height:100vh; }
+        .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:50; gap:12px; flex-wrap:wrap; }
+        .topbar-title { font-size:1.2rem; font-weight:800; color:var(--text); margin:0; }
+        .content { padding:24px 28px; }
+        .section-label { font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+
+        /* KPI GRID */
+        .kpi-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:24px; }
+        .kpi { background:white; border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:var(--shadow-sm); transition:box-shadow 0.2s; }
+        .kpi:hover { box-shadow:var(--shadow-md); }
+        .kpi.teal { background:linear-gradient(135deg,var(--teal),var(--teal-dark)); border-color:transparent; }
+        .kpi.navy { background:var(--navy); border-color:transparent; }
+        .kpi-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .kpi.teal .kpi-label, .kpi.navy .kpi-label { color:rgba(255,255,255,0.6); }
+        .kpi-value { font-size:1.8rem; font-weight:800; color:var(--text); line-height:1; letter-spacing:-0.5px; font-family:'DM Mono',monospace; }
+        .kpi.teal .kpi-value, .kpi.navy .kpi-value { color:white; }
+        .kpi-sub { font-size:11px; color:var(--muted); margin-top:6px; }
+        .kpi.teal .kpi-sub, .kpi.navy .kpi-sub { color:rgba(255,255,255,0.5); }
+
+        /* TREND CARDS */
+        .trend-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:24px; }
+        .trend-card { background:white; border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:var(--shadow-sm); display:flex; align-items:center; gap:16px; cursor:default; transition:box-shadow 0.2s; }
+        .trend-card:hover { box-shadow:var(--shadow-md); }
+        .trend-icon { width:52px; height:52px; border-radius:14px; display:flex; align-items:center; justify-content:center; font-size:24px; flex-shrink:0; }
+        .trend-icon.growth { background:var(--green-bg); color:var(--green-text); }
+        .trend-icon.stable { background:var(--blue-bg); color:var(--blue-text); }
+        .trend-icon.risk { background:var(--red-bg); color:var(--red-text); }
+        .trend-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:4px; }
+        .trend-value { font-size:2rem; font-weight:800; line-height:1; font-family:'DM Mono',monospace; }
+        .trend-value.growth { color:var(--green-text); }
+        .trend-value.stable { color:var(--blue-text); }
+        .trend-value.risk { color:var(--red-text); }
+        .trend-sub { font-size:11px; color:var(--muted); margin-top:4px; }
+
+        /* CHART */
+        .chart-card { background:white; border:1px solid var(--border); border-radius:16px; padding:24px; box-shadow:var(--shadow-sm); margin-bottom:24px; }
+        .chart-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+        .chart-title { font-size:14px; font-weight:800; color:var(--text); }
+        .chart-wrap { position:relative; height:220px; }
+
+        /* ENROLLMENTS */
+        .enroll-card { background:white; border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow-sm); overflow:hidden; margin-bottom:24px; }
+        .enroll-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+        .enroll-title { font-size:14px; font-weight:800; color:var(--text); }
+        .date-filter { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+        .date-input { padding:7px 12px; border:1px solid var(--border); border-radius:8px; font-size:12px; font-family:'DM Sans',sans-serif; color:var(--text); outline:none; transition:border-color 0.2s; }
+        .date-input:focus { border-color:var(--teal); }
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:8px 14px; border-radius:8px; font-size:12px; font-weight:700; font-family:'DM Sans',sans-serif; cursor:pointer; border:none; transition:all 0.2s; text-decoration:none; }
+        .btn-teal { background:var(--teal); color:white; }
         .btn-teal:hover { background:var(--teal-dark); }
-        .btn-outline { background:white;color:var(--secondary);border:1px solid var(--border); }
-        .btn-outline:hover { border-color:var(--teal);color:var(--teal); }
-        .card { background:white;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow-sm);overflow:hidden; }
-        table { width:100%;border-collapse:collapse;font-size:13px; }
-        thead th { background:#f8fafc;padding:10px 16px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;border-bottom:1px solid var(--border);white-space:nowrap; }
-        tbody tr { border-bottom:1px solid var(--border);transition:background 0.15s;cursor:pointer; }
+        .btn-outline { background:white; color:var(--secondary); border:1px solid var(--border); }
+        .btn-outline:hover { border-color:var(--teal); color:var(--teal); }
+        .btn-sm { padding:6px 10px; font-size:11px; }
+
+        /* TABLE */
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        thead th { background:#f8fafc; padding:10px 16px; text-align:left; font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
         tbody tr:last-child { border-bottom:none; }
         tbody tr:hover { background:var(--teal-bg); }
-        tbody td { padding:12px 16px;vertical-align:middle; }
-        .badge { display:inline-flex;align-items:center;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;white-space:nowrap; }
-        .badge.approved { background:var(--green-bg);color:var(--green); }
-        .badge.pending,.badge.enrollment { background:var(--amber-bg);color:var(--amber); }
-        .badge.closed,.badge.declined,.badge.withdrawn { background:#f1f5f9;color:#475569; }
-        .mono { font-family:'DM Mono',monospace;font-size:12px;font-weight:600; }
-        .pagination { display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-top:1px solid var(--border);background:#f8fafc;flex-wrap:wrap;gap:8px;font-size:12px;color:var(--muted); }
-        .empty { padding:60px;text-align:center;color:var(--muted); }
-        .empty .material-icons { font-size:48px;opacity:0.3;display:block;margin-bottom:12px; }
+        tbody td { padding:11px 16px; vertical-align:middle; }
+        .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; white-space:nowrap; }
+        .badge.approved { background:var(--green-bg); color:var(--green-text); }
+        .badge.pending { background:var(--amber-bg); color:var(--amber-text); }
+        .badge.closed,.badge.declined { background:#f1f5f9; color:#475569; }
+        .mono { font-family:'DM Mono',monospace; font-size:12px; font-weight:600; color:var(--teal); }
+        .empty { padding:40px; text-align:center; color:var(--muted); }
+        .empty .material-icons { font-size:40px; opacity:0.3; display:block; margin-bottom:8px; }
+
+        /* AGENT IDs */
+        .id-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:10px; margin-bottom:24px; }
+        .id-card { background:white; border:1px solid var(--border); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow-sm); }
+        .id-string { font-family:'DM Mono',monospace; font-size:16px; font-weight:700; color:var(--teal); }
+        .id-rev { font-size:11px; color:var(--muted); margin-top:3px; }
+        .prime-badge { display:inline-flex; align-items:center; gap:3px; background:#fef3c7; color:#92400e; padding:2px 8px; border-radius:99px; font-size:9px; font-weight:800; text-transform:uppercase; margin-top:4px; }
+
+        @media (max-width:900px) { .kpi-grid{grid-template-columns:repeat(2,1fr);} .trend-grid{grid-template-columns:1fr 1fr;} }
+        @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .kpi-grid{grid-template-columns:1fr 1fr;} .trend-grid{grid-template-columns:1fr;} }
         @keyframes spin { to { transform:rotate(360deg); } }
-        @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .toolbar{flex-direction:column;} }
+        @keyframes fadeInUp { from{opacity:0;transform:translateY(16px);} to{opacity:1;transform:translateY(0);} }
+        .pp-animate { animation:fadeInUp 0.4s ease both; }
     </style>
 </head>
 <body>
@@ -73,9 +131,9 @@
         </div>
     </div>
     <nav class="sidebar-nav">
-        <a class="nav-item" href='/partner/dashboard'><span class="material-icons">dashboard</span> Overview</a>
-        <a class="nav-item active" href='/partner/merchants'><span class="material-icons">storefront</span> My Merchants</a>
-        <a class="nav-item" href='/partner/messages'><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item active" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -84,28 +142,98 @@
 
 <div class="main">
     <div class="topbar">
-        <h1 class="topbar-title">My Merchants</h1>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-            <button class="btn btn-outline" onclick="exportCSV()"><span class="material-icons" style="font-size:16px;">download</span> Export CSV</button>
-            <button class="btn btn-teal" onclick="openRMARequest()"><span class="material-icons" style="font-size:16px;">assignment_return</span> Request RMA</button>
-        </div>
+        <h1 class="topbar-title" id="topbarGreeting">Dashboard</h1>
+        <button class="btn btn-teal" onclick="window.location.href='/partner/merchants'">
+            <span class="material-icons" style="font-size:16px;">storefront</span> View All Merchants
+        </button>
     </div>
+
     <div class="content">
-        <div class="toolbar">
-            <div class="search-wrap">
-                <span class="material-icons">search</span>
-                <input type="text" id="searchInput" placeholder="Search by merchant name..." oninput="debounceSearch()">
+
+        <!-- KPI CARDS -->
+        <div class="section-label"><span class="material-icons" style="font-size:14px;">analytics</span> Portfolio Overview</div>
+        <div class="kpi-grid pp-animate">
+            <div class="kpi teal">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">attach_money</span> MTD Volume</div>
+                <div class="kpi-value" id="kpiMTD">—</div>
+                <div class="kpi-sub">Month to date</div>
             </div>
-            <select id="statusFilter" onchange="loadMerchants()">
-                <option value="">All Statuses</option>
-                <option value="Approved">Approved</option>
-                <option value="Pending">Pending</option>
-                <option value="Declined">Declined</option>
-                <option value="Closed">Closed</option>
-                <option value="Withdrawn">Withdrawn</option>
-            </select>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">storefront</span> Approved Merchants</div>
+                <div class="kpi-value" id="kpiApproved" style="color:var(--teal);">—</div>
+                <div class="kpi-sub">Active accounts</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">pending</span> Pending</div>
+                <div class="kpi-value" id="kpiPending" style="color:var(--amber);">—</div>
+                <div class="kpi-sub">In review</div>
+            </div>
+            <div class="kpi navy">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">timeline</span> 90-Day Volume</div>
+                <div class="kpi-value" id="kpi90D">—</div>
+                <div class="kpi-sub">Last 3 months</div>
+            </div>
         </div>
-        <div class="card">
+
+        <!-- TREND CARDS -->
+        <div class="section-label"><span class="material-icons" style="font-size:14px;">trending_up</span> Merchant Health</div>
+        <div class="trend-grid pp-animate" style="animation-delay:0.1s;">
+            <div class="trend-card">
+                <div class="trend-icon growth"><span class="material-icons">trending_up</span></div>
+                <div>
+                    <div class="trend-label">On Growth</div>
+                    <div class="trend-value growth" id="trendGrowth">—</div>
+                    <div class="trend-sub">MTD above baseline</div>
+                </div>
+            </div>
+            <div class="trend-card">
+                <div class="trend-icon stable"><span class="material-icons">trending_flat</span></div>
+                <div>
+                    <div class="trend-label">Stable</div>
+                    <div class="trend-value stable" id="trendStable">—</div>
+                    <div class="trend-sub">Within normal range</div>
+                </div>
+            </div>
+            <div class="trend-card">
+                <div class="trend-icon risk"><span class="material-icons">trending_down</span></div>
+                <div>
+                    <div class="trend-label">At Risk</div>
+                    <div class="trend-value risk" id="trendRisk">—</div>
+                    <div class="trend-sub">MTD below baseline</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- VOLUME CHART -->
+        <div class="chart-card pp-animate" style="animation-delay:0.15s;">
+            <div class="chart-header">
+                <div class="chart-title">Portfolio Activity — Last 6 Months</div>
+                <div style="display:flex;gap:16px;font-size:11px;color:var(--muted);">
+                    <span style="display:flex;align-items:center;gap:5px;"><span style="width:10px;height:10px;border-radius:50%;background:var(--teal);display:inline-block;"></span> New Enrollments</span>
+                </div>
+            </div>
+            <div class="chart-wrap">
+                <canvas id="portfolioChart"></canvas>
+            </div>
+        </div>
+
+        <!-- NEW ENROLLMENTS -->
+        <div class="section-label"><span class="material-icons" style="font-size:14px;">person_add</span> New Enrollments</div>
+        <div class="enroll-card pp-animate" style="animation-delay:0.2s;">
+            <div class="enroll-header">
+                <div>
+                    <div class="enroll-title">Recently Enrolled Merchants</div>
+                    <div style="font-size:11px;color:var(--muted);margin-top:2px;"><span id="enrollCount">—</span> merchants enrolled in selected period</div>
+                </div>
+                <div class="date-filter">
+                    <span style="font-size:11px;font-weight:700;color:var(--muted);">FROM</span>
+                    <input type="date" id="dateFrom" class="date-input" onchange="loadEnrollments()">
+                    <span style="font-size:11px;font-weight:700;color:var(--muted);">TO</span>
+                    <input type="date" id="dateTo" class="date-input" onchange="loadEnrollments()">
+                    <button class="btn btn-outline btn-sm" onclick="setThisWeek()">This Week</button>
+                    <button class="btn btn-outline btn-sm" onclick="setThisMonth()">This Month</button>
+                </div>
+            </div>
             <table>
                 <thead>
                     <tr>
@@ -114,23 +242,21 @@
                         <th>Agent ID</th>
                         <th>Enrolled</th>
                         <th>Status</th>
-                        <th>MTD Volume</th>
                         <th>30D Volume</th>
-                        <th>Actions</th>
                     </tr>
                 </thead>
-                <tbody id="merchantsTable">
-                    <tr><td colspan="8"><div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>
+                <tbody id="enrollTable">
+                    <tr><td colspan="6"><div class="empty"><div style="animation:spin 1s linear infinite;width:18px;height:18px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>
                 </tbody>
             </table>
-            <div class="pagination" id="pagination">
-                <span id="pageInfo">Loading...</span>
-                <div style="display:flex;gap:8px;">
-                    <button class="btn btn-outline" id="btnPrev" onclick="changePage(-1)" style="padding:6px 12px;" disabled>← Prev</button>
-                    <button class="btn btn-outline" id="btnNext" onclick="changePage(1)" style="padding:6px 12px;" disabled>Next →</button>
-                </div>
-            </div>
         </div>
+
+        <!-- AGENT IDs -->
+        <div class="section-label"><span class="material-icons" style="font-size:14px;">badge</span> Your Agent IDs</div>
+        <div class="id-grid pp-animate" style="animation-delay:0.25s;" id="idGrid">
+            <div style="color:var(--muted);font-size:13px;padding:10px 0;">Loading...</div>
+        </div>
+
     </div>
 </div>
 
@@ -138,164 +264,176 @@
 const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
 
-let currentPage = 0;
-const limit = 25;
-let totalCount = 0;
-let searchTimeout = null;
+let portfolioChart = null;
 
+// ── DATE HELPERS ──────────────────────────────────────────
+function setThisWeek() {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(now.getDate() - now.getDay());
+    document.getElementById('dateFrom').value = start.toISOString().split('T')[0];
+    document.getElementById('dateTo').value = now.toISOString().split('T')[0];
+    loadEnrollments();
+}
+
+function setThisMonth() {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    document.getElementById('dateFrom').value = start.toISOString().split('T')[0];
+    document.getElementById('dateTo').value = now.toISOString().split('T')[0];
+    loadEnrollments();
+}
+
+function fmt(n) {
+    return '$' + parseFloat(n || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+// ── INIT ──────────────────────────────────────────────────
 async function init() {
-    const authRes = await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'validate', token }) });
-    const auth = await authRes.json();
-    if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
-    const initials = auth.partner.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
-    document.getElementById('sidebarAvatar').innerText = initials;
-    document.getElementById('sidebarName').innerText = auth.partner.name;
-    loadMerchants();
+    try {
+        const authRes = await fetch('/api/partner-auth', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'validate', token })
+        });
+        const auth = await authRes.json();
+        if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
+
+        const { partner, identifiers } = auth;
+        localStorage.setItem('pp_partner_name', partner.name);
+        localStorage.setItem('pp_partner_id', partner.id);
+
+        const initials = partner.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+        document.getElementById('sidebarAvatar').innerText = initials;
+        document.getElementById('sidebarName').innerText = partner.name;
+        document.getElementById('topbarGreeting').innerText = `Welcome back, ${partner.name.split(' ')[0]} 👋`;
+
+        // Render agent IDs
+        const idGrid = document.getElementById('idGrid');
+        if (!identifiers.length) {
+            idGrid.innerHTML = '<div style="color:var(--muted);font-size:13px;">No agent IDs assigned yet.</div>';
+        } else {
+            idGrid.innerHTML = identifiers.map(id => `
+                <div class="id-card">
+                    <div class="id-string">${id.id_string}</div>
+                    ${id.rev_share ? `<div class="id-rev">Rev Share: <b>${id.rev_share}</b></div>` : ''}
+                    ${id.prime49 ? '<div class="prime-badge"><span class="material-icons" style="font-size:10px;">star</span> Prime49</div>' : ''}
+                </div>
+            `).join('');
+        }
+
+        // Set default date range to this week
+        setThisWeek();
+
+        // Load all data in parallel
+        const [overviewRes, trendsRes] = await Promise.all([
+            fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_overview', token }) }),
+            fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_trends', token }) })
+        ]);
+
+        const [overview, trends] = await Promise.all([overviewRes.json(), trendsRes.json()]);
+
+        // ── KPIs ──
+        if (overview.success) {
+            const d = overview.data;
+            document.getElementById('kpiMTD').innerText = fmt(d.mtd);
+            document.getElementById('kpiApproved').innerText = (d.approved || 0).toLocaleString();
+            document.getElementById('kpiPending').innerText = (d.pending || 0).toLocaleString();
+            document.getElementById('kpi90D').innerText = fmt(d.vol90);
+        }
+
+        // ── TRENDS ──
+        if (trends.success) {
+            const t = trends.data;
+            document.getElementById('trendGrowth').innerText = t.growth.toLocaleString();
+            document.getElementById('trendStable').innerText = t.stable.toLocaleString();
+            document.getElementById('trendRisk').innerText = t.at_risk.toLocaleString();
+
+            // ── CHART ──
+            const ctx = document.getElementById('portfolioChart').getContext('2d');
+            if (portfolioChart) portfolioChart.destroy();
+            portfolioChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: t.chart.map(c => c.month),
+                    datasets: [{
+                        label: 'New Enrollments',
+                        data: t.chart.map(c => c.enrolled),
+                        backgroundColor: 'rgba(13, 148, 136, 0.15)',
+                        borderColor: '#0d9488',
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: ctx => ` ${ctx.parsed.y} new merchants`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 11 }, color: '#94a3b8' } },
+                        y: { grid: { color: '#f1f5f9' }, ticks: { font: { family: 'DM Sans', size: 11 }, color: '#94a3b8', stepSize: 1 }, beginAtZero: true }
+                    }
+                }
+            });
+        }
+
+    } catch (err) {
+        console.error('Dashboard init error:', err);
+    }
 }
 
-function debounceSearch() {
-    clearTimeout(searchTimeout);
-    searchTimeout = setTimeout(() => { currentPage = 0; loadMerchants(); }, 350);
-}
+// ── ENROLLMENTS ───────────────────────────────────────────
+async function loadEnrollments() {
+    const from = document.getElementById('dateFrom').value;
+    const to = document.getElementById('dateTo').value;
+    const tbody = document.getElementById('enrollTable');
+    tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><div style="animation:spin 1s linear infinite;width:18px;height:18px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>`;
 
-async function loadMerchants() {
-    const search = document.getElementById('searchInput').value;
-    const status = document.getElementById('statusFilter').value;
-    const tbody = document.getElementById('merchantsTable');
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>`;
+    try {
+        const res = await fetch('/api/partner-data', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                action: 'get_new_enrollments', token,
+                start_date: from ? new Date(from).toISOString() : undefined,
+                end_date: to ? new Date(to + 'T23:59:59').toISOString() : undefined
+            })
+        });
+        const data = await res.json();
+        document.getElementById('enrollCount').innerText = (data.count || 0).toLocaleString();
 
-    const res = await fetch('/api/partner-data', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'get_merchants', token, page:currentPage, limit, search, status_filter:status })
-    });
-    const data = await res.json();
-    if (!data.success) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><span class="material-icons">error</span><p>Failed to load merchants</p></div></td></tr>`; return; }
-    totalCount = data.count;
-    if (!data.data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><span class="material-icons">storefront</span><p>No merchants found</p></div></td></tr>`; }
-    else {
+        if (!data.success || !data.data.length) {
+            tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><span class="material-icons">person_add</span><p>No enrollments in this period</p></div></td></tr>`;
+            return;
+        }
+
         tbody.innerHTML = data.data.map(m => {
-            const st = (m.account_status||'').toLowerCase().replace(/[\s-]+/g,'-');
-            return `<tr onclick="openMerchantDetail('${m.id}', '${m.dba_name.replace(/'/g,"\\'")}')">
+            const st = (m.account_status || '').toLowerCase().replace(/[\s-]+/g, '-');
+            const enrolled = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : '—';
+            return `<tr>
                 <td style="font-weight:700;">${m.dba_name}</td>
-                <td class="mono" style="color:var(--teal);">${m.merchant_id}</td>
-                <td class="mono">${m.agent_id||'—'}</td>
-                <td style="font-size:12px;color:var(--muted);">${m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : '—'}</td>
-                <td><span class="badge ${st}">${m.account_status||'—'}</span></td>
-                <td class="mono">$${parseFloat(m.volume_mtd||0).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
-                <td class="mono">$${parseFloat(m.volume_30_day||0).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
-                <td onclick="event.stopPropagation()">
-                    <div style="display:flex;gap:4px;">
-                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openMerchantDetail('${m.id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">open_in_new</span></button>
-                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openRMARequest('${m.merchant_id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">assignment_return</span></button>
-                    </div>
-                </td>
+                <td class="mono">${m.merchant_id}</td>
+                <td class="mono" style="color:var(--secondary);">${m.agent_id || '—'}</td>
+                <td style="font-size:12px;color:var(--muted);">${enrolled}</td>
+                <td><span class="badge ${st}">${m.account_status || '—'}</span></td>
+                <td style="font-family:'DM Mono',monospace;font-weight:600;">$${parseFloat(m.volume_30_day || 0).toLocaleString(undefined, {minimumFractionDigits:2})}</td>
             </tr>`;
         }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6"><div class="empty"><span class="material-icons">error_outline</span><p>Failed to load enrollments</p></div></td></tr>`;
     }
-    const from = currentPage * limit + 1;
-    const to = Math.min((currentPage + 1) * limit, totalCount);
-    document.getElementById('pageInfo').innerText = `${from}–${to} of ${totalCount.toLocaleString()} merchants`;
-    document.getElementById('btnPrev').disabled = currentPage === 0;
-    document.getElementById('btnNext').disabled = to >= totalCount;
-}
-
-function changePage(dir) { currentPage += dir; loadMerchants(); }
-
-async function openMerchantDetail(merchantId, name) {
-    Swal.fire({ title: name, html: '<div style="text-align:center;padding:20px;color:#94a3b8;">Loading merchant details...</div>', showConfirmButton: false, showCloseButton: true, width: 700 });
-    const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'get_merchant_detail', token, merchant_uuid:merchantId }) });
-    const data = await res.json();
-    if (!data.success) { Swal.update({ html: '<p style="color:#ef4444;">Failed to load details.</p>' }); return; }
-    const { merchant: m, equipment, notes, rmas } = data.data;
-    Swal.update({ html: `
-        <div style="text-align:left;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #e2e8f0;">
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Merchant ID</div><div style="font-family:'DM Mono',monospace;font-weight:700;color:#0d9488;">${m.merchant_id}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Status</div><div style="font-weight:700;">${m.account_status}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Email</div><div style="font-size:12px;">${m.email||'—'}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Phone</div><div style="font-size:12px;">${m.merchant_phone||'—'}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">MTD Volume</div><div style="font-family:'DM Mono',monospace;font-weight:700;">$${parseFloat(m.volume_mtd||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">30D Volume</div><div style="font-family:'DM Mono',monospace;font-weight:700;">$${parseFloat(m.volume_30_day||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
-            </div>
-            <div style="margin-bottom:14px;">
-                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Equipment (${equipment.length})</div>
-                ${equipment.length ? equipment.map(e=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;"><span style="font-weight:700;">${e.terminal_type}</span><span style="font-family:'DM Mono',monospace;color:#0d9488;">${e.serial_number}</span><span style="color:#94a3b8;">${e.status}</span></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No equipment</div>'}
-            </div>
-            <div style="margin-bottom:14px;">
-                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Recent RMAs (${rmas.length})</div>
-                ${rmas.length ? rmas.slice(0,3).map(r=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:700;color:#0d9488;">${r.return_id||'—'}</span><span>${r.return_reason||'—'}</span><span style="background:${r.status==='Open'?'#e0f2fe':'#f1f5f9'};color:${r.status==='Open'?'#0369a1':'#475569'};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">${r.status}</span></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No RMAs</div>'}
-            </div>
-            <div>
-                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Notes (${notes.length})</div>
-                ${notes.length ? notes.slice(0,3).map(n=>`<div style="border-left:3px solid #0d9488;padding:8px 12px;margin-bottom:6px;background:#f0fdfa;border-radius:0 8px 8px 0;"><div style="font-weight:700;font-size:12px;">${n.title}</div><div style="font-size:11px;color:#475569;margin-top:4px;">${n.body}</div></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No notes</div>'}
-            </div>
-            <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
-                <button onclick="addNote('${merchantId}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">note_add</span>Add Note</button>
-                <button onclick="openRMARequest('${m.merchant_id}','${m.dba_name}')" style="background:#f1f5f9;color:#475569;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">assignment_return</span>Request RMA</button>
-            </div>
-        </div>
-    ` });
-}
-
-window.addNote = async function(merchantId) {
-    const { value: formValues } = await Swal.fire({ title: 'Add Note', html: `<input id="noteTitle" class="swal2-input" placeholder="Title"><textarea id="noteBody" class="swal2-textarea" placeholder="Note content..."></textarea>`, focusConfirm: false, showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'Add Note', preConfirm: () => ({ title: document.getElementById('noteTitle').value, body: document.getElementById('noteBody').value }) });
-    if (formValues?.body) {
-        await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'add_note', token, merchant_uuid:merchantId, title:formValues.title, body:formValues.body }) });
-        Swal.fire({ icon:'success', title:'Note added!', timer:1500, showConfirmButton:false });
-    }
-};
-
-window.openRMARequest = async function(merchantId='', merchantName='') {
-    const { value: form } = await Swal.fire({
-        title: 'Request RMA', showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'Submit Request',
-        html: `
-            <div style="text-align:left;font-size:13px;">
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Merchant ID</label>
-                <input id="rmaMID" class="swal2-input" value="${merchantId}" placeholder="Merchant ID" style="margin:0 0 12px;">
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment Serial #</label>
-                <input id="rmaSerial" class="swal2-input" placeholder="Serial number (optional)" style="margin:0 0 12px;">
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Reason *</label>
-                <select id="rmaReason" class="swal2-input" style="margin:0 0 12px;">
-                    <option value="">Select reason...</option>
-                    <option>Merchant Cancellation</option>
-                    <option>Equipment Malfunction</option>
-                    <option>Equipment Type Swap</option>
-                    <option>Switched to Desktop</option>
-                    <option>Other</option>
-                </select>
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Additional Notes</label>
-                <textarea id="rmaNotes" class="swal2-textarea" placeholder="Any additional details..." style="margin:0;"></textarea>
-            </div>`,
-        preConfirm: () => {
-            const reason = document.getElementById('rmaReason').value;
-            if (!reason) { Swal.showValidationMessage('Please select a reason'); return false; }
-            return { merchant_id: document.getElementById('rmaMID').value, equipment_serial: document.getElementById('rmaSerial').value, reason, notes: document.getElementById('rmaNotes').value };
-        }
-    });
-    if (form) {
-        const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'request_rma', token, ...form }) });
-        const result = await res.json();
-        if (result.success) Swal.fire({ icon:'success', title:'RMA Requested!', text:'Our team will review and follow up shortly.', confirmButtonColor:'#0d9488' });
-        else Swal.fire({ icon:'error', title:'Failed', text:result.message, confirmButtonColor:'#0d9488' });
-    }
-};
-
-async function exportCSV() {
-    Swal.fire({ title:'Exporting...', didOpen:()=>Swal.showLoading() });
-    const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'export_csv', token }) });
-    const data = await res.json();
-    if (!data.success || !data.data.length) { Swal.fire('No Data','Nothing to export.','info'); return; }
-    const headers = ['Merchant ID','DBA Name','Status','Agent ID','Enrolled','MTD Volume','30D Volume','90D Volume','Email','Phone'];
-    const rows = data.data.map(m => [m.merchant_id,`"${(m.dba_name||'').replace(/"/g,'""')}"`,m.account_status,m.agent_id,m.enrollment_date?new Date(m.enrollment_date).toLocaleDateString():'',m.volume_mtd||0,m.volume_30_day||0,m.volume_90_day||0,m.email||'',m.merchant_phone||'']);
-    const csv = [headers.join(','),...rows.map(r=>r.join(','))].join('\n');
-    const blob = new Blob([csv],{type:'text/csv'});
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download=`merchants_${new Date().toISOString().slice(0,10)}.csv`; a.click();
-    Swal.fire({ icon:'success', title:'Exported!', text:`${data.data.length} merchants downloaded.`, timer:1500, showConfirmButton:false });
 }
 
 async function handleLogout() {
-    await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'logout', token }) });
-    localStorage.clear(); window.location.href = '/partner';
+    await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'logout', token }) });
+    localStorage.clear();
+    window.location.href = '/partner';
 }
 
 window.onload = init;
