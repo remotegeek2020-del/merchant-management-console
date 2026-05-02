@@ -90,17 +90,32 @@ export default async function handler(req, res) {
             await supabase.from('persons').update({ portal_invite_token: inviteToken, invite_expires_at: expires.toISOString(), is_portal_active: true }).eq('id', person_id);
             const inviteUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner/setup.html?token=${inviteToken}`;
             console.log(`[PARTNER INVITE] ${person.full_name} <${person.email}> -> ${inviteUrl}`);
-            if (process.env.RESEND_API_KEY) {
-                await fetch('https://api.resend.com/emails', {
-                    method: 'POST',
-                    headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        from: 'PayProTec Partner Portal <noreply@mypayprotec.com>',
-                        to: person.email,
-                        subject: "You've been invited to the PayProTec Partner Portal",
-                        html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;"><img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;"><h2 style="color:#001e3c;">Welcome to your Partner Portal</h2><p style="color:#475569;line-height:1.6;">Hi ${person.full_name}, you've been invited to access the PayProTec Partner Portal — your dedicated dashboard for tracking your merchant portfolio.</p><a href="${inviteUrl}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:14px;">Set Up My Account</a><p style="color:#94a3b8;font-size:12px;">This link expires in 72 hours.</p></div>`
-                    })
-                });
+            // Send via Postmark
+            if (process.env.POSTMARK_SERVER_TOKEN) {
+                try {
+                    const { ServerClient } = await import('postmark');
+                    const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                    await client.sendEmail({
+                        From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                        To: person.email,
+                        Subject: "You've been invited to the PayProTec Partner Portal",
+                        HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
+                            <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;">
+                            <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">Welcome to your Partner Portal</h2>
+                            <p style="color:#475569;line-height:1.6;margin-bottom:24px;">Hi <strong>${person.full_name}</strong>, you've been invited to access the PayProTec Partner Portal — your dedicated dashboard for tracking your merchant portfolio, volumes, and more.</p>
+                            <div style="text-align:center;margin:28px 0;">
+                                <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Set Up My Account →</a>
+                            </div>
+                            <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This link expires in 72 hours. If you didn't expect this, you can safely ignore it.</p>
+                            <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
+                            <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Portal · Secure Access</p>
+                        </div>`,
+                        TextBody: `Hi ${person.full_name}, you've been invited to the PayProTec Partner Portal. Set up your account: ${inviteUrl}`,
+                        MessageStream: 'outbound'
+                    });
+                } catch(emailErr) {
+                    console.error('[PARTNER INVITE] Email failed:', emailErr.message);
+                }
             }
             return res.status(200).json({ success: true, invite_url: inviteUrl });
         }
@@ -125,8 +140,19 @@ export default async function handler(req, res) {
                 await supabase.from('persons').update({ portal_invite_token: resetToken, invite_expires_at: new Date(Date.now() + 3600000).toISOString() }).eq('id', person.id);
                 const resetUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner/setup.html?token=${resetToken}&mode=reset`;
                 console.log(`[PASSWORD RESET] ${person.email} -> ${resetUrl}`);
-                if (process.env.RESEND_API_KEY) {
-                    await fetch('https://api.resend.com/emails', { method: 'POST', headers: { 'Authorization': `Bearer ${process.env.RESEND_API_KEY}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: 'PayProTec Partner Portal <noreply@mypayprotec.com>', to: person.email, subject: 'Reset your Partner Portal password', html: `<div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;"><h2 style="color:#001e3c;">Password Reset</h2><p style="color:#475569;">Hi ${person.full_name}, click below to reset your password. This link expires in 1 hour.</p><a href="${resetUrl}" style="display:inline-block;margin:24px 0;padding:14px 28px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;">Reset Password</a></div>` }) });
+                if (process.env.POSTMARK_SERVER_TOKEN) {
+                    try {
+                        const { ServerClient } = await import('postmark');
+                        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                        await client.sendEmail({
+                            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                            To: person.email,
+                            Subject: 'Reset your PayProTec Partner Portal password',
+                            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;"><img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;"><h2 style="color:#001e3c;">Password Reset Request</h2><p style="color:#475569;line-height:1.6;">Hi <strong>${person.full_name}</strong>, click the button below to reset your password. This link expires in 1 hour.</p><div style="text-align:center;margin:28px 0;"><a href="${resetUrl}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;">Reset My Password →</a></div><p style="color:#94a3b8;font-size:12px;">If you didn't request this, you can safely ignore it.</p></div>`,
+                            TextBody: `Hi ${person.full_name}, reset your password: ${resetUrl}`,
+                            MessageStream: 'outbound'
+                        });
+                    } catch(emailErr) { console.error('[RESET EMAIL] Failed:', emailErr.message); }
                 }
             }
             return res.status(200).json({ success: true });
