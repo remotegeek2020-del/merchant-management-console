@@ -1024,7 +1024,7 @@ async function submitOnboarding() {
                     <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
                     <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span><button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
                 </div>
-                ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
+                ${(id.sub_ids && id.sub_ids.length > 0) ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
             </div>`;
     }
 
@@ -1137,6 +1137,7 @@ async function submitOnboarding() {
     const paginatedData = data.slice(start, end);
 
     grid.innerHTML = paginatedData.map(p => {
+        try {
         // --- INJECTED TREND CALCULATION FOR FILTERING ---
         let pCurrent = 0;
         let pBaseline = 0;
@@ -1175,7 +1176,7 @@ async function submitOnboarding() {
                 ${p.companies.map(co => `
                     <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
                         <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                        <div style="margin-top:5px;">${(co.ids||[]).map(id => { try { return renderBadge(id, true); } catch(e) { return ''; } }).join('')}</div>
                     </div>
                 `).join('')}
                 <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
