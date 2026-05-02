@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <title>Partner Network | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
-        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
+        body { background: #f1f5f9; padding: 25px; font-family: 'DM Sans', sans-serif; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
@@ -245,7 +245,18 @@ input[type=number] {
     </div>
 </div>
    <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
-    
+    <button onclick="filterByTrend('growth')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f0fdf4; color: #166534;">
+        <span class="material-icons" style="font-size: 16px;">trending_up</span> GROWTH
+    </button>
+    <button onclick="filterByTrend('stable')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f8fafc; color: #475569;">
+        <span class="material-icons" style="font-size: 16px;">trending_flat</span> STABLE
+    </button>
+    <button onclick="filterByTrend('risk')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #fef2f2; color: #991b1b;">
+        <span class="material-icons" style="font-size: 16px;">trending_down</span> AT RISK
+    </button>
+    <button onclick="filterByTrend('all')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: white; color: var(--pp-blue);">
+        CLEAR FILTER
+    </button>
 </div>
     <div id="partnerGrid" class="partner-grid"></div>
    <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
@@ -282,34 +293,13 @@ input[type=number] {
     <label class="search-label">Company / Firm Association</label>
     <div style="margin-bottom:14px;">
         <label class="search-label">Partner Activation Date</label>
-        <input type="date" id="partnerActivationDate" class="wizard-input" 
-               style="font-family:'DM Sans',sans-serif;">
+        <input type="date" id="partnerActivationDate" class="wizard-input" style="font-family:'DM Sans',sans-serif;">
         <div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div>
     </div>
-    <!-- Company Search -->
-    <div style="position:relative;">
-        <input type="text" id="companySearchInput" class="wizard-input" placeholder="🔍 Search company name..." 
-               oninput="searchCompanies(this.value)" autocomplete="off"
-               style="padding-right:36px;">
-        <div id="companyResults" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #e2e8f0;border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;z-index:200;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
-        </div>
-    </div>
-    <input type="hidden" id="companySelect" value="">
-    <div id="companySelectedDisplay" style="display:none;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:12px;color:#004990;font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
-        <span id="companySelectedName"></span>
-        <span onclick="clearCompanySelection()" style="cursor:pointer;color:#64748b;">✕</span>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:8px;">
-        <button type="button" onclick="selectNewCompany()" class="wizard-input" style="flex:1;cursor:pointer;background:#f8fafc;border-style:dashed;color:#475569;font-size:12px;font-weight:600;padding:9px;">
-            + Create New Company
-        </button>
-        <button type="button" onclick="selectIndependent()" class="wizard-input" style="flex:1;cursor:pointer;background:#f8fafc;border-style:dashed;color:#475569;font-size:12px;font-weight:600;padding:9px;">
-            👤 Independent Partner
-        </button>
-    </div>
-    <div id="newCompanyWrap" style="display:none;margin-top:8px;">
-        <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter new company name...">
-    </div>
+    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
+        <option value="none">Independent (Individual Partner)</option>
+        <option value="new">+ Create New Company...</option>
+        </select>
     
     <div id="newCompanyFields" style="margin-top: 10px; display: none;">
         <label class="search-label">New Company Name</label>
@@ -331,20 +321,14 @@ input[type=number] {
             <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
         </div>
         
-        <div style="display: flex; gap: 8px; align-items: center; flex-wrap:wrap;">
+        <div style="display: flex; gap: 8px; align-items: center;">
             <input type="number" id="idRevInput" class="wizard-input" 
-               placeholder="Rev Share (e.g. 50)" style="flex: 1; min-width:120px;"
+               placeholder="Rev Share (Number only)" style="flex: 1;"
                inputmode="numeric">
-            <select id="idParentSelect" class="wizard-input" style="flex:1;min-width:140px;" title="Parent ID (for sub-tier IDs)">
-                <option value="">No Parent (Main ID)</option>
-            </select>
             <label style="display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #64748b; white-space: nowrap;">
                 <input type="checkbox" id="idPrimeInput"> PRIME ⭐
             </label>
             <button onclick="addIdToList()" class="pagination-btn" style="background: var(--pp-blue); color: white; padding: 0 15px; height: 40px;">ADD</button>
-        </div>
-        <div style="font-size:10px;color:#94a3b8;margin-top:4px;">
-            💡 If this ID is a sub-tier of another ID (e.g. Agent B's sub-ID under Agent A's 00000), select the parent ID above.
         </div>
     </div>
 
@@ -366,6 +350,7 @@ input[type=number] {
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [];
+    let statsRaw = []; // ✅ Global stats for trend calculation
     let currentPage = 1;
     const cardsPerPage = 12; 
     let searchTimeout = null;
@@ -424,111 +409,84 @@ async function logAuditAction(action, details) {
     }
 
     function processPartnerData(payload) {
-    if (!payload) return [];
-    const persons = payload.persons || [];
-    const agents = payload.agents || [];
-    const identifiers = payload.identifiers || [];
-    const companies = payload.companies || [];
-
-    const companyMap = {};
-    companies.forEach(c => { companyMap[c.id] = c.company_name; });
-
-    // Build idMap for all identifiers
+    if (!payload || !payload.persons) return [];
+    const { persons, agents, identifiers, companies, stats } = payload; // stats should be passed here if available
     const idMap = {};
+    
+    // ... (Keep your existing idMap and parent/child logic at the start) ...
     identifiers.forEach(id => {
-        idMap[id.id] = {
-            db_id: id.id,
-            string: id.id_string,
-            rev: id.rev_share ? String(id.rev_share).replace('%','') + '%' : '0%',
-            isPrime: !!id.prime49,
-            sub_ids: [],
-            agent_id: id.agent_id,
-            parent_config_id: id.parent_config_id || null,
-            upline_name: null,
-            upline_string: null
+        const myAgent = agents.find(a => a.id === id.agent_id);
+        const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
+        idMap[id.id] = { 
+            db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
+            isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
+            owner_name: myPerson ? myPerson.full_name : 'Unknown',
+            parent_config_id: id.parent_config_id,
+            upline_name: null, upline_string: null
         };
     });
 
-    // Wire up parent-child relationships
-    identifiers.forEach(id => {
-        if (id.parent_config_id && idMap[id.parent_config_id] && idMap[id.id]) {
-            idMap[id.parent_config_id].sub_ids.push(idMap[id.id]);
-            idMap[id.id].upline_string = idMap[id.parent_config_id].string;
-        }
-    });
-
-    const result = [];
-
-    persons.forEach(person => {
-        const myAgents = agents.filter(a => a.parent_agent_id === person.id);
-        if (!myAgents.length) return; // no agents = skip
-
-        const companiesOut = [];
-
-        myAgents.forEach(agent => {
-            const myIds = identifiers.filter(i => i.agent_id === agent.id);
-            if (!myIds.length) return; // no IDs for this agent = skip agent, not partner
-
-            const coName = companyMap[agent.company_id] || 'Independent';
-            const idObjects = myIds.map(i => idMap[i.id]).filter(Boolean);
-
-            if (idObjects.length > 0) {
-                companiesOut.push({ name: coName, ids: idObjects });
+        identifiers.forEach(id => {
+            const current = idMap[id.id];
+            if (id.parent_config_id && idMap[id.parent_config_id]) {
+                const parentIdRecord = idMap[id.parent_config_id];
+                parentIdRecord.sub_ids.push(current);
+                current.upline_name = parentIdRecord.owner_name;
+                current.upline_string = parentIdRecord.string;
             }
         });
 
-        if (!companiesOut.length) return; // all agents had no IDs = skip partner
+       return persons.map(person => {
+        const myAgents = agents.filter(a => a.parent_agent_id === person.id);
+        if (myAgents.length === 0) return null;
+        
+        let totalCurrent = 0;
+        let totalBaseline = 0;
+        const groups = {};
 
-        result.push({
-            id: person.id,
-            name: person.full_name || 'Unknown',
-            email: person.email || '',
-            phone: person.phone_number || '',
-            hl_id: person.hl_contact_id || null,
+        myAgents.forEach(agent => {
+            const co = companies.find(c => c.id === agent.company_id);
+            const coName = co ? co.company_name : "Independent";
+            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
+            
+            if (myIds.length > 0) {
+                if (!groups[coName]) groups[coName] = [];
+                myIds.forEach(id => {
+                    groups[coName].push(idMap[id.id]);
+                    
+                    // --- TREND CALCULATION LOGIC ---
+                    // Look for stats in the payload to calculate the partner's global trend
+                    const s = (payload.stats || []).find(row => String(row.agent_id) === String(id.id_string));
+                    if (s) {
+                        totalCurrent += parseFloat(s.total_volume_sum || 0);
+                        totalBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                    }
+                });
+            }
+        });
+
+        const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
+        
+        // Assign the Trend String
+        let trend = 'stable';
+        if (totalBaseline > 0) {
+            const diff = ((totalCurrent - totalBaseline) / totalBaseline) * 100;
+            if (diff > 5) trend = 'growth';
+            else if (diff < -5) trend = 'risk';
+        }
+
+        return formatted.length > 0 ? { 
+            id: person.id, name: person.full_name,
+            email: person.email || 'No email provided',
+            phone: person.phone_number || 'No phone provided',
+            hl_id: person.hl_contact_id,
             enrolled_at: person.enrolled_at || null,
             portal_active: person.is_portal_active || false,
             portal_setup: person.portal_password_set || false,
-            last_portal_login: person.last_portal_login || null,
-            companies: companiesOut,
-            statusTrend: 'stable'
-        });
-    });
-
-    console.log('[Partners] processPartnerData built', result.length, 'partners from', persons.length, 'persons');
-    return result;
-}
-
-
-async function loadAllStats() {
-    // Non-blocking background stats load for trend filters
-    // Use setTimeout to ensure it doesn't block rendering
-    setTimeout(async () => {
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 15000); // 15s timeout
-            
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_all_stats' }),
-                signal: controller.signal
-            });
-            clearTimeout(timeout);
-            
-            const result = await res.json();
-            if (result.success && result.data && result.data.length) {
-                const statsMap = {};
-                result.data.forEach(s => { statsMap[s.agent_id] = s; });
-                identifiersRaw = identifiersRaw.map(id => {
-                    const stats = statsMap[id.id_string];
-                    return stats ? { ...id, ...stats } : id;
-                });
-                console.log('[Partners] Stats merged —', identifiersRaw.length, 'identifiers ready for trend filtering');
-            }
-        } catch(err) {
-            if (err.name !== 'AbortError') console.warn('[Partners] Stats load skipped:', err.message);
-        }
-    }, 100);
+            companies: formatted,
+            statusTrend: trend
+        } : null;
+    }).filter(Boolean);
 }
 
 window.filterByTrend = function(trend) {
@@ -543,7 +501,7 @@ window.filterByTrend = function(trend) {
         // Sum up every ID this partner owns to get the "Big Picture"
         p.companies.forEach(co => {
             co.ids.forEach(idObj => {
-                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                const s = statsRaw.find(raw => String(raw.agent_id).trim() === String(idObj.string).trim());
                 if (s) {
                     pCurrent += parseFloat(s.total_volume_sum || 0);
                     pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
@@ -646,18 +604,18 @@ window.filterByTrend = function(trend) {
     }
 
     async function loadWizardCompanies() {
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_companies' })
-            });
-            const result = await res.json();
-            if (result.success) {
-                allCompaniesRaw = (result.data || []).sort((a,b) => a.company_name.localeCompare(b.company_name));
-                console.log('[Partners] Loaded', allCompaniesRaw.length, 'companies');
-            }
-        } catch(err) { console.error('Company load error:', err); }
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_partners_list' })
+        });
+        const result = await res.json();
+        const select = document.getElementById('companySelect');
+        select.innerHTML = `
+            <option value="none">Independent (Individual Partner)</option>
+            <option value="new">+ Create New Company</option>
+        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
+        toggleCompanyInput();
     }
 
     // ==========================================
@@ -867,34 +825,21 @@ window.exportTrendToCSV = function(agentId, data) {
 
     function renderIdList() {
         const container = document.getElementById('addedIdsList');
-        if (!pendingIds.length) {
-            container.innerHTML = '<div style="color:#94a3b8;font-size:11px;text-align:center;padding:30px;">No IDs added yet</div>';
+        if (!container) return;
+        if (pendingIds.length === 0) {
+            container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
             return;
         }
-        // Separate main IDs and sub-IDs
-        const mainIds = pendingIds.filter(id => !id.parent_config_id);
-        const subIds = pendingIds.filter(id => id.parent_config_id);
-        
-        container.innerHTML = pendingIds.map((id, idx) => {
-            const isChild = !!id.parent_config_id;
-            const parentStr = id.parent_config_id ? pendingIds.find(p => p.string === id.parent_config_id)?.string || id.parent_config_id : null;
-            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${isChild?'#f0f7ff':'#f8fafc'};border-radius:8px;border:1px solid ${isChild?'#bfdbfe':'#e2e8f0'};${isChild?'margin-left:20px;border-left:3px solid #004990;':''}" data-idx="${idx}">
-                <div style="display:flex;align-items:center;gap:8px;">
-                    ${isChild ? '<span class="material-icons" style="font-size:14px;color:#94a3b8;">subdirectory_arrow_right</span>' : '<span class="material-icons" style="font-size:14px;color:#004990;">badge</span>'}
-                    <div>
-                        <div style="font-weight:800;font-size:13px;font-family:'DM Mono',monospace;color:#004990;">${id.string}</div>
-                        <div style="font-size:10px;color:#94a3b8;">
-                            ${isChild ? `Sub-tier of <b>${parentStr}</b> · ` : 'Main ID · '}
-                            Rev: ${id.rev || '—'}%
-                            ${id.prime ? ' · <span style="color:#d97706;font-weight:800;">⭐ PRIME</span>' : ''}
-                        </div>
-                    </div>
+        container.innerHTML = pendingIds.map((item, index) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:5px;">
+                <div style="font-size:12px;">
+                    <b style="color:var(--pp-blue);">${item.string}</b> 
+                    ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
+                    <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
                 </div>
-                <button onclick="removeId(${idx})" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px;" title="Remove">
-                    <span class="material-icons" style="font-size:16px;">close</span>
-                </button>
-            </div>`;
-        }).join('');
+                <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
+            </div>
+        `).join('');
     }
 
     // ==========================================
@@ -924,8 +869,8 @@ async function submitOnboarding() {
             return Swal.fire('Error', 'Please complete Step 1 (HighLevel Lookup) first.', 'error');
         }
 
-        const companyVal = document.getElementById('companySelect').value || 'none';
-        const activationDate = document.getElementById('partnerActivationDate')?.value;
+        const companyVal = document.getElementById('companySelect').value;
+        const activationDate = document.getElementById('partnerActivationDate') ? document.getElementById('partnerActivationDate').value : '';
         payload.person = {
             name: selectedGHLContact.name,
             email: selectedGHLContact.email,
@@ -933,7 +878,6 @@ async function submitOnboarding() {
             hl_id: selectedGHLContact.id,
             enrolled_at: activationDate ? new Date(activationDate).toISOString() : new Date().toISOString()
         };
-        payload.enrolled_by = localStorage.getItem('pp_userid');
         payload.company = {
             id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
             name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
@@ -1024,7 +968,7 @@ async function submitOnboarding() {
                     <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
                     <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span><button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
                 </div>
-                ${(id.sub_ids && id.sub_ids.length > 0) ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
+                ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
             </div>`;
     }
 
@@ -1069,61 +1013,10 @@ async function submitOnboarding() {
     // 7. GRID, PAGINATION & EXPORT FUNCTIONS
     // ==========================================
 
-    async function loadPartners() {
-        const loader = document.getElementById('loadingOverlay');
-        if (loader) loader.style.display = 'flex';
-
-        document.getElementById('partnerSearchInput').value = '';
-        
-        try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_partners_list' })
-            });
-            const result = await res.json();
-            if (result.success) {
-                if (result.partners) {
-                    // New server-assembled format
-                    allPartners = result.partners;
-                } else if (result.data && result.data.persons) {
-                    // Old format fallback - assemble client-side
-                    identifiersRaw = result.data.identifiers || [];
-                    agentsRaw = result.data.agents || [];
-                    personsRaw = result.data.persons || [];
-                    allPartners = processPartnerData(result.data);
-                } else {
-                    console.error('[Partners] Unexpected response format:', result);
-                    allPartners = [];
-                }
-                
-                // Populate identifiersRaw for quickAddId lookups
-                if (result.partners) {
-                    identifiersRaw = result.partners.flatMap(p => 
-                        p.companies.flatMap(co => co.ids.map(id => ({
-                            id: id.db_id, id_string: id.string, 
-                            rev_share: id.rev, prime49: id.isPrime,
-                            parent_config_id: id.parent_config_id,
-                            agent_id: co._agent_id
-                        })))
-                    );
-                }
-                
-                currentPage = 1;
-                renderGrid(allPartners);
-                console.log('[Partners] Loaded', allPartners.length, 'partners');
-            }
-        } catch (err) {
-            console.error("Loader Error:", err);
-            if (loader) loader.style.display = 'none';
-            // Show error in grid
-            const grid = document.getElementById('partnerGrid');
-            if (grid) grid.innerHTML = '<div style="text-align:center;padding:60px;color:#94a3b8;"><div style="font-size:48px;margin-bottom:12px;">⚠️</div><div style="font-weight:700;">Failed to load partners</div><div style="font-size:13px;margin-top:6px;">Check console for details</div></div>';
-        }
-        if (loader) loader.style.display = 'none';
-    }
+    
 
     function renderGrid(data) {
+    if (!data) data = allPartners; // fallback to global
     const grid = document.getElementById('partnerGrid');
     const prevBtn = document.getElementById('btnPrev');
     const nextBtn = document.getElementById('btnNext');
@@ -1137,7 +1030,6 @@ async function submitOnboarding() {
     const paginatedData = data.slice(start, end);
 
     grid.innerHTML = paginatedData.map(p => {
-        try {
         // --- INJECTED TREND CALCULATION FOR FILTERING ---
         let pCurrent = 0;
         let pBaseline = 0;
@@ -1176,21 +1068,18 @@ async function submitOnboarding() {
                 ${p.companies.map(co => `
                     <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
                         <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                        <div style="margin-top:5px;">${(co.ids||[]).map(id => { try { return renderBadge(id, true); } catch(e) { return ''; } }).join('')}</div>
+                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                     </div>
                 `).join('')}
                 <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
-                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" 
-                            style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;">
+                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')"
+                            style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
                         <span class="material-icons" style="font-size:14px;">person</span> View Detail
                     </button>
-                    ${p.portal_active && p.portal_setup ? 
-                        `<div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:7px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:4px;">
-                            <span class="material-icons" style="font-size:14px;">verified</span> Portal Active
-                        </div>` :
-                        `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name}','${p.email||''}')"
-                                style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;"
-                                title="${p.portal_active ? 'Invite sent, awaiting setup' : 'Invite to Partner Portal'}">
+                    ${(p.portal_active && p.portal_setup) ?
+                        '<div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:7px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:4px;"><span class=\"material-icons\" style=\"font-size:14px;\">verified</span> Portal Active</div>' :
+                        `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name.replace(/'/g,"\\'")}','${(p.email||'').replace(/'/g,"\\'")}')"
+                                style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;">
                             <span class="material-icons" style="font-size:14px;">${p.portal_active ? 'mark_email_read' : 'send'}</span>
                             ${p.portal_active ? 'Resend Invite' : 'Invite to Portal'}
                         </button>`}
@@ -1493,37 +1382,6 @@ async function submitOnboarding() {
     }
 
     // --- FEATURE: EDIT PERSON DETAILS ---
-window.editEnrolledAt = async function(personId, currentDate) {
-    const { value: newDate } = await Swal.fire({
-        title: 'Partner Activation Date',
-        html: `
-            <p style="color:#475569;font-size:13px;">Set when this partner was activated/enrolled. Used for partner reports.</p>
-            <input type="date" id="enrollDate" value="${currentDate}" 
-                   style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-top:8px;">`,
-        showCancelButton: true,
-        confirmButtonColor: '#004990',
-        confirmButtonText: 'Save Date',
-        preConfirm: () => document.getElementById('enrollDate').value
-    });
-    if (newDate) {
-        Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading() });
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'update_person_field', id: personId, field: 'enrolled_at', value: new Date(newDate).toISOString() })
-        });
-        const result = await res.json();
-        if (result.success) {
-            await logAuditAction('Partner Update', `Updated activation date for partner ${personId}`);
-            await loadPartners();
-            Swal.close();
-            openPartnerDetails(personId);
-        } else {
-            Swal.fire('Error', result.message || 'Update failed', 'error');
-        }
-    }
-};
-
 window.editPersonField = async function(personId, field, currentVal) {
     const label = field.replace('_', ' ').toUpperCase();
     const { value: newVal } = await Swal.fire({
@@ -1562,180 +1420,162 @@ window.editPersonField = async function(personId, field, currentVal) {
 
 // --- FEATURE: QUICK ADD ID TO PARTNER ---
 window.quickAddId = async function(personId, name) {
-    // Find agent record for this partner
+    pendingIds = [];
+    renderIdList();
+    
     const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
-    if (!personAgent) {
-        return Swal.fire({
-            icon: 'error', title: 'No Agent Record',
-            text: `No agent record found for ${name}. They may need to be fully onboarded first.`,
-            confirmButtonColor: '#004990'
-        });
-    }
+    if (!personAgent) return Swal.fire('Error', 'No agent record found.', 'error');
 
-    // Get existing IDs for this agent so we can offer them as parent options
-    const existingIds = identifiersRaw.filter(i => i.agent_id === personAgent.id);
+    // Set Mode: IMPORTANT
+    selectedGHLContact = { 
+        name: name, 
+        existingAgentId: personAgent.id, 
+        isQuickAdd: true 
+    };
+    
+    // UI Logic: Hide Step 1 & 2 dots so user isn't confused
+    document.getElementById('dot1').style.display = 'none';
+    document.getElementById('dot2').style.display = 'none';
+    
+    // Hide the "BACK" button on Step 3 so they can't go back to empty fields
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'none';
 
-    // Build parent options
-    const parentOpts = existingIds.map(id =>
-        `<option value="${id.id_string}">${id.id_string}${id.rev_share ? ` (${id.rev_share}% rev)` : ''}</option>`
-    ).join('');
-
-    const { value: form } = await Swal.fire({
-        title: `Add Agent ID — ${name}`,
-        width: 500,
-        html: `
-            <div style="text-align:left;">
-                <div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0369a1;">
-                    <b>${existingIds.length}</b> existing ID${existingIds.length !== 1 ? 's' : ''} for this partner: 
-                    <b>${existingIds.map(i => i.id_string).join(', ') || 'None'}</b>
-                </div>
-                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Agent ID String *</label>
-                <input id="qi-id" type="number" placeholder="e.g. 33343" 
-                       style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'DM Sans',monospace;outline:none;margin-bottom:12px;letter-spacing:1px;"
-                       oninput="checkIdExists(this.value)">
-                <div id="qi-check" style="font-size:11px;min-height:16px;margin-bottom:10px;"></div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-                    <div>
-                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Rev Share %</label>
-                        <input id="qi-rev" type="number" placeholder="e.g. 50" 
-                               style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">
-                    </div>
-                    <div>
-                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Tier / Parent ID</label>
-                        <select id="qi-parent" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">
-                            <option value="">None (Main ID)</option>
-                            ${parentOpts}
-                        </select>
-                    </div>
-                </div>
-                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;background:#fef3c7;padding:10px 12px;border-radius:8px;">
-                    <input type="checkbox" id="qi-prime" style="accent-color:#d97706;width:16px;height:16px;">
-                    <span>⭐ Mark as Prime49</span>
-                </label>
-            </div>`,
-        showCancelButton: true,
-        confirmButtonColor: '#004990',
-        confirmButtonText: 'Add ID',
-        preConfirm: () => {
-            const idStr = document.getElementById('qi-id').value.trim();
-            if (!idStr) { Swal.showValidationMessage('Please enter an agent ID'); return false; }
-            return {
-                id_string: idStr,
-                rev_share: document.getElementById('qi-rev').value || null,
-                prime49: document.getElementById('qi-prime').checked,
-                parent_id_string: document.getElementById('qi-parent').value || null
-            };
-        }
-    });
-
-    if (form) {
-        Swal.fire({ title: 'Adding ID...', didOpen: () => Swal.showLoading() });
-
-        // Resolve parent string to UUID if set
-        let parentConfigId = null;
-        if (form.parent_id_string) {
-            const parentRecord = identifiersRaw.find(i => i.id_string === form.parent_id_string);
-            parentConfigId = parentRecord?.id || null;
-        }
-
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                action: 'complete_onboarding',
-                isQuickAdd: true,
-                existingAgentId: personAgent.id,
-                identifiers: [{
-                    string: form.id_string,
-                    rev: form.rev_share,
-                    prime: form.prime49,
-                    parent_config_id: parentConfigId
-                }]
-            })
-        });
-
-        const result = await res.json();
-        if (result.success) {
-            await logAuditAction('Partner ID Added', 'Added ID ' + form.id_string + ' to ' + name);
-            await loadPartners();
-            Swal.fire({ icon: 'success', title: 'ID Added!', text: 'Agent ID ' + form.id_string + ' added to ' + name, timer: 2000, showConfirmButton: false });
-        } else {
-            Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Could not add ID', confirmButtonColor: '#004990' });
-        }
-    }
+    document.getElementById('onboardingWizard').classList.add('active');
+    goToStep(3); // Jump straight to IDs
 };
 
+    window.quickAddId = async function(personId, name) {
+    pendingIds = [];
+    renderIdList();
+    
+    // Find the person's first agent record from our local agentsRaw array
+    const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
+    
+    if (!personAgent) {
+        return Swal.fire('Error', 'Could not find an agent record for this partner.', 'error');
+    }
 
-    async function checkIdExists(idStr) {
-        const el = document.getElementById('qi-check');
-        if (!el || !idStr || idStr.length < 3) { if(el) el.innerHTML=''; return; }
-        const exists = identifiersRaw.find(i => i.id_string === idStr);
-        if (exists) {
-            const owner = agentsRaw.find(a => a.id === exists.agent_id);
-            const person = personsRaw.find(p => p.id === owner?.parent_agent_id);
-            const assignedTo = person ? ' — assigned to ' + person.full_name : '';
-            el.innerHTML = '<span style="color:#ef4444;font-weight:700;">⚠️ ID ' + idStr + ' already exists</span>' + assignedTo;
-        } else {
-            el.innerHTML = '<span style="color:#10b981;font-weight:700;">✓ ID available</span>';
+    // Set a "Mode" so the submit function knows NOT to create a new person
+    selectedGHLContact = { 
+        name: name, 
+        existingAgentId: personAgent.id, 
+        isQuickAdd: true 
+    };
+    
+    document.getElementById('onboardingWizard').classList.add('active');
+    goToStep(3); // Jump straight to IDs
+};
+ 
+
+    // --- LOAD PARTNERS WITH STATS ---
+    async function loadPartners() {
+        const loader = document.getElementById('loadingOverlay');
+        if (loader) loader.style.display = 'flex';
+        try {
+            // Fetch partners list and stats in parallel
+            const [partnersRes, statsRes] = await Promise.all([
+                fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_partners_list' })
+                }),
+                fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'get_all_stats' })
+                })
+            ]);
+
+            const partnersData = await partnersRes.json();
+            const statsData = await statsRes.json();
+
+            if (!partnersData.success) throw new Error(partnersData.message);
+
+            // Store raw data globally
+            personsRaw = partnersData.data.persons || [];
+            agentsRaw = partnersData.data.agents || [];
+            identifiersRaw = partnersData.data.identifiers || [];
+            const companiesRaw = partnersData.data.companies || [];
+            statsRaw = statsData.success ? statsData.data : []; // Store globally for filterByTrend
+
+            // Populate company dropdown in wizard
+            const companySelect = document.getElementById('companySelect');
+            if (companySelect) {
+                const existingOptions = companySelect.innerHTML;
+                companiesRaw.forEach(co => {
+                    const opt = document.createElement('option');
+                    opt.value = co.id;
+                    opt.textContent = co.company_name;
+                    companySelect.appendChild(opt);
+                });
+            }
+
+            // Process with stats for trend calculation
+            allPartners = processPartnerData({
+                persons: personsRaw,
+                agents: agentsRaw,
+                identifiers: identifiersRaw,
+                companies: companiesRaw,
+                stats: statsRaw  // ✅ Now stats are passed in
+            });
+
+            currentPage = 1;
+            renderGrid();
+
+        } catch (err) {
+            console.error("Failed to load partners:", err);
+            document.getElementById('partnerGrid').innerHTML = 
+                `<div style="padding:40px; text-align:center; color:#ef4444;">Failed to load partners: ${err.message}</div>`;
+        } finally {
+            // Always hide the loader whether success or error
+            if (loader) loader.style.display = 'none';
         }
     }
 
     async function sendPortalInvite(personId, name, email) {
-        if (!email) {
-            Swal.fire({ icon:'warning', title:'No email address', text:`${name} does not have an email address on file. Please add one in the Partners section first.`, confirmButtonColor:'#0d9488' });
-            return;
+        if (!email || email === 'No email provided') {
+            return Swal.fire({ icon:'warning', title:'No email', text: name + ' has no email address on file.', confirmButtonColor:'#0d9488' });
         }
-
         const { isConfirmed } = await Swal.fire({
-            title: `Invite ${name} to Partner Portal?`,
-            html: `<p style="color:#475569;">An email will be sent to <b>${email}</b> with a link to set up their portal account.</p>
-                   <p style="font-size:12px;color:#94a3b8;">They will be able to see their own merchants, volume data, and communicate with your team.</p>`,
-            icon: 'question',
-            showCancelButton: true,
-            confirmButtonColor: '#0d9488',
-            confirmButtonText: 'Send Invite'
+            title: 'Invite ' + name + ' to Partner Portal?',
+            html: '<p style="color:#475569;">An email will be sent to <b>' + email + '</b> with a link to set up their portal account.</p>',
+            icon: 'question', showCancelButton: true,
+            confirmButtonColor: '#0d9488', confirmButtonText: 'Send Invite'
         });
-
         if (!isConfirmed) return;
-
-        Swal.fire({ title:'Sending invite...', didOpen:()=>Swal.showLoading() });
-
+        Swal.fire({ title:'Sending...', didOpen:()=>Swal.showLoading() });
         try {
             const res = await fetch('/api/partner-auth', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'send_invite', person_id: personId })
+                method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ action:'send_invite', person_id: personId })
             });
             const result = await res.json();
-
             if (result.success) {
-                // Log the action
-                await fetch('/api/logs', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        email: localStorage.getItem('pp_userid'),
-                        action: `Sent partner portal invite to ${name} (${email})`,
-                        status: 'success',
-                        category: 'partners',
-                        severity: 'info'
-                    })
-                });
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Invite Sent!',
-                    html: `<p><b>${name}</b> will receive an email at <b>${email}</b> to set up their portal account.</p>
-                           ${result.invite_url ? `<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link (if email fails):</b><br>${result.invite_url}</div>` : ''}`,
-                    confirmButtonColor: '#0d9488'
-                });
-            } else {
-                throw new Error(result.message);
-            }
-        } catch(err) {
-            Swal.fire({ icon:'error', title:'Failed to send invite', text:err.message, confirmButtonColor:'#0d9488' });
-        }
+                await logAuditAction('Portal Invite', 'Sent invite to ' + name + ' (' + email + ')');
+                Swal.fire({ icon:'success', title:'Invite Sent!', 
+                    html: '<p><b>' + name + '</b> will receive an email at <b>' + email + '</b>.</p>' + 
+                          (result.invite_url ? '<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link:</b><br>' + result.invite_url + '</div>' : ''),
+                    confirmButtonColor:'#0d9488' });
+                loadPartners();
+            } else { throw new Error(result.message); }
+        } catch(err) { Swal.fire({ icon:'error', title:'Failed', text: err.message, confirmButtonColor:'#0d9488' }); }
     }
+
+    window.editEnrolledAt = async function(personId, currentDate) {
+        const { value: newDate } = await Swal.fire({
+            title: 'Partner Activation Date',
+            html: '<p style="color:#475569;font-size:13px;">When was this partner activated?</p><input type="date" id="enrollDate" value="' + currentDate + '" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;margin-top:8px;">',
+            showCancelButton: true, confirmButtonColor: '#004990', confirmButtonText: 'Save',
+            preConfirm: () => document.getElementById('enrollDate').value
+        });
+        if (newDate) {
+            await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'},
+                body: JSON.stringify({ action:'update_person_field', id: personId, field:'enrolled_at', value: new Date(newDate).toISOString() }) });
+            await logAuditAction('Partner Update', 'Updated activation date');
+            loadPartners();
+            Swal.close();
+        }
+    };
 
     window.addEventListener('load', loadPartners);
 </script>
