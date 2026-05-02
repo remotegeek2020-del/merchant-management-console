@@ -518,6 +518,27 @@ async function logAuditAction(action, details) {
     }).filter(Boolean);
 }
 
+async function loadAllStats() {
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_all_stats' })
+        });
+        const result = await res.json();
+        if (result.success && result.data.length) {
+            // Merge stats into identifiersRaw so filterByTrend can use them
+            const statsMap = {};
+            result.data.forEach(s => { statsMap[s.agent_id] = s; });
+            identifiersRaw = identifiersRaw.map(id => {
+                const stats = statsMap[id.id_string];
+                return stats ? { ...id, ...stats } : id;
+            });
+            console.log('[Partners] Stats merged into', identifiersRaw.length, 'identifiers');
+        }
+    } catch(err) { console.error('Stats load error:', err); }
+}
+
 window.filterByTrend = function(trend) {
     activeTrendFilter = trend;
     const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
@@ -637,11 +658,12 @@ window.filterByTrend = function(trend) {
             const res = await fetch('/api/partners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_all_data' })
+                body: JSON.stringify({ action: 'get_companies' })
             });
             const result = await res.json();
             if (result.success) {
-                allCompaniesRaw = (result.data.companies || []).sort((a,b) => a.company_name.localeCompare(b.company_name));
+                allCompaniesRaw = (result.data || []).sort((a,b) => a.company_name.localeCompare(b.company_name));
+                console.log('[Partners] Loaded', allCompaniesRaw.length, 'companies');
             }
         } catch(err) { console.error('Company load error:', err); }
     }
@@ -1075,6 +1097,9 @@ async function submitOnboarding() {
                 allPartners = processPartnerData(result.data);
                 currentPage = 1;
                 renderGrid(allPartners);
+                
+                // Load stats in background for trend filtering
+                loadAllStats();
             }
         } catch (err) { console.error("Loader Error:", err); }
         if (loader) loader.style.display = 'none';
@@ -1518,52 +1543,122 @@ window.editPersonField = async function(personId, field, currentVal) {
 
 // --- FEATURE: QUICK ADD ID TO PARTNER ---
 window.quickAddId = async function(personId, name) {
-    pendingIds = [];
-    renderIdList();
-    
+    // Find agent record for this partner
     const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
-    if (!personAgent) return Swal.fire('Error', 'No agent record found.', 'error');
-
-    // Set Mode: IMPORTANT
-    selectedGHLContact = { 
-        name: name, 
-        existingAgentId: personAgent.id, 
-        isQuickAdd: true 
-    };
-    
-    // UI Logic: Hide Step 1 & 2 dots so user isn't confused
-    document.getElementById('dot1').style.display = 'none';
-    document.getElementById('dot2').style.display = 'none';
-    
-    // Hide the "BACK" button on Step 3 so they can't go back to empty fields
-    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'none';
-
-    document.getElementById('onboardingWizard').classList.add('active');
-    goToStep(3); // Jump straight to IDs
-};
-
-    window.quickAddId = async function(personId, name) {
-    pendingIds = [];
-    renderIdList();
-    
-    // Find the person's first agent record from our local agentsRaw array
-    const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
-    
     if (!personAgent) {
-        return Swal.fire('Error', 'Could not find an agent record for this partner.', 'error');
+        return Swal.fire({
+            icon: 'error', title: 'No Agent Record',
+            text: `No agent record found for ${name}. They may need to be fully onboarded first.`,
+            confirmButtonColor: '#004990'
+        });
     }
 
-    // Set a "Mode" so the submit function knows NOT to create a new person
-    selectedGHLContact = { 
-        name: name, 
-        existingAgentId: personAgent.id, 
-        isQuickAdd: true 
-    };
-    
-    document.getElementById('onboardingWizard').classList.add('active');
-    goToStep(3); // Jump straight to IDs
+    // Get existing IDs for this agent so we can offer them as parent options
+    const existingIds = identifiersRaw.filter(i => i.agent_id === personAgent.id);
+
+    // Build parent options
+    const parentOpts = existingIds.map(id =>
+        `<option value="${id.id_string}">${id.id_string}${id.rev_share ? ` (${id.rev_share}% rev)` : ''}</option>`
+    ).join('');
+
+    const { value: form } = await Swal.fire({
+        title: `Add Agent ID — ${name}`,
+        width: 500,
+        html: `
+            <div style="text-align:left;">
+                <div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0369a1;">
+                    <b>${existingIds.length}</b> existing ID${existingIds.length !== 1 ? 's' : ''} for this partner: 
+                    <b>${existingIds.map(i => i.id_string).join(', ') || 'None'}</b>
+                </div>
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Agent ID String *</label>
+                <input id="qi-id" type="number" placeholder="e.g. 33343" 
+                       style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'DM Sans',monospace;outline:none;margin-bottom:12px;letter-spacing:1px;"
+                       oninput="checkIdExists(this.value)">
+                <div id="qi-check" style="font-size:11px;min-height:16px;margin-bottom:10px;"></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Rev Share %</label>
+                        <input id="qi-rev" type="number" placeholder="e.g. 50" 
+                               style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Tier / Parent ID</label>
+                        <select id="qi-parent" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">
+                            <option value="">None (Main ID)</option>
+                            ${parentOpts}
+                        </select>
+                    </div>
+                </div>
+                <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;background:#fef3c7;padding:10px 12px;border-radius:8px;">
+                    <input type="checkbox" id="qi-prime" style="accent-color:#d97706;width:16px;height:16px;">
+                    <span>⭐ Mark as Prime49</span>
+                </label>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Add ID',
+        preConfirm: () => {
+            const idStr = document.getElementById('qi-id').value.trim();
+            if (!idStr) { Swal.showValidationMessage('Please enter an agent ID'); return false; }
+            return {
+                id_string: idStr,
+                rev_share: document.getElementById('qi-rev').value || null,
+                prime49: document.getElementById('qi-prime').checked,
+                parent_id_string: document.getElementById('qi-parent').value || null
+            };
+        }
+    });
+
+    if (form) {
+        Swal.fire({ title: 'Adding ID...', didOpen: () => Swal.showLoading() });
+
+        // Resolve parent string to UUID if set
+        let parentConfigId = null;
+        if (form.parent_id_string) {
+            const parentRecord = identifiersRaw.find(i => i.id_string === form.parent_id_string);
+            parentConfigId = parentRecord?.id || null;
+        }
+
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'complete_onboarding',
+                isQuickAdd: true,
+                existingAgentId: personAgent.id,
+                identifiers: [{
+                    string: form.id_string,
+                    rev: form.rev_share,
+                    prime: form.prime49,
+                    parent_config_id: parentConfigId
+                }]
+            })
+        });
+
+        const result = await res.json();
+        if (result.success) {
+            await logAuditAction('Partner ID Added', \`Added ID \${form.id_string} to \${name}\`);
+            await loadPartners();
+            Swal.fire({ icon: 'success', title: 'ID Added!', text: \`Agent ID \${form.id_string} added to \${name}\`, timer: 2000, showConfirmButton: false });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Could not add ID', confirmButtonColor: '#004990' });
+        }
+    }
 };
- 
+
+
+    async function checkIdExists(idStr) {
+        const el = document.getElementById('qi-check');
+        if (!el || !idStr || idStr.length < 3) { if(el) el.innerHTML=''; return; }
+        const exists = identifiersRaw.find(i => i.id_string === idStr);
+        if (exists) {
+            const owner = agentsRaw.find(a => a.id === exists.agent_id);
+            const person = personsRaw.find(p => p.id === owner?.parent_agent_id);
+            el.innerHTML = \`<span style="color:#ef4444;font-weight:700;">⚠️ ID \${idStr} already exists</span>\${person ? \` — assigned to \${person.full_name}\` : ''}\`;
+        } else {
+            el.innerHTML = '<span style="color:#10b981;font-weight:700;">✓ ID available</span>';
+        }
+    }
 
     async function sendPortalInvite(personId, name, email) {
         if (!email) {
