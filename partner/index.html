@@ -120,7 +120,7 @@
     const existingToken = localStorage.getItem('pp_partner_token');
     if (existingToken) {
         fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'validate', token: existingToken }) })
-            .then(r => r.json()).then(result => { if (result.success) window.location.href = 'dashboard.html'; });
+            .then(r => r.json()).then(result => { if (result.success) window.location.href = '/partner/dashboard'; });
     }
 
     // Check for invite/reset token in URL
@@ -153,7 +153,7 @@
                 localStorage.setItem('pp_partner_token', result.token);
                 localStorage.setItem('pp_partner_name', result.partner.name);
                 localStorage.setItem('pp_partner_id', result.partner.id);
-                window.location.href = 'dashboard.html';
+                window.location.href = '/partner/dashboard';
             } else {
                 Swal.fire({ icon: 'error', title: 'Sign In Failed', text: result.message, confirmButtonColor: '#0d9488' });
                 btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:18px;">login</span> Sign In';
@@ -251,7 +251,7 @@
                 localStorage.setItem('pp_partner_name', result.partner.name);
                 localStorage.setItem('pp_partner_id', result.partner.id);
                 await Swal.fire({ icon: 'success', title: 'Welcome!', text: 'Your account is ready. Taking you to your dashboard...', timer: 2000, showConfirmButton: false, confirmButtonColor: '#0d9488' });
-                window.location.href = 'dashboard.html';
+                window.location.href = '/partner/dashboard';
             } else {
                 Swal.fire({ icon: 'error', title: 'Setup Failed', text: result.message, confirmButtonColor: '#0d9488' });
                 btn.disabled = false;
