@@ -54,13 +54,16 @@ if (action === 'complete_onboarding') {
         const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
 
         // 1. Upsert Person
+        const enrolledBy = body.enrolled_by || null;
         const { data: pData, error: pErr } = await supabase
             .from('persons')
             .upsert({ 
                 full_name: properName, 
                 email: person.email, 
                 phone_number: person.phone, 
-                hl_contact_id: person.hl_id 
+                hl_contact_id: person.hl_id,
+                enrolled_at: new Date().toISOString(),
+                enrolled_by: enrolledBy
             }, { onConflict: 'email' })
             .select().single();
 
