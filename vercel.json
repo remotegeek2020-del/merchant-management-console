@@ -1,6 +1,11 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
+  "functions": {
+    "api/partners.js": { "maxDuration": 30 },
+    "api/reports.js": { "maxDuration": 30 },
+    "api/merchants.js": { "maxDuration": 30 }
+  },
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/partner/dashboard", "dest": "/partner/dashboard.html" },
@@ -9,7 +14,7 @@
     { "src": "/partner/community", "dest": "/partner/community.html" },
     { "src": "/partner/settings", "dest": "/partner/settings.html" },
     { "src": "/partner/profile", "dest": "/partner/profile.html" },
-    { "src": "/partner/setup", "dest": "/partner/setup.html" },
+    { "src": "/partner/setup(.*)", "dest": "/partner/setup.html" },
     { "src": "/partner", "dest": "/partner/index.html" },
     { "src": "/partner/", "dest": "/partner/index.html" },
     { "src": "/(.*)\\.html", "dest": "/$1.html" },
