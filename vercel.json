@@ -1,14 +1,13 @@
 {
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
-    { "source": "/partner", "destination": "/partner/index.html" },
-    { "source": "/partner/dashboard", "destination": "/partner/dashboard.html" },
-    { "source": "/partner/merchants", "destination": "/partner/merchants.html" },
-    { "source": "/partner/messages", "destination": "/partner/messages.html" }
-  ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/partner/dashboard", "dest": "/partner/dashboard.html" },
+    { "src": "/partner/merchants", "dest": "/partner/merchants.html" },
+    { "src": "/partner/messages", "dest": "/partner/messages.html" },
+    { "src": "/partner", "dest": "/partner/index.html" },
+    { "src": "/partner/", "dest": "/partner/index.html" },
     { "src": "/(.*)\\.html", "dest": "/$1.html" },
     { "src": "/(.*)", "dest": "/$1.html" }
   ]
