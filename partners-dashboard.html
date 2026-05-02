@@ -291,6 +291,13 @@ input[type=number] {
 
  <div class="step-container" id="step2">
     <label class="search-label">Company / Firm Association</label>
+    <div style="margin-bottom:14px;">
+        <label class="search-label">Partner Activation Date</label>
+        <input type="date" id="partnerActivationDate" class="wizard-input" 
+               value="${new Date().toISOString().split('T')[0]}"
+               style="font-family:'DM Sans',sans-serif;">
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div>
+    </div>
     <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
         <option value="none">Independent (Individual Partner)</option>
         <option value="new">+ Create New Company...</option>
@@ -473,7 +480,9 @@ async function logAuditAction(action, details) {
             id: person.id, name: person.full_name,
             email: person.email || 'No email provided',
             phone: person.phone_number || 'No phone provided',
-            hl_id: person.hl_contact_id, 
+            hl_id: person.hl_contact_id,
+            enrolled_at: person.enrolled_at || null,
+            enrolled_by: person.enrolled_by || null,
             companies: formatted,
             statusTrend: trend // This is what the filter uses!
         } : null;
@@ -861,12 +870,15 @@ async function submitOnboarding() {
         }
 
         const companyVal = document.getElementById('companySelect').value;
+        const activationDate = document.getElementById('partnerActivationDate')?.value;
         payload.person = {
             name: selectedGHLContact.name,
             email: selectedGHLContact.email,
             phone: selectedGHLContact.phone,
-            hl_id: selectedGHLContact.id
+            hl_id: selectedGHLContact.id,
+            enrolled_at: activationDate ? new Date(activationDate).toISOString() : new Date().toISOString()
         };
+        payload.enrolled_by = localStorage.getItem('pp_userid');
         payload.company = {
             id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
             name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
@@ -1332,6 +1344,11 @@ async function submitOnboarding() {
                 ${p.phone}
                 <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'phone_number', '${p.phone}')">edit</span>
             </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                <span class="material-icons" style="font-size:16px;">calendar_today</span>
+                <span>Activated: <b>${p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString() : 'Not set'}</b></span>
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? new Date(p.enrolled_at).toISOString().split('T')[0] : ''}')">edit</span>
+            </div>
             ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
         </div>
                         <div id="summary-stats" style="text-align:right;">
@@ -1386,6 +1403,37 @@ async function submitOnboarding() {
     }
 
     // --- FEATURE: EDIT PERSON DETAILS ---
+window.editEnrolledAt = async function(personId, currentDate) {
+    const { value: newDate } = await Swal.fire({
+        title: 'Partner Activation Date',
+        html: `
+            <p style="color:#475569;font-size:13px;">Set when this partner was activated/enrolled. Used for partner reports.</p>
+            <input type="date" id="enrollDate" value="${currentDate}" 
+                   style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-top:8px;">`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Save Date',
+        preConfirm: () => document.getElementById('enrollDate').value
+    });
+    if (newDate) {
+        Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading() });
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_person_field', id: personId, field: 'enrolled_at', value: new Date(newDate).toISOString() })
+        });
+        const result = await res.json();
+        if (result.success) {
+            await logAuditAction('Partner Update', `Updated activation date for partner ${personId}`);
+            await loadPartners();
+            Swal.close();
+            openPartnerDetails(personId);
+        } else {
+            Swal.fire('Error', result.message || 'Update failed', 'error');
+        }
+    }
+};
+
 window.editPersonField = async function(personId, field, currentVal) {
     const label = field.replace('_', ' ').toUpperCase();
     const { value: newVal } = await Swal.fire({
