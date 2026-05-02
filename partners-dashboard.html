@@ -4,12 +4,12 @@
     <meta charset="UTF-8">
     <title>Partner Network | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
-        body { background: #f1f5f9; padding: 25px; font-family: 'DM Sans', sans-serif; }
+        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
@@ -345,7 +345,6 @@ input[type=number] {
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [];
-    let statsRaw = []; // ✅ Global stats for trend calculation
     let currentPage = 1;
     const cardsPerPage = 12; 
     let searchTimeout = null;
@@ -493,7 +492,7 @@ window.filterByTrend = function(trend) {
         // Sum up every ID this partner owns to get the "Big Picture"
         p.companies.forEach(co => {
             co.ids.forEach(idObj => {
-                const s = statsRaw.find(raw => String(raw.agent_id).trim() === String(idObj.string).trim());
+                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
                 if (s) {
                     pCurrent += parseFloat(s.total_volume_sum || 0);
                     pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
@@ -1003,10 +1002,32 @@ async function submitOnboarding() {
     // 7. GRID, PAGINATION & EXPORT FUNCTIONS
     // ==========================================
 
-    
+    async function loadPartners() {
+        const loader = document.getElementById('loadingOverlay');
+        if (loader) loader.style.display = 'flex';
+
+        document.getElementById('partnerSearchInput').value = '';
+        
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_partners_list' })
+            });
+            const result = await res.json();
+            if (result.success && result.data.persons) {
+                identifiersRaw = result.data.identifiers || [];
+                agentsRaw = result.data.agents || [];
+                personsRaw = result.data.persons || [];
+                allPartners = processPartnerData(result.data);
+                currentPage = 1;
+                renderGrid(allPartners);
+            }
+        } catch (err) { console.error("Loader Error:", err); }
+        if (loader) loader.style.display = 'none';
+    }
 
     function renderGrid(data) {
-    if (!data) data = allPartners; // fallback to global
     const grid = document.getElementById('partnerGrid');
     const prevBtn = document.getElementById('btnPrev');
     const nextBtn = document.getElementById('btnNext');
@@ -1061,6 +1082,17 @@ async function submitOnboarding() {
                         <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                     </div>
                 `).join('')}
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
+                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" 
+                            style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;">
+                        <span class="material-icons" style="font-size:14px;">person</span> View Detail
+                    </button>
+                    <button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name}','${p.email||''}')"
+                            style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;"
+                            title="Invite to Partner Portal">
+                        <span class="material-icons" style="font-size:14px;">send</span> Invite to Portal
+                    </button>
+                </div>
             </div>`;
     }).join('');
 
@@ -1439,68 +1471,60 @@ window.quickAddId = async function(personId, name) {
 };
  
 
-    // --- LOAD PARTNERS WITH STATS ---
-    async function loadPartners() {
-        const loader = document.getElementById('loadingOverlay');
-        if (loader) loader.style.display = 'flex';
+    async function sendPortalInvite(personId, name, email) {
+        if (!email) {
+            Swal.fire({ icon:'warning', title:'No email address', text:`${name} does not have an email address on file. Please add one in the Partners section first.`, confirmButtonColor:'#0d9488' });
+            return;
+        }
+
+        const { isConfirmed } = await Swal.fire({
+            title: `Invite ${name} to Partner Portal?`,
+            html: `<p style="color:#475569;">An email will be sent to <b>${email}</b> with a link to set up their portal account.</p>
+                   <p style="font-size:12px;color:#94a3b8;">They will be able to see their own merchants, volume data, and communicate with your team.</p>`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0d9488',
+            confirmButtonText: 'Send Invite'
+        });
+
+        if (!isConfirmed) return;
+
+        Swal.fire({ title:'Sending invite...', didOpen:()=>Swal.showLoading() });
+
         try {
-            // Fetch partners list and stats in parallel
-            const [partnersRes, statsRes] = await Promise.all([
-                fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'get_partners_list' })
-                }),
-                fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'get_all_stats' })
-                })
-            ]);
-
-            const partnersData = await partnersRes.json();
-            const statsData = await statsRes.json();
-
-            if (!partnersData.success) throw new Error(partnersData.message);
-
-            // Store raw data globally
-            personsRaw = partnersData.data.persons || [];
-            agentsRaw = partnersData.data.agents || [];
-            identifiersRaw = partnersData.data.identifiers || [];
-            const companiesRaw = partnersData.data.companies || [];
-            statsRaw = statsData.success ? statsData.data : []; // Store globally for filterByTrend
-
-            // Populate company dropdown in wizard
-            const companySelect = document.getElementById('companySelect');
-            if (companySelect) {
-                const existingOptions = companySelect.innerHTML;
-                companiesRaw.forEach(co => {
-                    const opt = document.createElement('option');
-                    opt.value = co.id;
-                    opt.textContent = co.company_name;
-                    companySelect.appendChild(opt);
-                });
-            }
-
-            // Process with stats for trend calculation
-            allPartners = processPartnerData({
-                persons: personsRaw,
-                agents: agentsRaw,
-                identifiers: identifiersRaw,
-                companies: companiesRaw,
-                stats: statsRaw  // ✅ Now stats are passed in
+            const res = await fetch('/api/partner-auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'send_invite', person_id: personId })
             });
+            const result = await res.json();
 
-            currentPage = 1;
-            renderGrid();
+            if (result.success) {
+                // Log the action
+                await fetch('/api/logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: localStorage.getItem('pp_userid'),
+                        action: `Sent partner portal invite to ${name} (${email})`,
+                        status: 'success',
+                        category: 'partners',
+                        severity: 'info'
+                    })
+                });
 
-        } catch (err) {
-            console.error("Failed to load partners:", err);
-            document.getElementById('partnerGrid').innerHTML = 
-                `<div style="padding:40px; text-align:center; color:#ef4444;">Failed to load partners: ${err.message}</div>`;
-        } finally {
-            // Always hide the loader whether success or error
-            if (loader) loader.style.display = 'none';
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Invite Sent!',
+                    html: `<p><b>${name}</b> will receive an email at <b>${email}</b> to set up their portal account.</p>
+                           ${result.invite_url ? `<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link (if email fails):</b><br>${result.invite_url}</div>` : ''}`,
+                    confirmButtonColor: '#0d9488'
+                });
+            } else {
+                throw new Error(result.message);
+            }
+        } catch(err) {
+            Swal.fire({ icon:'error', title:'Failed to send invite', text:err.message, confirmButtonColor:'#0d9488' });
         }
     }
 
