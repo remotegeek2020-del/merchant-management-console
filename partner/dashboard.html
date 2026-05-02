@@ -157,13 +157,13 @@
         </div>
     </div>
     <nav class="sidebar-nav">
-        <a class="nav-item active" href="dashboard.html">
+        <a class="nav-item active" href='/partner/dashboard'>
             <span class="material-icons">dashboard</span> Overview
         </a>
-        <a class="nav-item" href="merchants.html">
+        <a class="nav-item" href='/partner/merchants'>
             <span class="material-icons">storefront</span> My Merchants
         </a>
-        <a class="nav-item" href="messages.html">
+        <a class="nav-item" href='/partner/messages'>
             <span class="material-icons">forum</span> Messages
         </a>
         <div class="nav-divider"></div>
@@ -181,7 +181,7 @@
     <div class="topbar">
         <h1 class="topbar-title" id="topbarGreeting">Dashboard</h1>
         <div class="topbar-right">
-            <button class="btn btn-teal" onclick="window.location.href='merchants.html'">
+            <button class="btn btn-teal" onclick="window.location.href='/partner/merchants'">
                 <span class="material-icons" style="font-size:16px;">storefront</span>
                 View Merchants
             </button>
@@ -224,7 +224,7 @@
         <div class="card">
             <div class="card-header">
                 <h3>Recent Merchants</h3>
-                <a href="merchants.html" class="btn btn-outline" style="font-size:11px; padding:6px 12px;">View All →</a>
+                <a href='/partner/merchants' class="btn btn-outline" style="font-size:11px; padding:6px 12px;">View All →</a>
             </div>
             <table>
                 <thead>
@@ -247,7 +247,7 @@
 
 <script>
     const token = localStorage.getItem('pp_partner_token');
-    if (!token) window.location.href = 'index.html';
+    if (!token) window.location.href = '/partner';
 
     async function init() {
         try {
@@ -257,7 +257,7 @@
                 body: JSON.stringify({ action: 'validate', token })
             });
             const authData = await authRes.json();
-            if (!authData.success) { localStorage.clear(); window.location.href = 'index.html'; return; }
+            if (!authData.success) { localStorage.clear(); window.location.href = '/partner'; return; }
 
             const { partner, identifiers } = authData;
             localStorage.setItem('pp_partner_name', partner.name);
@@ -306,7 +306,7 @@
             const tbody = document.getElementById('recentMerchants');
             if (mData.success && mData.data.length) {
                 tbody.innerHTML = mData.data.map(m => `
-                    <tr onclick="window.location.href='merchants.html?id=${m.id}'" style="cursor:pointer;">
+                    <tr onclick="window.location.href='/partner/merchants?id=${m.id}'" style="cursor:pointer;">
                         <td style="font-weight:700;">${m.dba_name}</td>
                         <td class="mono">${m.merchant_id}</td>
                         <td class="mono">${m.agent_id || '—'}</td>
@@ -326,7 +326,7 @@
     async function handleLogout() {
         await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout', token }) });
         localStorage.clear();
-        window.location.href = 'index.html';
+        window.location.href = '/partner';
     }
 
     window.onload = init;
