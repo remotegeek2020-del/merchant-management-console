@@ -89,12 +89,26 @@ if (action === 'complete_onboarding') {
     }
 
     // Link IDs (This runs for both modes)
+    // Resolve parent_config_id from string to UUID if set
+    // First build a lookup of id_string -> uuid for already-existing IDs
+    const { data: existingIds } = await supabase
+        .from('agent_identifiers')
+        .select('id, id_string')
+        .in('id_string', identifiers.filter(i => i.parent_config_id).map(i => i.parent_config_id));
+    
+    const parentLookup = {};
+    (existingIds || []).forEach(e => { parentLookup[e.id_string] = e.id; });
+    // Also check newly added IDs in this batch (pending IDs that are parents of others)
+    const pendingParentMap = {};
+    identifiers.forEach(id => { pendingParentMap[id.string] = null; }); // will be filled after upsert
+
     const idInserts = identifiers.map(id => ({
         agent_id: finalAgentId,
         id_string: id.string,
         rev_share: id.rev,
-        prime49: id.prime,
-        status: 'active'
+        prime49: id.prime || false,
+        status: 'active',
+        parent_config_id: id.parent_config_id ? (parentLookup[id.parent_config_id] || null) : null
     }));
 
     const { error: finalErr } = await supabase.from('agent_identifiers').upsert(idInserts, { onConflict: 'id_string' });
@@ -211,7 +225,7 @@ if (action === 'get_all_stats') {
 
             const [persons, agents, identifiers, companies] = await Promise.all([
                 // UPDATED SELECT STRING BELOW
-                fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, enrolled_by'),
+                fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, enrolled_by, is_portal_active, portal_password_set, last_portal_login'),
                 fetchAll('agents', 'id, company_id, parent_agent_id'),
                 fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
                 fetchAll('companies', 'id, company_name')
