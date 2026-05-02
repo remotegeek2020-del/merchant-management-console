@@ -7,7 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <link rel="stylesheet" href="shared.css">
+    
     <style>
         *, *::before, *::after { box-sizing: border-box; }
         :root { --teal:#0d9488;--teal-dark:#0f766e;--teal-light:#ccfbf1;--teal-bg:#f0fdfa;--navy:#001e3c;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--green-bg:#dcfce7;--green:#166534;--red-bg:#fee2e2;--red:#991b1b;--amber-bg:#fef3c7;--amber:#92400e;--blue-bg:#e0f2fe;--blue:#0369a1;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);--shadow-md:0 4px 16px rgba(0,0,0,0.07); }
@@ -73,9 +73,9 @@
         </div>
     </div>
     <nav class="sidebar-nav">
-        <a class="nav-item" href="dashboard.html"><span class="material-icons">dashboard</span> Overview</a>
-        <a class="nav-item active" href="merchants.html"><span class="material-icons">storefront</span> My Merchants</a>
-        <a class="nav-item" href="messages.html"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href='/partner/dashboard'><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item active" href='/partner/merchants'><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item" href='/partner/messages'><span class="material-icons">forum</span> Messages</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -136,7 +136,7 @@
 
 <script>
 const token = localStorage.getItem('pp_partner_token');
-if (!token) window.location.href = 'index.html';
+if (!token) window.location.href = '/partner';
 
 let currentPage = 0;
 const limit = 25;
@@ -146,7 +146,7 @@ let searchTimeout = null;
 async function init() {
     const authRes = await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'validate', token }) });
     const auth = await authRes.json();
-    if (!auth.success) { localStorage.clear(); window.location.href = 'index.html'; return; }
+    if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
     const initials = auth.partner.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     document.getElementById('sidebarAvatar').innerText = initials;
     document.getElementById('sidebarName').innerText = auth.partner.name;
@@ -295,7 +295,7 @@ async function exportCSV() {
 
 async function handleLogout() {
     await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'logout', token }) });
-    localStorage.clear(); window.location.href = 'index.html';
+    localStorage.clear(); window.location.href = '/partner';
 }
 
 window.onload = init;
