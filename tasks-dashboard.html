@@ -2,213 +2,414 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Task Center | Secure Console</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Task Center | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
-    <style>
-        :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
-        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
-        .dashboard-container { max-width: 1400px; margin: 0 auto; }
-        .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .main-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .slds-table thead th { background-color: #f8fafc !important; font-weight: 700 !important; color: #475569 !important; padding: 15px !important; }
-        .task-row:hover { background-color: #f8fafc !important; cursor: pointer; }
-        .badge-due { font-weight: 800; font-size: 10px; padding: 4px 10px; border-radius: 4px; background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
-        .modern-input { border-radius: 8px !important; border: 1px solid #cbd5e1 !important; padding: 8px 12px !important; width: 100%; font-size: 0.8rem; margin-bottom: 12px; }
-        .edit-label { font-size: 9px; font-weight: 700; color: #64748b; margin-bottom: 3px; display: block; text-transform: uppercase; }
-    </style>
+    <link rel="stylesheet" href="css/pp-system.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>
-    (function() {
-        // 1. Check if a session exists in LocalStorage
-        const sessionUser = localStorage.getItem('pp_userid');
-        const isVerified = localStorage.getItem('pp_verified');
-
-        // 2. If no session, boot them to the login page immediately
-        if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
-        }
-    })();
-</script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='index.html?reason=unauthorized';})();</script>
+    <style>
+        .view-tabs{display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;}
+        .view-tab{padding:7px 16px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:'DM Sans',sans-serif;transition:all 0.2s;}
+        .view-tab.active{background:white;color:var(--pp-blue);box-shadow:0 1px 3px rgba(0,0,0,0.08);}
+        .priority-urgent{background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .priority-high{background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .priority-normal{background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .priority-low{background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .overdue-row{background:#fff5f5!important;}
+        .task-row{cursor:pointer;transition:background 0.15s;}
+        .task-row:hover{background:#f8fafc!important;}
+        .comment-item{background:#f8fafc;border-radius:10px;padding:10px 12px;margin-bottom:8px;}
+        .comment-author{font-weight:700;font-size:12px;color:#0a1628;}
+        .comment-body{font-size:13px;color:#475569;margin-top:3px;}
+        .comment-time{font-size:10px;color:#94a3b8;margin-top:3px;}
+        .stat-card{background:white;border:1px solid var(--border);border-radius:14px;padding:18px 20px;display:flex;align-items:center;gap:14px;box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+        .stat-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;}
+        .stat-val{font-size:1.8rem;font-weight:800;font-family:'DM Mono',monospace;line-height:1;}
+        .stat-label{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:3px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+    </style>
 </head>
 <body>
+<div class="pp-container">
 
-<div class="dashboard-container">
-    <div class="modern-header">
-        <div style="display: flex; align-items: center; gap: 15px;">
-            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px;">HOME</a>
-            <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Task Center</h1>
+    <!-- HEADER -->
+    <div class="pp-header">
+        <div class="pp-header-left">
+            <a href="index.html" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <h1 class="pp-header-title">Task Center</h1>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <select id="userFilter" class="slds-select" style="width: 180px; border-radius:10px; display:none;" onchange="resetAndFetchTasks()">
-                <option value="">All Assignees</option>
-            </select>
-            <select id="taskStatusFilter" class="slds-select" style="width: 150px; border-radius:10px;" onchange="resetAndFetchTasks()">
-                <option value="Pending">Pending</option>
-                <option value="Completed">Completed</option>
-                <option value="">All Statuses</option>
-            </select>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <div class="view-tabs">
+                <button class="view-tab active" onclick="setView('mine',this)">My Tasks</button>
+                <button class="view-tab" onclick="setView('created',this)">Created by Me</button>
+                <button class="view-tab" id="allTab" style="display:none;" onclick="setView('all',this)">All Tasks</button>
+            </div>
+            <button class="pp-btn pp-btn-primary" onclick="openCreateTask()">
+                <span class="material-icons" style="font-size:16px;">add</span> New Task
+            </button>
         </div>
     </div>
 
-    <article class="main-card">
-        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
+    <!-- STATS -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;">
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#e0f2fe;color:#0369a1;"><span class="material-icons">assignment</span></div>
+            <div><div class="stat-val pp-text-blue" id="statMine">—</div><div class="stat-label">My Pending Tasks</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#fee2e2;color:#991b1b;"><span class="material-icons">schedule</span></div>
+            <div><div class="stat-val" style="color:#ef4444;" id="statOverdue">—</div><div class="stat-label">Overdue</div></div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon" style="background:#f0fdf4;color:#166534;"><span class="material-icons">assignment_turned_in</span></div>
+            <div><div class="stat-val" style="color:#10b981;" id="statAll">—</div><div class="stat-label">Total Pending (All Staff)</div></div>
+        </div>
+    </div>
+
+    <!-- FILTERS -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+        <select class="pp-select" id="statusFilter" onchange="resetFetch()">
+            <option value="Pending">Pending</option>
+            <option value="Completed">Completed</option>
+            <option value="">All Statuses</option>
+        </select>
+        <select class="pp-select" id="priorityFilter" onchange="resetFetch()">
+            <option value="">All Priorities</option>
+            <option value="Urgent">🔴 Urgent</option>
+            <option value="High">🟠 High</option>
+            <option value="Normal">🔵 Normal</option>
+            <option value="Low">⚪ Low</option>
+        </select>
+        <select class="pp-select" id="assigneeFilter" style="display:none;" onchange="resetFetch()">
+            <option value="">All Assignees</option>
+        </select>
+    </div>
+
+    <!-- TABLE -->
+    <div class="pp-table-card">
+        <table class="pp-table">
             <thead>
                 <tr>
-                    <th style="width: 30%;">Task Description</th>
-                    <th style="width: 25%;">Merchant (DBA)</th>
-                    <th style="width: 15%;">Due Date</th>
-                    <th style="width: 15%;">Status</th>
-                    <th style="width: 15%; text-align: right;">Action</th>
+                    <th>Task</th>
+                    <th>Merchant</th>
+                    <th>Assigned To</th>
+                    <th>Priority</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
-            <tbody id="global-task-list"></tbody>
+            <tbody id="taskTable">
+                <tr><td colspan="7"><div class="pp-empty"><div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--pp-blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div></td></tr>
+            </tbody>
         </table>
-        <div style="padding: 15px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0;">
-            <div id="taskPageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</div>
-            <div>
-                <button class="slds-button slds-button_neutral" onclick="changeTaskPage(-1)">Prev</button>
-                <button class="slds-button slds-button_neutral" onclick="changeTaskPage(1)">Next</button>
+        <div class="pp-pagination">
+            <span id="pageInfo" style="font-size:12px;color:#94a3b8;">Loading...</span>
+            <div class="pp-pagination-controls">
+                <button class="pp-btn pp-btn-secondary" id="btnPrev" onclick="changePage(-1)" style="padding:6px 12px;font-size:12px;" disabled>← Prev</button>
+                <button class="pp-btn pp-btn-secondary" id="btnNext" onclick="changePage(1)" style="padding:6px 12px;font-size:12px;" disabled>Next →</button>
             </div>
         </div>
-    </article>
+    </div>
 </div>
 
 <script>
-    let currentTasks = []; 
-    let taskPage = 0;
-    const taskLimit = 20;
-    let staffList = [];
+const myId = localStorage.getItem('pp_userid');
+const myName = localStorage.getItem('pp_user_first_name') || 'Me';
+const myRole = (localStorage.getItem('pp_role') || '').toLowerCase();
+const isSuperAdmin = myRole.includes('super');
+const isAdmin = myRole.includes('admin') || isSuperAdmin;
 
-    async function loadStaffFilter() {
-        const res = await fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) });
-        const result = await res.json();
-        if (result.success) {
-            staffList = result.data;
-            document.getElementById('userFilter').innerHTML = '<option value="">All Assignees</option>' + 
-                staffList.map(s => `<option value="${s.id}">${s.full_name}</option>`).join('');
-        }
+let currentView = 'mine';
+let currentPage = 0;
+const limit = 25;
+let totalCount = 0;
+let staffList = [];
+let currentTasks = [];
+
+function api(body) {
+    return fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, userid: myId }) }).then(r=>r.json());
+}
+
+async function init() {
+    if (isAdmin) {
+        document.getElementById('allTab').style.display = 'inline-block';
+        document.getElementById('assigneeFilter').style.display = 'inline-block';
     }
 
-    async function fetchAllMyTasks() {
-        const myId = sessionStorage.getItem('pp_userid');
-        const res = await fetch('/api/merchants', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'get_global_tasks', 
-                userid: myId, 
-                targetUser: document.getElementById('userFilter').value || null, 
-                status: document.getElementById('taskStatusFilter').value || null, 
-                page: taskPage, 
-                limit: taskLimit 
-            })
-        });
-        const result = await res.json();
-        if (result.success) {
-            currentTasks = result.data;
-            renderTaskTable(result.data);
-            document.getElementById('taskPageInfo').innerHTML = `Page ${taskPage + 1} (Total: ${result.total || 0})`;
-        }
+    // Load staff
+    const staffRes = await api({ action:'get_staff' });
+    staffList = staffRes.data || [];
+    const sel = document.getElementById('assigneeFilter');
+    staffList.forEach(s => sel.innerHTML += `<option value="${s.id}">${s.full_name}</option>`);
+
+    // Load stats
+    loadStats();
+    loadTasks();
+}
+
+async function loadStats() {
+    const res = await api({ action:'get_stats' });
+    if (res.success) {
+        document.getElementById('statMine').innerText = res.mine;
+        document.getElementById('statOverdue').innerText = res.overdue;
+        document.getElementById('statAll').innerText = res.all;
     }
+}
 
-    function renderTaskTable(tasks) {
-        const tbody = document.getElementById('global-task-list');
-        if (!tasks || tasks.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:80px;"><span class="material-icons" style="font-size:48px; color:#22c55e;">check_circle</span><br><b>Congrats, you don't have a pending task today!</b></td></tr>`;
-            return;
-        }
-        tbody.innerHTML = tasks.map(t => `
-            <tr class="task-row" onclick="manageTaskModal('${t.id}')">
-                <td><div style="font-weight:700; color:var(--pp-blue);">${t.title}</div><div style="font-size:11px; color:#64748b;">${t.body || ''}</div></td>
-                <td><strong>${t.merchants?.dba_name || '---'}</strong></td>
-                <td><span class="badge-due">${t.due_date || 'N/A'}</span></td>
-                <td><span class="slds-badge">${t.status}</span></td>
-                <td style="text-align: right;"><button class="slds-button slds-button_brand slds-button_small">MANAGE</button></td>
-            </tr>`).join('');
-    }
+async function loadTasks() {
+    const tbody = document.getElementById('taskTable');
+    tbody.innerHTML = `<tr><td colspan="7"><div class="pp-empty"><div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--pp-blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div></td></tr>`;
 
-    async function manageTaskModal(taskId) {
-        const task = currentTasks.find(t => t.id === taskId);
-        if (!task) return;
+    const res = await api({
+        action: 'get_tasks',
+        view: currentView,
+        status: document.getElementById('statusFilter').value,
+        priority: document.getElementById('priorityFilter').value,
+        assigned_to: document.getElementById('assigneeFilter').value || undefined,
+        page: currentPage,
+        limit
+    });
 
-        const staffOptions = staffList.map(s => 
-            `<option value="${s.id}" ${s.id === task.assigned_to ? 'selected' : ''}>${s.full_name}</option>`
-        ).join('');
+    totalCount = res.count || 0;
+    currentTasks = res.data || [];
 
-        Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Manage Task</div>`,
-            width: '600px',
-            html: `
-                <div style="text-align:left; padding:10px;">
-                    <div style="background:#f8fafc; padding:10px; border-radius:8px; margin-bottom:15px;">
-                        <small style="color:#64748b; font-weight:700;">MERCHANT</small>
-                        <div style="font-weight:800; color:#004990;">${task.merchants?.dba_name || '---'}</div>
+    if (!currentTasks.length) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="pp-empty"><span class="material-icons">check_circle</span><p>No tasks found! ${currentView==='mine'?'You\'re all caught up 🎉':''}</p></div></td></tr>`;
+    } else {
+        tbody.innerHTML = currentTasks.map(t => {
+            const isOverdue = t.is_overdue;
+            const pClass = `priority-${(t.priority||'normal').toLowerCase()}`;
+            const dueColor = isOverdue ? 'color:#ef4444;font-weight:700;' : '';
+            const statusBadge = t.status === 'Completed'
+                ? '<span class="pp-badge approved">Completed</span>'
+                : '<span class="pp-badge pending">Pending</span>';
+            return `<tr class="task-row ${isOverdue?'overdue-row':''}" onclick="openTaskDetail('${t.id}')">
+                <td>
+                    <div style="font-weight:700;color:var(--pp-blue);">${t.title}</div>
+                    ${t.body?`<div style="font-size:11px;color:#94a3b8;margin-top:2px;">${t.body.substring(0,60)}${t.body.length>60?'...':''}</div>`:''}
+                </td>
+                <td style="font-weight:600;">${t.merchants?.dba_name||'—'}</td>
+                <td style="font-size:12px;">${t.assigned_to_name}</td>
+                <td><span class="${pClass}">${t.priority||'Normal'}</span></td>
+                <td style="font-size:12px;${dueColor}">${t.due_date||'—'}${isOverdue?' ⚠️':''}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    <div class="pp-actions">
+                        <button class="pp-btn pp-btn-icon" onclick="event.stopPropagation();openTaskDetail('${t.id}')" title="View"><span class="material-icons" style="font-size:14px;">open_in_new</span></button>
+                        <button class="pp-btn pp-btn-icon" onclick="event.stopPropagation();quickComplete('${t.id}','${t.status}')" title="Toggle complete"><span class="material-icons" style="font-size:14px;">${t.status==='Completed'?'undo':'check'}</span></button>
                     </div>
-
-                    <label class="edit-label">Task Title</label>
-                    <input id="edit-task-title" class="modern-input" value="${task.title || ''}">
-
-                    <label class="edit-label">Task Details</label>
-                    <textarea id="edit-task-body" class="modern-input" style="height:80px;">${task.body || ''}</textarea>
-
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px;">
-                        <div>
-                            <label class="edit-label">Due Date</label>
-                            <input type="date" id="edit-task-due" class="modern-input" value="${task.due_date || ''}">
-                        </div>
-                        <div>
-                            <label class="edit-label">Assign To</label>
-                            <select id="edit-task-assign" class="modern-input">
-                                ${staffOptions}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div style="margin-top:15px; display:flex; align-items:center; gap:10px; background:#f1f5f9; padding:12px; border-radius:8px;">
-                        <input type="checkbox" id="edit-task-complete" style="width:20px; height:20px;" ${task.status === 'Completed' ? 'checked' : ''}>
-                        <label for="edit-task-complete" style="font-weight:700; color:#002d5a; cursor:pointer;">Mark as Completed</label>
-                    </div>
-
-                    <button onclick="saveTaskUpdates('${taskId}')" style="background:#004990; color:white; width:100%; padding:15px; border-radius:10px; border:none; margin-top:20px; font-weight:700; cursor:pointer;">SAVE UPDATES</button>
-                </div>`,
-            showConfirmButton: false, showCloseButton: true
-        });
+                </td>
+            </tr>`;
+        }).join('');
     }
 
-    async function saveTaskUpdates(taskId) {
-        const payload = {
-            title: document.getElementById('edit-task-title').value,
-            body: document.getElementById('edit-task-body').value,
-            due_date: document.getElementById('edit-task-due').value,
-            assigned_to: document.getElementById('edit-task-assign').value,
-            status: document.getElementById('edit-task-complete').checked ? 'Completed' : 'Pending'
-        };
+    const from = currentPage * limit + 1;
+    const to = Math.min((currentPage+1)*limit, totalCount);
+    document.getElementById('pageInfo').innerText = totalCount ? `${from}–${to} of ${totalCount} tasks` : 'No tasks';
+    document.getElementById('btnPrev').disabled = currentPage === 0;
+    document.getElementById('btnNext').disabled = to >= totalCount;
+}
 
-        const res = await fetch('/api/merchants', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'update_task', task_id: taskId, payload })
-        });
+function setView(view, el) {
+    currentView = view;
+    currentPage = 0;
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    loadTasks();
+}
 
-        if ((await res.json()).success) {
-            Swal.fire({ icon: 'success', title: 'Task Updated', timer: 1500, showConfirmButton: false });
-            fetchAllMyTasks();
-        }
-    }
+function resetFetch() { currentPage = 0; loadTasks(); }
+function changePage(dir) { currentPage += dir; loadTasks(); }
 
-    function changeTaskPage(dir) { taskPage += dir; if (taskPage < 0) taskPage = 0; fetchAllMyTasks(); }
-    function resetAndFetchTasks() { taskPage = 0; fetchAllMyTasks(); }
+async function openTaskDetail(taskId) {
+    const task = currentTasks.find(t => t.id === taskId);
+    if (!task) return;
 
-    window.onload = async () => { 
-        const role = (sessionStorage.getItem('pp_role') || "").toUpperCase();
-        if (role === 'ADMIN' || role === 'SUPER ADMIN') {
-            document.getElementById('userFilter').style.display = 'inline-block';
-        }
-        await loadStaffFilter(); 
-        fetchAllMyTasks(); 
+    // Load comments
+    const commRes = await api({ action:'get_comments', task_id: taskId });
+    const comments = commRes.data || [];
+
+    const staffOpts = staffList.map(s => `<option value="${s.id}" ${s.id===task.assigned_to?'selected':''}>${s.full_name}</option>`).join('');
+    const priorityOpts = ['Low','Normal','High','Urgent'].map(p => `<option value="${p}" ${p===task.priority?'selected':''}>${p}</option>`).join('');
+
+    Swal.fire({
+        title: `<div style="text-align:left;font-weight:800;color:#001e3c;font-size:16px;">${task.title}</div>`,
+        width: 680,
+        html: `
+            <div style="text-align:left;">
+                <div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;display:flex;gap:20px;font-size:12px;">
+                    <div><span style="color:#94a3b8;font-weight:700;text-transform:uppercase;font-size:10px;">Merchant</span><br><b style="color:#004990;">${task.merchants?.dba_name||'—'}</b></div>
+                    <div><span style="color:#94a3b8;font-weight:700;text-transform:uppercase;font-size:10px;">Created by</span><br><b>${task.created_by_name}</b></div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Title</label>
+                        <input id="t-title" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;" value="${task.title}">
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Assign To</label>
+                        <select id="t-assign" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">${staffOpts}</select>
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Due Date</label>
+                        <input type="date" id="t-due" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;" value="${task.due_date||''}">
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Priority</label>
+                        <select id="t-priority" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">${priorityOpts}</select>
+                    </div>
+                </div>
+
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Description</label>
+                <textarea id="t-body" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical;min-height:70px;outline:none;margin-bottom:10px;">${task.body||''}</textarea>
+
+                <div style="display:flex;align-items:center;gap:8px;background:#f8fafc;padding:10px 12px;border-radius:8px;margin-bottom:14px;">
+                    <input type="checkbox" id="t-complete" ${task.status==='Completed'?'checked':''} style="width:16px;height:16px;accent-color:#004990;">
+                    <label for="t-complete" style="font-weight:700;font-size:13px;cursor:pointer;">Mark as Completed</label>
+                </div>
+
+                <div style="display:flex;gap:8px;margin-bottom:16px;">
+                    <button onclick="saveTask('${taskId}')" style="flex:1;padding:10px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;">Save Changes</button>
+                    <button onclick="deleteTask('${taskId}')" style="padding:10px 14px;background:#fee2e2;color:#991b1b;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:13px;">Delete</button>
+                </div>
+
+                <div style="border-top:1px solid #e2e8f0;padding-top:14px;">
+                    <div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:10px;">Comments (${comments.length})</div>
+                    <div id="commentsList">
+                        ${comments.map(c=>`<div class="comment-item"><div class="comment-author">${c.author_name}</div><div class="comment-body">${c.body}</div><div class="comment-time">${new Date(c.created_at).toLocaleString()}</div></div>`).join('') || '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:12px;">No comments yet</div>'}
+                    </div>
+                    <div style="display:flex;gap:8px;margin-top:10px;">
+                        <input id="newComment" placeholder="Add a comment..." style="flex:1;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">
+                        <button onclick="addComment('${taskId}')" style="padding:8px 14px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;">Post</button>
+                    </div>
+                </div>
+            </div>`,
+        showConfirmButton: false, showCloseButton: true
+    });
+}
+
+window.saveTask = async function(taskId) {
+    const payload = {
+        title: document.getElementById('t-title').value,
+        body: document.getElementById('t-body').value,
+        due_date: document.getElementById('t-due').value || null,
+        assigned_to: document.getElementById('t-assign').value,
+        priority: document.getElementById('t-priority').value,
+        status: document.getElementById('t-complete').checked ? 'Completed' : 'Pending'
     };
+    await api({ action:'update_task', task_id: taskId, payload });
+    Swal.fire({ icon:'success', title:'Saved!', timer:1200, showConfirmButton:false });
+    loadTasks(); loadStats();
+};
+
+window.deleteTask = async function(taskId) {
+    const { isConfirmed } = await Swal.fire({ title:'Delete task?', icon:'warning', showCancelButton:true, confirmButtonColor:'#ef4444', confirmButtonText:'Delete' });
+    if (isConfirmed) { await api({ action:'delete_task', task_id: taskId }); Swal.close(); loadTasks(); loadStats(); }
+};
+
+window.addComment = async function(taskId) {
+    const body = document.getElementById('newComment').value.trim();
+    if (!body) return;
+    await api({ action:'add_comment', task_id: taskId, body });
+    document.getElementById('newComment').value = '';
+    openTaskDetail(taskId);
+};
+
+async function quickComplete(taskId, status) {
+    const newStatus = status === 'Completed' ? 'Pending' : 'Completed';
+    await api({ action:'update_task', task_id: taskId, payload: { status: newStatus } });
+    loadTasks(); loadStats();
+}
+
+async function openCreateTask() {
+    const staffOpts = staffList.map(s => `<option value="${s.id}" ${s.id===myId?'selected':''}>${s.full_name}</option>`).join('');
+    
+    // Search merchants
+    const { value: form } = await Swal.fire({
+        title: 'Create New Task',
+        width: 580,
+        html: `
+            <div style="text-align:left;">
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Task Title *</label>
+                <input id="c-title" placeholder="e.g. Follow up on deployment" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:10px;">
+                
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Merchant ID *</label>
+                <input id="c-mid" placeholder="Search by merchant ID or DBA name..." style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:4px;" oninput="searchMerchant(this.value)">
+                <div id="merchantResults" style="border:1px solid #e2e8f0;border-radius:8px;max-height:140px;overflow-y:auto;display:none;margin-bottom:10px;"></div>
+                <input type="hidden" id="c-merchant-uuid">
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px;">
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Assign To</label>
+                        <select id="c-assign" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">${staffOpts}</select>
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Priority</label>
+                        <select id="c-priority" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;"><option>Normal</option><option>High</option><option>Urgent</option><option>Low</option></select>
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Due Date</label>
+                        <input type="date" id="c-due" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">
+                    </div>
+                </div>
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Description</label>
+                <textarea id="c-body" placeholder="Task details..." style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;resize:vertical;min-height:70px;outline:none;"></textarea>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Create Task',
+        preConfirm: () => {
+            const title = document.getElementById('c-title').value.trim();
+            const mid = document.getElementById('c-merchant-uuid').value;
+            if (!title) { Swal.showValidationMessage('Task title required'); return false; }
+            if (!mid) { Swal.showValidationMessage('Please select a merchant'); return false; }
+            return {
+                title,
+                merchant_id: mid,
+                assigned_to: document.getElementById('c-assign').value,
+                priority: document.getElementById('c-priority').value,
+                due_date: document.getElementById('c-due').value || null,
+                body: document.getElementById('c-body').value
+            };
+        }
+    });
+
+    if (form) {
+        await api({ action:'create_task', ...form });
+        Swal.fire({ icon:'success', title:'Task Created!', timer:1500, showConfirmButton:false });
+        loadTasks(); loadStats();
+    }
+}
+
+let merchantSearchTimeout;
+window.searchMerchant = function(q) {
+    clearTimeout(merchantSearchTimeout);
+    const results = document.getElementById('merchantResults');
+    if (!q || q.length < 2) { results.style.display='none'; return; }
+    merchantSearchTimeout = setTimeout(async () => {
+        const res = await fetch('/api/merchants', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'list', query:q, filterBy:'dba_name', page:0, limit:8 }) });
+        const data = await res.json();
+        results.style.display = 'block';
+        results.innerHTML = (data.data||[]).map(m => `
+            <div onclick="selectMerchant('${m.id}','${m.dba_name.replace(/'/g,"\\'")}','${m.merchant_id}')" 
+                 style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;font-size:12px;display:flex;justify-content:space-between;">
+                <b>${m.dba_name}</b>
+                <span style="color:#94a3b8;font-family:'DM Mono',monospace;">${m.merchant_id}</span>
+            </div>`).join('') || '<div style="padding:12px;color:#94a3b8;text-align:center;font-size:12px;">No merchants found</div>';
+    }, 300);
+};
+
+window.selectMerchant = function(id, name, mid) {
+    document.getElementById('c-mid').value = `${name} (${mid})`;
+    document.getElementById('c-merchant-uuid').value = id;
+    document.getElementById('merchantResults').style.display = 'none';
+};
+
+window.onload = init;
 </script>
 </body>
 </html>
