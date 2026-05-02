@@ -245,18 +245,7 @@ input[type=number] {
     </div>
 </div>
    <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
-    <button onclick="filterByTrend('growth')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f0fdf4; color: #166534;">
-        <span class="material-icons" style="font-size: 16px;">trending_up</span> GROWTH
-    </button>
-    <button onclick="filterByTrend('stable')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f8fafc; color: #475569;">
-        <span class="material-icons" style="font-size: 16px;">trending_flat</span> STABLE
-    </button>
-    <button onclick="filterByTrend('risk')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #fef2f2; color: #991b1b;">
-        <span class="material-icons" style="font-size: 16px;">trending_down</span> AT RISK
-    </button>
-    <button onclick="filterByTrend('all')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: white; color: var(--pp-blue);">
-        CLEAR FILTER
-    </button>
+    
 </div>
     <div id="partnerGrid" class="partner-grid"></div>
    <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
@@ -1102,17 +1091,18 @@ async function submitOnboarding() {
                 body: JSON.stringify({ action: 'get_partners_list' })
             });
             const result = await res.json();
-            if (result.success && result.data.persons) {
-                identifiersRaw = result.data.identifiers || [];
-                agentsRaw = result.data.agents || [];
-                personsRaw = result.data.persons || [];
-                allPartners = processPartnerData(result.data);
+            if (result.success && result.partners) {
+                allPartners = result.partners;
+                // Still populate these for quickAddId / detail lookups
+                identifiersRaw = result.partners.flatMap(p => 
+                    p.companies.flatMap(co => co.ids.map(id => ({
+                        id: id.db_id, id_string: id.string, 
+                        rev_share: id.rev, prime49: id.isPrime,
+                        parent_config_id: id.parent_config_id
+                    })))
+                );
                 currentPage = 1;
-                activeTrendFilter = 'all'; // Reset trend filter on fresh load
                 renderGrid(allPartners);
-                
-                // Load stats in background - fire and forget, never blocks render
-                setTimeout(() => loadAllStats(), 500);
             }
         } catch (err) {
             console.error("Loader Error:", err);
