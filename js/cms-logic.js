@@ -31,6 +31,8 @@ function filterUsers() {
         (u.role||'').toLowerCase().includes(q)
     ) : allUsersData;
     renderUsers(filtered);
+    const countEl = document.getElementById('userCount');
+    if (countEl) countEl.innerText = `${filtered.length} of ${allUsersData.length} users`;
 }
 
 function renderUsers(data) {
@@ -48,13 +50,13 @@ function renderUsers(data) {
         const isTargetSuper = (user.role === 'super_admin');
         const statusClass = user.is_active ? 'status-active' : 'status-pending';
         const disableActions = isTargetSuper && !iAmSuper;
-        const lastSeen = user.last_seen ? new Date(user.last_seen).toLocaleDateString() : '—';
-        const isPending = !user.is_active && user.invitation_token;
+        const lastSeen = (user.last_seen||user.last_portal_login) ? new Date(user.last_seen||user.last_portal_login).toLocaleDateString() : '—';
+        const isPending = !user.is_active; // Show resend for any inactive user
 
         const row = document.createElement('tr');
         row.innerHTML = `
             <td>
-                <div style="font-weight:700;">${user.first_name || ''}</div>
+                <div style="font-weight:700;">${(user.first_name||'').replace(/</g,'&lt;')}</div>
                 <div style="font-size:10px;color:#94a3b8;">Last login: ${lastSeen}</div>
             </td>
             <td style="font-size:12px;">${user.email || '---'}</td>
