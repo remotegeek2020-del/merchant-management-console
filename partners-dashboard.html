@@ -298,10 +298,30 @@ input[type=number] {
                style="font-family:'DM Sans',sans-serif;">
         <div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div>
     </div>
-    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
-        <option value="none">Independent (Individual Partner)</option>
-        <option value="new">+ Create New Company...</option>
-        </select>
+    <!-- Company Search -->
+    <div style="position:relative;">
+        <input type="text" id="companySearchInput" class="wizard-input" placeholder="🔍 Search company name..." 
+               oninput="searchCompanies(this.value)" autocomplete="off"
+               style="padding-right:36px;">
+        <div id="companyResults" style="position:absolute;top:100%;left:0;right:0;background:white;border:1px solid #e2e8f0;border-radius:0 0 8px 8px;max-height:200px;overflow-y:auto;z-index:200;display:none;box-shadow:0 4px 12px rgba(0,0,0,0.1);">
+        </div>
+    </div>
+    <input type="hidden" id="companySelect" value="">
+    <div id="companySelectedDisplay" style="display:none;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;padding:8px 12px;font-size:12px;color:#004990;font-weight:700;display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+        <span id="companySelectedName"></span>
+        <span onclick="clearCompanySelection()" style="cursor:pointer;color:#64748b;">✕</span>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:8px;">
+        <button type="button" onclick="selectNewCompany()" class="wizard-input" style="flex:1;cursor:pointer;background:#f8fafc;border-style:dashed;color:#475569;font-size:12px;font-weight:600;padding:9px;">
+            + Create New Company
+        </button>
+        <button type="button" onclick="selectIndependent()" class="wizard-input" style="flex:1;cursor:pointer;background:#f8fafc;border-style:dashed;color:#475569;font-size:12px;font-weight:600;padding:9px;">
+            👤 Independent Partner
+        </button>
+    </div>
+    <div id="newCompanyWrap" style="display:none;margin-top:8px;">
+        <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter new company name...">
+    </div>
     
     <div id="newCompanyFields" style="margin-top: 10px; display: none;">
         <label class="search-label">New Company Name</label>
@@ -323,14 +343,20 @@ input[type=number] {
             <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
         </div>
         
-        <div style="display: flex; gap: 8px; align-items: center;">
+        <div style="display: flex; gap: 8px; align-items: center; flex-wrap:wrap;">
             <input type="number" id="idRevInput" class="wizard-input" 
-               placeholder="Rev Share (Number only)" style="flex: 1;"
+               placeholder="Rev Share (e.g. 50)" style="flex: 1; min-width:120px;"
                inputmode="numeric">
+            <select id="idParentSelect" class="wizard-input" style="flex:1;min-width:140px;" title="Parent ID (for sub-tier IDs)">
+                <option value="">No Parent (Main ID)</option>
+            </select>
             <label style="display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #64748b; white-space: nowrap;">
                 <input type="checkbox" id="idPrimeInput"> PRIME ⭐
             </label>
             <button onclick="addIdToList()" class="pagination-btn" style="background: var(--pp-blue); color: white; padding: 0 15px; height: 40px;">ADD</button>
+        </div>
+        <div style="font-size:10px;color:#94a3b8;margin-top:4px;">
+            💡 If this ID is a sub-tier of another ID (e.g. Agent B's sub-ID under Agent A's 00000), select the parent ID above.
         </div>
     </div>
 
@@ -483,6 +509,9 @@ async function logAuditAction(action, details) {
             hl_id: person.hl_contact_id,
             enrolled_at: person.enrolled_at || null,
             enrolled_by: person.enrolled_by || null,
+            portal_active: person.is_portal_active || false,
+            portal_setup: person.portal_password_set || false,
+            last_portal_login: person.last_portal_login || null,
             companies: formatted,
             statusTrend: trend // This is what the filter uses!
         } : null;
@@ -604,18 +633,17 @@ window.filterByTrend = function(trend) {
     }
 
     async function loadWizardCompanies() {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_partners_list' })
-        });
-        const result = await res.json();
-        const select = document.getElementById('companySelect');
-        select.innerHTML = `
-            <option value="none">Independent (Individual Partner)</option>
-            <option value="new">+ Create New Company</option>
-        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
-        toggleCompanyInput();
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_all_data' })
+            });
+            const result = await res.json();
+            if (result.success) {
+                allCompaniesRaw = (result.data.companies || []).sort((a,b) => a.company_name.localeCompare(b.company_name));
+            }
+        } catch(err) { console.error('Company load error:', err); }
     }
 
     // ==========================================
@@ -825,21 +853,34 @@ window.exportTrendToCSV = function(agentId, data) {
 
     function renderIdList() {
         const container = document.getElementById('addedIdsList');
-        if (!container) return;
-        if (pendingIds.length === 0) {
-            container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
+        if (!pendingIds.length) {
+            container.innerHTML = '<div style="color:#94a3b8;font-size:11px;text-align:center;padding:30px;">No IDs added yet</div>';
             return;
         }
-        container.innerHTML = pendingIds.map((item, index) => `
-            <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:5px;">
-                <div style="font-size:12px;">
-                    <b style="color:var(--pp-blue);">${item.string}</b> 
-                    ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
-                    <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
+        // Separate main IDs and sub-IDs
+        const mainIds = pendingIds.filter(id => !id.parent_config_id);
+        const subIds = pendingIds.filter(id => id.parent_config_id);
+        
+        container.innerHTML = pendingIds.map((id, idx) => {
+            const isChild = !!id.parent_config_id;
+            const parentStr = id.parent_config_id ? pendingIds.find(p => p.string === id.parent_config_id)?.string || id.parent_config_id : null;
+            return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 10px;background:${isChild?'#f0f7ff':'#f8fafc'};border-radius:8px;border:1px solid ${isChild?'#bfdbfe':'#e2e8f0'};${isChild?'margin-left:20px;border-left:3px solid #004990;':''}" data-idx="${idx}">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    ${isChild ? '<span class="material-icons" style="font-size:14px;color:#94a3b8;">subdirectory_arrow_right</span>' : '<span class="material-icons" style="font-size:14px;color:#004990;">badge</span>'}
+                    <div>
+                        <div style="font-weight:800;font-size:13px;font-family:'DM Mono',monospace;color:#004990;">${id.string}</div>
+                        <div style="font-size:10px;color:#94a3b8;">
+                            ${isChild ? `Sub-tier of <b>${parentStr}</b> · ` : 'Main ID · '}
+                            Rev: ${id.rev || '—'}%
+                            ${id.prime ? ' · <span style="color:#d97706;font-weight:800;">⭐ PRIME</span>' : ''}
+                        </div>
+                    </div>
                 </div>
-                <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
-            </div>
-        `).join('');
+                <button onclick="removeId(${idx})" style="background:none;border:none;color:#94a3b8;cursor:pointer;padding:4px;" title="Remove">
+                    <span class="material-icons" style="font-size:16px;">close</span>
+                </button>
+            </div>`;
+        }).join('');
     }
 
     // ==========================================
@@ -869,7 +910,7 @@ async function submitOnboarding() {
             return Swal.fire('Error', 'Please complete Step 1 (HighLevel Lookup) first.', 'error');
         }
 
-        const companyVal = document.getElementById('companySelect').value;
+        const companyVal = document.getElementById('companySelect').value || 'none';
         const activationDate = document.getElementById('partnerActivationDate')?.value;
         payload.person = {
             name: selectedGHLContact.name,
@@ -1099,11 +1140,16 @@ async function submitOnboarding() {
                             style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;">
                         <span class="material-icons" style="font-size:14px;">person</span> View Detail
                     </button>
-                    <button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name}','${p.email||''}')"
-                            style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;"
-                            title="Invite to Partner Portal">
-                        <span class="material-icons" style="font-size:14px;">send</span> Invite to Portal
-                    </button>
+                    ${p.portal_active && p.portal_setup ? 
+                        `<div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:7px;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:4px;">
+                            <span class="material-icons" style="font-size:14px;">verified</span> Portal Active
+                        </div>` :
+                        `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name}','${p.email||''}')"
+                                style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;"
+                                title="${p.portal_active ? 'Invite sent, awaiting setup' : 'Invite to Partner Portal'}">
+                            <span class="material-icons" style="font-size:14px;">${p.portal_active ? 'mark_email_read' : 'send'}</span>
+                            ${p.portal_active ? 'Resend Invite' : 'Invite to Portal'}
+                        </button>`}
                 </div>
             </div>`;
     }).join('');
