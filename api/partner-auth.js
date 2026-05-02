@@ -88,7 +88,7 @@ export default async function handler(req, res) {
             const inviteToken = generateToken(32);
             const expires = new Date(Date.now() + 72 * 60 * 60 * 1000);
             await supabase.from('persons').update({ portal_invite_token: inviteToken, invite_expires_at: expires.toISOString(), is_portal_active: true }).eq('id', person_id);
-            const inviteUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner/setup.html?token=${inviteToken}`;
+            const inviteUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?token=${inviteToken}`;
             console.log(`[PARTNER INVITE] ${person.full_name} <${person.email}> -> ${inviteUrl}`);
             // Send via Postmark
             if (process.env.POSTMARK_SERVER_TOKEN) {
@@ -138,7 +138,7 @@ export default async function handler(req, res) {
             if (person && person.is_portal_active) {
                 const resetToken = generateToken(32);
                 await supabase.from('persons').update({ portal_invite_token: resetToken, invite_expires_at: new Date(Date.now() + 3600000).toISOString() }).eq('id', person.id);
-                const resetUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner/setup.html?token=${resetToken}&mode=reset`;
+                const resetUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?token=${resetToken}&mode=reset`;
                 console.log(`[PASSWORD RESET] ${person.email} -> ${resetUrl}`);
                 if (process.env.POSTMARK_SERVER_TOKEN) {
                     try {
