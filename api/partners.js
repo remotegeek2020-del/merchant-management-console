@@ -1,254 +1,1583 @@
-import { createClient } from '@supabase/supabase-js';
-
-export default async function handler(req, res) {
-    res.setHeader('Content-Type', 'application/json');
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-
-    const body = req.body || {};
-    const { action, person_id, id, payload } = body;
-
-    if (!action) return res.status(400).json({ success: false, message: "No action provided" });
-
-    try {
-
-        if (action === 'update_person_field') {
-    const { id, field, value } = body;
-    const { error } = await supabase
-        .from('persons')
-        .update({ [field]: value })
-        .eq('id', id);
-    return res.status(200).json({ success: !error });
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Partner Network | Secure Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <style>
+        :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
+        body { background: #f1f5f9; padding: 25px; font-family: 'Inter', sans-serif; }
+        .dashboard-container { max-width: 1400px; margin: 0 auto; }
+        .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
+        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
+        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; }
+        .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
+        .id-badge { background: #f1f5f9; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; border: 1px solid #e2e8f0; }
+        .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; }
+        .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
+        .company-box { border: 1px solid #e2e8f0; border-radius: 12px; padding: 15px; margin-bottom: 15px; background: #fafbfc; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* Add this to your styles to indent sub-partners */
+.sub-id-container {
+    margin-left: 15px;
+    border-left: 2px solid #e2e8f0;
+    padding-left: 8px;
+    margin-top: 5px;
 }
 
-   // Example of what your backend logic should look like:
-if (action === 'get_orphan_ids') {
-    const { query, placeholder_uuid } = body;
-    const { data, error } = await supabase
-        .from('agent_identifiers')
-        .select('id_string')
-        .eq('agent_id', placeholder_uuid) // Filter for the "Placeholder Agent"
-        .ilike('id_string', `%${query}%`)  // Search the string
-        .limit(10);
-    return res.status(200).json({ data });
+.id-badge.sub {
+    font-size: 11px;
+    background: #f8fafc;
 }
-        if (action === 'search_ghl') {
-    const { query } = body;
-    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=dfg08aPdtlQ1RhIKkCnN&query=${query}`, {
-        headers: {
-            'Authorization': 'Bearer pit-4da3c37b-fcae-4274-a893-7ad7777a4bba',
-            'Version': '2021-07-28'
-        }
-    });
-    const data = await ghlRes.json();
-    return res.status(200).json({ success: true, contacts: data.contacts });
-}
-if (action === 'complete_onboarding') {
-    const { person, company, identifiers, isQuickAdd, existingAgentId } = body;
-    let finalAgentId = existingAgentId;
-
-    if (!isQuickAdd) {
-        // --- START NEW PARTNER LOGIC ---
-        // Verify we have person data
-        if (!person || !person.email) return res.status(400).json({ success: false, message: "Missing person data for new partner" });
-
-        const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
-
-        // 1. Upsert Person
-        const enrolledBy = body.enrolled_by || null;
-        const { data: pData, error: pErr } = await supabase
-            .from('persons')
-            .upsert({ 
-                full_name: properName, 
-                email: person.email, 
-                phone_number: person.phone, 
-                hl_contact_id: person.hl_id,
-                enrolled_at: new Date().toISOString(),
-                enrolled_by: enrolledBy
-            }, { onConflict: 'email' })
-            .select().single();
-
-        if (pErr) return res.status(400).json({ success: false, message: "Person failed: " + pErr.message });
-
-        // 2. Handle Company
-        let targetCoId = company.id;
-        if (!targetCoId && !company.isIndependent && company.name) {
-            const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
-            targetCoId = coData ? coData.id : null;
-        }
-
-        // 3. Create Agent
-        const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
-            company_id: targetCoId,
-            agent_name: properName,
-            parent_agent_id: pData.id
-        }).select().single();
-
-        if (agentErr) return res.status(400).json({ success: false, message: "Agent creation failed: " + agentErr.message });
-        finalAgentId = agentData.id;
-        // --- END NEW PARTNER LOGIC ---
+        .search-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin-bottom: 40px;
+        position: relative;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
     }
 
-    // Link IDs (This runs for both modes)
-    const idInserts = identifiers.map(id => ({
-        agent_id: finalAgentId,
-        id_string: id.string,
-        rev_share: id.rev,
-        prime49: id.prime,
-        status: 'active'
-    }));
-
-    const { error: finalErr } = await supabase.from('agent_identifiers').upsert(idInserts, { onConflict: 'id_string' });
-
-    return res.status(200).json({ success: !finalErr, message: finalErr?.message });
-}
-        // --- ACTION: SEARCH BY MID ---
-if (action === 'search_by_mid') {
-    const { mid } = body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('agent_id')
-        .eq('merchant_id', mid)
-        .limit(1);
-
-    if (error) return res.status(500).json({ success: false });
-    return res.status(200).json({ success: true, agent_id: data[0]?.agent_id });
-}
-
-// --- ACTION: GET MERCHANT DATA (Using High-Speed View) ---
-if (action === 'get_merchant_data') {
-    const { identifier_ids } = body;
-    try {
-        const { data: stats, error } = await supabase
-            .from('merchant_stats_by_id')
-            .select('*')
-            .in('agent_id', identifier_ids); // identifier_ids must be an array of strings
-
-        if (error) throw error;
-        
-        // Log this to your server console to see if the DB is returning more than 1
-        console.log("Stats returned from DB:", stats);
-
-        return res.status(200).json({ success: true, data: stats });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+    .search-wrapper {
+        position: relative;
+        width: 100%;
+        display: flex;
+        align-items: center;
     }
-}
-        // --- ACTION: MOVE IDENTIFIER (Legacy/Single Update) ---
-        if (action === 'move_identifier') {
-            const { identifier_id, new_parent_id } = body;
 
-            if (identifier_id === new_parent_id) {
-                return res.status(400).json({ success: false, message: "ID cannot be its own parent." });
-            }
-
-            const parentId = (!new_parent_id || new_parent_id === "" || new_parent_id === "null") 
-                ? null 
-                : new_parent_id;
-
-            const { error } = await supabase
-                .from('agent_identifiers')
-                .update({ parent_config_id: parentId })
-                .eq('id', identifier_id);
-
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-        if (action === 'update_identifier_all') {
-    const { id, rev_share, prime49, new_parent_id } = body;
-    const { error } = await supabase
-        .from('agent_identifiers')
-        .update({ 
-            rev_share, 
-            prime49, 
-            parent_config_id: new_parent_id 
-        })
-        .eq('id', id);
-    return res.status(200).json({ success: !error, message: error?.message });
-}
-
-        // --- ACTION: GET ALL STATS (for page-level trend calculation) ---
-if (action === 'get_all_stats') {
-    try {
-        // Fetch all stats from the view in chunks to avoid timeouts
-        let allStats = [];
-        let from = 0;
-        let finished = false;
-        while (!finished) {
-            const { data, error } = await supabase
-                .from('merchant_stats_by_id')
-                .select('agent_id, merchant_count, total_volume_sum, total_volume_90d_sum, pending_count, closed_count, risk_count')
-                .range(from, from + 999);
-            if (error || !data || data.length === 0) { finished = true; }
-            else {
-                allStats = allStats.concat(data);
-                from += 1000;
-                if (data.length < 1000) finished = true;
-            }
-        }
-        return res.status(200).json({ success: true, data: allStats });
-    } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+    .search-wrapper .material-icons {
+        position: absolute;
+        left: 15px;
+        color: #94a3b8;
+        font-size: 20px;
     }
-}
 
-        // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
-        if (action === 'get_partners_list') {
-            async function fetchAll(table, select) {
-                let allData = [];
-                let from = 0;
-                let finished = false;
-                while (!finished) {
-                    const { data, error } = await supabase.from(table).select(select).range(from, from + 999);
-                    if (error || !data || data.length === 0) { finished = true; }
-                    else {
-                        allData = allData.concat(data);
-                        from += 1000;
-                        if (data.length < 1000) finished = true;
-                    }
-                }
-                return allData;
-            }
+    #partnerSearchInput {
+        width: 100%;
+        padding: 14px 20px 14px 45px;
+        font-size: 15px;
+        font-weight: 500;
+        color: #002d5a;
+        background: #ffffff;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        outline: none;
+        transition: all 0.2s ease-in-out;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    }
 
-            const [persons, agents, identifiers, companies] = await Promise.all([
-                // UPDATED SELECT STRING BELOW
-                fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id'),
-                fetchAll('agents', 'id, company_id, parent_agent_id'),
-                fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
-                fetchAll('companies', 'id, company_name')
-            ]);
+    #partnerSearchInput:focus {
+        border-color: #002d5a;
+        box-shadow: 0 10px 15px -3px rgba(0, 45, 90, 0.1);
+        background: #fff;
+    }
 
-            return res.status(200).json({ 
-                success: true, 
-                data: { persons, agents, identifiers, companies } 
-            });
-        }
+    #partnerSearchInput::placeholder {
+        color: #94a3b8;
+    }
 
- // Inside partners.js
-if (action === 'get_merchant_data_raw') {
-    const { identifier_id } = body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, last_batch_date') // Added merchant_id and last_batch_date
-        .eq('agent_id', identifier_id);
+    .search-label {
+        font-size: 11px;
+        font-weight: 800;
+        color: #64748b;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-bottom: 8px;
+        align-self: flex-start;
+        margin-left: 5px;
+    }
     
-    return res.status(200).json({ success: true, data });
+    #searchStats {
+        font-size: 12px;
+        color: #94a3b8;
+        margin-top: 10px;
+        font-weight: 500;
+    }
+        /* Premium Search Integration */
+.search-area {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end; /* Aligns search to the right of the header */
+    gap: 6px;
+    flex: 0 1 450px;
 }
-        // --- ACTION: GET HIERARCHY ---
-        if (action === 'get_hierarchy') {
-            const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
-            const masterIds = (masters || []).map(a => a.id);
 
-            const { data: subAgents, error } = await supabase
-                .from('agents')
-                .select(`agent_name, agent_identifiers (id_string, rev_share)`)
-                .in('parent_agent_id', masterIds);
+.search-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
 
-            if (error) throw error;
-            return res.status(200).json({ success: true, data: subAgents || [] });
+.search-wrapper .material-icons {
+    position: absolute;
+    left: 14px;
+    color: #94a3b8;
+    font-size: 20px;
+    pointer-events: none;
+}
+
+#partnerSearchInput {
+    width: 100%;
+    height: 48px;
+    padding: 0 15px 0 45px;
+    font-size: 14px;
+    font-weight: 500;
+    color: #002d5a;
+    background: #f8fafc; /* Subtle light background */
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    outline: none;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+#partnerSearchInput:focus {
+    border-color: #004990; /* Matches your --pp-blue */
+    background: #ffffff;
+    box-shadow: 0 4px 12px rgba(0, 73, 144, 0.08);
+}
+
+#searchStats {
+    font-size: 10px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-right: 5px;
+}
+
+/* Pagination Button Fix */
+.pagination-btn {
+    padding: 10px 20px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
+    background: white;
+    cursor: pointer;
+    font-weight: 700;
+    color: #002d5a;
+    transition: 0.2s;
+}
+
+.pagination-btn:hover:not(:disabled) {
+    background: #f1f5f9;
+    border-color: #004990;
+}
+
+.pagination-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+        /* Onboarding Wizard Styles */
+.wizard-overlay { 
+    position: fixed; top: 0; right: -500px; width: 450px; height: 100%; 
+    background: white; box-shadow: -10px 0 30px rgba(0,0,0,0.1); 
+    z-index: 10000; transition: 0.4s cubic-bezier(0.4, 0, 0.2, 1); 
+    padding: 30px; display: flex; flex-direction: column; 
+}
+.wizard-overlay.active { right: 0; }
+.step-container { display: none; flex-direction: column; gap: 20px; flex-grow: 1; }
+.step-container.active { display: flex; }
+.wizard-input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; outline: none; transition: 0.2s; }
+.wizard-input:focus { border-color: var(--pp-blue); box-shadow: 0 0 0 3px rgba(0, 73, 144, 0.1); }
+.step-indicator { display: flex; gap: 10px; margin-bottom: 30px; }
+.dot { flex: 1; height: 6px; background: #e2e8f0; border-radius: 10px; }
+.dot.active { background: var(--pp-blue); }
+
+.ghl-result-item { padding: 10px; cursor: pointer; border-bottom: 1px solid #f1f5f9; transition: 0.2s; }
+.ghl-result-item:hover { background: #f8fafc; color: var(--pp-blue); }
+        /* Removes arrows/spinners from number inputs */
+input::-webkit-outer-spin-button,
+input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+input[type=number] {
+    -moz-appearance: textfield;
+}
+    </style>
+    <script>
+    (function() {
+        // 1. Check if a session exists in LocalStorage
+        const sessionUser = localStorage.getItem('pp_userid');
+        const isVerified = localStorage.getItem('pp_verified');
+
+        // 2. If no session, boot them to the login page immediately
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
         }
+    })();
+</script>
+    
+</head>
+<body>
 
+<div id="loadingOverlay" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255,255,255,0.8); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 9999;">
+    <span class="material-icons" style="animation: spin 2s linear infinite; font-size: 50px; color: var(--pp-blue);">sync</span>
+    <p style="margin-top:15px; font-weight:700; color: var(--pp-blue);">UPDATING PARTNER NETWORK...</p>
+</div>
+
+<div class="dashboard-container">
+
+<div class="modern-header">
+    <div style="display: flex; align-items: center; gap: 15px;">
+        <div style="display: flex; gap: 10px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px; font-weight: 700;">BACK</a>
+            
+            <button onclick="openOnboardingWizard()" class="pagination-btn" style="background: var(--pp-blue); color: white; border: none; display: flex; align-items: center; gap: 8px;">
+                <span class="material-icons" style="font-size:18px;">person_add</span>
+                <span>ADD PARTNER</span>
+            </button>
+        </div>
+        <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Partner Network</h1>
+    </div>
+
+    <div class="search-area">
+        <div class="search-wrapper">
+            <span class="material-icons">search</span>
+            <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or MID...">
+        </div>
+        <div id="searchStats">Showing all partners</div>
+    </div>
+</div>
+   <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
+    <button onclick="filterByTrend('growth')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f0fdf4; color: #166534;">
+        <span class="material-icons" style="font-size: 16px;">trending_up</span> GROWTH
+    </button>
+    <button onclick="filterByTrend('stable')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f8fafc; color: #475569;">
+        <span class="material-icons" style="font-size: 16px;">trending_flat</span> STABLE
+    </button>
+    <button onclick="filterByTrend('risk')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #fef2f2; color: #991b1b;">
+        <span class="material-icons" style="font-size: 16px;">trending_down</span> AT RISK
+    </button>
+    <button onclick="filterByTrend('all')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: white; color: var(--pp-blue);">
+        CLEAR FILTER
+    </button>
+</div>
+    <div id="partnerGrid" class="partner-grid"></div>
+   <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
+    <button id="btnPrev" onclick="changePage(-1)" class="pagination-btn">Previous</button>
+    <span id="pageIndicator" style="font-weight:700; color:#64748b; font-size:14px;">Page 1 of 1</span>
+    <button id="btnNext" onclick="changePage(1)" class="pagination-btn">Next</button>
+</div>
+</div>
+
+    <div id="onboardingWizard" class="wizard-overlay">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2 style="font-weight: 800; color: var(--pp-blue);">New Partner Onboarding</h2>
+        <span class="material-icons" style="cursor: pointer; color: #94a3b8;" onclick="closeWizard()">close</span>
+    </div>
+    
+    <div class="step-indicator">
+        <div class="dot active" id="dot1"></div>
+        <div class="dot" id="dot2"></div>
+        <div class="dot" id="dot3"></div>
+    </div>
+
+    <div class="step-container active" id="step1">
+        <label class="search-label">HighLevel Contact Lookup</label>
+        <div class="search-wrapper">
+            <span class="material-icons">search</span>
+            <input type="text" id="ghlSearch" class="wizard-input" placeholder="Search by name or email..." style="padding-left: 45px;">
+        </div>
+        <div id="ghlResults" style="max-height: 250px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 8px; margin-top:10px;"></div>
+        <div id="selectedContactDisplay" style="padding: 15px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bcf0da; display: none; margin-top: 10px;"></div>
+        <button id="nextToStep2" onclick="goToStep(2)" class="pagination-btn" style="width: 100%; margin-top: auto; display:none; background: var(--pp-blue); color:white;">NEXT: BUSINESS INFO</button>
+    </div>
+
+ <div class="step-container" id="step2">
+    <label class="search-label">Company / Firm Association</label>
+    <div style="margin-bottom:14px;">
+        <label class="search-label">Partner Activation Date</label>
+        <input type="date" id="partnerActivationDate" class="wizard-input" 
+               value="${new Date().toISOString().split('T')[0]}"
+               style="font-family:'DM Sans',sans-serif;">
+        <div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div>
+    </div>
+    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
+        <option value="none">Independent (Individual Partner)</option>
+        <option value="new">+ Create New Company...</option>
+        </select>
+    
+    <div id="newCompanyFields" style="margin-top: 10px; display: none;">
+        <label class="search-label">New Company Name</label>
+        <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter company name...">
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-top: auto;">
+        <button onclick="goToStep(1)" class="pagination-btn" style="flex: 1;">BACK</button>
+        <button onclick="goToStep(3)" class="pagination-btn" style="flex: 2; background: var(--pp-blue); color:white;">NEXT: IDENTIFIERS</button>
+    </div>
+</div>
+
+<div class="step-container" id="step3">
+    <label class="search-label">Assign Agent Identifiers</label>
+    
+    <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
+        <div style="position: relative;">
+            <input type="number" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs..." oninput="searchIdentifierStrings()">
+            <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
+        </div>
+        
+        <div style="display: flex; gap: 8px; align-items: center;">
+            <input type="number" id="idRevInput" class="wizard-input" 
+               placeholder="Rev Share (Number only)" style="flex: 1;"
+               inputmode="numeric">
+            <label style="display: flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #64748b; white-space: nowrap;">
+                <input type="checkbox" id="idPrimeInput"> PRIME ⭐
+            </label>
+            <button onclick="addIdToList()" class="pagination-btn" style="background: var(--pp-blue); color: white; padding: 0 15px; height: 40px;">ADD</button>
+        </div>
+    </div>
+
+    <div id="addedIdsList" style="margin-top: 15px; display: flex; flex-direction: column; gap: 6px; min-height: 100px; padding: 10px; background: white; border-radius: 8px; border: 1px dashed #cbd5e1; max-height: 200px; overflow-y: auto;">
+        <div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added to this partner yet</div>
+    </div>
+
+    <div style="display: flex; gap: 10px; margin-top: auto;">
+        <button onclick="goToStep(2)" class="pagination-btn" style="flex: 1;">BACK</button>
+        <button onclick="submitOnboarding()" class="pagination-btn" style="flex: 2; background: #059669; color: white; border: none;">COMPLETE ONBOARDING</button>
+    </div>
+</div>
+
+    
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script>
+    // --- GLOBAL STATE ---
+    let allPartners = [];
+    let identifiersRaw = [];
+    let agentsRaw = [];
+    let personsRaw = [];
+    let currentPage = 1;
+    const cardsPerPage = 12; 
+    let searchTimeout = null;
+
+    // --- FEATURE: TREND FILTER CHIPS ---
+let activeTrendFilter = 'all';
+
+    // --- ONBOARDING WIZARD STATE ---
+    let selectedGHLContact = null;
+    let pendingIds = []; // Single declaration for the list of IDs being added
+
+    /**
+ * AUDIT LOGGER 
+ * Sends activity to the central activity_logs table
+ */
+async function logAuditAction(action, details) {
+    const userEmail = localStorage.getItem('pp_userid'); // Using the standardized key from your script.js
+    try {
+        await fetch('/api/logs', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                email: userEmail || 'Unknown Admin',
+                action: action,
+                status: details
+            })
+        });
     } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error("Failed to log audit trail:", err);
     }
 }
+
+    // ==========================================
+    // 1. DATA UTILITIES (Formatting & Logic)
+    // ==========================================
+
+    function toTitleCase(str) {
+        if (!str) return "";
+        return str.toLowerCase().split(' ').map(word => {
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
+    }
+
+    function getTrendIndicator(current30, total90) {
+        const averageMonthly = total90 / 3;
+        if (!averageMonthly || averageMonthly === 0) return '';
+        const percentChange = ((current30 - averageMonthly) / averageMonthly) * 100;
+        const diff = percentChange.toFixed(1);
+
+        if (percentChange > 5) {
+            return `<span class="material-icons" style="font-size:14px; color:#10b981; cursor:help;" title="Performance: +${diff}% vs 90-day monthly average">trending_up</span>`;
+        } else if (percentChange < -5) {
+            return `<span class="material-icons" style="font-size:14px; color:#ef4444; cursor:help;" title="Performance: ${diff}% vs 90-day monthly average">trending_down</span>`;
+        }
+        return `<span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:help;" title="Stable: Within 5% of 90-day average">trending_flat</span>`;
+    }
+
+    function processPartnerData(payload) {
+    if (!payload || !payload.persons) return [];
+    const { persons, agents, identifiers, companies, stats } = payload; // stats should be passed here if available
+    const idMap = {};
+    
+    // ... (Keep your existing idMap and parent/child logic at the start) ...
+    identifiers.forEach(id => {
+        const myAgent = agents.find(a => a.id === id.agent_id);
+        const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
+        idMap[id.id] = { 
+            db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
+            isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
+            owner_name: myPerson ? myPerson.full_name : 'Unknown',
+            parent_config_id: id.parent_config_id,
+            upline_name: null, upline_string: null
+        };
+    });
+
+        identifiers.forEach(id => {
+            const current = idMap[id.id];
+            if (id.parent_config_id && idMap[id.parent_config_id]) {
+                const parentIdRecord = idMap[id.parent_config_id];
+                parentIdRecord.sub_ids.push(current);
+                current.upline_name = parentIdRecord.owner_name;
+                current.upline_string = parentIdRecord.string;
+            }
+        });
+
+       return persons.map(person => {
+        const myAgents = agents.filter(a => a.parent_agent_id === person.id);
+        if (myAgents.length === 0) return null;
+        
+        let totalCurrent = 0;
+        let totalBaseline = 0;
+        const groups = {};
+
+        myAgents.forEach(agent => {
+            const co = companies.find(c => c.id === agent.company_id);
+            const coName = co ? co.company_name : "Independent";
+            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
+            
+            if (myIds.length > 0) {
+                if (!groups[coName]) groups[coName] = [];
+                myIds.forEach(id => {
+                    groups[coName].push(idMap[id.id]);
+                    
+                    // --- TREND CALCULATION LOGIC ---
+                    // Look for stats in the payload to calculate the partner's global trend
+                    const s = (payload.stats || []).find(row => String(row.agent_id) === String(id.id_string));
+                    if (s) {
+                        totalCurrent += parseFloat(s.total_volume_sum || 0);
+                        totalBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                    }
+                });
+            }
+        });
+
+        const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
+        
+        // Assign the Trend String
+        let trend = 'stable';
+        if (totalBaseline > 0) {
+            const diff = ((totalCurrent - totalBaseline) / totalBaseline) * 100;
+            if (diff > 5) trend = 'growth';
+            else if (diff < -5) trend = 'risk';
+        }
+
+        return formatted.length > 0 ? { 
+            id: person.id, name: person.full_name,
+            email: person.email || 'No email provided',
+            phone: person.phone_number || 'No phone provided',
+            hl_id: person.hl_contact_id,
+            enrolled_at: person.enrolled_at || null,
+            enrolled_by: person.enrolled_by || null,
+            companies: formatted,
+            statusTrend: trend // This is what the filter uses!
+        } : null;
+    }).filter(Boolean);
+}
+
+window.filterByTrend = function(trend) {
+    activeTrendFilter = trend;
+    const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
+    
+    // 1. We ALWAYS filter from the full global list (allPartners)
+    let filtered = allPartners.filter(p => {
+        let pCurrent = 0;
+        let pBaseline = 0;
+
+        // Sum up every ID this partner owns to get the "Big Picture"
+        p.companies.forEach(co => {
+            co.ids.forEach(idObj => {
+                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                if (s) {
+                    pCurrent += parseFloat(s.total_volume_sum || 0);
+                    pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                }
+            });
+        });
+
+        let pTrend = 'stable';
+        if (pBaseline > 0) {
+            const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
+            if (pct > 5) pTrend = 'growth';
+            else if (pct < -5) pTrend = 'risk';
+        }
+
+        // Match against the Chip you clicked
+        const matchesTrend = (trend === 'all' || pTrend === trend);
+        
+        // Ensure we don't break the search bar results
+        const matchesSearch = !term || (
+            p.name.toLowerCase().includes(term) || 
+            p.companies.some(co => co.name.toLowerCase().includes(term))
+        );
+
+        return matchesTrend && matchesSearch;
+    });
+
+    // 2. Reset to Page 1 so you don't get stuck on a blank page
+    currentPage = 1;
+    
+    // 3. Hand the filtered list to renderGrid to handle the drawing
+    renderGrid(filtered);
+    
+    // 4. Update the UI text
+    const label = trend === 'all' ? 'Showing all partners' : `Filter: ${trend.toUpperCase()}`;
+    document.getElementById('searchStats').innerText = `${label} (${filtered.length} partners)`;
+};
+    // ==========================================
+    // 2. WIZARD STEP 1: IDENTITY (GHL SEARCH)
+    // ==========================================
+
+    document.getElementById('ghlSearch').addEventListener('input', (e) => {
+        const query = e.target.value.trim();
+        if (query.length < 3) return;
+        
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'search_ghl', query })
+            });
+            const result = await res.json();
+            const container = document.getElementById('ghlResults');
+            container.style.display = 'block';
+            container.innerHTML = result.contacts.map(c => `
+                <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
+                    <b>${c.firstName} ${c.lastName}</b><br>
+                    <small>${c.email || 'No Email'}</small>
+                </div>
+            `).join('');
+        }, 500);
+    });
+
+    function selectGHLContact(id, name, email, phone) {
+        // Stop duplicates based on HL ID or Email
+        const exists = personsRaw.find(p => p.hl_contact_id === id || (email && p.email === email));
+        if (exists) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Partner Already Exists',
+                text: `${name} is already registered in the database.`,
+                confirmButtonColor: '#004990'
+            });
+            return;
+        }
+
+        selectedGHLContact = { 
+            id, 
+            name: toTitleCase(name), 
+            email: email ? email.toLowerCase() : '', 
+            phone 
+        };
+        
+        document.getElementById('ghlResults').style.display = 'none';
+        const display = document.getElementById('selectedContactDisplay');
+        display.style.display = 'block';
+        display.innerHTML = `<strong>Selected:</strong> ${selectedGHLContact.name}<br><small>${email}</small>`;
+        document.getElementById('nextToStep2').style.display = 'block';
+    }
+
+    // ==========================================
+    // 3. WIZARD STEP 2: BUSINESS (COMPANY)
+    // ==========================================
+
+    function toggleCompanyInput() {
+        const select = document.getElementById('companySelect');
+        const newFields = document.getElementById('newCompanyFields');
+        if (!select || !newFields) return;
+        newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+    }
+
+    async function loadWizardCompanies() {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_partners_list' })
+        });
+        const result = await res.json();
+        const select = document.getElementById('companySelect');
+        select.innerHTML = `
+            <option value="none">Independent (Individual Partner)</option>
+            <option value="new">+ Create New Company</option>
+        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
+        toggleCompanyInput();
+    }
+
+    // ==========================================
+    // 4. WIZARD STEP 3: ACCESS (IDENTIFIERS)
+    // ==========================================
+
+ async function searchIdentifierStrings() {
+        const term = document.getElementById('idLookupInput').value.trim();
+        const resultsBox = document.getElementById('idLookupResults');
+        if (term.length < 1) { resultsBox.style.display = 'none'; return; }
+
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'get_orphan_ids', 
+                    query: term,
+                    placeholder_uuid: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' 
+                })
+            });
+            const result = await res.json();
+            
+            resultsBox.style.display = 'block';
+            if (result.data && result.data.length > 0) {
+                resultsBox.innerHTML = result.data.map(item => `
+                    <div class="ghl-result-item" onclick="pickIdFromLookup('${item.id_string}')">
+                        <b>${item.id_string}</b> <small style="color:#94a3b8;">(Unassigned)</small>
+                    </div>
+                `).join('');
+            } else {
+                // ADDED: "USE MANUAL ENTRY" button to clear the invisible wall
+                resultsBox.innerHTML = `
+                    <div style="padding:12px; text-align:center;">
+                        <div style="color: #64748b; font-size:11px; margin-bottom:8px;">No unassigned ID found.</div>
+                        <button onclick="document.getElementById('idLookupResults').style.display='none'" 
+                                class="slds-button slds-button_neutral" 
+                                style="font-size:10px; padding:4px 8px; border-radius:4px;">
+                            USE MANUAL ENTRY
+                        </button>
+                    </div>`;
+            }
+        } catch (e) { console.error("ID Lookup Error:", e); }
+    }
+
+       // --- TREND DRILLER: ANALYZE CONTRIBUTORS ---
+async function drillDownTrend(agentId) {
+    Swal.fire({ title: 'Analyzing Contributors...', text: 'Fetching merchant details...', didOpen: () => Swal.showLoading() });
+
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: agentId })
+        });
+        const result = await res.json();
+
+        if (result.success && result.data.length > 0) {
+            const analyzed = result.data.map(m => {
+                const current = parseFloat(m.volume_30_day || 0);
+                const avg90 = (parseFloat(m.volume_90_day || 0) / 3);
+                return {
+                    mid: m.merchant_id,
+                    dba: m.dba_name,
+                    status: m.account_status,
+                    lastBatch: m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : 'Never',
+                    current: current,
+                    baseline: avg90,
+                    impact: current - avg90
+                };
+            });
+
+            analyzed.sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact));
+            showTrendTable(agentId, analyzed);
+        } else {
+            Swal.fire('No Data', 'No records found.', 'info');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Analysis failed.', 'error');
+    }
+}
+
+// --- TREND DRILLER: UI DISPLAY ---
+function showTrendTable(agentId, movers) {
+    const rows = movers.map(m => {
+        const isNegative = m.impact < 0;
+        const impactColor = isNegative ? '#ef4444' : '#059669';
+        
+        return `
+            <tr>
+                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9;">
+                    <div style="font-size: 11px; font-weight: 800; color: #002d5a;">${m.dba}</div>
+                    <div style="font-size: 9px; color: #94a3b8;">MID: ${m.mid}</div>
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 10px; color: #64748b;">
+                    ${m.lastBatch}
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; text-align: right;">
+                    $${m.baseline.toLocaleString(undefined, {maximumFractionDigits:0})}
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; text-align: right;">
+                    $${m.current.toLocaleString(undefined, {maximumFractionDigits:0})}
+                </td>
+                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; font-weight: 900; color: ${impactColor}; text-align: right; background: ${isNegative ? '#fef2f2' : '#f0fdf4'};">
+                    ${m.impact >= 0 ? '+' : ''}$${m.impact.toLocaleString(undefined, {maximumFractionDigits:0})}
+                </td>
+            </tr>
+        `;
+    }).join('');
+
+    Swal.fire({
+        title: `<div style="text-align:left; font-size: 18px; font-weight: 800; color: #002d5a;">Trend Contributors: ${agentId}</div>`,
+        width: '900px',
+        showConfirmButton: false,
+        showCloseButton: true,
+        html: `
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <div style="text-align: left; font-size: 12px; color: #64748b;">Comparison: Current vs. 90-Day Avg</div>
+                <button onclick="exportTrendToCSV('${agentId}', ${JSON.stringify(movers).replace(/"/g, '&quot;')})" 
+                        class="slds-button slds-button_neutral" style="font-size: 11px; font-weight: 700;">
+                    <span class="material-icons" style="font-size:14px; margin-right:5px;">file_download</span> EXPORT CSV
+                </button>
+            </div>
+            <div style="max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
+                <table style="width: 100%; border-collapse: collapse; text-align: left;">
+                    <thead style="position: sticky; top: 0; background: #f8fafc; z-index: 10;">
+                        <tr style="border-bottom: 2px solid #e2e8f0;">
+                            <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase;">Merchant / MID</th>
+                            <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase;">Last Batch</th>
+                            <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: right;">Avg (90d)</th>
+                            <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: right;">Current</th>
+                            <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: right;">Variance</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `
+    });
+}
+
+// --- CSV EXPORT HELPER ---
+window.exportTrendToCSV = function(agentId, data) {
+    const headers = ["MID", "Merchant Name", "Status", "Last Batch", "Avg 90D", "Current 30D", "Impact"];
+    const rows = data.map(m => [
+        m.mid, 
+        `"${m.dba.replace(/"/g, '""')}"`, 
+        m.status, 
+        m.lastBatch, 
+        m.baseline.toFixed(2), 
+        m.current.toFixed(2), 
+        m.impact.toFixed(2)
+    ]);
+    
+    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `Trend_Analysis_${agentId}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+};
+    function pickIdFromLookup(id) {
+        const input = document.getElementById('idLookupInput');
+        if (input) input.value = id;
+        document.getElementById('idLookupResults').style.display = 'none';
+    }
+
+  function addIdToList() {
+    const idInput = document.getElementById('idLookupInput');
+    const revInput = document.getElementById('idRevInput');
+    const primeInput = document.getElementById('idPrimeInput');
+    
+    // We get the raw value (number)
+    const idStr = idInput.value.trim();
+    const revNum = revInput.value.trim();
+    const isPrime = primeInput.checked;
+
+    if (!idStr) return;
+    
+    // Auto-formatting Rev Share: Add % if it's missing
+    // If they leave it blank, we default to "0%"
+    const formattedRev = revNum ? `${revNum}%` : "0%";
+
+    if (pendingIds.some(item => item.string === idStr)) {
+        return Swal.fire('Duplicate', 'This ID is already in your list.', 'warning');
+    }
+
+    // Push the formatted string to the list
+    pendingIds.push({ 
+        string: idStr, 
+        rev: formattedRev, 
+        prime: isPrime 
+    });
+    
+    // Reset inputs
+    idInput.value = '';
+    revInput.value = '';
+    primeInput.checked = false;
+    renderIdList();
+}
+    function removeIdFromList(index) {
+        pendingIds.splice(index, 1);
+        renderIdList();
+    }
+
+    function renderIdList() {
+        const container = document.getElementById('addedIdsList');
+        if (!container) return;
+        if (pendingIds.length === 0) {
+            container.innerHTML = '<div style="color: #94a3b8; font-size: 11px; text-align: center; margin-top: 30px;">No IDs added yet</div>';
+            return;
+        }
+        container.innerHTML = pendingIds.map((item, index) => `
+            <div style="display:flex; justify-content:space-between; align-items:center; background:#f1f5f9; padding:8px 12px; border-radius:8px; border:1px solid #e2e8f0; margin-bottom:5px;">
+                <div style="font-size:12px;">
+                    <b style="color:var(--pp-blue);">${item.string}</b> 
+                    ${item.prime ? '<span style="color:#fbbf24; margin-left:4px;">⭐</span>' : ''}
+                    <span style="color:#64748b; margin-left:10px;">Share: ${item.rev}</span>
+                </div>
+                <span class="material-icons" style="font-size: 18px; color:#ef4444; cursor:pointer;" onclick="removeIdFromList(${index})">delete_outline</span>
+            </div>
+        `).join('');
+    }
+
+    // ==========================================
+    // 5. WIZARD COMPLETION & SAVE
+    // ==========================================
+
+async function submitOnboarding() {
+    if (pendingIds.length === 0) return Swal.fire('Error', 'Please add at least one ID', 'error');
+
+    // 1. Determine if we are in Quick Add or New Partner mode
+    const isQuickAdd = !!(selectedGHLContact && selectedGHLContact.isQuickAdd);
+    
+    let payload = {
+        action: 'complete_onboarding',
+        isQuickAdd: isQuickAdd,
+        identifiers: pendingIds
+    };
+
+    if (isQuickAdd) {
+        // Mode A: Just adding IDs to existing partner
+        const logMsg = isQuickAdd ? `Added IDs to existing partner: ${selectedGHLContact.name}` : `Onboarded new partner: ${selectedGHLContact.name}`;
+    await logAuditAction('Partner ID Assignment', logMsg);
+        payload.existingAgentId = selectedGHLContact.existingAgentId;
+    } else {
+        // Mode B: Full Onboarding (Step 1 & 2 must be valid)
+        if (!selectedGHLContact || !selectedGHLContact.id) {
+            return Swal.fire('Error', 'Please complete Step 1 (HighLevel Lookup) first.', 'error');
+        }
+
+        const companyVal = document.getElementById('companySelect').value;
+        const activationDate = document.getElementById('partnerActivationDate')?.value;
+        payload.person = {
+            name: selectedGHLContact.name,
+            email: selectedGHLContact.email,
+            phone: selectedGHLContact.phone,
+            hl_id: selectedGHLContact.id,
+            enrolled_at: activationDate ? new Date(activationDate).toISOString() : new Date().toISOString()
+        };
+        payload.enrolled_by = localStorage.getItem('pp_userid');
+        payload.company = {
+            id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
+            name: companyVal === 'new' ? document.getElementById('newCompanyName').value : null,
+            isIndependent: companyVal === 'none'
+        };
+    }
+
+    Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        
+        const result = await res.json();
+        
+        if (result.success) {
+            await logAuditAction('Partner Created', `Onboarded new partner: ${selectedGHLContact.name}`);
+            Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
+            closeWizard();
+            loadPartners(); 
+        } else {
+            // This will show exactly WHY the backend failed (e.g., duplicate email)
+            throw new Error(result.message || 'Database error');
+        }
+    } catch (e) {
+        console.error("Submission Error:", e);
+        Swal.fire('Error', e.message, 'error');
+    }
+}
+
+ function openOnboardingWizard() {
+    // Reset Mode
+    selectedGHLContact = null;
+    pendingIds = [];
+    
+    // UI Reset: Enable all steps
+    document.getElementById('dot1').style.display = 'block';
+    document.getElementById('dot2').style.display = 'block';
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'block'; // Show back button
+    
+    document.getElementById('onboardingWizard').classList.add('active');
+    renderIdList();
+    loadWizardCompanies();
+    goToStep(1); // Start at the beginning
+}
+
+    function closeWizard() {
+        document.getElementById('onboardingWizard').classList.remove('active');
+        resetWizard();
+    }
+
+ function resetWizard() {
+    selectedGHLContact = null;
+    pendingIds = [];
+    
+    // Restore UI visibility for the next run
+    document.getElementById('dot1').style.display = 'block';
+    document.getElementById('dot2').style.display = 'block';
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'block';
+    
+    document.getElementById('ghlSearch').value = '';
+    document.getElementById('selectedContactDisplay').style.display = 'none';
+    document.getElementById('nextToStep2').style.display = 'none';
+    
+    renderIdList();
+    goToStep(1);
+}
+
+    function goToStep(step) {
+        document.querySelectorAll('.step-container').forEach(c => c.classList.remove('active'));
+        document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
+        document.getElementById('step' + step).classList.add('active');
+        document.getElementById('dot' + step).classList.add('active');
+    }
+
+    // ==========================================
+    // 6. DASHBOARD RENDERING & STATS
+    // ==========================================
+
+    function renderBadge(id, isRootOfCard = false) {
+        let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
+        return `
+            <div class="id-badge-container" style="margin-top:4px; width: 100%;">
+                <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
+                    <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
+                    <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span><button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
+                </div>
+                ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
+            </div>`;
+    }
+
+    function updateAllBadgeStats(idStr, s) {
+        const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
+        statDivs.forEach(div => {
+            div.style.display = 'block';
+            if (s) {
+                const current30 = parseFloat(s.total_volume_sum || 0);
+                const total90 = parseFloat(s.total_volume_90d_sum || 0);
+                const avgMonthly90 = total90 / 3;
+                const approved = parseInt(s.merchant_count || 0);
+                const pipeline = parseInt(s.pending_count || 0);
+                const lost = parseInt(s.closed_count || 0);
+                const risk = parseInt(s.risk_count || 0);
+                const percentChange = avgMonthly90 > 0 ? ((current30 - avgMonthly90) / avgMonthly90) * 100 : 0;
+                const diff = percentChange.toFixed(1);
+                let trendColor = '#94a3b8'; let trendIcon = 'trending_flat';
+                if (percentChange > 5) { trendColor = '#10b981'; trendIcon = 'trending_up'; }
+                else if (percentChange < -5) { trendColor = '#ef4444'; trendIcon = 'trending_down'; }
+                const tooltipText = `Portfolio Breakdown:\n• ACTIVE: ${approved.toLocaleString()}\n• PIPELINE: ${pipeline.toLocaleString()}\n• CHURN: ${lost.toLocaleString()}\n• RISK: ${risk.toLocaleString()}`;
+                div.innerHTML = `
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-top: 8px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;"><span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Current (30d)</span><span style="font-size: 11px; font-weight: 800; color: #059669;">$${current30.toLocaleString(undefined, {maximumFractionDigits:0})}</span></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dotted #cbd5e1;"><span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Baseline</span><span style="font-size: 11px; font-weight: 600; color: #475569;">$${avgMonthly90.toLocaleString(undefined, {maximumFractionDigits:0})}</span></div>
+                        <div style="display: flex; justify-content: space-between; align-items: center;"><div onclick="drillDownTrend('${idStr}')" 
+     style="display: flex; align-items: center; gap: 4px; background: white; padding: 2px 6px; border-radius: 6px; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s;"
+     onmouseover="this.style.borderColor='var(--pp-blue)'; this.style.background='#f0f9ff';"
+     onmouseout="this.style.borderColor='#e2e8f0'; this.style.background='white';"
+     title="Click to see top contributors to this trend">
+    <span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span>
+    <span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
+</div><span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span><span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span></div><div style="text-align: right; cursor: help;" title="${tooltipText}"><div style="font-size: 10px; font-weight: 800; color: #1e293b;">${approved.toLocaleString()}</div><div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; line-height: 1; border-bottom: 1px dashed #cbd5e1;">Approved</div></div></div>
+                    </div>`;
+            } else {
+                 div.innerHTML = `<div style="padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;"><span style="color:#64748b; font-size:10px; font-weight:700; text-transform: uppercase;">No Production</span></div>`;
+            }
+        });
+    }
+
+    // ==========================================
+    // 7. GRID, PAGINATION & EXPORT FUNCTIONS
+    // ==========================================
+
+    async function loadPartners() {
+        const loader = document.getElementById('loadingOverlay');
+        if (loader) loader.style.display = 'flex';
+
+        document.getElementById('partnerSearchInput').value = '';
+        
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_partners_list' })
+            });
+            const result = await res.json();
+            if (result.success && result.data.persons) {
+                identifiersRaw = result.data.identifiers || [];
+                agentsRaw = result.data.agents || [];
+                personsRaw = result.data.persons || [];
+                allPartners = processPartnerData(result.data);
+                currentPage = 1;
+                renderGrid(allPartners);
+            }
+        } catch (err) { console.error("Loader Error:", err); }
+        if (loader) loader.style.display = 'none';
+    }
+
+    function renderGrid(data) {
+    const grid = document.getElementById('partnerGrid');
+    const prevBtn = document.getElementById('btnPrev');
+    const nextBtn = document.getElementById('btnNext');
+    const indicator = document.getElementById('pageIndicator');
+    if (!grid) return;
+
+    const totalPages = Math.ceil(data.length / cardsPerPage);
+    if (currentPage > totalPages) currentPage = totalPages || 1;
+    const start = (currentPage - 1) * cardsPerPage;
+    const end = start + cardsPerPage;
+    const paginatedData = data.slice(start, end);
+
+    grid.innerHTML = paginatedData.map(p => {
+        // --- INJECTED TREND CALCULATION FOR FILTERING ---
+        let pCurrent = 0;
+        let pBaseline = 0;
+
+        // Sum up volume across all companies and IDs for this partner
+        p.companies.forEach(co => {
+            co.ids.forEach(idObj => {
+                // identifiersRaw was populated during loadPartners
+                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
+                if (s) {
+                    pCurrent += parseFloat(s.total_volume_sum || 0);
+                    pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                }
+            });
+        });
+
+        // Assign trend to partner object so the filterByTrend function can find it
+        let pTrend = 'stable';
+        if (pBaseline > 0) {
+            const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
+            if (pct > 5) pTrend = 'growth';
+            else if (pct < -5) pTrend = 'risk';
+        }
+        p.statusTrend = pTrend; 
+
+        // Return your existing card HTML
+        return `
+            <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px; flex:1;">${p.name}</h2>
+                    <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')" 
+                            style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
+                        <span class="material-icons" style="font-size:14px;">add</span> ID
+                    </button>
+                </div>
+                ${p.companies.map(co => `
+                    <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
+                        <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
+                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                    </div>
+                `).join('')}
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
+                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" 
+                            style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;">
+                        <span class="material-icons" style="font-size:14px;">person</span> View Detail
+                    </button>
+                    <button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name}','${p.email||''}')"
+                            style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;justify-content:center;gap:4px;"
+                            title="Invite to Partner Portal">
+                        <span class="material-icons" style="font-size:14px;">send</span> Invite to Portal
+                    </button>
+                </div>
+            </div>`;
+    }).join('');
+
+    if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
+    
+    // Button styling updates
+    if (prevBtn) { 
+        prevBtn.disabled = (currentPage === 1); 
+        prevBtn.style.opacity = (currentPage === 1) ? "0.5" : "1"; 
+    }
+    if (nextBtn) { 
+        nextBtn.disabled = (currentPage === totalPages || totalPages === 0); 
+        nextBtn.style.opacity = (currentPage === totalPages || totalPages === 0) ? "0.5" : "1"; 
+    }
+}
+
+    // --- SEARCH LISTENER (Reacts as you type) ---
+    document.getElementById('partnerSearchInput').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase().trim();
+        clearTimeout(searchTimeout);
+
+        searchTimeout = setTimeout(async () => {
+            if (!term) {
+                currentPage = 1;
+                renderGrid(allPartners);
+                return;
+            }
+
+            // Filter logic: Checks Name, Agent ID, and Company Name
+            let filtered = allPartners.filter(p => {
+                const matchesName = p.name.toLowerCase().includes(term);
+                const matchesID = p.companies.some(co => 
+                    co.ids.some(id => id.string.toLowerCase().includes(term))
+                );
+                const matchesCompany = p.companies.some(co => 
+                    co.name.toLowerCase().includes(term)
+                );
+                return matchesName || matchesID || matchesCompany;
+            });
+
+            // Remote Search for Merchant ID if no local results
+            if (filtered.length === 0 && term.length >= 6) {
+                try {
+                    const midRes = await fetch('/api/partners', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'search_by_mid', mid: term })
+                    });
+                    const midData = await midRes.json();
+                    if (midData.success && midData.agent_id) {
+                        filtered = allPartners.filter(p => 
+                            p.companies.some(co => co.ids.some(id => id.string === midData.agent_id))
+                        );
+                    }
+                } catch (e) { console.error("MID search error", e); }
+            }
+
+            currentPage = 1;
+            renderGrid(filtered);
+        }, 300);
+    });
+
+    window.changePage = function(direction) {
+        const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
+        const currentData = term ? allPartners.filter(p => 
+            p.name.toLowerCase().includes(term) || 
+            p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term)))
+        ) : allPartners;
+
+        const totalPages = Math.ceil(currentData.length / cardsPerPage);
+        const newPage = currentPage + direction;
+        if (newPage >= 1 && newPage <= totalPages) {
+            currentPage = newPage;
+            renderGrid(currentData);
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+    }
+
+  window.editIdentifier = async function(db_id, name, rev, isPrime) {
+        // 1. Find the current identifier data from our global raw array
+        const currentIdData = identifiersRaw.find(i => i.id === db_id);
+        
+        // 2. Build list of potential parents (excluding self)
+        const validParents = identifiersRaw.filter(i => i.id !== db_id && agentsRaw.some(a => a.id === i.agent_id && a.parent_agent_id !== null))
+            .map(i => {
+                const ownerName = personsRaw.find(p => p.id === agentsRaw.find(a => a.id === i.agent_id)?.parent_agent_id)?.full_name || 'Unknown';
+                return { id: i.id, string: i.id_string, owner: ownerName, label: `${i.id_string} (${ownerName})` };
+            });
+
+        let selectedParentId = currentIdData?.parent_config_id || null;
+
+        const { value: formValues } = await Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Settings: ${name}</div>`,
+            html: `<div style="text-align:left; padding: 10px;">
+                <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
+                <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 8px 0 20px 0; border-radius:8px;" type="text">
+                
+                <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-weight:700; margin-bottom:25px;">
+                    <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge
+                </label>
+                
+                <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT PARTNER</label>
+                <div style="position:relative; margin-top:8px;">
+                    <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..." 
+                           value="${validParents.find(p => p.id === selectedParentId)?.label || ''}" 
+                           style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
+                    <div id="search-results-box" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                </div>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonColor: '#002d5a',
+            confirmButtonText: 'SAVE CHANGES',
+            didOpen: () => {
+                const searchInput = document.getElementById('swal-parent-search');
+                const resultsBox = document.getElementById('search-results-box');
+                
+                searchInput.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase();
+                    if (!val) { resultsBox.style.display = 'none'; selectedParentId = null; return; }
+                    const matches = validParents.filter(p => p.label.toLowerCase().includes(val)).slice(0, 50);
+                    if (matches.length > 0) {
+                        resultsBox.innerHTML = matches.map(m => `
+                            <div class="search-item" data-id="${m.id}" data-label="${m.label}" style="padding:10px 15px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;">
+                                <b>${m.string}</b> <span style="color:#94a3b8; margin-left:5px;">${m.owner}</span>
+                            </div>`).join('');
+                        resultsBox.style.display = 'block';
+                    } else { resultsBox.style.display = 'none'; }
+                });
+
+                resultsBox.addEventListener('click', (e) => {
+                    const item = e.target.closest('.search-item');
+                    if (item) { 
+                        selectedParentId = item.dataset.id; 
+                        searchInput.value = item.dataset.label; 
+                        resultsBox.style.display = 'none'; 
+                    }
+                });
+            },
+            preConfirm: () => {
+                return { 
+                    rev_share: document.getElementById('swal-rev').value, 
+                    prime49: document.getElementById('swal-prime').checked, 
+                    new_parent_id: selectedParentId 
+                }
+            }
+        });
+
+        // 3. If user clicked Save, send to Backend
+        if (formValues) {
+            Swal.fire({ 
+                title: 'Saving Changes...', 
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading() 
+            });
+
+            try {
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        action: 'update_identifier_all', 
+                        id: db_id, 
+                        rev_share: formValues.rev_share, 
+                        prime49: formValues.prime49, 
+                        new_parent_id: formValues.new_parent_id 
+                    })
+                });
+                
+                const result = await res.json();
+                
+                if (result.success) {
+                    await logAuditAction('Partner ID Updated', `Modified settings for Agent ID: ${name}`);
+                    await loadPartners(); // Refresh the whole dashboard
+                    Swal.fire({ icon: 'success', title: 'Updated!', showConfirmButton: false, timer: 1500 });
+                } else { 
+                    throw new Error(result.message || 'Update failed'); 
+                }
+            } catch (err) { 
+                console.error("Update Error:", err);
+                Swal.fire('Error', err.message, 'error'); 
+            }
+        }
+    }
+
+    async function downloadSingleIdExport(idString) {
+        Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idString })
+            });
+            const result = await res.json();
+            if (result.success && result.data.length > 0) {
+                const merchants = result.data;
+                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+                const avgVol = totalVol / merchants.length;
+                let csv = `Summary for ID: ${idString}\nTotal Approved Merchants,${merchants.length}\nTotal 30-Day Volume,$${totalVol.toFixed(2)}\nAverage Volume,$${avgVol.toFixed(2)}\n\nMerchant ID,DBA Name,Status,Volume 30D\n`;
+                merchants.forEach(m => { csv += `${m.merchant_id},"${m.dba_name.replace(/"/g, '""')}",${m.account_status},${m.volume_30_day || 0}\n`; });
+                const blob = new Blob([csv], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.setAttribute('href', url);
+                a.setAttribute('download', `Export_ID_${idString}.csv`);
+                a.click();
+                Swal.close();
+            } else { Swal.fire('No Data', 'No approved merchants found.', 'info'); }
+        } catch (err) { Swal.fire('Error', 'Failed to generate export.', 'error'); }
+    }
+
+    window.openPartnerDetails = async function(personId) {
+        const p = allPartners.find(ptr => ptr.id === personId);
+        if (!p) return;
+        let branchIdStrings = [];
+        p.companies.forEach(co => { co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings)); });
+        branchIdStrings = [...new Set(branchIdStrings)];
+        const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
+
+        Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
+            width: '900px', showConfirmButton: false, showCloseButton: true,
+            html: `
+               <div id="modal-content-container" style="text-align:left;">
+    <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
+        <div style="display:flex; flex-direction:column; gap:8px;">
+            <div style="display:flex; align-items:center; gap:10px;">
+                <h1 style="font-size:24px; font-weight:900; color:#002d5a; margin:0;">${p.name}</h1>
+                <span class="material-icons" style="font-size:16px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'full_name', '${p.name}')">edit</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                <span class="material-icons" style="font-size:16px;">email</span>
+                ${p.email}
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'email', '${p.email}')">edit</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                <span class="material-icons" style="font-size:16px;">phone</span>
+                ${p.phone}
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'phone_number', '${p.phone}')">edit</span>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
+                <span class="material-icons" style="font-size:16px;">calendar_today</span>
+                <span>Activated: <b>${p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString() : 'Not set'}</b></span>
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? new Date(p.enrolled_at).toISOString().split('T')[0] : ''}')">edit</span>
+            </div>
+            ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
+        </div>
+                        <div id="summary-stats" style="text-align:right;">
+                            <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">Loading...</div>
+                            <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:20px;"><div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
+                            ${p.companies.map(co => `<div style="margin-bottom:20px;"><b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b><div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div></div>`).join('')}
+                        </div></div>
+                </div>`
+        });
+
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
+            });
+            const result = await res.json();
+            if (result.success) {
+                const stats = result.data;
+                let grandTotalVol = 0; let grandTotalCount = 0;
+                branchIdStrings.forEach(idStr => {
+                    const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
+                    updateAllBadgeStats(idStr, s);
+                    if (s) { grandTotalVol += parseFloat(s.total_volume_sum || 0); grandTotalCount += parseInt(s.merchant_count || 0); }
+                });
+                document.getElementById('main-total-vol').innerText = `$${grandTotalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
+                document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
+            }
+        } catch (err) { console.error("Error loading partner stats:", err); }
+    };
+
+    function getAllBranchIds(idObj, idList = []) {
+        idList.push(idObj.string);
+        if (idObj.sub_ids && idObj.sub_ids.length > 0) { idObj.sub_ids.forEach(sub => getAllBranchIds(sub, idList)); }
+        return idList;
+    }
+
+    function exportToCSV(name, data) {
+        const headers = ["Merchant ID", "DBA Name", "Status", "Volume 30D", "Agent ID"];
+        const rows = data.map(m => [m.merchant_id, `"${m.dba_name.replace(/"/g, '""')}"`, m.account_status, m.volume_30_day, m.agent_id]);
+        let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\n" + rows.map(e => e.join(",")).join("\n");
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${name.replace(/\s+/g, '_')}_Merchants.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // --- FEATURE: EDIT PERSON DETAILS ---
+window.editEnrolledAt = async function(personId, currentDate) {
+    const { value: newDate } = await Swal.fire({
+        title: 'Partner Activation Date',
+        html: `
+            <p style="color:#475569;font-size:13px;">Set when this partner was activated/enrolled. Used for partner reports.</p>
+            <input type="date" id="enrollDate" value="${currentDate}" 
+                   style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:'DM Sans',sans-serif;outline:none;margin-top:8px;">`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Save Date',
+        preConfirm: () => document.getElementById('enrollDate').value
+    });
+    if (newDate) {
+        Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading() });
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_person_field', id: personId, field: 'enrolled_at', value: new Date(newDate).toISOString() })
+        });
+        const result = await res.json();
+        if (result.success) {
+            await logAuditAction('Partner Update', `Updated activation date for partner ${personId}`);
+            await loadPartners();
+            Swal.close();
+            openPartnerDetails(personId);
+        } else {
+            Swal.fire('Error', result.message || 'Update failed', 'error');
+        }
+    }
+};
+
+window.editPersonField = async function(personId, field, currentVal) {
+    const label = field.replace('_', ' ').toUpperCase();
+    const { value: newVal } = await Swal.fire({
+        title: `Update ${label}`,
+        input: 'text',
+        inputValue: currentVal,
+        showCancelButton: true,
+        confirmButtonColor: '#002d5a',
+        inputValidator: (value) => { if (!value) return 'Field cannot be empty!' }
+    });
+
+    if (newVal && newVal !== currentVal) {
+        Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    action: 'update_person_field', 
+                    id: personId, 
+                    field: field, 
+                    value: (field === 'full_name') ? toTitleCase(newVal) : newVal 
+                })
+            });
+            const result = await res.json();
+            if (result.success) {
+                await logAuditAction('Partner Contact Update', `Changed ${field} for partner ID ${personId}`);
+                await loadPartners(); // Refresh grid
+                Swal.close();
+                // Re-open details to show changes
+                openPartnerDetails(personId); 
+            }
+        } catch (err) { Swal.fire('Error', 'Update failed', 'error'); }
+    }
+};
+
+// --- FEATURE: QUICK ADD ID TO PARTNER ---
+window.quickAddId = async function(personId, name) {
+    pendingIds = [];
+    renderIdList();
+    
+    const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
+    if (!personAgent) return Swal.fire('Error', 'No agent record found.', 'error');
+
+    // Set Mode: IMPORTANT
+    selectedGHLContact = { 
+        name: name, 
+        existingAgentId: personAgent.id, 
+        isQuickAdd: true 
+    };
+    
+    // UI Logic: Hide Step 1 & 2 dots so user isn't confused
+    document.getElementById('dot1').style.display = 'none';
+    document.getElementById('dot2').style.display = 'none';
+    
+    // Hide the "BACK" button on Step 3 so they can't go back to empty fields
+    document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'none';
+
+    document.getElementById('onboardingWizard').classList.add('active');
+    goToStep(3); // Jump straight to IDs
+};
+
+    window.quickAddId = async function(personId, name) {
+    pendingIds = [];
+    renderIdList();
+    
+    // Find the person's first agent record from our local agentsRaw array
+    const personAgent = agentsRaw.find(a => a.parent_agent_id === personId);
+    
+    if (!personAgent) {
+        return Swal.fire('Error', 'Could not find an agent record for this partner.', 'error');
+    }
+
+    // Set a "Mode" so the submit function knows NOT to create a new person
+    selectedGHLContact = { 
+        name: name, 
+        existingAgentId: personAgent.id, 
+        isQuickAdd: true 
+    };
+    
+    document.getElementById('onboardingWizard').classList.add('active');
+    goToStep(3); // Jump straight to IDs
+};
+ 
+
+    async function sendPortalInvite(personId, name, email) {
+        if (!email) {
+            Swal.fire({ icon:'warning', title:'No email address', text:`${name} does not have an email address on file. Please add one in the Partners section first.`, confirmButtonColor:'#0d9488' });
+            return;
+        }
+
+        const { isConfirmed } = await Swal.fire({
+            title: `Invite ${name} to Partner Portal?`,
+            html: `<p style="color:#475569;">An email will be sent to <b>${email}</b> with a link to set up their portal account.</p>
+                   <p style="font-size:12px;color:#94a3b8;">They will be able to see their own merchants, volume data, and communicate with your team.</p>`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#0d9488',
+            confirmButtonText: 'Send Invite'
+        });
+
+        if (!isConfirmed) return;
+
+        Swal.fire({ title:'Sending invite...', didOpen:()=>Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/partner-auth', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'send_invite', person_id: personId })
+            });
+            const result = await res.json();
+
+            if (result.success) {
+                // Log the action
+                await fetch('/api/logs', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        email: localStorage.getItem('pp_userid'),
+                        action: `Sent partner portal invite to ${name} (${email})`,
+                        status: 'success',
+                        category: 'partners',
+                        severity: 'info'
+                    })
+                });
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Invite Sent!',
+                    html: `<p><b>${name}</b> will receive an email at <b>${email}</b> to set up their portal account.</p>
+                           ${result.invite_url ? `<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link (if email fails):</b><br>${result.invite_url}</div>` : ''}`,
+                    confirmButtonColor: '#0d9488'
+                });
+            } else {
+                throw new Error(result.message);
+            }
+        } catch(err) {
+            Swal.fire({ icon:'error', title:'Failed to send invite', text:err.message, confirmButtonColor:'#0d9488' });
+        }
+    }
+
+    window.addEventListener('load', loadPartners);
+</script>
+    
+</body>
+</html>
