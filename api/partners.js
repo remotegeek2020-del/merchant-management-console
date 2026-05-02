@@ -211,61 +211,72 @@ if (action === 'get_all_stats') {
             return res.status(200).json({ success: true, data: data || [] });
         }
 
-        // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
+        // --- ACTION: GET PARTNERS LIST - server assembled ---
         if (action === 'get_partners_list') {
-            // Fetch persons and agents first (small tables)
+            // 1. Fetch all base data in parallel
             const [persons, agents, companies] = await Promise.all([
-                supabase.from('persons').select('id, full_name, email, phone_number, hl_contact_id, enrolled_at, enrolled_by, is_portal_active, portal_password_set, last_portal_login').then(r => r.data || []),
+                supabase.from('persons').select('id, full_name, email, phone_number, hl_contact_id, enrolled_at, is_portal_active, portal_password_set, last_portal_login').then(r => r.data || []),
                 supabase.from('agents').select('id, company_id, parent_agent_id').then(r => r.data || []),
-                supabase.from('companies').select('id, company_name').order('company_name').then(r => r.data || [])
+                supabase.from('companies').select('id, company_name').then(r => r.data || [])
             ]);
 
-            // Only fetch identifiers for agents we actually have (not all 3000+)
+            // 2. Fetch identifiers only for agents we have
             const agentIds = agents.map(a => a.id);
             let identifiers = [];
             if (agentIds.length > 0) {
-                // Fetch in chunks of 100 agent IDs to avoid URL length limits
-                const chunks = [];
-                for (let i = 0; i < agentIds.length; i += 100) {
-                    chunks.push(agentIds.slice(i, i + 100));
-                }
-                const results = await Promise.all(
-                    chunks.map(chunk =>
-                        supabase.from('agent_identifiers')
-                            .select('id, agent_id, id_string, rev_share, prime49, parent_config_id')
-                            .in('agent_id', chunk)
-                            .then(r => r.data || [])
-                    )
-                );
-                identifiers = results.flat();
+                const { data } = await supabase
+                    .from('agent_identifiers')
+                    .select('id, agent_id, id_string, rev_share, prime49, parent_config_id')
+                    .in('agent_id', agentIds);
+                identifiers = data || [];
             }
 
-            // Trim identifiers to only what the dashboard card needs
-            const slimIdentifiers = identifiers.map(i => ({
-                id: i.id,
-                agent_id: i.agent_id,
-                id_string: i.id_string,
-                rev_share: i.rev_share,
-                prime49: i.prime49,
-                parent_config_id: i.parent_config_id
-            }));
+            // 3. Assemble partner objects server-side (reliable, no JS quirks)
+            const companyMap = {};
+            companies.forEach(c => { companyMap[c.id] = c.company_name; });
 
-            return res.status(200).json({ 
-                success: true, 
-                data: { persons, agents, identifiers: slimIdentifiers, companies } 
-            });
+            const partners = persons.map(person => {
+                const myAgents = agents.filter(a => a.parent_agent_id === person.id);
+                if (myAgents.length === 0) return null;
+
+                const companies_out = [];
+                myAgents.forEach(agent => {
+                    const myIds = identifiers.filter(i => i.agent_id === agent.id);
+                    if (myIds.length === 0) return;
+                    const coName = companyMap[agent.company_id] || 'Independent';
+                    companies_out.push({
+                        name: coName,
+                        ids: myIds.map(i => ({
+                            db_id: i.id,
+                            string: i.id_string,
+                            rev: i.rev_share || '0',
+                            isPrime: !!i.prime49,
+                            parent_config_id: i.parent_config_id || null,
+                            sub_ids: []
+                        }))
+                    });
+                });
+
+                if (companies_out.length === 0) return null;
+
+                return {
+                    id: person.id,
+                    name: person.full_name,
+                    email: person.email || '',
+                    phone: person.phone_number || '',
+                    hl_id: person.hl_contact_id || null,
+                    enrolled_at: person.enrolled_at || null,
+                    portal_active: person.is_portal_active || false,
+                    portal_setup: person.portal_password_set || false,
+                    last_portal_login: person.last_portal_login || null,
+                    companies: companies_out
+                };
+            }).filter(Boolean);
+
+            return res.status(200).json({ success: true, partners });
         }
 
- // Inside partners.js
-if (action === 'get_merchant_data_raw') {
-    const { identifier_id } = body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, last_batch_date') // Added merchant_id and last_batch_date
-        .eq('agent_id', identifier_id);
-    
-    return res.status(200).json({ success: true, data });
-}
+
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
