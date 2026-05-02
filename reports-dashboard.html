@@ -72,7 +72,7 @@
                 </select>
             </div>
             <div>
-                <label class="report-label">Start Date</label>
+                <label class="report-label">Start Date <span id="dateHint" style="font-weight:400;font-size:9px;color:#94a3b8;">(optional)</span></label>
                 <input type="date" id="startDate" class="slds-input" style="border-radius:8px;">
             </div>
             <div>
@@ -123,17 +123,26 @@
         const container = document.getElementById('subFilterContainer');
         const label = document.getElementById('subFilterLabel');
         const sub = document.getElementById('subFilter');
+        const startLbl = document.querySelector('label[for="startDate"], .report-label:nth-of-type(3)');
+        const endLbl = document.querySelector('label[for="endDate"], .report-label:nth-of-type(4)');
 
         if (type === 'inventory') {
             container.style.visibility = 'visible';
             label.innerText = 'Location';
-            sub.innerHTML = '<option value="Warsaw Office">Warsaw Office (In Stock)</option><option value="Warsaw Repairs">Warsaw Repairs</option>';
+            sub.innerHTML = '<option value="">All Locations</option><option value="Warsaw Office">Warsaw Office (In Stock)</option><option value="Warsaw Repairs">Warsaw Repairs</option>';
         } else if (type === 'merchants') {
             container.style.visibility = 'visible';
             label.innerText = 'Status Filter';
             sub.innerHTML = '<option value="">All Statuses</option><option value="Approved">Approved</option><option value="Pending">Pending</option><option value="Declined">Declined</option><option value="Closed">Closed</option>';
         } else {
             container.style.visibility = 'hidden';
+        }
+
+        // Show date hint for optional date types
+        const dateHint = document.getElementById('dateHint');
+        if (dateHint) {
+            const optional = ['inventory','merchants','prime49','partners'].includes(type);
+            dateHint.innerText = optional ? '(optional — leave blank for all dates)' : '';
         }
     }
 
@@ -144,8 +153,10 @@ async function runReport() {
     const end = document.getElementById('endDate').value;
     const subFilter = document.getElementById('subFilter').value;
 
-    if (!start || !end) {
-        Swal.fire('Missing Dates', 'Please select a date range to continue.', 'warning');
+    // Only require dates for reports that need them
+    const requiresDates = ['deployments','returns'].includes(type);
+    if (requiresDates && (!start || !end)) {
+        Swal.fire('Missing Dates', 'Please select a start and end date for this report type.', 'warning');
         return;
     }
 
@@ -175,8 +186,9 @@ async function runReport() {
                 document.getElementById('resultsCard').style.display = 'block';
                 
                 // Update title with record count
-                document.getElementById('previewTitle').innerText = 
-                    `Preview: Showing 100 of ${totalRecordsAvailable} records`;
+                const typeLabel = document.getElementById('reportType').options[document.getElementById('reportType').selectedIndex].text;
+                document.getElementById('previewTitle').innerText = typeLabel;
+                document.getElementById('previewSub').innerText = `Showing ${result.rawData.length} of ${totalRecordsAvailable.toLocaleString()} total records`;
                 
                 Swal.close();
             } else {
