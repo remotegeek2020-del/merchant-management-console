@@ -9,54 +9,119 @@ let pendingChanges = {};
  * - Operations Admin can edit/delete anyone else.
  */
 
+let allUsersData = [];
+
 async function loadUsers() {
     try {
         const response = await fetch('/api/users?action=list');
         const result = await response.json();
         if (!result.success) throw new Error(result.message);
-
-        const tbody = document.getElementById('user-list');
-        tbody.innerHTML = ''; 
-        
-        const myRole = localStorage.getItem('pp_role') || "";
-        const iAmSuper = (myRole === 'super_admin');
-
-        result.data.forEach(user => {
-            const isTargetSuper = (user.role === 'super_admin');
-            const statusClass = user.is_active ? 'status-active' : 'status-pending';
-            
-            // SECURITY: Disable Edit/Del if target is Super Admin and I am not Super Admin
-            const disableActions = isTargetSuper && !iAmSuper;
-
-           // Inside result.data.forEach(user => { ... }) in cms-logic.js
-const row = document.createElement('tr');
-row.innerHTML = `
-    <td><strong>${user.first_name || ''}</strong></td>
-    <td>${user.email || '---'}</td>
-    <td><span class="status-badge ${statusClass}">${user.is_active ? 'Active' : 'Pending'}</span></td>
-    
-    <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-    <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-    <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-    <td style="text-align:center;"><input type="checkbox" ${user.access_merchants ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_merchants', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-    
-    <td style="text-align:center;"><input type="checkbox" ${user.access_jarvis ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_jarvis', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-    <td style="text-align:center;"><input type="checkbox" ${user.access_partners ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_partners', this.checked)" ${disableActions ? 'disabled' : ''}></td>
-    
-    <td><strong>${user.role}</strong></td>
-    <td style="text-align:center;">
-        <button class="slds-button slds-button_neutral slds-button_small" 
-            onclick="editUser('${user.userid}', '${user.first_name}', '${user.email}', '${user.role}')" 
-            ${disableActions ? 'disabled' : ''}>Edit</button>
-        <button class="slds-button slds-button_destructive slds-button_small" 
-            onclick="deleteUser('${user.userid}', '${user.first_name}')" 
-            ${disableActions ? 'disabled' : ''}>Del</button>
-    </td>`;
-tbody.appendChild(row);
-        });
+        allUsersData = result.data || [];
+        renderUsers(allUsersData);
     } catch (err) {
         console.error("Fetch Error:", err);
     }
+}
+
+function filterUsers() {
+    const q = (document.getElementById('userSearch')?.value || '').toLowerCase();
+    const filtered = q ? allUsersData.filter(u => 
+        (u.first_name||'').toLowerCase().includes(q) || 
+        (u.email||'').toLowerCase().includes(q) ||
+        (u.role||'').toLowerCase().includes(q)
+    ) : allUsersData;
+    renderUsers(filtered);
+}
+
+function renderUsers(data) {
+    const tbody = document.getElementById('user-list');
+    tbody.innerHTML = '';
+    const myRole = localStorage.getItem('pp_role') || "";
+    const iAmSuper = (myRole === 'super_admin');
+
+    if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;padding:40px;color:#94a3b8;">No users found</td></tr>';
+        return;
+    }
+
+    data.forEach(user => {
+        const isTargetSuper = (user.role === 'super_admin');
+        const statusClass = user.is_active ? 'status-active' : 'status-pending';
+        const disableActions = isTargetSuper && !iAmSuper;
+        const lastSeen = user.last_seen ? new Date(user.last_seen).toLocaleDateString() : '—';
+        const isPending = !user.is_active && user.invitation_token;
+
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <div style="font-weight:700;">${user.first_name || ''}</div>
+                <div style="font-size:10px;color:#94a3b8;">Last login: ${lastSeen}</div>
+            </td>
+            <td style="font-size:12px;">${user.email || '---'}</td>
+            <td>
+                <span class="status-badge ${statusClass}" style="cursor:${disableActions?'not-allowed':'pointer'}" 
+                      onclick="${disableActions?'':'toggleActive(''+user.userid+'','+user.is_active+')'}" 
+                      title="${disableActions?'':'Click to toggle'}">${user.is_active ? 'Active' : 'Pending'}</span>
+            </td>
+            <td style="text-align:center;"><input type="checkbox" ${user.access_inventory ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_inventory', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+            <td style="text-align:center;"><input type="checkbox" ${user.access_deployments ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_deployments', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+            <td style="text-align:center;"><input type="checkbox" ${user.access_returns ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_returns', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+            <td style="text-align:center;"><input type="checkbox" ${user.access_merchants ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_merchants', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+            <td style="text-align:center;"><input type="checkbox" ${user.access_jarvis ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_jarvis', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+            <td style="text-align:center;"><input type="checkbox" ${user.access_partners ? 'checked' : ''} onchange="queueChange('${user.userid}', 'access_partners', this.checked)" ${disableActions ? 'disabled' : ''}></td>
+            <td><strong style="font-size:12px;">${user.role}</strong></td>
+            <td style="text-align:center;">
+                <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+                    <button class="slds-button slds-button_neutral slds-button_small" 
+                        onclick="editUser('${user.userid}', '${(user.first_name||'').replace(/'/g,"\\'")}', '${(user.email||'').replace(/'/g,"\\'")}', '${user.role}')" 
+                        ${disableActions ? 'disabled' : ''}>Edit</button>
+                    ${isPending ? `<button class="slds-button slds-button_neutral slds-button_small" 
+                        onclick="resendInvite('${user.userid}', '${(user.email||'').replace(/'/g,"\\'")}')" 
+                        style="background:#fef9c3;border-color:#fbbf24;color:#92400e;" title="Resend setup email">Resend</button>` : ''}
+                    <button class="slds-button slds-button_destructive slds-button_small" 
+                        onclick="deleteUser('${user.userid}', '${(user.first_name||'').replace(/'/g,"\\'")}')" 
+                        ${disableActions ? 'disabled' : ''}>Del</button>
+                </div>
+            </td>`;
+        tbody.appendChild(row);
+    });
+}
+
+async function toggleActive(userId, currentState) {
+    const newState = !currentState;
+    await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'updateBatch', payload: { [userId]: { is_active: newState } } })
+    });
+    // Log it
+    await logAction(`${newState?'Activated':'Deactivated'} user account`, 'users');
+    loadUsers();
+}
+
+async function resendInvite(userId, email) {
+    Swal.fire({ title: 'Resending invite...', didOpen: () => Swal.showLoading() });
+    const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'resend_invite', userid: userId })
+    });
+    const result = await res.json();
+    if (result.success) {
+        await logAction(`Resent invite email to ${email}`, 'users');
+        Swal.fire({ icon: 'success', title: 'Invite resent!', text: `Setup email sent to ${email}`, confirmButtonColor: '#004990' });
+    } else {
+        Swal.fire({ icon: 'error', title: 'Failed', text: result.message, confirmButtonColor: '#004990' });
+    }
+}
+
+async function logAction(action, category = 'general') {
+    const email = localStorage.getItem('pp_userid') || 'Unknown';
+    await fetch('/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action, status: 'success', category, severity: 'info' })
+    }).catch(() => {});
 }
 
 function queueChange(userId, field, value) {
@@ -76,6 +141,7 @@ async function saveAllChanges() {
         });
         const result = await response.json();
         if (result.success) {
+            await logAction(`Updated permissions for ${Object.keys(pendingChanges).length} user(s)`, 'users');
             pendingChanges = {};
             document.getElementById('save-all-btn').style.display = 'none';
             document.getElementById('unsaved-warning').style.display = 'none';
@@ -125,7 +191,10 @@ async function addUser() {
             body: JSON.stringify({ action: 'insert', payload: formValues, performerRole: myRole })
         });
         const result = await res.json();
-        if (result.success) { loadUsers(); Swal.fire('Success', 'User enrolled', 'success'); }
+        if (result.success) { 
+            await logAction(`Enrolled new user: ${formValues.email} (${formValues.role})`, 'users');
+            loadUsers(); Swal.fire('Success', 'User enrolled! Setup email sent.', 'success'); 
+        }
     }
 }
 async function editUser(uid, name, email, role) {
@@ -189,6 +258,7 @@ async function deleteUser(uid, name) {
         });
         const resultJson = await response.json();
         if (resultJson.success) {
+            await logAction(`Deleted user: ${name}`, 'users');
             Swal.fire('Deleted!', '', 'success');
             loadUsers();
         }
