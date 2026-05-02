@@ -1,54 +1,221 @@
 import { createClient } from '@supabase/supabase-js';
 
+export const config = { api: { bodyParser: { sizeLimit: '2mb' } } };
+
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
 export default async function handler(req, res) {
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    res.setHeader('Content-Type', 'application/json');
+    if (req.method !== 'POST') return res.status(405).json({ success: false });
+
     const { action, reportType, startDate, endDate, subFilter, offset = 0, limit = 100 } = req.body;
 
-    if (action === 'getMonthlyReport') {
-        try {
-            let queryBuilder;
-            let dateField;
-            let selectQuery;
+    try {
+        if (action === 'getMonthlyReport') {
 
-            // 1. Restore Inventory, Deployments, Returns
+            // ── INVENTORY ──────────────────────────────────
             if (reportType === 'inventory') {
-                dateField = 'received_date';
-                selectQuery = `serial_number, terminal_type, status, current_location, condition, received_date`;
-                queryBuilder = supabase.from('equipments').select(selectQuery, { count: 'exact' })
-                    .eq('current_location', subFilter); 
-            } else if (reportType === 'deployments') {
-                dateField = 'target_deployment_date';
-                selectQuery = `deployment_id, tid, tracking_id, target_deployment_date, status, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)`;
-                queryBuilder = supabase.from('deployments').select(selectQuery, { count: 'exact' });
-            } else if (reportType === 'returns') {
-                dateField = 'return_date_initiated';
-                selectQuery = `return_id, return_reason, condition, status, return_date_initiated, equipment_received_date, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)`;
-                queryBuilder = supabase.from('returns').select(selectQuery, { count: 'exact' });
-            } 
-            // 2. FIXED: Prime49 Logic
-            else if (reportType === 'prime49') {
-                dateField = 'enrollment_date';
-                selectQuery = `merchant_id, dba_name, agent_id, company_display_name, partner_full_name, enrollment_date, account_status`;
-                queryBuilder = supabase.from('merchant_portfolio_view')
-                    .select(selectQuery, { count: 'exact' })
-                    .eq('is_prime49', true);
+                let query = supabase.from('equipments')
+                    .select(`serial_number, terminal_type, status, current_location, received_date, merchants:merchant_id(dba_name, merchant_id)`, { count: 'exact' });
+
+                if (subFilter) query = query.eq('current_location', subFilter);
+                if (startDate) query = query.gte('received_date', startDate);
+                if (endDate) query = query.lte('received_date', endDate);
+
+                const { data, count, error } = await query.range(offset, offset + limit - 1).order('received_date', { ascending: false });
+                if (error) throw error;
+
+                const rawData = (data||[]).map(d => ({
+                    'Serial Number': d.serial_number || '—',
+                    'Terminal Type': d.terminal_type || '—',
+                    'Status': d.status || '—',
+                    'Location': d.current_location || '—',
+                    'Received Date': d.received_date ? new Date(d.received_date).toLocaleDateString() : '—',
+                    'Current Merchant': d.merchants?.dba_name || 'In Stock',
+                    'Merchant ID': d.merchants?.merchant_id || '—'
+                }));
+
+                return res.status(200).json({ success: true, rawData, totalCount: count });
             }
 
-            if (!queryBuilder) return res.status(400).json({ success: false, message: "Invalid report type" });
+            // ── DEPLOYMENTS ───────────────────────────────
+            if (reportType === 'deployments') {
+                const { data, count, error } = await supabase.from('deployments')
+                    .select(`id, status, created_at, tracking_id, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)`, { count: 'exact' })
+                    .gte('created_at', startDate + 'T00:00:00')
+                    .lte('created_at', endDate + 'T23:59:59')
+                    .order('created_at', { ascending: false })
+                    .range(offset, offset + limit - 1);
 
-            // 3. Execute Query with proper Date Suffixes
-            const { data, error, count } = await queryBuilder
-                .gte(dateField, `${startDate}T00:00:00.000Z`)
-                .lte(dateField, `${endDate}T23:59:59.999Z`)
-                .range(offset, offset + limit - 1)
-                .order(dateField, { ascending: false });
+                if (error) throw error;
 
-            if (error) throw error;
-            return res.status(200).json({ success: true, rawData: data, totalCount: count });
-            
-        } catch (err) {
-            return res.status(500).json({ success: false, message: "Database Error: " + err.message });
+                const rawData = (data||[]).map(d => ({
+                    'DBA Name': d.merchants?.dba_name || '—',
+                    'Merchant ID': d.merchants?.merchant_id || '—',
+                    'Serial Number': d.equipments?.serial_number || '—',
+                    'Terminal Type': d.equipments?.terminal_type || '—',
+                    'Status': d.status || '—',
+                    'Tracking ID': d.tracking_id || '—',
+                    'Date': d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'
+                }));
+
+                return res.status(200).json({ success: true, rawData, totalCount: count });
+            }
+
+            // ── RETURNS ───────────────────────────────────
+            if (reportType === 'returns') {
+                const { data, count, error } = await supabase.from('returns')
+                    .select(`return_id, return_reason, condition, status, destination, return_date_initiated, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)`, { count: 'exact' })
+                    .gte('return_date_initiated', startDate)
+                    .lte('return_date_initiated', endDate)
+                    .order('return_date_initiated', { ascending: false })
+                    .range(offset, offset + limit - 1);
+
+                if (error) throw error;
+
+                const rawData = (data||[]).map(d => ({
+                    'RMA ID': d.return_id || '—',
+                    'Merchant': d.merchants?.dba_name || '—',
+                    'Merchant ID': d.merchants?.merchant_id || '—',
+                    'Serial Number': d.equipments?.serial_number || '—',
+                    'Terminal Type': d.equipments?.terminal_type || '—',
+                    'Reason': d.return_reason || '—',
+                    'Condition': d.condition || '—',
+                    'Destination': d.destination || '—',
+                    'Status': d.status || '—',
+                    'Date Initiated': d.return_date_initiated ? new Date(d.return_date_initiated).toLocaleDateString() : '—'
+                }));
+
+                return res.status(200).json({ success: true, rawData, totalCount: count });
+            }
+
+            // ── MERCHANTS ─────────────────────────────────
+            if (reportType === 'merchants') {
+                let query = supabase.from('merchants')
+                    .select(`merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_mtd, volume_30_day, volume_90_day, email, merchant_phone, merchant_city, merchant_state`, { count: 'exact' });
+
+                if (subFilter) query = query.eq('account_status', subFilter);
+                if (startDate) query = query.gte('enrollment_date', startDate);
+                if (endDate) query = query.lte('enrollment_date', endDate);
+
+                const { data, count, error } = await query
+                    .order('enrollment_date', { ascending: false })
+                    .range(offset, offset + limit - 1);
+
+                if (error) throw error;
+
+                const rawData = (data||[]).map(d => ({
+                    'Merchant ID': d.merchant_id || '—',
+                    'DBA Name': d.dba_name || '—',
+                    'Status': d.account_status || '—',
+                    'Agent ID': d.agent_id || '—',
+                    'Enrolled': d.enrollment_date ? new Date(d.enrollment_date).toLocaleDateString() : '—',
+                    'MTD Volume': parseFloat(d.volume_mtd||0).toFixed(2),
+                    '30D Volume': parseFloat(d.volume_30_day||0).toFixed(2),
+                    '90D Volume': parseFloat(d.volume_90_day||0).toFixed(2),
+                    'Email': d.email || '—',
+                    'Phone': d.merchant_phone || '—',
+                    'City': d.merchant_city || '—',
+                    'State': d.merchant_state || '—'
+                }));
+
+                return res.status(200).json({ success: true, rawData, totalCount: count });
+            }
+
+            // ── PRIME49 ───────────────────────────────────
+            if (reportType === 'prime49') {
+                // Get all Prime49 agent identifiers
+                const { data: primeIds } = await supabase
+                    .from('agent_identifiers')
+                    .select('id_string, rev_share, agents:agent_id(agent_name, persons:parent_agent_id(full_name, email))')
+                    .eq('prime49', true);
+
+                const idStrings = (primeIds||[]).map(p => p.id_string);
+                if (!idStrings.length) return res.status(200).json({ success: true, rawData: [], totalCount: 0 });
+
+                let query = supabase.from('merchants')
+                    .select(`merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_mtd, volume_30_day, volume_90_day`, { count: 'exact' })
+                    .in('agent_id', idStrings);
+
+                if (startDate) query = query.gte('enrollment_date', startDate);
+                if (endDate) query = query.lte('enrollment_date', endDate);
+
+                const { data, count, error } = await query
+                    .order('volume_30_day', { ascending: false })
+                    .range(offset, offset + limit - 1);
+
+                if (error) throw error;
+
+                const idMap = {};
+                (primeIds||[]).forEach(p => { idMap[p.id_string] = p; });
+
+                const rawData = (data||[]).map(d => {
+                    const pid = idMap[d.agent_id];
+                    return {
+                        'Merchant ID': d.merchant_id || '—',
+                        'DBA Name': d.dba_name || '—',
+                        'Status': d.account_status || '—',
+                        'Agent ID': d.agent_id || '—',
+                        'Partner Name': pid?.agents?.persons?.full_name || '—',
+                        'Partner Email': pid?.agents?.persons?.email || '—',
+                        'Rev Share': pid?.rev_share || '—',
+                        'Enrolled': d.enrollment_date ? new Date(d.enrollment_date).toLocaleDateString() : '—',
+                        'MTD Volume': parseFloat(d.volume_mtd||0).toFixed(2),
+                        '30D Volume': parseFloat(d.volume_30_day||0).toFixed(2),
+                        '90D Volume': parseFloat(d.volume_90_day||0).toFixed(2)
+                    };
+                });
+
+                return res.status(200).json({ success: true, rawData, totalCount: count });
+            }
+
+            // ── PARTNERS ──────────────────────────────────
+            if (reportType === 'partners') {
+                let query = supabase.from('persons')
+                    .select(`id, full_name, email, phone_number, enrolled_at, is_portal_active, last_portal_login`, { count: 'exact' });
+
+                if (startDate) query = query.gte('enrolled_at', startDate);
+                if (endDate) query = query.lte('enrolled_at', endDate + 'T23:59:59');
+
+                const { data: persons, count } = await query.order('enrolled_at', { ascending: false }).range(offset, offset + limit - 1);
+
+                // Get agent ID counts per person
+                const personIds = (persons||[]).map(p => p.id);
+                const { data: agents } = await supabase.from('agents').select('id, parent_agent_id').in('parent_agent_id', personIds);
+                const agentIds = (agents||[]).map(a => a.id);
+                const { data: identifiers } = await supabase.from('agent_identifiers').select('agent_id, id_string').in('agent_id', agentIds);
+
+                // Build maps
+                const agentsByPerson = {};
+                (agents||[]).forEach(a => { if(!agentsByPerson[a.parent_agent_id]) agentsByPerson[a.parent_agent_id]=[];  agentsByPerson[a.parent_agent_id].push(a.id); });
+                const idsByAgent = {};
+                (identifiers||[]).forEach(i => { if(!idsByAgent[i.agent_id]) idsByAgent[i.agent_id]=[]; idsByAgent[i.agent_id].push(i.id_string); });
+
+                const rawData = (persons||[]).map(p => {
+                    const myAgents = agentsByPerson[p.id] || [];
+                    const myIds = myAgents.flatMap(aid => idsByAgent[aid] || []);
+                    return {
+                        'Full Name': p.full_name || '—',
+                        'Email': p.email || '—',
+                        'Phone': p.phone_number || '—',
+                        'Agent IDs': myIds.join(', ') || '—',
+                        'ID Count': myIds.length,
+                        'Enrolled': p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString() : '—',
+                        'Portal Access': p.is_portal_active ? 'Yes' : 'No',
+                        'Last Portal Login': p.last_portal_login ? new Date(p.last_portal_login).toLocaleDateString() : 'Never'
+                    };
+                });
+
+                return res.status(200).json({ success: true, rawData, totalCount: count });
+            }
+
+            return res.status(400).json({ success: false, message: `Unknown report type: ${reportType}` });
         }
+
+        return res.status(400).json({ success: false, message: 'Unknown action' });
+
+    } catch (err) {
+        console.error('Reports API Error:', err.message);
+        return res.status(500).json({ success: false, message: err.message });
     }
-    return res.status(400).json({ success: false, message: "Invalid Action" });
 }
