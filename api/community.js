@@ -122,6 +122,16 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: post });
         }
 
+        // ── TOGGLE PIN (staff only) ───────────────────────
+        if (action === 'toggle_pin') {
+            const { post_id } = req.body;
+            if (user.type !== 'staff') return res.status(403).json({ success: false, message: 'Staff only.' });
+            const { data: post } = await supabase.from('community_posts').select('is_pinned').eq('id', post_id).single();
+            if (!post) return res.status(404).json({ success: false });
+            await supabase.from('community_posts').update({ is_pinned: !post.is_pinned }).eq('id', post_id);
+            return res.status(200).json({ success: true, pinned: !post.is_pinned });
+        }
+
         // ── DELETE POST ───────────────────────────────────
         if (action === 'delete_post') {
             const { post_id } = req.body;
