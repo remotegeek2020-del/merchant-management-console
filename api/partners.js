@@ -205,6 +205,16 @@ if (action === 'get_all_stats') {
     }
 }
 
+        // --- ACTION: GET COMPANIES (for wizard search) ---
+        if (action === 'get_companies') {
+            const { data, error } = await supabase
+                .from('companies')
+                .select('id, company_name')
+                .order('company_name');
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
         // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
         if (action === 'get_partners_list') {
             async function fetchAll(table, select) {
