@@ -473,7 +473,9 @@ async function logAuditAction(action, details) {
         myAgents.forEach(agent => {
             const co = companies.find(c => c.id === agent.company_id);
             const coName = co ? co.company_name : "Independent";
-            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
+            // Show ALL IDs for this agent - both root and sub-tier
+            // Parent/child nesting is handled by idMap.sub_ids for display
+            const myIds = identifiers.filter(i => i.agent_id === agent.id);
             
             if (myIds.length > 0) {
                 if (!groups[coName]) groups[coName] = [];
@@ -1106,6 +1108,7 @@ async function submitOnboarding() {
                 personsRaw = result.data.persons || [];
                 allPartners = processPartnerData(result.data);
                 currentPage = 1;
+                activeTrendFilter = 'all'; // Reset trend filter on fresh load
                 renderGrid(allPartners);
                 
                 // Load stats in background - fire and forget, never blocks render
