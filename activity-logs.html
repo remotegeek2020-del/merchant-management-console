@@ -2,83 +2,212 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>System Activity Logs</title>
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
-    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Activity Logs | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||(!r.includes('admin')&&!r.includes('super')))window.location.href='index.html?reason=denied';})();</script>
     <style>
-        body { background: radial-gradient(circle at top right, #f8fafc, #e2e8f0); min-height: 100vh; font-family: 'Inter', sans-serif; padding: 20px; }
-        .log-container { max-width: 1200px; margin: 40px auto; background: rgba(255, 255, 255, 0.8); backdrop-filter: blur(15px); border-radius: 24px; padding: 40px; box-shadow: 0 20px 40px rgba(0, 0, 0, 0.05); display: none; }
-        .status-success { color: #2e7d32; font-weight: bold; }
-        .status-failure { color: #d32f2f; font-weight: bold; }
+        .sev-info{background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .sev-warning{background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .sev-critical{background:#fee2e2;color:#991b1b;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
+        .cat-badge{background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
+        .search-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:16px;background:white;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.05);}
+        @keyframes spin{to{transform:rotate(360deg);}}
     </style>
-    
-    <script>
-        // --- CONSOLIDATED ADMIN GUARD ---
-        (function() {
-            const sessionUser = localStorage.getItem('pp_userid');
-            const role = (localStorage.getItem('pp_role') || "").toLowerCase();
-            const isVerified = localStorage.getItem('pp_verified');
-
-            const hasAccess = sessionUser && isVerified === 'true' && (role.includes('admin') || role.includes('super'));
-
-            if (!hasAccess) {
-                window.location.href = 'index.html?reason=denied';
-            }
-        })();
-    </script>
 </head>
 <body>
-    <div id="page-content" class="log-container">
-        <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_large" style="justify-content: space-between;">
-            <h1 class="slds-text-heading_large" style="color:#004990; font-weight:800;">Activity Audit Trail</h1>
-            <button class="slds-button slds-button_neutral" style="border-radius: 50px;" onclick="window.location.href='index.html'">🏠 HOME</button>
-        </div>
+<div class="pp-container">
 
-        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
-            <thead>
-                <tr class="slds-line-height_reset">
-                    <th scope="col">Timestamp</th>
-                    <th scope="col">User</th>
-                    <th scope="col">Action</th>
-                    <th scope="col">Status</th>
-                    <th scope="col">IP Address</th>
-                </tr>
-            </thead>
-            <tbody id="log-list">
-                <tr><td colspan="5" style="text-align:center;">Loading audit trail...</td></tr>
-            </tbody>
-        </table>
+    <!-- HEADER -->
+    <div class="pp-header">
+        <div class="pp-header-left">
+            <a href="index.html" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <h1 class="pp-header-title">Activity Audit Trail</h1>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="pp-btn pp-btn-secondary" onclick="exportCSV()">
+                <span class="material-icons" style="font-size:16px;">download</span> Export CSV
+            </button>
+            <button class="pp-btn pp-btn-secondary" onclick="loadLogs()">
+                <span class="material-icons" style="font-size:16px;">refresh</span>
+            </button>
+        </div>
     </div>
 
-    <script>
-        async function fetchLogs() {
-            try {
-                const response = await fetch('/api/logs');
-                const result = await response.json();
-                if (result.success) {
-                    const tbody = document.getElementById('log-list');
-                    tbody.innerHTML = result.data.map(log => `
-                        <tr>
-                            <td>${new Date(log.created_at).toLocaleString()}</td>
-                            <td><strong>${log.email || 'System'}</strong></td>
-                            <td><code>${log.action}</code></td>
-                            <td class="status-${(log.status || 'unknown').toLowerCase()}">${log.status}</td>
-                            <td>${log.ip_address || 'N/A'}</td>
-                        </tr>
-                    `).join('');
-                }
-            } catch (err) {
-                console.error("Failed to load logs:", err);
-            }
-        }
+    <!-- FILTERS -->
+    <div class="search-bar">
+        <div class="pp-search" style="flex:1;min-width:200px;">
+            <span class="material-icons pp-search-icon">search</span>
+            <input type="text" id="search" placeholder="Search user, action, status..." oninput="debounce()">
+        </div>
+        <select class="pp-select" id="catFilter" onchange="resetLoad()">
+            <option value="">All Categories</option>
+            <option value="auth">🔐 Auth</option>
+            <option value="merchants">🏪 Merchants</option>
+            <option value="deployments">🚚 Deployments</option>
+            <option value="returns">📦 Returns</option>
+            <option value="inventory">🖥️ Inventory</option>
+            <option value="tasks">✅ Tasks</option>
+            <option value="users">👥 Users</option>
+            <option value="partners">🤝 Partners</option>
+            <option value="general">⚙️ General</option>
+        </select>
+        <select class="pp-select" id="sevFilter" onchange="resetLoad()">
+            <option value="">All Severities</option>
+            <option value="info">ℹ️ Info</option>
+            <option value="warning">⚠️ Warning</option>
+            <option value="critical">🚨 Critical</option>
+        </select>
+        <input type="date" class="pp-select" id="fromDate" onchange="resetLoad()" title="From date">
+        <input type="date" class="pp-select" id="toDate" onchange="resetLoad()" title="To date">
+        <button class="pp-btn pp-btn-secondary" onclick="clearFilters()">Clear</button>
+    </div>
 
-        // Run as soon as DOM is ready
-        document.addEventListener('DOMContentLoaded', () => {
-            // Since the Head script already validated us, we just show content and fetch data
-            document.getElementById('page-content').style.display = 'block';
-            fetchLogs();
-        });
-    </script>
+    <!-- STATS ROW -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px;" id="statsRow">
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="font-size:1.5rem;font-weight:800;font-family:'DM Mono',monospace;color:#0a1628;" id="totalCount">—</div>
+            <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px;">Total Logs</div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="font-size:1.5rem;font-weight:800;font-family:'DM Mono',monospace;color:#0369a1;" id="infoCount">—</div>
+            <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px;">Info</div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="font-size:1.5rem;font-weight:800;font-family:'DM Mono',monospace;color:#92400e;" id="warnCount">—</div>
+            <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px;">Warnings</div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:14px 16px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="font-size:1.5rem;font-weight:800;font-family:'DM Mono',monospace;color:#991b1b;" id="critCount">—</div>
+            <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px;">Critical</div>
+        </div>
+    </div>
+
+    <!-- TABLE -->
+    <div class="pp-table-card">
+        <table class="pp-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>User</th>
+                    <th>Action</th>
+                    <th>Category</th>
+                    <th>Severity</th>
+                    <th>Status</th>
+                    <th>IP Address</th>
+                </tr>
+            </thead>
+            <tbody id="logTable">
+                <tr><td colspan="7"><div class="pp-empty"><div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div></td></tr>
+            </tbody>
+        </table>
+        <div class="pp-pagination">
+            <span id="pageInfo" style="font-size:12px;color:#94a3b8;">Loading...</span>
+            <div class="pp-pagination-controls">
+                <select class="pp-select" id="limitSel" onchange="resetLoad()" style="padding:5px 8px;font-size:12px;">
+                    <option value="50">50 per page</option>
+                    <option value="100">100 per page</option>
+                    <option value="200">200 per page</option>
+                </select>
+                <button class="pp-btn pp-btn-secondary" id="btnPrev" onclick="changePage(-1)" style="padding:6px 12px;font-size:12px;" disabled>← Prev</button>
+                <button class="pp-btn pp-btn-secondary" id="btnNext" onclick="changePage(1)" style="padding:6px 12px;font-size:12px;" disabled>Next →</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentPage = 0;
+let totalCount = 0;
+let searchTimeout = null;
+
+function getFilters() {
+    return {
+        search: document.getElementById('search').value,
+        category: document.getElementById('catFilter').value,
+        severity: document.getElementById('sevFilter').value,
+        from: document.getElementById('fromDate').value,
+        to: document.getElementById('toDate').value,
+        limit: document.getElementById('limitSel').value,
+        page: currentPage
+    };
+}
+
+async function loadLogs() {
+    const tbody = document.getElementById('logTable');
+    tbody.innerHTML = `<tr><td colspan="7"><div class="pp-empty"><div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div></div></td></tr>`;
+
+    const f = getFilters();
+    const params = new URLSearchParams({ page: f.page, limit: f.limit, search: f.search, category: f.category, severity: f.severity, from: f.from, to: f.to });
+
+    const res = await fetch(`/api/logs?${params}`).then(r=>r.json());
+    totalCount = res.count || 0;
+
+    // Stats
+    document.getElementById('totalCount').innerText = totalCount.toLocaleString();
+    const bySev = { info:0, warning:0, critical:0 };
+    (res.data||[]).forEach(l => { if(bySev[l.severity]!==undefined) bySev[l.severity]++; });
+    document.getElementById('infoCount').innerText = bySev.info;
+    document.getElementById('warnCount').innerText = bySev.warning;
+    document.getElementById('critCount').innerText = bySev.critical;
+
+    if (!res.data?.length) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="pp-empty"><span class="material-icons">search_off</span><p>No logs found</p></div></td></tr>`;
+    } else {
+        tbody.innerHTML = res.data.map(log => {
+            const sev = log.severity || 'info';
+            const cat = log.category || 'general';
+            const ts = new Date(log.created_at).toLocaleString();
+            const statusClass = (log.status||'').toLowerCase().includes('fail') || (log.status||'').toLowerCase().includes('error') ? 'color:#ef4444;font-weight:700;' : 'color:#10b981;font-weight:700;';
+            return `<tr>
+                <td style="font-size:11px;color:#64748b;white-space:nowrap;font-family:'DM Mono',monospace;">${ts}</td>
+                <td style="font-weight:600;font-size:12px;">${log.email||'System'}</td>
+                <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${log.action}">${log.action||'—'}</td>
+                <td><span class="cat-badge">${cat}</span></td>
+                <td><span class="sev-${sev}">${sev}</span></td>
+                <td style="${statusClass}font-size:12px;">${log.status||'—'}</td>
+                <td style="font-size:11px;color:#94a3b8;font-family:'DM Mono',monospace;">${log.ip_address||'N/A'}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    const lim = parseInt(f.limit);
+    const from = currentPage * lim + 1;
+    const to = Math.min((currentPage+1)*lim, totalCount);
+    document.getElementById('pageInfo').innerText = totalCount ? `${from.toLocaleString()}–${to.toLocaleString()} of ${totalCount.toLocaleString()} entries` : '0 entries';
+    document.getElementById('btnPrev').disabled = currentPage === 0;
+    document.getElementById('btnNext').disabled = to >= totalCount;
+}
+
+function resetLoad() { currentPage = 0; loadLogs(); }
+function changePage(dir) { currentPage += dir; loadLogs(); }
+function debounce() { clearTimeout(searchTimeout); searchTimeout = setTimeout(resetLoad, 400); }
+function clearFilters() {
+    document.getElementById('search').value='';
+    document.getElementById('catFilter').value='';
+    document.getElementById('sevFilter').value='';
+    document.getElementById('fromDate').value='';
+    document.getElementById('toDate').value='';
+    resetLoad();
+}
+
+async function exportCSV() {
+    Swal.fire({ title:'Exporting...', didOpen:()=>Swal.showLoading() });
+    const f = getFilters();
+    const res = await fetch('/api/logs', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(f) }).then(r=>r.json());
+    const data = res.data || [];
+    const headers = ['Timestamp','User','Action','Category','Severity','Status','IP Address'];
+    const rows = data.map(l => [new Date(l.created_at).toLocaleString(), l.email||'', `"${(l.action||'').replace(/"/g,'""')}"`, l.category||'', l.severity||'', l.status||'', l.ip_address||'']);
+    const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+    a.download = `activity_logs_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+    Swal.fire({ icon:'success', title:`Exported ${data.length} logs`, timer:1500, showConfirmButton:false });
+}
+
+window.onload = loadLogs;
+</script>
 </body>
 </html>
