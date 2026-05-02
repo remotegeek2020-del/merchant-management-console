@@ -186,6 +186,77 @@ export default async function handler(req, res) {
         }
 
 
+
+        // ── DASHBOARD COMBINED (single call for fast load) ──
+        if (action === 'get_dashboard') {
+            const results = { overview: null, trends: null };
+
+            // Run overview and trends in parallel
+            const [overviewData, trendsData] = await Promise.all([
+                (async () => {
+                    if (!idStrings.length) return { merchants:0, approved:0, pending:0, closed:0, mtd:0, vol30:0, vol90:0, open_rmas:0 };
+                    const { data: stats } = await supabase.from('merchant_stats_by_id').select('merchant_count,pending_count,closed_count,total_volume_sum,total_volume_90d_sum').in('agent_id', idStrings);
+                    let approved=0, pending=0, closed=0, mtd=0, vol90=0;
+                    (stats||[]).forEach(s => {
+                        approved += parseInt(s.merchant_count||0);
+                        pending  += parseInt(s.pending_count||0);
+                        closed   += parseInt(s.closed_count||0);
+                        mtd      += parseFloat(s.total_volume_sum||0);
+                        vol90    += parseFloat(s.total_volume_90d_sum||0);
+                    });
+                    return { merchants: approved+pending, approved, pending, closed, mtd, vol30: mtd, vol90, open_rmas: 0 };
+                })(),
+                (async () => {
+                    if (!idStrings.length) return { growth:0, stable:0, at_risk:0, no_data:0, chart:[] };
+                    const { data: merchants } = await supabase
+                        .from('merchants')
+                        .select('volume_mtd, volume_30_day, volume_90_day, enrollment_date')
+                        .in('agent_id', idStrings)
+                        .eq('account_status', 'Approved');
+
+                    let growth=0, stable=0, at_risk=0, no_data=0;
+                    const monthBuckets = {};
+                    for (let i=5; i>=0; i--) {
+                        const d = new Date(); d.setMonth(d.getMonth()-i);
+                        const key = d.toLocaleString('default',{month:'short',year:'2-digit'});
+                        monthBuckets[key] = { month:key, enrolled:0 };
+                    }
+                    (merchants||[]).forEach(m => {
+                        const mtd = parseFloat(m.volume_mtd||0);
+                        const vol90 = parseFloat(m.volume_90_day||0);
+                        const baseline = vol90/3;
+                        if (mtd===0 && baseline===0) no_data++;
+                        else if (baseline===0 || mtd > baseline*1.05) growth++;
+                        else if (mtd < baseline*0.95) at_risk++;
+                        else stable++;
+                        if (m.enrollment_date) {
+                            const d = new Date(m.enrollment_date);
+                            const key = d.toLocaleString('default',{month:'short',year:'2-digit'});
+                            if (monthBuckets[key]) monthBuckets[key].enrolled++;
+                        }
+                    });
+                    return { growth, stable, at_risk, no_data, chart: Object.values(monthBuckets) };
+                })()
+            ]);
+
+            // New enrollments this week
+            const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
+            const { data: newEnrolls, count: enrollCount } = await supabase
+                .from('merchants')
+                .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date', { count:'exact' })
+                .in('agent_id', idStrings)
+                .gte('enrollment_date', weekStart.toISOString())
+                .order('enrollment_date', { ascending: false });
+
+            return res.status(200).json({
+                success: true,
+                overview: overviewData,
+                trends: trendsData,
+                identifiers,
+                new_enrollments: { data: newEnrolls||[], count: enrollCount||0 }
+            });
+        }
+
         // ── TREND OVERVIEW ─────────────────────────────────
         if (action === 'get_trends') {
             if (!idStrings.length) return res.status(200).json({ success: true, data: { growth: 0, stable: 0, at_risk: 0, no_data: 0, chart: [] } });
