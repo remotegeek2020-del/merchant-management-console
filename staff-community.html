@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Community | PayProTec Staff Portal</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css"/>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function() {
+            const u = localStorage.getItem('pp_userid');
+            const v = localStorage.getItem('pp_verified');
+            if (!u || v !== 'true') window.location.href = 'index.html?reason=unauthorized';
+        })();
+    </script>
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{
+            --blue:#004990;--blue-dark:#002d5a;--blue-light:#e0f2fe;--accent:#00a1e0;
+            --border:#e2e8f0;--surface:#f0f4f8;--white:#fff;
+            --text:#0a1628;--secondary:#475569;--muted:#94a3b8;
+            --green:#10b981;--green-bg:#dcfce7;--green-text:#166534;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.06);--shadow-md:0 4px 16px rgba(0,0,0,0.07);
+        }
+        body{margin:0;padding:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+
+        /* TOP NAV - matches staff portal style */
+        .staff-nav{background:linear-gradient(135deg,var(--blue-dark),var(--blue));padding:12px 24px;display:flex;align-items:center;gap:16px;box-shadow:0 2px 8px rgba(0,0,0,0.15);}
+        .staff-nav-logo{height:28px;filter:brightness(0) invert(1);}
+        .staff-nav-title{font-size:14px;font-weight:800;color:white;letter-spacing:-0.2px;}
+        .staff-nav-badge{background:rgba(255,255,255,0.15);color:white;padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;letter-spacing:0.5px;}
+        .staff-nav-right{margin-left:auto;display:flex;align-items:center;gap:10px;}
+        .staff-nav-user{display:flex;align-items:center;gap:8px;background:rgba(255,255,255,0.1);padding:6px 12px;border-radius:8px;}
+        .staff-nav-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;color:white;overflow:hidden;flex-shrink:0;}
+        .staff-nav-avatar img{width:100%;height:100%;object-fit:cover;}
+        .staff-nav-name{font-size:12px;font-weight:700;color:white;}
+        .staff-nav-role{font-size:10px;color:rgba(255,255,255,0.6);}
+        .nav-btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;border-radius:8px;font-size:11px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all 0.2s;text-decoration:none;}
+        .nav-btn-white{background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.2);}
+        .nav-btn-white:hover{background:rgba(255,255,255,0.25);}
+
+        /* LAYOUT */
+        .layout{display:grid;grid-template-columns:240px 1fr 280px;gap:0;height:calc(100vh - 56px);}
+
+        /* LEFT SIDEBAR */
+        .left-sidebar{background:white;border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+        .sidebar-section{padding:12px;}
+        .sidebar-section-title{font-size:9px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:8px 8px 4px;}
+        .sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;font-size:12px;font-weight:600;color:var(--secondary);cursor:pointer;transition:all 0.15s;border:none;background:none;width:100%;font-family:'DM Sans',sans-serif;text-decoration:none;}
+        .sidebar-item:hover{background:var(--surface);color:var(--blue);}
+        .sidebar-item.active{background:var(--blue-light);color:var(--blue);}
+        .sidebar-item .material-icons{font-size:18px;flex-shrink:0;}
+        .channel-color{width:8px;height:8px;border-radius:50%;flex-shrink:0;}
+
+        /* MAIN FEED */
+        .feed-area{display:flex;flex-direction:column;overflow-y:auto;background:var(--surface);}
+        .feed-header{background:white;border-bottom:1px solid var(--border);padding:14px 20px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;}
+        .feed-title{font-size:14px;font-weight:800;color:var(--text);margin:0;}
+        .feed-content{padding:16px;display:flex;flex-direction:column;gap:14px;}
+
+        /* COMPOSER */
+        .composer{background:white;border:1px solid var(--border);border-radius:14px;padding:16px;box-shadow:var(--shadow-sm);}
+        .composer-top{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;}
+        .composer-avatar{width:36px;height:36px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:white;flex-shrink:0;overflow:hidden;}
+        .composer-avatar img{width:100%;height:100%;object-fit:cover;}
+        .composer-input{flex:1;border:1.5px solid var(--border);border-radius:10px;padding:9px 12px;font-size:13px;font-family:'DM Sans',sans-serif;color:var(--text);resize:none;min-height:70px;outline:none;transition:border-color 0.2s;background:#f8fafc;}
+        .composer-input:focus{border-color:var(--blue);background:white;}
+        .composer-footer{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;}
+        .composer-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+        .channel-select{padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:11px;font-family:'DM Sans',sans-serif;color:var(--text);outline:none;cursor:pointer;}
+        .pin-toggle{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--secondary);cursor:pointer;}
+
+        /* BUTTONS */
+        .btn{display:inline-flex;align-items:center;gap:5px;padding:8px 14px;border-radius:8px;font-size:12px;font-weight:700;font-family:'DM Sans',sans-serif;cursor:pointer;border:none;transition:all 0.2s;}
+        .btn-blue{background:var(--blue);color:white;}
+        .btn-blue:hover{background:var(--blue-dark);}
+        .btn-blue:disabled{opacity:0.5;cursor:not-allowed;}
+        .btn-outline{background:white;color:var(--secondary);border:1px solid var(--border);}
+        .btn-outline:hover{border-color:var(--blue);color:var(--blue);}
+        .btn-sm{padding:5px 9px;font-size:11px;}
+        .btn-danger-sm{background:#fee2e2;color:#991b1b;border:none;padding:5px 9px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;}
+        .btn-danger-sm:hover{background:#ef4444;color:white;}
+
+        /* POST CARD */
+        .post-card{background:white;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-sm);overflow:hidden;transition:box-shadow 0.2s;}
+        .post-card:hover{box-shadow:var(--shadow-md);}
+        .post-pinned{border-color:var(--blue);border-left:3px solid var(--blue);}
+        .post-header{padding:13px 14px 0;display:flex;align-items:center;gap:9px;}
+        .post-avatar{width:36px;height:36px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;color:white;flex-shrink:0;overflow:hidden;cursor:pointer;}
+        .post-avatar img{width:100%;height:100%;object-fit:cover;}
+        .post-avatar.partner-av{background:#0d9488;}
+        .post-meta{flex:1;}
+        .post-author{font-size:13px;font-weight:700;color:var(--text);cursor:pointer;}
+        .post-author:hover{color:var(--blue);}
+        .post-time{font-size:11px;color:var(--muted);}
+        .staff-badge{background:var(--blue);color:white;padding:1px 6px;border-radius:99px;font-size:9px;font-weight:800;margin-left:4px;}
+        .partner-badge{background:#ccfbf1;color:#0f766e;padding:1px 6px;border-radius:99px;font-size:9px;font-weight:800;margin-left:4px;}
+        .channel-tag{display:inline-flex;align-items:center;gap:3px;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;margin-left:6px;}
+        .pin-icon{color:var(--blue);font-size:14px;}
+        .post-actions-menu{display:flex;gap:4px;margin-left:auto;}
+        .post-body{padding:10px 14px;font-size:13px;line-height:1.6;color:var(--text);white-space:pre-wrap;word-break:break-word;}
+        .post-image{width:100%;max-height:380px;object-fit:cover;}
+        .post-footer{padding:7px 14px 11px;display:flex;align-items:center;gap:3px;border-top:1px solid var(--border);}
+        .reaction-btn{display:inline-flex;align-items:center;gap:4px;padding:5px 10px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;border:none;background:none;color:var(--muted);transition:all 0.2s;font-family:'DM Sans',sans-serif;}
+        .reaction-btn:hover{background:var(--surface);color:var(--blue);}
+        .reaction-btn.reacted{color:var(--blue);background:var(--blue-light);}
+        .reaction-btn .material-icons{font-size:15px;}
+        .comment-section{background:#f8fafc;border-top:1px solid var(--border);padding:10px 14px;}
+        .comment-item{display:flex;gap:7px;margin-bottom:8px;}
+        .comment-avatar{width:26px;height:26px;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:9px;color:white;flex-shrink:0;overflow:hidden;}
+        .comment-avatar img{width:100%;height:100%;object-fit:cover;}
+        .comment-avatar.partner-av{background:#0d9488;}
+        .comment-bubble{background:white;border:1px solid var(--border);border-radius:0 9px 9px 9px;padding:7px 10px;flex:1;}
+        .comment-author{font-size:11px;font-weight:700;color:var(--text);}
+        .comment-body{font-size:12px;color:var(--secondary);margin-top:1px;line-height:1.5;}
+        .comment-time{font-size:10px;color:var(--muted);margin-top:2px;}
+        .comment-input-row{display:flex;gap:7px;align-items:center;margin-top:8px;}
+        .comment-input{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;transition:border-color 0.2s;}
+        .comment-input:focus{border-color:var(--blue);}
+
+        /* RIGHT SIDEBAR */
+        .right-sidebar{background:white;border-left:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+        .widget{padding:14px 16px;border-bottom:1px solid var(--border);}
+        .widget-title{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;}
+        .online-user{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f8fafc;cursor:pointer;}
+        .online-user:hover .online-name{color:var(--blue);}
+        .online-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0;}
+        .online-name{font-size:12px;font-weight:600;color:var(--text);}
+        .online-role{font-size:10px;color:var(--muted);}
+
+        /* DM PANEL */
+        .dm-panel{position:fixed;bottom:20px;right:20px;width:320px;background:white;border-radius:14px;box-shadow:0 20px 40px rgba(0,0,0,0.15);border:1px solid var(--border);z-index:9999;display:none;flex-direction:column;height:420px;}
+        .dm-panel.open{display:flex;}
+        .dm-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;background:var(--blue-dark);border-radius:14px 14px 0 0;}
+        .dm-other-name{font-weight:700;font-size:12px;color:white;flex:1;}
+        .dm-messages{flex:1;overflow-y:auto;padding:10px;display:flex;flex-direction:column;gap:6px;}
+        .dm-msg{max-width:75%;padding:7px 10px;border-radius:10px;font-size:12px;line-height:1.5;}
+        .dm-msg.sent{background:var(--blue);color:white;border-radius:10px 10px 0 10px;align-self:flex-end;}
+        .dm-msg.recv{background:#f1f5f9;color:var(--text);border-radius:10px 10px 10px 0;}
+        .dm-msg-time{font-size:9px;opacity:0.6;margin-top:2px;}
+        .dm-input-row{padding:9px;border-top:1px solid var(--border);display:flex;gap:6px;}
+        .dm-input{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:7px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;}
+        .dm-input:focus{border-color:var(--blue);}
+
+        /* EMPTY + UTILS */
+        .empty{padding:40px;text-align:center;color:var(--muted);}
+        .empty .material-icons{font-size:40px;opacity:0.3;display:block;margin-bottom:8px;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .spinner{width:18px;height:18px;border:2px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:20px auto;}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+        .post-card{animation:fadeIn 0.3s ease both;}
+
+        @media(max-width:1100px){.layout{grid-template-columns:200px 1fr;}.right-sidebar{display:none;}}
+        @media(max-width:768px){.layout{grid-template-columns:1fr;}.left-sidebar{display:none;}}
+    </style>
+</head>
+<body>
+
+<!-- STAFF TOP NAV -->
+<div class="staff-nav">
+    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="staff-nav-logo">
+    <div class="staff-nav-title">PayProTec Portal</div>
+    <span class="staff-nav-badge">Staff</span>
+    <div class="staff-nav-right">
+        <a href="index.html" class="nav-btn nav-btn-white"><span class="material-icons" style="font-size:14px;">home</span> Home</a>
+        <button class="nav-btn nav-btn-white" onclick="openDMSearch()"><span class="material-icons" style="font-size:14px;">mail</span> New DM</button>
+        <a href="staff-settings.html" class="nav-btn nav-btn-white"><span class="material-icons" style="font-size:14px;">settings</span></a>
+        <div class="staff-nav-user">
+            <div class="staff-nav-avatar" id="navAvatar">?</div>
+            <div>
+                <div class="staff-nav-name" id="navName">Loading...</div>
+                <div class="staff-nav-role" id="navRole"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="layout">
+    <!-- LEFT SIDEBAR -->
+    <div class="left-sidebar">
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Feed</div>
+            <div class="sidebar-item active" onclick="setChannel(null, this)" id="all-feed-item">
+                <span class="material-icons">public</span> All Posts
+            </div>
+        </div>
+        <div class="sidebar-section">
+            <div class="sidebar-section-title">Channels</div>
+            <div id="channelNav"></div>
+        </div>
+        <div class="sidebar-section" style="margin-top:auto;border-top:1px solid var(--border);">
+            <a href="staff-profile.html" class="sidebar-item"><span class="material-icons">account_circle</span> My Profile</a>
+            <a href="index.html" class="sidebar-item"><span class="material-icons">arrow_back</span> Back to Portal</a>
+        </div>
+    </div>
+
+    <!-- FEED -->
+    <div class="feed-area">
+        <div class="feed-header">
+            <h2 class="feed-title" id="feedTitle">🌐 Community Feed</h2>
+            <div style="display:flex;gap:6px;">
+                <button class="btn btn-outline btn-sm" onclick="loadFeed()"><span class="material-icons" style="font-size:14px;">refresh</span></button>
+            </div>
+        </div>
+        <div class="feed-content">
+            <!-- COMPOSER -->
+            <div class="composer">
+                <div class="composer-top">
+                    <div class="composer-avatar" id="composerAvatar">?</div>
+                    <textarea class="composer-input" id="postInput" placeholder="Share an update, announcement, or ask the community..."></textarea>
+                </div>
+                <div class="composer-footer">
+                    <div class="composer-controls">
+                        <select class="channel-select" id="postChannel">
+                            <option value="">📡 All Channels</option>
+                        </select>
+                        <label class="pin-toggle">
+                            <input type="checkbox" id="pinPost" style="accent-color:var(--blue);">
+                            <span class="material-icons" style="font-size:14px;color:var(--blue);">push_pin</span> Pin
+                        </label>
+                    </div>
+                    <div style="display:flex;gap:6px;">
+                        <button class="btn btn-outline btn-sm" onclick="document.getElementById('imgInput').click()"><span class="material-icons" style="font-size:13px;">image</span> Photo</button>
+                        <button class="btn btn-blue" onclick="submitPost()" id="postBtn"><span class="material-icons" style="font-size:13px;">send</span> Post</button>
+                    </div>
+                </div>
+                <input type="file" id="imgInput" accept="image/*" style="display:none" onchange="handleImg(this)">
+                <div id="imgPreview" style="display:none;margin-top:8px;position:relative;">
+                    <img id="previewImg" style="width:100%;border-radius:8px;max-height:180px;object-fit:cover;">
+                    <button onclick="clearImg()" style="position:absolute;top:5px;right:5px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:22px;height:22px;color:white;cursor:pointer;font-size:12px;">✕</button>
+                </div>
+            </div>
+            <!-- POSTS -->
+            <div id="feedContainer"><div class="spinner"></div></div>
+            <div id="loadMoreWrap" style="display:none;">
+                <button class="btn btn-outline" onclick="loadMore()" style="width:100%;">Load more</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- RIGHT SIDEBAR -->
+    <div class="right-sidebar">
+        <div class="widget">
+            <div class="widget-title">🟢 Online Now</div>
+            <div id="onlineWidget"><div class="spinner"></div></div>
+        </div>
+        <div class="widget">
+            <div class="widget-title">📊 Community Stats</div>
+            <div id="statsWidget" style="font-size:12px;color:var(--secondary);line-height:2;">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<!-- DM PANEL -->
+<div class="dm-panel" id="dmPanel">
+    <div class="dm-header">
+        <div class="staff-nav-avatar" id="dmOtherAvatar" style="width:26px;height:26px;font-size:9px;flex-shrink:0;"></div>
+        <div class="dm-other-name" id="dmOtherName">—</div>
+        <button onclick="closeDM()" style="background:none;border:none;color:rgba(255,255,255,0.6);cursor:pointer;"><span class="material-icons" style="font-size:18px;">close</span></button>
+    </div>
+    <div class="dm-messages" id="dmMessages"></div>
+    <div class="dm-input-row">
+        <input class="dm-input" id="dmInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendDM()">
+        <button class="btn btn-blue btn-sm" onclick="sendDM()"><span class="material-icons" style="font-size:13px;">send</span></button>
+    </div>
+</div>
+
+<script>
+const staffId = localStorage.getItem('pp_userid');
+const staffName = `${localStorage.getItem('pp_user_first_name') || 'Staff'}`;
+if (!staffId) window.location.href = 'index.html';
+
+let channels = [], activeChannelId = null, feedPage = 0, feedHasMore = false;
+let pendingImgUrl = null, dmOtherId = null, dmOtherType = null, dmPollInterval = null;
+let currentProfile = null;
+
+function api(body) {
+    return fetch('/api/community', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, staff_userid: staffId }) }).then(r=>r.json());
+}
+
+async function init() {
+    // Set nav info
+    document.getElementById('navName').innerText = staffName;
+    const role = localStorage.getItem('pp_role') || 'Staff';
+    document.getElementById('navRole').innerText = role;
+    const initials = staffName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('navAvatar').innerHTML = initials;
+    document.getElementById('composerAvatar').innerHTML = initials;
+
+    // Load profile for avatar
+    const profRes = await api({ action:'get_profile' });
+    if (profRes.success && profRes.profile?.avatar_url) {
+        const av = profRes.profile.avatar_url;
+        document.getElementById('navAvatar').innerHTML = `<img src="${av}">`;
+        document.getElementById('composerAvatar').innerHTML = `<img src="${av}">`;
+    }
+    currentProfile = profRes.profile;
+
+    await loadChannels();
+    await loadFeed();
+    loadOnlineUsers();
+    loadStats();
+    startHeartbeat();
+}
+
+async function loadChannels() {
+    const res = await api({ action:'get_channels' });
+    channels = res.data || [];
+    const nav = document.getElementById('channelNav');
+    const sel = document.getElementById('postChannel');
+    sel.innerHTML = '<option value="">📡 All Channels</option>';
+    nav.innerHTML = '';
+    channels.forEach(ch => {
+        const isActive = activeChannelId === ch.id;
+        nav.innerHTML += `<div class="sidebar-item ${isActive?'active':''}" onclick="setChannel('${ch.id}', this)">
+            <span class="material-icons" style="font-size:17px;color:${ch.color};">${ch.icon}</span>
+            ${ch.name}${ch.is_announcement?' <span style="font-size:9px;color:var(--muted);">STAFF ONLY</span>':''}
+        </div>`;
+        sel.innerHTML += `<option value="${ch.id}">${ch.is_announcement?'📢':''} ${ch.name}</option>`;
+    });
+}
+
+async function setChannel(channelId, el) {
+    activeChannelId = channelId;
+    feedPage = 0;
+    document.querySelectorAll('.sidebar-item').forEach(i => i.classList.remove('active'));
+    if (el) el.classList.add('active');
+    const ch = channels.find(c => c.id === channelId);
+    document.getElementById('feedTitle').innerText = ch ? `#${ch.name}` : '🌐 Community Feed';
+    loadFeed();
+}
+
+async function loadFeed(append=false) {
+    if (!append) { feedPage=0; document.getElementById('feedContainer').innerHTML='<div class="spinner"></div>'; }
+    const res = await api({ action:'get_feed', channel_id: activeChannelId, page: feedPage, limit: 15 });
+    feedHasMore = res.has_more;
+    document.getElementById('loadMoreWrap').style.display = feedHasMore?'block':'none';
+    if (!res.data?.length && !append) { document.getElementById('feedContainer').innerHTML='<div class="empty"><span class="material-icons">forum</span><p>No posts yet. Start the conversation!</p></div>'; return; }
+    const html = (res.data||[]).map(renderPost).join('');
+    if (append) document.getElementById('feedContainer').insertAdjacentHTML('beforeend', html);
+    else document.getElementById('feedContainer').innerHTML = html;
+}
+
+function loadMore() { feedPage++; loadFeed(true); }
+
+function renderPost(post) {
+    const a = post.author || {};
+    const isStaff = a.user_type === 'staff';
+    const initials = (a.display_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    const avHtml = a.avatar_url ? `<img src="${a.avatar_url}">` : initials;
+    const badge = isStaff ? `<span class="staff-badge">STAFF</span>` : `<span class="partner-badge">PARTNER</span>`;
+    const chTag = post.community_channels ? `<span class="channel-tag" style="background:${post.community_channels.color}22;color:${post.community_channels.color};"><span class="material-icons" style="font-size:10px;">${post.community_channels.icon}</span>${post.community_channels.name}</span>` : '';
+    const pinHtml = post.is_pinned ? `<span class="material-icons pin-icon" title="Pinned">push_pin</span>` : '';
+    const isOwn = post.author_id === staffId;
+    const isSuperAdmin = (localStorage.getItem('pp_role')||'').toLowerCase().includes('super');
+
+    return `<div class="post-card ${post.is_pinned?'post-pinned':''}" id="post-${post.id}">
+        <div class="post-header">
+            <div class="post-avatar ${isStaff?'':'partner-av'}" onclick="openProfile('${post.author_id}')">${avHtml}</div>
+            <div class="post-meta">
+                <div><span class="post-author" onclick="openProfile('${post.author_id}')">${a.display_name||'Unknown'}</span>${badge}${chTag}</div>
+                <div class="post-time">${getTimeAgo(post.created_at)}</div>
+            </div>
+            ${pinHtml}
+            <div class="post-actions-menu">
+                ${isSuperAdmin ? `<button class="btn-danger-sm" onclick="togglePin('${post.id}',${post.is_pinned})" title="${post.is_pinned?'Unpin':'Pin'}"><span class="material-icons" style="font-size:12px;">push_pin</span></button>` : ''}
+                ${isOwn || isSuperAdmin ? `<button class="btn-danger-sm" onclick="deletePost('${post.id}')"><span class="material-icons" style="font-size:12px;">delete</span></button>` : ''}
+            </div>
+        </div>
+        <div class="post-body">${escHtml(post.body)}</div>
+        ${post.image_url ? `<img src="${post.image_url}" class="post-image">` : ''}
+        <div class="post-footer">
+            <button class="reaction-btn ${post.user_reacted?'reacted':''}" onclick="toggleReact('${post.id}',this)">
+                <span class="material-icons">${post.user_reacted?'favorite':'favorite_border'}</span>
+                <span class="react-count">${post.reaction_count||0}</span>
+            </button>
+            <button class="reaction-btn" onclick="toggleComments('${post.id}')">
+                <span class="material-icons">chat_bubble_outline</span> ${post.comment_count||0}
+            </button>
+            ${post.author_id !== staffId ? `<button class="reaction-btn" onclick="openDM('${post.author_id}','${(a.display_name||'').replace(/'/g,"\\'")}','${a.user_type||'partner'}')"><span class="material-icons">send</span> Message</button>` : ''}
+        </div>
+        <div class="comment-section" id="comments-${post.id}" style="display:none;"></div>
+    </div>`;
+}
+
+async function submitPost() {
+    const body = document.getElementById('postInput').value.trim();
+    const channelId = document.getElementById('postChannel').value || null;
+    const isPinned = document.getElementById('pinPost').checked;
+    if (!body) return;
+    const btn = document.getElementById('postBtn');
+    btn.disabled=true; btn.innerHTML='<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:13px;">sync</span>';
+    const res = await api({ action:'create_post', body, channel_id: channelId, image_url: pendingImgUrl });
+    if (res.success && isPinned) {
+        await api({ action:'toggle_pin', post_id: res.data.id });
+    }
+    document.getElementById('postInput').value='';
+    document.getElementById('pinPost').checked=false;
+    clearImg();
+    btn.disabled=false; btn.innerHTML='<span class="material-icons" style="font-size:13px;">send</span> Post';
+    feedPage=0; loadFeed();
+}
+
+async function toggleReact(postId, btn) {
+    const res = await api({ action:'react', post_id: postId });
+    if (res.success) {
+        const cnt = btn.querySelector('.react-count');
+        const ic = btn.querySelector('.material-icons');
+        if (res.action==='added'){btn.classList.add('reacted');ic.innerText='favorite';cnt.innerText=parseInt(cnt.innerText)+1;}
+        else{btn.classList.remove('reacted');ic.innerText='favorite_border';cnt.innerText=Math.max(0,parseInt(cnt.innerText)-1);}
+    }
+}
+
+async function toggleComments(postId) {
+    const sec = document.getElementById(`comments-${postId}`);
+    if (sec.style.display==='none') {
+        sec.style.display='block';
+        sec.innerHTML='<div class="spinner" style="margin:8px auto;"></div>';
+        const res = await api({ action:'get_comments', post_id: postId });
+        const initials2 = staffName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+        const myAv = currentProfile?.avatar_url ? `<img src="${currentProfile.avatar_url}">` : initials2;
+        sec.innerHTML = `${(res.data||[]).map(c=>{
+            const ci=(c.author?.display_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+            const cav=c.author?.avatar_url?`<img src="${c.author.avatar_url}">`:ci;
+            return `<div class="comment-item"><div class="comment-avatar ${c.author?.user_type==='partner'?'partner-av':''}">${cav}</div><div class="comment-bubble"><div class="comment-author">${c.author?.display_name||'Unknown'} ${c.author?.user_type==='staff'?'<span class="staff-badge">STAFF</span>':''}</div><div class="comment-body">${escHtml(c.body)}</div><div class="comment-time">${getTimeAgo(c.created_at)}</div></div></div>`;
+        }).join('')}
+        <div class="comment-input-row">
+            <div class="comment-avatar">${myAv}</div>
+            <input class="comment-input" id="ci-${postId}" placeholder="Add a comment..." onkeypress="if(event.key==='Enter')addComment('${postId}')">
+            <button class="btn btn-blue btn-sm" onclick="addComment('${postId}')">Reply</button>
+        </div>`;
+    } else { sec.style.display='none'; }
+}
+
+async function addComment(postId) {
+    const inp = document.getElementById(`ci-${postId}`);
+    const body = inp.value.trim();
+    if (!body) return;
+    await api({ action:'add_comment', post_id: postId, body });
+    inp.value='';
+    toggleComments(postId);
+    setTimeout(()=>toggleComments(postId),100);
+}
+
+async function deletePost(postId) {
+    const { isConfirmed } = await Swal.fire({ title:'Delete post?', icon:'warning', showCancelButton:true, confirmButtonColor:'#ef4444', confirmButtonText:'Delete' });
+    if (isConfirmed) { await api({ action:'delete_post', post_id:postId }); document.getElementById(`post-${postId}`)?.remove(); }
+}
+
+async function togglePin(postId, isPinned) {
+    await api({ action:'toggle_pin', post_id: postId });
+    feedPage=0; loadFeed();
+}
+
+// IMAGE
+function handleImg(input) {
+    const file=input.files[0]; if(!file) return;
+    const r=new FileReader(); r.onload=e=>{document.getElementById('previewImg').src=e.target.result;document.getElementById('imgPreview').style.display='block';};
+    r.readAsDataURL(file);
+    api({ action:'get_avatar_upload_url', file_type:file.type }).then(async u=>{
+        if(u.success){await fetch(u.upload_url,{method:'PUT',body:file,headers:{'Content-Type':file.type}});pendingImgUrl=u.public_url;}
+    });
+}
+function clearImg(){pendingImgUrl=null;document.getElementById('imgPreview').style.display='none';document.getElementById('imgInput').value='';}
+
+// DM
+async function openDMSearch() {
+    await Swal.fire({
+        title:'New Message', showCancelButton:true, confirmButtonColor:'#004990', confirmButtonText:'Done',
+        didOpen:async()=>{
+            const inp=Swal.getInput();
+            const res=await api({action:'get_all_users',search:''});
+            renderUserSearch(res.data||[]);
+            inp?.addEventListener('input',async()=>{const r=await api({action:'get_all_users',search:inp.value});renderUserSearch(r.data||[]);});
+        },
+        input:'text', inputPlaceholder:'Search by name...',
+        html:`<div id="userSearchRes" style="max-height:240px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;margin-top:8px;"></div>`
+    });
+}
+
+function renderUserSearch(users) {
+    const el=document.getElementById('userSearchRes');
+    if(!el) return;
+    el.innerHTML=users.map(u=>`<div onclick="Swal.close();openDM('${u.user_id}','${(u.display_name||'').replace(/'/g,"\\'")}','${u.user_type}')" style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f8fafc;">
+        <div style="width:26px;height:26px;border-radius:50%;background:${u.user_type==='staff'?'#004990':'#0d9488'};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:9px;color:white;flex-shrink:0;">${(u.display_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)}</div>
+        <div><div style="font-size:12px;font-weight:700;">${u.display_name||'Unknown'}</div><div style="font-size:10px;color:#94a3b8;">${u.user_type==='staff'?'Staff':'Partner'}${u.is_online?' · 🟢':''}</div></div>
+    </div>`).join('') || '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No users found</div>';
+}
+
+async function openDM(otherId, otherName, otherType) {
+    if(otherId===staffId) return;
+    dmOtherId=otherId; dmOtherType=otherType;
+    document.getElementById('dmOtherName').innerText=otherName;
+    document.getElementById('dmOtherAvatar').innerHTML=otherName.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    document.getElementById('dmPanel').classList.add('open');
+    await loadDMThread();
+    if(dmPollInterval) clearInterval(dmPollInterval);
+    dmPollInterval=setInterval(loadDMThread,5000);
+}
+
+function closeDM(){document.getElementById('dmPanel').classList.remove('open');if(dmPollInterval)clearInterval(dmPollInterval);dmOtherId=null;}
+
+async function loadDMThread() {
+    if(!dmOtherId) return;
+    const res=await api({action:'get_dm_thread',other_id:dmOtherId});
+    const msgs=document.getElementById('dmMessages');
+    const atBottom=msgs.scrollTop+msgs.clientHeight>=msgs.scrollHeight-10;
+    msgs.innerHTML=(res.data||[]).map(m=>{
+        const sent=m.sender_id===staffId;
+        return `<div style="display:flex;flex-direction:column;align-items:${sent?'flex-end':'flex-start'};"><div class="dm-msg ${sent?'sent':'recv'}">${escHtml(m.body)}<div class="dm-msg-time">${getTimeAgo(m.created_at)}</div></div></div>`;
+    }).join('')||'<div style="text-align:center;color:#94a3b8;font-size:12px;padding:20px;">No messages yet</div>';
+    if(atBottom) msgs.scrollTop=msgs.scrollHeight;
+}
+
+async function sendDM(){
+    const inp=document.getElementById('dmInput');
+    const body=inp.value.trim();
+    if(!body||!dmOtherId) return;
+    inp.value='';
+    await api({action:'send_dm',recipient_id:dmOtherId,recipient_type:dmOtherType,body});
+    loadDMThread();
+}
+
+// PROFILE MODAL
+async function openProfile(userId) {
+    const res = await api({ action:'get_profile', profile_user_id: userId });
+    if (!res.success) return;
+    const p=res.profile, s=res.stats;
+    const initials=(p.display_name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    Swal.fire({
+        html:`<div style="text-align:center;padding-bottom:14px;border-bottom:1px solid #e2e8f0;margin-bottom:14px;">
+            <div style="width:68px;height:68px;border-radius:50%;background:${p.user_type==='staff'?'#004990':'#0d9488'};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;color:white;margin:0 auto 10px;overflow:hidden;">
+                ${p.avatar_url?`<img src="${p.avatar_url}" style="width:100%;height:100%;object-fit:cover;">`:initials}
+            </div>
+            <div style="font-size:17px;font-weight:800;">${p.display_name||'Unknown'}</div>
+            ${p.user_type==='staff'?'<span style="background:#004990;color:white;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:800;">PAYPROTEC STAFF</span>':'<span style="background:#ccfbf1;color:#0f766e;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:800;">PARTNER</span>'}
+            ${p.tagline?`<div style="font-size:12px;color:#64748b;margin-top:6px;font-style:italic;">"${p.tagline}"</div>`:''}
+        </div>
+        ${p.bio?`<div style="font-size:12px;color:#475569;text-align:left;margin-bottom:10px;">${p.bio}</div>`:''}
+        ${p.location?`<div style="font-size:11px;color:#94a3b8;text-align:left;margin-bottom:5px;"><span class="material-icons" style="font-size:13px;vertical-align:middle;">location_on</span> ${p.location}</div>`:''}
+        ${s?`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;margin-top:10px;padding-top:10px;border-top:1px solid #e2e8f0;">
+            <div style="text-align:center;background:#f0f7ff;border-radius:8px;padding:8px;"><div style="font-size:16px;font-weight:800;color:#004990;">${s.merchants}</div><div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Merchants</div></div>
+            <div style="text-align:center;background:#f0f7ff;border-radius:8px;padding:8px;"><div style="font-size:12px;font-weight:800;color:#004990;">$${(s.mtd/1000).toFixed(1)}K</div><div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;">MTD</div></div>
+            <div style="text-align:center;background:#f0f7ff;border-radius:8px;padding:8px;"><div style="font-size:12px;font-weight:800;color:#004990;">$${(s.vol90/1000).toFixed(1)}K</div><div style="font-size:9px;color:#94a3b8;font-weight:700;text-transform:uppercase;">90D</div></div>
+        </div>`:''}
+        ${userId!==staffId?`<button onclick="Swal.close();openDM('${userId}','${(p.display_name||'').replace(/'/g,"\\'")}','${p.user_type}')" style="width:100%;margin-top:12px;padding:9px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">Message</button>`:''}`,
+        showConfirmButton:false, showCloseButton:true, width:380
+    });
+}
+
+// ONLINE USERS
+async function loadOnlineUsers() {
+    const res = await api({ action:'get_all_users', search:'' });
+    const widget=document.getElementById('onlineWidget');
+    const online=(res.data||[]).filter(u=>u.is_online).slice(0,10);
+    widget.innerHTML=online.length ? online.map(u=>`
+        <div class="online-user" onclick="openDM('${u.user_id}','${(u.display_name||'').replace(/'/g,"\\'")}','${u.user_type}')">
+            <div class="online-dot"></div>
+            <div><div class="online-name">${u.display_name||'Unknown'}</div><div class="online-role">${u.user_type==='staff'?'Staff':'Partner'}</div></div>
+        </div>`).join('') : '<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px;">Nobody online</div>';
+}
+
+async function loadStats() {
+    const res = await api({ action:'get_feed', page:0, limit:1 });
+    document.getElementById('statsWidget').innerHTML = `
+        Total posts: <b>${res.count||0}</b><br>
+        Channels: <b>${channels.length}</b><br>
+        Staff + Partners active`;
+}
+
+function startHeartbeat() {
+    api({ action:'heartbeat' });
+    setInterval(()=>api({ action:'heartbeat' }),60000);
+    setInterval(loadOnlineUsers, 30000);
+}
+
+function escHtml(str){return(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function getTimeAgo(d){const diff=Date.now()-new Date(d).getTime(),m=Math.floor(diff/60000),h=Math.floor(m/60),dy=Math.floor(h/24);return dy>0?`${dy}d ago`:h>0?`${h}h ago`:m>0?`${m}m ago`:'just now';}
+
+window.onload = init;
+document.getElementById('postInput').addEventListener('keydown', e=>{if(e.key==='Enter'&&e.metaKey)submitPost();});
+</script>
+</body>
+</html>
