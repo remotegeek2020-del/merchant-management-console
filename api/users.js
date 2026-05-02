@@ -81,6 +81,34 @@ await client.sendEmail({
                     await supabase.from('app_users').update(payload[uid]).eq('userid', uid);
                 }
                 return res.status(200).json({ success: true });
+            }
+
+            if (action === 'resend_invite') {
+                const { userid } = req.body;
+                const { data: user } = await supabase.from('app_users').select('first_name, email, invitation_token').eq('userid', userid).single();
+                if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
+                
+                // Generate new token
+                const newToken = crypto.randomUUID();
+                await supabase.from('app_users').update({ invitation_token: newToken }).eq('userid', userid);
+
+                const setupUrl = `https://${req.headers.host}/setup-password.html?token=${newToken}`;
+
+                if (process.env.POSTMARK_SERVER_TOKEN) {
+                    try {
+                        const { ServerClient } = await import('postmark');
+                        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                        await client.sendEmail({
+                            "From": process.env.EMAIL_FROM,
+                            "To": user.email,
+                            "Subject": "Reminder: Set up your PayProTec Staff Portal account",
+                            "HtmlBody": `<div style="font-family:sans-serif;max-width:500px;margin:auto;padding:30px;"><h2 style="color:#004990;">PayProTec Portal</h2><p>Hi ${user.first_name}, your account setup link has been refreshed. Click below to set your password:</p><div style="text-align:center;margin:30px 0;"><a href="${setupUrl}" style="background:#004990;color:white;padding:14px 28px;text-decoration:none;border-radius:8px;font-weight:bold;">Set Up My Password</a></div><p style="font-size:12px;color:#64748b;">${setupUrl}</p></div>`,
+                            "TextBody": `Set up your account: ${setupUrl}`,
+                            "MessageStream": "outbound"
+                        });
+                    } catch(e) { console.error("Email failed", e); }
+                }
+                return res.status(200).json({ success: true, setup_url: setupUrl });
             } 
             
             if (action === 'delete') {
