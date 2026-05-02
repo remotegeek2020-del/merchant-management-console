@@ -9,6 +9,7 @@
     { "src": "/partner/community", "dest": "/partner/community.html" },
     { "src": "/partner/settings", "dest": "/partner/settings.html" },
     { "src": "/partner/profile", "dest": "/partner/profile.html" },
+    { "src": "/partner/setup", "dest": "/partner/setup.html" },
     { "src": "/partner", "dest": "/partner/index.html" },
     { "src": "/partner/", "dest": "/partner/index.html" },
     { "src": "/(.*)\\.html", "dest": "/$1.html" },
