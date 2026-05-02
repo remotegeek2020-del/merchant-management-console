@@ -57,9 +57,9 @@
         </div>
     </div>
     <nav class="sidebar-nav">
-        <a class="nav-item" href="dashboard.html"><span class="material-icons">dashboard</span> Overview</a>
-        <a class="nav-item" href="merchants.html"><span class="material-icons">storefront</span> My Merchants</a>
-        <a class="nav-item active" href="messages.html"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href='/partner/dashboard'><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href='/partner/merchants'><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item active" href='/partner/messages'><span class="material-icons">forum</span> Messages</a>
         <div class="nav-divider"></div>
         <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
     </nav>
@@ -80,12 +80,12 @@
 </div>
 <script>
 const token = localStorage.getItem('pp_partner_token');
-if (!token) window.location.href = 'index.html';
+if (!token) window.location.href = '/partner';
 let myId = localStorage.getItem('pp_partner_id');
 
 async function init() {
     const auth = await fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'validate',token})}).then(r=>r.json());
-    if (!auth.success) { localStorage.clear(); window.location.href='index.html'; return; }
+    if (!auth.success) { localStorage.clear(); window.location.href='/partner'; return; }
     const initials = auth.partner.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     document.getElementById('sidebarAvatar').innerText = initials;
     document.getElementById('sidebarName').innerText = auth.partner.name;
@@ -138,7 +138,7 @@ async function composeMessage() {
 
 async function handleLogout() {
     await fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})});
-    localStorage.clear(); window.location.href='index.html';
+    localStorage.clear(); window.location.href='/partner';
 }
 
 window.onload = init;
