@@ -64,16 +64,25 @@
 
         <div id="unsaved-warning" class="save-banner">⚠️ UN-SAVED CHANGES: Click "SAVE ALL" to update the database.</div>
 
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:15px;">
+            <input type="text" id="userSearch" placeholder="🔍 Search by name, email or role..." 
+                   oninput="filterUsers()" class="slds-input" 
+                   style="max-width:320px;border-radius:10px;">
+            <span id="userCount" style="font-size:12px;color:#64748b;font-weight:600;"></span>
+        </div>
+
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-table_fixed-layout">
             <thead>
                 <tr class="slds-line-height_reset">
-                    <th scope="col">Full Name</th> <th scope="col">Email Address</th> <th scope="col" style="width:110px;">Status</th>
-                    <th scope="col" style="text-align:center; width:60px;">Inv</th>
-                    <th scope="col" style="text-align:center; width:60px;">Dep</th>
-                    <th scope="col" style="text-align:center; width:60px;">Ret</th>
-                    <th scope="col" style="text-align:center; width:60px;">Mer</th>
-                    <th scope="col" style="text-align:center; width:60px;">Jar</th>
-<th scope="col" style="text-align:center; width:60px;">Prt</th>
+                    <th scope="col">Name / Last Login</th>
+                    <th scope="col">Email Address</th>
+                    <th scope="col" style="width:90px;">Status</th>
+                    <th scope="col" style="text-align:center; width:55px;" title="Inventory">Inv</th>
+                    <th scope="col" style="text-align:center; width:55px;" title="Deployments">Dep</th>
+                    <th scope="col" style="text-align:center; width:55px;" title="Returns">Ret</th>
+                    <th scope="col" style="text-align:center; width:55px;" title="Merchants">Mer</th>
+                    <th scope="col" style="text-align:center; width:55px;" title="Jarvis AI">Jar</th>
+                    <th scope="col" style="text-align:center; width:55px;" title="Partners">Prt</th>
                     <th scope="col">Role</th>
                     <th scope="col" style="text-align:center;">Actions</th>
                 </tr>
