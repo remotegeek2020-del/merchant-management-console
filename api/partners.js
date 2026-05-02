@@ -1,5 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
 
+export const config = { 
+    api: { bodyParser: { sizeLimit: '10mb' } },
+    maxDuration: 30  // 30 second timeout for Vercel Pro, 10s for hobby
+};
+
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -208,33 +213,46 @@ if (action === 'get_all_stats') {
 
         // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
         if (action === 'get_partners_list') {
-            async function fetchAll(table, select) {
-                let allData = [];
-                let from = 0;
-                let finished = false;
-                while (!finished) {
-                    const { data, error } = await supabase.from(table).select(select).range(from, from + 999);
-                    if (error || !data || data.length === 0) { finished = true; }
-                    else {
-                        allData = allData.concat(data);
-                        from += 1000;
-                        if (data.length < 1000) finished = true;
-                    }
+            // Fetch persons and agents first (small tables)
+            const [persons, agents, companies] = await Promise.all([
+                supabase.from('persons').select('id, full_name, email, phone_number, hl_contact_id, enrolled_at, enrolled_by, is_portal_active, portal_password_set, last_portal_login').then(r => r.data || []),
+                supabase.from('agents').select('id, company_id, parent_agent_id').then(r => r.data || []),
+                supabase.from('companies').select('id, company_name').order('company_name').then(r => r.data || [])
+            ]);
+
+            // Only fetch identifiers for agents we actually have (not all 3000+)
+            const agentIds = agents.map(a => a.id);
+            let identifiers = [];
+            if (agentIds.length > 0) {
+                // Fetch in chunks of 100 agent IDs to avoid URL length limits
+                const chunks = [];
+                for (let i = 0; i < agentIds.length; i += 100) {
+                    chunks.push(agentIds.slice(i, i + 100));
                 }
-                return allData;
+                const results = await Promise.all(
+                    chunks.map(chunk =>
+                        supabase.from('agent_identifiers')
+                            .select('id, agent_id, id_string, rev_share, prime49, parent_config_id')
+                            .in('agent_id', chunk)
+                            .then(r => r.data || [])
+                    )
+                );
+                identifiers = results.flat();
             }
 
-            const [persons, agents, identifiers, companies] = await Promise.all([
-                // UPDATED SELECT STRING BELOW
-                fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, enrolled_by, is_portal_active, portal_password_set, last_portal_login'),
-                fetchAll('agents', 'id, company_id, parent_agent_id'),
-                fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
-                fetchAll('companies', 'id, company_name')
-            ]);
+            // Trim identifiers to only what the dashboard card needs
+            const slimIdentifiers = identifiers.map(i => ({
+                id: i.id,
+                agent_id: i.agent_id,
+                id_string: i.id_string,
+                rev_share: i.rev_share,
+                prime49: i.prime49,
+                parent_config_id: i.parent_config_id
+            }));
 
             return res.status(200).json({ 
                 success: true, 
-                data: { persons, agents, identifiers, companies } 
+                data: { persons, agents, identifiers: slimIdentifiers, companies } 
             });
         }
 
