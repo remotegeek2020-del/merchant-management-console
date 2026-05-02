@@ -185,6 +185,125 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+
+        // ── TREND OVERVIEW ─────────────────────────────────
+        if (action === 'get_trends') {
+            if (!idStrings.length) return res.status(200).json({ success: true, data: { growth: 0, stable: 0, at_risk: 0, no_data: 0, chart: [] } });
+
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('id, dba_name, account_status, volume_mtd, volume_30_day, volume_90_day, enrollment_date')
+                .in('agent_id', idStrings)
+                .eq('account_status', 'Approved');
+
+            let growth = 0, stable = 0, at_risk = 0, no_data = 0;
+
+            // Monthly buckets for chart (last 6 months)
+            const monthBuckets = {};
+            for (let i = 5; i >= 0; i--) {
+                const d = new Date();
+                d.setMonth(d.getMonth() - i);
+                const key = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+                monthBuckets[key] = { month: key, enrolled: 0, volume: 0 };
+            }
+
+            (merchants || []).forEach(m => {
+                const mtd = parseFloat(m.volume_mtd || 0);
+                const vol90 = parseFloat(m.volume_90_day || 0);
+                const baseline = vol90 / 3; // avg monthly from 90d
+
+                if (mtd === 0 && baseline === 0) {
+                    no_data++;
+                } else if (baseline === 0 || mtd > baseline * 1.05) {
+                    growth++;
+                } else if (mtd < baseline * 0.95) {
+                    at_risk++;
+                } else {
+                    stable++;
+                }
+
+                // Enrollment chart buckets
+                if (m.enrollment_date) {
+                    const d = new Date(m.enrollment_date);
+                    const key = d.toLocaleString('default', { month: 'short', year: '2-digit' });
+                    if (monthBuckets[key]) {
+                        monthBuckets[key].enrolled++;
+                        monthBuckets[key].volume += mtd;
+                    }
+                }
+            });
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    growth, stable, at_risk, no_data,
+                    total: (merchants || []).length,
+                    chart: Object.values(monthBuckets)
+                }
+            });
+        }
+
+        // ── NEW ENROLLMENTS ────────────────────────────────
+        if (action === 'get_new_enrollments') {
+            const { start_date, end_date } = req.body;
+            if (!idStrings.length) return res.status(200).json({ success: true, data: [], count: 0 });
+
+            // Default to this week if no dates provided
+            const now = new Date();
+            const weekStart = new Date(now);
+            weekStart.setDate(now.getDate() - now.getDay()); // Sunday
+            weekStart.setHours(0, 0, 0, 0);
+
+            const fromDate = start_date || weekStart.toISOString();
+            const toDate = end_date || now.toISOString();
+
+            const { data, count, error } = await supabase
+                .from('merchants')
+                .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_mtd, volume_30_day', { count: 'exact' })
+                .in('agent_id', idStrings)
+                .gte('enrollment_date', fromDate)
+                .lte('enrollment_date', toDate)
+                .order('enrollment_date', { ascending: false });
+
+            if (error) throw error;
+
+            const enriched = (data || []).map(m => {
+                const id = identifiers.find(i => i.id_string === m.agent_id);
+                return { ...m, rev_share: id?.rev_share || null };
+            });
+
+            return res.status(200).json({ success: true, data: enriched, count: count || 0 });
+        }
+
+        // ── GET ACTIVE DEPLOYMENTS FOR MERCHANT ───────────
+        if (action === 'get_active_deployments') {
+            const { merchant_uuid } = req.body;
+
+            // Verify ownership
+            const { data: merchant } = await supabase
+                .from('merchants')
+                .select('agent_id, dba_name, merchant_id')
+                .eq('id', merchant_uuid)
+                .single();
+
+            if (!merchant || !idStrings.includes(merchant.agent_id)) {
+                return res.status(403).json({ success: false, message: 'Access denied.' });
+            }
+
+            const { data: deployments } = await supabase
+                .from('deployments')
+                .select('id, status, created_at, equipments:equipment_id(serial_number, terminal_type)')
+                .eq('merchant_id', merchant_uuid)
+                .neq('status', 'Closed')
+                .order('created_at', { ascending: false });
+
+            return res.status(200).json({
+                success: true,
+                merchant: { id: merchant_uuid, dba_name: merchant.dba_name, merchant_id: merchant.merchant_id },
+                deployments: deployments || []
+            });
+        }
+
         // ── EXPORT CSV ─────────────────────────────────────
         if (action === 'export_csv') {
             if (!idStrings.length) return res.status(200).json({ success: true, data: [] });
