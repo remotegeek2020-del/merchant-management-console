@@ -1669,31 +1669,75 @@ window.ppDeleteNote = async function(noteId, personId) {
 function loadNotes(personId) {
     pAPI({action:'get_notes', person_id:personId}).then(function(result) {
         var el = document.getElementById('pp-notes-list');
-        if (!el) return;
+        if (!el) { console.warn('[Notes] pp-notes-list not found'); return; }
+        console.log('[Notes] result:', result);
         var notes = result.data || [];
+        el.innerHTML = '';
         if (!notes.length) {
             el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;font-size:13px;">No notes yet. Add the first one above.</div>';
             return;
         }
-        var typeLabel = {general:'General', call:'Call Log', follow_up:'Follow-up', win:'Win', issue:'Issue'};
-        el.innerHTML = notes.map(function(n) {
-            var ts = new Date(n.created_at).toLocaleString();
-            var pinnedStyle = n.is_pinned ? 'background:#fffbeb;border:1px solid #fbbf24;' : 'background:#f8fafc;border:1px solid #e2e8f0;';
-            return '<div style="' + pinnedStyle + 'border-radius:10px;padding:12px 14px;">'
-                + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
-                + '<div><span style="font-size:12px;font-weight:700;color:#0a1628;">' + (n.author_name||'Staff') + '</span>'
-                + ' <span style="font-size:10px;color:#94a3b8;">' + ts + '</span>'
-                + ' <span style="font-size:10px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:99px;">' + (typeLabel[n.note_type]||'Note') + '</span>'
-                + (n.is_pinned ? ' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;font-weight:800;">PINNED</span>' : '') + '</div>'
-                + '<div style="display:flex;gap:4px;">'
-                + '<button onclick="ppTogglePin('' + n.id + '',' + !n.is_pinned + ','' + personId + '')" style="background:none;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;color:#64748b;">' + (n.is_pinned ? 'Unpin' : 'Pin') + '</button>'
-                + '<button onclick="ppDeleteNote('' + n.id + '','' + personId + '')" style="background:none;border:1px solid #fecaca;color:#ef4444;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;">Del</button>'
-                + '</div></div>'
-                + '<div style="font-size:13px;color:#475569;line-height:1.5;">' + n.body + '</div>'
-                + '</div>';
-        }).join('');
+        var typeLabels = {general:'General', call:'Call Log', follow_up:'Follow-up', win:'Win', issue:'Issue'};
+        notes.forEach(function(n) {
+            var card = document.createElement('div');
+            card.style.cssText = 'background:' + (n.is_pinned ? '#fffbeb' : '#f8fafc') + ';border:1px solid ' + (n.is_pinned ? '#fbbf24' : '#e2e8f0') + ';border-radius:10px;padding:12px 14px;margin-bottom:2px;';
+            
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;';
+            
+            var metaDiv = document.createElement('div');
+            var authorSpan = document.createElement('span');
+            authorSpan.style.cssText = 'font-size:12px;font-weight:700;color:#0a1628;';
+            authorSpan.textContent = n.author_name || 'Staff';
+            var tsSpan = document.createElement('span');
+            tsSpan.style.cssText = 'font-size:10px;color:#94a3b8;margin-left:6px;';
+            tsSpan.textContent = new Date(n.created_at).toLocaleString();
+            var typeSpan = document.createElement('span');
+            typeSpan.style.cssText = 'font-size:10px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:99px;margin-left:4px;';
+            typeSpan.textContent = typeLabels[n.note_type] || 'Note';
+            metaDiv.appendChild(authorSpan);
+            metaDiv.appendChild(tsSpan);
+            metaDiv.appendChild(typeSpan);
+            if (n.is_pinned) {
+                var pinnedBadge = document.createElement('span');
+                pinnedBadge.style.cssText = 'font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;font-weight:800;margin-left:4px;';
+                pinnedBadge.textContent = 'PINNED';
+                metaDiv.appendChild(pinnedBadge);
+            }
+            
+            var btnDiv = document.createElement('div');
+            btnDiv.style.cssText = 'display:flex;gap:4px;flex-shrink:0;';
+            
+            var pinBtn = document.createElement('button');
+            pinBtn.textContent = n.is_pinned ? 'Unpin' : 'Pin';
+            pinBtn.style.cssText = 'background:none;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;color:#64748b;';
+            pinBtn.onclick = (function(id, newPin, pid) { return function() { ppTogglePin(id, newPin, pid); }; })(n.id, !n.is_pinned, personId);
+            
+            var delBtn = document.createElement('button');
+            delBtn.textContent = 'Del';
+            delBtn.style.cssText = 'background:none;border:1px solid #fecaca;color:#ef4444;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;';
+            delBtn.onclick = (function(id, pid) { return function() { ppDeleteNote(id, pid); }; })(n.id, personId);
+            
+            btnDiv.appendChild(pinBtn);
+            btnDiv.appendChild(delBtn);
+            row.appendChild(metaDiv);
+            row.appendChild(btnDiv);
+            
+            var bodyDiv = document.createElement('div');
+            bodyDiv.style.cssText = 'font-size:13px;color:#475569;line-height:1.5;';
+            bodyDiv.textContent = n.body;
+            
+            card.appendChild(row);
+            card.appendChild(bodyDiv);
+            el.appendChild(card);
+        });
+    }).catch(function(err) {
+        console.error('[Notes] Error:', err);
+        var el = document.getElementById('pp-notes-list');
+        if (el) el.innerHTML = '<div style="color:#ef4444;padding:20px;text-align:center;">Error loading notes: ' + err.message + '</div>';
     });
 }
+
 
 // Load scorecard into the modal
 function loadScorecard(personId) {
