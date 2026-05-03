@@ -1646,7 +1646,11 @@ window.ppSubmitNote = async function(personId) {
     if (!body) return;
     var staffId = localStorage.getItem('pp_userid') || '';
     var staffName = localStorage.getItem('pp_user_first_name') || 'Staff';
-    await pAPI({action:'add_note', person_id:personId, body:body, note_type:type ? type.value : 'general', author_id:staffId, author_name:staffName});
+    var btn = document.querySelector('#pppanel-notes button');
+    if (btn) { btn.disabled = true; btn.textContent = '...'; }
+    var result = await pAPI({action:'add_note', person_id:personId, body:body, note_type:type ? type.value : 'general', author_id:staffId, author_name:staffName});
+    console.log('[Notes] Add result:', result);
+    if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
     if (input) input.value = '';
     loadNotes(personId);
 };
