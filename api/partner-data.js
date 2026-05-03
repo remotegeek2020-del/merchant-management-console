@@ -248,13 +248,38 @@ export default async function handler(req, res) {
                 .gte('enrollment_date', weekStart.toISOString())
                 .order('enrollment_date', { ascending: false });
 
+            // Get company names for agent IDs
+            const agentIds = identifiers.map(i => i.agent_id).filter(Boolean);
+            const { data: agentsData } = await supabase
+                .from('agents')
+                .select('id, company_id, companies:company_id(company_name)')
+                .in('id', agentIds);
+
+            const companiesMap = {};
+            (agentsData||[]).forEach(a => {
+                companiesMap[a.id] = a.companies?.company_name || 'Independent';
+            });
+
             return res.status(200).json({
                 success: true,
+                partner: personData,
                 overview: overviewData,
                 trends: trendsData,
                 identifiers,
+                companies: companiesMap,
                 new_enrollments: { data: newEnrolls||[], count: enrollCount||0 }
             });
+        }
+
+        // ── UPDATE PROFILE ─────────────────────────────────
+        if (action === 'update_profile') {
+            const { full_name, phone_number } = body;
+            const updates = {};
+            if (full_name) updates.full_name = full_name.trim();
+            if (phone_number !== undefined) updates.phone_number = phone_number.trim();
+            const { error } = await supabase.from('persons').update(updates).eq('id', partnerId);
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true });
         }
 
         // ── TREND OVERVIEW ─────────────────────────────────
