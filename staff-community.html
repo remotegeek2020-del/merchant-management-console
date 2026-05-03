@@ -232,8 +232,10 @@ async function loadFeed(append) {
     if (posts.length < 20) document.getElementById('loadMore').style.display = 'none';
     else document.getElementById('loadMore').style.display = 'block';
     if (!append) document.getElementById('feedContainer').innerHTML = '';
-    if (!posts.length && !append) {
-        document.getElementById('feedContainer').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:14px;">No posts yet in this category.</div>';
+    if (!append) document.getElementById('feedContainer').innerHTML = '';
+    if (!posts.length) {
+        if (!append) document.getElementById('feedContainer').innerHTML = '<div style="text-align:center;padding:40px;color:var(--muted);font-size:14px;">No posts yet. Be the first to share something!</div>';
+        document.getElementById('loadMore').style.display = 'none';
         return;
     }
     posts.forEach(function(p) { document.getElementById('feedContainer').appendChild(buildPostCard(p)); });
@@ -268,7 +270,7 @@ function buildPostCard(p) {
         p.media_urls.slice(0,4).forEach(function(url, i) {
             var type = p.media_types && p.media_types[i];
             if (type === 'video') { mediaHtml += '<video src="' + url + '" controls></video>'; }
-            else { mediaHtml += '<img src="' + url + '" onclick="openLightbox(\'' + url + '\')" loading="lazy">'; }
+            else { mediaHtml += '<img src="' + url + '" onclick="openLightbox(this.src)" style="cursor:pointer;" loading="lazy">'; }
         });
         mediaHtml += '</div>';
     }
