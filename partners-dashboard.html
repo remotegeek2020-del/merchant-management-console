@@ -1268,7 +1268,7 @@ async function submitOnboarding() {
     }
 
     async function downloadSingleIdExport(idString) {
-        Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'Preparing Export...', html: 'Fetching all merchants for ID <b>' + idString + '</b>...', didOpen: () => Swal.showLoading() });
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -1276,21 +1276,79 @@ async function submitOnboarding() {
                 body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idString })
             });
             const result = await res.json();
-            if (result.success && result.data.length > 0) {
+            if (result.success && result.data && result.data.length > 0) {
                 const merchants = result.data;
-                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
-                const avgVol = totalVol / merchants.length;
-                let csv = `Summary for ID: ${idString}\nTotal Approved Merchants,${merchants.length}\nTotal 30-Day Volume,$${totalVol.toFixed(2)}\nAverage Volume,$${avgVol.toFixed(2)}\n\nMerchant ID,DBA Name,Status,Volume 30D\n`;
-                merchants.forEach(m => { csv += `${m.merchant_id},"${m.dba_name.replace(/"/g, '""')}",${m.account_status},${m.volume_30_day || 0}\n`; });
+                const approved = merchants.filter(m => m.account_status === 'Approved');
+                const totalVol30 = merchants.reduce((s, m) => s + (parseFloat(m.volume_30_day) || 0), 0);
+                const totalVol90 = merchants.reduce((s, m) => s + (parseFloat(m.volume_90_day) || 0), 0);
+                const totalVolMTD = merchants.reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
+
+                const esc = v => '"' + String(v || '').replace(/"/g, '""') + '"';
+                const fmt = v => parseFloat(v || 0).toFixed(2);
+
+                // Summary header rows
+                let csv = 'Agent ID Export,' + idString + '
+';
+                csv += 'Total Merchants,' + merchants.length + '
+';
+                csv += 'Approved Merchants,' + approved.length + '
+';
+                csv += 'Total MTD Volume,$' + fmt(totalVolMTD) + '
+';
+                csv += 'Total 30-Day Volume,$' + fmt(totalVol30) + '
+';
+                csv += 'Total 90-Day Volume,$' + fmt(totalVol90) + '
+';
+                csv += 'Export Date,' + new Date().toLocaleDateString() + '
+
+';
+
+                // Column headers
+                csv += 'Merchant ID,DBA Name,Status,City,State,Phone,Email,Enrolled Date,Last Batch,MTD Volume,30D Volume,90D Volume
+';
+
+                // Data rows
+                merchants.forEach(m => {
+                    csv += [
+                        esc(m.merchant_id),
+                        esc(m.dba_name),
+                        esc(m.account_status),
+                        esc(m.merchant_city),
+                        esc(m.merchant_state),
+                        esc(m.merchant_phone),
+                        esc(m.email),
+                        esc(m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : ''),
+                        esc(m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : ''),
+                        fmt(m.volume_mtd),
+                        fmt(m.volume_30_day),
+                        fmt(m.volume_90_day)
+                    ].join(',') + '
+';
+                });
+
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.setAttribute('href', url);
-                a.setAttribute('download', `Export_ID_${idString}.csv`);
+                a.href = url;
+                a.download = 'Export_ID_' + idString + '_' + new Date().toISOString().split('T')[0] + '.csv';
+                document.body.appendChild(a);
                 a.click();
-                Swal.close();
-            } else { Swal.fire('No Data', 'No approved merchants found.', 'info'); }
-        } catch (err) { Swal.fire('Error', 'Failed to generate export.', 'error'); }
+                document.body.removeChild(a);
+                setTimeout(() => window.URL.revokeObjectURL(url), 100);
+
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Export Complete',
+                    html: '<b>' + merchants.length + '</b> merchants exported for ID <b>' + idString + '</b>',
+                    timer: 2500,
+                    showConfirmButton: false
+                });
+            } else {
+                Swal.fire('No Data', 'No merchants found for agent ID ' + idString, 'info');
+            }
+        } catch (err) {
+            Swal.fire('Error', 'Failed to generate export: ' + err.message, 'error');
+        }
     }
 
     window.openPartnerDetails = async function(personId) {
