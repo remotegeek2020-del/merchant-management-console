@@ -215,7 +215,14 @@ function api(body) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(Object.assign({ action_source: 'staff', staff_id: staffId, staff_name: staffName }, body))
-    }).then(function(r) { return r.json(); });
+    }).then(function(r) {
+        if (!r.ok && r.status >= 500) {
+            return { success: false, message: 'Server error (' + r.status + '). Please try again.' };
+        }
+        return r.json().catch(function() {
+            return { success: false, message: 'Server error. Please try again.' };
+        });
+    });
 }
 
 async function loadFeed(append) {
@@ -227,7 +234,10 @@ async function loadFeed(append) {
         mine_only: mineOnly,
         mine_id: staffId
     });
-    if (!result.success) return;
+    if (!result.success) {
+        document.getElementById('feedContainer').innerHTML = '<div style="text-align:center;padding:40px;color:#ef4444;font-size:13px;">Could not load feed: ' + (result.message||'Unknown error') + '</div>';
+        return;
+    }
     var posts = result.data || [];
     if (posts.length < 20) document.getElementById('loadMore').style.display = 'none';
     else document.getElementById('loadMore').style.display = 'block';
