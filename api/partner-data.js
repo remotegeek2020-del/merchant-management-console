@@ -196,6 +196,13 @@ export default async function handler(req, res) {
         if (action === 'get_dashboard') {
             const results = { overview: null, trends: null };
 
+            // Fetch person info for profile
+            const { data: personData } = await supabase
+                .from('persons')
+                .select('id, full_name, email, phone_number, is_portal_active, enrolled_at, last_portal_login, portal_password_set')
+                .eq('id', personId)
+                .single();
+
             // Run overview and trends in parallel
             const [overviewData, trendsData] = await Promise.all([
                 (async () => {
