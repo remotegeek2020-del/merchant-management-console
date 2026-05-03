@@ -1283,6 +1283,20 @@ async function submitOnboarding() {
         } catch (err) { Swal.fire('Error', 'Failed to generate export.', 'error'); }
     }
 
+    // Tab switcher for partner detail modal
+    window.ppSwitchTab = function(tab) {
+        ['ids','scorecard','notes'].forEach(function(t) {
+            var btn = document.getElementById('pptab-' + t);
+            var panel = document.getElementById('pppanel-' + t);
+            if (btn) {
+                btn.style.background = t === tab ? 'white' : 'transparent';
+                btn.style.color = t === tab ? '#004990' : '#64748b';
+                btn.style.boxShadow = t === tab ? '0 1px 3px rgba(0,0,0,.08)' : 'none';
+            }
+            if (panel) panel.style.display = t === tab ? 'block' : 'none';
+        });
+    };
+
     window.openPartnerDetails = async function(personId) {
         const p = allPartners.find(ptr => ptr.id === personId);
         if (!p) return;
@@ -1339,9 +1353,9 @@ async function submitOnboarding() {
                     </div>
                     <!-- TAB BAR -->
                     <div id="pp-tab-bar" style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin:16px 0;">
-                        <button data-tab="ids" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
-                        <button data-tab="scorecard" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
-                        <button data-tab="notes" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
+                        <button onclick="ppSwitchTab('ids')" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
+                        <button onclick="ppSwitchTab('scorecard')" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
+                        <button onclick="ppSwitchTab('notes')" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
                     </div>
 
                     <!-- IDS PANEL -->
