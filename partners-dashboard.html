@@ -1324,9 +1324,42 @@ async function submitOnboarding() {
                             <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
                         </div>
                     </div>
-                    <div style="margin-top:20px;"><div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
+                    <!-- TAB BAR -->
+                    <div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin:16px 0;">
+                        <button onclick="ppSwitchTab('ids')" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
+                        <button onclick="ppSwitchTab('scorecard')" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
+                        <button onclick="ppSwitchTab('notes')" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
+                    </div>
+
+                    <!-- IDS PANEL -->
+                    <div id="pppanel-ids">
+                        <div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:400px; overflow-y:auto; border:1px solid #f1f5f9;">
                             ${p.companies.map(co => `<div style="margin-bottom:20px;"><b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b><div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div></div>`).join('')}
-                        </div></div>
+                        </div>
+                    </div>
+
+                    <!-- SCORECARD PANEL -->
+                    <div id="pppanel-scorecard" style="display:none;">
+                        <div id="pp-scorecard-content" style="min-height:180px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading scorecard...</div>
+                    </div>
+
+                    <!-- NOTES PANEL -->
+                    <div id="pppanel-notes" style="display:none;">
+                        <div style="display:flex;gap:8px;margin-bottom:12px;">
+                            <select id="pp-note-type" style="padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;">
+                                <option value="general">General</option>
+                                <option value="call">Call Log</option>
+                                <option value="follow_up">Follow-up</option>
+                                <option value="win">Win</option>
+                                <option value="issue">Issue</option>
+                            </select>
+                            <input id="pp-note-input" placeholder="Add a note about this partner..." style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">
+                            <button onclick="ppSubmitNote('${p.id}')" style="padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">Post</button>
+                        </div>
+                        <div id="pp-notes-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
+                            <div style="text-align:center;color:#94a3b8;padding:20px;">Loading notes...</div>
+                        </div>
+                    </div>
                 </div>`
         });
 
@@ -1349,6 +1382,10 @@ async function submitOnboarding() {
                 document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
             }
         } catch (err) { console.error("Error loading partner stats:", err); }
+
+        // Load scorecard and notes in background
+        loadScorecard(personId);
+        loadNotes(personId);
     };
 
     function getAllBranchIds(idObj, idList = []) {
