@@ -43,33 +43,28 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
 if (action === 'complete_onboarding') {
-    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId } = body;
+    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId, personName } = body;
     let finalAgentId = existingAgentId;
 
     // Quick add to a NEW company for an existing person
     if (isQuickAddNewAgent) {
-        if (!person || !person.name) return res.status(400).json({ success: false, message: 'Missing person name.' });
-        
-        // Find existing person by name (they already exist)
+        // Find existing person by name
         const { data: existingPerson } = await supabase
-            .from('persons')
-            .select('id')
-            .ilike('full_name', person.name.trim())
+            .from('persons').select('id')
+            .ilike('full_name', (personName || '').trim())
             .single();
 
-        if (!existingPerson) return res.status(400).json({ success: false, message: 'Could not find existing partner record.' });
+        if (!existingPerson) return res.status(400).json({ success: false, message: 'Could not find partner: ' + personName });
 
-        // Handle company
         let targetCoId = company.id || null;
         if (!targetCoId && !company.isIndependent && company.name) {
             const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
             targetCoId = coData ? coData.id : null;
         }
 
-        // Create new agent for this person under the new company
         const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
             company_id: targetCoId,
-            agent_name: person.name.trim(),
+            agent_name: (personName || '').trim(),
             parent_agent_id: existingPerson.id
         }).select().single();
 
@@ -129,6 +124,43 @@ if (action === 'complete_onboarding') {
 
     return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
+        // --- ACTION: GET COMPANIES WITH USAGE ---
+        if (action === 'get_companies_full') {
+            const { data: companies } = await supabase.from('companies').select('id, company_name').order('company_name');
+            const { data: agents } = await supabase.from('agents').select('company_id');
+            const usageMap = {};
+            (agents||[]).forEach(a => { if(a.company_id) usageMap[a.company_id] = (usageMap[a.company_id]||0)+1; });
+            const result = (companies||[]).map(c => ({ ...c, agent_count: usageMap[c.id]||0 }));
+            return res.status(200).json({ success: true, data: result });
+        }
+
+        // --- ACTION: DELETE COMPANY ---
+        if (action === 'delete_company') {
+            const { company_id } = body;
+            // Check if any agents use this company
+            const { count } = await supabase.from('agents').select('*', { count:'exact', head:true }).eq('company_id', company_id);
+            if (count > 0) return res.status(400).json({ success: false, message: `Cannot delete — ${count} agent(s) are linked to this company.` });
+            await supabase.from('companies').delete().eq('id', company_id);
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: MERGE COMPANIES ---
+        if (action === 'merge_companies') {
+            const { keep_id, delete_id } = body;
+            // Move all agents from delete_id to keep_id
+            await supabase.from('agents').update({ company_id: keep_id }).eq('company_id', delete_id);
+            // Delete the duplicate
+            await supabase.from('companies').delete().eq('id', delete_id);
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: RENAME COMPANY ---
+        if (action === 'rename_company') {
+            const { company_id, name } = body;
+            await supabase.from('companies').update({ company_name: name }).eq('id', company_id);
+            return res.status(200).json({ success: true });
+        }
+
         // --- ACTION: GET COMPANIES ---
         if (action === 'get_companies') {
             const { data } = await supabase.from('companies').select('id, company_name').order('company_name');
