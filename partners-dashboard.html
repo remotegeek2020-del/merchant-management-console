@@ -1296,71 +1296,202 @@ async function submitOnboarding() {
     }
 
     window.openPartnerDetails = async function(personId) {
-        const p = allPartners.find(ptr => ptr.id === personId);
+        const p = allPartners.find(function(ptr){ return ptr.id === personId; });
         if (!p) return;
         let branchIdStrings = [];
-        p.companies.forEach(co => { co.ids.forEach(id => branchIdStrings = getAllBranchIds(id, branchIdStrings)); });
+        p.companies.forEach(function(co){ co.ids.forEach(function(id){ branchIdStrings = getAllBranchIds(id, branchIdStrings); }); });
         branchIdStrings = [...new Set(branchIdStrings)];
-        const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
+        const hlLink = p.hl_id ? 'https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/' + p.hl_id : null;
+        const activatedDate = p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString() : 'Not set';
+        const enrolledKey = p.enrolled_at ? new Date(p.enrolled_at).toISOString().split('T')[0] : '';
 
         Swal.fire({
-            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
-            width: '900px', showConfirmButton: false, showCloseButton: true,
-            html: `
-               <div id="modal-content-container" style="text-align:left;">
-    <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
-        <div style="display:flex; flex-direction:column; gap:8px;">
-            <div style="display:flex; align-items:center; gap:10px;">
-                <h1 style="font-size:24px; font-weight:900; color:#002d5a; margin:0;">${p.name}</h1>
-                <span class="material-icons" style="font-size:16px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'full_name', '${p.name}')">edit</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
-                <span class="material-icons" style="font-size:16px;">email</span>
-                ${p.email}
-                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'email', '${p.email}')">edit</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
-                <span class="material-icons" style="font-size:16px;">phone</span>
-                ${p.phone}
-                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editPersonField('${p.id}', 'phone_number', '${p.phone}')">edit</span>
-            </div>
-            <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
-                <span class="material-icons" style="font-size:16px;">calendar_today</span>
-                <span>Activated: <b>${p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString() : 'Not set'}</b></span>
-                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? new Date(p.enrolled_at).toISOString().split('T')[0] : ''}')">edit</span>
-            </div>
-            ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
-        </div>
-                        <div id="summary-stats" style="text-align:right;">
-                            <div style="font-size:24px; font-weight:900; color:#002d5a;" id="main-total-vol">Loading...</div>
-                            <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
-                        </div>
-                    </div>
-                    <div style="margin-top:20px;"><div style="background:#f8fafc; padding:15px; border-radius:12px; max-height:450px; overflow-y:auto; border:1px solid #f1f5f9;">
-                            ${p.companies.map(co => `<div style="margin-bottom:20px;"><b style="color:#94a3b8; font-size:10px; text-transform:uppercase;">${co.name}</b><div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div></div>`).join('')}
-                        </div></div>
-                </div>`
+            title: '<div style="text-align:left;font-weight:800;color:#002d5a;">' + p.name + '</div>',
+            width: '960px', showConfirmButton: false, showCloseButton: true,
+            html: '<div style="text-align:left;">' +
+
+            // ── CONTACT HEADER ──────────────────────────────────
+            '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:14px;">' +
+                '<div style="display:flex;flex-direction:column;gap:6px;">' +
+                    '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;"><span class="material-icons" style="font-size:16px;">email</span>' + p.email + '<span class="material-icons" style="font-size:13px;color:#94a3b8;cursor:pointer;" onclick="editPersonField('' + p.id + '','email','' + p.email + '')">edit</span></div>' +
+                    '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;"><span class="material-icons" style="font-size:16px;">phone</span>' + p.phone + '<span class="material-icons" style="font-size:13px;color:#94a3b8;cursor:pointer;" onclick="editPersonField('' + p.id + '','phone_number','' + p.phone + '')">edit</span></div>' +
+                    '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;"><span class="material-icons" style="font-size:16px;">calendar_today</span><span>Activated: <b>' + activatedDate + '</b></span><span class="material-icons" style="font-size:13px;color:#94a3b8;cursor:pointer;" onclick="editEnrolledAt('' + p.id + '','' + enrolledKey + '')">edit</span></div>' +
+                    (hlLink ? '<a href="' + hlLink + '" target="_blank" style="font-size:11px;color:#0369a1;font-weight:700;">VIEW IN HIGHLEVEL →</a>' : '') +
+                '</div>' +
+                '<div style="text-align:right;"><div style="font-size:26px;font-weight:900;color:#002d5a;" id="main-total-vol">—</div><div style="font-size:11px;color:#64748b;" id="main-merch-count">Loading...</div></div>' +
+            '</div>' +
+
+            // ── TABS ─────────────────────────────────────────────
+            '<div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;">' +
+                '<button id="tab-overview" onclick="switchDetailTab('overview')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;font-family:'DM Sans',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,0.08);">🏷️ Agent IDs</button>' +
+                '<button id="tab-scorecard" onclick="switchDetailTab('scorecard')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:'DM Sans',sans-serif;">📊 Scorecard</button>' +
+                '<button id="tab-notes" onclick="switchDetailTab('notes')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:'DM Sans',sans-serif;">📝 Notes</button>' +
+            '</div>' +
+
+            // ── OVERVIEW TAB ─────────────────────────────────────
+            '<div id="panel-overview">' +
+                '<div style="background:#f8fafc;padding:15px;border-radius:12px;max-height:420px;overflow-y:auto;border:1px solid #f1f5f9;">' +
+                    p.companies.map(function(co){ return '<div style="margin-bottom:20px;"><b style="color:#94a3b8;font-size:10px;text-transform:uppercase;">' + co.name + '</b><div style="margin-top:5px;">' + co.ids.map(function(id){ return renderBadge(id,true); }).join('') + '</div></div>'; }).join('') +
+                '</div>' +
+            '</div>' +
+
+            // ── SCORECARD TAB ─────────────────────────────────────
+            '<div id="panel-scorecard" style="display:none;">' +
+                '<div id="scorecard-content" style="min-height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading scorecard...</div>' +
+            '</div>' +
+
+            // ── NOTES TAB ─────────────────────────────────────────
+            '<div id="panel-notes" style="display:none;">' +
+                '<div style="display:flex;gap:8px;margin-bottom:12px;">' +
+                    '<select id="note-type-sel" style="padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">' +
+                        '<option value="general">💬 General</option>' +
+                        '<option value="call">📞 Call Log</option>' +
+                        '<option value="follow_up">🔔 Follow-up</option>' +
+                        '<option value="win">🏆 Win</option>' +
+                        '<option value="issue">⚠️ Issue</option>' +
+                    '</select>' +
+                    '<input id="note-input" placeholder="Add a note about this partner..." style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;">' +
+                    '<button onclick="submitNote('' + p.id + '')" style="padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;">Post</button>' +
+                '</div>' +
+                '<div id="notes-list" style="max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">' +
+                    '<div style="text-align:center;color:#94a3b8;padding:20px;font-size:13px;">Loading notes...</div>' +
+                '</div>' +
+            '</div>' +
+
+            '</div>'
         });
 
+        // Load stats immediately
+        loadDetailStats(personId, branchIdStrings);
+        // Load notes in background
+        loadPartnerNotes(personId);
+        // Load scorecard data in background
+        loadPartnerScorecard(personId);
+    };
+
+    window.switchDetailTab = function(tab) {
+        var tabs = ['overview','scorecard','notes'];
+        tabs.forEach(function(t) {
+            var btn = document.getElementById('tab-' + t);
+            var panel = document.getElementById('panel-' + t);
+            if (btn) { btn.style.background = t === tab ? 'white' : 'transparent'; btn.style.color = t === tab ? '#004990' : '#64748b'; btn.style.boxShadow = t === tab ? '0 1px 3px rgba(0,0,0,0.08)' : 'none'; }
+            if (panel) panel.style.display = t === tab ? 'block' : 'none';
+        });
+    };
+
+    async function loadDetailStats(personId, branchIdStrings) {
         try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_merchant_data', identifier_ids: branchIdStrings })
-            });
+            const res = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_merchant_data', identifier_ids: branchIdStrings }) });
             const result = await res.json();
             if (result.success) {
-                const stats = result.data;
-                let grandTotalVol = 0; let grandTotalCount = 0;
-                branchIdStrings.forEach(idStr => {
-                    const s = stats.find(row => String(row.agent_id).trim() === String(idStr).trim());
+                var grandVol = 0, grandCount = 0;
+                branchIdStrings.forEach(function(idStr) {
+                    var s = result.data.find(function(r){ return String(r.agent_id).trim() === String(idStr).trim(); });
                     updateAllBadgeStats(idStr, s);
-                    if (s) { grandTotalVol += parseFloat(s.total_volume_sum || 0); grandTotalCount += parseInt(s.merchant_count || 0); }
+                    if (s) { grandVol += parseFloat(s.total_volume_sum||0); grandCount += parseInt(s.merchant_count||0); }
                 });
-                document.getElementById('main-total-vol').innerText = `$${grandTotalVol.toLocaleString(undefined, {minimumFractionDigits: 2})}`;
-                document.getElementById('main-merch-count').innerText = `${grandTotalCount.toLocaleString()} Approved Merchants`;
+                var volEl = document.getElementById('main-total-vol');
+                var cntEl = document.getElementById('main-merch-count');
+                if (volEl) volEl.innerText = '$' + grandVol.toLocaleString(undefined, {minimumFractionDigits:2});
+                if (cntEl) cntEl.innerText = grandCount.toLocaleString() + ' Approved Merchants';
             }
-        } catch (err) { console.error("Error loading partner stats:", err); }
+        } catch(e) { console.error('Detail stats error:', e); }
+    }
+
+    async function loadPartnerScorecard(personId) {
+        try {
+            const res = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_scorecard', person_id: personId }) });
+            const result = await res.json();
+            var el = document.getElementById('scorecard-content');
+            if (!el) return;
+            if (!result.success || !result.scorecard) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">No scorecard data available.</div>'; return; }
+            var sc = result.scorecard;
+            var t = sc.totals;
+            var trendIcon = t.overall_trend === 'growth' ? '📈' : t.overall_trend === 'risk' ? '📉' : '➡️';
+            var trendColor = t.overall_trend === 'growth' ? '#166534' : t.overall_trend === 'risk' ? '#991b1b' : '#475569';
+            var trendBg = t.overall_trend === 'growth' ? '#f0fdf4' : t.overall_trend === 'risk' ? '#fef2f2' : '#f8fafc';
+            var fmt = function(v){ return '$' + parseFloat(v||0).toLocaleString(undefined,{minimumFractionDigits:2}); };
+
+            var html = '';
+            // KPI cards
+            html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
+            html += '<div style="background:#f0f7ff;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.6rem;font-weight:900;color:#004990;font-family:'DM Mono',monospace;">' + (t.merchants||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Active Merchants</div></div>';
+            html += '<div style="background:#f0fdf4;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:#166534;font-family:'DM Mono',monospace;">' + fmt(t.volume_30) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">30-Day Volume</div></div>';
+            html += '<div style="background:#f8fafc;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:#475569;font-family:'DM Mono',monospace;">' + fmt(t.volume_90/3) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Avg Monthly (90D)</div></div>';
+            html += '<div style="background:' + trendBg + ';border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.4rem;font-weight:900;color:' + trendColor + ';">' + trendIcon + ' ' + t.overall_trend.toUpperCase() + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Portfolio Trend</div></div>';
+            html += '</div>';
+
+            // Pipeline row
+            html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:16px;">';
+            html += '<div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#92400e;">' + (t.pending||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Pipeline</div></div>';
+            html += '<div style="background:#fee2e2;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#991b1b;">' + (t.at_risk||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">At Risk</div></div>';
+            html += '<div style="background:#f1f5f9;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#475569;">' + (t.closed||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Closed/Lost</div></div>';
+            html += '</div>';
+
+            // Top merchants
+            if (sc.top_merchants && sc.top_merchants.length > 0) {
+                html += '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Top Merchants by 30D Volume</div>';
+                html += '<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">';
+                html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
+                html += '<thead><tr style="background:#f8fafc;"><th style="padding:8px 12px;text-align:left;font-weight:700;color:#64748b;">Merchant</th><th style="padding:8px 12px;text-align:left;font-weight:700;color:#64748b;">Agent ID</th><th style="padding:8px 12px;text-align:right;font-weight:700;color:#64748b;">30D Vol</th><th style="padding:8px 12px;text-align:right;font-weight:700;color:#64748b;">90D Vol</th></tr></thead>';
+                html += '<tbody>';
+                sc.top_merchants.forEach(function(m, i) {
+                    var bg = i % 2 === 0 ? 'white' : '#fafafa';
+                    html += '<tr style="background:' + bg + ';border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'—') + '</td><td style="padding:8px 12px;color:#94a3b8;font-family:'DM Mono',monospace;">' + (m.agent_id||'—') + '</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#166534;">' + fmt(m.volume_30_day) + '</td><td style="padding:8px 12px;text-align:right;color:#64748b;">' + fmt(m.volume_90_day) + '</td></tr>';
+                });
+                html += '</tbody></table></div>';
+            }
+
+            el.innerHTML = html;
+        } catch(e) { var el2 = document.getElementById('scorecard-content'); if(el2) el2.innerHTML = '<div style="color:#991b1b;padding:20px;">Error loading scorecard.</div>'; }
+    }
+
+    async function loadPartnerNotes(personId) {
+        try {
+            const res = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_notes', person_id: personId }) });
+            const result = await res.json();
+            var el = document.getElementById('notes-list');
+            if (!el) return;
+            var notes = result.data || [];
+            if (!notes.length) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;font-size:13px;">No notes yet. Add the first one above.</div>'; return; }
+            var typeIcon = { general:'💬', call:'📞', follow_up:'🔔', win:'🏆', issue:'⚠️' };
+            el.innerHTML = notes.map(function(n) {
+                var ts = new Date(n.created_at).toLocaleString();
+                var icon = typeIcon[n.note_type] || '💬';
+                return '<div style="background:' + (n.is_pinned?'#fffbeb':'#f8fafc') + ';border:1px solid ' + (n.is_pinned?'#fbbf24':'#e2e8f0') + ';border-radius:10px;padding:12px 14px;">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
+                        '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;">' + icon + '</span><span style="font-size:12px;font-weight:700;color:#0a1628;">' + (n.author_name||'Staff') + '</span><span style="font-size:10px;color:#94a3b8;">' + ts + '</span>' + (n.is_pinned ? '<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;font-weight:800;">PINNED</span>' : '') + '</div>' +
+                        '<div style="display:flex;gap:6px;">' +
+                            '<button onclick="toggleNotePin('' + n.id + '',' + !n.is_pinned + ','' + personId + '')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 6px;" title="' + (n.is_pinned?'Unpin':'Pin') + '">' + (n.is_pinned?'📌':'📍') + '</button>' +
+                            '<button onclick="deleteNote('' + n.id + '','' + personId + '')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 6px;" title="Delete">🗑️</button>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div style="font-size:13px;color:#475569;line-height:1.5;">' + n.body + '</div>' +
+                '</div>';
+            }).join('');
+        } catch(e) { console.error('Notes load error:', e); }
+    }
+
+    window.submitNote = async function(personId) {
+        var input = document.getElementById('note-input');
+        var typeSel = document.getElementById('note-type-sel');
+        var body = input ? input.value.trim() : '';
+        if (!body) return;
+        var staffId = localStorage.getItem('pp_userid') || '';
+        var staffName = localStorage.getItem('pp_user_first_name') || 'Staff';
+        await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'add_note', person_id: personId, body: body, note_type: typeSel ? typeSel.value : 'general', author_id: staffId, author_name: staffName }) });
+        if (input) input.value = '';
+        loadPartnerNotes(personId);
+    };
+
+    window.toggleNotePin = async function(noteId, pinState, personId) {
+        await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'update_note', note_id: noteId, is_pinned: pinState }) });
+        loadPartnerNotes(personId);
+    };
+
+    window.deleteNote = async function(noteId, personId) {
+        var conf = await Swal.fire({ title:'Delete note?', icon:'warning', showCancelButton:true, confirmButtonColor:'#ef4444', confirmButtonText:'Delete' });
+        if (conf.isConfirmed) { await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'delete_note', note_id: noteId }) }); loadPartnerNotes(personId); }
     };
 
     function getAllBranchIds(idObj, idList = []) {
