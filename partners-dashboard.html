@@ -1616,7 +1616,6 @@ window.quickAddId = async function(personId, name) {
                             resultsEl.innerHTML='<div style="padding:10px;color:#94a3b8;font-size:12px;">No unassigned IDs found — enter manually below</div>';
                             resultsEl.style.display='block'; return;
                         }
-                        resultsEl.innerHTML = res.data.map(function(id){
                         resultsEl.innerHTML = '';
                         res.data.forEach(function(id) {
                             var div = document.createElement('div');
@@ -2166,4 +2165,3 @@ function loadScorecard(personId) {
 
 </script>
 </body>
-</html>
