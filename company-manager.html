@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Company Manager | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||!r.includes('super'))window.location.href='index.html?reason=denied';})();</script>
+    <style>
+        .co-card { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px; transition:all 0.2s; }
+        .co-card:hover { border-color:#004990; box-shadow:0 2px 8px rgba(0,73,144,0.08); }
+        .co-name { font-weight:700; flex:1; }
+        .co-count { font-size:11px; color:#94a3b8; }
+        .co-count.used { color:#0369a1; font-weight:700; }
+        @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+</head>
+<body>
+<div class="pp-container">
+    <div class="pp-header">
+        <div class="pp-header-left">
+            <a href="secret-dungeon.html" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> DUNGEON</a>
+            <h1 class="pp-header-title">Company Manager</h1>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;">
+            <div class="pp-search" style="width:240px;">
+                <span class="material-icons pp-search-icon">search</span>
+                <input type="text" id="searchInput" placeholder="Search companies..." oninput="filterCompanies()">
+            </div>
+            <button class="pp-btn pp-btn-primary" onclick="addCompany()">
+                <span class="material-icons" style="font-size:16px;">add</span> Add Company
+            </button>
+        </div>
+    </div>
+
+    <div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:12px;padding:12px 16px;margin-bottom:16px;display:flex;gap:10px;align-items:flex-start;">
+        <span class="material-icons" style="color:#d97706;">warning</span>
+        <div>
+            <b style="font-size:13px;">Danger Zone</b>
+            <p style="font-size:12px;color:#92400e;margin:2px 0 0;">Deleting or merging companies affects partner assignments. Only delete companies with 0 agents. Merge moves all agents from duplicate to the kept record.</p>
+        </div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:800;color:#004990;" id="totalCount">—</div>
+            <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Total Companies</div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:800;color:#ef4444;" id="unusedCount">—</div>
+            <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Unused (0 agents)</div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+            <div style="font-size:1.4rem;font-weight:800;color:#f59e0b;" id="dupCount">—</div>
+            <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Possible Duplicates</div>
+        </div>
+    </div>
+
+    <div id="companyGrid" style="display:flex;flex-direction:column;gap:8px;">
+        <div style="text-align:center;padding:40px;color:#94a3b8;">
+            <div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
+            Loading companies...
+        </div>
+    </div>
+</div>
+
+<script>
+var allCompanies = [];
+
+function api(body) {
+    return fetch('/api/partners', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); });
+}
+
+async function loadCompanies() {
+    var result = await api({ action: 'get_companies_full' });
+    if (!result.success) return;
+    allCompanies = result.data || [];
+
+    // Stats
+    var unused = allCompanies.filter(function(c){ return c.agent_count === 0; });
+    // Find possible duplicates (similar names)
+    var names = allCompanies.map(function(c){ return c.company_name.toLowerCase().trim(); });
+    var dups = allCompanies.filter(function(c, i) {
+        return names.indexOf(c.company_name.toLowerCase().trim()) !== i ||
+               names.filter(function(n){ return n === c.company_name.toLowerCase().trim(); }).length > 1;
+    });
+
+    document.getElementById('totalCount').textContent = allCompanies.length;
+    document.getElementById('unusedCount').textContent = unused.length;
+    document.getElementById('dupCount').textContent = Math.floor(dups.length / 2);
+
+    renderCompanies(allCompanies);
+}
+
+function filterCompanies() {
+    var q = document.getElementById('searchInput').value.toLowerCase();
+    var filtered = q ? allCompanies.filter(function(c){ return c.company_name.toLowerCase().includes(q); }) : allCompanies;
+    renderCompanies(filtered);
+}
+
+function renderCompanies(data) {
+    var grid = document.getElementById('companyGrid');
+    if (!data.length) {
+        grid.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">No companies found</div>';
+        return;
+    }
+    grid.innerHTML = '';
+    data.forEach(function(co) {
+        var card = document.createElement('div');
+        card.className = 'co-card';
+
+        var icon = document.createElement('span');
+        icon.className = 'material-icons';
+        icon.style.cssText = 'color:#94a3b8;font-size:20px;';
+        icon.textContent = 'business';
+
+        var nameDiv = document.createElement('div');
+        nameDiv.className = 'co-name';
+        nameDiv.textContent = co.company_name;
+
+        var countDiv = document.createElement('div');
+        countDiv.className = 'co-count' + (co.agent_count > 0 ? ' used' : '');
+        countDiv.textContent = co.agent_count + ' agent' + (co.agent_count !== 1 ? 's' : '');
+
+        var btnWrap = document.createElement('div');
+        btnWrap.style.cssText = 'display:flex;gap:6px;';
+
+        var renameBtn = document.createElement('button');
+        renameBtn.className = 'pp-btn pp-btn-secondary';
+        renameBtn.style.cssText = 'padding:5px 10px;font-size:11px;';
+        renameBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">edit</span>';
+        renameBtn.title = 'Rename';
+        renameBtn.onclick = (function(c){ return function(){ renameCompany(c); }; })(co);
+
+        var mergeBtn = document.createElement('button');
+        mergeBtn.className = 'pp-btn pp-btn-secondary';
+        mergeBtn.style.cssText = 'padding:5px 10px;font-size:11px;background:#fef3c7;border-color:#fbbf24;color:#92400e;';
+        mergeBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">merge</span>';
+        mergeBtn.title = 'Merge into another company';
+        mergeBtn.onclick = (function(c){ return function(){ mergeCompany(c); }; })(co);
+
+        var deleteBtn = document.createElement('button');
+        deleteBtn.className = 'pp-btn';
+        deleteBtn.style.cssText = 'padding:5px 10px;font-size:11px;background:#fee2e2;color:#991b1b;' + (co.agent_count > 0 ? 'opacity:0.4;cursor:not-allowed;' : '');
+        deleteBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">delete</span>';
+        deleteBtn.title = co.agent_count > 0 ? 'Cannot delete — has agents' : 'Delete';
+        deleteBtn.disabled = co.agent_count > 0;
+        deleteBtn.onclick = (function(c){ return function(){ deleteCompany(c); }; })(co);
+
+        btnWrap.appendChild(renameBtn);
+        btnWrap.appendChild(mergeBtn);
+        btnWrap.appendChild(deleteBtn);
+
+        card.appendChild(icon);
+        card.appendChild(nameDiv);
+        card.appendChild(countDiv);
+        card.appendChild(btnWrap);
+        grid.appendChild(card);
+    });
+}
+
+async function addCompany() {
+    var result = await Swal.fire({
+        title: 'Add New Company',
+        input: 'text',
+        inputPlaceholder: 'Company name...',
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Add',
+        inputValidator: function(v){ if (!v.trim()) return 'Please enter a company name'; }
+    });
+    if (result.value) {
+        await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_companies', name: result.value.trim() }) });
+        // Actually insert via supabase directly through a dedicated action
+        var r = await api({ action: 'rename_company', company_id: null, name: result.value.trim(), create: true });
+        await loadCompanies();
+        Swal.fire({ icon:'success', title:'Company added!', timer:1500, showConfirmButton:false });
+    }
+}
+
+async function renameCompany(co) {
+    var result = await Swal.fire({
+        title: 'Rename Company',
+        input: 'text',
+        inputValue: co.company_name,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Save',
+        inputValidator: function(v){ if (!v.trim()) return 'Please enter a name'; }
+    });
+    if (result.value && result.value.trim() !== co.company_name) {
+        await api({ action: 'rename_company', company_id: co.id, name: result.value.trim() });
+        await loadCompanies();
+        Swal.fire({ icon:'success', title:'Renamed!', timer:1200, showConfirmButton:false });
+    }
+}
+
+async function mergeCompany(co) {
+    var others = allCompanies.filter(function(c){ return c.id !== co.id; });
+    var opts = others.map(function(c){ return '<option value="' + c.id + '">' + c.company_name + ' (' + c.agent_count + ' agents)</option>'; }).join('');
+
+    var result = await Swal.fire({
+        title: 'Merge: ' + co.company_name,
+        html: '<p style="color:#475569;font-size:13px;">All ' + co.agent_count + ' agent(s) from <b>' + co.company_name + '</b> will be moved into the selected company. The duplicate will be deleted.</p>'
+            + '<select id="merge-target" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-top:8px;">' + opts + '</select>',
+        showCancelButton: true,
+        confirmButtonColor: '#f59e0b',
+        confirmButtonText: 'Merge',
+        preConfirm: function() { return document.getElementById('merge-target').value; }
+    });
+    if (result.isConfirmed) {
+        await api({ action: 'merge_companies', keep_id: result.value, delete_id: co.id });
+        await loadCompanies();
+        Swal.fire({ icon:'success', title:'Merged!', timer:1500, showConfirmButton:false });
+    }
+}
+
+async function deleteCompany(co) {
+    var conf = await Swal.fire({
+        title: 'Delete ' + co.company_name + '?',
+        text: 'This cannot be undone.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Delete'
+    });
+    if (conf.isConfirmed) {
+        var r = await api({ action: 'delete_company', company_id: co.id });
+        if (r.success) {
+            await loadCompanies();
+            Swal.fire({ icon:'success', title:'Deleted!', timer:1200, showConfirmButton:false });
+        } else {
+            Swal.fire({ icon:'error', title:'Cannot delete', text: r.message, confirmButtonColor:'#004990' });
+        }
+    }
+}
+
+window.onload = loadCompanies;
+</script>
+</body>
+</html>
