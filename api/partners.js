@@ -319,22 +319,44 @@ if (action === 'complete_onboarding') {
             const { page = 0, category, mine_only, mine_id } = body;
             const limit = 20;
             let query = supabase.from('community_posts').select('*')
+                .eq('is_deleted', false)
+                .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
             if (category) query = query.eq('category', category);
-            if (mine_only && mine_id) query = query.eq('staff_author_id', mine_id);
+            if (mine_only && mine_id) query = query.eq('author_id', mine_id);
             const { data: posts, error: postsError } = await query;
             if (postsError) return res.status(400).json({ success: false, message: postsError.message });
-            return res.status(200).json({ success: true, data: (posts||[]).map(p => ({ ...p, liked_by_me: false })) });
+
+            // Resolve author names
+            const partnerIds = (posts||[]).filter(p => p.author_type === 'partner').map(p => p.author_id);
+            const { data: persons } = partnerIds.length
+                ? await supabase.from('persons').select('id, full_name').in('id', partnerIds)
+                : { data: [] };
+            const personMap = {};
+            (persons||[]).forEach(p => { personMap[p.id] = p.full_name; });
+
+            // Get staff names from users table if available
+            const enriched = (posts||[]).map(p => {
+                let displayName = p.author_name;
+                if (!displayName || displayName.includes('undefined')) {
+                    if (p.author_type === 'partner') displayName = personMap[p.author_id] || 'Partner';
+                    else displayName = 'Staff';
+                }
+                return { ...p, author_name: displayName, liked_by_me: false };
+            });
+
+            return res.status(200).json({ success: true, data: enriched });
         }
 
         if (action === 'community_post') {
             const { body: postBody, media_urls, media_types, post_type, category, staff_name, staff_id } = body;
             if (!postBody && (!media_urls || !media_urls.length)) return res.status(400).json({ success: false, message: 'Post cannot be empty.' });
+            const resolvedName = (staff_name && staff_name !== 'undefined') ? staff_name + ' (Staff)' : 'Staff';
             const { data, error } = await supabase.from('community_posts').insert({
                 author_id: staff_id || 'staff',
-                staff_author_id: staff_id,
-                author_name: (staff_name || 'Staff') + ' (Staff)',
+                author_type: 'staff',
+                author_name: resolvedName,
                 body: postBody || '',
                 media_urls: media_urls || [],
                 media_types: media_types || [],
@@ -342,16 +364,20 @@ if (action === 'complete_onboarding') {
                 category: category || 'general'
             }).select().single();
             if (error) return res.status(400).json({ success: false, message: error.message });
-            return res.status(200).json({ success: true, data });
+            return res.status(200).json({ success: true, data: { ...data, author_name: resolvedName } });
         }
 
         if (action === 'community_delete') {
             const { post_id, staff_id } = body;
-            const { data: post } = await supabase.from('community_posts').select('staff_author_id, author_id').eq('id', post_id).single();
-            if (!post || (post.staff_author_id !== staff_id && post.author_id !== staff_id)) {
-                return res.status(403).json({ success: false, message: 'Not authorized.' });
+            const { data: post } = await supabase.from('community_posts').select('author_id').eq('id', post_id).single();
+            if (!post || post.author_id !== staff_id) {
+                // Super admins can delete any post - check role
+                const role = (body.staff_role || '').toLowerCase();
+                if (!role.includes('super')) {
+                    return res.status(403).json({ success: false, message: 'Not authorized.' });
+                }
             }
-            await supabase.from('community_posts').delete().eq('id', post_id);
+            await supabase.from('community_posts').update({ is_deleted: true }).eq('id', post_id);
             return res.status(200).json({ success: true });
         }
 
