@@ -171,16 +171,23 @@ if (action === 'complete_onboarding') {
 
             const idStrings = (identifiers || []).map(i => i.id_string);
 
+            const { from_date, to_date } = body;
+
+            let topQuery = supabase.from('merchants')
+                .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, agent_id, last_batch_date')
+                .in('agent_id', idStrings)
+                .eq('account_status', 'Approved')
+                .order('volume_30_day', { ascending: false })
+                .limit(10);
+
+            if (from_date) topQuery = topQuery.gte('last_batch_date', from_date);
+            if (to_date) topQuery = topQuery.lte('last_batch_date', to_date);
+
             const [statsRes, topMerchantsRes] = await Promise.all([
                 supabase.from('merchant_stats_by_id')
                     .select('agent_id, merchant_count, total_volume_sum, total_volume_90d_sum, pending_count, closed_count, risk_count')
                     .in('agent_id', idStrings),
-                supabase.from('merchants')
-                    .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, agent_id')
-                    .in('agent_id', idStrings)
-                    .eq('account_status', 'Approved')
-                    .order('volume_30_day', { ascending: false })
-                    .limit(10)
+                topQuery
             ]);
 
             const statsMap = {};
