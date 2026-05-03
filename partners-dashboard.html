@@ -1617,13 +1617,19 @@ window.quickAddId = async function(personId, name) {
                             resultsEl.style.display='block'; return;
                         }
                         resultsEl.innerHTML = res.data.map(function(id){
-                            return '<div style="padding:10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-family:monospace;" '
-                                + 'onclick="document.getElementById('qa-id-manual').value='' + id.id_string + '';document.getElementById('qa-id-results').style.display='none';">'
-                                + id.id_string + '</div>';
-                        }).join('');
+                        resultsEl.innerHTML = '';
+                        res.data.forEach(function(id) {
+                            var div = document.createElement('div');
+                            div.style.cssText = 'padding:10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-family:monospace;';
+                            div.textContent = id.id_string;
+                            div.onclick = (function(idStr) { return function() {
+                                document.getElementById('qa-id-manual').value = idStr;
+                                document.getElementById('qa-id-results').style.display = 'none';
+                            }; })(id.id_string);
+                            resultsEl.appendChild(div);
+                        });
                         resultsEl.style.display='block';
                     });
-                }, 300);
             });
 
             // ID duplicate check
