@@ -293,7 +293,7 @@ input[type=number] {
     <label class="search-label">Company / Firm Association</label>
     <div style="margin-bottom:14px;">
         <label class="search-label">Partner Activation Date</label>
-        <input type="date" id="partnerActivationDate" class="wizard-input" style="font-family:'DM Sans',sans-serif;">
+        <input type="date" id="partnerActivationDate" class="wizard-input" style="font-family:sans-serif;">
         <div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div>
     </div>
     <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput();">
@@ -350,7 +350,7 @@ input[type=number] {
     let identifiersRaw = [];
     let agentsRaw = [];
     let personsRaw = [], partnersData_companiesRaw = [];
-    let statsRaw = []; // ✅ Global stats for trend calculation
+    let statsRaw = []; //  Global stats for trend calculation
     let currentPage = 1;
     const cardsPerPage = 12; 
     let searchTimeout = null;
@@ -1303,7 +1303,7 @@ async function submitOnboarding() {
         var wrap = document.createElement('div');
         wrap.style.textAlign = 'left';
 
-        // ── HEADER ────────────────────────────────────────────
+        //  HEADER 
         var header = document.createElement('div');
         header.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:14px;';
 
@@ -1348,14 +1348,14 @@ async function submitOnboarding() {
         header.appendChild(contactCol); header.appendChild(statsCol);
         wrap.appendChild(header);
 
-        // ── TABS ──────────────────────────────────────────────
+        //  TABS 
         var tabBar = document.createElement('div');
         tabBar.style.cssText = 'display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;';
 
         var tabDefs = [
-            { id: 'overview',   label: '🏷️ Agent IDs',  active: true },
-            { id: 'scorecard',  label: '📊 Scorecard',   active: false },
-            { id: 'notes',      label: '📝 Notes',        active: false }
+            { id: 'overview',   label: 'IDs Agent IDs',  active: true },
+            { id: 'scorecard',  label: ' Scorecard',   active: false },
+            { id: 'notes',      label: ' Notes',        active: false }
         ];
         tabDefs.forEach(function(t) {
             var btn = document.createElement('button');
@@ -1367,7 +1367,7 @@ async function submitOnboarding() {
         });
         wrap.appendChild(tabBar);
 
-        // ── OVERVIEW PANEL ────────────────────────────────────
+        //  OVERVIEW PANEL 
         var panelOv = document.createElement('div'); panelOv.id = 'panel-overview';
         var ovInner = document.createElement('div');
         ovInner.style.cssText = 'background:#f8fafc;padding:15px;border-radius:12px;max-height:420px;overflow-y:auto;border:1px solid #f1f5f9;';
@@ -1384,7 +1384,7 @@ async function submitOnboarding() {
         panelOv.appendChild(ovInner);
         wrap.appendChild(panelOv);
 
-        // ── SCORECARD PANEL ───────────────────────────────────
+        //  SCORECARD PANEL 
         var panelSc = document.createElement('div'); panelSc.id = 'panel-scorecard'; panelSc.style.display = 'none';
         var scContent = document.createElement('div');
         scContent.id = 'scorecard-content';
@@ -1393,14 +1393,14 @@ async function submitOnboarding() {
         panelSc.appendChild(scContent);
         wrap.appendChild(panelSc);
 
-        // ── NOTES PANEL ───────────────────────────────────────
+        //  NOTES PANEL 
         var panelNotes = document.createElement('div'); panelNotes.id = 'panel-notes'; panelNotes.style.display = 'none';
 
         var noteInputRow = document.createElement('div'); noteInputRow.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;';
         var noteTypeSel = document.createElement('select');
         noteTypeSel.id = 'note-type-sel';
         noteTypeSel.style.cssText = 'padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;';
-        [['general','💬 General'],['call','📞 Call Log'],['follow_up','🔔 Follow-up'],['win','🏆 Win'],['issue','⚠️ Issue']].forEach(function(o){
+        [['general',' General'],['call',' Call Log'],['follow_up',' Follow-up'],['win',' Win'],['issue',' Issue']].forEach(function(o){
             var opt = document.createElement('option'); opt.value = o[0]; opt.textContent = o[1]; noteTypeSel.appendChild(opt);
         });
         var noteInput = document.createElement('input');
@@ -1487,7 +1487,7 @@ async function submitOnboarding() {
             if (!result.success || !result.scorecard) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">No scorecard data available.</div>'; return; }
             var sc = result.scorecard;
             var t = sc.totals;
-            var trendIcon = t.overall_trend === 'growth' ? '📈' : t.overall_trend === 'risk' ? '📉' : '➡️';
+            var trendIcon = t.overall_trend === 'growth' ? '' : t.overall_trend === 'risk' ? '' : '';
             var trendColor = t.overall_trend === 'growth' ? '#166534' : t.overall_trend === 'risk' ? '#991b1b' : '#475569';
             var trendBg = t.overall_trend === 'growth' ? '#f0fdf4' : t.overall_trend === 'risk' ? '#fef2f2' : '#f8fafc';
             var fmt = function(v){ return '$' + parseFloat(v||0).toLocaleString(undefined,{minimumFractionDigits:2}); };
@@ -1495,9 +1495,9 @@ async function submitOnboarding() {
             var html = '';
             // KPI cards
             html += '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;">';
-            html += '<div style="background:#f0f7ff;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.6rem;font-weight:900;color:#004990;font-family:'DM Mono',monospace;">' + (t.merchants||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Active Merchants</div></div>';
-            html += '<div style="background:#f0fdf4;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:#166534;font-family:'DM Mono',monospace;">' + fmt(t.volume_30) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">30-Day Volume</div></div>';
-            html += '<div style="background:#f8fafc;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:#475569;font-family:'DM Mono',monospace;">' + fmt(t.volume_90/3) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Avg Monthly (90D)</div></div>';
+            html += '<div style="background:#f0f7ff;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.6rem;font-weight:900;color:#004990;font-family:monospace;">' + (t.merchants||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Active Merchants</div></div>';
+            html += '<div style="background:#f0fdf4;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:#166534;font-family:monospace;">' + fmt(t.volume_30) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">30-Day Volume</div></div>';
+            html += '<div style="background:#f8fafc;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:#475569;font-family:monospace;">' + fmt(t.volume_90/3) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Avg Monthly (90D)</div></div>';
             html += '<div style="background:' + trendBg + ';border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.4rem;font-weight:900;color:' + trendColor + ';">' + trendIcon + ' ' + t.overall_trend.toUpperCase() + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Portfolio Trend</div></div>';
             html += '</div>';
 
@@ -1517,7 +1517,7 @@ async function submitOnboarding() {
                 html += '<tbody>';
                 sc.top_merchants.forEach(function(m, i) {
                     var bg = i % 2 === 0 ? 'white' : '#fafafa';
-                    html += '<tr style="background:' + bg + ';border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'—') + '</td><td style="padding:8px 12px;color:#94a3b8;font-family:'DM Mono',monospace;">' + (m.agent_id||'—') + '</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#166534;">' + fmt(m.volume_30_day) + '</td><td style="padding:8px 12px;text-align:right;color:#64748b;">' + fmt(m.volume_90_day) + '</td></tr>';
+                    html += '<tr style="background:' + bg + ';border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'—') + '</td><td style="padding:8px 12px;color:#94a3b8;font-family:monospace;">' + (m.agent_id||'—') + '</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#166534;">' + fmt(m.volume_30_day) + '</td><td style="padding:8px 12px;text-align:right;color:#64748b;">' + fmt(m.volume_90_day) + '</td></tr>';
                 });
                 html += '</tbody></table></div>';
             }
@@ -1534,16 +1534,16 @@ async function submitOnboarding() {
             if (!el) return;
             var notes = result.data || [];
             if (!notes.length) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;font-size:13px;">No notes yet. Add the first one above.</div>'; return; }
-            var typeIcon = { general:'💬', call:'📞', follow_up:'🔔', win:'🏆', issue:'⚠️' };
+            var typeIcon = { general:'', call:'', follow_up:'', win:'', issue:'' };
             el.innerHTML = notes.map(function(n) {
                 var ts = new Date(n.created_at).toLocaleString();
-                var icon = typeIcon[n.note_type] || '💬';
+                var icon = typeIcon[n.note_type] || '';
                 return '<div style="background:' + (n.is_pinned?'#fffbeb':'#f8fafc') + ';border:1px solid ' + (n.is_pinned?'#fbbf24':'#e2e8f0') + ';border-radius:10px;padding:12px 14px;">' +
                     '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">' +
                         '<div style="display:flex;align-items:center;gap:6px;"><span style="font-size:14px;">' + icon + '</span><span style="font-size:12px;font-weight:700;color:#0a1628;">' + (n.author_name||'Staff') + '</span><span style="font-size:10px;color:#94a3b8;">' + ts + '</span>' + (n.is_pinned ? '<span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;font-weight:800;">PINNED</span>' : '') + '</div>' +
                         '<div style="display:flex;gap:6px;">' +
-                            '<button onclick="toggleNotePin('' + n.id + '',' + !n.is_pinned + ','' + personId + '')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 6px;" title="' + (n.is_pinned?'Unpin':'Pin') + '">' + (n.is_pinned?'📌':'📍') + '</button>' +
-                            '<button onclick="deleteNote('' + n.id + '','' + personId + '')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 6px;" title="Delete">🗑️</button>' +
+                            '<button onclick="toggleNotePin('' + n.id + '',' + !n.is_pinned + ','' + personId + '')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 6px;" title="' + (n.is_pinned?'Unpin':'Pin') + '">' + (n.is_pinned?'':'') + '</button>' +
+                            '<button onclick="deleteNote('' + n.id + '','' + personId + '')" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:2px 6px;" title="Delete"></button>' +
                         '</div>' +
                     '</div>' +
                     '<div style="font-size:13px;color:#475569;line-height:1.5;">' + n.body + '</div>' +
@@ -1720,7 +1720,7 @@ window.quickAddId = async function(personId, name) {
                 agents: agentsRaw,
                 identifiers: identifiersRaw,
                 companies: companiesRaw,
-                stats: statsRaw  // ✅ Now stats are passed in
+                stats: statsRaw  //  Now stats are passed in
             });
 
             currentPage = 1;
@@ -1787,7 +1787,7 @@ window.quickAddId = async function(personId, name) {
                 var totalVol90 = merchants.reduce(function(s,m){ return s + (parseFloat(m.volume_90_day)||0); }, 0);
                 var totalVolMTD = merchants.reduce(function(s,m){ return s + (parseFloat(m.volume_mtd)||0); }, 0);
                 var NL = String.fromCharCode(10);
-                var esc = function(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; };
+                var esc = function(v){ var q = String.fromCharCode(34); return q + String(v||'').replace(/"/g, q+q) + q; };
                 var fmt = function(v){ return parseFloat(v||0).toFixed(2); };
                 var rows = [];
                 rows.push('Agent ID Export,' + idString);
