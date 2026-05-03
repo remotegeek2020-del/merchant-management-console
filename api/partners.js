@@ -99,6 +99,12 @@ if (action === 'complete_onboarding') {
 
     return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
+        // --- ACTION: GET COMPANIES ---
+        if (action === 'get_companies') {
+            const { data } = await supabase.from('companies').select('id, company_name').order('company_name');
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
         // --- ACTION: SEARCH BY MID ---
 if (action === 'search_by_mid') {
     const { mid } = body;
@@ -189,12 +195,6 @@ if (action === 'get_all_stats') {
     }
 }
 
-        // --- ACTION: GET COMPANIES ---
-        if (action === 'get_companies') {
-            const { data } = await supabase.from('companies').select('id, company_name').order('company_name');
-            return res.status(200).json({ success: true, data: data || [] });
-        }
-
         // --- ACTION: GET PARTNERS LIST (Added Email, Phone, and HL ID) ---
         if (action === 'get_partners_list') {
             async function fetchAll(table, select) {
@@ -213,22 +213,13 @@ if (action === 'get_all_stats') {
                 return allData;
             }
 
-            const [persons, agents, companies] = await Promise.all([
+            const [persons, agents, identifiers, companies] = await Promise.all([
+                // UPDATED SELECT STRING BELOW
                 fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, is_portal_active, portal_password_set, last_portal_login'),
                 fetchAll('agents', 'id, company_id, parent_agent_id'),
+                fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
                 fetchAll('companies', 'id, company_name')
             ]);
-
-            // Only fetch identifiers for agents we have (not all 3000+)
-            const agentIds = agents.map(a => a.id);
-            let identifiers = [];
-            if (agentIds.length > 0) {
-                const { data: idData } = await supabase
-                    .from('agent_identifiers')
-                    .select('id, agent_id, id_string, rev_share, prime49, parent_config_id')
-                    .in('agent_id', agentIds);
-                identifiers = idData || [];
-            }
 
             return res.status(200).json({ 
                 success: true, 
