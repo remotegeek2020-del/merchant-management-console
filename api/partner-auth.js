@@ -172,7 +172,6 @@ export default async function handler(req, res) {
             }
 
             // Verify current password
-            const crypto = await import('crypto');
             const salt = process.env.PARTNER_SALT || 'payprotec_salt';
             const currentHash = crypto.createHash('sha256').update(current_password + salt).digest('hex');
 
