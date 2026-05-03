@@ -43,10 +43,40 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ success: true, contacts: data.contacts });
 }
 if (action === 'complete_onboarding') {
-    const { person, company, identifiers, isQuickAdd, existingAgentId } = body;
+    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId } = body;
     let finalAgentId = existingAgentId;
 
-    if (!isQuickAdd) {
+    // Quick add to a NEW company for an existing person
+    if (isQuickAddNewAgent) {
+        if (!person || !person.name) return res.status(400).json({ success: false, message: 'Missing person name.' });
+        
+        // Find existing person by name (they already exist)
+        const { data: existingPerson } = await supabase
+            .from('persons')
+            .select('id')
+            .ilike('full_name', person.name.trim())
+            .single();
+
+        if (!existingPerson) return res.status(400).json({ success: false, message: 'Could not find existing partner record.' });
+
+        // Handle company
+        let targetCoId = company.id || null;
+        if (!targetCoId && !company.isIndependent && company.name) {
+            const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
+            targetCoId = coData ? coData.id : null;
+        }
+
+        // Create new agent for this person under the new company
+        const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
+            company_id: targetCoId,
+            agent_name: person.name.trim(),
+            parent_agent_id: existingPerson.id
+        }).select().single();
+
+        if (agentErr) return res.status(400).json({ success: false, message: 'Agent creation failed: ' + agentErr.message });
+        finalAgentId = agentData.id;
+
+    } else if (!isQuickAdd) {
         // --- START NEW PARTNER LOGIC ---
         // Verify we have person data
         if (!person || !person.email) return res.status(400).json({ success: false, message: "Missing person data for new partner" });
