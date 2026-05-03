@@ -201,7 +201,11 @@ function timeAgo(d) {
     if(diff<86400)return Math.floor(diff/3600)+'h ago'; return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 }
 
-function init() {
+async function init() {
+    // Resolve staff full name from app_users via community API
+    var nameResult = await api({ action: 'get_staff_name', userid: staffId });
+    if (nameResult.success && nameResult.name) staffName = nameResult.name;
+
     document.getElementById('staffAvatar').textContent = initials(staffName);
     document.getElementById('composerAvatar').textContent = initials(staffName);
     loadFeed(false);
