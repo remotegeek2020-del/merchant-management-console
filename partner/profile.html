@@ -197,6 +197,14 @@
                     <textarea class="composer-input" id="postText" placeholder="Share something with the partner network..."></textarea>
                 </div>
                 <div id="mediaPreview" class="media-preview"></div>
+                <div style="margin-bottom:8px;">
+                    <select id="postCategory" style="padding:6px 10px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;color:var(--text);background:#f8fafc;">
+                        <option value="general">💬 General</option>
+                        <option value="partner_support">🤝 Partner Support</option>
+                        <option value="industry_news">📰 Industry News</option>
+                        <option value="wins">🏆 Wins & Milestones</option>
+                    </select>
+                </div>
                 <div class="composer-actions">
                     <button class="media-btn photo" onclick="document.getElementById('photoInput').click()">
                         <span class="material-icons" style="font-size:16px;">photo</span> Photo
@@ -276,7 +284,7 @@ async function init() {
     document.getElementById('infoId').textContent = partnerId;
 
     loadAgentIds(result);
-    loadFeed(false);
+    loadFeed(false, true);
 }
 
 function loadAgentIds(result) {
@@ -322,9 +330,10 @@ async function saveContactInfo() {
 
 // ── FEED ─────────────────────────────────────────────────
 
-async function loadFeed(append) {
+async function loadFeed(append, authorOnly) {
+    if (authorOnly === undefined) authorOnly = true; // Profile page shows own posts only
     if (!append) { feedPage = 0; feedAllLoaded = false; document.getElementById('feedContainer').innerHTML = '<div class="spinner"></div>'; }
-    var result = await api({ action:'get_feed', page: feedPage });
+    var result = await api({ action:'get_feed', page: feedPage, author_only: authorOnly });
     if (!result.success) return;
     var posts = result.data || [];
     if (posts.length < 20) { feedAllLoaded = true; document.getElementById('loadMore').style.display = 'none'; }
@@ -366,7 +375,7 @@ function buildPostCard(p) {
 
     card.innerHTML = '<div class="post-header">'
         + '<div class="post-avatar">' + ini + '</div>'
-        + '<div style="flex:1;"><div class="post-author">' + p.author_name + '</div><div class="post-time">' + timeAgo(p.created_at) + '</div></div>'
+        + '<div style="flex:1;"><div class="post-author">' + p.author_name + ' <span style="font-size:10px;background:' + catBg + ';color:' + catColor + ';padding:2px 8px;border-radius:99px;font-weight:700;margin-left:4px;">' + catLabel + '</span></div><div class="post-time">' + timeAgo(p.created_at) + '</div></div>'
         + deleteBtn + '</div>'
         + (p.body ? '<div class="post-body">' + escapeHtml(p.body) + '</div>' : '')
         + mediaHtml
@@ -460,16 +469,44 @@ async function deletePost(postId) {
 }
 
 // ── MEDIA HANDLING ────────────────────────────────────────
+function compressImage(file, maxW, maxH, quality, callback) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+        var img = new Image();
+        img.onload = function() {
+            var w = img.width, h = img.height;
+            if (w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+            if (h > maxH) { w = Math.round(w * maxH / h); h = maxH; }
+            var canvas = document.createElement('canvas');
+            canvas.width = w; canvas.height = h;
+            canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+            var dataUrl = canvas.toDataURL('image/jpeg', quality);
+            callback(dataUrl);
+        };
+        img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+}
+
 function handleMediaSelect(input, type) {
     var files = Array.from(input.files);
     files.forEach(function(file) {
-        if (pendingMedia.length >= 4) { Swal.fire('Max 4 media files per post.', '', 'info'); return; }
-        var reader = new FileReader();
-        reader.onload = function(e) {
-            pendingMedia.push({ file:file, dataUrl:e.target.result, type:type });
-            renderMediaPreview();
-        };
-        reader.readAsDataURL(file);
+        if (pendingMedia.length >= 4) { Swal.fire('Max 4 files per post.', '', 'info'); return; }
+        if (type === 'video') {
+            if (file.size > 50 * 1024 * 1024) { Swal.fire('Video too large', 'Max 50MB per video.', 'warning'); return; }
+            var reader = new FileReader();
+            reader.onload = function(e) {
+                pendingMedia.push({ file:file, dataUrl:e.target.result, type:'video', mimeType:file.type });
+                renderMediaPreview();
+            };
+            reader.readAsDataURL(file);
+        } else {
+            // Compress image: max 1200px wide, 80% quality
+            compressImage(file, 1200, 1200, 0.8, function(dataUrl) {
+                pendingMedia.push({ file:file, dataUrl:dataUrl, type:'image', mimeType:'image/jpeg' });
+                renderMediaPreview();
+            });
+        }
     });
     input.value = '';
 }
@@ -504,11 +541,14 @@ async function submitPost() {
         for (var i = 0; i < pendingMedia.length; i++) {
             var m = pendingMedia[i];
             var b64 = m.dataUrl.split(',')[1];
-            var result = await api({ action:'upload_media', file_base64:b64, file_name:m.file.name, content_type:m.file.type });
+            var fname = m.type === 'image' ? (m.file.name.replace(/\.[^.]+$/, '') + '.jpg') : m.file.name;
+            var ctype = m.mimeType || m.file.type;
+            var result = await api({ action:'upload_media', file_base64:b64, file_name:fname, content_type:ctype });
             if (result.success) { mediaUrls.push(result.url); mediaTypes.push(result.type); }
         }
         var postType = mediaTypes.includes('video') ? 'video' : mediaUrls.length ? 'photo' : 'text';
-        var postResult = await api({ action:'create_post', body:text, media_urls:mediaUrls, media_types:mediaTypes, post_type:postType });
+        var category = document.getElementById('postCategory') ? document.getElementById('postCategory').value : 'general';
+        var postResult = await api({ action:'create_post', body:text, media_urls:mediaUrls, media_types:mediaTypes, post_type:postType, category:category });
         if (postResult.success) {
             document.getElementById('postText').value = '';
             pendingMedia = [];
