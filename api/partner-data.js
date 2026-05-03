@@ -273,7 +273,7 @@ export default async function handler(req, res) {
 
         // ── UPDATE PROFILE ─────────────────────────────────
         if (action === 'update_profile') {
-            const { full_name, phone_number } = body;
+            const { full_name, phone_number } = req.body;
             const updates = {};
             if (full_name) updates.full_name = full_name.trim();
             if (phone_number !== undefined) updates.phone_number = phone_number.trim();
@@ -413,6 +413,104 @@ export default async function handler(req, res) {
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });
+
+
+        // ── COMMUNITY FEED ─────────────────────────────────
+        if (action === 'get_feed') {
+            const { page = 0 } = req.body;
+            const limit = 20;
+            const { data: posts } = await supabase
+                .from('community_posts')
+                .select('*')
+                .order('is_pinned', { ascending: false })
+                .order('created_at', { ascending: false })
+                .range(page * limit, (page + 1) * limit - 1);
+
+            // Get likes for current user
+            const postIds = (posts || []).map(p => p.id);
+            const { data: myLikes } = postIds.length ? await supabase
+                .from('post_likes').select('post_id').eq('author_id', personId).in('post_id', postIds)
+                : { data: [] };
+            const likedSet = new Set((myLikes || []).map(l => l.post_id));
+
+            return res.status(200).json({
+                success: true,
+                data: (posts || []).map(p => ({ ...p, liked_by_me: likedSet.has(p.id) }))
+            });
+        }
+
+        if (action === 'create_post') {
+            const { body: postBody, media_urls, media_types, post_type } = req.body;
+            if (!postBody && (!media_urls || !media_urls.length)) {
+                return res.status(400).json({ success: false, message: 'Post cannot be empty.' });
+            }
+            const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).single();
+            const { data, error } = await supabase.from('community_posts').insert({
+                author_id: personId,
+                author_name: person?.full_name || 'Partner',
+                body: postBody || '',
+                media_urls: media_urls || [],
+                media_types: media_types || [],
+                post_type: post_type || 'text'
+            }).select().single();
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'delete_post') {
+            const { post_id } = req.body;
+            const { data: post } = await supabase.from('community_posts').select('author_id').eq('id', post_id).single();
+            if (!post || post.author_id !== personId) return res.status(403).json({ success: false, message: 'Not authorized.' });
+            await supabase.from('community_posts').delete().eq('id', post_id);
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'toggle_like') {
+            const { post_id } = req.body;
+            const { data: existing } = await supabase.from('post_likes').select('id').eq('post_id', post_id).eq('author_id', personId).single();
+            if (existing) {
+                await supabase.from('post_likes').delete().eq('id', existing.id);
+                await supabase.from('community_posts').update({ likes_count: supabase.raw('likes_count - 1') }).eq('id', post_id);
+                const { data } = await supabase.from('community_posts').select('likes_count').eq('id', post_id).single();
+                return res.status(200).json({ success: true, liked: false, count: data?.likes_count || 0 });
+            } else {
+                await supabase.from('post_likes').insert({ post_id, author_id: personId });
+                await supabase.from('community_posts').update({ likes_count: supabase.raw('likes_count + 1') }).eq('id', post_id);
+                const { data } = await supabase.from('community_posts').select('likes_count').eq('id', post_id).single();
+                return res.status(200).json({ success: true, liked: true, count: data?.likes_count || 0 });
+            }
+        }
+
+        if (action === 'get_comments') {
+            const { post_id } = req.body;
+            const { data } = await supabase.from('post_comments').select('*').eq('post_id', post_id).order('created_at', { ascending: true });
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'add_comment') {
+            const { post_id, body: commentBody } = req.body;
+            if (!commentBody?.trim()) return res.status(400).json({ success: false, message: 'Comment cannot be empty.' });
+            const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).single();
+            const { data, error } = await supabase.from('post_comments').insert({
+                post_id, author_id: personId,
+                author_name: person?.full_name || 'Partner',
+                body: commentBody.trim()
+            }).select().single();
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            await supabase.from('community_posts').update({ comments_count: supabase.raw('comments_count + 1') }).eq('id', post_id);
+            return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'upload_media') {
+            const { file_base64, file_name, content_type } = req.body;
+            if (!file_base64) return res.status(400).json({ success: false, message: 'No file provided.' });
+            const buffer = Buffer.from(file_base64, 'base64');
+            const path = personId + '/' + Date.now() + '_' + file_name;
+            const { error } = await supabase.storage.from('partner-media').upload(path, buffer, { contentType: content_type, upsert: true });
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            const { data: urlData } = supabase.storage.from('partner-media').getPublicUrl(path);
+            return res.status(200).json({ success: true, url: urlData.publicUrl, type: content_type.startsWith('video') ? 'video' : 'image' });
+        }
 
     } catch (err) {
         console.error('Partner Data Error:', err.message);
