@@ -447,7 +447,7 @@ async function logAuditAction(action, details) {
         myAgents.forEach(agent => {
             const co = companies.find(c => c.id === agent.company_id);
             const coName = co ? co.company_name : "Independent";
-            const myIds = identifiers.filter(i => i.agent_id === agent.id);
+            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
             
             if (myIds.length > 0) {
                 if (!groups[coName]) groups[coName] = [];
@@ -475,9 +475,6 @@ async function logAuditAction(action, details) {
             else if (diff < -5) trend = 'risk';
         }
 
-        if (formatted.length === 0) {
-            console.warn('[DROPPED]', person.full_name, '- agents:', myAgents.length, '- groups:', JSON.stringify(Object.keys(groups)));
-        }
         return formatted.length > 0 ? { 
             id: person.id, name: person.full_name,
             email: person.email || 'No email provided',
@@ -873,13 +870,13 @@ async function submitOnboarding() {
         }
 
         const companyVal = document.getElementById('companySelect').value;
-        const activationDate = document.getElementById('partnerActivationDate') ? document.getElementById('partnerActivationDate').value : '';
+        const _activationDate = document.getElementById('partnerActivationDate');
         payload.person = {
             name: selectedGHLContact.name,
             email: selectedGHLContact.email,
             phone: selectedGHLContact.phone,
             hl_id: selectedGHLContact.id,
-            enrolled_at: activationDate ? new Date(activationDate).toISOString() : new Date().toISOString()
+            enrolled_at: (_activationDate && _activationDate.value) ? new Date(_activationDate.value).toISOString() : new Date().toISOString()
         };
         payload.company = {
             id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
@@ -1081,7 +1078,7 @@ async function submitOnboarding() {
                     </button>
                     <button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name.replace(/'/g, String.fromCharCode(39))}','${(p.email||'').replace(/'/g, String.fromCharCode(39))}')"
                             style="flex:1;background:${(p.portal_active && p.portal_setup) ? '#f0fdf4' : '#f0fdfa'};border:1px solid ${(p.portal_active && p.portal_setup) ? '#bbf7d0' : '#99f6e4'};color:${(p.portal_active && p.portal_setup) ? '#166534' : '#0d9488'};border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"
-                            ${(p.portal_active && p.portal_setup) ? 'disabled title="Portal already active"' : ''}>
+                            ${(p.portal_active && p.portal_setup) ? 'disabled' : ''}>
                         <span class="material-icons" style="font-size:14px;">${(p.portal_active && p.portal_setup) ? 'verified' : (p.portal_active ? 'mark_email_read' : 'send')}</span>
                         ${(p.portal_active && p.portal_setup) ? 'Portal Active' : (p.portal_active ? 'Resend Invite' : 'Invite to Portal')}
                     </button>
@@ -1474,7 +1471,7 @@ window.quickAddId = async function(personId, name) {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.style.display = 'flex';
         try {
-            // Fetch partners list ONLY - stats load separately after render
+            // Fetch partners list first, stats load separately after
             const partnersRes = await fetch('/api/partners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1489,7 +1486,7 @@ window.quickAddId = async function(personId, name) {
             agentsRaw = partnersData.data.agents || [];
             identifiersRaw = partnersData.data.identifiers || [];
             const companiesRaw = partnersData.data.companies || [];
-            statsRaw = []; // Will load in background after render
+            statsRaw = []; // loads in background after render
 
             // Populate company dropdown in wizard
             const companySelect = document.getElementById('companySelect');
@@ -1527,13 +1524,12 @@ window.quickAddId = async function(personId, name) {
 
     async function sendPortalInvite(personId, name, email) {
         if (!email || email === 'No email provided') {
-            return Swal.fire({ icon:'warning', title:'No email', text: name + ' has no email address on file.', confirmButtonColor:'#0d9488' });
+            return Swal.fire({ icon:'warning', title:'No email', text: name + ' has no email on file.', confirmButtonColor:'#0d9488' });
         }
         const { isConfirmed } = await Swal.fire({
-            title: 'Invite ' + name + ' to Partner Portal?',
-            html: '<p style="color:#475569;">An email will be sent to <b>' + email + '</b> with a link to set up their portal account.</p>',
-            icon: 'question', showCancelButton: true,
-            confirmButtonColor: '#0d9488', confirmButtonText: 'Send Invite'
+            title: 'Invite ' + name + '?',
+            html: '<p>An email will be sent to <b>' + email + '</b> to set up their portal account.</p>',
+            icon:'question', showCancelButton:true, confirmButtonColor:'#0d9488', confirmButtonText:'Send Invite'
         });
         if (!isConfirmed) return;
         Swal.fire({ title:'Sending...', didOpen:()=>Swal.showLoading() });
@@ -1544,29 +1540,26 @@ window.quickAddId = async function(personId, name) {
             });
             const result = await res.json();
             if (result.success) {
-                await logAuditAction('Portal Invite', 'Sent invite to ' + name + ' (' + email + ')');
-                Swal.fire({ icon:'success', title:'Invite Sent!', 
-                    html: '<p><b>' + name + '</b> will receive an email at <b>' + email + '</b>.</p>' + 
-                          (result.invite_url ? '<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link:</b><br>' + result.invite_url + '</div>' : ''),
+                Swal.fire({ icon:'success', title:'Invite Sent!',
+                    html:'<p><b>'+name+'</b> will receive setup email at <b>'+email+'</b>.</p>' +
+                         (result.invite_url ? '<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link:</b><br>'+result.invite_url+'</div>' : ''),
                     confirmButtonColor:'#0d9488' });
                 loadPartners();
             } else { throw new Error(result.message); }
-        } catch(err) { Swal.fire({ icon:'error', title:'Failed', text: err.message, confirmButtonColor:'#0d9488' }); }
+        } catch(err) { Swal.fire({ icon:'error', title:'Failed', text:err.message, confirmButtonColor:'#0d9488' }); }
     }
 
     window.editEnrolledAt = async function(personId, currentDate) {
         const { value: newDate } = await Swal.fire({
             title: 'Partner Activation Date',
-            html: '<p style="color:#475569;font-size:13px;">When was this partner activated?</p><input type="date" id="enrollDate" value="' + currentDate + '" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;margin-top:8px;">',
-            showCancelButton: true, confirmButtonColor: '#004990', confirmButtonText: 'Save',
+            html: '<input type="date" id="enrollDate" value="' + currentDate + '" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;">',
+            showCancelButton:true, confirmButtonColor:'#004990', confirmButtonText:'Save',
             preConfirm: () => document.getElementById('enrollDate').value
         });
         if (newDate) {
             await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ action:'update_person_field', id: personId, field:'enrolled_at', value: new Date(newDate).toISOString() }) });
-            await logAuditAction('Partner Update', 'Updated activation date');
+                body: JSON.stringify({ action:'update_person_field', id:personId, field:'enrolled_at', value:new Date(newDate).toISOString() }) });
             loadPartners();
-            Swal.close();
         }
     };
 
