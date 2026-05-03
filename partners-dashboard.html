@@ -1741,7 +1741,9 @@ function loadNotes(personId) {
 
 // Load scorecard into the modal
 function loadScorecard(personId) {
-    pAPI({action:'get_scorecard', person_id:personId}).then(function(result) {
+    var fromDate = document.getElementById('sc-from-date') ? document.getElementById('sc-from-date').value : '';
+    var toDate = document.getElementById('sc-to-date') ? document.getElementById('sc-to-date').value : '';
+    pAPI({action:'get_scorecard', person_id:personId, from_date:fromDate||undefined, to_date:toDate||undefined}).then(function(result) {
         var el = document.getElementById('pp-scorecard-content');
         if (!el) { console.warn('[Scorecard] element not found'); return; }
         if (!result.success || !result.scorecard) {
@@ -1759,6 +1761,44 @@ function loadScorecard(personId) {
         // Build the scorecard container
         el.style.cssText = 'display:block;';
         el.innerHTML = '';
+
+        // ── DATE FILTER BAR ───────────────────────────────
+        var filterBar = document.createElement('div');
+        filterBar.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:14px;padding:10px 14px;background:#f8fafc;border-radius:10px;border:1px solid #e2e8f0;flex-wrap:wrap;';
+        filterBar.innerHTML = '<span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;white-space:nowrap;">Last Activity Date:</span>';
+
+        var fromInput = document.createElement('input');
+        fromInput.type = 'date'; fromInput.id = 'sc-from-date';
+        fromInput.style.cssText = 'padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;font-family:inherit;';
+        fromInput.placeholder = 'From';
+
+        var toLabel = document.createElement('span');
+        toLabel.textContent = 'to'; toLabel.style.cssText = 'font-size:12px;color:#64748b;';
+
+        var toInput = document.createElement('input');
+        toInput.type = 'date'; toInput.id = 'sc-to-date';
+        toInput.style.cssText = 'padding:6px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;font-family:inherit;';
+
+        var applyBtn = document.createElement('button');
+        applyBtn.textContent = 'Apply';
+        applyBtn.style.cssText = 'padding:6px 14px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;';
+        applyBtn.onclick = function() { loadScorecard(personId); };
+
+        var clearBtn = document.createElement('button');
+        clearBtn.textContent = 'Clear';
+        clearBtn.style.cssText = 'padding:6px 14px;background:white;color:#64748b;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;';
+        clearBtn.onclick = function() {
+            document.getElementById('sc-from-date').value = '';
+            document.getElementById('sc-to-date').value = '';
+            loadScorecard(personId);
+        };
+
+        filterBar.appendChild(fromInput);
+        filterBar.appendChild(toLabel);
+        filterBar.appendChild(toInput);
+        filterBar.appendChild(applyBtn);
+        filterBar.appendChild(clearBtn);
+        el.appendChild(filterBar);
 
         // ── COMPANY TAB BAR (only if >1 company) ─────────
         var tabs = [];
@@ -1795,7 +1835,7 @@ function loadScorecard(personId) {
             var kpiRow = document.createElement('div');
             kpiRow.style.cssText = 'display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;';
             var kpis = [
-                {bg:'#f0f7ff', color:'#004990', val:merchants, label:'Merchants'},
+                {bg:'#f0f7ff', color:'#004990', val:merchants, label:'Approved'},
                 {bg:'#f0fdf4', color:'#166534', val:fmt(vol30), label:'30D Volume'},
                 {bg:'#f8fafc', color:'#475569', val:fmt(vol90/3), label:'Avg Monthly'},
                 {bg:trendBg(trend), color:trendColor(trend), val:trend.toUpperCase(), label:'Trend'}
@@ -1817,9 +1857,9 @@ function loadScorecard(personId) {
             // Pipeline row
             var pipeRow = document.createElement('div');
             pipeRow.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;';
-            [{bg:'#fef3c7',color:'#92400e',val:pending,label:'Pipeline'},
-             {bg:'#fee2e2',color:'#991b1b',val:atRisk,label:'At Risk'},
-             {bg:'#f1f5f9',color:'#475569',val:closed,label:'Closed/Lost'}
+            [{bg:'#fef3c7',color:'#92400e',val:pending,label:'Pending / Enrollment'},
+             {bg:'#fee2e2',color:'#991b1b',val:atRisk,label:'Fraud / Collections'},
+             {bg:'#f1f5f9',color:'#475569',val:closed,label:'Closed / Declined / Withdrawn'}
             ].forEach(function(k) {
                 var card = document.createElement('div');
                 card.style.cssText = 'background:'+k.bg+';border-radius:10px;padding:10px;text-align:center;';
@@ -1845,13 +1885,15 @@ function loadScorecard(personId) {
                 tableWrap.style.cssText = 'border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;';
                 var table = document.createElement('table');
                 table.style.cssText = 'width:100%;border-collapse:collapse;font-size:12px;';
-                table.innerHTML = '<thead><tr style="background:#f8fafc;"><th style="padding:8px 12px;text-align:left;color:#64748b;font-weight:700;">Merchant</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">Agent ID</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">30D Vol</th></tr></thead>';
+                table.innerHTML = '<thead><tr style="background:#f8fafc;"><th style="padding:8px 12px;text-align:left;color:#64748b;font-weight:700;">Merchant</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">Agent ID</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">Last Activity</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">30D Vol</th></tr></thead>';
                 var tbody = document.createElement('tbody');
                 topMerchants.forEach(function(m, i) {
                     var tr = document.createElement('tr');
                     tr.style.cssText = 'background:' + (i%2===0?'white':'#fafafa') + ';border-top:1px solid #f1f5f9;';
+                    var lastActivity = m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—';
                     tr.innerHTML = '<td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'') + '</td>'
                         + '<td style="padding:8px 12px;text-align:right;color:#94a3b8;font-family:monospace;font-size:11px;">' + (m.agent_id||'') + '</td>'
+                        + '<td style="padding:8px 12px;text-align:right;color:#64748b;font-size:11px;">' + lastActivity + '</td>'
                         + '<td style="padding:8px 12px;text-align:right;font-weight:700;color:#166534;">' + fmt(m.volume_30_day) + '</td>';
                     tbody.appendChild(tr);
                 });
