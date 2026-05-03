@@ -475,6 +475,9 @@ async function logAuditAction(action, details) {
             else if (diff < -5) trend = 'risk';
         }
 
+        if (formatted.length === 0) {
+            console.warn('[DROPPED]', person.full_name, '- agents:', myAgents.length, '- groups:', JSON.stringify(Object.keys(groups)));
+        }
         return formatted.length > 0 ? { 
             id: person.id, name: person.full_name,
             email: person.email || 'No email provided',
