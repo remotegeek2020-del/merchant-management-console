@@ -12,11 +12,16 @@ async function validateSession(token) {
 }
 
 async function getAgentIds(personId) {
-    const { data: agents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
-    if (!agents?.length) return { agentUuids: [], idStrings: [], identifiers: [] };
+    const { data: agents } = await supabase.from('agents').select('id, company_id, companies:company_id(company_name)').eq('parent_agent_id', personId);
+    if (!agents?.length) return { agentUuids: [], idStrings: [], identifiers: [], companiesMap: {} };
     const agentUuids = agents.map(a => a.id);
-    const { data: identifiers } = await supabase.from('agent_identifiers').select('id, id_string, rev_share, prime49').in('agent_id', agentUuids);
-    return { agentUuids, idStrings: (identifiers || []).map(i => i.id_string), identifiers: identifiers || [] };
+    const { data: identifiers } = await supabase.from('agent_identifiers').select('id, agent_id, id_string, rev_share, prime49').in('agent_id', agentUuids);
+    
+    // Build companies map: agent_id -> company_name
+    const companiesMap = {};
+    agents.forEach(a => { companiesMap[a.id] = a.companies?.company_name || 'Independent'; });
+    
+    return { agentUuids, idStrings: (identifiers || []).map(i => i.id_string), identifiers: identifiers || [], companiesMap };
 }
 
 export default async function handler(req, res) {
@@ -27,7 +32,7 @@ export default async function handler(req, res) {
     const personId = await validateSession(token);
     if (!personId) return res.status(401).json({ success: false, message: 'Session expired. Please log in again.' });
 
-    const { agentUuids, idStrings, identifiers } = await getAgentIds(personId);
+    const { agentUuids, idStrings, identifiers, companiesMap } = await getAgentIds(personId);
 
     try {
 
@@ -248,18 +253,6 @@ export default async function handler(req, res) {
                 .gte('enrollment_date', weekStart.toISOString())
                 .order('enrollment_date', { ascending: false });
 
-            // Get company names for agent IDs
-            const agentIds = identifiers.map(i => i.agent_id).filter(Boolean);
-            const { data: agentsData } = await supabase
-                .from('agents')
-                .select('id, company_id, companies:company_id(company_name)')
-                .in('id', agentIds);
-
-            const companiesMap = {};
-            (agentsData||[]).forEach(a => {
-                companiesMap[a.id] = a.companies?.company_name || 'Independent';
-            });
-
             return res.status(200).json({
                 success: true,
                 partner: personData,
@@ -277,7 +270,7 @@ export default async function handler(req, res) {
             const updates = {};
             if (full_name) updates.full_name = full_name.trim();
             if (phone_number !== undefined) updates.phone_number = phone_number.trim();
-            const { error } = await supabase.from('persons').update(updates).eq('id', partnerId);
+            const { error } = await supabase.from('persons').update(updates).eq('id', personId);
             if (error) return res.status(400).json({ success: false, message: error.message });
             return res.status(200).json({ success: true });
         }
