@@ -1299,69 +1299,129 @@ async function submitOnboarding() {
         window._detailPerson = p;
         window._detailEnrolledKey = enrolledKey;
 
-        var s = "";
+        // Use a DOM div - no string quoting issues at all
+        var wrap = document.createElement('div');
+        wrap.style.textAlign = 'left';
 
-        // Header
-        s += "<div style='text-align:left;'>";
-        s += "<div style='display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:14px;'>";
-        s += "<div style='display:flex;flex-direction:column;gap:6px;'>";
-        s += "<div style='font-size:13px;color:#475569;display:flex;align-items:center;gap:8px;'>";
-        s += "<span class='material-icons' style='font-size:16px;'>email</span>" + p.email;
-        s += "<span class='material-icons' style='font-size:13px;color:#94a3b8;cursor:pointer;' onclick="editPersonField(window._detailPerson.id,'email',window._detailPerson.email)">edit</span></div>";
-        s += "<div style='font-size:13px;color:#475569;display:flex;align-items:center;gap:8px;'>";
-        s += "<span class='material-icons' style='font-size:16px;'>phone</span>" + p.phone;
-        s += "<span class='material-icons' style='font-size:13px;color:#94a3b8;cursor:pointer;' onclick="editPersonField(window._detailPerson.id,'phone_number',window._detailPerson.phone)">edit</span></div>";
-        s += "<div style='font-size:13px;color:#475569;display:flex;align-items:center;gap:8px;'>";
-        s += "<span class='material-icons' style='font-size:16px;'>calendar_today</span>";
-        s += "<span>Activated: <b>" + activatedDate + "</b></span>";
-        s += "<span class='material-icons' style='font-size:13px;color:#94a3b8;cursor:pointer;' onclick="editEnrolledAt(window._detailPerson.id,window._detailEnrolledKey)">edit</span></div>";
-        if (hlLink) s += "<a href='" + hlLink + "' target='_blank' style='font-size:11px;color:#0369a1;font-weight:700;'>VIEW IN HIGHLEVEL →</a>";
-        s += "</div>";
-        s += "<div style='text-align:right;'><div style='font-size:26px;font-weight:900;color:#002d5a;' id='main-total-vol'>—</div>";
-        s += "<div style='font-size:11px;color:#64748b;' id='main-merch-count'>Loading...</div></div>";
-        s += "</div>";
+        // ── HEADER ────────────────────────────────────────────
+        var header = document.createElement('div');
+        header.style.cssText = 'display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:14px;';
 
-        // Tabs
-        s += "<div style='display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;'>";
-        s += "<button id='tab-overview' onclick="switchDetailTab('overview')" style='flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;font-family:DM Sans,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,0.08);'>🏷️ Agent IDs</button>";
-        s += "<button id='tab-scorecard' onclick="switchDetailTab('scorecard')" style='flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:DM Sans,sans-serif;'>📊 Scorecard</button>";
-        s += "<button id='tab-notes' onclick="switchDetailTab('notes')" style='flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:DM Sans,sans-serif;'>📝 Notes</button>";
-        s += "</div>";
+        var contactCol = document.createElement('div');
+        contactCol.style.cssText = 'display:flex;flex-direction:column;gap:6px;';
 
-        // Overview panel
-        s += "<div id='panel-overview'>";
-        s += "<div style='background:#f8fafc;padding:15px;border-radius:12px;max-height:420px;overflow-y:auto;border:1px solid #f1f5f9;'>";
-        p.companies.forEach(function(co) {
-            s += "<div style='margin-bottom:20px;'><b style='color:#94a3b8;font-size:10px;text-transform:uppercase;'>" + co.name + "</b><div style='margin-top:5px;'>";
-            co.ids.forEach(function(id) { s += renderBadge(id, true); });
-            s += "</div></div>";
+        function makeEditRow(icon, value, onclickFn) {
+            var row = document.createElement('div');
+            row.style.cssText = 'display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;';
+            var ic = document.createElement('span');
+            ic.className = 'material-icons'; ic.style.fontSize = '16px'; ic.textContent = icon;
+            var val = document.createElement('span'); val.textContent = value;
+            var edit = document.createElement('span');
+            edit.className = 'material-icons';
+            edit.style.cssText = 'font-size:13px;color:#94a3b8;cursor:pointer;';
+            edit.textContent = 'edit';
+            edit.onclick = onclickFn;
+            row.appendChild(ic); row.appendChild(val); row.appendChild(edit);
+            return row;
+        }
+
+        contactCol.appendChild(makeEditRow('email', p.email, function(){ editPersonField(window._detailPerson.id, 'email', window._detailPerson.email); }));
+        contactCol.appendChild(makeEditRow('phone', p.phone, function(){ editPersonField(window._detailPerson.id, 'phone_number', window._detailPerson.phone); }));
+        contactCol.appendChild(makeEditRow('calendar_today', 'Activated: ' + activatedDate, function(){ editEnrolledAt(window._detailPerson.id, window._detailEnrolledKey); }));
+
+        if (hlLink) {
+            var hl = document.createElement('a');
+            hl.href = hlLink; hl.target = '_blank';
+            hl.style.cssText = 'font-size:11px;color:#0369a1;font-weight:700;';
+            hl.textContent = 'VIEW IN HIGHLEVEL →';
+            contactCol.appendChild(hl);
+        }
+
+        var statsCol = document.createElement('div');
+        statsCol.style.textAlign = 'right';
+        var volDiv = document.createElement('div');
+        volDiv.id = 'main-total-vol'; volDiv.style.cssText = 'font-size:26px;font-weight:900;color:#002d5a;'; volDiv.textContent = '—';
+        var cntDiv = document.createElement('div');
+        cntDiv.id = 'main-merch-count'; cntDiv.style.cssText = 'font-size:11px;color:#64748b;'; cntDiv.textContent = 'Loading...';
+        statsCol.appendChild(volDiv); statsCol.appendChild(cntDiv);
+
+        header.appendChild(contactCol); header.appendChild(statsCol);
+        wrap.appendChild(header);
+
+        // ── TABS ──────────────────────────────────────────────
+        var tabBar = document.createElement('div');
+        tabBar.style.cssText = 'display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;';
+
+        var tabDefs = [
+            { id: 'overview',   label: '🏷️ Agent IDs',  active: true },
+            { id: 'scorecard',  label: '📊 Scorecard',   active: false },
+            { id: 'notes',      label: '📝 Notes',        active: false }
+        ];
+        tabDefs.forEach(function(t) {
+            var btn = document.createElement('button');
+            btn.id = 'tab-' + t.id;
+            btn.style.cssText = 'flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;' + (t.active ? 'background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,0.08);' : 'background:transparent;color:#64748b;');
+            btn.textContent = t.label;
+            btn.onclick = (function(id){ return function(){ switchDetailTab(id); }; })(t.id);
+            tabBar.appendChild(btn);
         });
-        s += "</div></div>";
+        wrap.appendChild(tabBar);
 
-        // Scorecard panel
-        s += "<div id='panel-scorecard' style='display:none;'>";
-        s += "<div id='scorecard-content' style='min-height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;'>Loading scorecard...</div>";
-        s += "</div>";
+        // ── OVERVIEW PANEL ────────────────────────────────────
+        var panelOv = document.createElement('div'); panelOv.id = 'panel-overview';
+        var ovInner = document.createElement('div');
+        ovInner.style.cssText = 'background:#f8fafc;padding:15px;border-radius:12px;max-height:420px;overflow-y:auto;border:1px solid #f1f5f9;';
+        p.companies.forEach(function(co) {
+            var coDiv = document.createElement('div'); coDiv.style.marginBottom = '20px';
+            var coLabel = document.createElement('b');
+            coLabel.style.cssText = 'color:#94a3b8;font-size:10px;text-transform:uppercase;';
+            coLabel.textContent = co.name;
+            var idsDiv = document.createElement('div'); idsDiv.style.marginTop = '5px';
+            co.ids.forEach(function(id) { idsDiv.innerHTML += renderBadge(id, true); });
+            coDiv.appendChild(coLabel); coDiv.appendChild(idsDiv);
+            ovInner.appendChild(coDiv);
+        });
+        panelOv.appendChild(ovInner);
+        wrap.appendChild(panelOv);
 
-        // Notes panel
-        s += "<div id='panel-notes' style='display:none;'>";
-        s += "<div style='display:flex;gap:8px;margin-bottom:12px;'>";
-        s += "<select id='note-type-sel' style='padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;'>";
-        s += "<option value='general'>💬 General</option>";
-        s += "<option value='call'>📞 Call Log</option>";
-        s += "<option value='follow_up'>🔔 Follow-up</option>";
-        s += "<option value='win'>🏆 Win</option>";
-        s += "<option value='issue'>⚠️ Issue</option>";
-        s += "</select>";
-        s += "<input id='note-input' placeholder='Add a note...' style='flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;' onkeydown="if(event.key==='Enter')submitNote(window._detailPerson.id)">";
-        s += "<button onclick='submitNote(window._detailPerson.id)' style='padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;'>Post</button>";
-        s += "</div>";
-        s += "<div id='notes-list' style='max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;'>";
-        s += "<div style='text-align:center;color:#94a3b8;padding:20px;'>Loading notes...</div>";
-        s += "</div></div>";
+        // ── SCORECARD PANEL ───────────────────────────────────
+        var panelSc = document.createElement('div'); panelSc.id = 'panel-scorecard'; panelSc.style.display = 'none';
+        var scContent = document.createElement('div');
+        scContent.id = 'scorecard-content';
+        scContent.style.cssText = 'min-height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;';
+        scContent.textContent = 'Loading scorecard...';
+        panelSc.appendChild(scContent);
+        wrap.appendChild(panelSc);
 
-        s += "</div>";
-        return s;
+        // ── NOTES PANEL ───────────────────────────────────────
+        var panelNotes = document.createElement('div'); panelNotes.id = 'panel-notes'; panelNotes.style.display = 'none';
+
+        var noteInputRow = document.createElement('div'); noteInputRow.style.cssText = 'display:flex;gap:8px;margin-bottom:12px;';
+        var noteTypeSel = document.createElement('select');
+        noteTypeSel.id = 'note-type-sel';
+        noteTypeSel.style.cssText = 'padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;';
+        [['general','💬 General'],['call','📞 Call Log'],['follow_up','🔔 Follow-up'],['win','🏆 Win'],['issue','⚠️ Issue']].forEach(function(o){
+            var opt = document.createElement('option'); opt.value = o[0]; opt.textContent = o[1]; noteTypeSel.appendChild(opt);
+        });
+        var noteInput = document.createElement('input');
+        noteInput.id = 'note-input'; noteInput.placeholder = 'Add a note about this partner...';
+        noteInput.style.cssText = 'flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;';
+        noteInput.onkeydown = function(e){ if(e.key==='Enter') submitNote(window._detailPerson.id); };
+        var noteBtn = document.createElement('button');
+        noteBtn.style.cssText = 'padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;';
+        noteBtn.textContent = 'Post';
+        noteBtn.onclick = function(){ submitNote(window._detailPerson.id); };
+        noteInputRow.appendChild(noteTypeSel); noteInputRow.appendChild(noteInput); noteInputRow.appendChild(noteBtn);
+
+        var notesList = document.createElement('div');
+        notesList.id = 'notes-list';
+        notesList.style.cssText = 'max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;';
+        notesList.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">Loading notes...</div>';
+
+        panelNotes.appendChild(noteInputRow); panelNotes.appendChild(notesList);
+        wrap.appendChild(panelNotes);
+
+        return wrap.outerHTML;
     }
 
         window.openPartnerDetails = async function(personId) {
