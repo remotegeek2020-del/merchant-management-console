@@ -220,12 +220,25 @@ if (action === 'get_all_stats') {
  // Inside partners.js
 if (action === 'get_merchant_data_raw') {
     const { identifier_id } = body;
-    const { data, error } = await supabase
-        .from('merchants')
-        .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, last_batch_date') // Added merchant_id and last_batch_date
-        .eq('agent_id', identifier_id);
     
-    return res.status(200).json({ success: true, data });
+    // Paginate to get ALL merchants (Supabase default cap is 1000)
+    let allMerchants = [];
+    let from = 0;
+    let done = false;
+    while (!done) {
+        const { data, error } = await supabase
+            .from('merchants')
+            .select('merchant_id, dba_name, account_status, enrollment_date, volume_30_day, volume_90_day, volume_mtd, last_batch_date, merchant_city, merchant_state, merchant_phone, email')
+            .eq('agent_id', identifier_id)
+            .range(from, from + 999);
+        if (error || !data || data.length === 0) { done = true; }
+        else {
+            allMerchants = allMerchants.concat(data);
+            if (data.length < 1000) done = true;
+            else from += 1000;
+        }
+    }
+    return res.status(200).json({ success: true, data: allMerchants, total: allMerchants.length });
 }
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
