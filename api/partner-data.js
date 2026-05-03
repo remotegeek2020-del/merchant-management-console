@@ -467,17 +467,17 @@ export default async function handler(req, res) {
 
         if (action === 'toggle_like') {
             const { post_id } = req.body;
-            const { data: existing } = await supabase.from('post_likes').select('id').eq('post_id', post_id).eq('author_id', personId).single();
+            const { data: existing } = await supabase.from('post_likes').select('id').eq('post_id', post_id).eq('author_id', personId).maybeSingle();
+            const { data: post } = await supabase.from('community_posts').select('likes_count').eq('id', post_id).single();
+            const currentCount = post?.likes_count || 0;
             if (existing) {
                 await supabase.from('post_likes').delete().eq('id', existing.id);
-                await supabase.from('community_posts').update({ likes_count: supabase.raw('likes_count - 1') }).eq('id', post_id);
-                const { data } = await supabase.from('community_posts').select('likes_count').eq('id', post_id).single();
-                return res.status(200).json({ success: true, liked: false, count: data?.likes_count || 0 });
+                await supabase.from('community_posts').update({ likes_count: Math.max(0, currentCount - 1) }).eq('id', post_id);
+                return res.status(200).json({ success: true, liked: false, count: Math.max(0, currentCount - 1) });
             } else {
                 await supabase.from('post_likes').insert({ post_id, author_id: personId });
-                await supabase.from('community_posts').update({ likes_count: supabase.raw('likes_count + 1') }).eq('id', post_id);
-                const { data } = await supabase.from('community_posts').select('likes_count').eq('id', post_id).single();
-                return res.status(200).json({ success: true, liked: true, count: data?.likes_count || 0 });
+                await supabase.from('community_posts').update({ likes_count: currentCount + 1 }).eq('id', post_id);
+                return res.status(200).json({ success: true, liked: true, count: currentCount + 1 });
             }
         }
 
@@ -497,7 +497,8 @@ export default async function handler(req, res) {
                 body: commentBody.trim()
             }).select().single();
             if (error) return res.status(400).json({ success: false, message: error.message });
-            await supabase.from('community_posts').update({ comments_count: supabase.raw('comments_count + 1') }).eq('id', post_id);
+            const { data: postForCount } = await supabase.from('community_posts').select('comments_count').eq('id', post_id).single();
+            await supabase.from('community_posts').update({ comments_count: (postForCount?.comments_count || 0) + 1 }).eq('id', post_id);
             return res.status(200).json({ success: true, data });
         }
 
