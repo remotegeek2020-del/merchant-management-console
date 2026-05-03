@@ -1469,151 +1469,224 @@ window.editPersonField = async function(personId, field, currentVal) {
 };
 
 // --- FEATURE: QUICK ADD ID TO PARTNER ---
-window.quickAddId = async function(personId, name) {
-    // Step 1: Company selection
-    // Get existing companies for this partner
-    var myAgents = agentsRaw.filter(function(a){ return a.parent_agent_id === personId; });
-    var existingCompanyIds = myAgents.map(function(a){ return a.company_id; }).filter(Boolean);
-    var existingCompanyNames = existingCompanyIds.map(function(cid){
-        var co = (_companiesRaw||[]).find(function(c){ return c.id === cid; });
-        return co ? co.company_name : null;
-    }).filter(Boolean);
+window.ppSelectParent = function(el) {
+    var id = el.getAttribute('data-id');
+    var label = el.getAttribute('data-label');
+    document.getElementById('qa-parent-val').value = id;
+    document.getElementById('qa-parent-search').value = '';
+    document.getElementById('qa-parent-results').style.display = 'none';
+    document.getElementById('qa-parent-label').textContent = label;
+    document.getElementById('qa-parent-selected').style.display = 'flex';
+};
 
-    // Build company options - existing companies for this partner + all others + Independent
-    var partnerCoOptions = myAgents.map(function(a) {
-        var co = (_companiesRaw||[]).find(function(c){ return c.id === a.company_id; });
-        var label = co ? co.company_name : 'Independent';
-        return '<option value="' + a.id + '" data-type="existing">' + label + ' (existing)</option>';
+window.quickAddId = async function(personId, name) {
+
+    // ── STEP 1: COMPANY SELECTION ──────────────────────────
+    var myAgents = agentsRaw.filter(function(a){ return a.parent_agent_id === personId; });
+    var allCos = (_companiesRaw || []).slice().sort(function(a,b){ return a.company_name.localeCompare(b.company_name); });
+
+    var existingOpts = myAgents.map(function(a){
+        var co = allCos.find(function(c){ return c.id === a.company_id; });
+        return '<option value="EXISTING:' + a.id + '">' + (co ? co.company_name : 'Independent') + ' (existing)</option>';
     }).join('');
 
-    var otherCoOptions = (_companiesRaw||[])
-        .filter(function(c){ return !existingCompanyIds.includes(c.id); })
-        .sort(function(a,b){ return a.company_name.localeCompare(b.company_name); })
-        .map(function(c){ return '<option value="' + c.id + '" data-type="new-co">' + c.company_name + '</option>'; })
+    var existingCoIds = myAgents.map(function(a){ return a.company_id; }).filter(Boolean);
+    var otherOpts = allCos
+        .filter(function(c){ return !existingCoIds.includes(c.id); })
+        .map(function(c){ return '<option value="NEWCO:' + c.id + ':' + c.company_name.replace(/:/g,'') + '">' + c.company_name + '</option>'; })
         .join('');
 
-    var companyHtml = '<div style="text-align:left;">'
-        + '<p style="color:#475569;font-size:13px;margin-bottom:12px;">Select which company this new ID belongs to, or add as a new company/independent.</p>'
-        + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Company</label>'
-        + '<select id="qa-company" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:10px;">'
-        + (partnerCoOptions ? '<optgroup label="--- Existing Companies ---">' + partnerCoOptions + '</optgroup>' : '')
-        + '<optgroup label="--- Add to New Company ---">'
-        + otherCoOptions
-        + '</optgroup>'
-        + '<optgroup label="--- Other ---">'
-        + '<option value="__new__">+ Create New Company</option>'
-        + '<option value="__independent__">👤 Independent (no company)</option>'
-        + '</optgroup>'
-        + '</select>'
-        + '<div id="qa-new-co-wrap" style="display:none;">'
-        + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">New Company Name</label>'
-        + '<input id="qa-new-co-name" placeholder="Enter company name..." style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">'
-        + '</div>'
-        + '</div>';
-
-    var step1Result = await Swal.fire({
+    var step1 = await Swal.fire({
         title: 'Add ID to ' + name,
-        html: companyHtml,
+        html: '<div style="text-align:left;">'
+            + '<p style="color:#475569;font-size:13px;margin-bottom:12px;">Which company does this ID belong to?</p>'
+            + '<select id="qa-co-sel" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:10px;">'
+            + (existingOpts ? '<optgroup label="Existing companies for this partner">' + existingOpts + '</optgroup>' : '')
+            + '<optgroup label="Add to another company">' + otherOpts + '</optgroup>'
+            + '<optgroup label="Other">'
+            + '<option value="NEW:">+ Create New Company</option>'
+            + '<option value="INDEPENDENT:">👤 Individual / Independent</option>'
+            + '</optgroup>'
+            + '</select>'
+            + '<div id="qa-new-co-wrap" style="display:none;">'
+            + '<input id="qa-new-co-name" placeholder="New company name..." style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">'
+            + '</div>'
+            + '</div>',
         showCancelButton: true,
         confirmButtonColor: '#004990',
         confirmButtonText: 'Next: Add ID →',
         didOpen: function() {
-            document.getElementById('qa-company').addEventListener('change', function() {
-                var wrap = document.getElementById('qa-new-co-wrap');
-                wrap.style.display = this.value === '__new__' ? 'block' : 'none';
+            document.getElementById('qa-co-sel').addEventListener('change', function(){
+                document.getElementById('qa-new-co-wrap').style.display = this.value.startsWith('NEW:') ? 'block' : 'none';
             });
         },
         preConfirm: function() {
-            var sel = document.getElementById('qa-company');
-            var val = sel.value;
-            var type = sel.options[sel.selectedIndex].getAttribute('data-type');
-            if (val === '__new__') {
-                var newName = document.getElementById('qa-new-co-name').value.trim();
-                if (!newName) { Swal.showValidationMessage('Please enter a company name'); return false; }
-                return { type: 'new', name: newName, agentId: null };
-            } else if (val === '__independent__') {
-                return { type: 'independent', name: 'Independent', agentId: null };
-            } else if (type === 'existing') {
-                return { type: 'existing', agentId: val };
-            } else {
-                // New company from existing list
-                var coName = sel.options[sel.selectedIndex].text;
-                return { type: 'new-co', companyId: val, name: coName, agentId: null };
+            var val = document.getElementById('qa-co-sel').value;
+            if (val.startsWith('NEW:')) {
+                var nm = document.getElementById('qa-new-co-name').value.trim();
+                if (!nm) { Swal.showValidationMessage('Enter a company name'); return false; }
+                return { type:'new', name:nm, agentId:null, coId:null };
+            }
+            if (val.startsWith('INDEPENDENT:')) return { type:'independent', name:'Independent', agentId:null, coId:null };
+            if (val.startsWith('EXISTING:')) return { type:'existing', agentId:val.split(':')[1] };
+            if (val.startsWith('NEWCO:')) {
+                var parts = val.split(':');
+                return { type:'newco', coId:parts[1], name:parts[2], agentId:null };
             }
         }
     });
+    if (!step1.isConfirmed) return;
+    var coChoice = step1.value;
 
-    if (!step1Result.isConfirmed) return;
-    var coChoice = step1Result.value;
+    // ── STEP 2: ID LOOKUP + ENTRY ──────────────────────────
+    // Get existing IDs for this agent (for parent dropdown)
+    var agentIdForParent = coChoice.type === 'existing' ? coChoice.agentId : null;
+    var existingIdsForParent = agentIdForParent
+        ? identifiersRaw.filter(function(i){ return i.agent_id === agentIdForParent; })
+        : [];
 
-    // Step 2: ID details
-    var existingIds = identifiersRaw.filter(function(i){
-        if (coChoice.type === 'existing') return i.agent_id === coChoice.agentId;
-        return myAgents.some(function(a){ return a.id === i.agent_id; });
-    });
-
-    var parentOpts = existingIds.map(function(id){
-        return '<option value="' + id.id_string + '">' + id.id_string + (id.rev_share ? ' (' + id.rev_share + '% rev)' : '') + '</option>';
+    // Build parent opts from ALL identifiers (network lookup)
+    var parentOptsAll = identifiersRaw.slice(0, 200).map(function(id){
+        var ownerAgent = agentsRaw.find(function(a){ return a.id === id.agent_id; });
+        var ownerPerson = personsRaw.find(function(p){ return p.id === (ownerAgent ? ownerAgent.parent_agent_id : null); });
+        var label = id.id_string + (ownerPerson ? ' (' + ownerPerson.full_name + ')' : '');
+        return '<option value="' + id.id_string + '">' + label + '</option>';
     }).join('');
 
-    var idResult = await Swal.fire({
+    var step2 = await Swal.fire({
         title: 'Add Agent ID',
-        width: 480,
+        width: 520,
         html: '<div style="text-align:left;">'
-            + '<div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0369a1;">'
-            + '<b>Company:</b> ' + coChoice.name
-            + (existingIds.length ? ' &nbsp;·&nbsp; <b>' + existingIds.length + ' existing ID(s):</b> ' + existingIds.map(function(i){ return i.id_string; }).join(', ') : '')
+            + '<div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0369a1;"><b>Company:</b> ' + coChoice.name + '</div>'
+
+            // ID search
+            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Search Unassigned IDs</label>'
+            + '<div style="position:relative;margin-bottom:6px;">'
+            + '<input id="qa-id-search" type="number" placeholder="Type to search unassigned IDs..." style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">'
             + '</div>'
-            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Agent ID *</label>'
-            + '<input id="qa-id" type="number" placeholder="e.g. 33343" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;outline:none;margin-bottom:12px;letter-spacing:1px;">'
-            + '<div id="qa-id-check" style="font-size:11px;min-height:16px;margin-bottom:10px;"></div>'
+            + '<div id="qa-id-results" style="border:1px solid #e2e8f0;border-radius:8px;max-height:120px;overflow-y:auto;display:none;margin-bottom:6px;"></div>'
+            + '<div style="font-size:11px;color:#94a3b8;margin-bottom:12px;">Or enter manually if not in the list</div>'
+
             + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
+            + '<div><label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Agent ID *</label>'
+            + '<input id="qa-id-manual" type="number" placeholder="e.g. 33343" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;outline:none;">'
+            + '<div id="qa-id-check" style="font-size:11px;min-height:16px;margin-top:4px;"></div></div>'
             + '<div><label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Rev Share %</label>'
             + '<input id="qa-rev" type="number" placeholder="e.g. 50" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;"></div>'
-            + '<div><label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Parent ID (sub-tier)</label>'
-            + '<select id="qa-parent" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">'
-            + '<option value="">None (Main ID)</option>' + parentOpts
-            + '</select></div>'
             + '</div>'
+
+            // Parent ID - network-wide lookup
+            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Parent / Upline ID (sub-tier)</label>'
+            + '<input id="qa-parent-search" type="text" placeholder="Search any partner ID..." style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:4px;">'
+            + '<div id="qa-parent-results" style="border:1px solid #e2e8f0;border-radius:8px;max-height:100px;overflow-y:auto;display:none;margin-bottom:10px;"></div>'
+            + '<input type="hidden" id="qa-parent-val">'
+            + '<div id="qa-parent-selected" style="display:none;background:#f0f7ff;border-radius:8px;padding:6px 10px;font-size:12px;color:#004990;margin-bottom:10px;display:flex;justify-content:space-between;">'
+            + '<span id="qa-parent-label"></span><span onclick="document.getElementById('qa-parent-val').value='';document.getElementById('qa-parent-selected').style.display='none';document.getElementById('qa-parent-search').value='';" style="cursor:pointer;color:#94a3b8;">✕</span>'
+            + '</div>'
+
             + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;background:#fef3c7;padding:10px 12px;border-radius:8px;">'
-            + '<input type="checkbox" id="qa-prime" style="accent-color:#d97706;width:16px;height:16px;"> ⭐ Mark as Prime49'
-            + '</label>'
+            + '<input type="checkbox" id="qa-prime" style="accent-color:#d97706;width:16px;height:16px;"> ⭐ Mark as Prime49</label>'
             + '</div>',
         showCancelButton: true,
+        cancelButtonText: '← Back',
         confirmButtonColor: '#004990',
         confirmButtonText: 'Add ID',
         didOpen: function() {
-            document.getElementById('qa-id').addEventListener('input', function() {
+            // Unassigned ID search
+            var searchTimeout;
+            document.getElementById('qa-id-search').addEventListener('input', function(){
+                clearTimeout(searchTimeout);
+                var q = this.value.trim();
+                var resultsEl = document.getElementById('qa-id-results');
+                if (!q || q.length < 2) { resultsEl.style.display='none'; return; }
+                searchTimeout = setTimeout(function(){
+                    fetch('/api/partners', {method:'POST',headers:{'Content-Type':'application/json'},
+                        body:JSON.stringify({action:'get_orphan_ids', query:q, placeholder_uuid:'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be'})
+                    }).then(function(r){return r.json();}).then(function(res){
+                        if (!res.data || !res.data.length) {
+                            resultsEl.innerHTML='<div style="padding:10px;color:#94a3b8;font-size:12px;">No unassigned IDs found — enter manually below</div>';
+                            resultsEl.style.display='block'; return;
+                        }
+                        resultsEl.innerHTML = res.data.map(function(id){
+                            return '<div style="padding:10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-family:monospace;" '
+                                + 'onclick="document.getElementById('qa-id-manual').value='' + id.id_string + '';document.getElementById('qa-id-results').style.display='none';">'
+                                + id.id_string + '</div>';
+                        }).join('');
+                        resultsEl.style.display='block';
+                    });
+                }, 300);
+            });
+
+            // ID duplicate check
+            document.getElementById('qa-id-manual').addEventListener('input', function(){
                 var idStr = this.value.trim();
-                var checkEl = document.getElementById('qa-id-check');
-                if (!idStr || idStr.length < 3) { checkEl.innerHTML = ''; return; }
+                var el = document.getElementById('qa-id-check');
+                if (!idStr) { el.innerHTML=''; return; }
                 var exists = identifiersRaw.find(function(i){ return i.id_string === idStr; });
                 if (exists) {
                     var owner = agentsRaw.find(function(a){ return a.id === exists.agent_id; });
                     var person = personsRaw.find(function(p){ return p.id === (owner ? owner.parent_agent_id : null); });
-                    checkEl.innerHTML = '<span style="color:#ef4444;font-weight:700;">⚠️ ID ' + idStr + ' already exists' + (person ? ' — assigned to ' + person.full_name : '') + '</span>';
+                    el.innerHTML = '<span style="color:#ef4444;font-weight:700;">⚠️ Already assigned' + (person ? ' to ' + person.full_name : '') + '</span>';
                 } else {
-                    checkEl.innerHTML = '<span style="color:#10b981;font-weight:700;">✓ ID available</span>';
+                    el.innerHTML = '<span style="color:#10b981;font-weight:700;">✓ Available</span>';
                 }
+            });
+
+            // Parent ID network search
+            var parentTimeout;
+            document.getElementById('qa-parent-search').addEventListener('input', function(){
+                clearTimeout(parentTimeout);
+                var q = this.value.trim().toLowerCase();
+                var resultsEl = document.getElementById('qa-parent-results');
+                if (!q || q.length < 2) { resultsEl.style.display='none'; return; }
+                parentTimeout = setTimeout(function(){
+                    var matches = identifiersRaw.filter(function(i){
+                        return i.id_string.includes(q);
+                    }).slice(0, 15);
+                    if (!matches.length) { resultsEl.style.display='none'; return; }
+                    resultsEl.innerHTML = '';
+                    matches.forEach(function(id) {
+                        var ownerAgent = agentsRaw.find(function(a){ return a.id === id.agent_id; });
+                        var ownerPerson = personsRaw.find(function(p){ return p.id === (ownerAgent ? ownerAgent.parent_agent_id : null); });
+                        var div = document.createElement('div');
+                        div.style.cssText = 'padding:8px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12px;';
+                        div.onmouseover = function(){ this.style.background='#f0f7ff'; };
+                        div.onmouseout = function(){ this.style.background='white'; };
+                        div.setAttribute('data-id', id.id_string);
+                        div.setAttribute('data-label', id.id_string + (ownerPerson ? ' - ' + ownerPerson.full_name : ''));
+                        div.onclick = function(){ ppSelectParent(this); };
+                        div.innerHTML = '<b style="font-family:monospace;">' + id.id_string + '</b>'
+                            + (ownerPerson ? ' <span style="color:#94a3b8;">— ' + ownerPerson.full_name + '</span>' : '');
+                        resultsEl.appendChild(div);
+                    });
+                    resultsEl.style.display = 'block';
+                }, 200);
             });
         },
         preConfirm: function() {
-            var idStr = document.getElementById('qa-id').value.trim();
-            if (!idStr) { Swal.showValidationMessage('Please enter an agent ID'); return false; }
+            var idStr = document.getElementById('qa-id-manual').value.trim();
+            if (!idStr) { Swal.showValidationMessage('Please enter or select an agent ID'); return false; }
             return {
                 id_string: idStr,
                 rev_share: document.getElementById('qa-rev').value || null,
                 prime49: document.getElementById('qa-prime').checked,
-                parent_id_string: document.getElementById('qa-parent').value || null
+                parent_id_string: document.getElementById('qa-parent-val').value || null
             };
         }
     });
 
-    if (!idResult.isConfirmed) return;
-    var idForm = idResult.value;
+    // Handle Back button
+    if (!step2.isConfirmed) {
+        if (step2.dismiss === Swal.DismissReason.cancel) {
+            // Back — restart from step 1
+            window.quickAddId(personId, name);
+        }
+        return;
+    }
+    var idForm = step2.value;
 
-    // Submit
-    Swal.fire({ title: 'Adding ID...', didOpen: function(){ Swal.showLoading(); } });
+    // ── SUBMIT ─────────────────────────────────────────────
+    Swal.fire({ title:'Adding ID...', didOpen:function(){ Swal.showLoading(); } });
 
     var parentConfigId = null;
     if (idForm.parent_id_string) {
@@ -1623,27 +1696,26 @@ window.quickAddId = async function(personId, name) {
 
     var submitPayload = {
         action: 'complete_onboarding',
-        isQuickAdd: true,
-        identifiers: [{ string: idForm.id_string, rev: idForm.rev_share, prime: idForm.prime49, parent_config_id: parentConfigId }]
+        identifiers: [{ string:idForm.id_string, rev:idForm.rev_share, prime:idForm.prime49, parent_config_id:parentConfigId }]
     };
 
     if (coChoice.type === 'existing') {
+        submitPayload.isQuickAdd = true;
         submitPayload.existingAgentId = coChoice.agentId;
     } else {
-        // Need to create a new agent for this person under the chosen company
+        // Create new agent for existing person
         submitPayload.isQuickAdd = false;
-        submitPayload.person = { name: name, email: '', phone: '', hl_id: null };
-        submitPayload.company = coChoice.type === 'independent'
-            ? { isIndependent: true }
-            : coChoice.type === 'new'
-                ? { name: coChoice.name }
-                : { id: coChoice.companyId };
         submitPayload.isQuickAddNewAgent = true;
+        submitPayload.personName = name;
+        submitPayload.company = coChoice.type === 'independent'
+            ? { isIndependent:true }
+            : coChoice.type === 'new'
+                ? { name:coChoice.name }
+                : { id:coChoice.coId };
     }
 
     var res = await fetch('/api/partners', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify(submitPayload)
     });
     var result = await res.json();
@@ -1651,12 +1723,13 @@ window.quickAddId = async function(personId, name) {
     if (result.success) {
         await logAuditAction('ID Added', 'Added ID ' + idForm.id_string + ' to ' + name);
         await loadPartners();
-        Swal.fire({ icon: 'success', title: 'ID Added!', text: idForm.id_string + ' added to ' + name, timer: 2000, showConfirmButton: false });
+        Swal.fire({ icon:'success', title:'ID Added!', text:idForm.id_string + ' added to ' + name, timer:2000, showConfirmButton:false });
     } else {
-        Swal.fire({ icon: 'error', title: 'Failed', text: result.message || 'Could not add ID', confirmButtonColor: '#004990' });
+        Swal.fire({ icon:'error', title:'Failed', text:result.message || 'Could not add ID', confirmButtonColor:'#004990' });
     }
 };
- 
+
+
 
     // --- LOAD PARTNERS WITH STATS ---
     async function loadPartners() {
