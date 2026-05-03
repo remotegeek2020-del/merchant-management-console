@@ -232,7 +232,7 @@ function authApi(body) {
     return fetch('/api/partner-auth', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.assign({ token: token }, body))
+        body: JSON.stringify(body)
     }).then(function(r) { return r.json(); });
 }
 
@@ -293,11 +293,11 @@ function loadAgentIds(result) {
     var companies = result.companies || {};
 
     if (!identifiers.length) {
-        el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;">No agent IDs found.</div>';
+        el.innerHTML = '<div style="text-align:center;color:var(--muted);padding:20px;">No agent IDs assigned yet.</div>';
         return;
     }
 
-    // Group by company
+    // Group by company - companies map: agent_id (UUID) -> company_name
     var grouped = {};
     identifiers.forEach(function(id) {
         var coName = companies[id.agent_id] || 'Independent';
@@ -335,7 +335,6 @@ async function saveContactInfo() {
 
     var result = await api({
         action: 'update_profile',
-        partner_id: partnerId,
         full_name: name,
         phone_number: phone
     });
@@ -396,7 +395,8 @@ async function changePassword() {
         action: 'change_password',
         partner_id: partnerId,
         current_password: current,
-        new_password: newPass
+        new_password: newPass,
+        token: token
     });
 
     if (result.success) {
