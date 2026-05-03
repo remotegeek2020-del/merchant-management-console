@@ -1602,11 +1602,9 @@ function pAPI(body) {
 
 // Tab switcher - scoped to Swal modal to avoid duplicate ID issues
 window.ppSwitchTab = function(tab) {
-    var modal = document.querySelector('.swal2-popup');
-    if (!modal) return;
     ['ids','scorecard','notes'].forEach(function(t) {
-        var btn = modal.querySelector('#pptab-' + t);
-        var panel = modal.querySelector('#pppanel-' + t);
+        var btn = document.getElementById('pptab-' + t);
+        var panel = document.getElementById('pppanel-' + t);
         if (btn) {
             btn.style.background = t === tab ? 'white' : 'transparent';
             btn.style.color = t === tab ? '#004990' : '#64748b';
@@ -1618,9 +1616,8 @@ window.ppSwitchTab = function(tab) {
 
 // Submit a note
 window.ppSubmitNote = async function(personId) {
-    var modal = document.querySelector('.swal2-popup');
-    var input = modal ? modal.querySelector('#pp-note-input') : null;
-    var type = modal ? modal.querySelector('#pp-note-type') : null;
+    var input = document.getElementById('pp-note-input');
+    var type = document.getElementById('pp-note-type');
     var body = input ? input.value.trim() : '';
     if (!body) return;
     var staffId = localStorage.getItem('pp_userid') || '';
@@ -1643,8 +1640,7 @@ window.ppDeleteNote = async function(noteId, personId) {
 // Load notes into the modal
 function loadNotes(personId) {
     pAPI({action:'get_notes', person_id:personId}).then(function(result) {
-        var modal = document.querySelector('.swal2-popup');
-        var el = modal ? modal.querySelector('#pp-notes-list') : null;
+        var el = document.getElementById('pp-notes-list');
         if (!el) return;
         var notes = result.data || [];
         if (!notes.length) {
@@ -1674,8 +1670,7 @@ function loadNotes(personId) {
 // Load scorecard into the modal
 function loadScorecard(personId) {
     pAPI({action:'get_scorecard', person_id:personId}).then(function(result) {
-        var modal = document.querySelector('.swal2-popup');
-        var el = modal ? modal.querySelector('#pp-scorecard-content') : null;
+        var el = document.getElementById('pp-scorecard-content');
         if (!el) return;
         if (!result.success || !result.scorecard) {
             el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">No scorecard data available.</div>';
