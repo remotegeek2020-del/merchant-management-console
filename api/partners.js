@@ -313,6 +313,100 @@ if (action === 'complete_onboarding') {
             });
         }
 
+
+        // ── STAFF COMMUNITY FEED ──────────────────────────
+        if (action === 'get_community_feed') {
+            const { page = 0, category, mine_only, mine_id } = body;
+            const limit = 20;
+            let query = supabase.from('community_posts').select('*')
+                .order('created_at', { ascending: false })
+                .range(page * limit, (page + 1) * limit - 1);
+            if (category) query = query.eq('category', category);
+            if (mine_only && mine_id) query = query.eq('staff_author_id', mine_id);
+            const { data: posts, error: postsError } = await query;
+            if (postsError) return res.status(400).json({ success: false, message: postsError.message });
+            return res.status(200).json({ success: true, data: (posts||[]).map(p => ({ ...p, liked_by_me: false })) });
+        }
+
+        if (action === 'community_post') {
+            const { body: postBody, media_urls, media_types, post_type, category, staff_name, staff_id } = body;
+            if (!postBody && (!media_urls || !media_urls.length)) return res.status(400).json({ success: false, message: 'Post cannot be empty.' });
+            const { data, error } = await supabase.from('community_posts').insert({
+                author_id: staff_id || 'staff',
+                staff_author_id: staff_id,
+                author_name: (staff_name || 'Staff') + ' (Staff)',
+                body: postBody || '',
+                media_urls: media_urls || [],
+                media_types: media_types || [],
+                post_type: post_type || 'text',
+                category: category || 'general'
+            }).select().single();
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'community_delete') {
+            const { post_id, staff_id } = body;
+            const { data: post } = await supabase.from('community_posts').select('staff_author_id, author_id').eq('id', post_id).single();
+            if (!post || (post.staff_author_id !== staff_id && post.author_id !== staff_id)) {
+                return res.status(403).json({ success: false, message: 'Not authorized.' });
+            }
+            await supabase.from('community_posts').delete().eq('id', post_id);
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'community_like') {
+            const { post_id, staff_id } = body;
+            const { data: existing } = await supabase.from('post_likes').select('id').eq('post_id', post_id).eq('author_id', staff_id).maybeSingle();
+            const { data: post } = await supabase.from('community_posts').select('likes_count').eq('id', post_id).single();
+            const count = post?.likes_count || 0;
+            if (existing) {
+                await supabase.from('post_likes').delete().eq('id', existing.id);
+                await supabase.from('community_posts').update({ likes_count: Math.max(0, count - 1) }).eq('id', post_id);
+                return res.status(200).json({ success: true, liked: false, count: Math.max(0, count - 1) });
+            } else {
+                await supabase.from('post_likes').insert({ post_id, author_id: staff_id });
+                await supabase.from('community_posts').update({ likes_count: count + 1 }).eq('id', post_id);
+                return res.status(200).json({ success: true, liked: true, count: count + 1 });
+            }
+        }
+
+        if (action === 'community_comments') {
+            const { post_id } = body;
+            const { data } = await supabase.from('post_comments').select('*').eq('post_id', post_id).order('created_at', { ascending: true });
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'community_comment') {
+            const { post_id, body: commentBody, staff_name, staff_id } = body;
+            if (!commentBody?.trim()) return res.status(400).json({ success: false, message: 'Comment empty.' });
+            const { data, error } = await supabase.from('post_comments').insert({
+                post_id, author_id: staff_id || 'staff',
+                author_name: (staff_name || 'Staff') + ' (Staff)',
+                body: commentBody.trim()
+            }).select().single();
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            const { data: p } = await supabase.from('community_posts').select('comments_count').eq('id', post_id).single();
+            await supabase.from('community_posts').update({ comments_count: (p?.comments_count||0)+1 }).eq('id', post_id);
+            return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'community_upload') {
+            const { file_base64, file_name, content_type, staff_id } = body;
+            if (!file_base64) return res.status(400).json({ success: false, message: 'No file.' });
+            const buffer = Buffer.from(file_base64, 'base64');
+            const path = (staff_id || 'staff') + '/' + Date.now() + '_' + file_name;
+            const { error } = await supabase.storage.from('partner-media').upload(path, buffer, { contentType: content_type, upsert: true });
+            if (error) return res.status(400).json({ success: false, message: error.message });
+            const { data: urlData } = supabase.storage.from('partner-media').getPublicUrl(path);
+            return res.status(200).json({ success: true, url: urlData.publicUrl, type: content_type.startsWith('video') ? 'video' : 'image' });
+        }
+
+        if (action === 'community_members') {
+            const { data } = await supabase.from('persons').select('id, full_name').eq('is_portal_active', true).order('full_name').limit(50);
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
         // --- ACTION: SEARCH BY MID ---
 if (action === 'search_by_mid') {
     const { mid } = body;
