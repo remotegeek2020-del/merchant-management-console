@@ -190,8 +190,8 @@
 
 <script>
 var staffId = localStorage.getItem('pp_userid') || '';
-var staffName = (localStorage.getItem('pp_user_first_name') || '') + ' ' + (localStorage.getItem('pp_user_last_name') || '');
-staffName = staffName.trim() || 'Staff';
+var staffName = localStorage.getItem('pp_user_first_name') || '';
+if (!staffName) staffName = (staffId || 'Staff').split('@')[0];
 var pendingMedia = [], feedPage = 0, currentCategory = null, mineOnly = false;
 
 function initials(name) { return (name||'?').split(' ').map(function(w){return w[0];}).join('').toUpperCase().slice(0,2); }
@@ -267,7 +267,8 @@ var catStyles = { general:'background:#f1f5f9;color:#475569', partner_support:'b
 
 function buildPostCard(p) {
     var card = document.createElement('div'); card.className = 'post-card'; card.id = 'post-' + p.id;
-    var ini = initials(p.author_name);
+    var authorName = p.author_name && p.author_name !== 'undefined' && p.author_name !== 'undefined undefined' ? p.author_name : (p.staff_author_id ? 'Staff' : 'Partner');
+    var ini = initials(authorName);
     var isOwn = p.staff_author_id === staffId || p.author_id === staffId;
     var cat = p.category || 'general';
     var catStyle = catStyles[cat] || catStyles.general;
@@ -289,7 +290,7 @@ function buildPostCard(p) {
 
     card.innerHTML = '<div class="post-header">'
         + '<div class="post-avatar">' + ini + '</div>'
-        + '<div style="flex:1;"><div class="post-author">' + p.author_name
+        + '<div style="flex:1;"><div class="post-author">' + authorName
         + ' <span class="cat-badge" style="' + catStyle + '">' + catLabel + '</span></div>'
         + '<div class="post-time">' + timeAgo(p.created_at) + '</div></div>'
         + delBtn + '</div>'
