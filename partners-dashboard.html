@@ -1474,23 +1474,14 @@ window.quickAddId = async function(personId, name) {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.style.display = 'flex';
         try {
-            // Fetch partners list and stats in parallel
-            const [partnersRes, statsRes] = await Promise.all([
-                fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'get_partners_list' })
-                }),
-                fetch('/api/partners', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'get_all_stats' })
-                })
-            ]);
+            // Fetch partners list ONLY - stats load separately after render
+            const partnersRes = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_partners_list' })
+            });
 
             const partnersData = await partnersRes.json();
-            const statsData = await statsRes.json();
-
             if (!partnersData.success) throw new Error(partnersData.message);
 
             // Store raw data globally
@@ -1498,7 +1489,7 @@ window.quickAddId = async function(personId, name) {
             agentsRaw = partnersData.data.agents || [];
             identifiersRaw = partnersData.data.identifiers || [];
             const companiesRaw = partnersData.data.companies || [];
-            statsRaw = statsData.success ? statsData.data : []; // Store globally for filterByTrend
+            statsRaw = []; // Will load in background after render
 
             // Populate company dropdown in wizard
             const companySelect = document.getElementById('companySelect');
