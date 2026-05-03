@@ -1294,6 +1294,19 @@ async function submitOnboarding() {
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '900px', showConfirmButton: false, showCloseButton: true,
+            didOpen: function() {
+                // Attach tab click handlers after modal renders
+                var tabBar = document.getElementById('pp-tab-bar');
+                if (tabBar) {
+                    tabBar.addEventListener('click', function(e) {
+                        var btn = e.target.closest('button[data-tab]');
+                        if (btn) ppSwitchTab(btn.getAttribute('data-tab'));
+                    });
+                }
+                // Trigger data loads
+                loadScorecard(personId);
+                loadNotes(personId);
+            },
             html: `
                <div id="modal-content-container" style="text-align:left;">
     <div style="display: flex; justify-content:space-between; align-items:flex-start; border-bottom: 1px solid #e2e8f0; padding-bottom: 15px;">
@@ -1325,10 +1338,10 @@ async function submitOnboarding() {
                         </div>
                     </div>
                     <!-- TAB BAR -->
-                    <div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin:16px 0;">
-                        <button onclick="ppSwitchTab('ids')" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
-                        <button onclick="ppSwitchTab('scorecard')" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
-                        <button onclick="ppSwitchTab('notes')" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
+                    <div id="pp-tab-bar" style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin:16px 0;">
+                        <button data-tab="ids" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
+                        <button data-tab="scorecard" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
+                        <button data-tab="notes" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
                     </div>
 
                     <!-- IDS PANEL -->
@@ -1383,9 +1396,6 @@ async function submitOnboarding() {
             }
         } catch (err) { console.error("Error loading partner stats:", err); }
 
-        // Load scorecard and notes in background
-        loadScorecard(personId);
-        loadNotes(personId);
     };
 
     function getAllBranchIds(idObj, idList = []) {
