@@ -105,6 +105,155 @@ if (action === 'complete_onboarding') {
             return res.status(200).json({ success: true, data: data || [] });
         }
 
+        // --- ACTION: GET PARTNER NOTES ---
+        if (action === 'get_notes') {
+            const { person_id } = body;
+            const { data, error } = await supabase
+                .from('partner_notes')
+                .select('*')
+                .eq('person_id', person_id)
+                .order('is_pinned', { ascending: false })
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        // --- ACTION: ADD PARTNER NOTE ---
+        if (action === 'add_note') {
+            const { person_id, body: noteBody, note_type, author_id, author_name } = body;
+            if (!noteBody?.trim()) return res.status(400).json({ success: false, message: 'Note body required.' });
+            const { data, error } = await supabase.from('partner_notes').insert({
+                person_id, body: noteBody.trim(), note_type: note_type || 'general',
+                author_id, author_name
+            }).select().single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+        }
+
+        // --- ACTION: UPDATE PARTNER NOTE ---
+        if (action === 'update_note') {
+            const { note_id, body: noteBody, is_pinned } = body;
+            const updates = {};
+            if (noteBody !== undefined) updates.body = noteBody.trim();
+            if (is_pinned !== undefined) updates.is_pinned = is_pinned;
+            updates.updated_at = new Date().toISOString();
+            const { error } = await supabase.from('partner_notes').update(updates).eq('id', note_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: DELETE PARTNER NOTE ---
+        if (action === 'delete_note') {
+            const { note_id } = body;
+            const { error } = await supabase.from('partner_notes').delete().eq('id', note_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: GET PARTNER SCORECARD ---
+        if (action === 'get_scorecard') {
+            const { person_id } = body;
+
+            // Get all agents for this person
+            const { data: agents } = await supabase
+                .from('agents')
+                .select('id, company_id, companies:company_id(company_name)')
+                .eq('parent_agent_id', person_id);
+
+            if (!agents || agents.length === 0) {
+                return res.status(200).json({ success: true, scorecard: null });
+            }
+
+            const agentIds = agents.map(a => a.id);
+
+            // Get all identifiers
+            const { data: identifiers } = await supabase
+                .from('agent_identifiers')
+                .select('id, agent_id, id_string, rev_share, prime49')
+                .in('agent_id', agentIds);
+
+            const idStrings = (identifiers || []).map(i => i.id_string);
+
+            // Get stats for all IDs
+            const { data: stats } = await supabase
+                .from('merchant_stats_by_id')
+                .select('agent_id, merchant_count, total_volume_sum, total_volume_90d_sum, pending_count, closed_count, risk_count')
+                .in('agent_id', idStrings);
+
+            const statsMap = {};
+            (stats || []).forEach(s => { statsMap[s.agent_id] = s; });
+
+            // Get top merchants
+            const { data: topMerchants } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, agent_id, enrollment_date')
+                .in('agent_id', idStrings)
+                .eq('account_status', 'Approved')
+                .order('volume_30_day', { ascending: false })
+                .limit(10);
+
+            // Aggregate totals
+            let totalMerchants = 0, totalVolume30 = 0, totalVolume90 = 0;
+            let totalPending = 0, totalClosed = 0, totalRisk = 0;
+
+            const idBreakdown = (identifiers || []).map(id => {
+                const s = statsMap[id.id_string] || {};
+                const vol30 = parseFloat(s.total_volume_sum || 0);
+                const vol90 = parseFloat(s.total_volume_90d_sum || 0);
+                totalMerchants += parseInt(s.merchant_count || 0);
+                totalVolume30 += vol30;
+                totalVolume90 += vol90;
+                totalPending += parseInt(s.pending_count || 0);
+                totalClosed += parseInt(s.closed_count || 0);
+                totalRisk += parseInt(s.risk_count || 0);
+
+                const avg90Monthly = vol90 / 3;
+                const trend = vol30 > avg90Monthly * 1.05 ? 'growth' :
+                              vol30 < avg90Monthly * 0.95 ? 'risk' : 'stable';
+
+                return {
+                    id_string: id.id_string,
+                    rev_share: id.rev_share,
+                    prime49: id.prime49,
+                    merchant_count: s.merchant_count || 0,
+                    volume_30: vol30,
+                    volume_90: vol90,
+                    pending: s.pending_count || 0,
+                    closed: s.closed_count || 0,
+                    risk: s.risk_count || 0,
+                    trend
+                };
+            });
+
+            const avg90Monthly = totalVolume90 / 3;
+            const overallTrend = totalVolume30 > avg90Monthly * 1.05 ? 'growth' :
+                                 totalVolume30 < avg90Monthly * 0.95 ? 'risk' : 'stable';
+
+            // Get notes count
+            const { count: notesCount } = await supabase
+                .from('partner_notes')
+                .select('*', { count: 'exact', head: true })
+                .eq('person_id', person_id);
+
+            return res.status(200).json({
+                success: true,
+                scorecard: {
+                    totals: {
+                        merchants: totalMerchants,
+                        volume_30: totalVolume30,
+                        volume_90: totalVolume90,
+                        pending: totalPending,
+                        closed: totalClosed,
+                        at_risk: totalRisk,
+                        overall_trend: overallTrend,
+                        notes_count: notesCount || 0
+                    },
+                    id_breakdown: idBreakdown,
+                    top_merchants: topMerchants || []
+                }
+            });
+        }
+
         // --- ACTION: SEARCH BY MID ---
 if (action === 'search_by_mid') {
     const { mid } = body;
