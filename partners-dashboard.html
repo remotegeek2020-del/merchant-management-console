@@ -1296,58 +1296,75 @@ async function submitOnboarding() {
     }
 
     function buildDetailHtml(p, activatedDate, enrolledKey, hlLink) {
-        // Store values globally so onclick handlers can access them safely
         window._detailPerson = p;
         window._detailEnrolledKey = enrolledKey;
 
-        var html = '<div style="text-align:left;">';
+        var s = "";
 
-        // Contact header
-        html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:14px;">';
-        html += '<div style="display:flex;flex-direction:column;gap:6px;">';
-        html += '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;"><span class="material-icons" style="font-size:16px;">email</span>' + p.email + '<span class="material-icons" style="font-size:13px;color:#94a3b8;cursor:pointer;" onclick="editPersonField(window._detailPerson.id,&apos;email&apos;,window._detailPerson.email)">edit</span></div>';
-        html += '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;"><span class="material-icons" style="font-size:16px;">phone</span>' + p.phone + '<span class="material-icons" style="font-size:13px;color:#94a3b8;cursor:pointer;" onclick="editPersonField(window._detailPerson.id,&apos;phone_number&apos;,window._detailPerson.phone)">edit</span></div>';
-        html += '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:#475569;"><span class="material-icons" style="font-size:16px;">calendar_today</span><span>Activated: <b>' + activatedDate + '</b></span><span class="material-icons" style="font-size:13px;color:#94a3b8;cursor:pointer;" onclick="editEnrolledAt(window._detailPerson.id,window._detailEnrolledKey)">edit</span></div>';
-        if (hlLink) html += '<a href="' + hlLink + '" target="_blank" style="font-size:11px;color:#0369a1;font-weight:700;">VIEW IN HIGHLEVEL →</a>';
-        html += '</div>';
-        html += '<div style="text-align:right;"><div style="font-size:26px;font-weight:900;color:#002d5a;" id="main-total-vol">—</div><div style="font-size:11px;color:#64748b;" id="main-merch-count">Loading...</div></div>';
-        html += '</div>';
+        // Header
+        s += "<div style='text-align:left;'>";
+        s += "<div style='display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #e2e8f0;padding-bottom:14px;margin-bottom:14px;'>";
+        s += "<div style='display:flex;flex-direction:column;gap:6px;'>";
+        s += "<div style='font-size:13px;color:#475569;display:flex;align-items:center;gap:8px;'>";
+        s += "<span class='material-icons' style='font-size:16px;'>email</span>" + p.email;
+        s += "<span class='material-icons' style='font-size:13px;color:#94a3b8;cursor:pointer;' onclick="editPersonField(window._detailPerson.id,'email',window._detailPerson.email)">edit</span></div>";
+        s += "<div style='font-size:13px;color:#475569;display:flex;align-items:center;gap:8px;'>";
+        s += "<span class='material-icons' style='font-size:16px;'>phone</span>" + p.phone;
+        s += "<span class='material-icons' style='font-size:13px;color:#94a3b8;cursor:pointer;' onclick="editPersonField(window._detailPerson.id,'phone_number',window._detailPerson.phone)">edit</span></div>";
+        s += "<div style='font-size:13px;color:#475569;display:flex;align-items:center;gap:8px;'>";
+        s += "<span class='material-icons' style='font-size:16px;'>calendar_today</span>";
+        s += "<span>Activated: <b>" + activatedDate + "</b></span>";
+        s += "<span class='material-icons' style='font-size:13px;color:#94a3b8;cursor:pointer;' onclick="editEnrolledAt(window._detailPerson.id,window._detailEnrolledKey)">edit</span></div>";
+        if (hlLink) s += "<a href='" + hlLink + "' target='_blank' style='font-size:11px;color:#0369a1;font-weight:700;'>VIEW IN HIGHLEVEL →</a>";
+        s += "</div>";
+        s += "<div style='text-align:right;'><div style='font-size:26px;font-weight:900;color:#002d5a;' id='main-total-vol'>—</div>";
+        s += "<div style='font-size:11px;color:#64748b;' id='main-merch-count'>Loading...</div></div>";
+        s += "</div>";
 
         // Tabs
-        html += '<div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;">';
-        html += '<button id="tab-overview" onclick="switchDetailTab('overview')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;font-family:'DM Sans',sans-serif;box-shadow:0 1px 3px rgba(0,0,0,0.08);">🏷️ Agent IDs</button>';
-        html += '<button id="tab-scorecard" onclick="switchDetailTab('scorecard')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:'DM Sans',sans-serif;">📊 Scorecard</button>';
-        html += '<button id="tab-notes" onclick="switchDetailTab('notes')" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:'DM Sans',sans-serif;">📝 Notes</button>';
-        html += '</div>';
+        s += "<div style='display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;'>";
+        s += "<button id='tab-overview' onclick="switchDetailTab('overview')" style='flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;font-family:DM Sans,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,0.08);'>🏷️ Agent IDs</button>";
+        s += "<button id='tab-scorecard' onclick="switchDetailTab('scorecard')" style='flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:DM Sans,sans-serif;'>📊 Scorecard</button>";
+        s += "<button id='tab-notes' onclick="switchDetailTab('notes')" style='flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:DM Sans,sans-serif;'>📝 Notes</button>";
+        s += "</div>";
 
         // Overview panel
-        html += '<div id="panel-overview">';
-        html += '<div style="background:#f8fafc;padding:15px;border-radius:12px;max-height:420px;overflow-y:auto;border:1px solid #f1f5f9;">';
+        s += "<div id='panel-overview'>";
+        s += "<div style='background:#f8fafc;padding:15px;border-radius:12px;max-height:420px;overflow-y:auto;border:1px solid #f1f5f9;'>";
         p.companies.forEach(function(co) {
-            html += '<div style="margin-bottom:20px;"><b style="color:#94a3b8;font-size:10px;text-transform:uppercase;">' + co.name + '</b><div style="margin-top:5px;">';
-            co.ids.forEach(function(id) { html += renderBadge(id, true); });
-            html += '</div></div>';
+            s += "<div style='margin-bottom:20px;'><b style='color:#94a3b8;font-size:10px;text-transform:uppercase;'>" + co.name + "</b><div style='margin-top:5px;'>";
+            co.ids.forEach(function(id) { s += renderBadge(id, true); });
+            s += "</div></div>";
         });
-        html += '</div></div>';
+        s += "</div></div>";
 
         // Scorecard panel
-        html += '<div id="panel-scorecard" style="display:none;"><div id="scorecard-content" style="min-height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading scorecard...</div></div>';
+        s += "<div id='panel-scorecard' style='display:none;'>";
+        s += "<div id='scorecard-content' style='min-height:200px;display:flex;align-items:center;justify-content:center;color:#94a3b8;'>Loading scorecard...</div>";
+        s += "</div>";
 
         // Notes panel
-        html += '<div id="panel-notes" style="display:none;">';
-        html += '<div style="display:flex;gap:8px;margin-bottom:12px;">';
-        html += '<select id="note-type-sel" style="padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;"><option value="general">💬 General</option><option value="call">📞 Call Log</option><option value="follow_up">🔔 Follow-up</option><option value="win">🏆 Win</option><option value="issue">⚠️ Issue</option></select>';
-        html += '<input id="note-input" placeholder="Add a note about this partner..." style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;" onkeydown="if(event.key==='Enter')submitNote(window._detailPerson.id)">';
-        html += '<button onclick="submitNote(window._detailPerson.id)" style="padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;font-size:12px;">Post</button>';
-        html += '</div>';
-        html += '<div id="notes-list" style="max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;"><div style="text-align:center;color:#94a3b8;padding:20px;font-size:13px;">Loading notes...</div></div>';
-        html += '</div>';
+        s += "<div id='panel-notes' style='display:none;'>";
+        s += "<div style='display:flex;gap:8px;margin-bottom:12px;'>";
+        s += "<select id='note-type-sel' style='padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;'>";
+        s += "<option value='general'>💬 General</option>";
+        s += "<option value='call'>📞 Call Log</option>";
+        s += "<option value='follow_up'>🔔 Follow-up</option>";
+        s += "<option value='win'>🏆 Win</option>";
+        s += "<option value='issue'>⚠️ Issue</option>";
+        s += "</select>";
+        s += "<input id='note-input' placeholder='Add a note...' style='flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;' onkeydown="if(event.key==='Enter')submitNote(window._detailPerson.id)">";
+        s += "<button onclick='submitNote(window._detailPerson.id)' style='padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;'>Post</button>";
+        s += "</div>";
+        s += "<div id='notes-list' style='max-height:380px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;'>";
+        s += "<div style='text-align:center;color:#94a3b8;padding:20px;'>Loading notes...</div>";
+        s += "</div></div>";
 
-        html += '</div>';
-        return html;
+        s += "</div>";
+        return s;
     }
 
-    window.openPartnerDetails = async function(personId) {
+        window.openPartnerDetails = async function(personId) {
         const p = allPartners.find(function(ptr){ return ptr.id === personId; });
         if (!p) return;
         let branchIdStrings = [];
