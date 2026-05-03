@@ -296,7 +296,7 @@ input[type=number] {
         <input type="date" id="partnerActivationDate" class="wizard-input" style="font-family:'DM Sans',sans-serif;">
         <div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div>
     </div>
-    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput()">
+    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput();">
         <option value="none">Independent (Individual Partner)</option>
         <option value="new">+ Create New Company...</option>
         </select>
@@ -349,7 +349,7 @@ input[type=number] {
     let allPartners = [];
     let identifiersRaw = [];
     let agentsRaw = [];
-    let personsRaw = [];
+    let personsRaw = [], partnersData_companiesRaw = [];
     let statsRaw = []; // ✅ Global stats for trend calculation
     let currentPage = 1;
     const cardsPerPage = 12; 
@@ -870,13 +870,13 @@ async function submitOnboarding() {
         }
 
         const companyVal = document.getElementById('companySelect').value;
-        const _activationDate = document.getElementById('partnerActivationDate');
+        var _ad = document.getElementById('partnerActivationDate');
         payload.person = {
             name: selectedGHLContact.name,
             email: selectedGHLContact.email,
             phone: selectedGHLContact.phone,
             hl_id: selectedGHLContact.id,
-            enrolled_at: (_activationDate && _activationDate.value) ? new Date(_activationDate.value).toISOString() : new Date().toISOString()
+            enrolled_at: (_ad && _ad.value) ? new Date(_ad.value).toISOString() : new Date().toISOString()
         };
         payload.company = {
             id: (companyVal === 'new' || companyVal === 'none') ? null : companyVal,
@@ -924,6 +924,8 @@ async function submitOnboarding() {
     document.getElementById('onboardingWizard').classList.add('active');
     renderIdList();
     loadWizardCompanies();
+    var _df2 = document.getElementById('partnerActivationDate');
+    if (_df2 && !_df2.value) _df2.value = new Date().toISOString().split('T')[0];
     goToStep(1); // Start at the beginning
 }
 
@@ -1268,7 +1270,7 @@ async function submitOnboarding() {
     }
 
     async function downloadSingleIdExport(idString) {
-        Swal.fire({ title: 'Preparing Export...', html: 'Fetching all merchants for ID <b>' + idString + '</b>...', didOpen: () => Swal.showLoading() });
+        Swal.fire({ title: 'Preparing Scalable Export...', text: 'Fetching all records...', didOpen: () => Swal.showLoading() });
         try {
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -1276,79 +1278,21 @@ async function submitOnboarding() {
                 body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idString })
             });
             const result = await res.json();
-            if (result.success && result.data && result.data.length > 0) {
+            if (result.success && result.data.length > 0) {
                 const merchants = result.data;
-                const approved = merchants.filter(m => m.account_status === 'Approved');
-                const totalVol30 = merchants.reduce((s, m) => s + (parseFloat(m.volume_30_day) || 0), 0);
-                const totalVol90 = merchants.reduce((s, m) => s + (parseFloat(m.volume_90_day) || 0), 0);
-                const totalVolMTD = merchants.reduce((s, m) => s + (parseFloat(m.volume_mtd) || 0), 0);
-
-                const esc = v => '"' + String(v || '').replace(/"/g, '""') + '"';
-                const fmt = v => parseFloat(v || 0).toFixed(2);
-
-                // Summary header rows
-                let csv = 'Agent ID Export,' + idString + '
-';
-                csv += 'Total Merchants,' + merchants.length + '
-';
-                csv += 'Approved Merchants,' + approved.length + '
-';
-                csv += 'Total MTD Volume,$' + fmt(totalVolMTD) + '
-';
-                csv += 'Total 30-Day Volume,$' + fmt(totalVol30) + '
-';
-                csv += 'Total 90-Day Volume,$' + fmt(totalVol90) + '
-';
-                csv += 'Export Date,' + new Date().toLocaleDateString() + '
-
-';
-
-                // Column headers
-                csv += 'Merchant ID,DBA Name,Status,City,State,Phone,Email,Enrolled Date,Last Batch,MTD Volume,30D Volume,90D Volume
-';
-
-                // Data rows
-                merchants.forEach(m => {
-                    csv += [
-                        esc(m.merchant_id),
-                        esc(m.dba_name),
-                        esc(m.account_status),
-                        esc(m.merchant_city),
-                        esc(m.merchant_state),
-                        esc(m.merchant_phone),
-                        esc(m.email),
-                        esc(m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : ''),
-                        esc(m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : ''),
-                        fmt(m.volume_mtd),
-                        fmt(m.volume_30_day),
-                        fmt(m.volume_90_day)
-                    ].join(',') + '
-';
-                });
-
+                const totalVol = merchants.reduce((sum, m) => sum + (parseFloat(m.volume_30_day) || 0), 0);
+                const avgVol = totalVol / merchants.length;
+                let csv = `Summary for ID: ${idString}\nTotal Approved Merchants,${merchants.length}\nTotal 30-Day Volume,$${totalVol.toFixed(2)}\nAverage Volume,$${avgVol.toFixed(2)}\n\nMerchant ID,DBA Name,Status,Volume 30D\n`;
+                merchants.forEach(m => { csv += `${m.merchant_id},"${m.dba_name.replace(/"/g, '""')}",${m.account_status},${m.volume_30_day || 0}\n`; });
                 const blob = new Blob([csv], { type: 'text/csv' });
                 const url = window.URL.createObjectURL(blob);
                 const a = document.createElement('a');
-                a.href = url;
-                a.download = 'Export_ID_' + idString + '_' + new Date().toISOString().split('T')[0] + '.csv';
-                document.body.appendChild(a);
+                a.setAttribute('href', url);
+                a.setAttribute('download', `Export_ID_${idString}.csv`);
                 a.click();
-                document.body.removeChild(a);
-                setTimeout(() => window.URL.revokeObjectURL(url), 100);
-
-                Swal.fire({
-                    icon: 'success',
-                    title: 'Export Complete',
-                    html: '<b>' + merchants.length + '</b> merchants exported for ID <b>' + idString + '</b>',
-                    timer: 2500,
-                    showConfirmButton: false
-                });
-            } else {
-                Swal.fire('No Data', 'No merchants found for agent ID ' + idString, 'info');
-            }
-        } catch (err) {
-            Swal.fire('Error', 'Failed to generate export: ' + err.message, 'error');
-        }
+                Swal.close();
+            } else { Swal.fire('No Data', 'No approved merchants found.', 'info'); }
+        } catch (err) { Swal.fire('Error', 'Failed to generate export.', 'error'); }
     }
 
     window.openPartnerDetails = async function(personId) {
@@ -1529,7 +1473,7 @@ window.quickAddId = async function(personId, name) {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.style.display = 'flex';
         try {
-            // Fetch partners list first, stats load separately after
+            // Fetch partners list first - stats load in background after render
             const partnersRes = await fetch('/api/partners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -1545,7 +1489,7 @@ window.quickAddId = async function(personId, name) {
             identifiersRaw = partnersData.data.identifiers || [];
             partnersData_companiesRaw = partnersData.data.companies || [];
             const companiesRaw = partnersData_companiesRaw;
-            statsRaw = []; // loads in background after render
+            statsRaw = [];
 
             // Populate company dropdown in wizard
             const companySelect = document.getElementById('companySelect');
@@ -1570,8 +1514,6 @@ window.quickAddId = async function(personId, name) {
 
             currentPage = 1;
             renderGrid();
-
-            // Load stats in background AFTER partners are visible
             loadStatsBackground();
 
         } catch (err) {
@@ -1586,67 +1528,79 @@ window.quickAddId = async function(personId, name) {
 
     async function loadStatsBackground() {
         try {
-            const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'get_all_stats' })
-            });
+            const res = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_all_stats' }) });
             const result = await res.json();
             if (result.success && result.data.length) {
                 statsRaw = result.data;
-                // Rebuild allPartners with stats so filterByTrend works
-                allPartners = processPartnerData({
-                    persons: personsRaw, agents: agentsRaw,
-                    identifiers: identifiersRaw,
-                    companies: (partnersData_companiesRaw || []),
-                    stats: statsRaw
-                });
-                console.log('[Partners] Stats loaded -', statsRaw.length, 'rows. Trend filters ready.');
+                allPartners = processPartnerData({ persons: personsRaw, agents: agentsRaw, identifiers: identifiersRaw, companies: partnersData_companiesRaw, stats: statsRaw });
+                console.log('[Partners] Stats ready - trend filters active');
             }
-        } catch(e) {
-            console.warn('[Partners] Stats load failed silently:', e.message);
-        }
+        } catch(e) { console.warn('[Partners] Stats load failed:', e.message); }
     }
 
     async function sendPortalInvite(personId, name, email) {
         if (!email || email === 'No email provided') {
             return Swal.fire({ icon:'warning', title:'No email', text: name + ' has no email on file.', confirmButtonColor:'#0d9488' });
         }
-        const { isConfirmed } = await Swal.fire({
-            title: 'Invite ' + name + '?',
-            html: '<p>An email will be sent to <b>' + email + '</b> to set up their portal account.</p>',
-            icon:'question', showCancelButton:true, confirmButtonColor:'#0d9488', confirmButtonText:'Send Invite'
-        });
-        if (!isConfirmed) return;
-        Swal.fire({ title:'Sending...', didOpen:()=>Swal.showLoading() });
+        var confirmed = await Swal.fire({ title:'Invite ' + name + '?', html:'<p>Setup email will be sent to <b>' + email + '</b></p>', icon:'question', showCancelButton:true, confirmButtonColor:'#0d9488', confirmButtonText:'Send Invite' });
+        if (!confirmed.isConfirmed) return;
+        Swal.fire({ title:'Sending...', didOpen: function(){ Swal.showLoading(); } });
         try {
-            const res = await fetch('/api/partner-auth', {
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ action:'send_invite', person_id: personId })
-            });
-            const result = await res.json();
+            var res = await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'send_invite', person_id: personId }) });
+            var result = await res.json();
             if (result.success) {
-                Swal.fire({ icon:'success', title:'Invite Sent!',
-                    html:'<p><b>'+name+'</b> will receive setup email at <b>'+email+'</b>.</p>' +
-                         (result.invite_url ? '<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link:</b><br>'+result.invite_url+'</div>' : ''),
-                    confirmButtonColor:'#0d9488' });
+                Swal.fire({ icon:'success', title:'Invite Sent!', html:'<p>Email sent to <b>' + email + '</b></p>' + (result.invite_url ? '<div style="background:#f0fdfa;border-radius:8px;padding:10px;margin-top:10px;font-size:11px;word-break:break-all;"><b>Direct link:</b><br>' + result.invite_url + '</div>' : ''), confirmButtonColor:'#0d9488' });
                 loadPartners();
             } else { throw new Error(result.message); }
-        } catch(err) { Swal.fire({ icon:'error', title:'Failed', text:err.message, confirmButtonColor:'#0d9488' }); }
+        } catch(err) { Swal.fire({ icon:'error', title:'Failed', text: err.message, confirmButtonColor:'#0d9488' }); }
     }
 
     window.editEnrolledAt = async function(personId, currentDate) {
-        const { value: newDate } = await Swal.fire({
-            title: 'Partner Activation Date',
-            html: '<input type="date" id="enrollDate" value="' + currentDate + '" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;">',
-            showCancelButton:true, confirmButtonColor:'#004990', confirmButtonText:'Save',
-            preConfirm: () => document.getElementById('enrollDate').value
-        });
-        if (newDate) {
-            await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({ action:'update_person_field', id:personId, field:'enrolled_at', value:new Date(newDate).toISOString() }) });
+        var result = await Swal.fire({ title:'Partner Activation Date', html:'<input type="date" id="enrollDate" value="' + currentDate + '" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;">', showCancelButton:true, confirmButtonColor:'#004990', confirmButtonText:'Save', preConfirm: function() { return document.getElementById('enrollDate').value; } });
+        if (result.value) {
+            await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'update_person_field', id: personId, field:'enrolled_at', value: new Date(result.value).toISOString() }) });
             loadPartners();
         }
+    };
+
+    // Fix CSV export - no backticks, safe string building
+    window.downloadSingleIdExport = async function(idString) {
+        Swal.fire({ title:'Preparing Export...', html:'Fetching all merchants for ID <b>' + idString + '</b>...', didOpen: function(){ Swal.showLoading(); } });
+        try {
+            var res = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_merchant_data_raw', identifier_id: idString }) });
+            var result = await res.json();
+            if (result.success && result.data && result.data.length > 0) {
+                var merchants = result.data;
+                var approved = merchants.filter(function(m){ return m.account_status === 'Approved'; });
+                var totalVol30 = merchants.reduce(function(s,m){ return s + (parseFloat(m.volume_30_day)||0); }, 0);
+                var totalVol90 = merchants.reduce(function(s,m){ return s + (parseFloat(m.volume_90_day)||0); }, 0);
+                var totalVolMTD = merchants.reduce(function(s,m){ return s + (parseFloat(m.volume_mtd)||0); }, 0);
+                var NL = String.fromCharCode(10);
+                var esc = function(v){ return '"' + String(v||'').replace(/"/g,'""') + '"'; };
+                var fmt = function(v){ return parseFloat(v||0).toFixed(2); };
+                var rows = [];
+                rows.push('Agent ID Export,' + idString);
+                rows.push('Total Merchants,' + merchants.length);
+                rows.push('Approved,' + approved.length);
+                rows.push('MTD Volume,$' + fmt(totalVolMTD));
+                rows.push('30D Volume,$' + fmt(totalVol30));
+                rows.push('90D Volume,$' + fmt(totalVol90));
+                rows.push('Export Date,' + new Date().toLocaleDateString());
+                rows.push('');
+                rows.push('Merchant ID,DBA Name,Status,City,State,Phone,Email,Enrolled,Last Batch,MTD Vol,30D Vol,90D Vol');
+                merchants.forEach(function(m){
+                    rows.push([esc(m.merchant_id),esc(m.dba_name),esc(m.account_status),esc(m.merchant_city),esc(m.merchant_state),esc(m.merchant_phone),esc(m.email),esc(m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : ''),esc(m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : ''),fmt(m.volume_mtd),fmt(m.volume_30_day),fmt(m.volume_90_day)].join(','));
+                });
+                var csv = rows.join(NL);
+                var blob = new Blob([csv], { type:'text/csv' });
+                var url = window.URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = url; a.download = 'Export_ID_' + idString + '_' + new Date().toISOString().split('T')[0] + '.csv';
+                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                setTimeout(function(){ window.URL.revokeObjectURL(url); }, 100);
+                Swal.fire({ icon:'success', title:'Export Complete', html:'<b>' + merchants.length + '</b> merchants exported', timer:2000, showConfirmButton:false });
+            } else { Swal.fire('No Data', 'No merchants found for ID ' + idString, 'info'); }
+        } catch(err) { Swal.fire('Error', 'Export failed: ' + err.message, 'error'); }
     };
 
     window.addEventListener('load', loadPartners);
