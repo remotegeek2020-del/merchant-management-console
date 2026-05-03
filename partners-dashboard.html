@@ -447,7 +447,7 @@ async function logAuditAction(action, details) {
         myAgents.forEach(agent => {
             const co = companies.find(c => c.id === agent.company_id);
             const coName = co ? co.company_name : "Independent";
-            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
+            const myIds = identifiers.filter(i => i.agent_id === agent.id);
             
             if (myIds.length > 0) {
                 if (!groups[coName]) groups[coName] = [];
