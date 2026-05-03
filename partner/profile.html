@@ -223,8 +223,8 @@ if (!token || !partnerId) window.location.href = '/partner';
 function api(body) {
     return fetch('/api/partner-data', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-        body: JSON.stringify(body)
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ token: token }, body))
     }).then(function(r) { return r.json(); });
 }
 
@@ -248,7 +248,7 @@ async function init() {
     document.getElementById('displayName').textContent = partnerName;
 
     // Load profile data
-    var result = await api({ action: 'get_dashboard', partner_id: partnerId });
+    var result = await api({ action: 'get_dashboard' });
     if (!result.success) {
         if (result.message === 'Invalid or expired token') {
             localStorage.clear();
