@@ -120,6 +120,28 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, invite_url: inviteUrl });
         }
 
+        // ── VERIFY INVITE TOKEN (check token is valid before showing form) ──
+        if (action === 'verify_invite_token') {
+            const { token } = req.body;
+            if (!token) return res.status(400).json({ success: false, message: 'No token provided.' });
+
+            const { data: person } = await supabase
+                .from('persons')
+                .select('id, full_name, invite_expires_at, portal_password_set')
+                .eq('portal_invite_token', token)
+                .single();
+
+            if (!person) return res.status(400).json({ success: false, message: 'This invite link is invalid or has already been used.' });
+            if (new Date(person.invite_expires_at) < new Date()) {
+                return res.status(400).json({ success: false, message: 'This invite link has expired (72 hours). Please contact your PayProTec representative for a new one.' });
+            }
+            if (person.portal_password_set) {
+                return res.status(400).json({ success: false, message: 'This invite link has already been used. Please sign in at the login page.' });
+            }
+
+            return res.status(200).json({ success: true, name: person.full_name });
+        }
+
         if (action === 'setup_password') {
             const { token, password } = req.body;
             if (!token || !password) return res.status(400).json({ success: false, message: 'Missing token or password.' });
@@ -130,6 +152,44 @@ export default async function handler(req, res) {
             await supabase.from('persons').update({ password_hash: hashPassword(password), portal_password_set: true, portal_invite_token: null, invite_expires_at: null, is_portal_active: true }).eq('id', person.id);
             const sessionToken = await createSession(person.id, req);
             return res.status(200).json({ success: true, token: sessionToken, partner: { id: person.id, name: person.full_name, email: person.email } });
+        }
+
+        if (action === 'change_password') {
+            const { partner_id, current_password, new_password } = body;
+            if (!partner_id || !current_password || !new_password) {
+                return res.status(400).json({ success: false, message: 'Missing required fields.' });
+            }
+
+            // Get current hash
+            const { data: person, error: fetchErr } = await supabase
+                .from('persons')
+                .select('password_hash')
+                .eq('id', partner_id)
+                .single();
+
+            if (fetchErr || !person) {
+                return res.status(400).json({ success: false, message: 'Partner not found.' });
+            }
+
+            // Verify current password
+            const crypto = await import('crypto');
+            const salt = process.env.PARTNER_SALT || 'payprotec_salt';
+            const currentHash = crypto.createHash('sha256').update(current_password + salt).digest('hex');
+
+            if (currentHash !== person.password_hash) {
+                return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
+            }
+
+            // Hash new password
+            const newHash = crypto.createHash('sha256').update(new_password + salt).digest('hex');
+
+            const { error: updateErr } = await supabase
+                .from('persons')
+                .update({ password_hash: newHash, portal_password_set: true })
+                .eq('id', partner_id);
+
+            if (updateErr) return res.status(400).json({ success: false, message: updateErr.message });
+            return res.status(200).json({ success: true });
         }
 
         if (action === 'forgot_password') {
