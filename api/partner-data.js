@@ -417,14 +417,17 @@ export default async function handler(req, res) {
 
         // ── COMMUNITY FEED ─────────────────────────────────
         if (action === 'get_feed') {
-            const { page = 0 } = req.body;
+            const { page = 0, author_only = false, category = null } = req.body;
             const limit = 20;
-            const { data: posts } = await supabase
+            let query = supabase
                 .from('community_posts')
                 .select('*')
                 .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
+            if (author_only) query = query.eq('author_id', personId);
+            if (category) query = query.eq('category', category);
+            const { data: posts } = await query;
 
             // Get likes for current user
             const postIds = (posts || []).map(p => p.id);
@@ -440,7 +443,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'create_post') {
-            const { body: postBody, media_urls, media_types, post_type } = req.body;
+            const { body: postBody, media_urls, media_types, post_type, category } = req.body;
             if (!postBody && (!media_urls || !media_urls.length)) {
                 return res.status(400).json({ success: false, message: 'Post cannot be empty.' });
             }
@@ -451,7 +454,8 @@ export default async function handler(req, res) {
                 body: postBody || '',
                 media_urls: media_urls || [],
                 media_types: media_types || [],
-                post_type: post_type || 'text'
+                post_type: post_type || 'text',
+                category: category || 'general'
             }).select().single();
             if (error) return res.status(400).json({ success: false, message: error.message });
             return res.status(200).json({ success: true, data });
