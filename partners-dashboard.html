@@ -1485,7 +1485,8 @@ window.quickAddId = async function(personId, name) {
             personsRaw = partnersData.data.persons || [];
             agentsRaw = partnersData.data.agents || [];
             identifiersRaw = partnersData.data.identifiers || [];
-            const companiesRaw = partnersData.data.companies || [];
+            partnersData_companiesRaw = partnersData.data.companies || [];
+            const companiesRaw = partnersData_companiesRaw;
             statsRaw = []; // loads in background after render
 
             // Populate company dropdown in wizard
@@ -1512,6 +1513,9 @@ window.quickAddId = async function(personId, name) {
             currentPage = 1;
             renderGrid();
 
+            // Load stats in background AFTER partners are visible
+            loadStatsBackground();
+
         } catch (err) {
             console.error("Failed to load partners:", err);
             document.getElementById('partnerGrid').innerHTML = 
@@ -1519,6 +1523,30 @@ window.quickAddId = async function(personId, name) {
         } finally {
             // Always hide the loader whether success or error
             if (loader) loader.style.display = 'none';
+        }
+    }
+
+    async function loadStatsBackground() {
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_all_stats' })
+            });
+            const result = await res.json();
+            if (result.success && result.data.length) {
+                statsRaw = result.data;
+                // Rebuild allPartners with stats so filterByTrend works
+                allPartners = processPartnerData({
+                    persons: personsRaw, agents: agentsRaw,
+                    identifiers: identifiersRaw,
+                    companies: (partnersData_companiesRaw || []),
+                    stats: statsRaw
+                });
+                console.log('[Partners] Stats loaded -', statsRaw.length, 'rows. Trend filters ready.');
+            }
+        } catch(e) {
+            console.warn('[Partners] Stats load failed silently:', e.message);
         }
     }
 
