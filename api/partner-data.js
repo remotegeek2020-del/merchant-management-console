@@ -422,6 +422,7 @@ export default async function handler(req, res) {
             let query = supabase
                 .from('community_posts')
                 .select('*')
+                .eq('is_deleted', false)
                 .order('is_pinned', { ascending: false })
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
@@ -448,9 +449,11 @@ export default async function handler(req, res) {
                 return res.status(400).json({ success: false, message: 'Post cannot be empty.' });
             }
             const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).single();
+            const authorName = person?.full_name || 'Partner';
             const { data, error } = await supabase.from('community_posts').insert({
                 author_id: personId,
-                author_name: person?.full_name || 'Partner',
+                author_type: 'partner',
+                author_name: authorName,
                 body: postBody || '',
                 media_urls: media_urls || [],
                 media_types: media_types || [],
@@ -458,7 +461,7 @@ export default async function handler(req, res) {
                 category: category || 'general'
             }).select().single();
             if (error) return res.status(400).json({ success: false, message: error.message });
-            return res.status(200).json({ success: true, data });
+            return res.status(200).json({ success: true, data: { ...data, author_name: authorName } });
         }
 
         if (action === 'delete_post') {
