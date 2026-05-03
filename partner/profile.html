@@ -403,7 +403,22 @@ function escapeHtml(str) {
 }
 
 function openLightbox(url) {
-    Swal.fire({ imageUrl:url, imageAlt:'Post image', showConfirmButton:false, showCloseButton:true, width:'auto' });
+    var overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;display:flex;align-items:center;justify-content:center;cursor:zoom-out;';
+    var img = document.createElement('img');
+    img.src = url;
+    img.style.cssText = 'max-width:95vw;max-height:95vh;object-fit:contain;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,0.5);';
+    var close = document.createElement('button');
+    close.innerHTML = '&times;';
+    close.style.cssText = 'position:fixed;top:20px;right:24px;background:none;border:none;color:white;font-size:36px;cursor:pointer;z-index:10000;line-height:1;opacity:0.8;';
+    close.onmouseover = function(){ this.style.opacity='1'; };
+    close.onmouseout = function(){ this.style.opacity='0.8'; };
+    overlay.onclick = function(){ document.body.removeChild(overlay); };
+    close.onclick = function(e){ e.stopPropagation(); document.body.removeChild(overlay); };
+    document.addEventListener('keydown', function esc(e){ if(e.key==='Escape'&&document.body.contains(overlay)){ document.body.removeChild(overlay); document.removeEventListener('keydown',esc); } });
+    overlay.appendChild(img);
+    overlay.appendChild(close);
+    document.body.appendChild(overlay);
 }
 
 async function toggleLike(postId) {
