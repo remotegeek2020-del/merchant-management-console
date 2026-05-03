@@ -1590,112 +1590,23 @@ window.quickAddId = async function(personId, name) {
     
 
 <script>
-// ── PARTNER NOTES & SCORECARD (isolated module) ──────────────────────────────
+// ── PARTNER NOTES & SCORECARD ────────────────────────────────────────────────
 
 function pAPI(body) {
-    return fetch('/api/partners', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}).then(function(r){return r.json();});
+    return fetch('/api/partners', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body)
+    }).then(function(r) { return r.json(); });
 }
 
-// Extend openPartnerDetails to add tabs after modal opens
-var _origOpenPartnerDetails = window.openPartnerDetails;
-window.openPartnerDetails = async function(personId) {
-    await _origOpenPartnerDetails(personId);
-    // After modal opens, inject tab bar and panels
-    setTimeout(function() { injectDetailTabs(personId); }, 100);
-};
-
-function injectDetailTabs(personId) {
-    var container = document.querySelector('.swal2-html-container #modal-content-container');
-    if (!container) {
-        // Try to find the modal content
-        container = document.querySelector('.swal2-html-container');
-    }
-    if (!container) return;
-
-    // Don't inject twice
-    if (document.getElementById('pp-detail-tabs')) return;
-
-    // Create tab bar
-    var tabBar = document.createElement('div');
-    tabBar.id = 'pp-detail-tabs';
-    tabBar.style.cssText = 'display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin:12px 0;';
-
-    var tabs = [['overview','Agent IDs'],['scorecard','Scorecard'],['notes','Notes']];
-    tabs.forEach(function(t) {
-        var btn = document.createElement('button');
-        btn.id = 'pptab-' + t[0];
-        btn.textContent = t[1];
-        btn.style.cssText = 'flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;' + (t[0]==='overview' ? 'background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.1);' : 'background:transparent;color:#64748b;');
-        btn.onclick = (function(id){return function(){ switchPPTab(id, personId); };})(t[0]);
-        tabBar.appendChild(btn);
-    });
-
-    // Wrap existing content in overview panel
-    var existingContent = container.innerHTML;
-    container.innerHTML = '';
-    var header = document.createElement('div');
-    header.innerHTML = existingContent;
-    // Extract just the stats header (first child div)
-    container.appendChild(header);
-    container.appendChild(tabBar);
-
-    // Overview = existing ID content (already rendered)
-    var panelOv = document.createElement('div');
-    panelOv.id = 'pppanel-overview';
-    panelOv.innerHTML = '';
-    container.appendChild(panelOv);
-
-    // Scorecard panel
-    var panelSc = document.createElement('div');
-    panelSc.id = 'pppanel-scorecard';
-    panelSc.style.display = 'none';
-    panelSc.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;">Loading scorecard...</div>';
-    container.appendChild(panelSc);
-
-    // Notes panel
-    var panelNo = document.createElement('div');
-    panelNo.id = 'pppanel-notes';
-    panelNo.style.display = 'none';
-    panelNo.innerHTML = buildNotesPanel(personId);
-    container.appendChild(panelNo);
-
-    // Load data
-    loadScorecard(personId);
-    loadNotes(personId);
-}
-
-function switchPPTab(tab, personId) {
-    ['overview','scorecard','notes'].forEach(function(t) {
-        var btn = document.getElementById('pptab-' + t);
-        var panel = document.getElementById('pppanel-' + t);
-        if (btn) { btn.style.background = t===tab ? 'white' : 'transparent'; btn.style.color = t===tab ? '#004990' : '#64748b'; btn.style.boxShadow = t===tab ? '0 1px 3px rgba(0,0,0,.1)' : 'none'; }
-        if (panel) panel.style.display = t===tab ? 'block' : 'none';
-    });
-}
-
-function buildNotesPanel(personId) {
-    return [
-        '<div style="display:flex;gap:8px;margin-bottom:12px;">',
-        '<select id="pp-note-type" style="padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;">',
-        '<option value="general">General</option>',
-        '<option value="call">Call Log</option>',
-        '<option value="follow_up">Follow-up</option>',
-        '<option value="win">Win</option>',
-        '<option value="issue">Issue</option>',
-        '</select>',
-        '<input id="pp-note-input" placeholder="Add a note..." style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">',
-        '<button onclick="ppSubmitNote('' + personId + '')" style="padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">Post</button>',
-        '</div>',
-        '<div id="pp-notes-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">',
-        '<div style="text-align:center;color:#94a3b8;padding:20px;">Loading...</div>',
-        '</div>'
-    ].join('');
-}
-
+// Tab switcher - scoped to Swal modal to avoid duplicate ID issues
 window.ppSwitchTab = function(tab) {
+    var modal = document.querySelector('.swal2-popup');
+    if (!modal) return;
     ['ids','scorecard','notes'].forEach(function(t) {
-        var btn = document.getElementById('pptab-' + t);
-        var panel = document.getElementById('pppanel-' + t);
+        var btn = modal.querySelector('#pptab-' + t);
+        var panel = modal.querySelector('#pppanel-' + t);
         if (btn) {
             btn.style.background = t === tab ? 'white' : 'transparent';
             btn.style.color = t === tab ? '#004990' : '#64748b';
@@ -1705,9 +1616,11 @@ window.ppSwitchTab = function(tab) {
     });
 };
 
+// Submit a note
 window.ppSubmitNote = async function(personId) {
-    var input = document.getElementById('pp-note-input');
-    var type = document.getElementById('pp-note-type');
+    var modal = document.querySelector('.swal2-popup');
+    var input = modal ? modal.querySelector('#pp-note-input') : null;
+    var type = modal ? modal.querySelector('#pp-note-type') : null;
     var body = input ? input.value.trim() : '';
     if (!body) return;
     var staffId = localStorage.getItem('pp_userid') || '';
@@ -1727,66 +1640,77 @@ window.ppDeleteNote = async function(noteId, personId) {
     if (c.isConfirmed) { await pAPI({action:'delete_note', note_id:noteId}); loadNotes(personId); }
 };
 
-async function loadNotes(personId) {
-    var el = document.getElementById('pp-notes-list');
-    if (!el) return;
-    var result = await pAPI({action:'get_notes', person_id:personId});
-    var notes = result.data || [];
-    if (!notes.length) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;font-size:13px;">No notes yet.</div>'; return; }
-    var typeIcon = {general:'[note]', call:'[call]', follow_up:'[!]', win:'[win]', issue:'[!!]'};
-    el.innerHTML = notes.map(function(n) {
-        var ts = new Date(n.created_at).toLocaleString();
-        var icon = typeIcon[n.note_type] || '';
-        var pinnedStyle = n.is_pinned ? 'background:#fffbeb;border:1px solid #fbbf24;' : 'background:#f8fafc;border:1px solid #e2e8f0;';
-        return '<div style="' + pinnedStyle + 'border-radius:10px;padding:12px 14px;">'
-            + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
-            + '<div style="font-size:12px;font-weight:700;">' + (n.author_name||'Staff') + ' <span style="font-size:10px;color:#94a3b8;font-weight:400;">' + ts + '</span>' + (n.is_pinned ? ' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;">PINNED</span>' : '') + '</div>'
-            + '<div style="display:flex;gap:4px;">'
-            + '<button onclick="ppTogglePin('' + n.id + '',' + !n.is_pinned + ','' + personId + '')" style="background:none;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;padding:2px 6px;font-size:11px;">' + (n.is_pinned ? 'Unpin' : 'Pin') + '</button>'
-            + '<button onclick="ppDeleteNote('' + n.id + '','' + personId + '')" style="background:none;border:1px solid #fecaca;color:#ef4444;border-radius:6px;cursor:pointer;padding:2px 6px;font-size:11px;">Del</button>'
-            + '</div></div>'
-            + '<div style="font-size:13px;color:#475569;">' + n.body + '</div>'
-            + '</div>';
-    }).join('');
+// Load notes into the modal
+function loadNotes(personId) {
+    pAPI({action:'get_notes', person_id:personId}).then(function(result) {
+        var modal = document.querySelector('.swal2-popup');
+        var el = modal ? modal.querySelector('#pp-notes-list') : null;
+        if (!el) return;
+        var notes = result.data || [];
+        if (!notes.length) {
+            el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;font-size:13px;">No notes yet. Add the first one above.</div>';
+            return;
+        }
+        var typeLabel = {general:'General', call:'Call Log', follow_up:'Follow-up', win:'Win', issue:'Issue'};
+        el.innerHTML = notes.map(function(n) {
+            var ts = new Date(n.created_at).toLocaleString();
+            var pinnedStyle = n.is_pinned ? 'background:#fffbeb;border:1px solid #fbbf24;' : 'background:#f8fafc;border:1px solid #e2e8f0;';
+            return '<div style="' + pinnedStyle + 'border-radius:10px;padding:12px 14px;">'
+                + '<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px;">'
+                + '<div><span style="font-size:12px;font-weight:700;color:#0a1628;">' + (n.author_name||'Staff') + '</span>'
+                + ' <span style="font-size:10px;color:#94a3b8;">' + ts + '</span>'
+                + ' <span style="font-size:10px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:99px;">' + (typeLabel[n.note_type]||'Note') + '</span>'
+                + (n.is_pinned ? ' <span style="font-size:9px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;font-weight:800;">PINNED</span>' : '') + '</div>'
+                + '<div style="display:flex;gap:4px;">'
+                + '<button onclick="ppTogglePin('' + n.id + '',' + !n.is_pinned + ','' + personId + '')" style="background:none;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;color:#64748b;">' + (n.is_pinned ? 'Unpin' : 'Pin') + '</button>'
+                + '<button onclick="ppDeleteNote('' + n.id + '','' + personId + '')" style="background:none;border:1px solid #fecaca;color:#ef4444;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;">Del</button>'
+                + '</div></div>'
+                + '<div style="font-size:13px;color:#475569;line-height:1.5;">' + n.body + '</div>'
+                + '</div>';
+        }).join('');
+    });
 }
 
-async function loadScorecard(personId) {
-    var el = document.getElementById('pppanel-scorecard');
-    if (!el) return;
-    var result = await pAPI({action:'get_scorecard', person_id:personId});
-    if (!result.success || !result.scorecard) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">No data available.</div>'; return; }
-    var sc = result.scorecard, t = sc.totals;
-    var trendColor = t.overall_trend === 'growth' ? '#166534' : t.overall_trend === 'risk' ? '#991b1b' : '#475569';
-    var trendBg = t.overall_trend === 'growth' ? '#f0fdf4' : t.overall_trend === 'risk' ? '#fef2f2' : '#f8fafc';
-    var fmt = function(v){ return '$' + parseFloat(v||0).toLocaleString(undefined,{minimumFractionDigits:2}); };
+// Load scorecard into the modal
+function loadScorecard(personId) {
+    pAPI({action:'get_scorecard', person_id:personId}).then(function(result) {
+        var modal = document.querySelector('.swal2-popup');
+        var el = modal ? modal.querySelector('#pp-scorecard-content') : null;
+        if (!el) return;
+        if (!result.success || !result.scorecard) {
+            el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">No scorecard data available.</div>';
+            return;
+        }
+        var sc = result.scorecard, t = sc.totals;
+        var trendColor = t.overall_trend === 'growth' ? '#166534' : t.overall_trend === 'risk' ? '#991b1b' : '#475569';
+        var trendBg = t.overall_trend === 'growth' ? '#f0fdf4' : t.overall_trend === 'risk' ? '#fef2f2' : '#f8fafc';
+        var fmt = function(v){ return '$' + parseFloat(v||0).toLocaleString(undefined,{minimumFractionDigits:2}); };
 
-    var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">';
-    html += '<div style="background:#f0f7ff;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.6rem;font-weight:900;color:#004990;">' + (t.merchants||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Active Merchants</div></div>';
-    html += '<div style="background:#f0fdf4;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.1rem;font-weight:900;color:#166534;">' + fmt(t.volume_30) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">30-Day Volume</div></div>';
-    html += '<div style="background:#f8fafc;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.1rem;font-weight:900;color:#475569;">' + fmt(t.volume_90/3) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Avg Monthly (90D)</div></div>';
-    html += '<div style="background:' + trendBg + ';border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.1rem;font-weight:900;color:' + trendColor + ';">' + t.overall_trend.toUpperCase() + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Trend</div></div>';
-    html += '</div>';
-
-    html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">';
-    html += '<div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#92400e;">' + (t.pending||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Pipeline</div></div>';
-    html += '<div style="background:#fee2e2;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#991b1b;">' + (t.at_risk||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">At Risk</div></div>';
-    html += '<div style="background:#f1f5f9;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#475569;">' + (t.closed||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Closed/Lost</div></div>';
-    html += '</div>';
-
-    if (sc.top_merchants && sc.top_merchants.length > 0) {
-        html += '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Top Merchants</div>';
-        html += '<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">';
-        html += '<table style="width:100%;border-collapse:collapse;font-size:12px;">';
-        html += '<thead><tr style="background:#f8fafc;"><th style="padding:8px 12px;text-align:left;font-weight:700;color:#64748b;">Merchant</th><th style="padding:8px 12px;text-align:right;font-weight:700;color:#64748b;">30D Vol</th><th style="padding:8px 12px;text-align:right;font-weight:700;color:#64748b;">90D Vol</th></tr></thead>';
-        html += '<tbody>';
-        sc.top_merchants.forEach(function(m, i) {
-            html += '<tr style="background:' + (i%2===0?'white':'#fafafa') + ';border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'') + '</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#166534;">' + fmt(m.volume_30_day) + '</td><td style="padding:8px 12px;text-align:right;color:#64748b;">' + fmt(m.volume_90_day) + '</td></tr>';
-        });
-        html += '</tbody></table></div>';
-    }
-
-    el.innerHTML = html;
+        var html = '<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;">';
+        html += '<div style="background:#f0f7ff;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.6rem;font-weight:900;color:#004990;">' + (t.merchants||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Active Merchants</div></div>';
+        html += '<div style="background:#f0fdf4;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.1rem;font-weight:900;color:#166534;">' + fmt(t.volume_30) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">30-Day Volume</div></div>';
+        html += '<div style="background:#f8fafc;border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.1rem;font-weight:900;color:#475569;">' + fmt(t.volume_90/3) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Avg Monthly (90D)</div></div>';
+        html += '<div style="background:' + trendBg + ';border-radius:12px;padding:14px;text-align:center;"><div style="font-size:1.2rem;font-weight:900;color:' + trendColor + ';">' + t.overall_trend.toUpperCase() + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;margin-top:2px;">Trend</div></div>';
+        html += '</div>';
+        html += '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px;">';
+        html += '<div style="background:#fef3c7;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#92400e;">' + (t.pending||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Pipeline</div></div>';
+        html += '<div style="background:#fee2e2;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#991b1b;">' + (t.at_risk||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">At Risk</div></div>';
+        html += '<div style="background:#f1f5f9;border-radius:10px;padding:12px;text-align:center;"><div style="font-size:1.3rem;font-weight:800;color:#475569;">' + (t.closed||0) + '</div><div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Closed/Lost</div></div>';
+        html += '</div>';
+        if (sc.top_merchants && sc.top_merchants.length) {
+            html += '<div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Top Merchants by 30D Volume</div>';
+            html += '<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;"><table style="width:100%;border-collapse:collapse;font-size:12px;">';
+            html += '<thead><tr style="background:#f8fafc;"><th style="padding:8px 12px;text-align:left;color:#64748b;font-weight:700;">Merchant</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">30D Vol</th><th style="padding:8px 12px;text-align:right;color:#64748b;font-weight:700;">90D Vol</th></tr></thead><tbody>';
+            sc.top_merchants.forEach(function(m, i) {
+                html += '<tr style="background:' + (i%2===0?'white':'#fafafa') + ';border-top:1px solid #f1f5f9;"><td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'') + '</td><td style="padding:8px 12px;text-align:right;font-weight:700;color:#166534;">' + fmt(m.volume_30_day) + '</td><td style="padding:8px 12px;text-align:right;color:#64748b;">' + fmt(m.volume_90_day) + '</td></tr>';
+            });
+            html += '</tbody></table></div>';
+        }
+        el.innerHTML = html;
+        el.style.display = 'block';
+        el.style.alignItems = 'unset';
+        el.style.justifyContent = 'unset';
+    });
 }
 </script>
 </body>
-</html>
