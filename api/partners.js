@@ -315,6 +315,16 @@ if (action === 'complete_onboarding') {
 
 
         // ── STAFF COMMUNITY FEED ──────────────────────────
+        if (action === 'get_staff_name') {
+            const { userid } = body;
+            const { data: user } = await supabase.from('app_users')
+                .select('first_name, last_name')
+                .eq('userid', userid).single();
+            if (!user) return res.status(200).json({ success: false });
+            const name = ((user.first_name||'') + ' ' + (user.last_name||'')).trim() || 'Staff';
+            return res.status(200).json({ success: true, name });
+        }
+
         if (action === 'get_community_feed') {
             const { page = 0, category, mine_only, mine_id } = body;
             const limit = 20;
