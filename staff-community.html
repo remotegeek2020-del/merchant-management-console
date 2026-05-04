@@ -254,6 +254,22 @@ async function init() {
     await loadChannels();
     loadFeed(false);
     loadMembers();
+    pollBadges();
+    setInterval(pollBadges, 15000);
+}
+
+async function pollBadges() {
+    const res = await api({ action: 'get_unread_counts' });
+    if (!res.success) return;
+    // Could show badge in nav - staff portal has different nav
+    // Just log for now, staff sees unread in the sidebar count
+    const dmCount = res.dms || 0;
+    const notifCount = res.notifications || 0;
+    // Update any badge elements if they exist
+    document.querySelectorAll('.dm-badge').forEach(function(el){
+        el.textContent = dmCount;
+        el.style.display = dmCount > 0 ? 'inline' : 'none';
+    });
 }
 
 // ── CHANNELS ─────────────────────────────────────────────
