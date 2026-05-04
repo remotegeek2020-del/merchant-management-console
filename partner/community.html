@@ -712,7 +712,7 @@ async function toggleNotifPanel() {
     if (!isOpen && panel) {
         setTimeout(function() {
             document.addEventListener('click', function oc(e) {
-                if (!panel.contains(e.target) && !e.target.closest('[onclick="toggleNotifPanel()"]')) {
+                if (!panel.contains(e.target) && !e.target.closest('.notif-bell')) {
                     panel.style.display = 'none';
                     document.removeEventListener('click', oc);
                 }
@@ -732,7 +732,7 @@ async function loadNotifications() {
     el.innerHTML = notifs.map(function(n) {
         var t = new Date(n.created_at);
         var ago = ((Date.now()-t)/60000 < 60) ? Math.floor((Date.now()-t)/60000)+'m ago' : Math.floor((Date.now()-t)/3600000)+'h ago';
-        return '<div class="notif-item' + (n.is_read ? '' : ' unread') + '" onclick="handleNotifClick('' + n.id + '','' + (n.link||'') + '')">'
+        return '<div class="notif-item' + (n.is_read ? '' : ' unread') + '" onclick="handleNotifClick(this)" data-id="' + n.id + '" data-link="' + (n.link||'') + '">'
             + '<div class="notif-icon" style="background:' + (bgColors[n.type]||'#f8fafc') + '">' + (icons[n.type]||'🔔') + '</div>'
             + '<div class="notif-text"><div class="notif-title">' + escHtml(n.title||'') + '</div>'
             + (n.body ? '<div class="notif-body">' + escHtml(n.body) + '</div>' : '')
@@ -740,7 +740,9 @@ async function loadNotifications() {
     }).join('');
 }
 
-function handleNotifClick(id, link) {
+function handleNotifClick(el) {
+    var id = el.getAttribute('data-id');
+    var link = el.getAttribute('data-link');
     api('community', { action:'mark_notifications_read', token, ids:[id] });
     if (link) window.location.href = link;
     pollUnreadCounts();
@@ -757,6 +759,9 @@ function escHtml(str) {
     return (str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+function timeAgo(dateStr) {
+    return getTimeAgo(dateStr);
+}
 function getTimeAgo(dateStr) {
     const diff = Date.now() - new Date(dateStr).getTime();
     const m = Math.floor(diff/60000), h = Math.floor(m/60), d = Math.floor(h/24);
