@@ -119,6 +119,26 @@ export default async function handler(req, res) {
             }).select().single();
 
             if (error) throw error;
+
+            // Notify all other members about new post
+            const { data: allProfiles } = await supabase
+                .from('user_profiles').select('user_id, user_type').neq('user_id', user.id);
+            if (allProfiles && allProfiles.length) {
+                await supabase.from('notifications').insert(
+                    allProfiles.map(p => ({
+                        recipient_id: p.user_id,
+                        recipient_type: p.user_type,
+                        type: 'post',
+                        title: `${user.name} posted something new`,
+                        body: body.trim().slice(0, 100),
+                        actor_id: user.id,
+                        actor_name: user.name,
+                        reference_id: post.id,
+                        link: '/partner/community'
+                    }))
+                );
+            }
+
             return res.status(200).json({ success: true, data: post });
         }
 
@@ -177,6 +197,16 @@ export default async function handler(req, res) {
             await getOrCreateProfile(user);
             const { error } = await supabase.from('community_comments').insert({ post_id, author_id: user.id, author_type: user.type, body: body.trim() });
             if (error) throw error;
+            // Notify post author
+            const { data: post } = await supabase.from('community_posts').select('author_id, author_type').eq('id', post_id).single();
+            if (post && post.author_id !== user.id) {
+                await supabase.from('notifications').insert({
+                    recipient_id: post.author_id, recipient_type: post.author_type,
+                    type: 'comment', title: `${user.name} commented on your post`,
+                    body: body.trim().slice(0, 80), actor_id: user.id, actor_name: user.name,
+                    reference_id: post_id, link: '/partner/community'
+                });
+            }
             return res.status(200).json({ success: true });
         }
 
@@ -261,7 +291,14 @@ export default async function handler(req, res) {
             const { recipient_id, recipient_type, body } = req.body;
             if (!body?.trim() || !recipient_id) return res.status(400).json({ success: false });
             await getOrCreateProfile(user);
-            await supabase.from('direct_messages').insert({ sender_id: user.id, sender_type: user.type, recipient_id, recipient_type, body: body.trim() });
+            await supabase.from('direct_messages').insert({ sender_id: user.id, sender_type: user.type, recipient_id, recipient_type: recipient_type || 'partner', body: body.trim() });
+            // Notify recipient
+            await supabase.from('notifications').insert({
+                recipient_id, recipient_type: recipient_type || 'partner',
+                type: 'dm', title: `New message from ${user.name}`,
+                body: body.trim().slice(0, 80), actor_id: user.id, actor_name: user.name,
+                reference_id: user.id, link: '/partner/messages'
+            });
             return res.status(200).json({ success: true });
         }
 
@@ -341,6 +378,46 @@ export default async function handler(req, res) {
         // ── MARK ONLINE ───────────────────────────────────
         if (action === 'heartbeat') {
             await supabase.from('user_profiles').upsert({ user_id: user.id, user_type: user.type, display_name: user.name, is_online: true, last_seen: new Date().toISOString() }, { onConflict: 'user_id' });
+            return res.status(200).json({ success: true });
+        }
+
+
+        // ── GET UNREAD COUNTS (badge polling) ─────────────
+        if (action === 'get_unread_counts') {
+            const [dmResult, notifResult] = await Promise.all([
+                supabase.from('direct_messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('recipient_id', user.id)
+                    .eq('is_read', false),
+                supabase.from('notifications')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('recipient_id', user.id)
+                    .eq('is_read', false)
+            ]);
+            return res.status(200).json({ 
+                success: true, 
+                dms: dmResult.count || 0, 
+                notifications: notifResult.count || 0 
+            });
+        }
+
+        // ── GET NOTIFICATIONS ─────────────────────────────
+        if (action === 'get_notifications') {
+            const { data } = await supabase.from('notifications')
+                .select('*')
+                .eq('recipient_id', user.id)
+                .order('created_at', { ascending: false })
+                .limit(30);
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        // ── MARK NOTIFICATIONS READ ───────────────────────
+        if (action === 'mark_notifications_read') {
+            const { ids } = req.body;
+            let q = supabase.from('notifications').update({ is_read: true }).eq('recipient_id', user.id);
+            if (ids && ids.length) q = q.in('id', ids);
+            else q = q.eq('is_read', false);
+            await q;
             return res.status(200).json({ success: true });
         }
 
