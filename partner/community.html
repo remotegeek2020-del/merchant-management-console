@@ -135,7 +135,26 @@
 
         @media(max-width:900px){.community-layout{grid-template-columns:1fr;}.right-sidebar{display:none;}}
         @media(max-width:640px){.sidebar{transform:translateX(-100%);}.main{margin-left:0;}.community-layout{padding:12px;}}
-    </style>
+    
+        /* NOTIFICATION BELL */
+        .notif-bell{position:relative;cursor:pointer;background:none;border:none;padding:6px;border-radius:8px;color:#475569;display:flex;align-items:center;}
+        .notif-bell:hover{background:#f1f5f9;}
+        .notif-bell .material-icons{font-size:22px;}
+        .notif-dot{position:absolute;top:4px;right:4px;width:8px;height:8px;background:#ef4444;border-radius:50%;border:2px solid white;display:none;}
+        .notif-count{position:absolute;top:0;right:0;background:#ef4444;color:white;border-radius:99px;font-size:9px;font-weight:800;padding:0 4px;min-width:16px;text-align:center;display:none;}
+        .notif-panel{position:fixed;top:56px;right:16px;width:340px;background:white;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.12);z-index:1000;display:none;max-height:480px;overflow-y:auto;}
+        .notif-panel-header{padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;justify-content:space-between;align-items:center;}
+        .notif-panel-title{font-size:13px;font-weight:800;}
+        .notif-mark-all{font-size:11px;color:#0d9488;cursor:pointer;font-weight:700;border:none;background:none;}
+        .notif-item{display:flex;gap:10px;padding:12px 16px;border-bottom:1px solid #f8fafc;cursor:pointer;transition:background 0.15s;}
+        .notif-item:hover{background:#f8fafc;}
+        .notif-item.unread{background:#f0fdfa;}
+        .notif-icon{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:16px;}
+        .notif-text{flex:1;}
+        .notif-title{font-size:12px;font-weight:700;color:#0a1628;margin-bottom:2px;}
+        .notif-body{font-size:11px;color:#64748b;}
+        .notif-time{font-size:10px;color:#94a3b8;margin-top:2px;}
+</style>
 </head>
 <body>
 
@@ -172,6 +191,21 @@
         <h1 class="topbar-title" id="topbarTitle">🌐 Community Feed</h1>
         <div style="display:flex;gap:8px;">
             <button class="btn btn-outline btn-sm" onclick="openDMSearch()"><span class="material-icons" style="font-size:14px;">mail</span> New Message</button>
+        
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto;">
+            <button class="notif-bell" onclick="toggleNotifPanel()" title="Notifications">
+                <span class="material-icons">notifications</span>
+                <span class="notif-count" id="notifBellCount"></span>
+            </button>
+        </div>
+        </div>
+        <!-- NOTIFICATION PANEL -->
+        <div class="notif-panel" id="notifPanel">
+            <div class="notif-panel-header">
+                <span class="notif-panel-title">Notifications</span>
+                <button class="notif-mark-all" onclick="markAllNotifsRead()">Mark all read</button>
+            </div>
+            <div id="notifList"><div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;">Loading...</div></div>
         </div>
     </div>
 
@@ -650,6 +684,72 @@ async function openProfile(userId) {
 function startHeartbeat() {
     api('community', { action:'heartbeat', token });
     setInterval(() => api('community', { action:'heartbeat', token }), 60000);
+    // Poll for unread counts every 15s
+    pollUnreadCounts();
+    setInterval(pollUnreadCounts, 15000);
+}
+
+async function pollUnreadCounts() {
+    const res = await api('community', { action:'get_unread_counts', token });
+    if (!res.success) return;
+    const dmBadge = document.getElementById('dmBadge');
+    const notifCount = document.getElementById('notifBellCount');
+    if (dmBadge) {
+        if (res.dms > 0) { dmBadge.textContent = res.dms; dmBadge.style.display = 'inline'; }
+        else dmBadge.style.display = 'none';
+    }
+    if (notifCount) {
+        if (res.notifications > 0) { notifCount.textContent = res.notifications; notifCount.style.display = 'inline'; }
+        else notifCount.style.display = 'none';
+    }
+}
+
+async function toggleNotifPanel() {
+    const panel = document.getElementById('notifPanel');
+    const isOpen = panel && panel.style.display === 'block';
+    if (panel) panel.style.display = isOpen ? 'none' : 'block';
+    if (!isOpen) loadNotifications();
+    if (!isOpen && panel) {
+        setTimeout(function() {
+            document.addEventListener('click', function oc(e) {
+                if (!panel.contains(e.target) && !e.target.closest('[onclick="toggleNotifPanel()"]')) {
+                    panel.style.display = 'none';
+                    document.removeEventListener('click', oc);
+                }
+            });
+        }, 100);
+    }
+}
+
+async function loadNotifications() {
+    const res = await api('community', { action:'get_notifications', token });
+    const el = document.getElementById('notifList');
+    if (!el) return;
+    const notifs = res.data || [];
+    if (!notifs.length) { el.innerHTML = '<div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No notifications yet.</div>'; return; }
+    const icons = { post:'🏷️', comment:'💬', reaction:'❤️', dm:'✉️' };
+    const bgColors = { post:'#eff6ff', comment:'#f0fdf4', reaction:'#fff1f2', dm:'#f0fdfa' };
+    el.innerHTML = notifs.map(function(n) {
+        var t = new Date(n.created_at);
+        var ago = ((Date.now()-t)/60000 < 60) ? Math.floor((Date.now()-t)/60000)+'m ago' : Math.floor((Date.now()-t)/3600000)+'h ago';
+        return '<div class="notif-item' + (n.is_read ? '' : ' unread') + '" onclick="handleNotifClick('' + n.id + '','' + (n.link||'') + '')">'
+            + '<div class="notif-icon" style="background:' + (bgColors[n.type]||'#f8fafc') + '">' + (icons[n.type]||'🔔') + '</div>'
+            + '<div class="notif-text"><div class="notif-title">' + escHtml(n.title||'') + '</div>'
+            + (n.body ? '<div class="notif-body">' + escHtml(n.body) + '</div>' : '')
+            + '<div class="notif-time">' + ago + '</div></div></div>';
+    }).join('');
+}
+
+function handleNotifClick(id, link) {
+    api('community', { action:'mark_notifications_read', token, ids:[id] });
+    if (link) window.location.href = link;
+    pollUnreadCounts();
+}
+
+async function markAllNotifsRead() {
+    await api('community', { action:'mark_notifications_read', token });
+    loadNotifications();
+    pollUnreadCounts();
 }
 
 // ── UTILS ─────────────────────────────────────────────────
