@@ -127,6 +127,26 @@ export default async function handler(req, res) {
             }).select().single();
 
             if (error) throw error;
+
+            // Get sender name for notification
+            const { data: staffUser } = await supabase.from('app_users').select('first_name, last_name').eq('userid', sender_id).single();
+            const senderName = staffUser ? `${staffUser.first_name} ${staffUser.last_name||''}`.trim() : 'Staff';
+
+            // Create notification for recipient
+            try {
+                await supabase.from('notifications').insert({
+                    recipient_id,
+                    recipient_type: 'partner',
+                    type: 'dm',
+                    title: `New message from ${senderName}`,
+                    body: content.trim().slice(0, 80),
+                    actor_id: sender_id,
+                    actor_name: senderName,
+                    reference_id: sender_id,
+                    link: '/partner/messages'
+                });
+            } catch(e) { /* notifications are optional */ }
+
             return res.status(200).json({ success: true, data });
         }
 
