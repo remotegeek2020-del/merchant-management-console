@@ -171,7 +171,10 @@ async function init() {
 async function loadUserList() {
     var res = await chatApi({ action: 'getUserList' });
     if (!res.success) return;
-    allUsers = res.data || [];
+    // Partners only see staff members (not themselves, not other partners)
+    allUsers = (res.data || []).filter(function(u) {
+        return u.user_type === 'staff';
+    });
     renderList(allUsers);
     // Update unread badge
     var totalUnread = allUsers.reduce(function(s,u){ return s+(u.unread||0); }, 0);
@@ -283,7 +286,7 @@ async function sendMsg() {
 
 async function startNew() {
     await loadUserList();
-    var others = allUsers.filter(function(u){ return u.id !== myId; });
+    var others = allUsers; // already filtered to staff only
     if (!others.length) { alert('No staff members available yet.'); return; }
     var opts = others.map(function(u){
         var tag = u.user_type==='staff' ? ' (Staff)' : ' (Partner)';
