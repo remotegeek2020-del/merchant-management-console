@@ -155,7 +155,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'change_password') {
-            const { partner_id, current_password, new_password } = body;
+            const { partner_id, current_password, new_password } = req.body;
             if (!partner_id || !current_password || !new_password) {
                 return res.status(400).json({ success: false, message: 'Missing required fields.' });
             }
@@ -172,15 +172,14 @@ export default async function handler(req, res) {
             }
 
             // Verify current password
-            const salt = process.env.PARTNER_SALT || 'payprotec_salt';
-            const currentHash = crypto.createHash('sha256').update(current_password + salt).digest('hex');
+            const currentHash = hashPassword(current_password);
 
             if (currentHash !== person.password_hash) {
                 return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
             }
 
             // Hash new password
-            const newHash = crypto.createHash('sha256').update(new_password + salt).digest('hex');
+            const newHash = hashPassword(new_password);
 
             const { error: updateErr } = await supabase
                 .from('persons')
