@@ -42,7 +42,20 @@ export default async function handler(req, res) {
         // --- VERIFY 2FA ---
         else if (action === 'verify2FA') {
             const { data: tfaUser } = await supabase.from('app_users').select('*').eq('userid', userId).single();
-            if (tfaUser && tfaUser.tfa_code === code) {
+
+            const attempts = (tfaUser?.tfa_attempts || 0) + 1;
+            const MAX_ATTEMPTS = 5;
+
+            if (!tfaUser || !tfaUser.tfa_code) {
+                return res.status(401).json({ success: false, message: 'No active verification code. Please log in again.' });
+            }
+
+            if (tfaUser.tfa_attempts >= MAX_ATTEMPTS) {
+                await supabase.from('app_users').update({ tfa_code: null, tfa_attempts: 0 }).eq('userid', userId);
+                return res.status(429).json({ success: false, message: 'Too many failed attempts. Please log in again.' });
+            }
+
+            if (tfaUser.tfa_code === code) {
                 if (remember) {
                     generatedDeviceToken = crypto.randomUUID();
                     await supabase.from('trusted_devices').insert({
@@ -50,10 +63,12 @@ export default async function handler(req, res) {
                         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
                     });
                 }
-                await supabase.from('app_users').update({ tfa_code: null }).eq('userid', userId);
+                await supabase.from('app_users').update({ tfa_code: null, tfa_attempts: 0 }).eq('userid', userId);
                 user = tfaUser;
             } else {
-                return res.status(401).json({ success: false, message: 'Invalid verification code.' });
+                await supabase.from('app_users').update({ tfa_attempts: attempts }).eq('userid', userId);
+                const remaining = MAX_ATTEMPTS - attempts;
+                return res.status(401).json({ success: false, message: remaining > 0 ? `Invalid code. ${remaining} attempt(s) remaining.` : 'Too many failed attempts. Please log in again.' });
             }
         }
 
@@ -84,7 +99,7 @@ export default async function handler(req, res) {
                         user = dbUser;
                     } else {
                         const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
-                        await supabase.from('app_users').update({ tfa_code: tfaCode }).eq('userid', dbUser.userid);
+                        await supabase.from('app_users').update({ tfa_code: tfaCode, tfa_attempts: 0 }).eq('userid', dbUser.userid);
                         if (process.env.POSTMARK_SERVER_TOKEN) {
                             const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
                             await client.sendEmail({

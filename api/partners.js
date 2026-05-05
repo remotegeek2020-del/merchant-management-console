@@ -33,9 +33,14 @@ if (action === 'get_orphan_ids') {
 }
         if (action === 'search_ghl') {
     const { query } = body;
-    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=dfg08aPdtlQ1RhIKkCnN&query=${query}`, {
+    const ghlLocationId = process.env.GHL_LOCATION_ID;
+    const ghlApiKey = process.env.GHL_API_KEY;
+    if (!ghlLocationId || !ghlApiKey) {
+        return res.status(500).json({ success: false, message: 'GHL integration not configured.' });
+    }
+    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=${ghlLocationId}&query=${encodeURIComponent(query)}`, {
         headers: {
-            'Authorization': 'Bearer pit-4da3c37b-fcae-4274-a893-7ad7777a4bba',
+            'Authorization': `Bearer ${ghlApiKey}`,
             'Version': '2021-07-28'
         }
     });

@@ -412,9 +412,6 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [] });
         }
 
-        return res.status(400).json({ success: false, message: 'Unknown action.' });
-
-
         // ── COMMUNITY FEED ─────────────────────────────────
         if (action === 'get_feed') {
             const { page = 0, author_only = false, category = null } = req.body;
@@ -519,6 +516,8 @@ export default async function handler(req, res) {
             const { data: urlData } = supabase.storage.from('partner-media').getPublicUrl(path);
             return res.status(200).json({ success: true, url: urlData.publicUrl, type: content_type.startsWith('video') ? 'video' : 'image' });
         }
+
+        return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {
         console.error('Partner Data Error:', err.message);

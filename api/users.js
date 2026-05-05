@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { ServerClient } from 'postmark';
 import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
 
 export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -30,23 +31,23 @@ export default async function handler(req, res) {
                 };
 
                 const { error: insertError } = await supabase.from('app_users').insert([newUser]);
-                
+
                 if (insertError) {
                     if (insertError.code === '23505') return res.status(400).json({ success: false, message: 'User already exists.' });
                     throw insertError;
                 }
 
                 // Email Trigger
+                let emailSent = false;
                 if (process.env.POSTMARK_SERVER_TOKEN) {
                     try {
                         const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
                         const setupUrl = `https://${req.headers.host}/setup-password.html?token=${invitationToken}`;
-                       // --- RESTORED PROFESSIONAL DESIGN ---
-await client.sendEmail({
-    "From": process.env.EMAIL_FROM,
-    "To": payload.email,
-    "Subject": "Action Required: Set up your PayProtec Staff Portal account",
-    "HtmlBody": `
+                        await client.sendEmail({
+                            "From": process.env.EMAIL_FROM,
+                            "To": payload.email,
+                            "Subject": "Action Required: Set up your PayProtec Staff Portal account",
+                            "HtmlBody": `
         <div style="font-family: 'Inter', Arial, sans-serif; max-width: 500px; margin: auto; padding: 30px; border: 1px solid #e2e8f0; border-radius: 16px; color: #1e293b; background-color: #ffffff;">
             <div style="text-align: center; margin-bottom: 20px;">
                 <h2 style="color: #004990; margin: 0; font-size: 24px;">PayProTec Portal</h2>
@@ -54,26 +55,29 @@ await client.sendEmail({
             <h1 style="color: #004990; font-size: 20px; margin-bottom: 20px;">Welcome, ${payload.first_name}!</h1>
             <p style="line-height: 1.6;">An account has been created for you on the <strong>Hardware Management Portal</strong>.</p>
             <p style="line-height: 1.6;">To finalize your access and secure your account, please click the button below to set your password:</p>
-            
+
             <div style="text-align: center; margin: 35px 0;">
                 <a href="${setupUrl}" style="background-color: #004990; color: #ffffff; padding: 14px 28px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block;">Set Up My Password</a>
             </div>
-            
+
             <p style="font-size: 12px; color: #64748b; line-height: 1.5;">
                 If the button does not work, copy and paste this link into your browser:<br>
                 <a href="${setupUrl}" style="color: #004990; word-break: break-all;">${setupUrl}</a>
             </p>
-            
+
             <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 30px 0;">
             <p style="font-size: 11px; color: #94a3b8; text-align: center;">This is an automated security message from PayProTec Operations. Please do not reply to this email.</p>
         </div>
     `,
-    "TextBody": `Welcome ${payload.first_name}! Set up your account here: ${setupUrl}`,
-    "MessageStream": "outbound"
-});
-                    } catch (e) { console.error("Email failed", e); }
+                            "TextBody": `Welcome ${payload.first_name}! Set up your account here: ${setupUrl}`,
+                            "MessageStream": "outbound"
+                        });
+                        emailSent = true;
+                    } catch (e) {
+                        console.error("Email failed", e);
+                    }
                 }
-                return res.status(200).json({ success: true });
+                return res.status(200).json({ success: true, email_sent: emailSent });
             } 
             
             if (action === 'updateBatch') {
@@ -94,6 +98,7 @@ await client.sendEmail({
 
                 const setupUrl = `https://${req.headers.host}/setup-password.html?token=${newToken}`;
 
+                let emailSent = false;
                 if (process.env.POSTMARK_SERVER_TOKEN) {
                     try {
                         const { ServerClient } = await import('postmark');
@@ -106,9 +111,10 @@ await client.sendEmail({
                             "TextBody": `Set up your account: ${setupUrl}`,
                             "MessageStream": "outbound"
                         });
+                        emailSent = true;
                     } catch(e) { console.error("Email failed", e); }
                 }
-                return res.status(200).json({ success: true, setup_url: setupUrl });
+                return res.status(200).json({ success: true, setup_url: setupUrl, email_sent: emailSent });
             } 
             
             if (action === 'delete') {
@@ -126,15 +132,16 @@ await client.sendEmail({
                 const { data: user } = await supabase.from('app_users').select('passkey, first_name').eq('userid', uid).single();
                 if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
 
-                // Verify current password (SHA256 hash)
-                const currentHash = crypto.createHash('sha256').update(current_password).digest('hex');
-                if (user.passkey !== current_password && user.passkey !== currentHash) {
+                // Verify current password using bcrypt
+                const passwordValid = await bcrypt.compare(current_password, user.passkey)
+                    || await bcrypt.compare(current_password, user.password_hash || '');
+                if (!passwordValid) {
                     return res.status(401).json({ success: false, message: 'Current password is incorrect.' });
                 }
 
-                // Save new password (store as hash)
-                const newHash = crypto.createHash('sha256').update(new_password).digest('hex');
-                await supabase.from('app_users').update({ passkey: newHash }).eq('userid', uid);
+                // Save new password as bcrypt hash
+                const newHash = await bcrypt.hash(new_password, 12);
+                await supabase.from('app_users').update({ passkey: newHash, password_hash: newHash }).eq('userid', uid);
 
                 // Log it
                 await supabase.from('activity_logs').insert({

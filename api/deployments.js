@@ -381,10 +381,18 @@ if (action === 'create') {
 
     if (depError) throw depError;
 
-    // 4. Update equipment status
-    await supabase.from('equipments')
+    // 4. Update equipment status — conditional on still being 'stocked' to prevent race conditions
+    const { data: updateResult, error: updateEquipError } = await supabase.from('equipments')
         .update({ status: 'deployed', current_location: dbaName, merchant_id })
-        .eq('id', equipment_id);
+        .eq('id', equipment_id)
+        .eq('status', 'stocked')
+        .select('id');
+
+    if (updateEquipError || !updateResult || updateResult.length === 0) {
+        // Another request deployed this unit between our check and update — roll back the deployment
+        await supabase.from('deployments').delete().eq('id', newDep[0]?.id);
+        return res.status(409).json({ success: false, message: `Conflict: Serial ${checkEquip.serial_number} was just deployed by another user. Please refresh and try again.` });
+    }
 
     // 5. Log the event
     await supabase.from('equipment_logs').insert([{

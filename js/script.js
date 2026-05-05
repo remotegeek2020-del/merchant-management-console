@@ -122,9 +122,9 @@ async function authorizeUser(user) {
     } catch (e) { console.error("Storage Error:", e); }
 
     // --- 1. ROLE LOGIC ---
-    const roleStr = (user.role || "").toLowerCase().replace(/[\s_]/g, '');
-    const isSuperAdmin = roleStr.includes('super');
-    const isAdmin = roleStr.includes('admin') || isSuperAdmin;
+    const roleStr = (user.role || "").toLowerCase().trim();
+    const isSuperAdmin = roleStr === 'super_admin';
+    const isAdmin = roleStr === 'admin' || isSuperAdmin;
 
     const elements = {
         loader: document.getElementById('initial-loader'),
@@ -256,14 +256,37 @@ async function triggerBulkNoteUpload() {
         const reader = new FileReader();
         reader.onload = async (e) => {
             const text = e.target.result;
-            const rows = text.split('\n').slice(1).filter(r => r.trim()); 
-            const notes = rows.map(r => {
+            const allRows = text.split('\n').filter(r => r.trim());
+            if (allRows.length < 2) {
+                return Swal.fire('Error', 'CSV file is empty or has no data rows.', 'error');
+            }
+
+            const headerRow = allRows[0].split(',').map(h => h.trim().toLowerCase());
+            const expectedHeaders = ['merchant_id', 'title', 'body'];
+            const missingHeaders = expectedHeaders.filter(h => !headerRow.includes(h));
+            if (missingHeaders.length > 0) {
+                return Swal.fire('Error', `CSV is missing required columns: ${missingHeaders.join(', ')}. Expected headers: merchant_id, title, body`, 'error');
+            }
+
+            const midIdx = headerRow.indexOf('merchant_id');
+            const titleIdx = headerRow.indexOf('title');
+            const bodyIdx = headerRow.indexOf('body');
+
+            const notes = allRows.slice(1).map(r => {
                 const cols = r.split(',');
-                return { merchant_id: cols[0]?.trim(), title: cols[1]?.trim(), body: cols[2]?.trim() };
-            });
+                return {
+                    merchant_id: cols[midIdx]?.trim(),
+                    title: cols[titleIdx]?.trim(),
+                    body: cols[bodyIdx]?.trim()
+                };
+            }).filter(n => n.merchant_id);
+
+            if (notes.length === 0) {
+                return Swal.fire('Error', 'No valid rows found. Ensure merchant_id column is populated.', 'error');
+            }
 
             Swal.fire({ title: 'Injecting...', didOpen: () => Swal.showLoading() });
-            
+
             const res = await fetch('/api/bulk-notes', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },

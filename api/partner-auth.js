@@ -1,12 +1,17 @@
 import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-function hashPassword(password) {
-    return crypto.createHash('sha256').update(password + (process.env.PARTNER_SALT || 'pp_partner_2024')).digest('hex');
+async function hashPassword(password) {
+    return bcrypt.hash(password, 12);
+}
+
+async function verifyPassword(password, hash) {
+    return bcrypt.compare(password, hash);
 }
 
 function generateToken(length = 48) {
@@ -59,7 +64,7 @@ export default async function handler(req, res) {
             if (!person) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
             if (!person.is_portal_active) return res.status(403).json({ success: false, message: 'Your portal access is not yet activated. Check your email for an invite.' });
             if (!person.portal_password_set) return res.status(403).json({ success: false, message: 'Please complete your account setup using the invite link sent to your email.' });
-            if (hashPassword(password) !== person.password_hash) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
+            if (!await verifyPassword(password, person.password_hash)) return res.status(401).json({ success: false, message: 'Invalid credentials.' });
             const token = await createSession(person.id, req);
             await supabase.from('persons').update({ last_portal_login: new Date().toISOString() }).eq('id', person.id);
             return res.status(200).json({ success: true, token, partner: { id: person.id, name: person.full_name, email: person.email } });
@@ -149,7 +154,7 @@ export default async function handler(req, res) {
             const { data: person } = await supabase.from('persons').select('id, full_name, email, portal_invite_token, invite_expires_at').eq('portal_invite_token', token).single();
             if (!person) return res.status(400).json({ success: false, message: 'Invalid or expired invite link.' });
             if (new Date(person.invite_expires_at) < new Date()) return res.status(400).json({ success: false, message: 'This invite link has expired. Please contact your administrator.' });
-            await supabase.from('persons').update({ password_hash: hashPassword(password), portal_password_set: true, portal_invite_token: null, invite_expires_at: null, is_portal_active: true }).eq('id', person.id);
+            await supabase.from('persons').update({ password_hash: await hashPassword(password), portal_password_set: true, portal_invite_token: null, invite_expires_at: null, is_portal_active: true }).eq('id', person.id);
             const sessionToken = await createSession(person.id, req);
             return res.status(200).json({ success: true, token: sessionToken, partner: { id: person.id, name: person.full_name, email: person.email } });
         }
@@ -172,14 +177,12 @@ export default async function handler(req, res) {
             }
 
             // Verify current password
-            const currentHash = hashPassword(current_password);
-
-            if (currentHash !== person.password_hash) {
+            if (!await verifyPassword(current_password, person.password_hash)) {
                 return res.status(400).json({ success: false, message: 'Current password is incorrect.' });
             }
 
             // Hash new password
-            const newHash = hashPassword(new_password);
+            const newHash = await hashPassword(new_password);
 
             const { error: updateErr } = await supabase
                 .from('persons')

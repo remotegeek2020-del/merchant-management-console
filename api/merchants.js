@@ -394,7 +394,7 @@ if (action === 'get_merchant_equipment') {
             const { note_id, title, body } = req.body;
             const { error } = await supabase
                 .from('merchant_notes')
-                .update({ title, body, created_at: new Date() })
+                .update({ title, body, updated_at: new Date().toISOString() })
                 .eq('id', note_id);
 
             if (error) throw error;
@@ -443,11 +443,14 @@ if (action === 'list') {
         'dba_name': 'dba_name',
         'merchant_id': 'merchant_id',
         'agent_id': 'agent_id',
-        'company_name': 'company_display_name', 
+        'company_name': 'company_display_name',
         'partner_name': 'partner_full_name'
     };
-    const targetCol = colMap[filterBy] || filterBy;
-    dataReq = dataReq.ilike(targetCol, `%${query}%`); // ✅ reassigned
+    if (!colMap[filterBy]) {
+        return res.status(400).json({ success: false, message: `Invalid filter field: ${filterBy}` });
+    }
+    const targetCol = colMap[filterBy];
+    dataReq = dataReq.ilike(targetCol, `%${query}%`);
 }
 
         const { data, count, error: dataError } = await dataReq
