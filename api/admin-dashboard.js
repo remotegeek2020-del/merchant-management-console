@@ -105,7 +105,7 @@ export default async function handler(req, res) {
         if (action === 'get_recent_deployments') {
             const { data, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, created_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)')
+                .select('id, deployment_id, status, created_at, purchase_type, tracking_id, notes, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)')
                 .order('created_at', { ascending: false })
                 .limit(8);
             if (error) throw error;
@@ -116,7 +116,7 @@ export default async function handler(req, res) {
             const { deployment_id } = req.body;
             const { data, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, created_at, updated_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), equipments:equipment_id(serial_number, terminal_type)')
+                .select('id, deployment_id, status, created_at, updated_at, purchase_type, tracking_id, notes, merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), equipments:equipment_id(serial_number, terminal_type)')
                 .eq('id', deployment_id)
                 .single();
             if (error) throw error;
