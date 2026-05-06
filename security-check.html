@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Security Check | Secret Dungeon</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function() {
+            if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
+                window.location.href = 'index.html?reason=unauthorized';
+            }
+            const role = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g,'_');
+            if (role !== 'super_admin') window.location.href = 'index.html';
+        })();
+    </script>
+    <style>
+        body { background: #0f172a; font-family: 'DM Sans', sans-serif; min-height: 100vh; padding: 0; margin: 0; }
+        .page-header { background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); padding: 28px 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .content { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+        .panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; overflow: hidden; margin-bottom: 20px; }
+        .panel-header { padding: 14px 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+        .panel-title { font-size: 13px; font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+        .panel-body { padding: 16px 20px; }
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 8px; font-size: 12px; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-danger { background: #dc2626; color: white; }
+        .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+        .btn-ghost:hover { border-color: #6366f1; color: #a5b4fc; }
+        .email-chip { display: inline-flex; align-items: center; gap: 6px; background: #0f172a; border: 1px solid #334155; border-radius: 99px; padding: 5px 12px; font-size: 12px; color: #e2e8f0; }
+        .email-chip button { background: none; border: none; color: #64748b; cursor: pointer; padding: 0; display: flex; align-items: center; }
+        .email-chip button:hover { color: #ef4444; }
+        .status-banner { padding: 16px 20px; border-radius: 10px; font-size: 15px; font-weight: 700; display: flex; align-items: center; gap: 10px; margin-bottom: 20px; }
+        .status-pass { background: #14532d; color: #86efac; }
+        .status-warn { background: #78350f; color: #fde68a; }
+        .status-fail { background: #7f1d1d; color: #fca5a5; }
+        .status-info { background: #1e3a5f; color: #93c5fd; }
+        .section-card { background: #0f172a; border: 1px solid #334155; border-radius: 10px; margin-bottom: 14px; overflow: hidden; }
+        .section-header { padding: 12px 16px; display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 13px; }
+        .section-pass { border-left: 4px solid #22c55e; }
+        .section-warn { border-left: 4px solid #f59e0b; }
+        .section-fail { border-left: 4px solid #ef4444; }
+        .section-info { border-left: 4px solid #3b82f6; }
+        .check-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 16px; border-top: 1px solid #1e293b; font-size: 12px; }
+        .check-icon { font-size: 15px; flex-shrink: 0; margin-top: 1px; }
+        .check-name { font-weight: 600; color: #e2e8f0; }
+        .check-detail { color: #94a3b8; margin-top: 2px; line-height: 1.5; }
+        .meta { font-size: 11px; color: #64748b; margin-top: 3px; }
+        .skeleton { background: linear-gradient(90deg,#1e293b 25%,#334155 50%,#1e293b 75%); background-size:400% 100%; animation:shimmer 1.2s infinite; border-radius:6px; }
+        @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+        .spinner { width: 18px; height: 18px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; display: inline-block; vertical-align: middle; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <div style="display:flex; align-items:center; gap:16px;">
+        <a href="secret-dungeon.html" style="background:rgba(255,255,255,0.15); border:none; border-radius:8px; color:white; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; display:flex; align-items:center; gap:5px;">
+            <span class="material-icons" style="font-size:16px;">arrow_back</span> Back
+        </a>
+        <div>
+            <h1 style="color:white; font-size:1.4rem; font-weight:800; margin:0;">Daily Security Check</h1>
+            <p style="color:#e0e7ff; opacity:0.8; margin:0; font-size:12px;">Database integrity, access control, login activity & operational health</p>
+        </div>
+    </div>
+    <button class="btn btn-primary" id="run-btn" onclick="runCheck()">
+        <span class="material-icons" style="font-size:16px;">security</span>
+        Run Security Check
+    </button>
+</div>
+
+<div class="content">
+
+    <!-- Email Recipients -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:#6366f1; font-size:18px;">email</span>
+                Report Recipients
+            </div>
+            <button class="btn btn-ghost" onclick="addEmail()">
+                <span class="material-icons" style="font-size:15px;">add</span>
+                Add Email
+            </button>
+        </div>
+        <div class="panel-body">
+            <div id="email-list" style="display:flex; flex-wrap:wrap; gap:8px; min-height:32px;">
+                <div class="skeleton" style="height:30px; width:200px;"></div>
+            </div>
+            <p style="font-size:11px; color:#64748b; margin:10px 0 0;">Report will be emailed to all addresses above when the check runs.</p>
+        </div>
+    </div>
+
+    <!-- Last Run Info -->
+    <div id="last-run-bar" style="display:none; margin-bottom:20px;">
+        <div style="font-size:11px; color:#64748b; display:flex; align-items:center; gap:6px;">
+            <span class="material-icons" style="font-size:14px;">history</span>
+            <span id="last-run-text"></span>
+        </div>
+    </div>
+
+    <!-- Report Output -->
+    <div id="report-area">
+        <div class="panel">
+            <div class="panel-body" style="text-align:center; padding:48px; color:#64748b;">
+                <span class="material-icons" style="font-size:48px; display:block; margin-bottom:12px; color:#334155;">security</span>
+                No report loaded. Click <strong style="color:#a5b4fc;">Run Security Check</strong> to run all checks now.
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+async function api(action, extra = {}) {
+    const r = await fetch('/api/security-check', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...extra })
+    });
+    return r.json();
+}
+
+async function loadEmails() {
+    const r = await api('list_emails');
+    renderEmails(r.emails || []);
+}
+
+function renderEmails(emails) {
+    const el = document.getElementById('email-list');
+    if (!emails.length) {
+        el.innerHTML = `<span style="font-size:12px; color:#64748b;">No recipients configured yet.</span>`;
+        return;
+    }
+    el.innerHTML = emails.map(e => `
+        <div class="email-chip">
+            <span class="material-icons" style="font-size:13px; color:#6366f1;">mail</span>
+            ${e.email}
+            <button onclick="removeEmail('${e.id}')" title="Remove">
+                <span class="material-icons" style="font-size:14px;">close</span>
+            </button>
+        </div>`).join('');
+}
+
+async function addEmail() {
+    const { value: email } = await Swal.fire({
+        title: 'Add Email Recipient',
+        input: 'email',
+        inputPlaceholder: 'name@example.com',
+        background: '#1e293b',
+        color: '#e2e8f0',
+        confirmButtonColor: '#6366f1',
+        showCancelButton: true,
+        inputValidator: v => (!v || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) ? 'Please enter a valid email address' : null
+    });
+    if (!email) return;
+    const r = await api('add_email', { email });
+    if (r.success) { loadEmails(); }
+    else Swal.fire({ icon: 'error', title: 'Error', text: r.message, background: '#1e293b', color: '#e2e8f0' });
+}
+
+async function removeEmail(id) {
+    const r = await api('remove_email', { id });
+    if (r.success) loadEmails();
+}
+
+async function loadLastReport() {
+    const r = await api('get_last_report');
+    if (r.report) {
+        renderReport(r.report.report_json);
+        const bar = document.getElementById('last-run-bar');
+        bar.style.display = 'block';
+        document.getElementById('last-run-text').textContent =
+            `Last run: ${new Date(r.report.run_at).toLocaleString()} · Triggered by: ${r.report.triggered_by}`;
+    }
+}
+
+async function runCheck() {
+    const btn = document.getElementById('run-btn');
+    btn.disabled = true;
+    btn.innerHTML = `<span class="spinner"></span> Running…`;
+
+    document.getElementById('report-area').innerHTML = `
+        <div class="panel"><div class="panel-body" style="text-align:center; padding:48px; color:#94a3b8;">
+            <span class="spinner" style="width:32px;height:32px;border-width:3px;"></span>
+            <div style="margin-top:16px; font-size:13px;">Running all security checks…</div>
+        </div></div>`;
+
+    const r = await api('run_check');
+    btn.disabled = false;
+    btn.innerHTML = `<span class="material-icons" style="font-size:16px;">security</span> Run Security Check`;
+
+    if (r.success) {
+        renderReport(r.report);
+        const bar = document.getElementById('last-run-bar');
+        bar.style.display = 'block';
+        document.getElementById('last-run-text').textContent = `Last run: ${new Date().toLocaleString()} · Triggered by: manual`;
+    } else {
+        document.getElementById('report-area').innerHTML = `
+            <div class="panel"><div class="panel-body" style="color:#fca5a5; padding:20px;">
+                Error: ${r.message || 'Unknown error occurred.'}
+            </div></div>`;
+    }
+}
+
+function renderReport(report) {
+    const overallIcon = report.overall_status === 'pass' ? '✅' : report.overall_status === 'warn' ? '⚠️' : '❌';
+    const overallLabel = report.overall_status === 'pass' ? 'All Clear — No Issues Found'
+        : report.overall_status === 'warn' ? 'Warnings Detected — Review Recommended'
+        : 'Issues Detected — Immediate Attention Required';
+
+    const statusClass = `status-${report.overall_status}`;
+
+    const checkIcon = s => s === 'pass' ? '✅' : s === 'warn' ? '⚠️' : s === 'fail' ? '❌' : 'ℹ️';
+    const sectionClass = s => `section-${s === 'info' ? 'info' : s}`;
+
+    const sectionsHtml = (report.sections || []).map(s => `
+        <div class="section-card ${sectionClass(s.status)}">
+            <div class="section-header">
+                <span class="material-icons" style="font-size:18px; color:${s.status==='pass'?'#22c55e':s.status==='warn'?'#f59e0b':s.status==='fail'?'#ef4444':'#3b82f6'};">${s.icon || 'check_circle'}</span>
+                <span style="color:#e2e8f0;">${s.title}</span>
+                <span style="margin-left:auto; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; background:${s.status==='pass'?'#14532d':s.status==='warn'?'#78350f':s.status==='fail'?'#7f1d1d':'#1e3a5f'}; color:${s.status==='pass'?'#86efac':s.status==='warn'?'#fde68a':s.status==='fail'?'#fca5a5':'#93c5fd'}; text-transform:uppercase;">${s.status}</span>
+            </div>
+            ${(s.checks || []).map(c => `
+            <div class="check-row">
+                <span class="check-icon">${checkIcon(c.status)}</span>
+                <div>
+                    <div class="check-name">${c.name}</div>
+                    <div class="check-detail">${c.detail}</div>
+                </div>
+            </div>`).join('')}
+        </div>`).join('');
+
+    document.getElementById('report-area').innerHTML = `
+        <div class="status-banner ${statusClass}">
+            <span style="font-size:22px;">${overallIcon}</span>
+            <div>
+                <div>${overallLabel}</div>
+                <div style="font-size:11px; font-weight:400; opacity:0.8; margin-top:3px;">Generated: ${new Date(report.timestamp).toLocaleString()}</div>
+            </div>
+        </div>
+        ${sectionsHtml}`;
+}
+
+loadEmails();
+loadLastReport();
+</script>
+</body>
+</html>
