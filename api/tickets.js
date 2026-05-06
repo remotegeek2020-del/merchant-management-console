@@ -546,6 +546,17 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        if (action === 'delete_ticket') {
+            const { ticket_id } = req.body;
+            if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
+
+            // Delete comments first (FK), then the ticket
+            await supabase.from('ticket_comments').delete().eq('ticket_id', ticket_id);
+            const { error } = await supabase.from('support_tickets').delete().eq('id', ticket_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {
