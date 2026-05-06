@@ -157,6 +157,7 @@ async function authorizeUser(user) {
     // Manage General Admin Cards
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-logs')) document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
+    if (document.getElementById('card-admin-dashboard')) document.getElementById('card-admin-dashboard').style.display = isAdmin ? 'flex' : 'none';
 
     // --- 3. THE DUNGEON LOCKDOWN ---
     if (elements.secretDungeon) {

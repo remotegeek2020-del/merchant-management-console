@@ -208,6 +208,54 @@ if (action === 'getMonthlyReport') {
             return res.status(200).json({ success: true, data: updatedData });
         }
 
+        // --- REPAIR QUEUE ACTIONS ---
+
+        if (action === 'list_repair_queue') {
+            const { data, error } = await supabase
+                .from('equipments')
+                .select('id, serial_number, terminal_type, current_location, condition, received_date, repair_notes, repair_stage')
+                .eq('current_location', 'Warsaw Repairs')
+                .order('received_date', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'log_repair_action') {
+            const { equipment_id, repair_stage, repair_notes, technician } = req.body;
+            const { error } = await supabase.from('equipments')
+                .update({ repair_stage, repair_notes, condition: repair_stage })
+                .eq('id', equipment_id);
+            if (error) throw error;
+            await supabase.from('equipment_logs').insert([{
+                equipment_id,
+                action: 'repair_update',
+                from_location: 'Warsaw Repairs',
+                to_location: 'Warsaw Repairs',
+                notes: `Stage: ${repair_stage}. ${repair_notes || ''}. Tech: ${technician || 'Staff'}`
+            }]);
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'close_repair') {
+            const { equipment_id, outcome, technician } = req.body;
+            // outcome: 'return_to_stock' | 'scrap'
+            const isScrap = outcome === 'scrap';
+            const newStatus = isScrap ? 'decommissioned' : 'stocked';
+            const newLocation = isScrap ? 'Scrapped' : 'Warsaw Office';
+            const { error } = await supabase.from('equipments')
+                .update({ status: newStatus, current_location: newLocation, repair_stage: null, repair_notes: null, merchant_id: null })
+                .eq('id', equipment_id);
+            if (error) throw error;
+            await supabase.from('equipment_logs').insert([{
+                equipment_id,
+                action: isScrap ? 'scrapped' : 'repair_completed',
+                from_location: 'Warsaw Repairs',
+                to_location: newLocation,
+                notes: `Repair closed by ${technician || 'Staff'}. Outcome: ${isScrap ? 'Scrapped' : 'Returned to stock'}`
+            }]);
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ message: 'Unknown action' });
 
     } catch (err) {

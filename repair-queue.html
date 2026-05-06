@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Repair Queue | PayProTec</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function() {
+            if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
+                window.location.href = 'index.html?reason=unauthorized';
+            }
+        })();
+    </script>
+    <style>
+        body { background: var(--surface-0); font-family: 'DM Sans', sans-serif; padding: var(--page-pad); }
+        .dashboard-container { max-width: 1400px; margin: 0 auto; }
+        .modern-header { background: white; border-radius: var(--radius-lg); padding: 16px 24px; margin-bottom: var(--gap); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+        .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
+        .kpi-card { background: white; padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 14px; }
+        .kpi-icon { width: 44px; height: 44px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .kpi-val { font-size: 1.8rem; font-weight: 800; font-family: 'DM Mono', monospace; color: var(--text-primary); letter-spacing: -0.5px; line-height: 1; }
+        .kpi-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 4px; }
+        .main-card { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+        .slds-table thead th { background: #f8fafc !important; font-size: 10px !important; font-weight: 700 !important; color: var(--text-muted) !important; text-transform: uppercase !important; letter-spacing: 0.6px !important; padding: 12px !important; }
+        .slds-table tbody td { padding: 14px 12px !important; font-size: 13px; vertical-align: middle; }
+        .slds-table tbody tr:hover td { background: var(--surface-2) !important; }
+        .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        .stage-received { background: #fef3c7; color: #92400e; }
+        .stage-diagnosis { background: #e0f2fe; color: #0369a1; }
+        .stage-repair { background: #f3e8ff; color: #7c3aed; }
+        .stage-testing { background: #dcfce7; color: #166534; }
+        .action-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.15s; font-family: 'DM Sans', sans-serif; }
+        .action-btn:hover { background: var(--surface-2); }
+        .action-btn.danger { color: var(--red-text); border-color: var(--red-bg); }
+        .action-btn.danger:hover { background: var(--red-bg); }
+        .action-btn.success { color: var(--green-text); border-color: var(--green-bg); }
+        .action-btn.success:hover { background: var(--green-bg); }
+        .empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); }
+        @media (max-width: 768px) { .kpi-row { grid-template-columns: 1fr; } .main-card { overflow-x: auto; } }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+
+    <div class="modern-header">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 15px;">
+                <span class="material-icons" style="font-size:18px; vertical-align:middle;">arrow_back</span>
+                <span style="font-weight:700; font-size:11px; margin-left:5px;">HOME</span>
+            </a>
+            <div>
+                <h1 style="font-size:1.5rem; font-weight:800; color:var(--pp-navy); margin:0;">Repair Queue</h1>
+                <p style="font-size:11px; color:var(--text-muted); margin:0;">Equipment at Warsaw Repairs</p>
+            </div>
+        </div>
+        <button onclick="loadQueue()" class="slds-button slds-button_neutral" style="border-radius:10px; font-weight:700; font-size:12px; padding:8px 16px;">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle;">refresh</span>
+            Refresh
+        </button>
+    </div>
+
+    <div class="kpi-row">
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:22px;">build</span></div>
+            <div>
+                <div class="kpi-val" id="kpi-total">—</div>
+                <div class="kpi-label">Total In Repair</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:22px;">pending</span></div>
+            <div>
+                <div class="kpi-val" id="kpi-awaiting">—</div>
+                <div class="kpi-label">Awaiting Diagnosis</div>
+            </div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:22px;">check_circle</span></div>
+            <div>
+                <div class="kpi-val" id="kpi-ready">—</div>
+                <div class="kpi-label">Ready for Closure</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="main-card">
+        <div class="table-header">
+            <div style="font-size:13px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
+                <span class="material-icons" style="color:var(--text-muted); font-size:18px;">hardware</span>
+                Equipment Under Repair
+            </div>
+        </div>
+        <div id="queue-body">
+            <div class="empty-state">
+                <div class="slds-spinner_container" style="position:relative; height:60px;">
+                    <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand">
+                        <span class="slds-assistive-text">Loading</span>
+                        <div class="slds-spinner__dot-a"></div>
+                        <div class="slds-spinner__dot-b"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const STAGES = ['Received', 'Diagnosis', 'Under Repair', 'Testing'];
+const STAGE_CLASSES = { 'Received': 'stage-received', 'Diagnosis': 'stage-diagnosis', 'Under Repair': 'stage-repair', 'Testing': 'stage-testing' };
+const technician = localStorage.getItem('pp_user_first_name') || 'Staff';
+
+async function equipApi(action, extra = {}) {
+    const r = await fetch('/api/equipments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...extra })
+    });
+    return r.json();
+}
+
+async function loadQueue() {
+    document.getElementById('queue-body').innerHTML = `<div class="empty-state"><div style="color:var(--text-muted);">Loading...</div></div>`;
+    const res = await equipApi('list_repair_queue');
+    if (!res.success) {
+        document.getElementById('queue-body').innerHTML = `<div class="empty-state">Error loading queue.</div>`;
+        return;
+    }
+
+    const data = res.data || [];
+    document.getElementById('kpi-total').textContent = data.length;
+    document.getElementById('kpi-awaiting').textContent = data.filter(e => !e.repair_stage || e.repair_stage === 'Received').length;
+    document.getElementById('kpi-ready').textContent = data.filter(e => e.repair_stage === 'Testing').length;
+
+    if (!data.length) {
+        document.getElementById('queue-body').innerHTML = `
+            <div class="empty-state">
+                <span class="material-icons" style="font-size:40px; color:var(--green); display:block; margin-bottom:12px;">check_circle</span>
+                <div style="font-weight:700; color:var(--text-primary); margin-bottom:4px;">Repair queue is clear</div>
+                <div style="font-size:12px;">No equipment currently at Warsaw Repairs.</div>
+            </div>`;
+        return;
+    }
+
+    document.getElementById('queue-body').innerHTML = `
+        <table class="slds-table slds-table_cell-buffer slds-table_bordered" style="width:100%;">
+            <thead>
+                <tr>
+                    <th>Serial Number</th>
+                    <th>Model</th>
+                    <th>Stage</th>
+                    <th>Notes</th>
+                    <th>Received</th>
+                    <th style="text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                ${data.map(e => {
+                    const stage = e.repair_stage || 'Received';
+                    const badgeClass = STAGE_CLASSES[stage] || 'stage-received';
+                    return `<tr data-id="${e.id}">
+                        <td><span style="font-family:'DM Mono',monospace; font-weight:600;">${e.serial_number}</span></td>
+                        <td>${e.terminal_type || '—'}</td>
+                        <td><span class="badge ${badgeClass}">${stage}</span></td>
+                        <td style="color:var(--text-secondary); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${e.repair_notes || '—'}</td>
+                        <td style="color:var(--text-muted); font-size:12px;">${e.received_date ? new Date(e.received_date).toLocaleDateString() : '—'}</td>
+                        <td style="text-align:right;">
+                            <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
+                                <button class="action-btn" onclick="updateStage('${e.id}', '${e.serial_number}', '${stage}')">Update Stage</button>
+                                <button class="action-btn success" onclick="closeRepair('${e.id}', '${e.serial_number}', 'return_to_stock')">✓ Return to Stock</button>
+                                <button class="action-btn danger" onclick="closeRepair('${e.id}', '${e.serial_number}', 'scrap')">Scrap</button>
+                            </div>
+                        </td>
+                    </tr>`;
+                }).join('')}
+            </tbody>
+        </table>`;
+}
+
+async function updateStage(id, serial, currentStage) {
+    const currentIdx = STAGES.indexOf(currentStage);
+    const stageOptions = STAGES.map((s, i) =>
+        `<option value="${s}" ${s === currentStage ? 'selected' : ''}>${s}</option>`
+    ).join('');
+
+    const { value: formValues, isConfirmed } = await Swal.fire({
+        title: `Update: ${serial}`,
+        html: `
+            <div style="text-align:left;">
+                <label style="font-size:12px; font-weight:700; color:#475569; display:block; margin-bottom:6px;">REPAIR STAGE</label>
+                <select id="swal-stage" class="slds-select" style="width:100%; margin-bottom:14px; border-radius:8px;">${stageOptions}</select>
+                <label style="font-size:12px; font-weight:700; color:#475569; display:block; margin-bottom:6px;">TECHNICIAN NOTES</label>
+                <textarea id="swal-notes" class="slds-textarea" placeholder="Describe findings, parts replaced, etc..." style="width:100%; border-radius:8px; min-height:80px;"></textarea>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Save Update',
+        confirmButtonColor: '#004990',
+        preConfirm: () => ({
+            stage: document.getElementById('swal-stage').value,
+            notes: document.getElementById('swal-notes').value
+        })
+    });
+
+    if (!isConfirmed || !formValues) return;
+
+    Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading() });
+    const res = await equipApi('log_repair_action', {
+        equipment_id: id,
+        repair_stage: formValues.stage,
+        repair_notes: formValues.notes,
+        technician
+    });
+
+    if (res.success) {
+        Swal.fire('Updated', `${serial} moved to "${formValues.stage}".`, 'success');
+        loadQueue();
+    } else {
+        Swal.fire('Error', res.message || 'Update failed.', 'error');
+    }
+}
+
+async function closeRepair(id, serial, outcome) {
+    const isScrap = outcome === 'scrap';
+    const { isConfirmed } = await Swal.fire({
+        title: isScrap ? `Scrap ${serial}?` : `Return ${serial} to Stock?`,
+        text: isScrap
+            ? 'This will mark the unit as decommissioned. This cannot be undone.'
+            : 'This will move the unit back to Warsaw Office as stocked.',
+        icon: isScrap ? 'warning' : 'question',
+        showCancelButton: true,
+        confirmButtonText: isScrap ? 'Yes, Scrap It' : 'Return to Stock',
+        confirmButtonColor: isScrap ? '#dc2626' : '#10b981'
+    });
+
+    if (!isConfirmed) return;
+
+    Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
+    const res = await equipApi('close_repair', { equipment_id: id, outcome, technician });
+
+    if (res.success) {
+        Swal.fire(
+            isScrap ? 'Scrapped' : 'Done!',
+            isScrap ? `${serial} has been decommissioned.` : `${serial} returned to Warsaw Office stock.`,
+            'success'
+        );
+        loadQueue();
+    } else {
+        Swal.fire('Error', res.message || 'Operation failed.', 'error');
+    }
+}
+
+loadQueue();
+</script>
+</body>
+</html>

@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin Dashboard | PayProTec</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function() {
+            if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
+                window.location.href = 'index.html?reason=unauthorized';
+            }
+        })();
+    </script>
+    <style>
+        body { background: var(--surface-0); font-family: 'DM Sans', sans-serif; padding: var(--page-pad); }
+        .dashboard-container { max-width: 1600px; margin: 0 auto; }
+        .modern-header { background: white; border-radius: var(--radius-lg); padding: 16px 24px; margin-bottom: var(--gap); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+        .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
+        .kpi-card { background: white; padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
+        .kpi-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
+        .kpi-val { font-size: 1.9rem; font-weight: 800; color: var(--text-primary); font-family: 'DM Mono', monospace; letter-spacing: -1px; line-height: 1; }
+        .kpi-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin-top: 4px; }
+        .kpi-sub { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+        .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
+        .three-col { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
+        .panel { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+        .panel-title { font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+        .panel-body { padding: 0; }
+        .risk-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .risk-row:last-child { border-bottom: none; }
+        .risk-row:hover { background: var(--surface-2); }
+        .risk-name { font-weight: 600; color: var(--text-primary); }
+        .risk-mid { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); }
+        .drop-badge { background: var(--red-bg); color: var(--red-text); font-weight: 800; font-size: 11px; padding: 3px 10px; border-radius: 99px; min-width: 52px; text-align: center; }
+        .drop-badge.mild { background: var(--amber-bg); color: var(--amber-text); }
+        .dep-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .dep-row:last-child { border-bottom: none; }
+        .dep-row:hover { background: var(--surface-2); }
+        .dep-icon { width: 32px; height: 32px; background: var(--blue-bg); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        .badge-open { background: var(--blue-bg); color: var(--blue-text); }
+        .badge-transit { background: var(--amber-bg); color: var(--amber-text); }
+        .badge-closed { background: var(--gray-bg); color: var(--gray-text); }
+        .equip-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--border); }
+        .equip-seg { background: white; padding: 16px 20px; text-align: center; }
+        .equip-num { font-size: 1.4rem; font-weight: 800; font-family: 'DM Mono', monospace; }
+        .equip-lbl { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px; }
+        .activity-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 12px; }
+        .activity-row:last-child { border-bottom: none; }
+        .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+        .dot-success { background: var(--green); }
+        .dot-failure { background: var(--red); }
+        .dot-info { background: var(--pp-accent); }
+        .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+        .skeleton { background: linear-gradient(90deg, #f0f4f8 25%, #e2e8f0 50%, #f0f4f8 75%); background-size: 400% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
+        @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
+        @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .three-col { grid-template-columns: 1fr; } }
+        @media (max-width: 700px) { .kpi-grid { grid-template-columns: 1fr 1fr; } .two-col { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+
+    <div class="modern-header">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 15px;">
+                <span class="material-icons" style="font-size:18px; vertical-align:middle;">arrow_back</span>
+                <span style="font-weight:700; font-size:11px; margin-left:5px;">HOME</span>
+            </a>
+            <div>
+                <h1 style="font-size:1.5rem; font-weight:800; color:var(--pp-navy); margin:0;">Admin Dashboard</h1>
+                <p style="font-size:11px; color:var(--text-muted); margin:0;" id="last-updated">Loading...</p>
+            </div>
+        </div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <button onclick="sendRiskDigest()" class="slds-button" style="background:#dc2626; color:white; border-radius:10px; font-weight:700; font-size:12px; padding:8px 16px; border:none; cursor:pointer; display:flex; align-items:center; gap:6px;">
+                <span class="material-icons" style="font-size:16px;">notifications_active</span>
+                Send Risk Alert
+            </button>
+            <button onclick="loadAll()" class="slds-button slds-button_neutral" style="border-radius:10px; font-weight:700; font-size:12px; padding:8px 16px;">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle;">refresh</span>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Row -->
+    <div class="kpi-grid" id="kpi-grid">
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">storefront</span></div><div class="kpi-val skeleton" style="height:32px; width:80px;">&nbsp;</div><div class="kpi-label">Active Merchants</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">payments</span></div><div class="kpi-val skeleton" style="height:32px; width:100px;">&nbsp;</div><div class="kpi-label">MTD Volume</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:20px;">local_shipping</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Active Deployments</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">assignment_return</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Open RMAs</div></div>
+    </div>
+
+    <!-- Secondary KPIs -->
+    <div class="kpi-grid" id="kpi-grid-2" style="grid-template-columns: repeat(4,1fr);">
+        <div class="kpi-card"><div class="kpi-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed; font-size:20px;">fiber_new</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">New This Week</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">inventory_2</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Units In Stock</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">devices</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Units Deployed</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">build</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">In Repair</div></div>
+    </div>
+
+    <!-- At-Risk + Recent Deployments -->
+    <div class="three-col">
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:#dc2626; font-size:18px;">trending_down</span>
+                    At-Risk Merchants
+                </div>
+                <span id="risk-count" style="font-size:11px; color:var(--text-muted);"></span>
+            </div>
+            <div class="panel-body" id="risk-table">
+                <div class="empty-state"><div class="skeleton" style="height:14px; width:200px; margin:0 auto 10px;"></div><div class="skeleton" style="height:14px; width:160px; margin:0 auto;"></div></div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:var(--pp-accent); font-size:18px;">local_shipping</span>
+                    Recent Deployments
+                </div>
+                <a href="deployments-dashboard.html" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">View All</a>
+            </div>
+            <div class="panel-body" id="dep-list">
+                <div class="empty-state"><div class="skeleton" style="height:14px; width:180px; margin:0 auto;"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="panel" style="margin-bottom:var(--gap);">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:var(--text-muted); font-size:18px;">history</span>
+                Recent Activity
+            </div>
+            <a href="activity-logs.html" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">Full Log</a>
+        </div>
+        <div class="panel-body" id="activity-log">
+            <div class="empty-state"><div class="skeleton" style="height:14px; width:220px; margin:0 auto;"></div></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const fmt = n => '$' + parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+const timeAgo = d => {
+    const s = Math.floor((Date.now() - new Date(d)) / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+};
+
+async function api(action, extra = {}) {
+    const r = await fetch('/api/admin-dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...extra })
+    });
+    return r.json();
+}
+
+function renderKPIs(kpis) {
+    document.getElementById('kpi-grid').innerHTML = `
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">storefront</span></div>
+            <div class="kpi-val">${kpis.approved.toLocaleString()}</div>
+            <div class="kpi-label">Active Merchants</div>
+            <div class="kpi-sub">${kpis.pending.toLocaleString()} pending &nbsp;·&nbsp; ${kpis.closed.toLocaleString()} closed</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">payments</span></div>
+            <div class="kpi-val">${fmt(kpis.total_mtd)}</div>
+            <div class="kpi-label">MTD Volume</div>
+            <div class="kpi-sub">${fmt(kpis.total_90d / 3)} monthly avg (90d)</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:20px;">local_shipping</span></div>
+            <div class="kpi-val">${kpis.active_deployments}</div>
+            <div class="kpi-label">Active Deployments</div>
+            <div class="kpi-sub"><a href="deployments-dashboard.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View tickets →</a></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">assignment_return</span></div>
+            <div class="kpi-val">${kpis.open_rmas}</div>
+            <div class="kpi-label">Open RMAs</div>
+            <div class="kpi-sub"><a href="returns-dashboard.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View returns →</a></div>
+        </div>`;
+
+    document.getElementById('kpi-grid-2').innerHTML = `
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed; font-size:20px;">fiber_new</span></div>
+            <div class="kpi-val">${kpis.new_this_week}</div>
+            <div class="kpi-label">New This Week</div>
+            <div class="kpi-sub">Enrolled since Sunday</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">inventory_2</span></div>
+            <div class="kpi-val">${kpis.equipment.stocked}</div>
+            <div class="kpi-label">Units In Stock</div>
+            <div class="kpi-sub"><a href="equipments-dashboard.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View inventory →</a></div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">devices</span></div>
+            <div class="kpi-val">${kpis.equipment.deployed}</div>
+            <div class="kpi-label">Units Deployed</div>
+            <div class="kpi-sub">At merchant sites</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">build</span></div>
+            <div class="kpi-val">${kpis.equipment.repair}</div>
+            <div class="kpi-label">In Repair</div>
+            <div class="kpi-sub"><a href="repair-queue.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View queue →</a></div>
+        </div>`;
+}
+
+function renderAtRisk(data) {
+    document.getElementById('risk-count').textContent = data.length ? `${data.length} merchant(s)` : '';
+    if (!data.length) {
+        document.getElementById('risk-table').innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px; color:var(--green); display:block; margin-bottom:8px;">check_circle</span>All merchants are on track.</div>`;
+        return;
+    }
+    document.getElementById('risk-table').innerHTML = data.slice(0, 15).map(m => `
+        <div class="risk-row">
+            <div>
+                <div class="risk-name">${m.dba_name}</div>
+                <div class="risk-mid">${m.merchant_id} &nbsp;·&nbsp; ${fmt(m.volume_30_day)} vs ${fmt(m.baseline)} expected</div>
+            </div>
+            <div style="font-size:11px; color:var(--text-muted);">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—'}</div>
+            <div class="drop-badge ${m.drop_pct < 30 ? 'mild' : ''}">-${m.drop_pct}%</div>
+        </div>`).join('');
+}
+
+function renderDeployments(data) {
+    if (!data.length) {
+        document.getElementById('dep-list').innerHTML = `<div class="empty-state">No recent deployments.</div>`;
+        return;
+    }
+    const statusClass = s => s === 'Open' ? 'badge-open' : s === 'In Transit' ? 'badge-transit' : 'badge-closed';
+    document.getElementById('dep-list').innerHTML = data.map(d => `
+        <div class="dep-row">
+            <div class="dep-icon"><span class="material-icons" style="color:#0369a1; font-size:16px;">local_shipping</span></div>
+            <div style="flex:1; min-width:0;">
+                <div style="font-weight:600; font-size:12px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${d.merchants?.dba_name || '—'}</div>
+                <div style="font-size:11px; color:var(--text-muted); font-family:'DM Mono',monospace;">${d.equipments?.serial_number || '—'} · ${d.equipments?.terminal_type || ''}</div>
+            </div>
+            <div style="text-align:right; flex-shrink:0;">
+                <span class="badge ${statusClass(d.status)}">${d.status}</span>
+                <div style="font-size:10px; color:var(--text-muted); margin-top:3px;">${timeAgo(d.created_at)}</div>
+            </div>
+        </div>`).join('');
+}
+
+function renderActivity(data) {
+    if (!data.length) {
+        document.getElementById('activity-log').innerHTML = `<div class="empty-state">No recent activity.</div>`;
+        return;
+    }
+    document.getElementById('activity-log').innerHTML = `<div style="display:grid; grid-template-columns:repeat(2,1fr);">` +
+        data.map(a => `
+        <div class="activity-row">
+            <div class="activity-dot ${(a.status||'').toUpperCase()==='SUCCESS'?'dot-success':(a.status||'').toUpperCase()==='FAILURE'?'dot-failure':'dot-info'}"></div>
+            <div style="flex:1; min-width:0;">
+                <div style="font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${a.email || '—'}</div>
+                <div style="color:var(--text-muted);">${a.action || ''}</div>
+            </div>
+            <div style="font-size:10px; color:var(--text-muted); flex-shrink:0;">${timeAgo(a.created_at)}</div>
+        </div>`).join('') + `</div>`;
+}
+
+async function sendRiskDigest() {
+    const { isConfirmed } = await Swal.fire({
+        title: 'Send Risk Alert?',
+        text: 'This will email all admins a digest of at-risk merchants.',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: 'Send Now',
+        confirmButtonColor: '#dc2626'
+    });
+    if (!isConfirmed) return;
+
+    Swal.fire({ title: 'Sending...', didOpen: () => Swal.showLoading() });
+    const r = await fetch('/api/alerts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send_risk_digest' })
+    }).then(r => r.json());
+
+    if (r.success) {
+        Swal.fire('Sent!', `${r.at_risk_count} at-risk merchants reported to ${r.admins_notified} admin(s).`, 'success');
+    } else {
+        Swal.fire('Issue', r.message || 'Could not send.', 'warning');
+    }
+}
+
+async function loadAll() {
+    document.getElementById('last-updated').textContent = 'Refreshing...';
+    const [kpiRes, riskRes, depRes] = await Promise.all([
+        api('get_kpis'),
+        api('get_at_risk'),
+        api('get_recent_deployments')
+    ]);
+
+    if (kpiRes.success) {
+        renderKPIs(kpiRes.kpis);
+        renderActivity(kpiRes.recent_activity);
+    }
+    if (riskRes.success) renderAtRisk(riskRes.data);
+    if (depRes.success) renderDeployments(depRes.data);
+
+    document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+}
+
+loadAll();
+</script>
+</body>
+</html>
