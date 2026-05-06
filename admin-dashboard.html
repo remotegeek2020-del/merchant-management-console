@@ -44,6 +44,15 @@
         .access-row:hover { background:var(--surface-2); }
         .access-col { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:70px; }
         .access-col-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+        #merchant-detail-modal { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        #merchant-detail-modal.is-open { display:flex; }
+        .detail-modal-box { background:white; border-radius:16px; width:95%; max-width:520px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden; }
+        .detail-section { padding:16px 20px; border-bottom:1px solid var(--border); }
+        .detail-section:last-child { border-bottom:none; }
+        .detail-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px; }
+        .detail-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+        .detail-key { color:var(--text-muted); }
+        .detail-val { font-weight:600; color:var(--text-primary); text-align:right; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .risk-row:last-child { border-bottom: none; }
         .risk-row:hover { background: var(--surface-2); }
         .risk-name { font-weight: 600; color: var(--text-primary); }
@@ -178,6 +187,19 @@
 
 </div>
 
+<!-- Merchant Detail Modal -->
+<div id="merchant-detail-modal">
+    <div class="detail-modal-box">
+        <div style="padding:16px 20px; background:var(--pp-navy); display:flex; justify-content:space-between; align-items:center;">
+            <div style="font-weight:800; font-size:14px; color:white;" id="modal-merchant-title">Merchant Detail</div>
+            <button onclick="closeDetailModal()" style="background:none; border:none; color:white; cursor:pointer; padding:0;"><span class="material-icons">close</span></button>
+        </div>
+        <div id="modal-body" style="max-height:70vh; overflow-y:auto;">
+            <div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>
+        </div>
+    </div>
+</div>
+
 <script>
 const fmt = n => '$' + parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const timeAgo = d => {
@@ -251,7 +273,10 @@ function renderKPIs(kpis) {
         </div>`;
 }
 
+let atRiskCache = [];
+
 function renderAtRisk(data) {
+    atRiskCache = data;
     document.getElementById('risk-count').textContent = data.length ? `${data.length} merchant(s)` : '';
     if (!data.length) {
         document.getElementById('risk-table').innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px; color:var(--green); display:block; margin-bottom:8px;">check_circle</span>All merchants are on track.</div>`;
@@ -266,8 +291,57 @@ function renderAtRisk(data) {
             <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;" title="${m.agent_name || '—'}">${m.agent_name || '—'}</div>
             <div style="font-size:11px; color:var(--text-muted);">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—'}</div>
             <div class="drop-badge ${m.drop_pct < 30 ? 'mild' : ''}">-${m.drop_pct}%</div>
-            <a href="merchants-dashboard.html?q=${encodeURIComponent(m.merchant_id)}" style="font-size:11px; font-weight:700; color:var(--pp-blue); text-decoration:none; white-space:nowrap; border:1px solid var(--border); padding:3px 10px; border-radius:6px;">View →</a>
+            <button onclick="openMerchantDetail('${m.merchant_id}')" style="font-size:11px; font-weight:700; color:var(--pp-blue); background:none; border:1px solid var(--border); padding:3px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;">View →</button>
         </div>`).join('');
+}
+
+async function openMerchantDetail(merchantId) {
+    document.getElementById('modal-merchant-title').textContent = merchantId;
+    document.getElementById('modal-body').innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>`;
+    document.getElementById('merchant-detail-modal').classList.add('is-open');
+
+    try {
+        const r = await api('get_merchant_detail', { merchant_id: merchantId });
+        if (!r.success) throw new Error(r.message);
+
+        const m = r.merchant;
+        const p = r.partner;
+        const baseline = parseFloat(m.volume_90_day) / 3;
+        const drop = Math.round((1 - parseFloat(m.volume_30_day) / baseline) * 100);
+
+        document.getElementById('modal-merchant-title').textContent = m.dba_name;
+        document.getElementById('modal-body').innerHTML = `
+            <div class="detail-section">
+                <div class="detail-label">Merchant</div>
+                <div class="detail-row"><span class="detail-key">MID</span><span class="detail-val" style="font-family:'DM Mono',monospace;">${m.merchant_id}</span></div>
+                <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val">${m.account_status || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Location</span><span class="detail-val">${[m.merchant_city, m.merchant_state].filter(Boolean).join(', ') || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Phone</span><span class="detail-val">${m.merchant_phone || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Enrolled</span><span class="detail-val">${m.enrollment_date || '—'}</span></div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-label">Volume Performance</div>
+                <div class="detail-row"><span class="detail-key">30-Day Volume</span><span class="detail-val">${fmt(m.volume_30_day)}</span></div>
+                <div class="detail-row"><span class="detail-key">90-Day Monthly Avg</span><span class="detail-val">${fmt(baseline)}</span></div>
+                <div class="detail-row"><span class="detail-key">Drop</span><span class="detail-val" style="color:var(--red-text); font-weight:800;">-${drop}%</span></div>
+                <div class="detail-row"><span class="detail-key">Last Batch</span><span class="detail-val">${m.last_batch_date || '—'}</span></div>
+            </div>
+            <div class="detail-section">
+                <div class="detail-label">Partner / Agent</div>
+                ${p ? `
+                <div class="detail-row"><span class="detail-key">Agent Group</span><span class="detail-val">${p.agent_name || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Contact Name</span><span class="detail-val">${p.full_name || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Email</span><span class="detail-val"><a href="mailto:${p.email}" style="color:var(--pp-blue);">${p.email || '—'}</a></span></div>
+                <div class="detail-row"><span class="detail-key">Phone</span><span class="detail-val">${p.phone_number || '—'}</span></div>
+                ` : `<div style="color:var(--text-muted); font-size:13px;">No partner linked to Agent ID: ${m.agent_id || 'N/A'}</div>`}
+            </div>`;
+    } catch (err) {
+        document.getElementById('modal-body').innerHTML = `<div style="padding:20px; color:var(--red-text);">Error: ${err.message}</div>`;
+    }
+}
+
+function closeDetailModal() {
+    document.getElementById('merchant-detail-modal').classList.remove('is-open');
 }
 
 function renderDeployments(data) {
@@ -350,6 +424,7 @@ async function loadStaffAccess() {
 
         const ACCESS_COLS = [
             { key: 'is_active', label: 'Active' },
+            { key: 'access_admin_dashboard', label: 'Admin Dash' },
             { key: 'access_inventory', label: 'Inventory' },
             { key: 'access_deployments', label: 'Deployments' },
             { key: 'access_returns', label: 'Returns' },

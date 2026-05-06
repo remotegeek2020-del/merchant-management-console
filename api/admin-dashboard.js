@@ -74,6 +74,34 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: atRisk });
         }
 
+        if (action === 'get_merchant_detail') {
+            const { merchant_id } = req.body;
+            const { data: merchant, error: mErr } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, agent_id, agent_name, volume_30_day, volume_90_day, last_batch_date, account_status, enrollment_date, merchant_phone, merchant_city, merchant_state')
+                .eq('merchant_id', merchant_id)
+                .single();
+            if (mErr) throw mErr;
+
+            let partner = null;
+            if (merchant?.agent_id) {
+                const { data: agentId } = await supabase
+                    .from('agent_identifiers')
+                    .select('id_string, agents!agent_identifiers_agent_id_fkey(agent_name, persons!agents_parent_agent_id_fkey(full_name, email, phone_number))')
+                    .eq('id_string', merchant.agent_id)
+                    .single();
+                if (agentId?.agents) {
+                    partner = {
+                        agent_name: agentId.agents.agent_name,
+                        full_name: agentId.agents.persons?.full_name || null,
+                        email: agentId.agents.persons?.email || null,
+                        phone_number: agentId.agents.persons?.phone_number || null
+                    };
+                }
+            }
+            return res.status(200).json({ success: true, merchant, partner });
+        }
+
         if (action === 'get_recent_deployments') {
             const { data, error } = await supabase
                 .from('deployments')
