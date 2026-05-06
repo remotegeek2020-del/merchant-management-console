@@ -141,8 +141,9 @@ export default async function handler(req, res) {
                 userid: user.userid, first_name: user.first_name, email: user.email, role: user.role,
                 access_inventory: user.access_inventory, access_deployments: user.access_deployments,
                 access_returns: user.access_returns, access_merchants: user.access_merchants,
-                access_partners: user.access_partners, // Added for completeness
-        access_jarvis: user.access_jarvis    // THIS IS THE CRITICAL ADDITION
+                access_partners: user.access_partners,
+                access_jarvis: user.access_jarvis,
+                access_admin_dashboard: user.access_admin_dashboard
             },
             newDeviceToken: generatedDeviceToken
         });

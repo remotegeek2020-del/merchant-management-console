@@ -44,6 +44,15 @@
         .access-row:hover { background:var(--surface-2); }
         .access-col { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:70px; }
         .access-col-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
+        #merchant-detail-modal { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        #merchant-detail-modal.is-open { display:flex; }
+        .detail-modal-box { background:white; border-radius:16px; width:95%; max-width:520px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden; }
+        .detail-section { padding:16px 20px; border-bottom:1px solid var(--border); }
+        .detail-section:last-child { border-bottom:none; }
+        .detail-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px; }
+        .detail-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+        .detail-key { color:var(--text-muted); }
+        .detail-val { font-weight:600; color:var(--text-primary); text-align:right; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .risk-row:last-child { border-bottom: none; }
         .risk-row:hover { background: var(--surface-2); }
         .risk-name { font-weight: 600; color: var(--text-primary); }
@@ -281,7 +290,10 @@ function renderKPIs(kpis) {
         </div>`;
 }
 
+let atRiskCache = [];
+
 function renderAtRisk(data) {
+    atRiskCache = data;
     document.getElementById('risk-count').textContent = data.length ? `${data.length} merchant(s)` : '';
     if (!data.length) {
         document.getElementById('risk-table').innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px; color:var(--green); display:block; margin-bottom:8px;">check_circle</span>All merchants are on track.</div>`;
@@ -534,6 +546,7 @@ async function loadStaffAccess() {
 
         const ACCESS_COLS = [
             { key: 'is_active', label: 'Active' },
+            { key: 'access_admin_dashboard', label: 'Admin Dash' },
             { key: 'access_inventory', label: 'Inventory' },
             { key: 'access_deployments', label: 'Deployments' },
             { key: 'access_returns', label: 'Returns' },
