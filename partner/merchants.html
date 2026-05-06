@@ -268,7 +268,7 @@ async function openMerchantDetail(merchantId, name) {
             </div>
             <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
                 <button onclick="addNote('${merchantId}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">note_add</span>Add Note</button>
-                <button onclick="openTicketMenu('${merchantId}','${m.dba_name}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">confirmation_number</span>Open Ticket</button>
+                <button onclick="openTicketMenu('${m.merchant_id}','${m.dba_name}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">confirmation_number</span>Open Ticket</button>
             </div>
         </div>
     ` });
@@ -305,11 +305,44 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
     });
 
     if (!window._ticketType) return;
-    openTicketForm(merchantId, merchantName, window._ticketType);
+
+    if (window._ticketType === 'rma_request') {
+        // Fetch active equipment before showing form
+        Swal.fire({ title: 'Checking equipment...', didOpen: () => Swal.showLoading() });
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_merchant_equipment', token, merchant_id: merchantId })
+        });
+        const result = await r.json();
+
+        if (!result.success) {
+            Swal.fire({ icon: 'error', title: 'Error', text: result.message, confirmButtonColor: '#0d9488' });
+            return;
+        }
+        if (!result.deployments || !result.deployments.length) {
+            Swal.fire({
+                icon: 'info', title: 'No Active Equipment',
+                html: `<p style="color:#475569;">There is no active equipment deployed for <b>${merchantName}</b>.</p><p style="color:#94a3b8;font-size:13px;">An RMA can only be requested when a merchant has equipment actively deployed.</p>`,
+                confirmButtonColor: '#0d9488'
+            });
+            return;
+        }
+        Swal.close();
+        openTicketForm(merchantId, merchantName, 'rma_request', result.deployments);
+    } else {
+        openTicketForm(merchantId, merchantName, 'deployment_request', []);
+    }
 };
 
-window.openTicketForm = async function(merchantId, merchantName, type) {
+window.openTicketForm = async function(merchantId, merchantName, type, deployments) {
     const isDeployment = type === 'deployment_request';
+
+    const equipmentOptions = !isDeployment ? deployments.map(d => {
+        const e = d.equipments;
+        const label = [e?.terminal_type, e?.model, e?.serial_number].filter(Boolean).join(' — ');
+        return `<option value="${e?.serial_number || ''}">${label || 'Unknown equipment'}</option>`;
+    }).join('') : '';
+
     const { value: form } = await Swal.fire({
         title: isDeployment ? `Deployment Request — ${merchantName}` : `Returns Request — ${merchantName}`,
         showCancelButton: true,
@@ -321,7 +354,7 @@ window.openTicketForm = async function(merchantId, merchantName, type) {
                     Submitting a <b>${isDeployment ? 'Deployment' : 'Returns/RMA'} ticket</b> for <b>${merchantName}</b>. Our team will review and follow up shortly.
                 </div>
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Subject *</label>
-                <input id="tickSubject" class="swal2-input" style="margin:0 0 12px;" placeholder="${isDeployment ? 'e.g. New terminal for main location' : 'e.g. Return Verifone VX520 — merchant closed'}">
+                <input id="tickSubject" class="swal2-input" style="margin:0 0 12px;" placeholder="${isDeployment ? 'e.g. New terminal for main location' : 'e.g. Return terminal — merchant closed'}">
                 ${isDeployment ? `
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment Type Needed</label>
                 <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
@@ -332,7 +365,12 @@ window.openTicketForm = async function(merchantId, merchantName, type) {
                     <option>PIN Pad</option>
                     <option>Other</option>
                 </select>` : `
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Return Reason</label>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment to Return *</label>
+                <select id="tickEquip" class="swal2-input" style="margin:0 0 12px;">
+                    <option value="">Select equipment...</option>
+                    ${equipmentOptions}
+                </select>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Return Reason *</label>
                 <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
                     <option value="">Select reason...</option>
                     <option>Merchant Cancellation</option>
@@ -348,18 +386,20 @@ window.openTicketForm = async function(merchantId, merchantName, type) {
                     <option value="urgent">Urgent</option>
                     <option value="low">Low</option>
                 </select>
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Description</label>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Additional Notes</label>
                 <textarea id="tickDesc" class="swal2-textarea" placeholder="Please provide any relevant details..." style="margin:0;height:80px;"></textarea>
             </div>`,
         preConfirm: () => {
             const subject = document.getElementById('tickSubject').value.trim();
             if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
-            return {
-                subject,
-                category: document.getElementById('tickCategory').value || null,
-                priority: document.getElementById('tickPriority').value,
-                description: document.getElementById('tickDesc').value || null
-            };
+            if (!isDeployment) {
+                const equip = document.getElementById('tickEquip')?.value;
+                const reason = document.getElementById('tickCategory')?.value;
+                if (!equip) { Swal.showValidationMessage('Please select equipment to return'); return false; }
+                if (!reason) { Swal.showValidationMessage('Please select a return reason'); return false; }
+                return { subject, category: reason, equipment_serial: equip, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
+            }
+            return { subject, category: document.getElementById('tickCategory').value || null, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
         }
     });
 

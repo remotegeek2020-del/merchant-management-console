@@ -16,6 +16,24 @@ export default async function handler(req, res) {
             return data.person_id;
         }
 
+        if (action === 'get_merchant_equipment') {
+            const { token, merchant_id } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data: merchant } = await supabase
+                .from('merchants').select('id, dba_name').eq('merchant_id', merchant_id).single();
+            if (!merchant) return res.status(404).json({ success: false, message: 'Merchant not found.' });
+
+            const { data: deployments } = await supabase
+                .from('deployments')
+                .select('id, status, equipments:equipment_id(id, serial_number, terminal_type, model)')
+                .eq('merchant_id', merchant.id)
+                .neq('status', 'Closed');
+
+            return res.status(200).json({ success: true, deployments: deployments || [] });
+        }
+
         if (action === 'create') {
             const { token, merchant_id, type, category, subject, description, priority } = req.body;
             const personId = await validatePartner(token);

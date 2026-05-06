@@ -213,17 +213,26 @@ async function openTicket(ticketId) {
     document.getElementById('modal-ticket-body').innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>';
     document.getElementById('ticket-modal').classList.add('is-open');
 
-    const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId })
-    });
-    const result = await r.json();
+    const [ticketRes, staffRes] = await Promise.all([
+        fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId }) }),
+        fetch('/api/users', { method: 'GET' })
+    ]);
+    const result = await ticketRes.json();
+    const staffResult = await staffRes.json();
+
     if (!result.success) {
         document.getElementById('modal-ticket-body').innerHTML = `<div style="padding:20px; color:var(--red-text);">Error loading ticket.</div>`;
         return;
     }
     const t = result.ticket;
+    const staffList = (staffResult.data || []).filter(u => u.is_active);
     document.getElementById('modal-ticket-num').textContent = t.ticket_number;
+
+    const staffOptions = `<option value="">— Unassigned —</option>` +
+        staffList.map(u => {
+            const name = [u.first_name, u.last_name].filter(Boolean).join(' ');
+            return `<option value="${name}" ${t.assigned_to === name ? 'selected' : ''}>${name} (${u.role || 'staff'})</option>`;
+        }).join('');
 
     document.getElementById('modal-ticket-body').innerHTML = `
         <div class="tm-section">
@@ -274,7 +283,9 @@ async function openTicket(ticketId) {
             </div>
             <div class="form-group">
                 <label class="form-label">Assigned To</label>
-                <input id="upd-assigned" class="form-input" value="${t.assigned_to || ''}" placeholder="Staff name...">
+                <select id="upd-assigned" class="form-input">
+                    ${staffOptions}
+                </select>
             </div>
             <div class="form-group">
                 <label class="form-label">Staff Notes (visible to staff only)</label>
@@ -290,7 +301,7 @@ async function openTicket(ticketId) {
 async function saveTicketUpdate(ticketId) {
     const status = document.getElementById('upd-status').value;
     const priority = document.getElementById('upd-priority').value;
-    const assigned_to = document.getElementById('upd-assigned').value.trim() || null;
+    const assigned_to = document.getElementById('upd-assigned').value || null;
     const staff_notes = document.getElementById('upd-notes').value.trim() || null;
 
     const r = await fetch('/api/tickets', {
