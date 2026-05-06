@@ -54,7 +54,7 @@ export default async function handler(req, res) {
                 .from('deployments')
                 .select('id, deployment_id, status, equipments:equipment_id(id, serial_number, terminal_type)')
                 .eq('merchant_id', merchant.id)
-                .neq('status', 'Closed');
+                .order('created_at', { ascending: false });
 
             return res.status(200).json({ success: true, deployments: deployments || [] });
         }
