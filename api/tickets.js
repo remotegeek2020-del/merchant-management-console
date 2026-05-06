@@ -340,7 +340,7 @@ export default async function handler(req, res) {
         if (action === 'get_available_equipment') {
             // Delegates to deployments getLookups for equipment, but also allows direct listing
             const { query: term } = req.body;
-            let q = supabase.from('equipments').select('id, serial_number, terminal_type, model, status').eq('status', 'stocked');
+            let q = supabase.from('equipments').select('id, serial_number, terminal_type, status').eq('status', 'stocked');
             if (term) q = q.ilike('serial_number', `%${term}%`);
             q = q.order('serial_number').limit(20);
             const { data, error } = await q;
@@ -354,7 +354,7 @@ export default async function handler(req, res) {
             if (!merchant) return res.status(404).json({ success: false, message: 'Merchant not found.' });
 
             const { data, error } = await supabase.from('deployments')
-                .select('id, deployment_id, status, created_at, equipments:equipment_id(serial_number, terminal_type, model)')
+                .select('id, deployment_id, status, created_at, equipments:equipment_id(serial_number, terminal_type)')
                 .eq('merchant_id', merchant.id)
                 .order('created_at', { ascending: false });
             if (error) throw error;
