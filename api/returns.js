@@ -50,26 +50,33 @@ if (action === 'getMonthlyReport') {
     return res.status(200).json({ success: true, rawData, totalCount: count });
 }
        if (action === 'list') {
-    const { data, error } = await supabase.from('returns').select(`
+    const searchQuery = query || '';
+    let q = supabase.from('returns').select(`
         id, return_id, return_reason, condition, destination, status, created_at,
         return_date_initiated, equipment_received_date,
-        merchant_id, equipment_id,
+        merchant_id, equipment_id, ticket_id,
         merchants:merchant_id (dba_name, merchant_id),
         equipments:equipment_id (serial_number, terminal_type)
     `).order('return_date_initiated', { ascending: false });
 
+    if (searchQuery) {
+        q = q.or(`return_id.ilike.%${searchQuery}%,condition.ilike.%${searchQuery}%`);
+    }
+
+    const { data, error } = await q;
+
     if (error) throw error;
-    
+
     const metrics = {
         open: data ? data.filter(d => d.status.toLowerCase() === 'open').length : 0,
         defective: data ? data.filter(d => d.condition && d.condition.includes('Defective')).length : 0
     };
-    
-    return res.status(200).json({ 
-        success: true, 
-        data: data || [], 
-        metrics, 
-        count: data?.length || 0 
+
+    return res.status(200).json({
+        success: true,
+        data: data || [],
+        metrics,
+        count: data?.length || 0
     });
 }
 
@@ -78,48 +85,59 @@ if (action === 'complete_return') {
     const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
     if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
 
-    // 1. Fetch the linked deployment_id and merchant_id before closing the RMA
+    // 1. Fetch linked deployment_id, merchant_id, and ticket_id
     const { data: rmaData } = await supabase
         .from('returns')
-        .select('deployment_id, merchant_id')
+        .select('deployment_id, merchant_id, ticket_id')
         .eq('id', rmaId)
         .single();
-    
-    // Use merchant_id from payload, fallback to what's stored in the return record
+
     const resolved_merchant_id = merchant_id || rmaData?.merchant_id || null;
 
     if (rmaData?.deployment_id) {
-        // 2. Automatically close the linked deployment ticket
-        await supabase
-            .from('deployments')
-            .update({ status: 'Closed' }) 
+        // 2. Close the linked deployment
+        await supabase.from('deployments')
+            .update({ status: 'Closed' })
             .eq('id', rmaData.deployment_id);
     }
 
-    // 3. Close RMA
-    await supabase.from('returns').update({ 
-        status: 'closed',
+    // 3. Close RMA with capital-C status (consistent with check_rma comparison)
+    await supabase.from('returns').update({
+        status: 'Closed',
         condition: condition,
         destination: destination
     }).eq('id', rmaId);
 
-    // 4. Update Equipment status
+    // 4. Update equipment status
     const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
-    
-    await supabase.from('equipments').update({ 
-        status: finalStatus, 
+    await supabase.from('equipments').update({
+        status: finalStatus,
         current_location: destination,
-        merchant_id: null 
+        merchant_id: null
     }).eq('id', equipment_id);
 
-    // 5. Log history — with resolved merchant_id ✅
+    // 5. Auto-close the linked support ticket
+    if (rmaData?.ticket_id) {
+        await supabase.from('support_tickets')
+            .update({ status: 'closed', updated_at: new Date().toISOString() })
+            .eq('id', rmaData.ticket_id);
+        await supabase.from('ticket_comments').insert({
+            ticket_id: rmaData.ticket_id,
+            author_type: 'system',
+            author_name: 'System',
+            change_summary: `RMA completed. Unit received at ${destination} as ${condition}. Ticket auto-closed.`,
+            is_internal: false
+        });
+    }
+
+    // 6. Log equipment history
     await supabase.from('equipment_logs').insert([{
         equipment_id,
         merchant_id: resolved_merchant_id,
         action: 'RMA Completed',
         from_location: 'In Transit / RMA',
         to_location: destination,
-        notes: `Inspection finished. Unit marked as ${condition}. Deployment ticket auto-closed.`
+        notes: `Inspection finished. Unit marked as ${condition}.`
     }]);
 
     return res.status(200).json({ success: true });
