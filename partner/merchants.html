@@ -352,7 +352,7 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
     const equipmentOptions = !isDeployment ? deployments.map(d => {
         const e = d.equipments;
         const depLabel = d.deployment_id ? ` [${d.deployment_id}]` : '';
-        const label = [e?.terminal_type, e?.model, e?.serial_number].filter(Boolean).join(' — ') + depLabel;
+        const label = [e?.terminal_type, e?.serial_number].filter(Boolean).join(' — ') + depLabel;
         return `<option value="${d.id}">${label || 'Unknown equipment'}</option>`;
     }).join('') : '';
 

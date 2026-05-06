@@ -52,7 +52,7 @@ export default async function handler(req, res) {
 
             const { data: deployments } = await supabase
                 .from('deployments')
-                .select('id, status, equipments:equipment_id(id, serial_number, terminal_type, model)')
+                .select('id, deployment_id, status, equipments:equipment_id(id, serial_number, terminal_type)')
                 .eq('merchant_id', merchant.id)
                 .neq('status', 'Closed');
 
@@ -497,10 +497,10 @@ export default async function handler(req, res) {
 
             const { data: dep, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, tracking_id, target_deployment_date, notes, purchase_type, created_at, ticket_id, equipments:equipment_id(terminal_type, model, serial_number), merchants:merchant_id(dba_name, merchant_id)')
+                .select('id, deployment_id, status, tracking_id, target_deployment_date, notes, purchase_type, created_at, ticket_id, equipments:equipment_id(terminal_type, serial_number), merchants:merchant_id(dba_name, merchant_id)')
                 .eq('deployment_id', deployment_id)
                 .single();
-            if (error || !dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
+            if (error || !dep) return res.status(404).json({ success: false, message: 'Deployment record not found. It may have been archived or processed.' });
             return res.status(200).json({ success: true, deployment: dep });
         }
 
