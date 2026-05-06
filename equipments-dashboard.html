@@ -770,7 +770,8 @@ async function processFinalImport(itemsToCreate) {
             const result = await res.json();
 
             if (result.success) {
-                await logAuditAction(selectedId ? 'Inventory Updated' : 'Inventory Created', logMsg); // ADD THIS
+                const logMsg = `Serial ${payload.serial_number} ${selectedId ? 'updated' : 'created'}.`;
+                await logAuditAction(selectedId ? 'Inventory Updated' : 'Inventory Created', logMsg);
                 closeModal();
                 fetchInventory(); 
                 Swal.fire({ 

@@ -32,7 +32,18 @@
         .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
         .panel-title { font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
         .panel-body { padding: 0; }
-        .risk-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .risk-row { display: grid; grid-template-columns: 1fr auto auto auto auto; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .toggle-pill { position:relative; display:inline-block; width:36px; height:20px; }
+        .toggle-pill input { opacity:0; width:0; height:0; }
+        .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#cbd5e1; border-radius:20px; transition:.2s; }
+        .toggle-slider:before { position:absolute; content:""; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:.2s; }
+        .toggle-pill input:checked + .toggle-slider { background:#22c55e; }
+        .toggle-pill input:checked + .toggle-slider:before { transform:translateX(16px); }
+        .access-row { display:flex; align-items:center; gap:16px; padding:12px 20px; border-bottom:1px solid var(--border); font-size:13px; flex-wrap:wrap; }
+        .access-row:last-child { border-bottom:none; }
+        .access-row:hover { background:var(--surface-2); }
+        .access-col { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:70px; }
+        .access-col-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
         .risk-row:last-child { border-bottom: none; }
         .risk-row:hover { background: var(--surface-2); }
         .risk-name { font-weight: 600; color: var(--text-primary); }
@@ -149,6 +160,22 @@
         </div>
     </div>
 
+    <!-- Staff Access Management -->
+    <div class="panel" style="margin-bottom:var(--gap);">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:#7c3aed; font-size:18px;">manage_accounts</span>
+                Staff Access Control
+            </div>
+            <button onclick="saveAccessChanges()" id="save-access-btn" class="slds-button" style="background:#004990; color:white; border-radius:8px; font-weight:700; font-size:11px; padding:6px 14px; border:none; cursor:pointer; display:none;">
+                Save Changes
+            </button>
+        </div>
+        <div class="panel-body" id="staff-access-table">
+            <div class="empty-state"><div class="skeleton" style="height:14px; width:200px; margin:0 auto;"></div></div>
+        </div>
+    </div>
+
 </div>
 
 <script>
@@ -236,8 +263,10 @@ function renderAtRisk(data) {
                 <div class="risk-name">${m.dba_name}</div>
                 <div class="risk-mid">${m.merchant_id} &nbsp;·&nbsp; ${fmt(m.volume_30_day)} vs ${fmt(m.baseline)} expected</div>
             </div>
+            <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;" title="${m.agent_name || '—'}">${m.agent_name || '—'}</div>
             <div style="font-size:11px; color:var(--text-muted);">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—'}</div>
             <div class="drop-badge ${m.drop_pct < 30 ? 'mild' : ''}">-${m.drop_pct}%</div>
+            <a href="merchants-dashboard.html?q=${encodeURIComponent(m.merchant_id)}" style="font-size:11px; font-weight:700; color:var(--pp-blue); text-decoration:none; white-space:nowrap; border:1px solid var(--border); padding:3px 10px; border-radius:6px;">View →</a>
         </div>`).join('');
 }
 
@@ -303,6 +332,94 @@ async function sendRiskDigest() {
     }
 }
 
+let staffData = [];
+let pendingAccessChanges = {};
+
+async function loadStaffAccess() {
+    const container = document.getElementById('staff-access-table');
+    try {
+        const res = await fetch('/api/users', { method: 'GET' });
+        const result = await res.json();
+        if (!result.success) throw new Error(result.message);
+        staffData = result.data || [];
+
+        if (!staffData.length) {
+            container.innerHTML = `<div class="empty-state">No staff users found.</div>`;
+            return;
+        }
+
+        const ACCESS_COLS = [
+            { key: 'is_active', label: 'Active' },
+            { key: 'access_inventory', label: 'Inventory' },
+            { key: 'access_deployments', label: 'Deployments' },
+            { key: 'access_returns', label: 'Returns' },
+            { key: 'access_merchants', label: 'Merchants' },
+            { key: 'access_partners', label: 'Partners' },
+        ];
+
+        const headerHtml = `
+            <div style="display:flex; align-items:center; gap:16px; padding:10px 20px; border-bottom:2px solid var(--border); background:var(--surface-2);">
+                <div style="flex:1; font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Staff Member</div>
+                ${ACCESS_COLS.map(c => `<div class="access-col"><div class="access-col-label">${c.label}</div></div>`).join('')}
+            </div>`;
+
+        const rowsHtml = staffData.map(u => `
+            <div class="access-row">
+                <div style="flex:1; min-width:140px;">
+                    <div style="font-weight:700; color:var(--text-primary);">${u.first_name || ''} ${u.last_name || ''}</div>
+                    <div style="font-size:11px; color:var(--text-muted);">${u.email || ''} &nbsp;·&nbsp; <span style="color:var(--pp-accent); font-weight:600;">${u.role || 'staff'}</span></div>
+                </div>
+                ${ACCESS_COLS.map(c => `
+                    <div class="access-col">
+                        <label class="toggle-pill">
+                            <input type="checkbox" data-uid="${u.userid}" data-key="${c.key}" ${u[c.key] ? 'checked' : ''} onchange="markChange(this)">
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </div>`).join('')}
+            </div>`).join('');
+
+        container.innerHTML = headerHtml + rowsHtml;
+    } catch (err) {
+        container.innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error loading staff: ${err.message}</div>`;
+    }
+}
+
+function markChange(input) {
+    const uid = input.dataset.uid;
+    const key = input.dataset.key;
+    if (!pendingAccessChanges[uid]) pendingAccessChanges[uid] = {};
+    pendingAccessChanges[uid][key] = input.checked;
+    document.getElementById('save-access-btn').style.display = 'block';
+}
+
+async function saveAccessChanges() {
+    if (!Object.keys(pendingAccessChanges).length) return;
+    const btn = document.getElementById('save-access-btn');
+    btn.textContent = 'Saving...';
+    btn.disabled = true;
+    try {
+        const res = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'updateBatch', payload: pendingAccessChanges })
+        });
+        const result = await res.json();
+        if (result.success) {
+            pendingAccessChanges = {};
+            btn.style.display = 'none';
+            Swal.fire({ icon: 'success', title: 'Saved', timer: 1500, showConfirmButton: false });
+            loadStaffAccess();
+        } else {
+            Swal.fire('Error', result.message || 'Save failed', 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', err.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Changes';
+    }
+}
+
 async function loadAll() {
     document.getElementById('last-updated').textContent = 'Refreshing...';
     const [kpiRes, riskRes, depRes] = await Promise.all([
@@ -322,6 +439,7 @@ async function loadAll() {
 }
 
 loadAll();
+loadStaffAccess();
 </script>
 </body>
 </html>

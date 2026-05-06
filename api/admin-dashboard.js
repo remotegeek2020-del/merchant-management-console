@@ -54,7 +54,7 @@ export default async function handler(req, res) {
         if (action === 'get_at_risk') {
             const { data, error } = await supabase
                 .from('merchants')
-                .select('merchant_id, dba_name, agent_id, volume_30_day, volume_90_day, last_batch_date')
+                .select('merchant_id, dba_name, agent_id, agent_name, volume_30_day, volume_90_day, last_batch_date')
                 .eq('account_status', 'Approved')
                 .gt('volume_90_day', 0)
                 .order('volume_30_day', { ascending: true })
