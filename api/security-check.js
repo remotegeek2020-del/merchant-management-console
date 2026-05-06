@@ -59,69 +59,201 @@ export default async function handler(req, res) {
                 checks: envChecks
             });
 
-            // ── 2. Access Control ─────────────────────────────────────────────
-            const { data: inactiveWithAccess } = await safeQuery(() =>
-                supabase.from('users')
-                    .select('first_name, last_name, email')
-                    .eq('is_active', false)
-                    .or('access_admin_dashboard.eq.true,access_inventory.eq.true,access_deployments.eq.true,access_returns.eq.true,access_merchants.eq.true,access_partners.eq.true')
-            );
+            // ── 2. Database Security ──────────────────────────────────────────
+            const [rlsRes, dupSerialsRes, extensionsRes] = await Promise.all([
+                safeQuery(() => supabase.rpc('get_tables_rls_status')),
+                safeQuery(() => supabase.rpc('get_duplicate_serials')),
+                safeQuery(() => supabase.rpc('get_installed_extensions'))
+            ]);
 
-            const accessChecks = [];
-            if (inactiveWithAccess && inactiveWithAccess.length > 0) {
-                accessChecks.push({
-                    name: 'Inactive staff with active permissions',
-                    status: 'warn',
-                    detail: `${inactiveWithAccess.length} inactive user(s) still have access flags: ${inactiveWithAccess.map(u => u.email || `${u.first_name} ${u.last_name}`).join(', ')}`
-                });
-            } else {
-                accessChecks.push({ name: 'Inactive staff with active permissions', status: 'pass', detail: 'No inactive users with lingering access flags' });
-            }
+            const dbSecChecks = [];
+
+            // RLS check
+            const rlsTables = rlsRes.data || [];
+            const noRlsTables = rlsTables.filter(t => !t.rls_enabled);
+            dbSecChecks.push({
+                name: 'Row-Level Security (RLS) on all tables',
+                status: noRlsTables.length > 0 ? 'warn' : 'pass',
+                detail: noRlsTables.length > 0
+                    ? `${noRlsTables.length} table(s) without RLS: ${noRlsTables.map(t => t.table_name).join(', ')}`
+                    : `All ${rlsTables.length} public tables have RLS enabled`
+            });
+
+            // Duplicate serials
+            const dupSerials = dupSerialsRes.data || [];
+            dbSecChecks.push({
+                name: 'Duplicate serial numbers in inventory',
+                status: dupSerials.length > 0 ? 'fail' : 'pass',
+                detail: dupSerials.length > 0
+                    ? `${dupSerials.length} duplicate serial(s) found: ${dupSerials.map(d => `${d.serial_number} (${d.count}x)`).join(', ')}`
+                    : 'No duplicate serial numbers found'
+            });
+
+            // Extensions
+            const extensions = extensionsRes.data || [];
+            const sensitiveExts = extensions.filter(e => ['pg_cron', 'pg_net', 'pgsodium', 'supabase_vault', 'http'].includes(e.name));
+            dbSecChecks.push({
+                name: 'Installed PostgreSQL extensions audit',
+                status: 'pass',
+                detail: extensions.length > 0
+                    ? `${extensions.length} extension(s) installed. Notable: ${sensitiveExts.length > 0 ? sensitiveExts.map(e => e.name).join(', ') : 'none requiring special attention'}`
+                    : 'No extensions found or unable to query'
+            });
 
             sections.push({
-                title: 'Access Control',
+                title: 'Database Security',
+                icon: 'shield',
+                status: dbSecChecks.some(c => c.status === 'fail') ? 'fail' : dbSecChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: dbSecChecks
+            });
+
+            // ── 3. Access Control & Privilege Security ────────────────────────
+            const [inactiveAccessRes, superAdminRes, staleAccountsRes] = await Promise.all([
+                safeQuery(() =>
+                    supabase.from('app_users')
+                        .select('first_name, last_name, email')
+                        .eq('is_active', false)
+                        .or('access_admin_dashboard.eq.true,access_inventory.eq.true,access_deployments.eq.true,access_returns.eq.true,access_merchants.eq.true,access_partners.eq.true')
+                ),
+                safeQuery(() => supabase.rpc('get_super_admin_count')),
+                safeQuery(() => supabase.rpc('get_stale_active_accounts'))
+            ]);
+
+            const accessChecks = [];
+
+            const inactiveWithAccess = inactiveAccessRes.data || [];
+            accessChecks.push(inactiveWithAccess.length > 0 ? {
+                name: 'Inactive staff with active permissions',
+                status: 'warn',
+                detail: `${inactiveWithAccess.length} inactive user(s) still have access flags: ${inactiveWithAccess.map(u => u.email || `${u.first_name} ${u.last_name}`).join(', ')}`
+            } : {
+                name: 'Inactive staff with active permissions',
+                status: 'pass',
+                detail: 'No inactive users with lingering access flags'
+            });
+
+            const superAdminCount = superAdminRes.data ?? null;
+            if (superAdminCount !== null) {
+                accessChecks.push({
+                    name: 'Super Admin account count',
+                    status: superAdminCount > 3 ? 'warn' : 'pass',
+                    detail: superAdminCount > 3
+                        ? `${superAdminCount} active super admin accounts — review if all are necessary`
+                        : `${superAdminCount} active super admin account(s) — within acceptable range`
+                });
+            }
+
+            const staleAccounts = staleAccountsRes.data || [];
+            accessChecks.push(staleAccounts.length > 0 ? {
+                name: 'Active accounts with no login in 90+ days',
+                status: 'warn',
+                detail: `${staleAccounts.length} account(s) may be dormant: ${staleAccounts.map(u => u.email || `${u.first_name} ${u.last_name}`).join(', ')}`
+            } : {
+                name: 'Active accounts with no login in 90+ days',
+                status: 'pass',
+                detail: 'All active accounts have recent login activity'
+            });
+
+            sections.push({
+                title: 'Access Control & Privilege Security',
                 icon: 'manage_accounts',
                 status: accessChecks.some(c => c.status === 'fail') ? 'fail' : accessChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
                 checks: accessChecks
             });
 
-            // ── 3. Failed Login Activity (last 24h) ───────────────────────────
+            // ── 4. Login & Brute-Force Security ───────────────────────────────
             const since24h = new Date(Date.now() - 86400000).toISOString();
-            const { data: failedLogins } = await safeQuery(() =>
-                supabase.from('activity_logs')
-                    .select('email, action, created_at')
-                    .eq('status', 'FAILURE')
-                    .gte('created_at', since24h)
-                    .order('created_at', { ascending: false })
-            );
+            const [failedLoginsRes, bruteForceSuspectsRes, highTfaRes] = await Promise.all([
+                safeQuery(() =>
+                    supabase.from('activity_logs')
+                        .select('email, action, created_at')
+                        .eq('status', 'FAILURE')
+                        .gte('created_at', since24h)
+                        .order('created_at', { ascending: false })
+                ),
+                safeQuery(() => supabase.rpc('get_brute_force_suspects')),
+                safeQuery(() => supabase.rpc('get_high_tfa_attempts'))
+            ]);
 
-            const failCount = failedLogins?.length || 0;
+            const loginChecks = [];
+
+            const failedLogins = failedLoginsRes.data || [];
+            const failCount = failedLogins.length;
             const byEmail = {};
-            (failedLogins || []).forEach(l => { byEmail[l.email] = (byEmail[l.email] || 0) + 1; });
+            failedLogins.forEach(l => { byEmail[l.email] = (byEmail[l.email] || 0) + 1; });
             const topFailers = Object.entries(byEmail).sort((a, b) => b[1] - a[1]).slice(0, 5);
+            let loginStatus = 'pass', loginDetail = 'No failed logins in the last 24 hours';
+            if (failCount >= 10) { loginStatus = 'fail'; loginDetail = `HIGH: ${failCount} failed login attempts! Top: ${topFailers.map(([e, n]) => `${e} (${n}x)`).join(', ')}`; }
+            else if (failCount > 0) { loginStatus = 'warn'; loginDetail = `${failCount} failed attempt(s) in last 24h. Top: ${topFailers.map(([e, n]) => `${e} (${n}x)`).join(', ')}`; }
+            loginChecks.push({ name: 'Failed login attempts (24h)', status: loginStatus, detail: loginDetail });
 
-            let loginStatus = 'pass';
-            let loginDetail = 'No failed logins in the last 24 hours';
-            if (failCount >= 10) {
-                loginStatus = 'fail';
-                loginDetail = `HIGH: ${failCount} failed login attempts! Top: ${topFailers.map(([e, n]) => `${e} (${n}x)`).join(', ')}`;
-            } else if (failCount > 0) {
-                loginStatus = 'warn';
-                loginDetail = `${failCount} failed attempt(s) in last 24h: ${topFailers.map(([e, n]) => `${e} (${n}x)`).join(', ')}`;
-            }
-
-            sections.push({
-                title: 'Login Security',
-                icon: 'lock',
-                status: loginStatus,
-                checks: [{ name: 'Failed login attempts (24h)', status: loginStatus, detail: loginDetail }]
+            const bruteSuspects = bruteForceSuspectsRes.data || [];
+            loginChecks.push(bruteSuspects.length > 0 ? {
+                name: 'Brute-force suspects (5+ failures in 1 hour)',
+                status: 'fail',
+                detail: `ALERT: ${bruteSuspects.length} account(s) under brute-force attack: ${bruteSuspects.map(s => `${s.email} (${s.failure_count}x)`).join(', ')}`
+            } : {
+                name: 'Brute-force suspects (5+ failures in 1 hour)',
+                status: 'pass',
+                detail: 'No brute-force patterns detected in the last hour'
             });
 
-            // ── 4. Data Integrity ─────────────────────────────────────────────
-            const [orphanDepsRes, orphanReturnsRes, nullStatusRes] = await Promise.all([
+            const highTfa = highTfaRes.data || [];
+            loginChecks.push(highTfa.length > 0 ? {
+                name: '2FA lockout candidates (3+ failed attempts)',
+                status: 'warn',
+                detail: `${highTfa.length} account(s) with high 2FA failures: ${highTfa.map(u => `${u.email} (${u.tfa_attempts}x)`).join(', ')}`
+            } : {
+                name: '2FA lockout candidates (3+ failed attempts)',
+                status: 'pass',
+                detail: 'No accounts with excessive 2FA failures'
+            });
+
+            sections.push({
+                title: 'Login & Brute-Force Security',
+                icon: 'lock',
+                status: loginChecks.some(c => c.status === 'fail') ? 'fail' : loginChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: loginChecks
+            });
+
+            // ── 5. Session Security ───────────────────────────────────────────
+            const sessionRes = await safeQuery(() => supabase.rpc('get_session_health'));
+            const sessionData = sessionRes.data?.[0] || {};
+            const sessionChecks = [
+                {
+                    name: 'Expired sessions not yet purged',
+                    status: (sessionData.expired_not_purged || 0) > 50 ? 'warn' : 'pass',
+                    detail: (sessionData.expired_not_purged || 0) > 50
+                        ? `${sessionData.expired_not_purged} expired sessions still in DB — consider purging`
+                        : `${sessionData.expired_not_purged || 0} expired sessions pending cleanup (within normal range)`
+                },
+                {
+                    name: 'Active partner sessions',
+                    status: 'pass',
+                    detail: `${sessionData.active_sessions || 0} active partner session(s) currently`
+                },
+                {
+                    name: 'Partners with multiple simultaneous sessions',
+                    status: (sessionData.multi_session_persons || 0) > 0 ? 'warn' : 'pass',
+                    detail: (sessionData.multi_session_persons || 0) > 0
+                        ? `${sessionData.multi_session_persons} partner(s) have more than one active session — possible account sharing`
+                        : 'No partners with multiple simultaneous sessions'
+                }
+            ];
+
+            sections.push({
+                title: 'Session Security',
+                icon: 'verified_user',
+                status: sessionChecks.some(c => c.status === 'fail') ? 'fail' : sessionChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: sessionChecks
+            });
+
+            // ── 6. Data Integrity ─────────────────────────────────────────────
+            const [orphanDepsRes, orphanReturnsRes, nullStatusRes, equipConflictsRes] = await Promise.all([
                 safeQuery(() => supabase.from('deployments').select('*', { count: 'exact', head: true }).or('merchant_id.is.null,equipment_id.is.null')),
                 safeQuery(() => supabase.from('returns').select('*', { count: 'exact', head: true }).is('equipment_id', null)),
-                safeQuery(() => supabase.from('equipments').select('*', { count: 'exact', head: true }).is('status', null))
+                safeQuery(() => supabase.from('equipments').select('*', { count: 'exact', head: true }).is('status', null)),
+                safeQuery(() => supabase.rpc('get_equipment_status_conflicts'))
             ]);
 
             const integrityChecks = [
@@ -139,6 +271,13 @@ export default async function handler(req, res) {
                     name: 'Equipment records with null status',
                     status: (nullStatusRes.count || 0) > 0 ? 'warn' : 'pass',
                     detail: (nullStatusRes.count || 0) > 0 ? `${nullStatusRes.count} equipment record(s) have no status set` : 'All equipment has a status value'
+                },
+                {
+                    name: 'Equipment status vs. merchant assignment conflicts',
+                    status: (equipConflictsRes.data?.length || 0) > 0 ? 'warn' : 'pass',
+                    detail: (equipConflictsRes.data?.length || 0) > 0
+                        ? `${equipConflictsRes.data.length} conflict(s): stocked units with merchant IDs, or deployed units missing merchant IDs`
+                        : 'All equipment statuses match their merchant assignments'
                 }
             ];
 
@@ -149,7 +288,7 @@ export default async function handler(req, res) {
                 checks: integrityChecks
             });
 
-            // ── 5. Operational Health ─────────────────────────────────────────
+            // ── 7. Operational Health ─────────────────────────────────────────
             const since48h  = new Date(Date.now() - 172800000).toISOString();
             const since7d   = new Date(Date.now() - 604800000).toISOString();
             const since14d  = new Date(Date.now() - 1209600000).toISOString();
