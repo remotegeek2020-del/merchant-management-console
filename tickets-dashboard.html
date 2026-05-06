@@ -438,7 +438,7 @@ async function openTicket(ticketId) {
             </div>
             <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
                 <button onclick="closeModal()" style="background:none; border:1px solid var(--border); border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Cancel</button>
-                <button onclick="saveTicketUpdate(${t.id})" style="background:var(--pp-navy); color:white; border:none; border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer; opacity:${isLocked ? '0.45' : '1'};" ${isLocked ? 'disabled' : ''}>Save Changes</button>
+                <button onclick="saveTicketUpdate(${t.id})" style="background:var(--pp-navy); color:white; border:none; border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Save Changes</button>
             </div>
         </div>`;
 }
