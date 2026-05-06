@@ -132,6 +132,15 @@
             <span class="material-icons" style="font-size:13px; vertical-align:middle;">person</span>
             Mine
         </button>
+        <div class="filter-sep"></div>
+        <div style="position:relative; flex:1; min-width:200px;">
+            <span class="material-icons" style="position:absolute; left:9px; top:50%; transform:translateY(-50%); font-size:16px; color:var(--text-muted); pointer-events:none;">search</span>
+            <input id="ticket-search" type="text" placeholder="Search ticket #, MID, merchant name…" oninput="setSearchQuery(this.value)"
+                style="width:100%; padding:6px 30px 6px 30px; border:1.5px solid var(--border); border-radius:99px; font-size:12px; font-family:'DM Sans',sans-serif; color:var(--text-primary); background:white; outline:none; transition:border-color 0.2s; box-sizing:border-box;">
+            <button id="search-clear" onclick="clearSearch()" style="display:none; position:absolute; right:9px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; padding:0; color:var(--text-muted);">
+                <span class="material-icons" style="font-size:15px;">close</span>
+            </button>
+        </div>
     </div>
 
     <!-- Ticket List -->
@@ -189,6 +198,7 @@ let allTickets = [];
 let statusFilter = 'all';
 let typeFilter = 'all';
 let mineFilter = false;
+let searchQuery = '';
 let currentStaffName = '';
 let currentUserRole = '';
 let currentTicketId = null;
@@ -232,6 +242,16 @@ function renderTickets() {
     if (statusFilter !== 'all') filtered = filtered.filter(t => t.status === statusFilter);
     if (typeFilter !== 'all') filtered = filtered.filter(t => t.type === typeFilter);
     if (mineFilter && currentStaffName) filtered = filtered.filter(t => t.assigned_to === currentStaffName);
+    if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        filtered = filtered.filter(t =>
+            (t.ticket_number || '').toLowerCase().includes(q) ||
+            (t.merchants?.dba_name || '').toLowerCase().includes(q) ||
+            (t.merchants?.merchant_id || '').toLowerCase().includes(q) ||
+            (t.persons?.full_name || '').toLowerCase().includes(q) ||
+            (t.subject || '').toLowerCase().includes(q)
+        );
+    }
 
     document.getElementById('ticket-count').textContent = `${filtered.length} ticket(s)`;
 
@@ -279,6 +299,22 @@ function setTypeFilter(btn, val) {
 function toggleMineFilter(btn) {
     mineFilter = !mineFilter;
     btn.classList.toggle('active', mineFilter);
+    renderTickets();
+}
+
+function setSearchQuery(val) {
+    searchQuery = val.trim();
+    const clearBtn = document.getElementById('search-clear');
+    if (clearBtn) clearBtn.style.display = searchQuery ? 'block' : 'none';
+    renderTickets();
+}
+
+function clearSearch() {
+    searchQuery = '';
+    const input = document.getElementById('ticket-search');
+    const clearBtn = document.getElementById('search-clear');
+    if (input) input.value = '';
+    if (clearBtn) clearBtn.style.display = 'none';
     renderTickets();
 }
 
