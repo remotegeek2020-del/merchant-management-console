@@ -77,6 +77,7 @@
         <a class="nav-item active" href='/partner/merchants'><span class="material-icons">storefront</span> My Merchants</a>
         <a class="nav-item" href='/partner/community'><span class="material-icons">groups</span> Community</a>
         <a class="nav-item" href='/partner/messages'><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href='/partner/tickets'><span class="material-icons">confirmation_number</span> My Tickets</a>
         <a class="nav-item" href='/partner/profile'><span class="material-icons">account_circle</span> My Profile</a>
         <a class="nav-item" href='/partner/settings'><span class="material-icons">settings</span> Settings</a>
         <div class="nav-divider"></div>
@@ -90,7 +91,7 @@
         <h1 class="topbar-title">My Merchants</h1>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-outline" onclick="exportCSV()"><span class="material-icons" style="font-size:16px;">download</span> Export CSV</button>
-            <button class="btn btn-teal" onclick="Swal.fire({icon:'info',title:'Select a Merchant',text:'Click the return icon on a specific merchant row to request an RMA.',confirmButtonColor:'#0d9488'})"><span class="material-icons" style="font-size:16px;">assignment_return</span> Request RMA</button>
+            <button class="btn btn-teal" onclick="window.location.href='/partner/tickets'"><span class="material-icons" style="font-size:16px;">confirmation_number</span> My Tickets</button>
         </div>
     </div>
     <div class="content">
@@ -222,7 +223,7 @@ async function loadMerchants() {
                 <td onclick="event.stopPropagation()">
                     <div style="display:flex;gap:4px;">
                         <button class="btn btn-outline" style="padding:5px 8px;" onclick="openMerchantDetail('${m.id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">open_in_new</span></button>
-                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openRMARequest('${m.merchant_id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">assignment_return</span></button>
+                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openTicketMenu('${m.merchant_id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">confirmation_number</span></button>
                     </div>
                 </td>
             </tr>`;
@@ -267,7 +268,7 @@ async function openMerchantDetail(merchantId, name) {
             </div>
             <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
                 <button onclick="addNote('${merchantId}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">note_add</span>Add Note</button>
-                <button onclick="openRMARequest('${merchantId}','${m.dba_name}')" style="background:#f1f5f9;color:#475569;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">assignment_return</span>Request RMA</button>
+                <button onclick="openTicketMenu('${merchantId}','${m.dba_name}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">confirmation_number</span>Open Ticket</button>
             </div>
         </div>
     ` });
@@ -281,93 +282,98 @@ window.addNote = async function(merchantId) {
     }
 };
 
-window.openRMARequest = async function(merchantUuid='', merchantName='') {
-    if (!merchantUuid) {
-        Swal.fire({ icon:'warning', title:'Select a Merchant', text:'Please click the RMA button on a specific merchant row.', confirmButtonColor:'#0d9488' });
-        return;
-    }
-
-    // Check for active deployments first
-    Swal.fire({ title:'Checking deployments...', didOpen:()=>Swal.showLoading() });
-    
-    const res = await fetch('/api/partner-data', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ action:'get_active_deployments', token, merchant_uuid: merchantUuid })
+window.openTicketMenu = async function(merchantId='', merchantName='') {
+    if (!merchantId) return;
+    const { value: ticketType } = await Swal.fire({
+        title: `Open Ticket — ${merchantName}`,
+        html: `
+            <div style="display:flex;flex-direction:column;gap:10px;padding:8px 0;">
+                <button onclick="Swal.clickConfirm(); window._ticketType='deployment_request';" style="background:#e0f2fe;color:#0369a1;border:none;border-radius:10px;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:10px;text-align:left;">
+                    <span class="material-icons" style="font-size:22px;">local_shipping</span>
+                    <div><div>New Deployment Request</div><div style="font-size:11px;font-weight:400;color:#0369a1;margin-top:2px;">Request equipment deployment for this merchant</div></div>
+                </button>
+                <button onclick="Swal.clickConfirm(); window._ticketType='rma_request';" style="background:#fef3c7;color:#92400e;border:none;border-radius:10px;padding:14px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:10px;text-align:left;">
+                    <span class="material-icons" style="font-size:22px;">assignment_return</span>
+                    <div><div>Returns / RMA Request</div><div style="font-size:11px;font-weight:400;color:#92400e;margin-top:2px;">Request equipment return or replacement</div></div>
+                </button>
+            </div>`,
+        showConfirmButton: false,
+        showCancelButton: true,
+        cancelButtonText: 'Cancel',
+        confirmButtonColor: '#0d9488',
+        didOpen: () => { window._ticketType = null; }
     });
-    const result = await res.json();
 
-    if (!result.success) {
-        Swal.fire({ icon:'error', title:'Error', text: result.message || 'Could not check deployments.', confirmButtonColor:'#0d9488' });
-        return;
-    }
+    if (!window._ticketType) return;
+    openTicketForm(merchantId, merchantName, window._ticketType);
+};
 
-    if (!result.deployments.length) {
-        Swal.fire({
-            icon: 'info',
-            title: 'No Active Deployments',
-            html: `<p style="color:#475569;">There are no active deployments for <b>${merchantName}</b>.</p><p style="color:#94a3b8;font-size:13px;">An RMA can only be requested when a merchant has equipment actively deployed.</p>`,
-            confirmButtonColor: '#0d9488',
-            confirmButtonText: 'Got it'
-        });
-        return;
-    }
-
-    // Build equipment options from active deployments
-    const equipmentOptions = result.deployments.map(d => 
-        `<option value="${d.equipments?.serial_number || ''}">${d.equipments?.terminal_type || 'Equipment'} — ${d.equipments?.serial_number || 'Unknown S/N'}</option>`
-    ).join('');
-
-    Swal.close();
-
+window.openTicketForm = async function(merchantId, merchantName, type) {
+    const isDeployment = type === 'deployment_request';
     const { value: form } = await Swal.fire({
-        title: `Request RMA — ${merchantName}`,
+        title: isDeployment ? `Deployment Request — ${merchantName}` : `Returns Request — ${merchantName}`,
         showCancelButton: true,
         confirmButtonColor: '#0d9488',
-        confirmButtonText: 'Submit Request',
+        confirmButtonText: 'Submit Ticket',
         html: `
             <div style="text-align:left;font-size:13px;">
-                <div style="background:#f0fdfa;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#0f766e;">
-                    <b>${result.deployments.length} active deployment${result.deployments.length > 1 ? 's' : ''} found</b> for ${merchantName}
+                <div style="background:${isDeployment ? '#e0f2fe' : '#fef3c7'};border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:${isDeployment ? '#0369a1' : '#92400e'};">
+                    Submitting a <b>${isDeployment ? 'Deployment' : 'Returns/RMA'} ticket</b> for <b>${merchantName}</b>. Our team will review and follow up shortly.
                 </div>
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment to Return *</label>
-                <select id="rmaEquip" class="swal2-input" style="margin:0 0 12px;">
-                    <option value="">Select equipment...</option>
-                    ${equipmentOptions}
-                </select>
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Reason *</label>
-                <select id="rmaReason" class="swal2-input" style="margin:0 0 12px;">
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Subject *</label>
+                <input id="tickSubject" class="swal2-input" style="margin:0 0 12px;" placeholder="${isDeployment ? 'e.g. New terminal for main location' : 'e.g. Return Verifone VX520 — merchant closed'}">
+                ${isDeployment ? `
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment Type Needed</label>
+                <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
+                    <option value="">Select type...</option>
+                    <option>Wireless Terminal</option>
+                    <option>Countertop Terminal</option>
+                    <option>POS System</option>
+                    <option>PIN Pad</option>
+                    <option>Other</option>
+                </select>` : `
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Return Reason</label>
+                <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
                     <option value="">Select reason...</option>
                     <option>Merchant Cancellation</option>
                     <option>Equipment Malfunction</option>
                     <option>Equipment Type Swap</option>
                     <option>Switched to Desktop</option>
                     <option>Other</option>
+                </select>`}
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Priority</label>
+                <select id="tickPriority" class="swal2-input" style="margin:0 0 12px;">
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="low">Low</option>
                 </select>
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Additional Notes</label>
-                <textarea id="rmaNotes" class="swal2-textarea" placeholder="Any additional details..." style="margin:0;height:80px;"></textarea>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Description</label>
+                <textarea id="tickDesc" class="swal2-textarea" placeholder="Please provide any relevant details..." style="margin:0;height:80px;"></textarea>
             </div>`,
         preConfirm: () => {
-            const equip = document.getElementById('rmaEquip').value;
-            const reason = document.getElementById('rmaReason').value;
-            if (!equip) { Swal.showValidationMessage('Please select equipment'); return false; }
-            if (!reason) { Swal.showValidationMessage('Please select a reason'); return false; }
+            const subject = document.getElementById('tickSubject').value.trim();
+            if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
             return {
-                merchant_id: result.merchant.merchant_id,
-                equipment_serial: equip,
-                reason,
-                notes: document.getElementById('rmaNotes').value
+                subject,
+                category: document.getElementById('tickCategory').value || null,
+                priority: document.getElementById('tickPriority').value,
+                description: document.getElementById('tickDesc').value || null
             };
         }
     });
 
     if (form) {
-        Swal.fire({ title:'Submitting...', didOpen:()=>Swal.showLoading() });
-        const submitRes = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'request_rma', token, ...form }) });
-        const submitResult = await submitRes.json();
-        if (submitResult.success) {
-            Swal.fire({ icon:'success', title:'RMA Requested!', text:'Our team will review and follow up with you shortly.', confirmButtonColor:'#0d9488' });
+        Swal.fire({ title:'Submitting ticket...', didOpen:()=>Swal.showLoading() });
+        const r = await fetch('/api/tickets', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({ action:'create', token, merchant_id: merchantId, type, ...form })
+        });
+        const result = await r.json();
+        if (result.success) {
+            Swal.fire({ icon:'success', title:'Ticket Created!', html:`Ticket <b>${result.ticket.ticket_number}</b> has been submitted. Our team will be in touch shortly.`, confirmButtonColor:'#0d9488' });
         } else {
-            Swal.fire({ icon:'error', title:'Failed', text:submitResult.message, confirmButtonColor:'#0d9488' });
+            Swal.fire({ icon:'error', title:'Failed', text: result.message || 'Could not submit ticket.', confirmButtonColor:'#0d9488' });
         }
     }
 };

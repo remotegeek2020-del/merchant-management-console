@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Partner Tickets | PayProTec</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function() {
+            if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
+                window.location.href = 'index.html?reason=unauthorized';
+            }
+        })();
+    </script>
+    <style>
+        body { background: var(--surface-0); font-family: 'DM Sans', sans-serif; padding: var(--page-pad); }
+        .dashboard-container { max-width: 1400px; margin: 0 auto; }
+        .modern-header { background: white; border-radius: var(--radius-lg); padding: 16px 24px; margin-bottom: var(--gap); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+        .filter-bar { background: white; border-radius: var(--radius-lg); padding: 14px 20px; margin-bottom: var(--gap); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+        .filter-chip { padding: 6px 14px; border-radius: 99px; font-size: 11px; font-weight: 700; border: 1px solid var(--border); background: white; color: var(--text-secondary); cursor: pointer; transition: all 0.15s; }
+        .filter-chip.active { background: var(--pp-navy); color: white; border-color: var(--pp-navy); }
+        .filter-sep { width: 1px; height: 24px; background: var(--border); }
+        .tickets-panel { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; }
+        .panel-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+        .panel-title { font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+        .ticket-row { display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 14px; align-items: center; padding: 14px 20px; border-bottom: 1px solid var(--border); font-size: 13px; cursor: pointer; transition: background 0.12s; }
+        .ticket-row:last-child { border-bottom: none; }
+        .ticket-row:hover { background: var(--surface-2); }
+        .ticket-icon { width: 36px; height: 36px; border-radius: 9px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .icon-deployment { background: #e0f2fe; color: #0369a1; }
+        .icon-rma { background: #fef3c7; color: #92400e; }
+        .icon-general { background: #f3e8ff; color: #7c3aed; }
+        .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        .badge-open { background: var(--blue-bg); color: var(--blue-text); }
+        .badge-in_progress { background: var(--amber-bg); color: var(--amber-text); }
+        .badge-resolved { background: var(--green-bg); color: var(--green-text); }
+        .badge-closed { background: var(--gray-bg); color: var(--gray-text); }
+        .badge-urgent { background: var(--red-bg); color: var(--red-text); }
+        .badge-high { background: var(--amber-bg); color: var(--amber-text); }
+        .badge-normal { background: var(--gray-bg); color: var(--gray-text); }
+        .badge-low { background: #f0fdf4; color: #166534; }
+        .empty-state { padding: 48px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+        .skeleton { background: linear-gradient(90deg,#f0f4f8 25%,#e2e8f0 50%,#f0f4f8 75%); background-size:400% 100%; animation:shimmer 1.2s infinite; border-radius:6px; }
+        @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
+
+        /* Ticket detail modal */
+        .ticket-modal { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        .ticket-modal.is-open { display:flex; }
+        .ticket-modal-box { background:white; border-radius:16px; width:95%; max-width:600px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden; max-height:90vh; display:flex; flex-direction:column; }
+        .tm-header { padding:16px 20px; background:var(--pp-navy); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+        .tm-body { overflow-y:auto; flex:1; }
+        .tm-section { padding:16px 20px; border-bottom:1px solid var(--border); }
+        .tm-section:last-child { border-bottom:none; }
+        .tm-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px; }
+        .tm-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+        .tm-key { color:var(--text-muted); }
+        .tm-val { font-weight:600; color:var(--text-primary); text-align:right; max-width:65%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+        .form-group { margin-bottom:12px; }
+        .form-label { display:block; font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:5px; }
+        .form-input { width:100%; padding:9px 12px; border:1.5px solid var(--border); border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text-primary); background:#f8fafc; outline:none; transition:border-color 0.2s; }
+        .form-input:focus { border-color:var(--pp-accent); background:white; }
+        textarea.form-input { resize:vertical; min-height:80px; }
+    </style>
+</head>
+<body>
+<div class="dashboard-container">
+
+    <div class="modern-header">
+        <div style="display:flex; align-items:center; gap:15px;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 15px;">
+                <span class="material-icons" style="font-size:18px; vertical-align:middle;">arrow_back</span>
+                <span style="font-weight:700; font-size:11px; margin-left:5px;">HOME</span>
+            </a>
+            <div>
+                <h1 style="font-size:1.5rem; font-weight:800; color:var(--pp-navy); margin:0;">Partner Tickets</h1>
+                <p style="font-size:11px; color:var(--text-muted); margin:0;" id="last-updated">Loading...</p>
+            </div>
+        </div>
+        <button onclick="loadTickets()" class="slds-button slds-button_neutral" style="border-radius:10px; font-weight:700; font-size:12px; padding:8px 16px;">
+            <span class="material-icons" style="font-size:16px; vertical-align:middle;">refresh</span>
+            Refresh
+        </button>
+    </div>
+
+    <!-- Filter Bar -->
+    <div class="filter-bar">
+        <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Status:</span>
+        <button class="filter-chip active" data-status="all" onclick="setStatusFilter(this,'all')">All</button>
+        <button class="filter-chip" data-status="open" onclick="setStatusFilter(this,'open')">Open</button>
+        <button class="filter-chip" data-status="in_progress" onclick="setStatusFilter(this,'in_progress')">In Progress</button>
+        <button class="filter-chip" data-status="resolved" onclick="setStatusFilter(this,'resolved')">Resolved</button>
+        <button class="filter-chip" data-status="closed" onclick="setStatusFilter(this,'closed')">Closed</button>
+        <div class="filter-sep"></div>
+        <span style="font-size:11px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Type:</span>
+        <button class="filter-chip active" data-type="all" onclick="setTypeFilter(this,'all')">All</button>
+        <button class="filter-chip" data-type="deployment_request" onclick="setTypeFilter(this,'deployment_request')">Deployments</button>
+        <button class="filter-chip" data-type="rma_request" onclick="setTypeFilter(this,'rma_request')">Returns</button>
+        <button class="filter-chip" data-type="general" onclick="setTypeFilter(this,'general')">General</button>
+    </div>
+
+    <!-- Ticket List -->
+    <div class="tickets-panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:#0d9488; font-size:18px;">confirmation_number</span>
+                Tickets
+            </div>
+            <span id="ticket-count" style="font-size:11px; color:var(--text-muted);"></span>
+        </div>
+        <div id="ticket-table">
+            <div class="empty-state"><div class="skeleton" style="height:14px;width:200px;margin:0 auto;"></div></div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Ticket Detail Modal -->
+<div class="ticket-modal" id="ticket-modal">
+    <div class="ticket-modal-box">
+        <div class="tm-header">
+            <div style="font-weight:800; font-size:14px; color:white;" id="modal-ticket-num">Ticket Detail</div>
+            <button onclick="closeModal()" style="background:none; border:none; color:white; cursor:pointer; padding:0;"><span class="material-icons">close</span></button>
+        </div>
+        <div class="tm-body" id="modal-ticket-body">
+            <div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const timeAgo = d => {
+    const s = Math.floor((Date.now() - new Date(d)) / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+};
+const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns/RMA' : 'General';
+const typeIconClass = t => t === 'deployment_request' ? 'icon-deployment' : t === 'rma_request' ? 'icon-rma' : 'icon-general';
+const typeIconName = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
+
+let allTickets = [];
+let statusFilter = 'all';
+let typeFilter = 'all';
+
+async function loadTickets() {
+    document.getElementById('last-updated').textContent = 'Loading...';
+    const r = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_for_staff', limit: 200 })
+    });
+    const result = await r.json();
+    if (result.success) {
+        allTickets = result.data || [];
+        renderTickets();
+        document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    }
+}
+
+function renderTickets() {
+    let filtered = allTickets;
+    if (statusFilter !== 'all') filtered = filtered.filter(t => t.status === statusFilter);
+    if (typeFilter !== 'all') filtered = filtered.filter(t => t.type === typeFilter);
+
+    document.getElementById('ticket-count').textContent = `${filtered.length} ticket(s)`;
+
+    if (!filtered.length) {
+        document.getElementById('ticket-table').innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px; display:block; margin-bottom:8px;">confirmation_number</span>No tickets found.</div>`;
+        return;
+    }
+
+    document.getElementById('ticket-table').innerHTML = filtered.map(t => `
+        <div class="ticket-row" onclick="openTicket(${t.id})">
+            <div class="ticket-icon ${typeIconClass(t.type)}">
+                <span class="material-icons" style="font-size:18px;">${typeIconName(t.type)}</span>
+            </div>
+            <div style="min-width:0;">
+                <div style="font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.subject}</div>
+                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+                    <span style="font-family:'DM Mono',monospace;">${t.ticket_number}</span>
+                    ${t.persons?.full_name ? ` · ${t.persons.full_name}` : ''}
+                    ${t.merchants?.dba_name ? ` · ${t.merchants.dba_name}` : ''}
+                </div>
+            </div>
+            <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${typeLabel(t.type)}</span>
+            <span class="badge badge-${t.priority}">${t.priority}</span>
+            <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+            <span style="font-size:11px; color:var(--text-muted); white-space:nowrap;">${timeAgo(t.created_at)}</span>
+        </div>`).join('');
+}
+
+function setStatusFilter(btn, val) {
+    document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    statusFilter = val;
+    renderTickets();
+}
+
+function setTypeFilter(btn, val) {
+    document.querySelectorAll('[data-type]').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    typeFilter = val;
+    renderTickets();
+}
+
+async function openTicket(ticketId) {
+    document.getElementById('modal-ticket-num').textContent = 'Loading...';
+    document.getElementById('modal-ticket-body').innerHTML = '<div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>';
+    document.getElementById('ticket-modal').classList.add('is-open');
+
+    const r = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId })
+    });
+    const result = await r.json();
+    if (!result.success) {
+        document.getElementById('modal-ticket-body').innerHTML = `<div style="padding:20px; color:var(--red-text);">Error loading ticket.</div>`;
+        return;
+    }
+    const t = result.ticket;
+    document.getElementById('modal-ticket-num').textContent = t.ticket_number;
+
+    document.getElementById('modal-ticket-body').innerHTML = `
+        <div class="tm-section">
+            <div class="tm-label">Ticket Info</div>
+            <div class="tm-row"><span class="tm-key">Type</span><span class="tm-val">${typeLabel(t.type)}</span></div>
+            <div class="tm-row"><span class="tm-key">Subject</span><span class="tm-val" title="${t.subject}">${t.subject}</span></div>
+            <div class="tm-row"><span class="tm-key">Status</span><span class="tm-val"><span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span></span></div>
+            <div class="tm-row"><span class="tm-key">Priority</span><span class="tm-val"><span class="badge badge-${t.priority}">${t.priority}</span></span></div>
+            ${t.category ? `<div class="tm-row"><span class="tm-key">Category</span><span class="tm-val">${t.category}</span></div>` : ''}
+            <div class="tm-row"><span class="tm-key">Opened</span><span class="tm-val">${new Date(t.created_at).toLocaleString()}</span></div>
+        </div>
+        <div class="tm-section">
+            <div class="tm-label">Partner</div>
+            <div class="tm-row"><span class="tm-key">Name</span><span class="tm-val">${t.persons?.full_name || '—'}</span></div>
+            <div class="tm-row"><span class="tm-key">Email</span><span class="tm-val"><a href="mailto:${t.persons?.email}" style="color:var(--pp-blue);">${t.persons?.email || '—'}</a></span></div>
+        </div>
+        ${t.merchants ? `
+        <div class="tm-section">
+            <div class="tm-label">Merchant</div>
+            <div class="tm-row"><span class="tm-key">Name</span><span class="tm-val">${t.merchants.dba_name}</span></div>
+            <div class="tm-row"><span class="tm-key">MID</span><span class="tm-val" style="font-family:'DM Mono',monospace;">${t.merchants.merchant_id}</span></div>
+            <div class="tm-row"><span class="tm-key">Location</span><span class="tm-val">${[t.merchants.merchant_city, t.merchants.merchant_state].filter(Boolean).join(', ') || '—'}</span></div>
+        </div>` : ''}
+        ${t.description ? `
+        <div class="tm-section">
+            <div class="tm-label">Description</div>
+            <div style="font-size:13px; color:var(--text-primary); line-height:1.6; white-space:pre-wrap;">${t.description}</div>
+        </div>` : ''}
+        <div class="tm-section">
+            <div class="tm-label">Update Ticket</div>
+            <div class="form-group">
+                <label class="form-label">Status</label>
+                <select id="upd-status" class="form-input">
+                    <option value="open" ${t.status==='open'?'selected':''}>Open</option>
+                    <option value="in_progress" ${t.status==='in_progress'?'selected':''}>In Progress</option>
+                    <option value="resolved" ${t.status==='resolved'?'selected':''}>Resolved</option>
+                    <option value="closed" ${t.status==='closed'?'selected':''}>Closed</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Priority</label>
+                <select id="upd-priority" class="form-input">
+                    <option value="low" ${t.priority==='low'?'selected':''}>Low</option>
+                    <option value="normal" ${t.priority==='normal'?'selected':''}>Normal</option>
+                    <option value="high" ${t.priority==='high'?'selected':''}>High</option>
+                    <option value="urgent" ${t.priority==='urgent'?'selected':''}>Urgent</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Assigned To</label>
+                <input id="upd-assigned" class="form-input" value="${t.assigned_to || ''}" placeholder="Staff name...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Staff Notes (visible to staff only)</label>
+                <textarea id="upd-notes" class="form-input">${t.staff_notes || ''}</textarea>
+            </div>
+            <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
+                <button onclick="closeModal()" style="background:none; border:1px solid var(--border); border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Cancel</button>
+                <button onclick="saveTicketUpdate(${t.id})" style="background:var(--pp-navy); color:white; border:none; border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Save Changes</button>
+            </div>
+        </div>`;
+}
+
+async function saveTicketUpdate(ticketId) {
+    const status = document.getElementById('upd-status').value;
+    const priority = document.getElementById('upd-priority').value;
+    const assigned_to = document.getElementById('upd-assigned').value.trim() || null;
+    const staff_notes = document.getElementById('upd-notes').value.trim() || null;
+
+    const r = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status, priority, assigned_to, staff_notes })
+    });
+    const result = await r.json();
+    if (result.success) {
+        closeModal();
+        Swal.fire({ icon: 'success', title: 'Updated', timer: 1500, showConfirmButton: false });
+        loadTickets();
+    } else {
+        Swal.fire('Error', result.message || 'Update failed', 'error');
+    }
+}
+
+function closeModal() {
+    document.getElementById('ticket-modal').classList.remove('is-open');
+}
+
+document.getElementById('ticket-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('ticket-modal')) closeModal();
+});
+
+loadTickets();
+</script>
+</body>
+</html>

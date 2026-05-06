@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Tickets | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --teal:#0d9488; --teal-dark:#0f766e; --teal-light:#ccfbf1; --teal-bg:#f0fdfa;
+            --navy:#001e3c; --border:#e2e8f0; --surface:#f8fafc; --white:#ffffff;
+            --text:#0a1628; --secondary:#475569; --muted:#94a3b8;
+            --green:#10b981; --green-bg:#dcfce7; --green-text:#166534;
+            --red:#ef4444; --red-bg:#fee2e2; --red-text:#991b1b;
+            --amber:#f59e0b; --amber-bg:#fef3c7; --amber-text:#92400e;
+            --blue-bg:#e0f2fe; --blue-text:#0369a1;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.06);
+        }
+        body { margin:0; padding:0; font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+        .sidebar { position:fixed; top:0; left:0; width:240px; height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:100; box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px; filter:brightness(0) invert(1); display:block; margin-bottom:16px; }
+        .sidebar-partner { display:flex; align-items:center; gap:10px; }
+        .sidebar-avatar { width:36px; height:36px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:white; flex-shrink:0; }
+        .sidebar-name { font-size:13px; font-weight:700; color:white; line-height:1.3; }
+        .sidebar-tag { font-size:10px; color:rgba(255,255,255,0.4); font-weight:500; }
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
+        .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); text-decoration:none; cursor:pointer; transition:all 0.2s; border:none; background:none; width:100%; font-family:'DM Sans',sans-serif; }
+        .nav-item:hover { background:rgba(255,255,255,0.08); color:white; }
+        .nav-item.active { background:var(--teal); color:white; }
+        .nav-item .material-icons { font-size:20px; flex-shrink:0; }
+        .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+        .main { margin-left:240px; min-height:100vh; }
+        .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:50; gap:12px; flex-wrap:wrap; }
+        .topbar-title { font-size:1.2rem; font-weight:800; color:var(--text); margin:0; }
+        .content { padding:24px 28px; max-width:1000px; }
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:12px; font-weight:700; font-family:'DM Sans',sans-serif; cursor:pointer; border:none; transition:all 0.2s; }
+        .btn-teal { background:var(--teal); color:white; }
+        .btn-teal:hover { background:var(--teal-dark); }
+        .btn-outline { background:white; color:var(--secondary); border:1px solid var(--border); }
+        .btn-outline:hover { border-color:var(--teal); color:var(--teal); }
+        .filter-bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px; }
+        .filter-btn { padding:6px 14px; border-radius:99px; font-size:12px; font-weight:700; border:1px solid var(--border); background:white; color:var(--secondary); cursor:pointer; transition:all 0.15s; }
+        .filter-btn.active { background:var(--navy); color:white; border-color:var(--navy); }
+        .ticket-card { background:white; border:1px solid var(--border); border-radius:12px; padding:16px 20px; margin-bottom:10px; cursor:pointer; transition:all 0.15s; display:flex; align-items:flex-start; gap:14px; }
+        .ticket-card:hover { box-shadow:0 4px 16px rgba(0,0,0,0.08); border-color:var(--teal); }
+        .ticket-icon { width:40px; height:40px; border-radius:10px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+        .ticket-icon.deployment { background:var(--blue-bg); color:var(--blue-text); }
+        .ticket-icon.rma { background:var(--amber-bg); color:var(--amber-text); }
+        .ticket-icon.general { background:#f3e8ff; color:#7c3aed; }
+        .ticket-body { flex:1; min-width:0; }
+        .ticket-num { font-size:10px; font-weight:700; color:var(--muted); font-family:'DM Mono',monospace; margin-bottom:2px; }
+        .ticket-subject { font-weight:700; color:var(--text); font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ticket-meta { font-size:11px; color:var(--muted); margin-top:4px; }
+        .ticket-right { display:flex; flex-direction:column; align-items:flex-end; gap:5px; flex-shrink:0; }
+        .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; white-space:nowrap; }
+        .badge-open { background:var(--blue-bg); color:var(--blue-text); }
+        .badge-in_progress { background:var(--amber-bg); color:var(--amber-text); }
+        .badge-resolved { background:var(--green-bg); color:var(--green-text); }
+        .badge-closed { background:#f1f5f9; color:#475569; }
+        .badge-urgent { background:var(--red-bg); color:var(--red-text); }
+        .badge-high { background:var(--amber-bg); color:var(--amber-text); }
+        .badge-normal { background:#f1f5f9; color:#64748b; }
+        .badge-low { background:#f0fdf4; color:#166534; }
+        .empty { padding:60px 20px; text-align:center; color:var(--muted); }
+        .empty .material-icons { font-size:48px; opacity:0.3; display:block; margin-bottom:12px; }
+        @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
+        @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo" alt="PayProTec">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="avatarInitial">?</div>
+            <div>
+                <div class="sidebar-name" id="partnerName">Loading...</div>
+                <div class="sidebar-tag">Partner Portal</div>
+            </div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item active" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+</aside>
+
+<div class="main">
+    <div class="topbar">
+        <h1 class="topbar-title">My Tickets</h1>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="openGeneralTicket()">
+                <span class="material-icons" style="font-size:16px;">help_outline</span>
+                General Support
+            </button>
+            <button class="btn btn-teal" onclick="window.location.href='/partner/merchants'">
+                <span class="material-icons" style="font-size:16px;">local_shipping</span>
+                New Merchant Ticket
+            </button>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="filter-bar">
+            <button class="filter-btn active" data-filter="all" onclick="setFilter(this,'all')">All</button>
+            <button class="filter-btn" data-filter="open" onclick="setFilter(this,'open')">Open</button>
+            <button class="filter-btn" data-filter="in_progress" onclick="setFilter(this,'in_progress')">In Progress</button>
+            <button class="filter-btn" data-filter="resolved" onclick="setFilter(this,'resolved')">Resolved</button>
+            <button class="filter-btn" data-filter="closed" onclick="setFilter(this,'closed')">Closed</button>
+        </div>
+
+        <div id="ticket-list">
+            <div style="text-align:center; padding:40px; color:var(--muted);">
+                <span class="material-icons" style="font-size:32px; animation:spin 0.8s linear infinite; display:block; margin-bottom:8px;">sync</span>
+                Loading tickets...
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+
+let allTickets = [];
+let currentFilter = 'all';
+
+const name = localStorage.getItem('pp_partner_name') || '';
+if (name) {
+    document.getElementById('partnerName').textContent = name;
+    document.getElementById('avatarInitial').textContent = name.charAt(0).toUpperCase();
+}
+
+const typeIcon = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
+const typeClass = t => t === 'deployment_request' ? 'deployment' : t === 'rma_request' ? 'rma' : 'general';
+const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns / RMA' : 'General Support';
+const timeAgo = d => {
+    const s = Math.floor((Date.now() - new Date(d)) / 1000);
+    if (s < 60) return s + 's ago';
+    if (s < 3600) return Math.floor(s/60) + 'm ago';
+    if (s < 86400) return Math.floor(s/3600) + 'h ago';
+    return Math.floor(s/86400) + 'd ago';
+};
+
+async function loadTickets() {
+    const r = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'list_for_partner', token })
+    });
+    const result = await r.json();
+    if (!result.success) {
+        if (r.status === 401) { localStorage.clear(); window.location.href = '/partner'; return; }
+        document.getElementById('ticket-list').innerHTML = `<div class="empty"><span class="material-icons">error_outline</span>Failed to load tickets.</div>`;
+        return;
+    }
+    allTickets = result.data || [];
+    renderTickets();
+}
+
+function renderTickets() {
+    const filtered = currentFilter === 'all' ? allTickets : allTickets.filter(t => t.status === currentFilter);
+    const container = document.getElementById('ticket-list');
+    if (!filtered.length) {
+        container.innerHTML = `<div class="empty"><span class="material-icons">confirmation_number</span>${currentFilter === 'all' ? 'No tickets yet. Open a ticket from your merchant page or use General Support above.' : 'No ' + currentFilter.replace('_', ' ') + ' tickets.'}</div>`;
+        return;
+    }
+    container.innerHTML = filtered.map(t => `
+        <div class="ticket-card" onclick="viewTicket(${t.id})">
+            <div class="ticket-icon ${typeClass(t.type)}">
+                <span class="material-icons" style="font-size:20px;">${typeIcon(t.type)}</span>
+            </div>
+            <div class="ticket-body">
+                <div class="ticket-num">${t.ticket_number} · ${typeLabel(t.type)}</div>
+                <div class="ticket-subject">${t.subject}</div>
+                <div class="ticket-meta">
+                    ${t.merchants?.dba_name ? `<span>${t.merchants.dba_name}</span> · ` : ''}
+                    Opened ${timeAgo(t.created_at)} · Updated ${timeAgo(t.updated_at)}
+                </div>
+            </div>
+            <div class="ticket-right">
+                <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>
+                <span class="badge badge-${t.priority}" style="font-size:9px;">${t.priority}</span>
+            </div>
+        </div>`).join('');
+}
+
+function setFilter(btn, filter) {
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    currentFilter = filter;
+    renderTickets();
+}
+
+async function viewTicket(ticketId) {
+    Swal.fire({ title: 'Loading...', didOpen: () => Swal.showLoading() });
+    const r = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId, token })
+    });
+    const result = await r.json();
+    if (!result.success) { Swal.fire('Error', result.message, 'error'); return; }
+    const t = result.ticket;
+
+    const statusColors = { open: '#0369a1', in_progress: '#92400e', resolved: '#166534', closed: '#475569' };
+    const statusBgs = { open: '#e0f2fe', in_progress: '#fef3c7', resolved: '#dcfce7', closed: '#f1f5f9' };
+
+    Swal.fire({
+        title: t.ticket_number,
+        width: 600,
+        showConfirmButton: false,
+        showCloseButton: true,
+        html: `
+            <div style="text-align:left;">
+                <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
+                    <span style="background:${statusBgs[t.status]};color:${statusColors[t.status]};padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:uppercase;">${t.status.replace('_',' ')}</span>
+                    <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;">${typeLabel(t.type)}</span>
+                    <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:capitalize;">${t.priority} priority</span>
+                </div>
+                <div style="font-size:16px;font-weight:800;margin-bottom:8px;">${t.subject}</div>
+                ${t.merchants?.dba_name ? `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;"><span class="material-icons" style="font-size:14px;vertical-align:middle;">storefront</span> ${t.merchants.dba_name} · ${t.merchants.merchant_id}</div>` : ''}
+                ${t.description ? `<div style="background:#f8fafc;border-radius:8px;padding:12px 14px;font-size:13px;color:#475569;line-height:1.6;margin-bottom:14px;">${t.description}</div>` : ''}
+                ${t.category ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;"><b>Category:</b> ${t.category}</div>` : ''}
+                <div style="font-size:11px;color:var(--muted);border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;">
+                    Opened ${timeAgo(t.created_at)} · Last updated ${timeAgo(t.updated_at)}
+                    ${t.assigned_to ? `<br>Assigned to: <b>${t.assigned_to}</b>` : ''}
+                </div>
+                ${t.staff_notes ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;margin-top:12px;font-size:13px;"><div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px;">Staff Notes</div>${t.staff_notes}</div>` : ''}
+            </div>`,
+        confirmButtonColor: '#0d9488'
+    });
+}
+
+async function openGeneralTicket() {
+    const { value: form } = await Swal.fire({
+        title: 'General Support Ticket',
+        showCancelButton: true,
+        confirmButtonColor: '#0d9488',
+        confirmButtonText: 'Submit Ticket',
+        html: `
+            <div style="text-align:left;font-size:13px;">
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Category *</label>
+                <select id="gCat" class="swal2-input" style="margin:0 0 12px;">
+                    <option value="">Select category...</option>
+                    <option value="Technical Support">Technical Support</option>
+                    <option value="Account Questions">Account Questions</option>
+                    <option value="Billing Issues">Billing Issues</option>
+                    <option value="Portal Help">Portal Help</option>
+                    <option value="Other">Other</option>
+                </select>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Subject *</label>
+                <input id="gSubject" class="swal2-input" style="margin:0 0 12px;" placeholder="Brief description of your issue">
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Priority</label>
+                <select id="gPriority" class="swal2-input" style="margin:0 0 12px;">
+                    <option value="normal">Normal</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                    <option value="low">Low</option>
+                </select>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Description</label>
+                <textarea id="gDesc" class="swal2-textarea" placeholder="Please describe your issue in detail..." style="margin:0;height:100px;"></textarea>
+            </div>`,
+        preConfirm: () => {
+            const category = document.getElementById('gCat').value;
+            const subject = document.getElementById('gSubject').value.trim();
+            if (!category) { Swal.showValidationMessage('Please select a category'); return false; }
+            if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
+            return {
+                category,
+                subject,
+                priority: document.getElementById('gPriority').value,
+                description: document.getElementById('gDesc').value || null
+            };
+        }
+    });
+
+    if (form) {
+        Swal.fire({ title: 'Submitting...', didOpen: () => Swal.showLoading() });
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', token, type: 'general', ...form })
+        });
+        const result = await r.json();
+        if (result.success) {
+            await Swal.fire({ icon: 'success', title: 'Ticket Submitted!', html: `Ticket <b>${result.ticket.ticket_number}</b> has been created. We'll be in touch shortly.`, confirmButtonColor: '#0d9488' });
+            loadTickets();
+        } else {
+            Swal.fire('Error', result.message || 'Could not submit.', 'error');
+        }
+    }
+}
+
+async function handleLogout() {
+    await fetch('/api/partner-auth', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'logout', token }) });
+    localStorage.clear(); window.location.href = '/partner';
+}
+
+loadTickets();
+</script>
+</body>
+</html>

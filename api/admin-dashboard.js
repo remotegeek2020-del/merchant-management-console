@@ -58,7 +58,7 @@ export default async function handler(req, res) {
                 .eq('account_status', 'Approved')
                 .gt('volume_90_day', 0)
                 .order('volume_30_day', { ascending: true })
-                .limit(200);
+                .limit(2000);
 
             if (error) throw error;
 
@@ -77,11 +77,102 @@ export default async function handler(req, res) {
         if (action === 'get_recent_deployments') {
             const { data, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, created_at, purchase_type, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)')
+                .select('id, deployment_id, status, created_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type, model)')
                 .order('created_at', { ascending: false })
                 .limit(8);
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'get_deployment_detail') {
+            const { deployment_id } = req.body;
+            const { data, error } = await supabase
+                .from('deployments')
+                .select('id, deployment_id, status, created_at, updated_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), equipments:equipment_id(serial_number, terminal_type, model)')
+                .eq('id', deployment_id)
+                .single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'send_partner_alerts') {
+            const { merchant_ids } = req.body;
+            if (!merchant_ids || !merchant_ids.length) return res.status(400).json({ success: false, message: 'No merchant IDs provided.' });
+
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, agent_id, agent_name, volume_30_day, volume_90_day, last_batch_date')
+                .in('merchant_id', merchant_ids);
+
+            if (!merchants || !merchants.length) return res.status(400).json({ success: false, message: 'No merchants found.' });
+
+            // Group merchants by agent_id
+            const byAgent = {};
+            for (const m of merchants) {
+                if (!m.agent_id) continue;
+                if (!byAgent[m.agent_id]) byAgent[m.agent_id] = [];
+                byAgent[m.agent_id].push(m);
+            }
+
+            let emailsSent = 0;
+            const agentIds = Object.keys(byAgent);
+
+            for (const agentId of agentIds) {
+                const { data: agentRec } = await supabase
+                    .from('agent_identifiers')
+                    .select('agents!agent_identifiers_agent_id_fkey(agent_name, persons!agents_parent_agent_id_fkey(full_name, email))')
+                    .eq('id_string', agentId)
+                    .single();
+
+                const partner = agentRec?.agents?.persons;
+                if (!partner?.email) continue;
+
+                const agentName = agentRec?.agents?.agent_name || agentId;
+                const merchantList = byAgent[agentId];
+
+                if (process.env.POSTMARK_SERVER_TOKEN) {
+                    try {
+                        const { ServerClient } = await import('postmark');
+                        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                        const rows = merchantList.map(m => {
+                            const baseline = parseFloat(m.volume_90_day) / 3;
+                            const drop = Math.round((1 - parseFloat(m.volume_30_day) / baseline) * 100);
+                            return `<tr style="border-bottom:1px solid #e2e8f0;">
+                                <td style="padding:10px 12px; font-weight:600;">${m.dba_name}</td>
+                                <td style="padding:10px 12px; font-family:monospace; font-size:12px;">${m.merchant_id}</td>
+                                <td style="padding:10px 12px; color:#dc2626; font-weight:700;">-${drop}%</td>
+                                <td style="padding:10px 12px; color:#64748b;">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—'}</td>
+                            </tr>`;
+                        }).join('');
+                        await client.sendEmail({
+                            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                            To: partner.email,
+                            Subject: `Action Required: ${merchantList.length} At-Risk Merchant${merchantList.length > 1 ? 's' : ''} in Your Portfolio`,
+                            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;">
+                                <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;">
+                                <h2 style="color:#001e3c;margin-bottom:8px;">Volume Alert — Immediate Attention Needed</h2>
+                                <p style="color:#475569;line-height:1.6;">Hi <strong>${partner.full_name || agentName}</strong>, the following merchant(s) in your portfolio have shown a significant drop in processing volume and may need your attention:</p>
+                                <table style="width:100%;border-collapse:collapse;margin:20px 0;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                                    <thead><tr style="background:#f8fafc;"><th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">Merchant</th><th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">MID</th><th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">Drop</th><th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">Last Batch</th></tr></thead>
+                                    <tbody>${rows}</tbody>
+                                </table>
+                                <p style="color:#475569;line-height:1.6;">Please reach out to these merchants to understand if there are any issues we can help resolve.</p>
+                                <hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;">
+                                <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Portal · Automated Risk Alert</p>
+                            </div>`,
+                            TextBody: `Hi ${partner.full_name || agentName}, ${merchantList.length} merchant(s) in your portfolio need attention. Please log in to your Partner Portal for details.`,
+                            MessageStream: 'outbound'
+                        });
+                        emailsSent++;
+                    } catch (e) {
+                        console.error('[ALERT] Email failed for', partner.email, e.message);
+                    }
+                } else {
+                    emailsSent++;
+                }
+            }
+
+            return res.status(200).json({ success: true, partners_notified: emailsSent, merchant_count: merchants.length });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });
