@@ -159,7 +159,7 @@ async function fetchReturns() {
                             <span class="material-icons" style="font-size:16px;">history</span>
                         </button>
                         ${isOpen ? `
-                        <button class="pp-btn pp-btn-success" onclick="finalizeRMA('${r.id}', '${r.equipment_id}', '${r.condition}', '${r.destination}')">
+                        <button class="pp-btn pp-btn-success" onclick="finalizeRMA('${r.id}', '${r.equipment_id}')">
                             <span class="material-icons" style="font-size:14px;">check_circle</span>
                             <span class="btn-label">Complete & Restock</span>
                         </button>` : `
@@ -174,34 +174,58 @@ async function fetchReturns() {
     }
 }
 
-async function finalizeRMA(id, equipment_id, condition, destination) {
-    const finalCondition = (destination === 'Warsaw Office') ? 'Working (Back to Stock)' : condition;
-    const finalDestination = destination || 'Warsaw Office';
+async function finalizeRMA(id, equipment_id) {
+    // Step 1: Confirm receipt date
+    const { value: receivedDate } = await Swal.fire({
+        title: 'Confirm Receipt Date',
+        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}" style="margin-top:10px;">`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Next',
+        preConfirm: () => {
+            const v = document.getElementById('swal-receive-date').value;
+            if (!v) { Swal.showValidationMessage('Please select a date'); return false; }
+            return v;
+        }
+    });
+    if (!receivedDate) return;
 
-    const confirm = await Swal.fire({
-        title: 'Complete Inspection?',
-        html: `<p style="color:#475569;">Move unit to <b>${finalDestination}</b> and mark as <b>${finalCondition}</b>?</p>`,
+    // Step 2: Ask final disposition
+    const result = await Swal.fire({
+        title: 'Complete RMA — Final Disposition',
+        text: 'Where is this unit going?',
         icon: 'question',
         showCancelButton: true,
-        confirmButtonColor: '#10b981',
-        cancelButtonColor: '#94a3b8',
-        confirmButtonText: 'Yes, Restock Unit'
+        confirmButtonText: 'Warsaw Office (Back to Stock)',
+        confirmButtonColor: '#004990',
+        denyButtonText: 'Warsaw Repairs (Defective)',
+        denyButtonColor: '#e11d48',
+        showDenyButton: true
     });
 
-    if (confirm.isConfirmed) {
-        Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-        try {
-            const res = await fetch('/api/returns', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'complete_return', payload: { id, equipment_id, condition: finalCondition, destination: finalDestination } })
-            });
-            const result = await res.json();
-            if (result.success) {
-                await logAuditAction('RMA Completed', `Equipment restocked to ${finalDestination}. Condition: ${finalCondition}`);
-                Swal.fire({ icon: 'success', title: 'Restocked!', text: 'Equipment is back in live inventory.', timer: 2000, showConfirmButton: false }).then(() => fetchReturns());
-            } else { throw new Error(result.message); }
-        } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    let finalCondition, finalDestination;
+    if (result.isConfirmed) {
+        finalCondition = 'Working (Back to Stock)';
+        finalDestination = 'Warsaw Office';
+    } else if (result.isDenied) {
+        finalCondition = 'Defective (Received in Repairs)';
+        finalDestination = 'Warsaw Repairs';
+    } else {
+        return;
     }
+
+    Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+    try {
+        const res = await fetch('/api/returns', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'complete_return', payload: { id, equipment_id, condition: finalCondition, destination: finalDestination } })
+        });
+        const r = await res.json();
+        if (r.success) {
+            await logAuditAction('RMA Completed', `Equipment received ${receivedDate}. Restocked to ${finalDestination}. Condition: ${finalCondition}`);
+            Swal.fire({ icon: 'success', title: 'RMA Closed!', html: `Unit moved to <b>${finalDestination}</b> as <b>${finalCondition}</b>.`, timer: 2500, showConfirmButton: false }).then(() => fetchReturns());
+        } else { throw new Error(r.message); }
+    } catch (err) { Swal.fire('Error', err.message, 'error'); }
 }
 
 window.onload = fetchReturns;

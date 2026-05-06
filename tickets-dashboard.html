@@ -185,7 +185,9 @@ let typeFilter = 'all';
 let mineFilter = false;
 let currentStaffName = '';
 let currentTicketId = null;
+let currentTicketData = null;
 let staffList = [];
+let depEquipLookupTimeout;
 
 async function init() {
     const staffRes = await fetch('/api/users', { method: 'GET' });
@@ -294,6 +296,7 @@ async function openTicket(ticketId) {
         return;
     }
     const t = result.ticket;
+    currentTicketData = t;
     const comments = commentsResult.comments || [];
     document.getElementById('modal-ticket-num').textContent = t.ticket_number;
     document.getElementById('modal-ticket-sub').textContent = t.subject;
@@ -464,129 +467,218 @@ async function saveTicketUpdate(ticketId) {
     }
 }
 
+// Live equipment search inside Swal — called via oninput in Swal HTML
+async function searchDepEquipment(val) {
+    const sugg = document.getElementById('dep-eq-suggestions');
+    const hidden = document.getElementById('dep-eq-id');
+    if (!sugg || !hidden) return;
+    hidden.value = '';
+    if (!val || val.length < 1) { sugg.style.display = 'none'; return; }
+
+    clearTimeout(depEquipLookupTimeout);
+    depEquipLookupTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            const items = result.inventory || [];
+            if (!items.length) { sugg.style.display = 'none'; return; }
+            sugg.innerHTML = items.map(e =>
+                `<div onclick="selectDepEquip('${e.id}','${e.serial_number}','${e.terminal_type || ''}')"
+                    style="padding:10px 12px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:12px; display:flex; justify-content:space-between; align-items:center;">
+                    <div><strong style="color:#004990;">${e.serial_number}</strong><div style="font-size:10px;color:#64748b;">${e.terminal_type || ''}</div></div>
+                    <span style="font-size:9px;background:#f0fdf4;color:#166534;padding:2px 6px;border-radius:4px;font-weight:700;">${(e.status||'').toUpperCase()}</span>
+                </div>`
+            ).join('');
+            sugg.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }, 250);
+}
+
+function selectDepEquip(id, serial, type) {
+    const inp = document.getElementById('dep-eq-search');
+    const hid = document.getElementById('dep-eq-id');
+    const sugg = document.getElementById('dep-eq-suggestions');
+    if (inp) inp.value = `${serial}${type ? ' (' + type + ')' : ''}`;
+    if (hid) hid.value = id;
+    if (sugg) sugg.style.display = 'none';
+}
+
 async function createLinkedDeployment() {
-    const t = allTickets.find(x => x.id === currentTicketId);
-    const merchantId = t?.merchant_id;
+    const t = currentTicketData;
+    if (!t || !t.merchant_id) {
+        Swal.fire('No Merchant', 'This ticket has no merchant linked.', 'warning');
+        return;
+    }
 
-    // Get available equipment
-    const eqRes = await fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_available_equipment' }) });
-    const eqData = await eqRes.json();
-    const equipment = eqData.equipment || [];
+    const merchantLabel = t.merchants?.dba_name ? `${t.merchants.dba_name} (${t.merchant_id})` : t.merchant_id;
 
-    const eqOptions = equipment.length
-        ? equipment.map(e => `<option value="${e.serial_number}">${e.terminal_type || ''} ${e.model || ''} — ${e.serial_number}</option>`).join('')
-        : '<option value="">No available equipment</option>';
-
-    const { value: form } = await Swal.fire({
+    await Swal.fire({
         title: 'Create Deployment Record',
-        width: 540,
+        width: 620,
         showCancelButton: true,
         confirmButtonColor: '#001e3c',
-        confirmButtonText: 'Create',
-        html: `<div style="text-align:left;font-size:13px;">
-            <label class="form-label" style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Equipment</label>
-            <select id="dep-eq" class="swal2-input" style="margin:0 0 12px;">${eqOptions}</select>
-            <label class="form-label" style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Purchase Type</label>
-            <select id="dep-pt" class="swal2-input" style="margin:0 0 12px;">
-                <option value="Free Placement">Free Placement</option>
-                <option value="Purchase">Purchase</option>
-                <option value="Rental">Rental</option>
-            </select>
-            <label class="form-label" style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Recipient Name</label>
-            <input id="dep-name" class="swal2-input" style="margin:0 0 12px;" placeholder="Recipient name">
-            <label class="form-label" style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Shipping Address</label>
-            <input id="dep-addr" class="swal2-input" style="margin:0 0 12px;" placeholder="Full shipping address">
-            <label class="form-label" style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Notes</label>
-            <textarea id="dep-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Any deployment notes..."></textarea>
+        confirmButtonText: 'Create Deployment',
+        html: `
+        <div style="text-align:left; font-size:13px;">
+            <div style="background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:#0f766e;">
+                <strong>Merchant:</strong> ${merchantLabel}
+            </div>
+            <div style="position:relative; margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">HARDWARE (SERIAL NUMBER) *</label>
+                <input id="dep-eq-search" class="swal2-input" style="margin:0;" placeholder="Type serial to search..." oninput="searchDepEquipment(this.value)" autocomplete="off">
+                <input type="hidden" id="dep-eq-id">
+                <div id="dep-eq-suggestions" style="position:absolute;z-index:99999;background:white;width:100%;border:1px solid #e2e8f0;border-radius:8px;max-height:160px;overflow-y:auto;display:none;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,0.12);"></div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+                <div>
+                    <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TID</label>
+                    <input id="dep-tid" class="swal2-input" style="margin:0;" placeholder="Terminal ID">
+                </div>
+                <div>
+                    <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TARGET DATE</label>
+                    <input id="dep-date" type="date" class="swal2-input" style="margin:0;" value="${new Date().toISOString().split('T')[0]}">
+                </div>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TRACKING NUMBER</label>
+                <input id="dep-tracking" class="swal2-input" style="margin:0;" placeholder="Carrier tracking number">
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">PURCHASE TYPE *</label>
+                <select id="dep-pt" class="swal2-input" style="margin:0;">
+                    <option value="Free Placement">Free Placement</option>
+                    <option value="Agent Purchase">Agent Purchase</option>
+                    <option value="Rental">Rental</option>
+                    <option value="Reprogram">Reprogram</option>
+                    <option value="Swap">Swap</option>
+                    <option value="Swap/No Return">Swap/No Return</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">INTERNAL NOTES</label>
+                <textarea id="dep-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Internal notes..."></textarea>
+            </div>
         </div>`,
-        preConfirm: () => ({
-            equipment_serial: document.getElementById('dep-eq').value,
-            purchase_type: document.getElementById('dep-pt').value,
-            recipient_name: document.getElementById('dep-name').value,
-            shipping_address: document.getElementById('dep-addr').value,
-            notes: document.getElementById('dep-notes').value
-        })
+        preConfirm: () => {
+            const eqId = document.getElementById('dep-eq-id').value;
+            if (!eqId) { Swal.showValidationMessage('Please select equipment from the search results'); return false; }
+            return {
+                equipment_id: eqId,
+                tid: document.getElementById('dep-tid').value,
+                target_date: document.getElementById('dep-date').value,
+                tracking_id: document.getElementById('dep-tracking').value,
+                purchase_type: document.getElementById('dep-pt').value,
+                notes: document.getElementById('dep-notes').value
+            };
+        }
+    }).then(async result => {
+        if (!result.isConfirmed || !result.value) return;
+        Swal.fire({ title: 'Creating Deployment...', didOpen: () => Swal.showLoading() });
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'deployment', staff_name: currentStaffName, ...result.value })
+        });
+        const res = await r.json();
+        if (res.success) {
+            await Swal.fire({ icon: 'success', title: 'Deployment Created!', html: `Deployment ID: <strong style="font-family:'DM Mono',monospace;">${res.deployment_id}</strong>`, confirmButtonColor: '#001e3c' });
+            openTicket(currentTicketId);
+            loadTickets();
+        } else {
+            Swal.fire('Error', res.message || 'Could not create deployment.', 'error');
+        }
     });
-
-    if (!form) return;
-    Swal.fire({ title: 'Creating...', didOpen: () => Swal.showLoading() });
-    const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'deployment', staff_name: currentStaffName, ...form })
-    });
-    const result = await r.json();
-    if (result.success) {
-        await Swal.fire({ icon: 'success', title: 'Deployment Created!', html: `Deployment ID: <strong style="font-family:monospace;">${result.deployment_id}</strong>`, confirmButtonColor: '#001e3c' });
-        openTicket(currentTicketId);
-        loadTickets();
-    } else {
-        Swal.fire('Error', result.message || 'Could not create deployment.', 'error');
-    }
 }
 
 async function createLinkedRMA() {
-    const t = allTickets.find(x => x.id === currentTicketId);
-    const merchantId = t?.merchant_id;
-    if (!merchantId) {
+    const t = currentTicketData;
+    if (!t || !t.merchant_id) {
         Swal.fire('No Merchant', 'This ticket has no merchant linked. Cannot create RMA.', 'warning');
         return;
     }
 
-    // Get all deployments for this merchant (any status)
-    const depRes = await fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_merchant_deployments', merchant_id: merchantId }) });
+    Swal.fire({ title: 'Loading deployments...', didOpen: () => Swal.showLoading() });
+    const depRes = await fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_merchant_deployments', merchant_id: t.merchant_id }) });
     const depData = await depRes.json();
     const deps = depData.deployments || [];
+    Swal.close();
 
     if (!deps.length) {
-        Swal.fire('No Deployments', 'There are no deployment records for this merchant. An RMA requires a deployment record.', 'warning');
+        Swal.fire('No Deployments', 'There are no deployment records for this merchant. An RMA requires an existing deployment (equipment lifecycle rule).', 'warning');
         return;
     }
 
     const depOptions = deps.map(d => {
         const eq = d.equipments;
-        const label = eq ? `${eq.terminal_type || ''} ${eq.model || ''} — ${eq.serial_number || ''}`.trim() : 'No Equipment';
-        return `<option value="${d.id}">${d.deployment_id} · ${label} (${d.status})</option>`;
+        const label = eq ? `${eq.terminal_type || ''} ${eq.model || ''} — SN: ${eq.serial_number || ''}`.trim() : 'No equipment';
+        return `<option value="${d.id}">${d.deployment_id || d.id} · ${label} · ${d.status}</option>`;
     }).join('');
 
-    const { value: form } = await Swal.fire({
-        title: 'Create RMA Record',
-        width: 540,
+    await Swal.fire({
+        title: 'Initiate RMA / Return',
+        width: 580,
         showCancelButton: true,
-        confirmButtonColor: '#001e3c',
+        confirmButtonColor: '#92400e',
         confirmButtonText: 'Create RMA',
-        html: `<div style="text-align:left;font-size:13px;">
-            <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Linked Deployment *</label>
-            <select id="rma-dep" class="swal2-input" style="margin:0 0 12px;">${depOptions}</select>
-            <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Return Reason *</label>
-            <input id="rma-reason" class="swal2-input" style="margin:0 0 12px;" placeholder="Reason for return">
-            <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin:0 0 4px;">Notes</label>
-            <textarea id="rma-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Additional notes..."></textarea>
+        html: `
+        <div style="text-align:left;font-size:13px;">
+            <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#92400e;">
+                <strong>Merchant:</strong> ${t.merchants?.dba_name || t.merchant_id}
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">LINKED DEPLOYMENT *</label>
+                <select id="rma-dep" class="swal2-input" style="margin:0;">${depOptions}</select>
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">RETURN REASON *</label>
+                <select id="rma-reason-sel" class="swal2-input" style="margin:0 0 8px;" onchange="document.getElementById('rma-reason-other').style.display=this.value==='Other'?'block':'none'">
+                    <option value="">Select reason...</option>
+                    <option value="Merchant Cancellation">Merchant Cancellation</option>
+                    <option value="Equipment Type Swap">Equipment Type Swap</option>
+                    <option value="Technical Issue Swap">Technical Issue Swap</option>
+                    <option value="Other">Other</option>
+                </select>
+                <input id="rma-reason-other" class="swal2-input" style="margin:0;display:none;" placeholder="Specify reason...">
+            </div>
+            <div style="margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">DATE INITIATED</label>
+                <input id="rma-date" type="date" class="swal2-input" style="margin:0;" value="${new Date().toISOString().split('T')[0]}">
+            </div>
+            <div>
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">NOTES</label>
+                <textarea id="rma-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Additional notes..."></textarea>
+            </div>
         </div>`,
         preConfirm: () => {
-            const reason = document.getElementById('rma-reason').value.trim();
-            if (!reason) { Swal.showValidationMessage('Return reason is required'); return false; }
+            const reasonSel = document.getElementById('rma-reason-sel').value;
+            const reasonOther = document.getElementById('rma-reason-other').value.trim();
+            const finalReason = reasonSel === 'Other' ? reasonOther : reasonSel;
+            if (!finalReason) { Swal.showValidationMessage('Please select or enter a return reason'); return false; }
             return {
                 deployment_internal_id: document.getElementById('rma-dep').value,
-                return_reason: reason,
+                return_reason: finalReason,
+                return_date_initiated: document.getElementById('rma-date').value,
                 notes: document.getElementById('rma-notes').value
             };
         }
+    }).then(async result => {
+        if (!result.isConfirmed || !result.value) return;
+        Swal.fire({ title: 'Creating RMA...', didOpen: () => Swal.showLoading() });
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'rma', staff_name: currentStaffName, ...result.value })
+        });
+        const res = await r.json();
+        if (res.success) {
+            await Swal.fire({ icon: 'success', title: 'RMA Initiated!', html: `RMA ID: <strong style="font-family:'DM Mono',monospace;">${res.return_id}</strong><br><span style="font-size:12px;color:#64748b;">Unit marked In Transit. Complete inspection from Returns & RMA ledger.</span>`, confirmButtonColor: '#001e3c' });
+            openTicket(currentTicketId);
+            loadTickets();
+        } else {
+            Swal.fire('Error', res.message || 'Could not create RMA.', 'error');
+        }
     });
-
-    if (!form) return;
-    Swal.fire({ title: 'Creating RMA...', didOpen: () => Swal.showLoading() });
-    const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'rma', staff_name: currentStaffName, ...form })
-    });
-    const result = await r.json();
-    if (result.success) {
-        await Swal.fire({ icon: 'success', title: 'RMA Created!', html: `RMA ID: <strong style="font-family:monospace;">${result.return_id}</strong>`, confirmButtonColor: '#001e3c' });
-        openTicket(currentTicketId);
-        loadTickets();
-    } else {
-        Swal.fire('Error', result.message || 'Could not create RMA.', 'error');
-    }
 }
 
 function closeModal() {
