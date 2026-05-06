@@ -11,8 +11,8 @@ export default async function handler(req, res) {
             weekStart.setDate(weekStart.getDate() - weekStart.getDay());
             weekStart.setHours(0, 0, 0, 0);
 
-            const [merchantStats, deploymentCount, openRmaCount, stockedCount, deployedCount, repairCount, newThisWeek, recentActivity] = await Promise.all([
-                supabase.from('merchant_stats_by_id').select('merchant_count, pending_count, closed_count, total_volume_sum, total_volume_90d_sum'),
+            const [merchantKpis, deploymentCount, openRmaCount, stockedCount, deployedCount, repairCount, newThisWeek, recentActivity] = await Promise.all([
+                supabase.rpc('get_merchant_kpis'),
                 supabase.from('deployments').select('*', { count: 'exact', head: true }).in('status', ['Open', 'In Transit']),
                 supabase.from('returns').select('*', { count: 'exact', head: true }).ilike('status', 'open'),
                 supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'stocked'),
@@ -22,28 +22,23 @@ export default async function handler(req, res) {
                 supabase.from('activity_logs').select('email, action, status, created_at').order('created_at', { ascending: false }).limit(12)
             ]);
 
-            let approved = 0, pending = 0, closed = 0, mtd = 0, vol90 = 0;
-            (merchantStats.data || []).forEach(s => {
-                approved += parseInt(s.merchant_count || 0);
-                pending  += parseInt(s.pending_count || 0);
-                closed   += parseInt(s.closed_count || 0);
-                mtd      += parseFloat(s.total_volume_sum || 0);
-                vol90    += parseFloat(s.total_volume_90d_sum || 0);
-            });
+            const mk = merchantKpis.data || {};
 
             return res.status(200).json({
                 success: true,
                 kpis: {
-                    approved, pending, closed,
-                    total_mtd: mtd,
-                    total_90d: vol90,
+                    approved:  parseInt(mk.approved  || 0),
+                    pending:   parseInt(mk.pending   || 0),
+                    closed:    parseInt(mk.closed    || 0),
+                    total_mtd: parseFloat(mk.mtd_volume || 0),
+                    total_90d: parseFloat(mk.vol_90d    || 0),
                     active_deployments: deploymentCount.count || 0,
                     open_rmas: openRmaCount.count || 0,
                     new_this_week: newThisWeek.count || 0,
                     equipment: {
-                        stocked: stockedCount.count || 0,
+                        stocked:  stockedCount.count  || 0,
                         deployed: deployedCount.count || 0,
-                        repair: repairCount.count || 0
+                        repair:   repairCount.count   || 0
                     }
                 },
                 recent_activity: recentActivity.data || []
