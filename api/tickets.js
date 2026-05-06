@@ -58,8 +58,8 @@ export default async function handler(req, res) {
 
             // Only show deployments that don't already have a completed RMA
             const eligible = (deployments || []).filter(d => {
-                const hasClosedRma = d.returns && d.returns.some(r => r.status === 'Closed');
-                return !hasClosedRma;
+                const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
+                return !rets.some(r => r.status === 'Closed');
             });
 
             return res.status(200).json({ success: true, deployments: eligible });
@@ -363,8 +363,8 @@ export default async function handler(req, res) {
 
             // Exclude deployments that already have a completed RMA
             const eligible = (data || []).filter(d => {
-                const hasClosedRma = d.returns && d.returns.some(r => r.status === 'Closed');
-                return !hasClosedRma;
+                const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
+                return !rets.some(r => r.status === 'Closed');
             });
             return res.status(200).json({ success: true, deployments: eligible });
         }
