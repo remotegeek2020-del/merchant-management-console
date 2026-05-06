@@ -11,11 +11,13 @@ export default async function handler(req, res) {
             weekStart.setDate(weekStart.getDate() - weekStart.getDay());
             weekStart.setHours(0, 0, 0, 0);
 
-            const [merchantStats, deploymentCount, openRmaCount, equipRows, newThisWeek, recentActivity] = await Promise.all([
+            const [merchantStats, deploymentCount, openRmaCount, stockedCount, deployedCount, repairCount, newThisWeek, recentActivity] = await Promise.all([
                 supabase.from('merchant_stats_by_id').select('merchant_count, pending_count, closed_count, total_volume_sum, total_volume_90d_sum'),
                 supabase.from('deployments').select('*', { count: 'exact', head: true }).in('status', ['Open', 'In Transit']),
-                supabase.from('returns').select('*', { count: 'exact', head: true }).eq('status', 'Open'),
-                supabase.from('equipments').select('status, current_location'),
+                supabase.from('returns').select('*', { count: 'exact', head: true }).ilike('status', 'open'),
+                supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'stocked'),
+                supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
+                supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'repairing'),
                 supabase.from('merchants').select('*', { count: 'exact', head: true }).gte('enrollment_date', weekStart.toISOString()),
                 supabase.from('activity_logs').select('email, action, status, created_at').order('created_at', { ascending: false }).limit(12)
             ]);
@@ -29,13 +31,6 @@ export default async function handler(req, res) {
                 vol90    += parseFloat(s.total_volume_90d_sum || 0);
             });
 
-            const equip = { stocked: 0, deployed: 0, repair: 0 };
-            (equipRows.data || []).forEach(e => {
-                if (e.status === 'deployed') equip.deployed++;
-                else if ((e.current_location || '').toLowerCase().includes('repair')) equip.repair++;
-                else equip.stocked++;
-            });
-
             return res.status(200).json({
                 success: true,
                 kpis: {
@@ -45,7 +40,11 @@ export default async function handler(req, res) {
                     active_deployments: deploymentCount.count || 0,
                     open_rmas: openRmaCount.count || 0,
                     new_this_week: newThisWeek.count || 0,
-                    equipment: equip
+                    equipment: {
+                        stocked: stockedCount.count || 0,
+                        deployed: deployedCount.count || 0,
+                        repair: repairCount.count || 0
+                    }
                 },
                 recent_activity: recentActivity.data || []
             });
