@@ -69,6 +69,43 @@
         .empty .material-icons { font-size:48px; opacity:0.3; display:block; margin-bottom:12px; }
         @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
         @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* Ticket detail modal */
+        .t-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        .t-modal.open { display:flex; }
+        .t-modal-box { background:white; border-radius:16px; width:95%; max-width:640px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden; max-height:92vh; display:flex; flex-direction:column; }
+        .t-header { padding:16px 20px; background:var(--navy); display:flex; justify-content:space-between; align-items:center; flex-shrink:0; }
+        .t-body { overflow-y:auto; flex:1; }
+        .t-section { padding:16px 20px; border-bottom:1px solid var(--border); }
+        .t-section:last-child { border-bottom:none; }
+        .t-label { font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px; }
+        .t-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
+        .t-key { color:var(--muted); }
+        .t-val { font-weight:600; text-align:right; max-width:65%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+        /* Comment thread */
+        .comment-thread { display:flex; flex-direction:column; gap:10px; }
+        .c-entry { display:flex; gap:9px; }
+        .c-entry.staff { flex-direction:row; }
+        .c-entry.partner { flex-direction:row-reverse; }
+        .c-avatar { width:28px; height:28px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:700; flex-shrink:0; margin-top:2px; }
+        .c-entry.staff .c-avatar { background:var(--navy); color:white; }
+        .c-entry.partner .c-avatar { background:var(--teal); color:white; }
+        .c-bubble { max-width:78%; padding:9px 13px; border-radius:12px; font-size:12px; line-height:1.55; }
+        .c-entry.staff .c-bubble { background:#f0fdfa; color:#134e4a; border:1px solid #99f6e4; border-radius:2px 12px 12px 12px; }
+        .c-entry.partner .c-bubble { background:var(--navy); color:white; border-radius:12px 2px 12px 12px; }
+        .c-meta { font-size:10px; color:var(--muted); margin-top:3px; }
+        .c-entry.partner .c-meta { text-align:right; }
+        .system-event { text-align:center; font-size:11px; color:var(--muted); padding:2px 0; display:flex; align-items:center; gap:8px; }
+        .system-event::before, .system-event::after { content:''; flex:1; height:1px; background:var(--border); }
+
+        /* Reply box */
+        .reply-box { display:flex; gap:10px; align-items:flex-end; }
+        .reply-input { flex:1; padding:10px 13px; border:1.5px solid var(--border); border-radius:10px; font-size:13px; font-family:'DM Sans',sans-serif; color:var(--text); background:#f8fafc; outline:none; resize:none; min-height:72px; transition:border-color 0.2s; }
+        .reply-input:focus { border-color:var(--teal); background:white; }
+        .reply-send-btn { background:var(--teal); color:white; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; font-family:'DM Sans',sans-serif; font-weight:700; font-size:12px; display:flex; align-items:center; gap:5px; white-space:nowrap; transition:background 0.2s; }
+        .reply-send-btn:hover { background:var(--teal-dark); }
+        .reply-send-btn:disabled { opacity:0.6; cursor:default; }
     </style>
 </head>
 <body>
@@ -130,12 +167,29 @@
     </div>
 </div>
 
+<!-- Ticket Detail Modal -->
+<div class="t-modal" id="t-modal">
+    <div class="t-modal-box">
+        <div class="t-header">
+            <div>
+                <div style="font-weight:800; font-size:14px; color:white;" id="t-modal-num">Ticket</div>
+                <div style="font-size:11px; color:rgba(255,255,255,0.6); margin-top:1px;" id="t-modal-sub"></div>
+            </div>
+            <button onclick="closeTicketModal()" style="background:none;border:none;color:white;cursor:pointer;padding:4px;"><span class="material-icons">close</span></button>
+        </div>
+        <div class="t-body" id="t-modal-body">
+            <div style="padding:40px;text-align:center;color:var(--muted);">Loading...</div>
+        </div>
+    </div>
+</div>
+
 <script>
 const token = localStorage.getItem('pp_partner_token');
 if (!token) window.location.href = '/partner';
 
 let allTickets = [];
 let currentFilter = 'all';
+let currentViewTicketId = null;
 
 const name = localStorage.getItem('pp_partner_name') || '';
 if (name) {
@@ -204,43 +258,107 @@ function setFilter(btn, filter) {
 }
 
 async function viewTicket(ticketId) {
-    Swal.fire({ title: 'Loading...', didOpen: () => Swal.showLoading() });
+    currentViewTicketId = ticketId;
+    document.getElementById('t-modal-num').textContent = 'Loading...';
+    document.getElementById('t-modal-sub').textContent = '';
+    document.getElementById('t-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading...</div>';
+    document.getElementById('t-modal').classList.add('open');
+
+    const [ticketRes, commentsRes] = await Promise.all([
+        fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_detail', ticket_id: ticketId, token }) }),
+        fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_comments', ticket_id: ticketId, token }) })
+    ]);
+    const tr = await ticketRes.json();
+    const cr = await commentsRes.json();
+
+    if (!tr.success) {
+        document.getElementById('t-modal-body').innerHTML = `<div style="padding:20px;color:#ef4444;">Error: ${tr.message}</div>`;
+        return;
+    }
+
+    const t = tr.ticket;
+    const comments = cr.comments || [];
+    document.getElementById('t-modal-num').textContent = t.ticket_number;
+    document.getElementById('t-modal-sub').textContent = t.subject;
+
+    const statusColors = { open:'#0369a1', in_progress:'#92400e', resolved:'#166534', closed:'#475569' };
+    const statusBgs = { open:'#e0f2fe', in_progress:'#fef3c7', resolved:'#dcfce7', closed:'#f1f5f9' };
+
+    const commentsHtml = comments.length === 0
+        ? `<div style="text-align:center;font-size:12px;color:var(--muted);padding:16px 0;">No messages yet.</div>`
+        : comments.map(c => {
+            if (c.author_type === 'system') {
+                return `<div class="system-event">${c.change_summary} <span style="opacity:0.65;"> · ${timeAgo(c.created_at)}</span></div>`;
+            }
+            const isPartner = c.author_type === 'partner';
+            const initials = (c.author_name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+            return `<div class="c-entry ${isPartner ? 'partner' : 'staff'}">
+                <div class="c-avatar">${initials}</div>
+                <div>
+                    <div class="c-bubble">${c.body}</div>
+                    <div class="c-meta">${c.author_name} · ${timeAgo(c.created_at)}</div>
+                </div>
+            </div>`;
+        }).join('');
+
+    const isClosed = t.status === 'closed' || t.status === 'resolved';
+
+    document.getElementById('t-modal-body').innerHTML = `
+        <div class="t-section">
+            <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:12px;">
+                <span style="background:${statusBgs[t.status]};color:${statusColors[t.status]};padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:capitalize;">${t.status.replace('_',' ')}</span>
+                <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;">${typeLabel(t.type)}</span>
+                <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:capitalize;">${t.priority} priority</span>
+            </div>
+            ${t.merchants?.dba_name ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;"><span class="material-icons" style="font-size:14px;vertical-align:middle;">storefront</span> ${t.merchants.dba_name} · <span style="font-family:'DM Mono',monospace;">${t.merchants.merchant_id}</span></div>` : ''}
+            ${t.description ? `<div style="background:#f8fafc;border-radius:8px;padding:12px 14px;font-size:13px;color:#475569;line-height:1.6;">${t.description}</div>` : ''}
+            <div style="font-size:11px;color:var(--muted);margin-top:10px;">
+                Opened ${timeAgo(t.created_at)}
+                ${t.assigned_to ? ` · Assigned to <strong>${t.assigned_to}</strong>` : ''}
+            </div>
+        </div>
+        <div class="t-section">
+            <div class="t-label">Conversation</div>
+            <div class="comment-thread" style="margin-bottom:16px;">${commentsHtml}</div>
+            ${!isClosed ? `
+            <div class="reply-box">
+                <textarea id="partner-reply" class="reply-input" placeholder="Type your reply or question..."></textarea>
+                <button class="reply-send-btn" id="partner-send-btn" onclick="submitPartnerComment()">
+                    <span class="material-icons" style="font-size:16px;">send</span>
+                    Send
+                </button>
+            </div>` : `<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px;">This ticket is ${t.status}. Open a new ticket if you need further assistance.</div>`}
+        </div>`;
+}
+
+async function submitPartnerComment() {
+    const body = document.getElementById('partner-reply')?.value?.trim();
+    if (!body) return;
+
+    const btn = document.getElementById('partner-send-btn');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:14px;animation:spin 0.7s linear infinite;">sync</span>'; }
+
     const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId, token })
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ action:'add_comment', ticket_id: currentViewTicketId, body, token })
     });
     const result = await r.json();
-    if (!result.success) { Swal.fire('Error', result.message, 'error'); return; }
-    const t = result.ticket;
-
-    const statusColors = { open: '#0369a1', in_progress: '#92400e', resolved: '#166534', closed: '#475569' };
-    const statusBgs = { open: '#e0f2fe', in_progress: '#fef3c7', resolved: '#dcfce7', closed: '#f1f5f9' };
-
-    Swal.fire({
-        title: t.ticket_number,
-        width: 600,
-        showConfirmButton: false,
-        showCloseButton: true,
-        html: `
-            <div style="text-align:left;">
-                <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px; flex-wrap:wrap;">
-                    <span style="background:${statusBgs[t.status]};color:${statusColors[t.status]};padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:uppercase;">${t.status.replace('_',' ')}</span>
-                    <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;">${typeLabel(t.type)}</span>
-                    <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:capitalize;">${t.priority} priority</span>
-                </div>
-                <div style="font-size:16px;font-weight:800;margin-bottom:8px;">${t.subject}</div>
-                ${t.merchants?.dba_name ? `<div style="font-size:12px;color:var(--muted);margin-bottom:12px;"><span class="material-icons" style="font-size:14px;vertical-align:middle;">storefront</span> ${t.merchants.dba_name} · ${t.merchants.merchant_id}</div>` : ''}
-                ${t.description ? `<div style="background:#f8fafc;border-radius:8px;padding:12px 14px;font-size:13px;color:#475569;line-height:1.6;margin-bottom:14px;">${t.description}</div>` : ''}
-                ${t.category ? `<div style="font-size:12px;color:var(--muted);margin-bottom:10px;"><b>Category:</b> ${t.category}</div>` : ''}
-                <div style="font-size:11px;color:var(--muted);border-top:1px solid #e2e8f0;padding-top:12px;margin-top:12px;">
-                    Opened ${timeAgo(t.created_at)} · Last updated ${timeAgo(t.updated_at)}
-                    ${t.assigned_to ? `<br>Assigned to: <b>${t.assigned_to}</b>` : ''}
-                </div>
-                ${t.staff_notes ? `<div style="background:#fffbeb;border:1px solid #fde68a;border-radius:8px;padding:12px 14px;margin-top:12px;font-size:13px;"><div style="font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;margin-bottom:4px;">Staff Notes</div>${t.staff_notes}</div>` : ''}
-            </div>`,
-        confirmButtonColor: '#0d9488'
-    });
+    if (result.success) {
+        viewTicket(currentViewTicketId);
+    } else {
+        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:16px;">send</span> Send'; }
+        Swal.fire('Error', result.message || 'Could not send reply.', 'error');
+    }
 }
+
+function closeTicketModal() {
+    document.getElementById('t-modal').classList.remove('open');
+    currentViewTicketId = null;
+}
+
+document.getElementById('t-modal').addEventListener('click', e => {
+    if (e.target === document.getElementById('t-modal')) closeTicketModal();
+});
 
 async function openGeneralTicket() {
     const { value: form } = await Swal.fire({
@@ -277,8 +395,7 @@ async function openGeneralTicket() {
             if (!category) { Swal.showValidationMessage('Please select a category'); return false; }
             if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
             return {
-                category,
-                subject,
+                category, subject,
                 priority: document.getElementById('gPriority').value,
                 description: document.getElementById('gDesc').value || null
             };

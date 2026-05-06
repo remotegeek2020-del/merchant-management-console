@@ -6,14 +6,39 @@ export default async function handler(req, res) {
     const { action } = req.body;
 
     try {
-
-        // Validate partner session helper
         async function validatePartner(token) {
             if (!token) return null;
             const { data } = await supabase.from('partner_sessions')
                 .select('person_id, expires_at').eq('session_token', token).single();
             if (!data || new Date(data.expires_at) < new Date()) return null;
             return data.person_id;
+        }
+
+        async function sendEmail(to, subject, htmlBody, textBody) {
+            if (!process.env.POSTMARK_SERVER_TOKEN) return;
+            try {
+                const { ServerClient } = await import('postmark');
+                const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                await client.sendEmail({
+                    From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                    To: to, Subject: subject, HtmlBody: htmlBody, TextBody: textBody,
+                    MessageStream: 'outbound'
+                });
+            } catch (e) { console.error('[EMAIL] Failed:', e.message); }
+        }
+
+        function genId(prefix) {
+            const ym = new Date().toISOString().slice(0, 7).replace('-', '');
+            return `${prefix}-${ym}-${Math.floor(Math.random() * 99999 + 1).toString().padStart(5, '0')}`;
+        }
+
+        function emailLayout(content) {
+            return `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:40px 20px;">
+                <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;">
+                ${content}
+                <hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;">
+                <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Partner Portal · Support</p>
+            </div>`;
         }
 
         if (action === 'get_merchant_equipment') {
@@ -41,7 +66,6 @@ export default async function handler(req, res) {
 
             if (!type || !subject) return res.status(400).json({ success: false, message: 'Type and subject are required.' });
 
-            // If merchant_id provided, verify this partner owns the merchant
             if (merchant_id) {
                 const { data: person } = await supabase.from('persons').select('id').eq('id', personId).single();
                 if (!person) return res.status(401).json({ success: false, message: 'Partner not found.' });
@@ -58,6 +82,16 @@ export default async function handler(req, res) {
             }).select('id, ticket_number, status, created_at').single();
 
             if (error) throw error;
+
+            // Log creation in audit trail
+            await supabase.from('ticket_comments').insert({
+                ticket_id: ticket.id,
+                author_type: 'system',
+                author_name: 'System',
+                change_summary: 'Ticket created',
+                is_internal: true
+            });
+
             return res.status(200).json({ success: true, ticket });
         }
 
@@ -76,14 +110,15 @@ export default async function handler(req, res) {
         }
 
         if (action === 'list_for_staff') {
-            const { status, type, limit = 50 } = req.body;
+            const { status, type, limit = 200, mine_name } = req.body;
             let query = supabase.from('support_tickets')
-                .select('id, ticket_number, type, category, subject, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
+                .select('id, ticket_number, type, category, subject, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, has_unread_partner_comment, unread_count, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
             if (status && status !== 'all') query = query.eq('status', status);
             if (type && type !== 'all') query = query.eq('type', type);
+            if (mine_name) query = query.eq('assigned_to', mine_name);
 
             const { data, error } = await query;
             if (error) throw error;
@@ -99,7 +134,6 @@ export default async function handler(req, res) {
 
             if (error || !ticket) return res.status(404).json({ success: false, message: 'Ticket not found.' });
 
-            // If partner token provided, verify ownership
             if (token) {
                 const personId = await validatePartner(token);
                 if (!personId || ticket.person_id !== personId)
@@ -110,18 +144,290 @@ export default async function handler(req, res) {
         }
 
         if (action === 'update_status') {
-            const { ticket_id, status, assigned_to, staff_notes, priority } = req.body;
+            const { ticket_id, status, assigned_to, staff_notes, priority, staff_name } = req.body;
             if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
 
-            const updates = {};
-            if (status) updates.status = status;
-            if (assigned_to !== undefined) updates.assigned_to = assigned_to;
+            const { data: oldTicket } = await supabase.from('support_tickets')
+                .select('status, priority, assigned_to, person_id, ticket_number, subject')
+                .eq('id', ticket_id).single();
+
+            const updates = { updated_at: new Date().toISOString() };
+            const changes = [];
+            if (status && status !== oldTicket?.status) {
+                updates.status = status;
+                changes.push(`Status changed from <b>${oldTicket?.status}</b> → <b>${status}</b>`);
+                if (status === 'resolved') updates.resolved_at = new Date().toISOString();
+            }
+            if (priority && priority !== oldTicket?.priority) {
+                updates.priority = priority;
+                changes.push(`Priority changed to <b>${priority}</b>`);
+            }
+            if (assigned_to !== undefined && assigned_to !== oldTicket?.assigned_to) {
+                updates.assigned_to = assigned_to;
+                changes.push(assigned_to ? `Assigned to <b>${assigned_to}</b>` : 'Unassigned');
+            }
             if (staff_notes !== undefined) updates.staff_notes = staff_notes;
-            if (priority) updates.priority = priority;
 
             const { error } = await supabase.from('support_tickets').update(updates).eq('id', ticket_id);
             if (error) throw error;
+
+            const author = staff_name || 'Staff';
+
+            if (changes.length > 0) {
+                await supabase.from('ticket_comments').insert({
+                    ticket_id,
+                    author_type: 'system',
+                    author_name: author,
+                    change_summary: changes.join(' · '),
+                    is_internal: true
+                });
+            }
+
+            // Email partner on status change
+            if (updates.status && oldTicket?.person_id) {
+                const { data: person } = await supabase.from('persons')
+                    .select('full_name, email').eq('id', oldTicket.person_id).single();
+                if (person?.email) {
+                    await sendEmail(
+                        person.email,
+                        `Ticket Update: ${oldTicket.ticket_number}`,
+                        emailLayout(`
+                            <h2 style="color:#001e3c;">Your Ticket Has Been Updated</h2>
+                            <p style="color:#475569;">Hi <strong>${person.full_name || 'Partner'}</strong>, your support ticket <strong>${oldTicket.ticket_number}</strong> — ${oldTicket.subject} has been updated.</p>
+                            <p style="color:#475569;">New status: <strong style="text-transform:capitalize;">${updates.status.replace('_', ' ')}</strong></p>
+                            <p style="color:#475569;">Log in to your Partner Portal to view details and respond.</p>`),
+                        `Your ticket ${oldTicket.ticket_number} status was updated to ${updates.status}.`
+                    );
+                }
+            }
+
             return res.status(200).json({ success: true });
+        }
+
+        if (action === 'add_comment') {
+            const { ticket_id, body, is_internal = false, token, staff_name } = req.body;
+            if (!ticket_id || !body?.trim()) return res.status(400).json({ success: false, message: 'ticket_id and body required.' });
+
+            let authorType, authorName, authorId;
+
+            if (token) {
+                // Partner comment
+                const personId = await validatePartner(token);
+                if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+                const { data: curTicket } = await supabase.from('support_tickets')
+                    .select('person_id, assigned_to, ticket_number, subject, unread_count')
+                    .eq('id', ticket_id).single();
+                if (!curTicket || curTicket.person_id !== personId)
+                    return res.status(403).json({ success: false, message: 'Access denied.' });
+
+                const { data: person } = await supabase.from('persons')
+                    .select('full_name').eq('id', personId).single();
+
+                authorType = 'partner';
+                authorName = person?.full_name || 'Partner';
+                authorId = personId.toString();
+
+                await supabase.from('support_tickets').update({
+                    has_unread_partner_comment: true,
+                    unread_count: (curTicket.unread_count || 0) + 1,
+                    updated_at: new Date().toISOString()
+                }).eq('id', ticket_id);
+
+                // Email assigned staff
+                if (curTicket.assigned_to) {
+                    const parts = curTicket.assigned_to.trim().split(' ');
+                    let staffQuery = supabase.from('users').select('email').eq('first_name', parts[0]);
+                    if (parts.length > 1) staffQuery = staffQuery.eq('last_name', parts.slice(1).join(' '));
+                    const { data: staffUser } = await staffQuery.maybeSingle();
+                    if (staffUser?.email) {
+                        await sendEmail(
+                            staffUser.email,
+                            `Partner Reply on Ticket ${curTicket.ticket_number}`,
+                            emailLayout(`
+                                <h2 style="color:#001e3c;">New Partner Reply</h2>
+                                <p style="color:#475569;"><strong>${authorName}</strong> replied on ticket <strong>${curTicket.ticket_number}</strong> — ${curTicket.subject}:</p>
+                                <div style="background:#f8fafc;border-left:4px solid #0d9488;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.6;">${body.trim()}</div>
+                                <p style="color:#475569;">Log in to the Staff Portal to view and respond.</p>`),
+                            `${authorName} replied on ticket ${curTicket.ticket_number}. Please log in to respond.`
+                        );
+                    }
+                }
+            } else {
+                // Staff comment
+                authorType = 'staff';
+                authorName = staff_name || 'Staff';
+
+                await supabase.from('support_tickets').update({ updated_at: new Date().toISOString() }).eq('id', ticket_id);
+
+                // Email partner for non-internal staff notes
+                if (!is_internal) {
+                    const { data: ticket } = await supabase.from('support_tickets')
+                        .select('person_id, ticket_number, subject').eq('id', ticket_id).single();
+                    if (ticket?.person_id) {
+                        const { data: person } = await supabase.from('persons')
+                            .select('full_name, email').eq('id', ticket.person_id).single();
+                        if (person?.email) {
+                            await sendEmail(
+                                person.email,
+                                `New Note on Your Ticket: ${ticket.ticket_number}`,
+                                emailLayout(`
+                                    <h2 style="color:#001e3c;">Staff Note on Your Ticket</h2>
+                                    <p style="color:#475569;">Hi <strong>${person.full_name || 'Partner'}</strong>, ${authorName} added a note on your ticket <strong>${ticket.ticket_number}</strong> — ${ticket.subject}:</p>
+                                    <div style="background:#f8fafc;border-left:4px solid #0d9488;padding:12px 16px;margin:12px 0;font-size:13px;line-height:1.6;">${body.trim()}</div>
+                                    <p style="color:#475569;">Log in to your Partner Portal to view and reply.</p>`),
+                                `${authorName} added a note on your ticket ${ticket.ticket_number}. Log in to view.`
+                            );
+                        }
+                    }
+                }
+            }
+
+            const { data: comment, error } = await supabase.from('ticket_comments').insert({
+                ticket_id,
+                author_type: authorType,
+                author_name: authorName,
+                author_id: authorId || null,
+                body: body.trim(),
+                is_internal: token ? false : is_internal
+            }).select().single();
+
+            if (error) throw error;
+            return res.status(200).json({ success: true, comment });
+        }
+
+        if (action === 'get_comments') {
+            const { ticket_id, token } = req.body;
+            if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
+
+            let query = supabase.from('ticket_comments')
+                .select('*').eq('ticket_id', ticket_id).order('created_at', { ascending: true });
+
+            if (token) {
+                const personId = await validatePartner(token);
+                if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+                query = query.eq('is_internal', false);
+            }
+
+            const { data, error } = await query;
+            if (error) throw error;
+            return res.status(200).json({ success: true, comments: data || [] });
+        }
+
+        if (action === 'mark_read') {
+            const { ticket_id } = req.body;
+            if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
+            await supabase.from('support_tickets')
+                .update({ has_unread_partner_comment: false, unread_count: 0 }).eq('id', ticket_id);
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'get_available_equipment') {
+            const { data, error } = await supabase.from('equipments')
+                .select('id, serial_number, terminal_type, model, status')
+                .neq('status', 'deployed')
+                .order('serial_number');
+            if (error) throw error;
+            return res.status(200).json({ success: true, equipment: data || [] });
+        }
+
+        if (action === 'get_merchant_deployments') {
+            const { merchant_id } = req.body;
+            const { data: merchant } = await supabase.from('merchants').select('id').eq('merchant_id', merchant_id).single();
+            if (!merchant) return res.status(404).json({ success: false, message: 'Merchant not found.' });
+
+            const { data, error } = await supabase.from('deployments')
+                .select('id, deployment_id, status, created_at, equipments:equipment_id(serial_number, terminal_type, model)')
+                .eq('merchant_id', merchant.id)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, deployments: data || [] });
+        }
+
+        if (action === 'create_linked_record') {
+            const { ticket_id, record_type, staff_name } = req.body;
+            if (!ticket_id || !record_type) return res.status(400).json({ success: false, message: 'ticket_id and record_type required.' });
+
+            const { data: ticket } = await supabase.from('support_tickets')
+                .select('merchant_id, type, subject, equipment_serial').eq('id', ticket_id).single();
+            if (!ticket) return res.status(404).json({ success: false, message: 'Ticket not found.' });
+
+            let merchantUUID = null;
+            if (ticket.merchant_id) {
+                const { data: m } = await supabase.from('merchants').select('id').eq('merchant_id', ticket.merchant_id).single();
+                merchantUUID = m?.id || null;
+            }
+
+            const author = staff_name || 'Staff';
+
+            if (record_type === 'deployment') {
+                const { equipment_serial, purchase_type, shipping_address, recipient_name, notes } = req.body;
+
+                let equipmentId = null;
+                if (equipment_serial) {
+                    const { data: eq } = await supabase.from('equipments').select('id').eq('serial_number', equipment_serial).single();
+                    equipmentId = eq?.id || null;
+                }
+
+                const deploymentId = genId('DEP');
+                const { data: dep, error: depErr } = await supabase.from('deployments').insert({
+                    deployment_id: deploymentId,
+                    merchant_id: merchantUUID,
+                    equipment_id: equipmentId,
+                    purchase_type: purchase_type || 'Free Placement',
+                    shipping_address: shipping_address || null,
+                    recipient_name: recipient_name || null,
+                    notes: notes || `Created from support ticket`,
+                    status: 'Open'
+                }).select('id, deployment_id').single();
+
+                if (depErr) throw depErr;
+
+                if (equipmentId) {
+                    await supabase.from('equipments').update({ status: 'deployed' }).eq('id', equipmentId);
+                }
+
+                await supabase.from('support_tickets').update({ linked_deployment_id: dep.deployment_id }).eq('id', ticket_id);
+                await supabase.from('ticket_comments').insert({
+                    ticket_id, author_type: 'system', author_name: author,
+                    change_summary: `Deployment record created: <strong>${dep.deployment_id}</strong>`,
+                    is_internal: true
+                });
+
+                return res.status(200).json({ success: true, deployment_id: dep.deployment_id });
+
+            } else if (record_type === 'rma') {
+                const { deployment_internal_id, return_reason, notes } = req.body;
+
+                const { data: dep } = await supabase.from('deployments')
+                    .select('id, equipment_id, merchant_id, deployment_id').eq('id', deployment_internal_id).single();
+                if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
+
+                const returnId = genId('RMA');
+                const { data: ret, error: retErr } = await supabase.from('returns').insert({
+                    return_id: returnId,
+                    equipment_id: dep.equipment_id,
+                    merchant_id: dep.merchant_id || merchantUUID,
+                    deployment_id: dep.id,
+                    return_reason: return_reason || ticket.subject,
+                    notes: notes || null,
+                    return_date_initiated: new Date().toISOString().split('T')[0],
+                    status: 'open'
+                }).select('id, return_id').single();
+
+                if (retErr) throw retErr;
+
+                await supabase.from('support_tickets').update({ linked_return_id: ret.return_id }).eq('id', ticket_id);
+                await supabase.from('ticket_comments').insert({
+                    ticket_id, author_type: 'system', author_name: author,
+                    change_summary: `RMA record created: <strong>${ret.return_id}</strong> (linked to deployment ${dep.deployment_id})`,
+                    is_internal: true
+                });
+
+                return res.status(200).json({ success: true, return_id: ret.return_id });
+            }
+
+            return res.status(400).json({ success: false, message: 'Invalid record_type.' });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });
