@@ -105,7 +105,7 @@ export default async function handler(req, res) {
         if (action === 'get_recent_deployments') {
             const { data, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, created_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type, model)')
+                .select('id, deployment_id, status, created_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)')
                 .order('created_at', { ascending: false })
                 .limit(8);
             if (error) throw error;
@@ -116,11 +116,28 @@ export default async function handler(req, res) {
             const { deployment_id } = req.body;
             const { data, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, created_at, updated_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), equipments:equipment_id(serial_number, terminal_type, model)')
+                .select('id, deployment_id, status, created_at, updated_at, purchase_type, tracking_id, notes, shipping_address, recipient_name, merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), equipments:equipment_id(serial_number, terminal_type)')
                 .eq('id', deployment_id)
                 .single();
             if (error) throw error;
             return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'get_priority_tickets') {
+            const { priority } = req.body;
+            let q = supabase.from('support_tickets')
+                .select('id, ticket_number, type, subject, status, priority, assigned_to, created_at, merchants:merchant_id(dba_name, merchant_id), persons:person_id(full_name)')
+                .not('status', 'in', '("closed")')
+                .order('created_at', { ascending: false })
+                .limit(50);
+            if (priority && priority !== 'all') {
+                q = q.eq('priority', priority);
+            } else {
+                q = q.in('priority', ['urgent', 'high']);
+            }
+            const { data, error } = await q;
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
         }
 
         if (action === 'send_partner_alerts') {
