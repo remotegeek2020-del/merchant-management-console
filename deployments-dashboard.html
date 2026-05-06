@@ -1095,8 +1095,11 @@ async function executeBulk(validData) {
         });
         const result = await res.json();
         if (result.success) {
-            Swal.fire({ icon: 'success', title: 'Ticket Closed', text: 'Partner has been notified.', timer: 2000, showConfirmButton: false });
-            document.getElementById('linkedTicketSection').style.display = 'none';
+            Swal.fire({ icon: 'success', title: 'Ticket Closed', text: 'Partner has been notified.', timer: 2000, showConfirmButton: false })
+                .then(() => {
+                    document.getElementById('editDepModal').style.display = 'none';
+                    fetchDeployments(currentPage);
+                });
         } else {
             Swal.fire('Error', result.message || 'Failed to close ticket', 'error');
         }

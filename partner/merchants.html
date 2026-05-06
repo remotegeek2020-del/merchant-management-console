@@ -328,20 +328,37 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
             return;
         }
         Swal.close();
-        openTicketForm(merchantId, merchantName, 'rma_request', result.deployments);
+        openTicketForm(merchantId, merchantName, 'rma_request', result.deployments, []);
     } else {
-        openTicketForm(merchantId, merchantName, 'deployment_request', []);
+        // Fetch terminal types from DB for deployment form
+        Swal.fire({ title: 'Loading...', didOpen: () => Swal.showLoading() });
+        let terminalTypes = [];
+        try {
+            const tr = await fetch('/api/tickets', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_terminal_types' })
+            });
+            const tResult = await tr.json();
+            if (tResult.success) terminalTypes = tResult.types || [];
+        } catch(e) {}
+        Swal.close();
+        openTicketForm(merchantId, merchantName, 'deployment_request', [], terminalTypes);
     }
 };
 
-window.openTicketForm = async function(merchantId, merchantName, type, deployments) {
+window.openTicketForm = async function(merchantId, merchantName, type, deployments, terminalTypes = []) {
     const isDeployment = type === 'deployment_request';
 
     const equipmentOptions = !isDeployment ? deployments.map(d => {
         const e = d.equipments;
-        const label = [e?.terminal_type, e?.model, e?.serial_number].filter(Boolean).join(' — ');
-        return `<option value="${e?.serial_number || ''}">${label || 'Unknown equipment'}</option>`;
+        const depLabel = d.deployment_id ? ` [${d.deployment_id}]` : '';
+        const label = [e?.terminal_type, e?.model, e?.serial_number].filter(Boolean).join(' — ') + depLabel;
+        return `<option value="${d.id}">${label || 'Unknown equipment'}</option>`;
     }).join('') : '';
+
+    const typeOptions = terminalTypes.length > 0
+        ? terminalTypes.map(t => `<option value="${t}">${t}</option>`).join('')
+        : `<option value="Wireless Terminal">Wireless Terminal</option><option value="Countertop Terminal">Countertop Terminal</option><option value="POS System">POS System</option><option value="PIN Pad">PIN Pad</option><option value="Other">Other</option>`;
 
     const { value: form } = await Swal.fire({
         title: isDeployment ? `Deployment Request — ${merchantName}` : `Returns Request — ${merchantName}`,
@@ -359,11 +376,7 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment Type Needed</label>
                 <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
                     <option value="">Select type...</option>
-                    <option>Wireless Terminal</option>
-                    <option>Countertop Terminal</option>
-                    <option>POS System</option>
-                    <option>PIN Pad</option>
-                    <option>Other</option>
+                    ${typeOptions}
                 </select>` : `
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment to Return *</label>
                 <select id="tickEquip" class="swal2-input" style="margin:0 0 12px;">
@@ -393,11 +406,11 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
             const subject = document.getElementById('tickSubject').value.trim();
             if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
             if (!isDeployment) {
-                const equip = document.getElementById('tickEquip')?.value;
+                const depId = document.getElementById('tickEquip')?.value;
                 const reason = document.getElementById('tickCategory')?.value;
-                if (!equip) { Swal.showValidationMessage('Please select equipment to return'); return false; }
+                if (!depId) { Swal.showValidationMessage('Please select equipment to return'); return false; }
                 if (!reason) { Swal.showValidationMessage('Please select a return reason'); return false; }
-                return { subject, category: reason, equipment_serial: equip, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
+                return { subject, category: reason, deployment_id: depId, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
             }
             return { subject, category: document.getElementById('tickCategory').value || null, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
         }

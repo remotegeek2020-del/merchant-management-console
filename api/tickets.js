@@ -60,7 +60,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'create') {
-            const { token, merchant_id, type, category, subject, description, priority } = req.body;
+            const { token, merchant_id, type, category, subject, description, priority, deployment_id, equipment_serial } = req.body;
             const personId = await validatePartner(token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
 
@@ -78,7 +78,8 @@ export default async function handler(req, res) {
                 category: category || null,
                 subject,
                 description: description || null,
-                priority: priority || 'normal'
+                priority: priority || 'normal',
+                equipment_serial: deployment_id || equipment_serial || null
             }).select('id, ticket_number, status, created_at').single();
 
             if (error) throw error;
@@ -170,6 +171,20 @@ export default async function handler(req, res) {
 
             const { error } = await supabase.from('support_tickets').update(updates).eq('id', ticket_id);
             if (error) throw error;
+
+            // When ticket is closed, clear ticket_id from linked deployment/return so badges disappear
+            if (updates.status === 'closed') {
+                const { data: fullTicket } = await supabase.from('support_tickets')
+                    .select('linked_deployment_id, linked_return_id').eq('id', ticket_id).single();
+                if (fullTicket?.linked_deployment_id) {
+                    await supabase.from('deployments').update({ ticket_id: null })
+                        .eq('deployment_id', fullTicket.linked_deployment_id);
+                }
+                if (fullTicket?.linked_return_id) {
+                    await supabase.from('returns').update({ ticket_id: null })
+                        .eq('return_id', fullTicket.linked_return_id);
+                }
+            }
 
             const author = staff_name || 'Staff';
 
@@ -462,6 +477,77 @@ export default async function handler(req, res) {
             }
 
             return res.status(400).json({ success: false, message: 'Invalid record_type.' });
+        }
+
+        if (action === 'get_terminal_types') {
+            const { data, error } = await supabase
+                .from('equipments')
+                .select('terminal_type')
+                .not('terminal_type', 'is', null)
+                .neq('terminal_type', '');
+            if (error) throw error;
+            const types = [...new Set((data || []).map(e => e.terminal_type))].filter(Boolean).sort();
+            return res.status(200).json({ success: true, types });
+        }
+
+        if (action === 'get_linked_deployment') {
+            const { token, deployment_id } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data: dep, error } = await supabase
+                .from('deployments')
+                .select('id, deployment_id, status, tracking_id, target_deployment_date, notes, purchase_type, created_at, ticket_id, equipments:equipment_id(terminal_type, model, serial_number), merchants:merchant_id(dba_name, merchant_id)')
+                .eq('deployment_id', deployment_id)
+                .single();
+            if (error || !dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
+            return res.status(200).json({ success: true, deployment: dep });
+        }
+
+        if (action === 'mark_delivered') {
+            const { token, deployment_id, ticket_id } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data: dep } = await supabase
+                .from('deployments')
+                .select('id, status, ticket_id, equipment_id, merchant_id, merchants:merchant_id(dba_name)')
+                .eq('deployment_id', deployment_id)
+                .single();
+            if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
+
+            // Close the deployment and clear ticket linkage badge
+            await supabase.from('deployments')
+                .update({ status: 'Closed', ticket_id: null })
+                .eq('id', dep.id);
+
+            // Log delivery to equipment_logs
+            await supabase.from('equipment_logs').insert({
+                equipment_id: dep.equipment_id,
+                merchant_id: dep.merchant_id,
+                deployment_id: dep.id,
+                action: 'Delivered',
+                from_location: 'In Transit',
+                to_location: dep.merchants?.dba_name || 'Merchant',
+                notes: 'Marked as delivered by partner via portal'
+            });
+
+            // Close the linked ticket
+            const finalTicketId = ticket_id || dep.ticket_id;
+            if (finalTicketId) {
+                await supabase.from('support_tickets')
+                    .update({ status: 'closed', updated_at: new Date().toISOString() })
+                    .eq('id', finalTicketId);
+                await supabase.from('ticket_comments').insert({
+                    ticket_id: finalTicketId,
+                    author_type: 'system',
+                    author_name: 'Partner',
+                    change_summary: 'Equipment confirmed received by merchant. Deployment marked as delivered. Ticket closed.',
+                    is_internal: false
+                });
+            }
+
+            return res.status(200).json({ success: true });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action.' });

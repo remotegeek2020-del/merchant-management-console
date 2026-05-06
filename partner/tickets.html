@@ -287,9 +287,10 @@ async function viewTicket(ticketId) {
     // Linked records banners (visible to partner)
     let linkedBanners = '';
     if (t.linked_deployment_id) {
-        linkedBanners += `<div style="background:#e0f2fe;border:1px solid #bae6fd;border-radius:8px;padding:11px 14px;margin-bottom:10px;font-size:12px;color:#0369a1;display:flex;align-items:center;gap:8px;">
+        linkedBanners += `<div onclick="showDeploymentDetail('${t.linked_deployment_id}', ${t.id})" style="background:#e0f2fe;border:1px solid #bae6fd;border-radius:8px;padding:11px 14px;margin-bottom:10px;font-size:12px;color:#0369a1;display:flex;align-items:center;gap:8px;cursor:pointer;transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 4px 12px rgba(3,105,161,0.15)'" onmouseout="this.style.boxShadow='none'">
             <span class="material-icons" style="font-size:18px;">local_shipping</span>
-            <div><strong>Deployment Processed</strong><br>Your hardware deployment is underway. Reference: <span style="font-family:'DM Mono',monospace;font-weight:700;">${t.linked_deployment_id}</span></div>
+            <div style="flex:1;"><strong>Deployment Processed</strong><br>Your hardware deployment is underway. Reference: <span style="font-family:'DM Mono',monospace;font-weight:700;">${t.linked_deployment_id}</span></div>
+            <span class="material-icons" style="font-size:16px;opacity:0.6;">open_in_new</span>
         </div>`;
     }
     if (t.linked_return_id) {
@@ -365,6 +366,83 @@ async function submitPartnerComment() {
         if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:16px;">send</span> Send'; }
         Swal.fire('Error', result.message || 'Could not send reply.', 'error');
     }
+}
+
+async function showDeploymentDetail(deploymentId, ticketId) {
+    Swal.fire({ title: 'Loading deployment...', didOpen: () => Swal.showLoading() });
+    const r = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_linked_deployment', token, deployment_id: deploymentId })
+    });
+    const result = await r.json();
+    if (!result.success) {
+        Swal.fire('Error', result.message || 'Could not load deployment.', 'error');
+        return;
+    }
+    const dep = result.deployment;
+    const eq = dep.equipments || {};
+    const isClosed = dep.status === 'Closed';
+
+    const statusColors = { Open: '#0369a1', 'In Transit': '#92400e', Closed: '#166534' };
+    const statusBgs = { Open: '#e0f2fe', 'In Transit': '#fef3c7', Closed: '#dcfce7' };
+    const statusColor = statusColors[dep.status] || '#475569';
+    const statusBg = statusBgs[dep.status] || '#f1f5f9';
+
+    const trackingHtml = dep.tracking_id
+        ? `<a href="https://parcelsapp.com/en/tracking/${dep.tracking_id}" target="_blank" rel="noopener" style="color:#0369a1;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">${dep.tracking_id} <span class="material-icons" style="font-size:12px;">open_in_new</span></a>`
+        : '<span style="color:#94a3b8;">Not assigned</span>';
+
+    const deliverBtn = !isClosed
+        ? `<button id="swal-deliver-btn" style="background:#10b981;color:white;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;margin-top:4px;width:100%;justify-content:center;">
+                <span class="material-icons" style="font-size:16px;">check_circle</span> Mark as Delivered
+           </button>`
+        : `<div style="background:#dcfce7;color:#166534;border-radius:8px;padding:10px;text-align:center;font-size:12px;font-weight:700;margin-top:4px;">
+                <span class="material-icons" style="font-size:14px;vertical-align:middle;">verified</span> Equipment Delivered
+           </div>`;
+
+    await Swal.fire({
+        title: dep.deployment_id,
+        html: `
+            <div style="text-align:left;font-size:13px;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;">
+                    <span style="background:${statusBg};color:${statusColor};padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;">${dep.status}</span>
+                    ${dep.purchase_type ? `<span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;">${dep.purchase_type}</span>` : ''}
+                </div>
+                <div style="background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:6px;">Equipment</div>
+                    <div style="font-weight:700;color:#0a1628;">${eq.terminal_type || '---'}${eq.model ? ' · ' + eq.model : ''}</div>
+                    <div style="font-family:'DM Mono',monospace;font-size:12px;color:#0d9488;margin-top:2px;">${eq.serial_number || '---'}</div>
+                </div>
+                <div style="background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:6px;">Tracking</div>
+                    ${trackingHtml}
+                </div>
+                ${dep.target_deployment_date ? `<div style="font-size:11px;color:#64748b;margin-bottom:12px;">Target date: <strong>${new Date(dep.target_deployment_date).toLocaleDateString()}</strong></div>` : ''}
+                ${deliverBtn}
+            </div>`,
+        showConfirmButton: false,
+        showCloseButton: true,
+        didOpen: () => {
+            const btn = document.getElementById('swal-deliver-btn');
+            if (btn) {
+                btn.addEventListener('click', async () => {
+                    btn.disabled = true;
+                    btn.innerHTML = '<span class="material-icons" style="font-size:14px;animation:spin 0.7s linear infinite;vertical-align:middle;">sync</span> Processing...';
+                    const res = await fetch('/api/tickets', {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'mark_delivered', token, deployment_id: dep.deployment_id, ticket_id: ticketId })
+                    });
+                    const out = await res.json();
+                    if (out.success) {
+                        Swal.fire({ icon: 'success', title: 'Delivered!', text: 'Equipment marked as received. Your ticket has been closed.', confirmButtonColor: '#0d9488' })
+                            .then(() => viewTicket(ticketId));
+                    } else {
+                        Swal.fire('Error', out.message || 'Could not update.', 'error');
+                    }
+                });
+            }
+        }
+    });
 }
 
 function closeTicketModal() {
