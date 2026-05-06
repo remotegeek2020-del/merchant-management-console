@@ -172,14 +172,10 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('support_tickets').update(updates).eq('id', ticket_id);
             if (error) throw error;
 
-            // When ticket is closed, clear ticket_id from linked deployment/return so badges disappear
+            // When ticket is closed, clear ticket_id from linked return so its badge disappears
             if (updates.status === 'closed') {
                 const { data: fullTicket } = await supabase.from('support_tickets')
-                    .select('linked_deployment_id, linked_return_id').eq('id', ticket_id).single();
-                if (fullTicket?.linked_deployment_id) {
-                    await supabase.from('deployments').update({ ticket_id: null })
-                        .eq('deployment_id', fullTicket.linked_deployment_id);
-                }
+                    .select('linked_return_id').eq('id', ticket_id).single();
                 if (fullTicket?.linked_return_id) {
                     await supabase.from('returns').update({ ticket_id: null })
                         .eq('return_id', fullTicket.linked_return_id);
@@ -516,9 +512,9 @@ export default async function handler(req, res) {
                 .single();
             if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
 
-            // Close the deployment and clear ticket linkage badge
+            // Close the deployment (keep ticket_id so badge stays as historical record)
             await supabase.from('deployments')
-                .update({ status: 'Closed', ticket_id: null })
+                .update({ status: 'Closed' })
                 .eq('id', dep.id);
 
             // Log delivery to equipment_logs
