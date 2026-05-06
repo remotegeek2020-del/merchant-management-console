@@ -85,6 +85,26 @@
 
         <div class="main-container">
             <div class="card-grid">
+                <!-- Row 1: Admin Dashboard, Partners, Merchants -->
+                <a href="admin-dashboard.html" class="console-card" id="card-admin-dashboard" style="display:none; border-bottom: 4px solid #004990;">
+                    <div class="card-icon-header" style="background: #e0f2fe; color: #004990;"><span class="material-icons">dashboard</span></div>
+                    <div class="card-title">Admin Dashboard</div>
+                    <p class="card-desc">Live KPIs, at-risk merchants, deployment activity, and equipment status at a glance.</p>
+                </a>
+
+                <a href="partners-dashboard.html" class="console-card" id="card-partners">
+                    <div class="card-icon-header" style="background: #e0f2fe; color: #0369a1;"><span class="material-icons">handshake</span></div>
+                    <div class="card-title">Partners</div>
+                    <p class="card-desc">Manage person-to-company mappings, Agent ID hierarchies, and Prime49 portfolios.</p>
+                </a>
+
+                <a href="merchants-dashboard.html" class="console-card" id="card-merchants">
+                    <div class="card-icon-header"><span class="material-icons">storefront</span></div>
+                    <div class="card-title">Merchants</div>
+                    <p class="card-desc">View and manage your merchant portfolio, Agent IDs, and enrollment history.</p>
+                </a>
+
+                <!-- Row 2: Inventory, Deployments, Returns -->
                 <a href="equipments-dashboard.html" class="console-card" id="card-inventory">
                     <div class="card-icon-header"><span class="material-icons">inventory_2</span></div>
                     <div class="card-title">Inventory</div>
@@ -103,11 +123,50 @@
                     <p class="card-desc">Monitor RMAs, damage assessments, and stock reintegration.</p>
                 </a>
 
-               <a href="merchants-dashboard.html" class="console-card" id="card-merchants">
-    <div class="card-icon-header"><span class="material-icons">storefront</span></div>
-    <div class="card-title">Merchants</div>
-    <p class="card-desc">View and manage your merchant portfolio, Agent IDs, and enrollment history.</p>
-</a>
+                <!-- Remaining rows -->
+                <a href="tickets-dashboard.html" class="console-card" id="card-tickets" style="border-bottom: 4px solid #0d9488;">
+                    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">confirmation_number</span></div>
+                    <div class="card-title">Partner Tickets</div>
+                    <p class="card-desc">View and manage partner support tickets — deployments, returns, and general support requests.</p>
+                </a>
+
+                <a href="repair-queue.html" class="console-card" id="card-repair-queue" style="border-bottom: 4px solid #dc2626;">
+                    <div class="card-icon-header" style="background: #fee2e2; color: #991b1b;"><span class="material-icons">build</span></div>
+                    <div class="card-title">Repair Queue</div>
+                    <p class="card-desc">Track equipment at Warsaw Repairs through diagnosis, repair, and return-to-stock or scrap.</p>
+                </a>
+
+                <a href="reports-dashboard.html" class="console-card" id="card-reports" style="border-bottom: 4px solid #00a1e0;">
+                    <div class="card-icon-header" style="background: #e0f2fe; color: #00a1e0;"><span class="material-icons">analytics</span></div>
+                    <div class="card-title">System Reports</div>
+                    <p class="card-desc">Generate and export Salesforce-style reports for Inventory, Deployments, and Returns.</p>
+                </a>
+
+                <a href="chat.html" class="console-card" id="card-chat" style="border-bottom: 4px solid #0084ff;">
+                    <span id="nav-msg-badge" class="msg-badge">0</span>
+                    <div class="card-icon-header" style="background: #e7f3ff; color: #0084ff;"><span class="material-icons">forum</span></div>
+                    <div class="card-title">Direct Messages</div>
+                    <p class="card-desc">Messenger-style chat with other staff members and internal operations teams.</p>
+                </a>
+
+                <a href="staff-community.html" class="console-card" id="card-community" style="border-bottom: 4px solid #0d9488;">
+                    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">groups</span></div>
+                    <div class="card-title">Community</div>
+                    <p class="card-desc">Share updates, celebrate wins, and interact with partners in a shared community feed.</p>
+                </a>
+
+                <a href="tasks-dashboard.html" class="console-card" id="card-tasks">
+                    <div class="card-icon-header" style="background: #fff9e6; color: #ffcc00;"><span class="material-icons">assignment</span></div>
+                    <div class="card-title">My Tasks</div>
+                    <p class="card-desc">View and manage tasks assigned specifically to you across all merchants.</p>
+                    <div id="task-count-badge" style="font-size: 10px; font-weight: 800; margin-top: 10px; color: #ffcc00; display:none;">LOADING PENDING...</div>
+                </a>
+
+                <a href="staff-settings.html" class="console-card" id="card-settings" style="border-bottom: 4px solid #64748b;">
+                    <div class="card-icon-header" style="background: #f1f5f9; color: #475569;"><span class="material-icons">manage_accounts</span></div>
+                    <div class="card-title">My Settings</div>
+                    <p class="card-desc">Update your profile photo, display name, bio, and change your password.</p>
+                </a>
 
                 <a href="user-management.html" class="console-card" id="card-cms" style="display:none; border-bottom: 4px solid #ff9800;">
                     <div class="card-icon-header" style="background: #fff4e5; color: #ff9800;"><span class="material-icons">admin_panel_settings</span></div>
@@ -116,80 +175,17 @@
                 </a>
 
                 <a href="activity-logs.html" class="console-card" id="card-logs" style="display:none; border-bottom: 4px solid #6a1b9a;">
-    <div class="card-icon-header" style="background: #f3e5f5; color: #6a1b9a;"><span class="material-icons">history_edu</span></div>
-    <div class="card-title">Activity Logs</div>
-    <p class="card-desc">Audit system access, login attempts, and administrative changes.</p>
-</a>
-                <a href="partners-dashboard.html" class="console-card" id="card-partners">
-    <div class="card-icon-header" style="background: #e0f2fe; color: #0369a1;">
-        <span class="material-icons">handshake</span>
-    </div>
-    <div class="card-title">Partners</div>
-    <p class="card-desc">Manage person-to-company mappings, Agent ID hierarchies, and Prime49 portfolios.</p>
-</a>
-<a href="reports-dashboard.html" class="console-card" id="card-reports" style="border-bottom: 4px solid #00a1e0;">
-    <div class="card-icon-header" style="background: #e0f2fe; color: #00a1e0;"><span class="material-icons">analytics</span></div>
-    <div class="card-title">System Reports</div>
-    <p class="card-desc">Generate and export Salesforce-style reports for Inventory, Deployments, and Returns.</p>
-</a>
-                <a href="chat.html" class="console-card" id="card-chat" style="border-bottom: 4px solid #0084ff;">
-    <span id="nav-msg-badge" class="msg-badge">0</span>
-    <div class="card-icon-header" style="background: #e7f3ff; color: #0084ff;">
-        <span class="material-icons">forum</span>
-    </div>
-    <div class="card-title">Direct Messages</div>
-    <p class="card-desc">Messenger-style chat with other staff members and internal operations teams.</p>
-</a>
-                <a href="staff-community.html" class="console-card" id="card-community" style="border-bottom: 4px solid #0d9488;">
-    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;">
-        <span class="material-icons">groups</span>
-    </div>
-    <div class="card-title">Community</div>
-    <p class="card-desc">Share updates, celebrate wins, and interact with partners in a shared community feed.</p>
-</a>
-                <a href="tasks-dashboard.html" class="console-card" id="card-tasks">
-    <div class="card-icon-header" style="background: #fff9e6; color: #ffcc00;">
-        <span class="material-icons">assignment</span>
-    </div>
-    <div class="card-title">My Tasks</div>
-    <p class="card-desc">View and manage tasks assigned specifically to you across all merchants.</p>
-    <div id="task-count-badge" style="font-size: 10px; font-weight: 800; margin-top: 10px; color: #ffcc00; display:none;">
-        LOADING PENDING...
-    </div>
-</a>
-                <a href="staff-settings.html" class="console-card" id="card-settings" style="border-bottom: 4px solid #64748b;">
-    <div class="card-icon-header" style="background: #f1f5f9; color: #475569;">
-        <span class="material-icons">manage_accounts</span>
-    </div>
-    <div class="card-title">My Settings</div>
-    <p class="card-desc">Update your profile photo, display name, bio, and change your password.</p>
-</a>
-                <a href="admin-dashboard.html" class="console-card" id="card-admin-dashboard" style="display:none; border-bottom: 4px solid #004990;">
-    <div class="card-icon-header" style="background: #e0f2fe; color: #004990;"><span class="material-icons">dashboard</span></div>
-    <div class="card-title">Admin Dashboard</div>
-    <p class="card-desc">Live KPIs, at-risk merchants, deployment activity, and equipment status at a glance.</p>
-</a>
+                    <div class="card-icon-header" style="background: #f3e5f5; color: #6a1b9a;"><span class="material-icons">history_edu</span></div>
+                    <div class="card-title">Activity Logs</div>
+                    <p class="card-desc">Audit system access, login attempts, and administrative changes.</p>
+                </a>
 
-                <a href="tickets-dashboard.html" class="console-card" id="card-tickets" style="border-bottom: 4px solid #0d9488;">
-    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">confirmation_number</span></div>
-    <div class="card-title">Partner Tickets</div>
-    <p class="card-desc">View and manage partner support tickets — deployments, returns, and general support requests.</p>
-</a>
-
-                <a href="repair-queue.html" class="console-card" id="card-repair-queue" style="border-bottom: 4px solid #dc2626;">
-    <div class="card-icon-header" style="background: #fee2e2; color: #991b1b;"><span class="material-icons">build</span></div>
-    <div class="card-title">Repair Queue</div>
-    <p class="card-desc">Track equipment at Warsaw Repairs through diagnosis, repair, and return-to-stock or scrap.</p>
-</a>
-
-             <a href="secret-dungeon.html" class="console-card slds-hide" id="card-secret" style="border-bottom: 4px solid #6366f1; background: #f5f3ff;">
-    <div class="card-icon-header" style="background: #e0e7ff; color: #6366f1;">
-        <span class="material-icons">fort</span>
-    </div>
-    <div class="card-title" style="color: #4338ca;">Secret Dungeon</div>
-    <p class="card-desc">System hacks, database bypasses, and bulk administrative tools.</p>
-    <div style="font-size: 9px; font-weight: 800; color: #6366f1; margin-top: 10px; letter-spacing: 1px;">SUPER ADMIN ONLY</div>
-</a>
+                <a href="secret-dungeon.html" class="console-card slds-hide" id="card-secret" style="border-bottom: 4px solid #6366f1; background: #f5f3ff;">
+                    <div class="card-icon-header" style="background: #e0e7ff; color: #6366f1;"><span class="material-icons">fort</span></div>
+                    <div class="card-title" style="color: #4338ca;">Secret Dungeon</div>
+                    <p class="card-desc">System hacks, database bypasses, and bulk administrative tools.</p>
+                    <div style="font-size: 9px; font-weight: 800; color: #6366f1; margin-top: 10px; letter-spacing: 1px;">SUPER ADMIN ONLY</div>
+                </a>
             </div>
         </div>
     </div>
