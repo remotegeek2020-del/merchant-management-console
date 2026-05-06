@@ -127,7 +127,7 @@ export default async function handler(req, res) {
             const { priority } = req.body;
             let q = supabase.from('support_tickets')
                 .select('id, ticket_number, type, subject, status, priority, assigned_to, created_at, merchants:merchant_id(dba_name, merchant_id), persons:person_id(full_name)')
-                .not('status', 'in', '("closed")')
+                .neq('status', 'closed')
                 .order('created_at', { ascending: false })
                 .limit(50);
             if (priority && priority !== 'all') {

@@ -690,18 +690,25 @@ async function saveAccessChanges() {
 
 async function loadAll() {
     document.getElementById('last-updated').textContent = 'Refreshing...';
-    const [kpiRes, riskRes, depRes] = await Promise.all([
+    const [kpiRes, riskRes, depRes] = await Promise.allSettled([
         api('get_kpis'),
         api('get_at_risk'),
         api('get_recent_deployments')
     ]);
 
-    if (kpiRes.success) {
-        renderKPIs(kpiRes.kpis);
-        renderActivity(kpiRes.recent_activity);
+    const kpi = kpiRes.status === 'fulfilled' ? kpiRes.value : null;
+    const risk = riskRes.status === 'fulfilled' ? riskRes.value : null;
+    const dep = depRes.status === 'fulfilled' ? depRes.value : null;
+
+    if (kpi?.success) {
+        renderKPIs(kpi.kpis);
+        renderActivity(kpi.recent_activity);
     }
-    if (riskRes.success) renderAtRisk(riskRes.data);
-    if (depRes.success) renderDeployments(depRes.data);
+    if (risk?.success) renderAtRisk(risk.data);
+    else document.getElementById('risk-table').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error: ${risk?.message || 'Could not load at-risk data.'}</div>`;
+
+    if (dep?.success) renderDeployments(dep.data);
+    else document.getElementById('dep-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error: ${dep?.message || 'Could not load deployments.'}</div>`;
 
     loadPriorityTickets(currentTicketPriorityFilter);
     document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
