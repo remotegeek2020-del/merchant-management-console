@@ -52,11 +52,17 @@ export default async function handler(req, res) {
 
             const { data: deployments } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, equipments:equipment_id(id, serial_number, terminal_type)')
+                .select('id, deployment_id, status, equipments:equipment_id(id, serial_number, terminal_type), returns(id, status)')
                 .eq('merchant_id', merchant.id)
                 .order('created_at', { ascending: false });
 
-            return res.status(200).json({ success: true, deployments: deployments || [] });
+            // Only show deployments that don't already have a completed RMA
+            const eligible = (deployments || []).filter(d => {
+                const hasClosedRma = d.returns && d.returns.some(r => r.status === 'Closed');
+                return !hasClosedRma;
+            });
+
+            return res.status(200).json({ success: true, deployments: eligible });
         }
 
         if (action === 'create') {
