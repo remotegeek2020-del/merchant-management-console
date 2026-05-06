@@ -178,6 +178,15 @@
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('editDepModal').style.display='none'">close</span>
         <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Edit / Close Ticket</h2>
+      <div id="linkedTicketSection" style="display:none; margin-bottom:15px; padding:12px 14px; background:#f3e8ff; border:1px solid #d8b4fe; border-radius:10px;">
+          <div style="font-size:9px; font-weight:800; color:#7c3aed; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
+              <span class="material-icons" style="font-size:13px;vertical-align:middle;">confirmation_number</span> Partner Ticket Request
+          </div>
+          <div style="font-size:12px; color:#581c87; margin-bottom:8px;">This deployment was created from a partner support ticket.</div>
+          <button type="button" id="closeTicketBtn" onclick="" class="slds-button" style="font-size:11px;font-weight:700;background:#7c3aed;color:white;border:none;border-radius:6px;padding:6px 12px;cursor:pointer;">
+              <span class="material-icons" style="font-size:13px;vertical-align:middle;">task_alt</span> Close Partner Ticket
+          </button>
+      </div>
       <div id="rmaStatusBadge" style="display:none; margin-bottom: 15px; padding: 15px; border-radius: 12px; background: #fffbeb; border: 1px solid #fef3c7; box-shadow: 0 2px 8px rgba(0,0,0,0.05);">
     <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
@@ -303,10 +312,11 @@
 
 <script>
     let currentDeployments = [];
-    let searchTimeout; // Declared once at the top level
+    let searchTimeout;
     let currentPage = 1;
     let totalPages = 1;
     let lookupTimeout;
+    let currentStaffName = '';
 
 
 async function executeBulk(validData) {
@@ -500,7 +510,10 @@ if (document.getElementById('kpi-total')) {
                         const safeDba = merchantName.replace(/'/g, "\\'");
 
                         row.innerHTML = `
-                            <td style="font-weight:700; color:var(--pp-blue);">${d.deployment_id || '---'}</td>
+                            <td style="font-weight:700; color:var(--pp-blue);">
+                                ${d.deployment_id || '---'}
+                                ${d.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;letter-spacing:0.3px;">TICKET</span>` : ''}
+                            </td>
                             <td style="font-weight:600;">${merchantName}</td>
                             <td><code>${serialNum}</code></td>
                             <td>${d.tid || '---'}</td>
@@ -858,6 +871,7 @@ async function openEditModal(index) {
     // 2. RESET UI ELEMENTS
     const rmaBadge = document.getElementById('rmaStatusBadge');
     const returnBox = document.getElementById('returnProcessBox');
+    const linkedSection = document.getElementById('linkedTicketSection');
     const completeBtn = rmaBadge.querySelector('button');
     const updateBtn = document.getElementById('updateBtn');
 
@@ -865,6 +879,15 @@ async function openEditModal(index) {
     rmaBadge.style.display = 'none';
     returnBox.style.display = 'block';
     if(updateBtn) updateBtn.style.display = 'block';
+
+    // Linked ticket section
+    if (d.ticket_id && linkedSection) {
+        linkedSection.style.display = 'block';
+        const closeBtn = document.getElementById('closeTicketBtn');
+        if (closeBtn) closeBtn.onclick = () => closeLinkedTicket(d.ticket_id);
+    } else if (linkedSection) {
+        linkedSection.style.display = 'none';
+    }
 
     // 3. FETCH RMA STATUS
     try {
@@ -1044,7 +1067,40 @@ async function executeBulk(validData) {
     document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
 }
 
-    window.onload = () => fetchDeployments();
+    window.onload = async () => {
+        try {
+            const res = await fetch('/api/users');
+            const result = await res.json();
+            const uid = localStorage.getItem('pp_userid');
+            const me = (result.data || []).find(u => String(u.id) === String(uid));
+            if (me) currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
+        } catch(e) {}
+        fetchDeployments();
+    };
+
+    async function closeLinkedTicket(ticketId) {
+        const confirm = await Swal.fire({
+            title: 'Close Partner Ticket?',
+            text: 'This will mark the support ticket as closed and notify the partner.',
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: '#001e3c',
+            confirmButtonText: 'Yes, Close Ticket'
+        });
+        if (!confirm.isConfirmed) return;
+        Swal.fire({ title: 'Closing...', didOpen: () => Swal.showLoading() });
+        const res = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status: 'closed', staff_name: currentStaffName })
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Ticket Closed', text: 'Partner has been notified.', timer: 2000, showConfirmButton: false });
+            document.getElementById('linkedTicketSection').style.display = 'none';
+        } else {
+            Swal.fire('Error', result.message || 'Failed to close ticket', 'error');
+        }
+    }
 
     
 </script>

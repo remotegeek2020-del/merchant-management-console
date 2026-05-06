@@ -79,6 +79,42 @@
 </div>
 
 <script>
+let currentStaffName = '';
+window.onload = async () => {
+    try {
+        const res = await fetch('/api/users');
+        const result = await res.json();
+        const uid = localStorage.getItem('pp_userid');
+        const me = (result.data || []).find(u => String(u.id) === String(uid));
+        if (me) currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
+    } catch(e) {}
+    fetchReturns();
+};
+
+async function closeLinkedTicket(ticketId, btnEl) {
+    const confirm = await Swal.fire({
+        title: 'Close Partner Ticket?',
+        text: 'This will mark the support ticket as closed and notify the partner.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#001e3c',
+        confirmButtonText: 'Yes, Close Ticket'
+    });
+    if (!confirm.isConfirmed) return;
+    Swal.fire({ title: 'Closing...', didOpen: () => Swal.showLoading() });
+    const res = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status: 'closed', staff_name: currentStaffName })
+    });
+    const result = await res.json();
+    if (result.success) {
+        Swal.fire({ icon: 'success', title: 'Ticket Closed', text: 'Partner has been notified.', timer: 2000, showConfirmButton: false });
+        if (btnEl) btnEl.remove();
+    } else {
+        Swal.fire('Error', result.message || 'Failed to close ticket', 'error');
+    }
+}
+
 async function logAuditAction(action, details) {
     const userEmail = localStorage.getItem('pp_userid');
     try {
@@ -142,7 +178,10 @@ async function fetchReturns() {
         tbody.innerHTML = result.data.map(r => {
             const isOpen = r.status.toLowerCase() === 'open';
             return `<tr>
-                <td class="pp-id">${r.return_id || 'PENDING'}</td>
+                <td class="pp-id">
+                    ${r.return_id || 'PENDING'}
+                    ${r.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">TICKET</span>` : ''}
+                </td>
                 <td style="color:#94a3b8; font-size:12px;">${new Date(r.created_at).toLocaleDateString()}</td>
                 <td style="font-weight:600;">${r.merchants?.dba_name || '---'}</td>
                 <td class="hide-mobile">
@@ -162,7 +201,11 @@ async function fetchReturns() {
                         <button class="pp-btn pp-btn-success" onclick="finalizeRMA('${r.id}', '${r.equipment_id}')">
                             <span class="material-icons" style="font-size:14px;">check_circle</span>
                             <span class="btn-label">Complete & Restock</span>
-                        </button>` : `
+                        </button>
+                        ${r.ticket_id ? `<button class="pp-btn" onclick="closeLinkedTicket(${r.ticket_id}, this)" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;" title="Close partner ticket">
+                            <span class="material-icons" style="font-size:14px;">task_alt</span>
+                            <span class="btn-label">Close Ticket</span>
+                        </button>` : ''}` : `
                         <span style="font-size:11px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Processed</span>`}
                     </div>
                 </td>
@@ -228,7 +271,7 @@ async function finalizeRMA(id, equipment_id) {
     } catch (err) { Swal.fire('Error', err.message, 'error'); }
 }
 
-window.onload = fetchReturns;
+// window.onload handled above
 </script>
 </body>
 </html>

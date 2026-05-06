@@ -382,7 +382,8 @@ export default async function handler(req, res) {
                     target_deployment_date: target_date || null,
                     notes: notes || 'Created from support ticket',
                     purchase_type: purchase_type || 'Free Placement',
-                    status: 'Open'
+                    status: 'Open',
+                    ticket_id: parseInt(ticket_id)
                 }).select().single();
                 if (depErr) throw depErr;
 
@@ -409,8 +410,8 @@ export default async function handler(req, res) {
                 await supabase.from('support_tickets').update({ linked_deployment_id: String(deploymentId) }).eq('id', ticket_id);
                 await supabase.from('ticket_comments').insert({
                     ticket_id, author_type: 'system', author_name: author,
-                    change_summary: `Deployment record created: <strong>${deploymentId}</strong>`,
-                    is_internal: true
+                    change_summary: `Deployment record created: <strong>${deploymentId}</strong> — your hardware is being prepared for dispatch.`,
+                    is_internal: false
                 });
 
                 return res.status(200).json({ success: true, deployment_id: deploymentId });
@@ -437,7 +438,8 @@ export default async function handler(req, res) {
                     return_date_initiated: dateInitiated,
                     condition: 'IN TRANSIT',
                     destination: 'In Transit / RMA',
-                    status: 'Open'
+                    status: 'Open',
+                    ticket_id: parseInt(ticket_id)
                 }, { onConflict: 'deployment_id' }).select('id, return_id').single();
                 if (retErr) throw retErr;
 
@@ -452,8 +454,8 @@ export default async function handler(req, res) {
                 await supabase.from('support_tickets').update({ linked_return_id: finalReturnId }).eq('id', ticket_id);
                 await supabase.from('ticket_comments').insert({
                     ticket_id, author_type: 'system', author_name: author,
-                    change_summary: `RMA initiated: <strong>${finalReturnId}</strong> (deployment ${dep.deployment_id})`,
-                    is_internal: true
+                    change_summary: `Return/RMA initiated: <strong>${finalReturnId}</strong> — unit is being returned for inspection.`,
+                    is_internal: false
                 });
 
                 return res.status(200).json({ success: true, return_id: finalReturnId });
