@@ -40,13 +40,13 @@ export default async function handler(req, res) {
                 .ilike('merchant_id', like)
                 .limit(5),
 
-            supabase.from('tickets')
+            supabase.from('support_tickets')
                 .select('id, ticket_number, subject, status, priority')
                 .ilike('ticket_number', like)
                 .order('created_at', { ascending: false })
                 .limit(5),
 
-            supabase.from('tickets')
+            supabase.from('support_tickets')
                 .select('id, ticket_number, subject, status, priority')
                 .ilike('subject', like)
                 .order('created_at', { ascending: false })
