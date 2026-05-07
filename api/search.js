@@ -18,7 +18,7 @@ export default async function handler(req, res) {
     const isAdmin = ['super_admin', 'admin', 'manager'].includes(user.role);
 
     try {
-        const [merchantsRes, partnersRes, ticketsRes, equipmentRes] = await Promise.all([
+        const [merchantsRes, partnersRes, agentIdsRes, ticketsRes, equipmentRes] = await Promise.all([
             // Merchants: search dba_name, merchant_id, company_name
             supabase.from('merchants')
                 .select('merchant_id, dba_name, company_name, agent_id, account_status')
@@ -30,6 +30,14 @@ export default async function handler(req, res) {
                 ? supabase.from('persons')
                     .select('id, full_name, email, is_portal_active')
                     .or(`full_name.ilike.${like},email.ilike.${like}`)
+                    .limit(5)
+                : Promise.resolve({ data: [] }),
+
+            // Agent IDs: search id_string, then resolve partner name via agents → persons
+            isAdmin
+                ? supabase.from('agent_identifiers')
+                    .select('id_string, agent_id')
+                    .ilike('id_string', like)
                     .limit(5)
                 : Promise.resolve({ data: [] }),
 
@@ -49,11 +57,37 @@ export default async function handler(req, res) {
                 : Promise.resolve({ data: [] }),
         ]);
 
+        // Resolve agent IDs → partner name by joining agents → persons
+        let agentIdResults = [];
+        const rawAgentIds = agentIdsRes.data || [];
+        if (rawAgentIds.length) {
+            const agentUuids = rawAgentIds.map(a => a.agent_id).filter(Boolean);
+            const { data: agents } = await supabase
+                .from('agents')
+                .select('id, parent_agent_id')
+                .in('id', agentUuids);
+
+            const personUuids = (agents || []).map(a => a.parent_agent_id).filter(Boolean);
+            const { data: persons } = personUuids.length
+                ? await supabase.from('persons').select('id, full_name, email').in('id', personUuids)
+                : { data: [] };
+
+            const agentMap  = Object.fromEntries((agents  || []).map(a => [a.id, a]));
+            const personMap = Object.fromEntries((persons || []).map(p => [p.id, p]));
+
+            agentIdResults = rawAgentIds.map(ai => {
+                const agent  = agentMap[ai.agent_id];
+                const person = agent ? personMap[agent.parent_agent_id] : null;
+                return { id_string: ai.id_string, partner_name: person?.full_name || null, partner_email: person?.email || null };
+            });
+        }
+
         return res.status(200).json({
             success: true,
             results: {
                 merchants: merchantsRes.data || [],
                 partners:  partnersRes.data  || [],
+                agent_ids: agentIdResults,
                 tickets:   ticketsRes.data   || [],
                 equipment: equipmentRes.data || [],
             }

@@ -478,8 +478,8 @@
             return;
         }
 
-        const { merchants, partners, tickets, equipment } = data.results;
-        const total = merchants.length + partners.length + tickets.length + equipment.length;
+        const { merchants, partners, agent_ids, tickets, equipment } = data.results;
+        const total = merchants.length + partners.length + (agent_ids||[]).length + tickets.length + equipment.length;
 
         if (total === 0) {
             panel.innerHTML = `<div class="gsr-empty">No results for "<strong>${esc(q)}</strong>"</div>`;
@@ -516,6 +516,22 @@
                         <div class="gsr-sub">${esc(p.email)}</div>
                     </div>
                     <span class="gsr-tag" style="background:${col}22; color:${col};">${p.is_portal_active ? 'Active' : 'Inactive'}</span>
+                </a>`;
+            }).join('<hr class="gsr-divider">');
+        }
+
+        if (agent_ids && agent_ids.length) {
+            if (html) html += '<hr class="gsr-divider">';
+            html += '<div class="gsr-section-label">Agent IDs</div>';
+            html += agent_ids.map(a => {
+                const sub = [a.partner_name, a.partner_email].filter(Boolean).join(' · ');
+                return `<a class="gsr-item" href="partners-dashboard.html">
+                    <span class="material-icons gsr-icon" style="color:#a78bfa;">badge</span>
+                    <div class="gsr-main">
+                        <div class="gsr-title" style="font-family:monospace;">${esc(a.id_string)}</div>
+                        ${sub ? `<div class="gsr-sub">${esc(sub)}</div>` : ''}
+                    </div>
+                    <span class="gsr-tag" style="background:#7c3aed22; color:#a78bfa;">Agent ID</span>
                 </a>`;
             }).join('<hr class="gsr-divider">');
         }
