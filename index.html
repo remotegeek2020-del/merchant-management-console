@@ -35,6 +35,90 @@
         line-height: 1;
     }
 
+    /* Global Search */
+    .global-search-wrap {
+        position: relative;
+        max-width: 520px;
+        margin: 18px auto 0;
+    }
+    .global-search-input {
+        width: 100%;
+        padding: 11px 44px 11px 42px;
+        border-radius: 12px;
+        border: none;
+        background: rgba(255,255,255,0.15);
+        color: white;
+        font-family: 'Inter', sans-serif;
+        font-size: 14px;
+        outline: none;
+        backdrop-filter: blur(8px);
+        transition: background 0.2s;
+    }
+    .global-search-input::placeholder { color: rgba(255,255,255,0.6); }
+    .global-search-input:focus { background: rgba(255,255,255,0.22); }
+    .global-search-icon {
+        position: absolute;
+        left: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        color: rgba(255,255,255,0.7);
+        font-size: 20px;
+        pointer-events: none;
+    }
+    .global-search-kbd {
+        position: absolute;
+        right: 12px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255,255,255,0.2);
+        border-radius: 4px;
+        padding: 2px 6px;
+        font-size: 10px;
+        color: rgba(255,255,255,0.7);
+        font-family: 'Inter', sans-serif;
+        pointer-events: none;
+    }
+    .global-search-results {
+        position: absolute;
+        top: calc(100% + 8px);
+        left: 0;
+        right: 0;
+        background: #1e293b;
+        border: 1px solid #334155;
+        border-radius: 14px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+        z-index: 9999;
+        overflow: hidden;
+        display: none;
+    }
+    .gsr-section-label {
+        padding: 8px 14px 4px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.8px;
+        color: #64748b;
+        text-transform: uppercase;
+    }
+    .gsr-item {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 9px 14px;
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 0.12s;
+        color: #e2e8f0;
+    }
+    .gsr-item:hover, .gsr-item.focused { background: #0f172a; color: #e2e8f0; }
+    .gsr-icon { color: #64748b; font-size: 18px; flex-shrink: 0; }
+    .gsr-main { flex: 1; min-width: 0; }
+    .gsr-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gsr-sub { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .gsr-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; flex-shrink: 0; }
+    .gsr-divider { border: none; border-top: 1px solid #1e293b; margin: 0; }
+    .gsr-empty { padding: 20px; text-align: center; color: #475569; font-size: 13px; }
+    .gsr-loading { padding: 16px; text-align: center; color: #64748b; font-size: 12px; }
+
 </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -85,6 +169,14 @@
                 <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProtec" class="logo-img">
                 <h1 class="brand-title">PayProTec Portal</h1>
                 <p class="brand-sub">Central Operations Console</p>
+                <div class="global-search-wrap" id="global-search-wrap">
+                    <span class="material-icons global-search-icon">search</span>
+                    <input type="text" id="global-search-input" class="global-search-input"
+                           placeholder="Search merchants, tickets, equipment…"
+                           autocomplete="off" autocorrect="off" spellcheck="false">
+                    <span class="global-search-kbd" id="gsr-kbd">⌘K</span>
+                    <div class="global-search-results" id="global-search-results"></div>
+                </div>
             </div>
         </div>
 
@@ -281,6 +373,191 @@
     }
     // Poll every 30 seconds for real-time feel
     setInterval(loadNotifBadges, 30000);
+})();
+</script>
+
+<script>
+(function() {
+    const input   = document.getElementById('global-search-input');
+    const panel   = document.getElementById('global-search-results');
+    const kbd     = document.getElementById('gsr-kbd');
+    let debounce  = null;
+    let lastQuery = '';
+    let focusIdx  = -1;
+    let items     = [];
+
+    // ⌘K / Ctrl+K shortcut
+    const isMac = navigator.platform.toUpperCase().includes('MAC');
+    kbd.textContent = isMac ? '⌘K' : 'Ctrl+K';
+    document.addEventListener('keydown', e => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+            e.preventDefault();
+            input.focus();
+            input.select();
+        }
+        if (e.key === 'Escape') closeResults();
+    });
+
+    input.addEventListener('input', () => {
+        clearTimeout(debounce);
+        const q = input.value.trim();
+        if (q.length < 2) { closeResults(); return; }
+        if (q === lastQuery) return;
+        showLoading();
+        debounce = setTimeout(() => doSearch(q), 300);
+    });
+
+    input.addEventListener('keydown', e => {
+        if (!panel.style.display || panel.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
+        if (e.key === 'ArrowUp')   { e.preventDefault(); moveFocus(-1); }
+        if (e.key === 'Enter' && focusIdx >= 0 && items[focusIdx]) {
+            e.preventDefault();
+            items[focusIdx].click();
+        }
+    });
+
+    document.addEventListener('click', e => {
+        if (!document.getElementById('global-search-wrap').contains(e.target)) closeResults();
+    });
+
+    function moveFocus(dir) {
+        items = Array.from(panel.querySelectorAll('.gsr-item'));
+        items.forEach(i => i.classList.remove('focused'));
+        focusIdx = Math.max(0, Math.min(items.length - 1, focusIdx + dir));
+        if (items[focusIdx]) items[focusIdx].classList.add('focused');
+    }
+
+    function showLoading() {
+        panel.style.display = 'block';
+        panel.innerHTML = '<div class="gsr-loading">Searching…</div>';
+        focusIdx = -1;
+    }
+
+    function closeResults() {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        focusIdx = -1;
+        lastQuery = '';
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+
+    function statusColor(s) {
+        const map = {
+            active: '#22c55e', enrolled: '#22c55e', open: '#3b82f6', pending: '#f59e0b',
+            closed: '#64748b', resolved: '#22c55e', stocked: '#22c55e', deployed: '#3b82f6',
+            decommissioned: '#64748b', in_repair: '#f59e0b', open_ticket: '#3b82f6',
+        };
+        return map[(s||'').toLowerCase()] || '#94a3b8';
+    }
+
+    async function doSearch(q) {
+        lastQuery = q;
+        const userid = localStorage.getItem('pp_userid');
+        if (!userid) { closeResults(); return; }
+
+        let data;
+        try {
+            const r = await fetch('/api/search', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ q, userid })
+            });
+            data = await r.json();
+        } catch {
+            panel.innerHTML = '<div class="gsr-empty">Search unavailable — check connection.</div>';
+            return;
+        }
+
+        if (!data.success) {
+            panel.innerHTML = '<div class="gsr-empty">Search unavailable.</div>';
+            return;
+        }
+
+        const { merchants, partners, tickets, equipment } = data.results;
+        const total = merchants.length + partners.length + tickets.length + equipment.length;
+
+        if (total === 0) {
+            panel.innerHTML = `<div class="gsr-empty">No results for "<strong>${esc(q)}</strong>"</div>`;
+            return;
+        }
+
+        let html = '';
+
+        if (merchants.length) {
+            html += '<div class="gsr-section-label">Merchants</div>';
+            html += merchants.map(m => {
+                const sub = [m.merchant_id, m.company_name, m.agent_id ? `Agent ${m.agent_id}` : ''].filter(Boolean).join(' · ');
+                const col = statusColor(m.account_status);
+                return `<a class="gsr-item" href="merchants-dashboard.html">
+                    <span class="material-icons gsr-icon" style="color:#0ea5e9;">storefront</span>
+                    <div class="gsr-main">
+                        <div class="gsr-title">${esc(m.dba_name || m.company_name)}</div>
+                        <div class="gsr-sub">${esc(sub)}</div>
+                    </div>
+                    ${m.account_status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(m.account_status)}</span>` : ''}
+                </a>`;
+            }).join('<hr class="gsr-divider">');
+        }
+
+        if (partners.length) {
+            if (html) html += '<hr class="gsr-divider">';
+            html += '<div class="gsr-section-label">Partners</div>';
+            html += partners.map(p => {
+                const col = p.is_portal_active ? '#22c55e' : '#64748b';
+                return `<a class="gsr-item" href="partners-dashboard.html">
+                    <span class="material-icons gsr-icon" style="color:#8b5cf6;">handshake</span>
+                    <div class="gsr-main">
+                        <div class="gsr-title">${esc(p.full_name)}</div>
+                        <div class="gsr-sub">${esc(p.email)}</div>
+                    </div>
+                    <span class="gsr-tag" style="background:${col}22; color:${col};">${p.is_portal_active ? 'Active' : 'Inactive'}</span>
+                </a>`;
+            }).join('<hr class="gsr-divider">');
+        }
+
+        if (tickets.length) {
+            if (html) html += '<hr class="gsr-divider">';
+            html += '<div class="gsr-section-label">Tickets</div>';
+            html += tickets.map(t => {
+                const col = statusColor(t.status);
+                const prioColor = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' }[t.priority] || '#64748b';
+                return `<a class="gsr-item" href="tickets-dashboard.html">
+                    <span class="material-icons gsr-icon" style="color:#0d9488;">confirmation_number</span>
+                    <div class="gsr-main">
+                        <div class="gsr-title">${esc(t.subject)}</div>
+                        <div class="gsr-sub">${esc(t.ticket_number)}${t.priority ? ` · <span style="color:${prioColor};">${esc(t.priority)}</span>` : ''}</div>
+                    </div>
+                    ${t.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(t.status)}</span>` : ''}
+                </a>`;
+            }).join('<hr class="gsr-divider">');
+        }
+
+        if (equipment.length) {
+            if (html) html += '<hr class="gsr-divider">';
+            html += '<div class="gsr-section-label">Equipment</div>';
+            html += equipment.map(eq => {
+                const col = statusColor(eq.status);
+                return `<a class="gsr-item" href="equipments-dashboard.html">
+                    <span class="material-icons gsr-icon" style="color:#f59e0b;">inventory_2</span>
+                    <div class="gsr-main">
+                        <div class="gsr-title">${esc(eq.serial_number)}</div>
+                        <div class="gsr-sub">${esc(eq.terminal_type)}${eq.current_location ? ` · ${esc(eq.current_location)}` : ''}</div>
+                    </div>
+                    ${eq.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(eq.status)}</span>` : ''}
+                </a>`;
+            }).join('<hr class="gsr-divider">');
+        }
+
+        panel.style.display = 'block';
+        panel.innerHTML = html;
+        focusIdx = -1;
+        items = Array.from(panel.querySelectorAll('.gsr-item'));
+    }
 })();
 </script>
 </body>
