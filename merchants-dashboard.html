@@ -480,7 +480,7 @@ async function executeFinalUpsert(payload) {
  * Sends activity to the central activity_logs table
  */
 async function logAuditAction(action, details) {
-    const userEmail = localStorage.getItem('pp_userid'); 
+    const firstName = localStorage.getItem('pp_user_first_name') || ''; const lastName = localStorage.getItem('pp_user_last_name') || ''; const userEmail = [firstName, lastName].filter(Boolean).join(' ') || localStorage.getItem('pp_user_email') || 'Unknown'; 
     try {
         await fetch('/api/logs', {
             method: 'POST',
@@ -628,7 +628,9 @@ async function addTask(merchantUuid) {
     const assigned = document.getElementById('task-assign-select')?.value;
 
     // Standardized key from your login system
-    const currentAdminEmail = localStorage.getItem('pp_userid'); 
+    const _fn = localStorage.getItem('pp_user_first_name') || '';
+    const _ln = localStorage.getItem('pp_user_last_name')  || '';
+    const currentAdminEmail = [_fn, _ln].filter(Boolean).join(' ') || localStorage.getItem('pp_user_email') || 'Unknown';
 
     if (!merchantUuid || merchantUuid === 'undefined') {
         return Swal.fire('Error', 'Internal Error: Merchant ID not found.', 'error');

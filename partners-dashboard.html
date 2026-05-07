@@ -363,13 +363,16 @@ let activeTrendFilter = 'all';
  * Sends activity to the central activity_logs table
  */
 async function logAuditAction(action, details) {
-    const userEmail = localStorage.getItem('pp_userid'); // Using the standardized key from your script.js
+    const firstName = localStorage.getItem('pp_user_first_name') || '';
+    const lastName  = localStorage.getItem('pp_user_last_name')  || '';
+    const email     = localStorage.getItem('pp_user_email')       || '';
+    const displayName = [firstName, lastName].filter(Boolean).join(' ') || email || 'Unknown Admin';
     try {
         await fetch('/api/logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                email: userEmail || 'Unknown Admin',
+                email: displayName,
                 action: action,
                 status: details
             })
