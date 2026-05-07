@@ -210,17 +210,17 @@ async function init() {
     const staffRes = await fetch('/api/users', { method: 'GET' });
     const sr = await staffRes.json();
     staffList = (sr.data || []).filter(u => u.is_active);
-    // Try to find current user's name
+    // Try to find current user's full name from staff list
     const uid = localStorage.getItem('pp_userid');
     if (uid) {
-        const me = staffList.find(u => String(u.id) === String(uid));
+        const me = staffList.find(u => String(u.userid) === String(uid));
         if (me) {
             currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
         }
     }
-    // Fallback to stored display name if staff list lookup didn't resolve
+    // Fallback to first name stored at login
     if (!currentStaffName) {
-        currentStaffName = localStorage.getItem('pp_name') || localStorage.getItem('pp_userid') || 'Staff';
+        currentStaffName = localStorage.getItem('pp_user_first_name') || 'Staff';
     }
     currentUserRole = localStorage.getItem('pp_role') || '';
     loadTickets();
