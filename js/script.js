@@ -170,9 +170,8 @@ async function authorizeUser(user) {
         if (isSuperAdmin) {
             elements.secretDungeon.classList.remove('slds-hide');
             elements.secretDungeon.style.display = 'flex';
-            console.log("🔓 Secret Dungeon authorized for Super Admin.");
         } else {
-            elements.secretDungeon.style.display = 'none';
+            elements.secretDungeon.remove();
         }
     }
 
