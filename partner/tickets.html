@@ -68,6 +68,15 @@
         .empty { padding:60px 20px; text-align:center; color:var(--muted); }
         .empty .material-icons { font-size:48px; opacity:0.3; display:block; margin-bottom:12px; }
         @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} }
+
+        /* Pagination */
+        .pagination-bar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px; margin-top:16px; }
+        .page-btn { min-width:32px; height:32px; border-radius:8px; border:1px solid var(--border); background:white; color:var(--text); font-size:12px; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; transition:all 0.15s; padding:0 6px; font-family:'DM Sans',sans-serif; }
+        .page-btn:hover:not(:disabled) { border-color:var(--teal); color:var(--teal); }
+        .page-btn.active { background:var(--teal); color:white; border-color:var(--teal); }
+        .page-btn:disabled { opacity:0.4; cursor:default; }
+        .page-size-btn { padding:4px 11px; border-radius:6px; border:1px solid var(--border); background:white; color:var(--secondary); font-size:11px; font-weight:700; cursor:pointer; transition:all 0.15s; font-family:'DM Sans',sans-serif; }
+        .page-size-btn.active { background:var(--navy); color:white; border-color:var(--navy); }
         @keyframes spin { to { transform:rotate(360deg); } }
         .swal-above-modal.swal2-container { z-index: 99999 !important; }
 
@@ -151,12 +160,20 @@
     </div>
 
     <div class="content">
-        <div class="filter-bar">
-            <button class="filter-btn active" data-filter="all" onclick="setFilter(this,'all')">All</button>
-            <button class="filter-btn" data-filter="open" onclick="setFilter(this,'open')">Open</button>
-            <button class="filter-btn" data-filter="in_progress" onclick="setFilter(this,'in_progress')">In Progress</button>
-            <button class="filter-btn" data-filter="resolved" onclick="setFilter(this,'resolved')">Resolved</button>
-            <button class="filter-btn" data-filter="closed" onclick="setFilter(this,'closed')">Closed</button>
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:20px;">
+            <div class="filter-bar" style="margin-bottom:0;">
+                <button class="filter-btn active" data-filter="all" onclick="setFilter(this,'all')">All</button>
+                <button class="filter-btn" data-filter="open" onclick="setFilter(this,'open')">Open</button>
+                <button class="filter-btn" data-filter="in_progress" onclick="setFilter(this,'in_progress')">In Progress</button>
+                <button class="filter-btn" data-filter="resolved" onclick="setFilter(this,'resolved')">Resolved</button>
+                <button class="filter-btn" data-filter="closed" onclick="setFilter(this,'closed')">Closed</button>
+            </div>
+            <div style="display:flex;align-items:center;gap:6px;">
+                <span style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;">Show:</span>
+                <button class="page-size-btn active" onclick="setPageSize(20)">20</button>
+                <button class="page-size-btn" onclick="setPageSize(50)">50</button>
+                <button class="page-size-btn" onclick="setPageSize(100)">100</button>
+            </div>
         </div>
 
         <div id="ticket-list">
@@ -165,6 +182,7 @@
                 Loading tickets...
             </div>
         </div>
+        <div id="ticket-pagination"></div>
     </div>
 </div>
 
@@ -191,6 +209,8 @@ if (!token) window.location.href = '/partner';
 let allTickets = [];
 let currentFilter = 'all';
 let currentViewTicketId = null;
+let currentPage = 0;
+let pageSize = 20;
 
 const name = localStorage.getItem('pp_partner_name') || '';
 if (name) {
@@ -227,11 +247,23 @@ async function loadTickets() {
 function renderTickets() {
     const filtered = currentFilter === 'all' ? allTickets : allTickets.filter(t => t.status === currentFilter);
     const container = document.getElementById('ticket-list');
+    const pagEl = document.getElementById('ticket-pagination');
+
     if (!filtered.length) {
         container.innerHTML = `<div class="empty"><span class="material-icons">confirmation_number</span>${currentFilter === 'all' ? 'No tickets yet. Open a ticket from your merchant page or use General Support above.' : 'No ' + currentFilter.replace('_', ' ') + ' tickets.'}</div>`;
+        if (pagEl) pagEl.innerHTML = '';
         return;
     }
-    container.innerHTML = filtered.map(t => `
+
+    const total = filtered.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    if (currentPage >= totalPages) currentPage = totalPages - 1;
+    if (currentPage < 0) currentPage = 0;
+
+    const start = currentPage * pageSize;
+    const pageItems = filtered.slice(start, start + pageSize);
+
+    container.innerHTML = pageItems.map(t => `
         <div class="ticket-card" onclick="viewTicket(${t.id})">
             <div class="ticket-icon ${typeClass(t.type)}">
                 <span class="material-icons" style="font-size:20px;">${typeIcon(t.type)}</span>
@@ -249,12 +281,63 @@ function renderTickets() {
                 <span class="badge badge-${t.priority}" style="font-size:9px;">${t.priority}</span>
             </div>
         </div>`).join('');
+
+    if (pagEl) renderPagination(total, totalPages);
+}
+
+function renderPagination(total, totalPages) {
+    const pag = document.getElementById('ticket-pagination');
+    if (!pag) return;
+    if (totalPages <= 1) { pag.innerHTML = ''; return; }
+
+    const start = currentPage * pageSize + 1;
+    const end = Math.min((currentPage + 1) * pageSize, total);
+
+    const visibleSet = new Set(
+        [0, totalPages - 1, currentPage - 1, currentPage, currentPage + 1].filter(p => p >= 0 && p < totalPages)
+    );
+    const sorted = [...visibleSet].sort((a, b) => a - b);
+
+    let pageButtons = '';
+    let prev = -1;
+    for (const p of sorted) {
+        if (prev !== -1 && p - prev > 1) pageButtons += `<span style="padding:0 2px;color:var(--muted);font-size:13px;">…</span>`;
+        pageButtons += `<button class="page-btn ${p === currentPage ? 'active' : ''}" onclick="goToPage(${p})">${p + 1}</button>`;
+        prev = p;
+    }
+
+    pag.innerHTML = `<div class="pagination-bar">
+        <span style="font-size:12px;color:var(--muted);">Showing ${start}–${end} of ${total}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+            <button class="page-btn" onclick="goToPage(${currentPage - 1})" ${currentPage === 0 ? 'disabled' : ''}>
+                <span class="material-icons" style="font-size:16px;">chevron_left</span>
+            </button>
+            ${pageButtons}
+            <button class="page-btn" onclick="goToPage(${currentPage + 1})" ${currentPage >= totalPages - 1 ? 'disabled' : ''}>
+                <span class="material-icons" style="font-size:16px;">chevron_right</span>
+            </button>
+        </div>
+    </div>`;
+}
+
+function setPageSize(n) {
+    pageSize = n;
+    currentPage = 0;
+    document.querySelectorAll('.page-size-btn').forEach(b => b.classList.toggle('active', parseInt(b.textContent) === n));
+    renderTickets();
+}
+
+function goToPage(p) {
+    currentPage = p;
+    renderTickets();
+    document.querySelector('.content')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function setFilter(btn, filter) {
     document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     currentFilter = filter;
+    currentPage = 0;
     renderTickets();
 }
 
