@@ -519,8 +519,11 @@ async function processFinalImport(itemsToCreate) {
             <div style="background:#dcfce7; color:#166534; padding:12px; border-radius:12px; border:1px solid #bbf7d0; font-size:13px; margin-top:10px;">
                 <strong>Success!</strong> ${addedCount} units have been added to the Warsaw Office.
             </div>`;
-        status.innerText = "Import complete.";
-        fetchInventory(); // Refresh the main table
+        status.innerText = "Import complete. Closing...";
+        fetchInventory();
+        setTimeout(() => {
+            document.getElementById('aiAgentSidebar').style.display = 'none';
+        }, 2000);
 
     } catch (err) {
         status.innerText = "Sync failed.";

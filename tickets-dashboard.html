@@ -419,7 +419,10 @@ async function openTicket(ticketId) {
         fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_comments', ticket_id: ticketId }) })
     ]);
     const result = await ticketRes.json();
-    const commentsResult = await commentsRes.json();
+
+    let commentsResult = null;
+    try { commentsResult = await commentsRes.json(); } catch {}
+    const commentsOk = commentsResult?.success !== false;
 
     // Mark as read in background
     fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark_read', ticket_id: ticketId }) });
@@ -430,7 +433,7 @@ async function openTicket(ticketId) {
     }
     const t = result.ticket;
     currentTicketData = t;
-    const comments = commentsResult.comments || [];
+    const comments = commentsOk ? (commentsResult?.comments || []) : null;
     document.getElementById('modal-ticket-num').textContent = t.ticket_number;
     document.getElementById('modal-ticket-sub').textContent = t.subject;
 
@@ -447,7 +450,9 @@ async function openTicket(ticketId) {
         }).join('');
 
     // Build comment thread HTML
-    const commentsHtml = comments.length === 0
+    const commentsHtml = comments === null
+        ? `<div style="text-align:center;padding:16px;font-size:12px;color:var(--red-text);background:#fff1f2;border-radius:8px;"><span class="material-icons" style="font-size:15px;vertical-align:middle;">warning</span> Could not load activity. <button onclick="openTicket(${ticketId})" style="background:none;border:none;color:var(--pp-accent);font-size:12px;font-weight:700;cursor:pointer;text-decoration:underline;">Retry</button></div>`
+        : comments.length === 0
         ? `<div style="text-align:center;padding:20px;font-size:12px;color:var(--text-muted);">No activity yet.</div>`
         : comments.map(c => {
             if (c.author_type === 'system') {
