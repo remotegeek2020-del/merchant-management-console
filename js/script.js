@@ -58,13 +58,16 @@ async function initGatekeeper() {
  * Records actions into the activity_logs table via the API
  */
 async function recordActivity(action, statusDetails) {
-    const userEmail = localStorage.getItem('pp_userid');
+    const firstName = localStorage.getItem('pp_user_first_name') || '';
+    const lastName  = localStorage.getItem('pp_user_last_name')  || '';
+    const email     = localStorage.getItem('pp_user_email')       || '';
+    const fullName  = [firstName, lastName].filter(Boolean).join(' ') || email || 'System';
     try {
         await fetch('/api/logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                email: userEmail || 'System',
+                email: fullName,
                 action: action,
                 status: statusDetails
             })
@@ -114,10 +117,12 @@ async function authorizeUser(user) {
         if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
 
         localStorage.setItem('pp_userid', user.userid || '');
-        localStorage.setItem('pp_role', user.role || 'Regular User'); 
+        localStorage.setItem('pp_role', user.role || 'Regular User');
         localStorage.setItem('pp_verified', 'true');
-        localStorage.setItem('pp_user_first_name', user.first_name || 'Sir'); 
-        localStorage.setItem('userid', user.userid || ''); 
+        localStorage.setItem('pp_user_first_name', user.first_name || 'Sir');
+        localStorage.setItem('pp_user_email', user.email || '');
+        localStorage.setItem('pp_user_last_name', user.last_name || '');
+        localStorage.setItem('userid', user.userid || '');
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
 

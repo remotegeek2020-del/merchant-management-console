@@ -8,7 +8,7 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
-    const { action, userid } = req.body;
+    const { action, userid, staff_name } = req.body;
 
     try {
         // ── GET TASKS ─────────────────────────────────────
@@ -78,7 +78,7 @@ export default async function handler(req, res) {
 
             // Log it
             await supabase.from('activity_logs').insert({
-                email: userid, action: `Created task: ${title}`,
+                email: staff_name || userid, action: `Created task: ${title}`,
                 status: 'success', category: 'tasks',
                 target_id: data.id, target_type: 'task'
             });
@@ -93,7 +93,7 @@ export default async function handler(req, res) {
             if (error) throw error;
 
             await supabase.from('activity_logs').insert({
-                email: userid, action: `Updated task`,
+                email: staff_name || userid, action: `Updated task`,
                 status: 'success', category: 'tasks',
                 target_id: task_id, target_type: 'task'
             });
