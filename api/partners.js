@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { getConfigValue } from './api-config.js';
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
@@ -33,10 +34,11 @@ if (action === 'get_orphan_ids') {
 }
         if (action === 'search_ghl') {
     const { query } = body;
-    const ghlLocationId = process.env.GHL_LOCATION_ID;
-    const ghlApiKey = process.env.GHL_API_KEY;
+    // Prefer DB-stored key (managed via Secret Dungeon), fall back to env var
+    const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+    const ghlApiKey    = (await getConfigValue('GHL_API_KEY'))     || process.env.GHL_API_KEY;
     if (!ghlLocationId || !ghlApiKey) {
-        return res.status(500).json({ success: false, message: 'GHL integration not configured.' });
+        return res.status(500).json({ success: false, message: 'GHL integration not configured. Set API keys in Secret Dungeon → API Key Manager.' });
     }
     const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=${ghlLocationId}&query=${encodeURIComponent(query)}`, {
         headers: {
@@ -45,7 +47,7 @@ if (action === 'get_orphan_ids') {
         }
     });
     const data = await ghlRes.json();
-    return res.status(200).json({ success: true, contacts: data.contacts });
+    return res.status(200).json({ success: true, contacts: data.contacts || [] });
 }
 if (action === 'complete_onboarding') {
     const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId, personName } = body;

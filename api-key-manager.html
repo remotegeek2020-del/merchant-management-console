@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Key Manager | Secret Dungeon</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>
+        (function() {
+            if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
+                window.location.href = 'index.html?reason=unauthorized';
+            }
+            const role = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g,'_');
+            if (role !== 'super_admin') window.location.href = 'index.html';
+        })();
+    </script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: #0f172a; font-family: 'DM Sans', sans-serif; min-height: 100vh; color: #e2e8f0; }
+        .page-header { background: linear-gradient(135deg, #4338ca 0%, #6366f1 100%); padding: 28px 32px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; }
+        .content { max-width: 800px; margin: 0 auto; padding: 32px 24px; }
+        .btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 18px; border-radius: 8px; font-size: 13px; font-weight: 700; font-family: 'DM Sans', sans-serif; cursor: pointer; border: none; transition: all 0.2s; }
+        .btn-primary { background: #6366f1; color: white; }
+        .btn-primary:hover { background: #4f46e5; }
+        .btn-ghost { background: transparent; color: #94a3b8; border: 1px solid #334155; }
+        .btn-ghost:hover { border-color: #6366f1; color: #a5b4fc; }
+        .panel { background: #1e293b; border: 1px solid #334155; border-radius: 14px; overflow: hidden; margin-bottom: 20px; }
+        .panel-header { padding: 14px 20px; border-bottom: 1px solid #334155; display: flex; align-items: center; justify-content: space-between; }
+        .panel-title { font-size: 13px; font-weight: 700; color: #e2e8f0; display: flex; align-items: center; gap: 8px; }
+        .panel-body { padding: 20px; }
+        .key-row { background: #0f172a; border: 1px solid #334155; border-radius: 10px; padding: 16px 18px; margin-bottom: 12px; display: flex; align-items: center; gap: 14px; }
+        .key-name { font-family: 'DM Mono', monospace; font-size: 13px; color: #38bdf8; font-weight: 500; min-width: 180px; }
+        .key-masked { font-family: 'DM Mono', monospace; font-size: 12px; color: #64748b; flex: 1; }
+        .key-meta { font-size: 11px; color: #475569; white-space: nowrap; }
+        .key-actions { display: flex; gap: 6px; flex-shrink: 0; }
+        .icon-btn { background: #1e293b; border: 1px solid #334155; border-radius: 6px; color: #94a3b8; cursor: pointer; padding: 5px 8px; display: flex; align-items: center; font-size: 12px; gap: 4px; font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all 0.15s; }
+        .icon-btn:hover { border-color: #6366f1; color: #a5b4fc; }
+        .icon-btn.danger:hover { border-color: #ef4444; color: #ef4444; }
+        .empty-state { text-align: center; padding: 40px; color: #475569; }
+        .info-box { background: #1e3a5f; border: 1px solid #1d4ed8; border-radius: 10px; padding: 14px 18px; font-size: 12px; color: #93c5fd; line-height: 1.7; margin-bottom: 20px; display: flex; gap: 10px; }
+        .preset-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin-bottom: 20px; }
+        .preset-card { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 12px 14px; cursor: pointer; transition: all 0.15s; }
+        .preset-card:hover { border-color: #6366f1; background: #1e293b; }
+        .preset-name { font-family: 'DM Mono', monospace; font-size: 12px; color: #38bdf8; margin-bottom: 4px; }
+        .preset-desc { font-size: 11px; color: #64748b; }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <div style="display:flex; align-items:center; gap:16px;">
+        <a href="secret-dungeon.html" style="background:rgba(255,255,255,0.15); border:none; border-radius:8px; color:white; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; display:flex; align-items:center; gap:5px;">
+            <span class="material-icons" style="font-size:16px;">arrow_back</span> Back
+        </a>
+        <div>
+            <h1 style="color:white; font-size:1.4rem; font-weight:800; margin:0;">API Key Manager</h1>
+            <p style="color:#e0e7ff; opacity:0.8; margin:0; font-size:12px;">Encrypted key storage — values are AES-256-GCM encrypted and never shown in plaintext</p>
+        </div>
+    </div>
+    <button class="btn btn-primary" onclick="openAddKey()">
+        <span class="material-icons" style="font-size:16px;">add</span>
+        Add / Update Key
+    </button>
+</div>
+
+<div class="content">
+
+    <div class="info-box">
+        <span class="material-icons" style="font-size:18px; flex-shrink:0; margin-top:1px;">lock</span>
+        <div>
+            All values are encrypted with <strong>AES-256-GCM</strong> before being stored in the database. The encryption key is derived from your server's service role key — only the server can decrypt. Masked values are shown here for reference only.
+        </div>
+    </div>
+
+    <!-- Quick Presets -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:#f59e0b; font-size:18px;">bolt</span>
+                Quick Setup — Common Integrations
+            </div>
+        </div>
+        <div class="panel-body">
+            <div class="preset-grid">
+                <div class="preset-card" onclick="openAddKey('GHL_API_KEY')">
+                    <div class="preset-name">GHL_API_KEY</div>
+                    <div class="preset-desc">HighLevel / LeadConnector API key for partner search</div>
+                </div>
+                <div class="preset-card" onclick="openAddKey('GHL_LOCATION_ID')">
+                    <div class="preset-name">GHL_LOCATION_ID</div>
+                    <div class="preset-desc">HighLevel location/sub-account ID</div>
+                </div>
+                <div class="preset-card" onclick="openAddKey('POSTMARK_SERVER_TOKEN')">
+                    <div class="preset-name">POSTMARK_SERVER_TOKEN</div>
+                    <div class="preset-desc">Postmark email delivery server token</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stored Keys -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:#6366f1; font-size:18px;">vpn_key</span>
+                Stored Keys
+            </div>
+            <button class="btn-ghost btn" onclick="loadKeys()" style="padding:6px 12px; font-size:12px;">
+                <span class="material-icons" style="font-size:14px;">refresh</span> Refresh
+            </button>
+        </div>
+        <div class="panel-body" id="keys-list">
+            <div class="empty-state">
+                <span class="material-icons" style="font-size:36px; display:block; margin-bottom:8px; color:#334155;">hourglass_empty</span>
+                Loading…
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const userId   = localStorage.getItem('pp_userid') || 'unknown';
+const userName = localStorage.getItem('pp_name') || userId;
+
+async function api(action, extra = {}) {
+    const r = await fetch('/api/api-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action, ...extra })
+    });
+    return r.json();
+}
+
+async function loadKeys() {
+    const r = await api('list_status');
+    const el = document.getElementById('keys-list');
+    const configs = r.configs || [];
+
+    if (!configs.length) {
+        el.innerHTML = `<div class="empty-state">
+            <span class="material-icons" style="font-size:36px; display:block; margin-bottom:8px; color:#334155;">key_off</span>
+            No keys stored yet. Use the presets above to add your first key.
+        </div>`;
+        return;
+    }
+
+    el.innerHTML = configs.map(c => `
+        <div class="key-row">
+            <span class="material-icons" style="color:#22c55e; font-size:18px; flex-shrink:0;">check_circle</span>
+            <div class="key-name">${escHtml(c.key)}</div>
+            <div class="key-masked">${escHtml(c.masked)}</div>
+            <div class="key-meta">Updated ${formatDate(c.updated_at)}<br>by ${escHtml(c.updated_by)}</div>
+            <div class="key-actions">
+                <button class="icon-btn" onclick="openAddKey('${escHtml(c.key)}')">
+                    <span class="material-icons" style="font-size:14px;">edit</span> Update
+                </button>
+                <button class="icon-btn danger" onclick="deleteKey('${escHtml(c.key)}')">
+                    <span class="material-icons" style="font-size:14px;">delete</span>
+                </button>
+            </div>
+        </div>`).join('');
+}
+
+async function openAddKey(prefillKey = '') {
+    const { value: formValues } = await Swal.fire({
+        title: prefillKey ? `Update ${prefillKey}` : 'Add / Update API Key',
+        background: '#1e293b',
+        color: '#e2e8f0',
+        html: `
+            <div style="text-align:left;">
+                <label style="font-size:11px; color:#94a3b8; display:block; margin-bottom:4px;">KEY NAME</label>
+                <input id="cfg-key" class="swal2-input" style="margin:0 0 14px; background:#0f172a; color:#e2e8f0; border-color:#334155; font-family:monospace;"
+                    placeholder="e.g. GHL_API_KEY" value="${escHtml(prefillKey)}">
+                <label style="font-size:11px; color:#94a3b8; display:block; margin-bottom:4px;">VALUE (will be encrypted)</label>
+                <input id="cfg-val" type="password" class="swal2-input" style="margin:0; background:#0f172a; color:#e2e8f0; border-color:#334155; font-family:monospace;"
+                    placeholder="Paste the API key here">
+                <div style="margin-top:8px;">
+                    <label style="display:flex; align-items:center; gap:6px; font-size:12px; color:#64748b; cursor:pointer;">
+                        <input type="checkbox" id="cfg-show" onchange="document.getElementById('cfg-val').type=this.checked?'text':'password'">
+                        Show value
+                    </label>
+                </div>
+            </div>`,
+        confirmButtonText: 'Save Encrypted',
+        confirmButtonColor: '#6366f1',
+        showCancelButton: true,
+        focusConfirm: false,
+        preConfirm: () => {
+            const key = document.getElementById('cfg-key').value.trim().toUpperCase().replace(/\s+/g,'_');
+            const value = document.getElementById('cfg-val').value.trim();
+            if (!key)   { Swal.showValidationMessage('Key name is required'); return false; }
+            if (!value) { Swal.showValidationMessage('Value is required'); return false; }
+            return { key, value };
+        }
+    });
+
+    if (!formValues) return;
+
+    Swal.fire({ title: 'Encrypting & Saving…', didOpen: () => Swal.showLoading(), allowOutsideClick: false, background: '#1e293b', color: '#e2e8f0' });
+    const r = await api('set', { key: formValues.key, value: formValues.value, updated_by: userName });
+
+    if (r.success) {
+        await loadKeys();
+        Swal.fire({ icon: 'success', title: 'Key Saved', text: `${formValues.key} has been encrypted and stored.`, background: '#1e293b', color: '#e2e8f0', confirmButtonColor: '#6366f1', timer: 2500, showConfirmButton: false });
+    } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: r.message, background: '#1e293b', color: '#e2e8f0' });
+    }
+}
+
+async function deleteKey(key) {
+    const { isConfirmed } = await Swal.fire({
+        title: `Delete ${key}?`,
+        text: 'The key will be permanently removed. Any integration relying on it will fall back to environment variables.',
+        icon: 'warning',
+        background: '#1e293b',
+        color: '#e2e8f0',
+        showCancelButton: true,
+        confirmButtonText: 'Delete Key',
+        confirmButtonColor: '#ef4444'
+    });
+    if (!isConfirmed) return;
+    const r = await api('delete', { key });
+    if (r.success) { loadKeys(); }
+    else Swal.fire({ icon: 'error', title: 'Error', text: r.message, background: '#1e293b', color: '#e2e8f0' });
+}
+
+function formatDate(iso) {
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function escHtml(str) {
+    if (!str) return '';
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadKeys();
+</script>
+</body>
+</html>
