@@ -118,7 +118,7 @@
 
 <script>
 const userId = localStorage.getItem('pp_userid') || '';
-const userName = localStorage.getItem('pp_name') || localStorage.getItem('pp_userid') || 'Staff';
+const userName = localStorage.getItem('pp_user_first_name') || 'Staff';
 const userRole = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
 const isAdmin = userRole === 'super_admin' || userRole === 'developer';
 
