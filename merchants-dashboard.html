@@ -1255,5 +1255,6 @@ window.saveMerchant = async (uuid) => {
         fetchMerchants().then(() => { Swal.close(); });
     };
 </script>
+<script>localStorage.setItem('pp_last_seen_merchants', new Date().toISOString());</script>
 </body>
 </html>

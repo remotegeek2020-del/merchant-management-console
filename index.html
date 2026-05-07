@@ -12,24 +12,29 @@
     
     <link rel="stylesheet" href="css/style.css">
     <style>
-    /* Messenger Notification Badge */
-    #card-chat { position: relative; }
-    .msg-badge {
+    /* Notification Badges */
+    .console-card { position: relative; }
+    .msg-badge, .notif-badge {
         position: absolute;
         top: -10px;
         right: -10px;
         background: #ff3b30;
         color: white;
         border-radius: 50%;
-        padding: 4px 8px;
-        font-size: 12px;
+        min-width: 24px;
+        height: 24px;
+        padding: 0 5px;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
         font-weight: 800;
         box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        display: none; /* Hidden until a message arrives */
         z-index: 100;
         border: 2px solid white;
+        line-height: 1;
     }
-   
+
 </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -93,12 +98,14 @@
                 </a>
 
                 <a href="partners-dashboard.html" class="console-card" id="card-partners">
+                    <span class="notif-badge" id="badge-partners"></span>
                     <div class="card-icon-header" style="background: #e0f2fe; color: #0369a1;"><span class="material-icons">handshake</span></div>
                     <div class="card-title">Partners</div>
                     <p class="card-desc">Manage person-to-company mappings, Agent ID hierarchies, and Prime49 portfolios.</p>
                 </a>
 
                 <a href="merchants-dashboard.html" class="console-card" id="card-merchants">
+                    <span class="notif-badge" id="badge-merchants"></span>
                     <div class="card-icon-header"><span class="material-icons">storefront</span></div>
                     <div class="card-title">Merchants</div>
                     <p class="card-desc">View and manage your merchant portfolio, Agent IDs, and enrollment history.</p>
@@ -106,18 +113,21 @@
 
                 <!-- Row 2: Inventory, Deployments, Returns -->
                 <a href="equipments-dashboard.html" class="console-card" id="card-inventory">
+                    <span class="notif-badge" id="badge-inventory"></span>
                     <div class="card-icon-header"><span class="material-icons">inventory_2</span></div>
                     <div class="card-title">Inventory</div>
                     <p class="card-desc">Manage warehouse stock, terminal models, and available serials.</p>
                 </a>
 
                 <a href="deployments-dashboard.html" class="console-card" id="card-deployments">
+                    <span class="notif-badge" id="badge-deployments"></span>
                     <div class="card-icon-header"><span class="material-icons">local_shipping</span></div>
                     <div class="card-title">Deployments</div>
                     <p class="card-desc">Track merchant installs, TIDs, and live shipping status.</p>
                 </a>
 
                 <a href="returns-dashboard.html" class="console-card" id="card-returns">
+                    <span class="notif-badge" id="badge-returns"></span>
                     <div class="card-icon-header"><span class="material-icons">assignment_return</span></div>
                     <div class="card-title">Returns</div>
                     <p class="card-desc">Monitor RMAs, damage assessments, and stock reintegration.</p>
@@ -125,6 +135,7 @@
 
                 <!-- Remaining rows -->
                 <a href="tickets-dashboard.html" class="console-card" id="card-tickets" style="border-bottom: 4px solid #0d9488;">
+                    <span class="notif-badge" id="badge-tickets"></span>
                     <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">confirmation_number</span></div>
                     <div class="card-title">Partner Tickets</div>
                     <p class="card-desc">View and manage partner support tickets — deployments, returns, and general support requests.</p>
@@ -156,6 +167,7 @@
                 </a>
 
                 <a href="tasks-dashboard.html" class="console-card" id="card-tasks">
+                    <span class="notif-badge" id="badge-tasks"></span>
                     <div class="card-icon-header" style="background: #fff9e6; color: #ffcc00;"><span class="material-icons">assignment</span></div>
                     <div class="card-title">My Tasks</div>
                     <p class="card-desc">View and manage tasks assigned specifically to you across all merchants.</p>
@@ -163,6 +175,7 @@
                 </a>
 
                 <a href="ideas-dashboard.html" class="console-card" id="card-ideas" style="border-bottom: 4px solid #0d9488;">
+                    <span class="notif-badge" id="badge-ideas"></span>
                     <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">lightbulb</span></div>
                     <div class="card-title">Ideas & Suggestions</div>
                     <p class="card-desc">Submit feature requests and ideas to improve the platform. Admins track progress and mark items done.</p>
@@ -224,5 +237,63 @@
 <button id="jarvis-trigger" class="oracle-float-btn" onclick="toggleJarvis()" style="display:none;">
     <span class="material-icons">blur_on</span>
 </button>
+
+<script>
+(function() {
+    const SECTIONS = ['partners','merchants','inventory','deployments','returns','tickets','tasks','ideas'];
+
+    function getLastSeen() {
+        const out = {};
+        SECTIONS.forEach(s => {
+            const v = localStorage.getItem('pp_last_seen_' + s);
+            out[s] = v || null;
+        });
+        return out;
+    }
+
+    function showBadge(id, count) {
+        const el = document.getElementById('badge-' + id);
+        if (!el) return;
+        if (count > 0) {
+            el.textContent = count > 99 ? '99+' : count;
+            el.style.display = 'flex';
+        } else {
+            el.style.display = 'none';
+        }
+    }
+
+    async function loadNotifBadges() {
+        const userid = localStorage.getItem('pp_userid');
+        if (!userid) return;
+        try {
+            const r = await fetch('/api/notifications', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ last_seen: getLastSeen(), userid })
+            });
+            const data = await r.json();
+            if (!data.success) return;
+            const c = data.counts;
+            showBadge('partners',    c.partners);
+            showBadge('merchants',   c.merchants);
+            showBadge('inventory',   c.inventory);
+            showBadge('deployments', c.deployments);
+            showBadge('returns',     c.returns);
+            showBadge('tickets',     c.tickets);
+            showBadge('tasks',       c.tasks);
+            showBadge('ideas',       c.ideas);
+        } catch (e) { /* silent fail */ }
+    }
+
+    // Run after page is interactive
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadNotifBadges);
+    } else {
+        loadNotifBadges();
+    }
+    // Refresh every 2 minutes while on the page
+    setInterval(loadNotifBadges, 120000);
+})();
+</script>
 </body>
 </html>
