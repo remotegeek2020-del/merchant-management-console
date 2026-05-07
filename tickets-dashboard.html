@@ -244,6 +244,14 @@ async function init() {
         currentStaffName = localStorage.getItem('pp_user_first_name') || 'Staff';
     }
     currentUserRole = localStorage.getItem('pp_role') || '';
+    const urlQ = new URLSearchParams(window.location.search).get('q');
+    if (urlQ) {
+        const searchEl = document.getElementById('ticket-search');
+        if (searchEl) {
+            searchEl.value = urlQ;
+            setSearchQuery(urlQ);
+        }
+    }
     loadTickets();
 }
 

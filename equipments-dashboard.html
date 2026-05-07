@@ -1082,7 +1082,11 @@ async function fetchCombinedLogs() {
     function nextPage() { currentPage++; fetchInventory(); }
     function prevPage() { if(currentPage > 0) { currentPage--; fetchInventory(); } }
 
-    window.onload = fetchInventory;
+    window.onload = () => {
+        const urlQ = new URLSearchParams(window.location.search).get('q');
+        if (urlQ) document.getElementById('invSearch').value = urlQ;
+        fetchInventory();
+    };
 </script>
 
     <div id="aiAgentSidebar" style="display:none; position:fixed; right:0; top:0; width:450px; height:100vh; background:white; box-shadow:-5px 0 25px rgba(0,0,0,0.15); z-index:11000; flex-direction:column;">

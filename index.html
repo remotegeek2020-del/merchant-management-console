@@ -488,12 +488,14 @@
 
         let html = '';
 
+        const qParam = encodeURIComponent(q);
+
         if (merchants.length) {
             html += '<div class="gsr-section-label">Merchants</div>';
             html += merchants.map(m => {
                 const sub = [m.merchant_id, m.company_name, m.agent_id ? `Agent ${m.agent_id}` : ''].filter(Boolean).join(' · ');
                 const col = statusColor(m.account_status);
-                return `<a class="gsr-item" href="merchants-dashboard.html">
+                return `<a class="gsr-item" href="merchants-dashboard.html?q=${qParam}">
                     <span class="material-icons gsr-icon" style="color:#0ea5e9;">storefront</span>
                     <div class="gsr-main">
                         <div class="gsr-title">${esc(m.dba_name || m.company_name)}</div>
@@ -509,7 +511,7 @@
             html += '<div class="gsr-section-label">Partners</div>';
             html += partners.map(p => {
                 const col = p.is_portal_active ? '#22c55e' : '#64748b';
-                return `<a class="gsr-item" href="partners-dashboard.html">
+                return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(p.full_name)}">
                     <span class="material-icons gsr-icon" style="color:#8b5cf6;">handshake</span>
                     <div class="gsr-main">
                         <div class="gsr-title">${esc(p.full_name)}</div>
@@ -525,7 +527,7 @@
             html += '<div class="gsr-section-label">Agent IDs</div>';
             html += agent_ids.map(a => {
                 const sub = [a.partner_name, a.partner_email].filter(Boolean).join(' · ');
-                return `<a class="gsr-item" href="partners-dashboard.html">
+                return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(a.id_string)}">
                     <span class="material-icons gsr-icon" style="color:#a78bfa;">badge</span>
                     <div class="gsr-main">
                         <div class="gsr-title" style="font-family:monospace;">${esc(a.id_string)}</div>
@@ -542,7 +544,7 @@
             html += tickets.map(t => {
                 const col = statusColor(t.status);
                 const prioColor = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' }[t.priority] || '#64748b';
-                return `<a class="gsr-item" href="tickets-dashboard.html">
+                return `<a class="gsr-item" href="tickets-dashboard.html?q=${encodeURIComponent(t.ticket_number)}">
                     <span class="material-icons gsr-icon" style="color:#0d9488;">confirmation_number</span>
                     <div class="gsr-main">
                         <div class="gsr-title">${esc(t.subject)}</div>
@@ -558,7 +560,7 @@
             html += '<div class="gsr-section-label">Equipment</div>';
             html += equipment.map(eq => {
                 const col = statusColor(eq.status);
-                return `<a class="gsr-item" href="equipments-dashboard.html">
+                return `<a class="gsr-item" href="equipments-dashboard.html?q=${encodeURIComponent(eq.serial_number)}">
                     <span class="material-icons gsr-icon" style="color:#f59e0b;">inventory_2</span>
                     <div class="gsr-main">
                         <div class="gsr-title">${esc(eq.serial_number)}</div>

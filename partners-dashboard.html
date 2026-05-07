@@ -1841,7 +1841,15 @@ window.quickAddId = async function(personId, name) {
         }
     };
 
-    window.addEventListener('load', loadPartners);
+    window.addEventListener('load', () => {
+        loadPartners().then(() => {
+            const urlQ = new URLSearchParams(window.location.search).get('q');
+            if (urlQ) {
+                const el = document.getElementById('partnerSearchInput');
+                if (el) { el.value = urlQ; el.dispatchEvent(new Event('input')); }
+            }
+        });
+    });
 </script>
     
 
