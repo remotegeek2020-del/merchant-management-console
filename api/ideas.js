@@ -13,26 +13,60 @@ export default async function handler(req, res) {
 
     try {
         if (action === 'list') {
+            const { userid } = req.body;
             const { data, error } = await supabase
                 .from('feature_ideas')
                 .select('*')
+                .order('votes', { ascending: false })
                 .order('created_at', { ascending: false });
             if (error) throw error;
-            return res.status(200).json({ success: true, ideas: data || [] });
+
+            // Fetch which ideas this user has voted on
+            let votedSet = new Set();
+            if (userid) {
+                const { data: votes } = await supabase
+                    .from('idea_votes').select('idea_id').eq('userid', userid);
+                votedSet = new Set((votes || []).map(v => v.idea_id));
+            }
+
+            const ideas = (data || []).map(i => ({ ...i, voted_by_me: votedSet.has(i.id) }));
+            return res.status(200).json({ success: true, ideas });
+        }
+
+        if (action === 'vote') {
+            const { id, userid } = req.body;
+            if (!id || !userid) return res.status(400).json({ success: false, message: 'ID and userid are required.' });
+
+            // Check if already voted
+            const { data: existing } = await supabase
+                .from('idea_votes').select('idea_id').eq('idea_id', id).eq('userid', userid).maybeSingle();
+
+            if (existing) {
+                await supabase.from('idea_votes').delete().eq('idea_id', id).eq('userid', userid);
+                await supabase.rpc('decrement_idea_votes', { idea_id: id });
+                const { data: updated } = await supabase.from('feature_ideas').select('votes').eq('id', id).single();
+                return res.status(200).json({ success: true, voted: false, votes: updated?.votes ?? 0 });
+            } else {
+                await supabase.from('idea_votes').insert({ idea_id: id, userid });
+                await supabase.rpc('increment_idea_votes', { idea_id: id });
+                const { data: updated } = await supabase.from('feature_ideas').select('votes').eq('id', id).single();
+                return res.status(200).json({ success: true, voted: true, votes: updated?.votes ?? 0 });
+            }
         }
 
         if (action === 'add') {
-            const { title, body, requested_by_userid, requested_by_name } = req.body;
+            const { title, body, requested_by_userid, requested_by_name, category } = req.body;
             if (!title?.trim()) return res.status(400).json({ success: false, message: 'Title is required.' });
             if (!body?.trim()) return res.status(400).json({ success: false, message: 'Description is required.' });
             if (!requested_by_userid) return res.status(400).json({ success: false, message: 'User ID is required.' });
+            const allowedCats = ['general','ui_ux','api','reporting','performance','security','other'];
+            const safeCat = allowedCats.includes(category) ? category : 'general';
             const { data, error } = await supabase
                 .from('feature_ideas')
-                .insert({ title: title.trim(), body: body.trim(), requested_by_userid, requested_by_name })
-                .select()
-                .single();
+                .insert({ title: title.trim(), body: body.trim(), requested_by_userid, requested_by_name, category: safeCat })
+                .select().single();
             if (error) throw error;
-            return res.status(200).json({ success: true, idea: data });
+            return res.status(200).json({ success: true, idea: { ...data, voted_by_me: false } });
         }
 
         if (action === 'update_status') {
