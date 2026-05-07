@@ -104,7 +104,8 @@ Required output format:
         let rawText = "";
         try {
             const result = await Promise.race([aiRequest, timeoutPromise]);
-            rawText = result.response.text().trim();
+            const response = await result.response;
+            rawText = response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
                 return sendJsonError(504, "Connection timed out. For large invoices, upload one page at a time or use a JPG image.");
