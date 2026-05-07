@@ -306,13 +306,10 @@ async function handleAgentFile(input) {
                 body: JSON.stringify({ fileBase64: base64 })
             });
             
-            if (!res.ok) throw new Error(`Server Error: ${res.status}`);
-            
             const result = await res.json();
 
             if (result.success) {
-                // IMPORTANT: Ensure result is passed entirely
-                confirmAIImport(result); 
+                confirmAIImport(result);
                 status.innerText = "Ready for review.";
             } else {
                 chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;">${result.message}</div>`;

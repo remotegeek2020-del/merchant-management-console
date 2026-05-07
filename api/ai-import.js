@@ -71,7 +71,7 @@ export default async function handler(req, res) {
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash",
+            model: "gemini-1.5-flash",
             generationConfig: {
                 temperature: 0,
                 responseMimeType: "application/json",
@@ -164,6 +164,6 @@ Required output format:
 
     } catch (err) {
         console.error("AI Import Exception:", err);
-        return sendJsonError(500, `AI System Error: ${err.message}`);
+        return sendJsonError(500, `AI System Error: ${err.message || err.toString()}`);
     }
 }
