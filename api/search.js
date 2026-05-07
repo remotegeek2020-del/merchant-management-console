@@ -27,91 +27,100 @@ export default async function handler(req, res) {
     const isAdmin = ['super_admin', 'admin', 'manager'].includes(user.role);
 
     try {
-        // Use separate ilike queries per column instead of .or() to avoid parser issues
-        const merchantFields = ['dba_name', 'merchant_id', 'company_name'];
-        const merchantQueries = merchantFields.map(col =>
-            supabase.from('merchants')
-                .select('merchant_id, dba_name, company_name, agent_id, account_status')
-                .ilike(col, like).limit(5)
-        );
+        // Merchants: use merchant_portfolio_view (same as merchants dashboard)
+        // Search dba_name and merchant_id separately to avoid column issues
+        const [merchantsByDba, merchantsByMid, ticketsByNumber, ticketsBySubject] = await Promise.all([
+            supabase.from('merchant_portfolio_view')
+                .select('merchant_id, dba_name, account_status, agent_id')
+                .ilike('dba_name', like)
+                .limit(5),
 
-        const ticketFields = ['ticket_number', 'subject'];
-        const ticketQueries = ticketFields.map(col =>
+            supabase.from('merchant_portfolio_view')
+                .select('merchant_id, dba_name, account_status, agent_id')
+                .ilike('merchant_id', like)
+                .limit(5),
+
             supabase.from('tickets')
                 .select('id, ticket_number, subject, status, priority')
-                .ilike(col, like)
+                .ilike('ticket_number', like)
                 .order('created_at', { ascending: false })
-                .limit(5)
-        );
+                .limit(5),
 
-        const partnerQueries = isAdmin ? [
-            supabase.from('persons').select('id, full_name, email, is_portal_active').ilike('full_name', like).limit(5),
-            supabase.from('persons').select('id, full_name, email, is_portal_active').ilike('email', like).limit(5),
-        ] : [Promise.resolve({ data: [] })];
-
-        const equipmentQueries = isAdmin ? [
-            supabase.from('equipments').select('id, serial_number, terminal_type, status, current_location').ilike('serial_number', like).limit(5),
-            supabase.from('equipments').select('id, serial_number, terminal_type, status, current_location').ilike('terminal_type', like).limit(5),
-        ] : [Promise.resolve({ data: [] })];
-
-        const agentIdQuery = isAdmin
-            ? supabase.from('agent_identifiers').select('id_string, agent_id').ilike('id_string', like).limit(5)
-            : Promise.resolve({ data: [] });
-
-        const allResults = await Promise.all([
-            ...merchantQueries,
-            ...ticketQueries,
-            ...partnerQueries,
-            ...equipmentQueries,
-            agentIdQuery,
+            supabase.from('tickets')
+                .select('id, ticket_number, subject, status, priority')
+                .ilike('subject', like)
+                .order('created_at', { ascending: false })
+                .limit(5),
         ]);
 
-        const mEnd = merchantFields.length;
-        const tEnd = mEnd + ticketFields.length;
-        const pEnd = tEnd + partnerQueries.length;
-        const eEnd = pEnd + equipmentQueries.length;
-
-        const merchants = dedup(
-            allResults.slice(0, mEnd).flatMap(r => r.data || []),
-            'merchant_id'
-        ).slice(0, 5);
+        // Tag each merchant with which field matched for deep-link filterBy
+        const byDba = (merchantsByDba.data || []).map(m => ({ ...m, _matchedBy: 'dba_name' }));
+        const byMid = (merchantsByMid.data || []).map(m => ({ ...m, _matchedBy: 'merchant_id' }));
+        // Merge: prefer dba_name match if same record appears in both
+        const merchants = dedup([...byDba, ...byMid], 'merchant_id').slice(0, 5);
 
         const tickets = dedup(
-            allResults.slice(mEnd, tEnd).flatMap(r => r.data || []),
+            [...(ticketsByNumber.data || []), ...(ticketsBySubject.data || [])],
             'id'
         ).slice(0, 5);
 
-        const partners = dedup(
-            allResults.slice(tEnd, pEnd).flatMap(r => r.data || []),
-            'id'
-        ).slice(0, 5);
+        // Partners and equipment (admin only)
+        let partners = [], equipment = [], agentIdResults = [];
 
-        const equipment = dedup(
-            allResults.slice(pEnd, eEnd).flatMap(r => r.data || []),
-            'id'
-        ).slice(0, 5);
+        if (isAdmin) {
+            const [partnersByName, partnersByEmail, equipBySerial, equipByModel, agentIdsRes] = await Promise.all([
+                supabase.from('persons')
+                    .select('id, full_name, email, is_portal_active')
+                    .ilike('full_name', like)
+                    .limit(5),
+                supabase.from('persons')
+                    .select('id, full_name, email, is_portal_active')
+                    .ilike('email', like)
+                    .limit(5),
+                supabase.from('equipments')
+                    .select('id, serial_number, terminal_type, status, current_location')
+                    .ilike('serial_number', like)
+                    .limit(5),
+                supabase.from('equipments')
+                    .select('id, serial_number, terminal_type, status, current_location')
+                    .ilike('terminal_type', like)
+                    .limit(5),
+                supabase.from('agent_identifiers')
+                    .select('id_string, agent_id')
+                    .ilike('id_string', like)
+                    .limit(5),
+            ]);
 
-        // Resolve agent IDs → partner name via agents → persons join
-        let agentIdResults = [];
-        const rawAgentIds = (allResults[eEnd]?.data) || [];
-        if (rawAgentIds.length) {
-            const agentUuids = rawAgentIds.map(a => a.agent_id).filter(Boolean);
-            const { data: agents } = await supabase
-                .from('agents').select('id, parent_agent_id').in('id', agentUuids);
+            partners = dedup(
+                [...(partnersByName.data || []), ...(partnersByEmail.data || [])],
+                'id'
+            ).slice(0, 5);
 
-            const personUuids = (agents || []).map(a => a.parent_agent_id).filter(Boolean);
-            const { data: persons } = personUuids.length
-                ? await supabase.from('persons').select('id, full_name, email').in('id', personUuids)
-                : { data: [] };
+            equipment = dedup(
+                [...(equipBySerial.data || []), ...(equipByModel.data || [])],
+                'id'
+            ).slice(0, 5);
 
-            const agentMap  = Object.fromEntries((agents  || []).map(a => [a.id, a]));
-            const personMap = Object.fromEntries((persons || []).map(p => [p.id, p]));
+            const rawAgentIds = agentIdsRes.data || [];
+            if (rawAgentIds.length) {
+                const agentUuids = rawAgentIds.map(a => a.agent_id).filter(Boolean);
+                const { data: agents } = await supabase
+                    .from('agents').select('id, parent_agent_id').in('id', agentUuids);
 
-            agentIdResults = rawAgentIds.map(ai => {
-                const agent  = agentMap[ai.agent_id];
-                const person = agent ? personMap[agent.parent_agent_id] : null;
-                return { id_string: ai.id_string, partner_name: person?.full_name || null, partner_email: person?.email || null };
-            });
+                const personUuids = (agents || []).map(a => a.parent_agent_id).filter(Boolean);
+                const { data: persons } = personUuids.length
+                    ? await supabase.from('persons').select('id, full_name, email').in('id', personUuids)
+                    : { data: [] };
+
+                const agentMap  = Object.fromEntries((agents  || []).map(a => [a.id, a]));
+                const personMap = Object.fromEntries((persons || []).map(p => [p.id, p]));
+
+                agentIdResults = rawAgentIds.map(ai => {
+                    const agent  = agentMap[ai.agent_id];
+                    const person = agent ? personMap[agent.parent_agent_id] : null;
+                    return { id_string: ai.id_string, partner_name: person?.full_name || null, partner_email: person?.email || null };
+                });
+            }
         }
 
         return res.status(200).json({

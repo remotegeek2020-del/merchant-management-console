@@ -1253,12 +1253,13 @@ window.saveMerchant = async (uuid) => {
     
     window.onload = () => {
         Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
-        const urlQ = new URLSearchParams(window.location.search).get('q');
+        const params = new URLSearchParams(window.location.search);
+        const urlQ = params.get('q');
+        const urlFilterBy = params.get('filterBy');
         if (urlQ) {
             document.getElementById('searchInput').value = urlQ;
-            // Pick a reasonable default filter; user can adjust
             const filterEl = document.getElementById('filterBy');
-            if (filterEl && filterEl.value === '') filterEl.value = 'dba_name';
+            if (filterEl && urlFilterBy) filterEl.value = urlFilterBy;
         }
         fetchMerchants().then(() => { Swal.close(); });
     };

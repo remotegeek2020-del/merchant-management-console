@@ -493,12 +493,13 @@
         if (merchants.length) {
             html += '<div class="gsr-section-label">Merchants</div>';
             html += merchants.map(m => {
-                const sub = [m.merchant_id, m.company_name, m.agent_id ? `Agent ${m.agent_id}` : ''].filter(Boolean).join(' · ');
+                const sub = [m.merchant_id, m.agent_id ? `Agent ${m.agent_id}` : ''].filter(Boolean).join(' · ');
                 const col = statusColor(m.account_status);
-                return `<a class="gsr-item" href="merchants-dashboard.html?q=${qParam}">
+                const url = `merchants-dashboard.html?q=${encodeURIComponent(m._matchedBy === 'merchant_id' ? m.merchant_id : m.dba_name)}&filterBy=${encodeURIComponent(m._matchedBy || 'dba_name')}`;
+                return `<a class="gsr-item" href="${url}">
                     <span class="material-icons gsr-icon" style="color:#0ea5e9;">storefront</span>
                     <div class="gsr-main">
-                        <div class="gsr-title">${esc(m.dba_name || m.company_name)}</div>
+                        <div class="gsr-title">${esc(m.dba_name)}</div>
                         <div class="gsr-sub">${esc(sub)}</div>
                     </div>
                     ${m.account_status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(m.account_status)}</span>` : ''}
