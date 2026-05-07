@@ -428,15 +428,16 @@ async function confirmAIImport(result) {
         return;
     }
 
-    // 2. CREATE A SEARCH SET: Normalize strings to prevent "invisible" mismatches
-    const existingSerials = new Set((checkResult.serials || []).map(sn => sn.toString().toUpperCase().trim()));
+    // 2. CREATE A SEARCH SET: Strip all non-alphanumeric so dashes/dots/spaces never cause mismatches
+    const normSerial = sn => String(sn || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    const existingSerials = new Set((checkResult.serials || []).map(normSerial));
 
     const newItems = [];
     const duplicates = [];
 
     // 3. CROSS-REFERENCE: Compare AI extraction vs. the global list
     extractedData.forEach(item => {
-        const cleanSN = item.serial_number.toString().toUpperCase().trim();
+        const cleanSN = normSerial(item.serial_number);
         if (existingSerials.has(cleanSN)) {
             duplicates.push(item);
         } else {

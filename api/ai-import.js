@@ -86,17 +86,22 @@ const prompt = `
         // --- LAYER 1: STRICT JSON PARSE ---
         try {
             const parsed = JSON.parse(rawText);
-            const rawArray = parsed.items || (Array.isArray(parsed) ? parsed : []);
+            // Support both "data" (current prompt schema) and legacy "items"
+            const rawArray = parsed.data || parsed.items || (Array.isArray(parsed) ? parsed : []);
             rawArray.forEach(item => {
-                const sn = String(item.sn || item.serial_number || "").replace(/[.,\s]/g, "").toUpperCase();
-                if (sn.length >= 8 && !seenSerials.has(sn)) {
-                    items.push({ 
-                        serial_number: sn, 
-                        terminal_type: item.type || item.terminal_type || "Terminal" 
+                const sn = String(item.sn || item.serial_number || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+                if (sn.length >= 6 && !seenSerials.has(sn)) {
+                    items.push({
+                        serial_number: sn,
+                        terminal_type: item.type || item.terminal_type || item.model || "Terminal"
                     });
                     seenSerials.add(sn);
                 }
             });
+            // Also capture invoice_date from parsed JSON
+            if (parsed.invoice_date) {
+                items._invoiceDate = parsed.invoice_date;
+            }
         } catch (e) {
             console.warn("JSON Parse failed, attempting raw text recovery...");
         }
@@ -129,7 +134,10 @@ const prompt = `
             return sendJsonError(422, "No serials identified. AI Response snippet: " + debugSnippet);
         }
 
-        return res.status(200).json({ success: true, data: items });
+        const invoiceDate = items._invoiceDate || null;
+        delete items._invoiceDate;
+
+        return res.status(200).json({ success: true, data: items, invoice_date: invoiceDate });
 
     } catch (err) {
         console.error("AI Import Exception:", err);
