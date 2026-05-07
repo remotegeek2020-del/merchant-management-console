@@ -5,6 +5,7 @@
     "api/partners.js": { "maxDuration": 30 },
     "api/reports.js": { "maxDuration": 30 },
     "api/merchants.js": { "maxDuration": 30 },
+    "api/ai-import.js": { "maxDuration": 60 },
     "api/security-check.js": { "maxDuration": 60 },
     "api/cron-security-check.js": { "maxDuration": 60 }
   },

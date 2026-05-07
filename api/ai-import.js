@@ -91,13 +91,13 @@ CRITICAL RULES:
 Required output format:
 {"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "EXACT_SERIAL", "terminal_type": "Proper Model Name"}]}`;
 
-        // Watchdog: 8.8 seconds before Vercel's 10s kill
+        // Watchdog: 55s (maxDuration is 60s in vercel.json)
         const aiRequest = model.generateContent([
             { text: prompt },
             { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
         ]);
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 8800)
+            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 55000)
         );
 
         let rawText = "";
