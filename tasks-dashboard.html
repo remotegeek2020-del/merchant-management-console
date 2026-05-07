@@ -117,7 +117,9 @@
 
 <script>
 const myId = localStorage.getItem('pp_userid');
-const myName = localStorage.getItem('pp_user_first_name') || 'Me';
+const _fn = localStorage.getItem('pp_user_first_name') || '';
+const _ln = localStorage.getItem('pp_user_last_name')  || '';
+const myName = [_fn, _ln].filter(Boolean).join(' ') || localStorage.getItem('pp_user_email') || 'Staff';
 const myRole = (localStorage.getItem('pp_role') || '').toLowerCase();
 const isSuperAdmin = myRole.includes('super');
 const isAdmin = myRole.includes('admin') || isSuperAdmin;
@@ -130,7 +132,7 @@ let staffList = [];
 let currentTasks = [];
 
 function api(body) {
-    return fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, userid: myId }) }).then(r=>r.json());
+    return fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, userid: myId, staff_name: myName }) }).then(r=>r.json());
 }
 
 async function init() {
