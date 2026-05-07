@@ -4,8 +4,16 @@
   "functions": {
     "api/partners.js": { "maxDuration": 30 },
     "api/reports.js": { "maxDuration": 30 },
-    "api/merchants.js": { "maxDuration": 30 }
+    "api/merchants.js": { "maxDuration": 30 },
+    "api/security-check.js": { "maxDuration": 60 },
+    "api/cron-security-check.js": { "maxDuration": 60 }
   },
+  "crons": [
+    {
+      "path": "/api/cron-security-check",
+      "schedule": "0 8 * * *"
+    }
+  ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
     { "src": "/partner/dashboard", "dest": "/partner/dashboard.html" },

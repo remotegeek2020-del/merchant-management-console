@@ -53,8 +53,12 @@ export default async function handler(req, res) {
                 merchants += parseInt(s.merchant_count || 0) + parseInt(s.pending_count || 0);
             });
 
-            // Open RMAs for this partner
-            const { count: openRmas } = await supabase.from('returns').select('*', { count: 'exact', head: true }).in('merchants.agent_id', idStrings).eq('status', 'Open');
+            // Open RMAs for this partner (two-step: get merchant IDs first, then filter returns)
+            const { data: partnerMerchants } = await supabase.from('merchants').select('id').in('agent_id', idStrings);
+            const merchantIds = (partnerMerchants || []).map(m => m.id);
+            const { count: openRmas } = merchantIds.length
+                ? await supabase.from('returns').select('*', { count: 'exact', head: true }).in('merchant_id', merchantIds).eq('status', 'Open')
+                : { count: 0 };
 
             return res.status(200).json({ success: true, data: { merchants, approved, pending, closed, mtd, vol30, vol90, open_rmas: openRmas || 0, identifiers } });
         }
