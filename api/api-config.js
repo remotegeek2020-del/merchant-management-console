@@ -43,10 +43,23 @@ export async function getConfigValue(key) {
     try { return decrypt(data.encrypted_value, data.iv, data.auth_tag); } catch { return null; }
 }
 
+async function verifySuperAdmin(supabase, userid) {
+    if (!userid) return false;
+    const { data } = await supabase
+        .from('app_users')
+        .select('role, is_active')
+        .eq('userid', userid)
+        .single();
+    return data?.is_active === true && data?.role === 'super_admin';
+}
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action } = req.body;
+    const { action, userid } = req.body;
+
+    const authorized = await verifySuperAdmin(supabase, userid);
+    if (!authorized) return res.status(403).json({ success: false, message: 'Access denied.' });
 
     try {
         // List config keys with masked values and timestamps — no plaintext ever sent to client
