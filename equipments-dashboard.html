@@ -784,12 +784,6 @@ async function processFinalImport(itemsToCreate) {
                 const msg = result.message || "";
                 if (msg.includes('unique')) {
                     Swal.fire('Duplicate', 'This Serial Number already exists.', 'warning');
-                    if (!selectedId) {
-    recordActivity('Inventory Added', `Serial ${payload.serial_number} created.`);
-} else {
-    recordActivity('Inventory Updated', `Serial ${payload.serial_number} modified.`);
-}
-                    
                 } else {
                     Swal.fire('Error', result.message, 'error');
                 }
