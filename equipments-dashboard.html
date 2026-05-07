@@ -1112,6 +1112,6 @@ async function fetchCombinedLogs() {
         <div id="agentStatus" style="font-size:11px; text-align:center; color:#94a3b8;">Ready for file...</div>
     </div>
 </div>
-<script>localStorage.setItem('pp_last_seen_inventory', new Date().toISOString());</script>
+<script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'inventory'})});})();</script>
 </body>
 </html>

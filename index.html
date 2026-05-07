@@ -240,17 +240,6 @@
 
 <script>
 (function() {
-    const SECTIONS = ['partners','merchants','inventory','deployments','returns','tickets','tasks','ideas'];
-
-    function getLastSeen() {
-        const out = {};
-        SECTIONS.forEach(s => {
-            const v = localStorage.getItem('pp_last_seen_' + s);
-            out[s] = v || null;
-        });
-        return out;
-    }
-
     function showBadge(id, count) {
         const el = document.getElementById('badge-' + id);
         if (!el) return;
@@ -269,7 +258,7 @@
             const r = await fetch('/api/notifications', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ last_seen: getLastSeen(), userid })
+                body: JSON.stringify({ action: 'get_counts', userid })
             });
             const data = await r.json();
             if (!data.success) return;
@@ -282,17 +271,16 @@
             showBadge('tickets',     c.tickets);
             showBadge('tasks',       c.tasks);
             showBadge('ideas',       c.ideas);
-        } catch (e) { /* silent fail */ }
+        } catch (e) { /* silent */ }
     }
 
-    // Run after page is interactive
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', loadNotifBadges);
     } else {
         loadNotifBadges();
     }
-    // Refresh every 2 minutes while on the page
-    setInterval(loadNotifBadges, 120000);
+    // Poll every 30 seconds for real-time feel
+    setInterval(loadNotifBadges, 30000);
 })();
 </script>
 </body>

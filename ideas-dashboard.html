@@ -280,6 +280,6 @@ function escHtml(str) {
 
 loadIdeas();
 </script>
-<script>localStorage.setItem('pp_last_seen_ideas', new Date().toISOString());</script>
+<script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'ideas'})});})();</script>
 </body>
 </html>

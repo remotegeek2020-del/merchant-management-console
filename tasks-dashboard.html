@@ -411,6 +411,6 @@ window.selectMerchant = function(id, name, mid) {
 
 window.onload = init;
 </script>
-<script>localStorage.setItem('pp_last_seen_tasks', new Date().toISOString());</script>
+<script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'tasks'})});})();</script>
 </body>
 </html>

@@ -1255,6 +1255,6 @@ window.saveMerchant = async (uuid) => {
         fetchMerchants().then(() => { Swal.close(); });
     };
 </script>
-<script>localStorage.setItem('pp_last_seen_merchants', new Date().toISOString());</script>
+<script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'merchants'})});})();</script>
 </body>
 </html>
