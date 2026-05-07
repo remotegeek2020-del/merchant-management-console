@@ -218,6 +218,10 @@ async function init() {
             currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
         }
     }
+    // Fallback to stored display name if staff list lookup didn't resolve
+    if (!currentStaffName) {
+        currentStaffName = localStorage.getItem('pp_name') || localStorage.getItem('pp_userid') || 'Staff';
+    }
     currentUserRole = localStorage.getItem('pp_role') || '';
     loadTickets();
 }
