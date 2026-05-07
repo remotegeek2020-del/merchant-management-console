@@ -218,6 +218,7 @@ if (name) {
     document.getElementById('avatarInitial').textContent = name.charAt(0).toUpperCase();
 }
 
+const escapeHtml = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
 const typeIcon = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
 const typeClass = t => t === 'deployment_request' ? 'deployment' : t === 'rma_request' ? 'rma' : 'general';
 const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns / RMA' : 'General Support';
@@ -270,7 +271,7 @@ function renderTickets() {
             </div>
             <div class="ticket-body">
                 <div class="ticket-num">${t.ticket_number} · ${typeLabel(t.type)}</div>
-                <div class="ticket-subject">${t.subject}</div>
+                <div class="ticket-subject">${escapeHtml(t.subject)}</div>
                 <div class="ticket-meta">
                     ${t.merchants?.dba_name ? `<span>${t.merchants.dba_name}</span> · ` : ''}
                     Opened ${timeAgo(t.created_at)} · Updated ${timeAgo(t.updated_at)}
@@ -388,15 +389,15 @@ async function viewTicket(ticketId) {
         ? `<div style="text-align:center;font-size:12px;color:var(--muted);padding:16px 0;">No messages yet.</div>`
         : comments.map(c => {
             if (c.author_type === 'system') {
-                return `<div class="system-event">${c.change_summary} <span style="opacity:0.65;"> · ${timeAgo(c.created_at)}</span></div>`;
+                return `<div class="system-event">${escapeHtml(c.change_summary)} <span style="opacity:0.65;"> · ${timeAgo(c.created_at)}</span></div>`;
             }
             const isPartner = c.author_type === 'partner';
             const initials = (c.author_name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
             return `<div class="c-entry ${isPartner ? 'partner' : 'staff'}">
                 <div class="c-avatar">${initials}</div>
                 <div>
-                    <div class="c-bubble">${c.body}</div>
-                    <div class="c-meta">${c.author_name} · ${timeAgo(c.created_at)}</div>
+                    <div class="c-bubble">${escapeHtml(c.body)}</div>
+                    <div class="c-meta">${escapeHtml(c.author_name)} · ${timeAgo(c.created_at)}</div>
                 </div>
             </div>`;
         }).join('');
@@ -411,7 +412,7 @@ async function viewTicket(ticketId) {
                 <span style="background:#f1f5f9;color:#64748b;padding:4px 12px;border-radius:99px;font-size:11px;font-weight:700;text-transform:capitalize;">${t.priority} priority</span>
             </div>
             ${t.merchants?.dba_name ? `<div style="font-size:12px;color:var(--muted);margin-bottom:8px;"><span class="material-icons" style="font-size:14px;vertical-align:middle;">storefront</span> ${t.merchants.dba_name} · <span style="font-family:'DM Mono',monospace;">${t.merchants.merchant_id}</span></div>` : ''}
-            ${t.description ? `<div style="background:#f8fafc;border-radius:8px;padding:12px 14px;font-size:13px;color:#475569;line-height:1.6;">${t.description}</div>` : ''}
+            ${t.description ? `<div style="background:#f8fafc;border-radius:8px;padding:12px 14px;font-size:13px;color:#475569;line-height:1.6;">${escapeHtml(t.description)}</div>` : ''}
             <div style="font-size:11px;color:var(--muted);margin-top:10px;">
                 Opened ${timeAgo(t.created_at)}
                 ${t.assigned_to ? ` · Assigned to <strong>${t.assigned_to}</strong>` : ''}

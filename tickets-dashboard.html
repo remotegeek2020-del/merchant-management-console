@@ -207,6 +207,7 @@ const timeAgo = d => {
     if (s < 86400) return Math.floor(s/3600) + 'h ago';
     return Math.floor(s/86400) + 'd ago';
 };
+const escapeHtml = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
 const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns/RMA' : 'General';
 const typeIconClass = t => t === 'deployment_request' ? 'icon-deployment' : t === 'rma_request' ? 'icon-rma' : 'icon-general';
 const typeIconName = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
@@ -300,7 +301,7 @@ function renderTickets() {
                 ${t.unread_count > 0 ? `<div class="unread-dot">${t.unread_count > 9 ? '9+' : t.unread_count}</div>` : ''}
             </div>
             <div style="min-width:0;">
-                <div style="font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.subject}</div>
+                <div style="font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(t.subject)}</div>
                 <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
                     <span style="font-family:'DM Mono',monospace;">${t.ticket_number}</span>
                     ${t.persons?.full_name ? ` · ${t.persons.full_name}` : ''}
@@ -450,7 +451,7 @@ async function openTicket(ticketId) {
         ? `<div style="text-align:center;padding:20px;font-size:12px;color:var(--text-muted);">No activity yet.</div>`
         : comments.map(c => {
             if (c.author_type === 'system') {
-                return `<div class="system-event">${c.change_summary} <span style="opacity:0.7;">· ${c.author_name} · ${timeAgo(c.created_at)}</span></div>`;
+                return `<div class="system-event">${escapeHtml(c.change_summary)} <span style="opacity:0.7;">· ${escapeHtml(c.author_name)} · ${timeAgo(c.created_at)}</span></div>`;
             }
             const isStaff = c.author_type === 'staff';
             const initials = (c.author_name || '?').split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
@@ -458,10 +459,10 @@ async function openTicket(ticketId) {
                 <div class="comment-avatar">${initials}</div>
                 <div>
                     <div class="comment-bubble">
-                        ${c.body}
+                        ${escapeHtml(c.body)}
                         ${c.is_internal ? `<span class="internal-badge">Internal</span>` : ''}
                     </div>
-                    <div class="comment-meta">${c.author_name} · ${timeAgo(c.created_at)}</div>
+                    <div class="comment-meta">${escapeHtml(c.author_name)} · ${timeAgo(c.created_at)}</div>
                 </div>
             </div>`;
         }).join('');
@@ -506,7 +507,7 @@ async function openTicket(ticketId) {
         ${t.description ? `
         <div class="tm-section">
             <div class="tm-label">Description</div>
-            <div style="font-size:13px; color:var(--text-primary); line-height:1.6; white-space:pre-wrap;">${t.description}</div>
+            <div style="font-size:13px; color:var(--text-primary); line-height:1.6; white-space:pre-wrap;">${escapeHtml(t.description)}</div>
         </div>` : ''}
         ${linkedHtml ? `<div class="tm-section"><div class="tm-label">Linked Records</div>${linkedHtml}</div>` : ''}
         <div class="tm-section">
@@ -558,7 +559,7 @@ async function openTicket(ticketId) {
             </div>
             <div class="form-group">
                 <label class="form-label">Pinned Staff Notes (internal)</label>
-                <textarea id="upd-notes" class="form-input" style="min-height:60px;" ${isLocked ? 'disabled' : ''}>${t.staff_notes || ''}</textarea>
+                <textarea id="upd-notes" class="form-input" style="min-height:60px;" ${isLocked ? 'disabled' : ''}>${escapeHtml(t.staff_notes || '')}</textarea>
             </div>
             <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:4px;">
                 <button onclick="closeModal()" style="background:none; border:1px solid var(--border); border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Cancel</button>

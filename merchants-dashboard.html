@@ -405,8 +405,7 @@ async function executeFinalUpsert(payload) {
 
             const contentType = res.headers.get('content-type');
             if (!contentType || !contentType.includes('application/json')) {
-                const text = await res.text();
-                totalErrors.push(`Batch ${i + 1}: ${text.substring(0, 120)}`);
+                totalErrors.push(`Batch ${i + 1}: Server error — please try again or contact support if this persists.`);
                 continue;
             }
 
@@ -414,7 +413,7 @@ async function executeFinalUpsert(payload) {
             if (result.success) {
                 totalProcessed += result.count;
             } else {
-                totalErrors.push(`Batch ${i + 1}: ${result.message}`);
+                totalErrors.push(`Batch ${i + 1}: Could not sync records — check data format and try again.`);
             }
         }
 
@@ -445,7 +444,7 @@ async function executeFinalUpsert(payload) {
 
     } catch (err) {
         console.error("Sync Error:", err);
-        Swal.fire('Sync Failed', err.message, 'error');
+        Swal.fire('Sync Failed', 'An unexpected error occurred. Please try again.', 'error');
     }
 }
 
