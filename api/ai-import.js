@@ -8,25 +8,59 @@ export const config = {
     },
 };
 
-// Exponential backoff helper for free-tier stability
-const wait = (ms) => new Promise(res => setTimeout(res, ms));
+// Serial patterns used in both splitting and Layer 2 harvesting
+const SERIAL_PATTERNS = [
+    { regex: /P125\d{10,13}/g,       type: "Dejavoo P1"  },
+    { regex: /P325\d{10,13}/g,       type: "Dejavoo P3"  },
+    { regex: /P524\d{10,13}/g,       type: "Dejavoo P5"  },
+    { regex: /P17[B86]\d{10,13}/g,   type: "Dejavoo P17" },
+    { regex: /18125\d{7}/g,          type: "Valor VL550" },
+    { regex: /X5C8[A-Z0-9]{8,12}/g,  type: "Valor VP800" },
+    { regex: /18126\d{7}/g,          type: "Valor VL100" },
+    { regex: /18127\d{7}/g,          type: "Valor VL110" },
+];
 
-async function callGeminiWithRetry(model, content, retries = 2) {
-    for (let i = 0; i < retries; i++) {
-        try {
-            const result = await model.generateContent(content);
-            return result;
-        } catch (err) {
-            if (i === retries - 1) throw err;
-            await wait(1000); // 1s wait before retry
+// Invoice SKU codes → proper product names
+const MODEL_NAME_MAP = {
+    'KOZ-P1':  'Dejavoo P1',  'KOZP1':  'Dejavoo P1',
+    'KOZ-P3':  'Dejavoo P3',  'KOZP3':  'Dejavoo P3',
+    'KOZ-P5':  'Dejavoo P5',  'KOZP5':  'Dejavoo P5',
+    'KOZ-P17': 'Dejavoo P17', 'KOZP17': 'Dejavoo P17',
+    'KOZ-Z11': 'Dejavoo Z11', 'KOZZ11': 'Dejavoo Z11',
+    'KOZ-Z9':  'Dejavoo Z9',  'KOZZ9':  'Dejavoo Z9',
+    'VL550':   'Valor VL550',
+    'VL100':   'Valor VL100',
+    'VL110':   'Valor VL110',
+    'VP800':   'Valor VP800',
+};
+
+function normalizeModelName(raw) {
+    if (!raw) return 'Terminal';
+    const key = raw.toUpperCase().replace(/\s+/g, '');
+    return MODEL_NAME_MAP[key] || raw;
+}
+
+// If a "serial_number" is actually multiple serials concatenated, split them.
+// Returns an array of individual { serial_number, terminal_type } objects.
+function expandItem(item) {
+    const sn = item.serial_number;
+    for (const p of SERIAL_PATTERNS) {
+        const clone = new RegExp(p.regex.source, p.regex.flags);
+        const matches = sn.match(clone);
+        if (matches && matches.length > 1) {
+            // Concatenated serials — split into individual items
+            return matches.map(m => ({
+                serial_number: m,
+                terminal_type: item.terminal_type || p.type,
+            }));
         }
     }
+    return [item];
 }
 
 export default async function handler(req, res) {
-    const sendJsonError = (status, message, details = null) => {
-        return res.status(status).json({ success: false, message, details });
-    };
+    const sendJsonError = (status, message, details = null) =>
+        res.status(status).json({ success: false, message, details });
 
     if (req.method !== 'POST') return sendJsonError(405, 'Method Not Allowed');
     if (!process.env.GEMINI_API_KEY) return sendJsonError(500, 'API Key Missing');
@@ -36,92 +70,83 @@ export default async function handler(req, res) {
         if (!fileBase64) return sendJsonError(400, 'No file data received.');
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        
-      // Replace the model configuration (approx. lines 44-51)
-// Locate and replace approx. lines 44-55
-// 1. Update to Gemini 3 Flash (approx. line 45)
-// Inside api/ai-import.js
-// FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
-// FIX: Use the specific Preview/Experimental ID recognized by the v1beta API
-// Replace the old model line with this verified ID
-const model = genAI.getGenerativeModel({ 
-    model: "gemini-3.1-flash-lite-preview", // This is the stable ID for the latest Flash technology
-    generationConfig: {
-        temperature: 0,
-        responseMimeType: "application/json",
-    }
-});
+        const model = genAI.getGenerativeModel({
+            model: "gemini-2.0-flash",
+            generationConfig: {
+                temperature: 0,
+                responseMimeType: "application/json",
+            }
+        });
 
-const prompt = `
-    ACT AS A FAST OCR.
-    Find Invoice Date (YYYY-MM-DD).
-    Extract Serial Number and Model.
-    Strict JSON only:
-    {"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "SN", "terminal_type": "MODEL"}]}
-`;
-        // Watchdog: 8.8 seconds to return before Vercel's 10s kill switch
-     const aiRequest = model.generateContent([
-    { text: prompt },
-    { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
-]);
-        const timeoutPromise = new Promise((_, reject) => 
+        const prompt = `You are an OCR tool reading a hardware invoice.
+
+TASK: Extract every serial number found in this document.
+
+CRITICAL RULES:
+1. Create ONE separate object for EACH individual serial number — never combine multiple serials into one entry.
+2. If a line item has a quantity of 5, there should be 5 separate entries with 5 different serial numbers.
+3. Map invoice SKU codes to proper names: KOZ-P1=Dejavoo P1, KOZ-P3=Dejavoo P3, KOZ-P5=Dejavoo P5, KOZ-P17=Dejavoo P17, KOZ-Z11=Dejavoo Z11, KOZ-Z9=Dejavoo Z9.
+4. Find the invoice date in YYYY-MM-DD format.
+5. Return ONLY valid JSON — no markdown, no explanation.
+
+Required output format:
+{"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "EXACT_SERIAL", "terminal_type": "Proper Model Name"}]}`;
+
+        // Watchdog: 8.8 seconds before Vercel's 10s kill
+        const aiRequest = model.generateContent([
+            { text: prompt },
+            { inlineData: { data: fileBase64, mimeType: "application/pdf" } }
+        ]);
+        const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 8800)
         );
 
         let rawText = "";
         try {
             const result = await Promise.race([aiRequest, timeoutPromise]);
-            const response = await result.response;
-            rawText = response.text().trim();
+            rawText = result.response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
-                return sendJsonError(504, "Connection timed out. For invoices with 100+ units, please upload one page at a time or use a JPG image.");
+                return sendJsonError(504, "Connection timed out. For large invoices, upload one page at a time or use a JPG image.");
             }
             throw err;
         }
 
         const items = [];
         const seenSerials = new Set();
+        let invoiceDate = null;
 
-        // --- LAYER 1: STRICT JSON PARSE ---
+        // --- LAYER 1: JSON PARSE ---
         try {
             const parsed = JSON.parse(rawText);
-            // Support both "data" (current prompt schema) and legacy "items"
             const rawArray = parsed.data || parsed.items || (Array.isArray(parsed) ? parsed : []);
+            if (parsed.invoice_date) invoiceDate = parsed.invoice_date;
+
             rawArray.forEach(item => {
-                const sn = String(item.sn || item.serial_number || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
-                if (sn.length >= 6 && !seenSerials.has(sn)) {
-                    items.push({
-                        serial_number: sn,
-                        terminal_type: item.type || item.terminal_type || item.model || "Terminal"
-                    });
-                    seenSerials.add(sn);
-                }
+                const rawSN = String(item.serial_number || item.sn || "").replace(/[^A-Z0-9]/gi, "").toUpperCase();
+                if (rawSN.length < 6) return;
+
+                const modelName = normalizeModelName(item.terminal_type || item.type || item.model);
+                const expanded = expandItem({ serial_number: rawSN, terminal_type: modelName });
+
+                expanded.forEach(e => {
+                    if (!seenSerials.has(e.serial_number)) {
+                        items.push(e);
+                        seenSerials.add(e.serial_number);
+                    }
+                });
             });
-            // Also capture invoice_date from parsed JSON
-            if (parsed.invoice_date) {
-                items._invoiceDate = parsed.invoice_date;
-            }
         } catch (e) {
-            console.warn("JSON Parse failed, attempting raw text recovery...");
+            console.warn("Layer 1 JSON parse failed — falling through to regex harvester");
         }
 
-        // --- LAYER 2: SURVIVAL REGEX HARVESTER ---
-        // If the JSON failed or was truncated, we scan the raw text for matches
-        const patterns = [
-            { regex: /\b(18125\d{7})\b/g, type: "Valor VL550" },
-            { regex: /\b(X5C8[A-Z0-9]{8,12})\b/g, type: "Valor VP800" },
-            { regex: /\b(P125\d{10,13})\b/g, type: "Dejavoo P1" },
-            { regex: /\b(P325\d{10,13})\b/g, type: "Dejavoo P3" },
-            { regex: /\b(P524\d{10,13})\b/g, type: "Dejavoo P5" },
-            { regex: /\b(P17[B86]\d{10,13})\b/g, type: "Dejavoo P17" }
-        ];
-
+        // --- LAYER 2: REGEX HARVESTER (always runs to catch anything Layer 1 missed) ---
         const upperText = rawText.toUpperCase();
-        patterns.forEach(p => {
+        SERIAL_PATTERNS.forEach(p => {
+            const clone = new RegExp(p.regex.source, p.regex.flags);
             let match;
-            while ((match = p.regex.exec(upperText)) !== null) {
-                const sn = match[1];
+            while ((match = clone.exec(upperText)) !== null) {
+                const sn = match[0];
                 if (!seenSerials.has(sn)) {
                     items.push({ serial_number: sn, terminal_type: p.type });
                     seenSerials.add(sn);
@@ -130,12 +155,9 @@ const prompt = `
         });
 
         if (items.length === 0) {
-            const debugSnippet = rawText.length > 0 ? rawText.substring(0, 100) : "EMPTY";
-            return sendJsonError(422, "No serials identified. AI Response snippet: " + debugSnippet);
+            const snippet = rawText.substring(0, 150) || "EMPTY";
+            return sendJsonError(422, `No serial numbers identified. AI response: ${snippet}`);
         }
-
-        const invoiceDate = items._invoiceDate || null;
-        delete items._invoiceDate;
 
         return res.status(200).json({ success: true, data: items, invoice_date: invoiceDate });
 
