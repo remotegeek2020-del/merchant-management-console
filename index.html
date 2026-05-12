@@ -79,16 +79,14 @@
         pointer-events: none;
     }
     .global-search-results {
-        position: absolute;
-        top: calc(100% + 8px);
-        left: 0;
-        right: 0;
+        position: fixed;
         background: #1e293b;
         border: 1px solid #334155;
         border-radius: 14px;
         box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        z-index: 9999;
-        overflow: hidden;
+        z-index: 99999;
+        overflow-y: auto;
+        max-height: 65vh;
         display: none;
     }
     .gsr-section-label {
@@ -428,7 +426,16 @@
         if (items[focusIdx]) items[focusIdx].classList.add('focused');
     }
 
+    function positionPanel() {
+        const wrap = document.getElementById('global-search-wrap');
+        const rect = wrap.getBoundingClientRect();
+        panel.style.top   = (rect.bottom + 8) + 'px';
+        panel.style.left  = rect.left + 'px';
+        panel.style.width = rect.width + 'px';
+    }
+
     function showLoading() {
+        positionPanel();
         panel.style.display = 'block';
         panel.innerHTML = '<div class="gsr-loading">Searching…</div>';
         focusIdx = -1;
@@ -440,6 +447,8 @@
         focusIdx = -1;
         lastQuery = '';
     }
+
+    window.addEventListener('resize', () => { if (panel.style.display === 'block') positionPanel(); });
 
     function esc(s) {
         if (!s) return '';
@@ -596,6 +605,7 @@
             </a>`;
         });
 
+        positionPanel();
         panel.style.display = 'block';
         panel.innerHTML = html;
         focusIdx = -1;
