@@ -53,6 +53,7 @@
             <option value="tasks">✅ Tasks</option>
             <option value="users">👥 Users</option>
             <option value="partners">🤝 Partners</option>
+            <option value="tickets">🎫 Tickets</option>
             <option value="general">⚙️ General</option>
         </select>
         <select class="pp-select" id="sevFilter" onchange="resetLoad()">
@@ -164,7 +165,7 @@ async function loadLogs() {
             const statusClass = (log.status||'').toLowerCase().includes('fail') || (log.status||'').toLowerCase().includes('error') ? 'color:#ef4444;font-weight:700;' : 'color:#10b981;font-weight:700;';
             return `<tr>
                 <td style="font-size:11px;color:#64748b;white-space:nowrap;font-family:'DM Mono',monospace;">${ts}</td>
-                <td style="font-weight:600;font-size:12px;">${log.email||'System'}</td>
+                <td style="font-weight:600;font-size:12px;">${log.user_name||log.email||'System'}</td>
                 <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${log.action}">${log.action||'—'}</td>
                 <td><span class="cat-badge">${cat}</span></td>
                 <td><span class="sev-${sev}">${sev}</span></td>
@@ -200,7 +201,7 @@ async function exportCSV() {
     const res = await fetch('/api/logs', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(f) }).then(r=>r.json());
     const data = res.data || [];
     const headers = ['Timestamp','User','Action','Category','Severity','Status','IP Address'];
-    const rows = data.map(l => [new Date(l.created_at).toLocaleString(), l.email||'', `"${(l.action||'').replace(/"/g,'""')}"`, l.category||'', l.severity||'', l.status||'', l.ip_address||'']);
+    const rows = data.map(l => [new Date(l.created_at).toLocaleString(), l.user_name||l.email||'', `"${(l.action||'').replace(/"/g,'""')}"`, l.category||'', l.severity||'', l.status||'', l.ip_address||'']);
     const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
     a.download = `activity_logs_${new Date().toISOString().slice(0,10)}.csv`; a.click();

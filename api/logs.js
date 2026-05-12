@@ -4,6 +4,21 @@ export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+function inferCategory(action, provided) {
+    if (provided && provided !== 'general') return provided;
+    const a = (action || '').toLowerCase();
+    if (/login|logout|password|auth|sign.?in|2fa|token/.test(a))           return 'auth';
+    if (/merchant|mid|dba/.test(a))                                          return 'merchants';
+    if (/deploy/.test(a))                                                    return 'deployments';
+    if (/return/.test(a))                                                    return 'returns';
+    if (/inventory|equipment|serial|import|stock|unit/.test(a))             return 'inventory';
+    if (/task/.test(a))                                                      return 'tasks';
+    if (/ticket|support|case/.test(a))                                       return 'tickets';
+    if (/user|enroll|activat|deactivat|permission|role|invite/.test(a))     return 'users';
+    if (/partner|agent/.test(a))                                             return 'partners';
+    return provided || 'general';
+}
+
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
 
@@ -25,7 +40,29 @@ export default async function handler(req, res) {
 
         const { data, error, count } = await query;
         if (error) return res.status(500).json({ error: error.message });
-        return res.status(200).json({ success: true, data, count, page: parseInt(page), total_pages: Math.ceil((count||0) / parseInt(limit)) });
+
+        // Resolve email/userid → display name from app_users
+        let enriched = data || [];
+        if (enriched.length) {
+            const identifiers = [...new Set(enriched.map(l => l.email).filter(Boolean))];
+            const { data: users } = await supabase
+                .from('app_users')
+                .select('userid, email, first_name, last_name')
+                .or(identifiers.map(id => `email.eq.${id},userid.eq.${id}`).join(','));
+
+            const byEmail  = Object.fromEntries((users || []).map(u => [u.email,  u]));
+            const byUserid = Object.fromEntries((users || []).map(u => [u.userid, u]));
+
+            enriched = enriched.map(log => {
+                const u = byEmail[log.email] || byUserid[log.email];
+                return {
+                    ...log,
+                    user_name: u ? `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email : log.email
+                };
+            });
+        }
+
+        return res.status(200).json({ success: true, data: enriched, count, page: parseInt(page), total_pages: Math.ceil((count||0) / parseInt(limit)) });
     }
 
     // ── WRITE LOG ─────────────────────────────────────────
@@ -36,7 +73,7 @@ export default async function handler(req, res) {
             email: email || 'System',
             action,
             status: status || 'success',
-            category,
+            category: inferCategory(action, category),
             target_id: target_id || null,
             target_type: target_type || null,
             severity,

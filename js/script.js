@@ -129,7 +129,7 @@ async function authorizeUser(user) {
     // --- 1. ROLE LOGIC ---
     const roleStr = (user.role || "").toLowerCase().trim();
     const isSuperAdmin = roleStr === 'super_admin';
-    const isAdmin = roleStr === 'admin' || isSuperAdmin;
+    const isAdmin = roleStr === 'admin' || roleStr === 'operations admin' || isSuperAdmin;
 
     const elements = {
         loader: document.getElementById('initial-loader'),

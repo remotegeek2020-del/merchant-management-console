@@ -72,10 +72,24 @@
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
             <span id="userCount" style="font-size:12px;color:#94a3b8;font-weight:600;"></span>
-            <div class="pp-search" style="width:260px;">
+            <div class="pp-search" style="width:220px;">
                 <span class="material-icons pp-search-icon">search</span>
                 <input type="text" id="searchInput" placeholder="Search name, email, role..." oninput="filterUsers()">
             </div>
+            <select class="pp-select" id="roleFilter" onchange="filterUsers()" style="padding:7px 10px;font-size:12px;">
+                <option value="">All Roles</option>
+                <option value="super_admin">Super Admin</option>
+                <option value="Operations Admin">Operations Admin</option>
+                <option value="Standard User">Standard User</option>
+            </select>
+            <select class="pp-select" id="statusFilter" onchange="filterUsers()" style="padding:7px 10px;font-size:12px;">
+                <option value="">All Status</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+            </select>
+            <button class="pp-btn pp-btn-secondary" onclick="exportUsers()" title="Export CSV">
+                <span class="material-icons" style="font-size:16px;">download</span>
+            </button>
             <button class="pp-btn pp-btn-primary" onclick="addUser()">
                 <span class="material-icons" style="font-size:16px;">person_add</span> Enroll New User
             </button>
@@ -87,6 +101,7 @@
         <table class="pp-table" id="userTable">
             <thead>
                 <tr>
+                    <th style="width:36px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all" style="accent-color:#004990;cursor:pointer;"></th>
                     <th style="min-width:160px;">Name</th>
                     <th>Email</th>
                     <th style="width:100px;">Status</th>
@@ -101,13 +116,30 @@
                 </tr>
             </thead>
             <tbody id="userList">
-                <tr><td colspan="11"><div class="pp-empty">
+                <tr><td colspan="12"><div class="pp-empty">
                     <div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
                 </div></td></tr>
             </tbody>
         </table>
     </div>
 
+</div>
+
+<!-- BULK ACTION BAR -->
+<div class="save-bar" id="bulkBar" style="display:none;background:#1e293b;">
+    <div style="display:flex;align-items:center;gap:10px;">
+        <span class="material-icons">check_box</span>
+        <span style="font-weight:700;"><span id="bulkCount">0</span> user(s) selected</span>
+    </div>
+    <div style="display:flex;gap:10px;">
+        <button onclick="bulkActivate(true)" style="background:#10b981;border:none;color:white;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">
+            <span class="material-icons" style="font-size:14px;vertical-align:middle;">check_circle</span> Activate
+        </button>
+        <button onclick="bulkActivate(false)" style="background:#ef4444;border:none;color:white;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">
+            <span class="material-icons" style="font-size:14px;vertical-align:middle;">cancel</span> Deactivate
+        </button>
+        <button onclick="clearSelection()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:8px 14px;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">Cancel</button>
+    </div>
 </div>
 
 <!-- SAVE BAR -->
@@ -184,13 +216,36 @@ async function loadUsers() {
 
 function filterUsers() {
     const q = document.getElementById('searchInput').value.toLowerCase();
-    const filtered = q ? allUsers.filter(u =>
+    const roleF = document.getElementById('roleFilter').value;
+    const statusF = document.getElementById('statusFilter').value;
+    let filtered = allUsers;
+    if (q) filtered = filtered.filter(u =>
         (u.first_name||'').toLowerCase().includes(q) ||
         (u.last_name||'').toLowerCase().includes(q) ||
         (u.email||'').toLowerCase().includes(q) ||
         (u.role||'').toLowerCase().includes(q)
-    ) : allUsers;
+    );
+    if (roleF) filtered = filtered.filter(u => u.role === roleF);
+    if (statusF === 'active') filtered = filtered.filter(u => u.is_active);
+    if (statusF === 'inactive') filtered = filtered.filter(u => !u.is_active);
     renderUsers(filtered);
+}
+
+function exportUsers() {
+    const headers = ['First Name','Last Name','Email','Role','Status','Last Seen','Inventory','Deployments','Returns','Merchants','Partners','Jarvis'];
+    const rows = allUsers.map(u => [
+        u.first_name||'', u.last_name||'', u.email||'', u.role||'',
+        u.is_active ? 'Active' : 'Inactive',
+        u.last_seen ? new Date(u.last_seen).toLocaleString() : 'Never',
+        u.access_inventory?'Yes':'No', u.access_deployments?'Yes':'No',
+        u.access_returns?'Yes':'No', u.access_merchants?'Yes':'No',
+        u.access_partners?'Yes':'No', u.access_jarvis?'Yes':'No'
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `users_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
 }
 
 function renderUsers(data) {
@@ -198,7 +253,7 @@ function renderUsers(data) {
     const tbody = document.getElementById('userList');
 
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="11"><div class="pp-empty"><span class="material-icons">group_off</span><p>No users found</p></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="12"><div class="pp-empty"><span class="material-icons">group_off</span><p>No users found</p></div></td></tr>`;
         return;
     }
 
@@ -206,7 +261,7 @@ function renderUsers(data) {
         const isTargetSuper = user.role === 'super_admin';
         const cantEdit = isTargetSuper && !iAmSuper;
         const isActive = user.is_active;
-        const isPending = !isActive;
+        const isPending = !isActive && !user.last_seen;
         const lastSeen = user.last_seen ? new Date(user.last_seen).toLocaleDateString() : null;
         const roleClass = isTargetSuper ? 'role-super' : user.role?.toLowerCase().includes('admin') ? 'role-admin' : 'role-standard';
         const fullName = `${user.first_name||''} ${user.last_name||''}`.trim();
@@ -223,9 +278,10 @@ function renderUsers(data) {
             </td>`).join('');
 
         return `<tr>
+            <td><input type="checkbox" class="row-select" value="${user.userid}" onchange="onRowSelect()" ${cantEdit?'disabled':''} style="accent-color:#004990;cursor:pointer;"></td>
             <td>
                 <div style="font-weight:700;">${fullName || '—'}</div>
-                <div style="font-size:10px;color:#94a3b8;margin-top:1px;">${lastSeen ? `Last seen ${lastSeen}` : 'Never logged in'}</div>
+                <div style="font-size:10px;color:#94a3b8;margin-top:1px;">${lastSeen ? `Last seen ${lastSeen}` : isPending ? '<span style="color:#f59e0b;">⏳ Invite pending</span>' : 'Never logged in'}</div>
             </td>
             <td style="font-size:12px;color:#475569;">${user.email||'—'}</td>
             <td>
@@ -245,7 +301,7 @@ function renderUsers(data) {
                         ${cantEdit?'disabled':''}>
                         <span class="material-icons" style="font-size:13px;">edit</span>
                     </button>
-                    ${isPending ? `
+                    ${!isActive ? `
                     <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#fef9c3;border-color:#fbbf24;color:#92400e;"
                         onclick="resendInvite('${user.userid}','${(user.email||'').replace(/'/g,"\\'")}','${fullName.replace(/'/g,"\\'")}')"
                         title="Resend invite email">
@@ -445,6 +501,44 @@ async function deleteUser(uid, name) {
     } else {
         Swal.fire('Error', result.message, 'error');
     }
+}
+
+// ── BULK SELECTION ────────────────────────────────────────
+function onRowSelect() {
+    const checked = document.querySelectorAll('.row-select:checked');
+    const bulkBar = document.getElementById('bulkBar');
+    document.getElementById('bulkCount').innerText = checked.length;
+    bulkBar.style.display = checked.length > 0 ? 'flex' : 'none';
+}
+
+function toggleSelectAll(cb) {
+    document.querySelectorAll('.row-select:not(:disabled)').forEach(c => c.checked = cb.checked);
+    onRowSelect();
+}
+
+function clearSelection() {
+    document.querySelectorAll('.row-select').forEach(c => c.checked = false);
+    const sa = document.getElementById('selectAll'); if (sa) sa.checked = false;
+    document.getElementById('bulkBar').style.display = 'none';
+}
+
+async function bulkActivate(state) {
+    const ids = [...document.querySelectorAll('.row-select:checked')].map(c => c.value);
+    if (!ids.length) return;
+    const { isConfirmed } = await Swal.fire({
+        title: `${state ? 'Activate' : 'Deactivate'} ${ids.length} user(s)?`,
+        icon: 'question', showCancelButton: true,
+        confirmButtonColor: state ? '#10b981' : '#ef4444',
+        confirmButtonText: state ? 'Yes, Activate All' : 'Yes, Deactivate All'
+    });
+    if (!isConfirmed) return;
+    Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+    const payload = Object.fromEntries(ids.map(id => [id, { is_active: state }]));
+    await apiPost({ action: 'updateBatch', payload });
+    await logAction(`Bulk ${state ? 'activated' : 'deactivated'} ${ids.length} user(s)`);
+    clearSelection();
+    await loadUsers();
+    Swal.fire({ icon: 'success', title: 'Done!', timer: 1200, showConfirmButton: false });
 }
 
 window.onload = loadUsers;
