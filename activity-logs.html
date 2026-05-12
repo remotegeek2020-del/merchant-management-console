@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||(!r.includes('admin')&&!r.includes('super')))window.location.href='index.html?reason=denied';})();</script>
     <style>
@@ -161,7 +162,7 @@ async function loadLogs() {
         tbody.innerHTML = res.data.map(log => {
             const sev = log.severity || 'info';
             const cat = log.category || 'general';
-            const ts = new Date(log.created_at).toLocaleString();
+            const ts = fmtDateTime(log.created_at);
             const statusClass = (log.status||'').toLowerCase().includes('fail') || (log.status||'').toLowerCase().includes('error') ? 'color:#ef4444;font-weight:700;' : 'color:#10b981;font-weight:700;';
             return `<tr>
                 <td style="font-size:11px;color:#64748b;white-space:nowrap;font-family:'DM Mono',monospace;">${ts}</td>
@@ -201,7 +202,7 @@ async function exportCSV() {
     const res = await fetch('/api/logs', { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(f) }).then(r=>r.json());
     const data = res.data || [];
     const headers = ['Timestamp','User','Action','Category','Severity','Status','IP Address'];
-    const rows = data.map(l => [new Date(l.created_at).toLocaleString(), l.user_name||l.email||'', `"${(l.action||'').replace(/"/g,'""')}"`, l.category||'', l.severity||'', l.status||'', l.ip_address||'']);
+    const rows = data.map(l => [fmtDateTime(l.created_at), l.user_name||l.email||'', `"${(l.action||'').replace(/"/g,'""')}"`, l.category||'', l.severity||'', l.status||'', l.ip_address||'']);
     const csv = [headers.join(','), ...rows.map(r=>r.join(','))].join('\n');
     const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
     a.download = `activity_logs_${new Date().toISOString().slice(0,10)}.csv`; a.click();

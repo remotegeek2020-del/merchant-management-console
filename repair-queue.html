@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         (function() {
@@ -169,7 +170,7 @@ async function loadQueue() {
                         <td>${e.terminal_type || '—'}</td>
                         <td><span class="badge ${badgeClass}">${stage}</span></td>
                         <td style="color:var(--text-secondary); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${e.repair_notes || '—'}</td>
-                        <td style="color:var(--text-muted); font-size:12px;">${e.received_date ? new Date(e.received_date).toLocaleDateString() : '—'}</td>
+                        <td style="color:var(--text-muted); font-size:12px;">${e.received_date ? fmtDate(e.received_date) : '—'}</td>
                         <td style="text-align:right;">
                             <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
                                 <button class="action-btn" onclick="updateStage('${e.id}', '${e.serial_number}', '${stage}')">Update Stage</button>

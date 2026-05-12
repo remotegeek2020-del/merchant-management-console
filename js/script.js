@@ -126,6 +126,12 @@ async function authorizeUser(user) {
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
 
+    // Bootstrap timezone from business profile (non-blocking)
+    fetch('/api/business-profile?userid=' + (user.userid || ''))
+        .then(r => r.json())
+        .then(r => { if (r.success && r.data?.timezone) localStorage.setItem('pp_tz', r.data.timezone); })
+        .catch(() => {});
+
     // --- 1. ROLE LOGIC ---
     const roleStr = (user.role || "").toLowerCase().trim();
     const isSuperAdmin = roleStr === 'super_admin';

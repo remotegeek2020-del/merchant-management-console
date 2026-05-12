@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='index.html?reason=unauthorized';})();</script>
     <style>
@@ -203,7 +204,7 @@ function timeAgo(d) {
     if (diff < 60) return 'Just now';
     if (diff < 3600) return Math.floor(diff/60) + 'm ago';
     if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
-    return new Date(d).toLocaleDateString(undefined, { month:'short', day:'numeric' });
+    return fmtDate(d);
 }
 function escHtml(s) { var d=document.createElement('div');d.textContent=s;return d.innerHTML; }
 function openLightbox(url) {

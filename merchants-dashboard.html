@@ -6,6 +6,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="js/tz.js"></script>
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
@@ -890,13 +891,7 @@ async function addTask(merchantUuid) {
     // Look for n.created_at (the actual DB column name)
     const rawDate = n.created_at; 
     
-    const noteDate = rawDate ? new Date(rawDate).toLocaleString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    }) : 'Just now';
+    const noteDate = rawDate ? fmtDateTime(rawDate) : 'Just now';
 
     return `
     <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
@@ -963,7 +958,7 @@ async function addTask(merchantUuid) {
                                     <span class="material-icons" style="color:var(--pp-blue);">description</span>
                                     <div>
                                         <div style="font-weight:700; font-size:12px;">${f.file_name}</div>
-                                        <div style="font-size:10px; color:#64748b;">${new Date(f.created_at).toLocaleDateString()}</div>
+                                        <div style="font-size:10px; color:#64748b;">${fmtDate(f.created_at)}</div>
                                     </div>
                                 </div>
                                 <div style="display:flex; gap:10px;">
@@ -978,7 +973,7 @@ async function addTask(merchantUuid) {
 
                 <div id="content-audit" class="tab-content" style="display:none; text-align:left;">
                     <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
-                        ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${new Date(l.created_at).toLocaleString()}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
+                        ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${fmtDateTime(l.created_at)}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
                     </div>
                 </div>
             `,
@@ -1028,7 +1023,7 @@ async function addTask(merchantUuid) {
             <div class="lifecycle-item" style="border-left: 2px solid #e2e8f0; margin-left: 10px; padding-left: 20px; padding-bottom: 20px; position: relative;">
                 <div class="lifecycle-dot" style="position: absolute; left: -6px; top: 0; width: 10px; height: 10px; background: #004990; border-radius: 50%;"></div>
                 <div style="font-weight:800; color:#004990; font-size:11px; text-transform:uppercase;">${log.action}</div>
-                <div style="font-size:10px; color:#94a3b8; margin-bottom:5px;">${new Date(log.created_at).toLocaleString()}</div>
+                <div style="font-size:10px; color:#94a3b8; margin-bottom:5px;">${fmtDateTime(log.created_at)}</div>
                 <div style="font-size:12px; font-weight:600;">${log.equipments?.terminal_type || 'Device'} (${log.equipments?.serial_number || 'S/N Missing'})</div>
                 <div style="font-size:11px; color:#64748b; margin-top:2px;">
                     Movement: <b>${log.from_location}</b> → <b>${log.to_location}</b>
@@ -1070,7 +1065,7 @@ async function addTask(merchantUuid) {
                         <td style="font-weight:700; color:var(--pp-blue); font-size:12px;">${e.serial_number}</td>
                         <td style="font-size:12px;">${e.terminal_type}</td>
                         <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${e.status}</span></td>
-                        <td style="font-size:11px; color:#64748b;">${e.received_date ? new Date(e.received_date).toLocaleDateString() : '---'}</td>
+                        <td style="font-size:11px; color:#64748b;">${e.received_date ? fmtDate(e.received_date) : '---'}</td>
                     `;
                 });
             }

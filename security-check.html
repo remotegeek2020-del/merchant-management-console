@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         (function() {
@@ -177,7 +178,7 @@ async function loadLastReport() {
         const bar = document.getElementById('last-run-bar');
         bar.style.display = 'block';
         document.getElementById('last-run-text').textContent =
-            `Last run: ${new Date(r.report.run_at).toLocaleString()} · Triggered by: ${r.report.triggered_by}`;
+            `Last run: ${fmtDateTime(r.report.run_at)} · Triggered by: ${r.report.triggered_by}`;
     }
 }
 
@@ -242,7 +243,7 @@ function renderReport(report) {
             <span style="font-size:22px;">${overallIcon}</span>
             <div>
                 <div>${overallLabel}</div>
-                <div style="font-size:11px; font-weight:400; opacity:0.8; margin-top:3px;">Generated: ${new Date(report.timestamp).toLocaleString()}</div>
+                <div style="font-size:11px; font-weight:400; opacity:0.8; margin-top:3px;">Generated: ${fmtDateTime(report.timestamp)}</div>
             </div>
         </div>
         ${sectionsHtml}`;

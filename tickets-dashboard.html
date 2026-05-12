@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         (function() {
@@ -211,7 +212,7 @@ const escapeHtml = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns/RMA' : 'General';
 const typeIconClass = t => t === 'deployment_request' ? 'icon-deployment' : t === 'rma_request' ? 'icon-rma' : 'icon-general';
 const typeIconName = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
-const fmt = d => new Date(d).toLocaleString();
+const fmt = fmtDateTime;
 
 let allTickets = [];
 let statusFilter = 'all';
@@ -265,7 +266,7 @@ async function loadTickets() {
     if (result.success) {
         allTickets = result.data || [];
         renderTickets();
-        document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+        document.getElementById('last-updated').textContent = 'Last updated: ' + fmtTime(new Date());
     }
 }
 

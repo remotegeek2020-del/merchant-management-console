@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <script src="js/tz.js"></script>
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
         body { background: #f1f5f9; padding: 25px; font-family: 'DM Sans', sans-serif; }
@@ -680,7 +681,7 @@ async function drillDownTrend(agentId) {
                     mid: m.merchant_id,
                     dba: m.dba_name,
                     status: m.account_status,
-                    lastBatch: m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : 'Never',
+                    lastBatch: m.last_batch_date ? fmtDate(m.last_batch_date) : 'Never',
                     current: current,
                     baseline: avg90,
                     impact: current - avg90
@@ -1344,7 +1345,7 @@ async function submitOnboarding() {
             </div>
             <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
                 <span class="material-icons" style="font-size:16px;">calendar_today</span>
-                <span>Activated: <b>${p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString() : 'Not set'}</b></span>
+                <span>Activated: <b>${p.enrolled_at ? fmtDate(p.enrolled_at) : 'Not set'}</b></span>
                 <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? new Date(p.enrolled_at).toISOString().split('T')[0] : ''}')">edit</span>
             </div>
             ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
@@ -1931,7 +1932,7 @@ function loadNotes(personId) {
             authorSpan.textContent = n.author_name || 'Staff';
             var tsSpan = document.createElement('span');
             tsSpan.style.cssText = 'font-size:10px;color:#94a3b8;margin-left:6px;';
-            tsSpan.textContent = new Date(n.created_at).toLocaleString();
+            tsSpan.textContent = fmtDateTime(n.created_at);
             var typeSpan = document.createElement('span');
             typeSpan.style.cssText = 'font-size:10px;background:#f1f5f9;color:#475569;padding:1px 6px;border-radius:99px;margin-left:4px;';
             typeSpan.textContent = typeLabels[n.note_type] || 'Note';
@@ -2130,7 +2131,7 @@ function loadScorecard(personId) {
                 topMerchants.forEach(function(m, i) {
                     var tr = document.createElement('tr');
                     tr.style.cssText = 'background:' + (i%2===0?'white':'#fafafa') + ';border-top:1px solid #f1f5f9;';
-                    var lastActivity = m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—';
+                    var lastActivity = m.last_batch_date ? fmtDate(m.last_batch_date) : '—';
                     tr.innerHTML = '<td style="padding:8px 12px;font-weight:600;">' + (m.dba_name||'') + '</td>'
                         + '<td style="padding:8px 12px;text-align:right;color:#94a3b8;font-family:monospace;font-size:11px;">' + (m.agent_id||'') + '</td>'
                         + '<td style="padding:8px 12px;text-align:right;color:#64748b;font-size:11px;">' + lastActivity + '</td>'

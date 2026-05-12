@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         /* Page-specific overrides */
@@ -504,7 +505,7 @@ if (document.getElementById('kpi-total')) {
                 } else {
                     currentDeployments.forEach((d, index) => {
                         const row = tbody.insertRow();
-                        const dateStr = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+                        const dateStr = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
                         const merchantName = d.merchants?.dba_name || '---';
                         const serialNum = d.equipments?.serial_number || '---';
                         const safeDba = merchantName.replace(/'/g, "\\'");
@@ -710,7 +711,7 @@ async function processReturn() {
             list.innerHTML = (result.data || []).map(log => `
                 <div class="timeline-item">
                     <div class="timeline-dot"></div>
-                    <div style="font-size:0.75rem; color:#94a3b8; font-weight:700;">${new Date(log.created_at).toLocaleString()}</div>
+                    <div style="font-size:0.75rem; color:#94a3b8; font-weight:700;">${fmtDateTime(log.created_at)}</div>
                     <div style="font-weight:800; color:#002d5a;">${log.action.toUpperCase()}</div>
                     <div style="font-size:0.85rem; color:#64748b;">${log.from_location} → ${log.to_location}</div>
                 </div>
@@ -722,7 +723,7 @@ async function processReturn() {
     function generateDeploymentPDF(index) {
         const d = currentDeployments[index];
         if (!d) return;
-        const targetDate = d.target_deployment_date ? new Date(d.target_deployment_date).toLocaleDateString() : '---';
+        const targetDate = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
         const merchantName = d.merchants?.dba_name || '---';
         const merchantId = d.merchants?.merchant_id || '---';
         const serialNumber = d.equipments?.serial_number || '---';

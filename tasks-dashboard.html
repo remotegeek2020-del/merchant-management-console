@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='index.html?reason=unauthorized';})();</script>
     <style>
@@ -282,7 +283,7 @@ async function openTaskDetail(taskId) {
                 <div style="border-top:1px solid #e2e8f0;padding-top:14px;">
                     <div style="font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;margin-bottom:10px;">Comments (${comments.length})</div>
                     <div id="commentsList">
-                        ${comments.map(c=>`<div class="comment-item"><div class="comment-author">${c.author_name}</div><div class="comment-body">${c.body}</div><div class="comment-time">${new Date(c.created_at).toLocaleString()}</div></div>`).join('') || '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:12px;">No comments yet</div>'}
+                        ${comments.map(c=>`<div class="comment-item"><div class="comment-author">${c.author_name}</div><div class="comment-body">${c.body}</div><div class="comment-time">${fmtDateTime(c.created_at)}</div></div>`).join('') || '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:12px;">No comments yet</div>'}
                     </div>
                     <div style="display:flex;gap:8px;margin-top:10px;">
                         <input id="newComment" placeholder="Add a comment..." style="flex:1;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">

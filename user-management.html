@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
     (function() {
@@ -236,7 +237,7 @@ function exportUsers() {
     const rows = allUsers.map(u => [
         u.first_name||'', u.last_name||'', u.email||'', u.role||'',
         u.is_active ? 'Active' : 'Inactive',
-        u.last_seen ? new Date(u.last_seen).toLocaleString() : 'Never',
+        u.last_seen ? fmtDateTime(u.last_seen) : 'Never',
         u.access_inventory?'Yes':'No', u.access_deployments?'Yes':'No',
         u.access_returns?'Yes':'No', u.access_merchants?'Yes':'No',
         u.access_partners?'Yes':'No', u.access_jarvis?'Yes':'No'
@@ -262,7 +263,7 @@ function renderUsers(data) {
         const cantEdit = isTargetSuper && !iAmSuper;
         const isActive = user.is_active;
         const isPending = !isActive && !user.last_seen;
-        const lastSeen = user.last_seen ? new Date(user.last_seen).toLocaleDateString() : null;
+        const lastSeen = user.last_seen ? fmtDate(user.last_seen) : null;
         const roleClass = isTargetSuper ? 'role-super' : user.role?.toLowerCase().includes('admin') ? 'role-admin' : 'role-standard';
         const fullName = `${user.first_name||''} ${user.last_name||''}`.trim();
 

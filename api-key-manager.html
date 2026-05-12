@@ -7,6 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="js/tz.js"></script>
     <script>
         (function() {
             if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
@@ -228,7 +229,7 @@ async function deleteKey(key) {
 }
 
 function formatDate(iso) {
-    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return fmtDateTime(iso);
 }
 
 function escHtml(str) {

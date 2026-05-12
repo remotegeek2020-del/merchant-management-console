@@ -8,6 +8,7 @@
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <style>
         .dashboard-container { max-width: 1600px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 16px; padding: 16px 24px; margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
@@ -502,7 +503,7 @@ async function processFinalImport(itemsToCreate) {
 
 
     function printPDFReport() {
-        const today = new Date().toLocaleDateString();
+        const today = fmtDate(new Date());
         
         const total = document.getElementById('kpi-total').innerText;
         const office = document.getElementById('kpi-office').innerText;
@@ -785,7 +786,7 @@ async function processFinalImport(itemsToCreate) {
                 <div style="background: #f8fafc; padding: 10px; border-radius: 8px; margin-bottom: 8px; border: 1px solid #e2e8f0;">
                     <p style="margin: 0; font-size: 13px; color: #1e293b;">${n.note_text}</p>
                     <div style="display: flex; justify-content: space-between; margin-top: 5px;">
-                        <small style="color: #94a3b8;">${new Date(n.created_at).toLocaleDateString()}</small>
+                        <small style="color: #94a3b8;">${fmtDate(n.created_at)}</small>
                         <small style="color: var(--pp-blue); font-weight: 600;">${n.author_email || 'Staff'}</small>
                     </div>
                 </div>
@@ -927,7 +928,7 @@ async function saveNote() {
                     ${isStaleRepair ? `<span class="material-icons" style="font-size:14px; color:#e11d48; vertical-align:middle; margin-left:4px;" title="Stale: ${diffDays} days in repair">warning</span>` : ''}
                 </td>
                 <td>${item.terminal_type || '---'}</td>
-                <td>${item.received_date ? new Date(item.received_date).toLocaleDateString() : '---'}</td>
+                <td>${item.received_date ? fmtDate(item.received_date) : '---'}</td>
                 <td>
                     <span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span>
                     ${isStaleRepair ? `<div style="color:#e11d48; font-weight:700; font-size:10px; margin-top:2px;">STALE: ${diffDays} DAYS</div>` : ''}
@@ -1007,7 +1008,7 @@ async function fetchCombinedLogs() {
                             <p style="font-weight: 800; margin: 0; color: var(--pp-blue); font-size: 13px;">${log.action.toUpperCase()}</p>
                             <p style="margin: 2px 0; color: #1e293b; font-size: 12px;">${log.from_location} → ${log.to_location}</p>
                             <div style="display: flex; justify-content: space-between; margin-top: 5px;">
-                                <small style="color: #94a3b8;">${new Date(log.created_at).toLocaleString()}</small>
+                                <small style="color: #94a3b8;">${fmtDateTime(log.created_at)}</small>
                                 <small style="color: #64748b; font-weight:600;">Logistics Event</small>
                             </div>
                         </div>
@@ -1020,7 +1021,7 @@ async function fetchCombinedLogs() {
                             <p style="font-weight: 800; margin: 0; color: #1e293b; font-size: 13px;">${log.action}</p>
                             <p style="margin: 2px 0; color: #64748b; font-size: 12px;">Status: ${log.status}</p>
                             <div style="display: flex; justify-content: space-between; margin-top: 5px;">
-                                <small style="color: #94a3b8;">${new Date(log.created_at).toLocaleString()}</small>
+                                <small style="color: #94a3b8;">${fmtDateTime(log.created_at)}</small>
                                 <small style="color: #94a3b8;">${log.email || 'Admin'}</small>
                             </div>
                         </div>

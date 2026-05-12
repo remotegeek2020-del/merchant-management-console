@@ -26,6 +26,7 @@
         @media(max-width:900px){.filter-grid{grid-template-columns:1fr 1fr;}}
         @media(max-width:600px){.filter-grid{grid-template-columns:1fr;}}
     </style>
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
     (function() {
@@ -228,7 +229,7 @@ function renderPreviewTable(data) {
         }
         // Format dates
         if (isDate(k) && String(val).match(/\d{4}-\d{2}-\d{2}/)) {
-            return `<td>${new Date(val).toLocaleDateString()}</td>`;
+            return `<td>${fmtDate(val)}</td>`;
         }
         return `<td>${val}</td>`;
     }).join('')}</tr>`).join('');

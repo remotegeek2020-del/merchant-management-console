@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
         (function() {
@@ -328,7 +329,7 @@ function renderAtRisk(data) {
                 <div class="risk-mid">${m.merchant_id} &nbsp;·&nbsp; ${fmt(m.volume_30_day)} vs ${fmt(m.baseline)} expected</div>
             </div>
             <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;" title="${m.agent_name || '—'}">${m.agent_name || '—'}</div>
-            <div style="font-size:11px; color:var(--text-muted);">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—'}</div>
+            <div style="font-size:11px; color:var(--text-muted);">${m.last_batch_date ? fmtDate(m.last_batch_date) : '—'}</div>
             <div class="drop-badge ${m.drop_pct < 30 ? 'mild' : ''}">-${m.drop_pct}%</div>
             <button onclick="openMerchantDetail('${m.merchant_id}')" style="font-size:11px; font-weight:700; color:var(--pp-blue); background:none; border:1px solid var(--border); padding:3px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;">View →</button>
         </div>`).join('');
@@ -501,7 +502,7 @@ async function openDepDetail(depId) {
             <div class="detail-row"><span class="detail-key">ID</span><span class="detail-val" style="font-family:'DM Mono',monospace;">${d.deployment_id || '—'}</span></div>
             <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val">${d.status || '—'}</span></div>
             <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val">${d.purchase_type || '—'}</span></div>
-            <div class="detail-row"><span class="detail-key">Created</span><span class="detail-val">${d.created_at ? new Date(d.created_at).toLocaleString() : '—'}</span></div>
+            <div class="detail-row"><span class="detail-key">Created</span><span class="detail-val">${d.created_at ? fmtDateTime(d.created_at) : '—'}</span></div>
         </div>
         <div class="detail-section">
             <div class="detail-label">Tracking</div>
@@ -709,7 +710,7 @@ async function loadAll() {
     else document.getElementById('dep-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error: ${dep?.message || 'Could not load deployments.'}</div>`;
 
     loadPriorityTickets(currentTicketPriorityFilter);
-    document.getElementById('last-updated').textContent = 'Last updated: ' + new Date().toLocaleTimeString();
+    document.getElementById('last-updated').textContent = 'Last updated: ' + fmtTime(new Date());
 }
 
 // Only admins and super_admins can see Staff Access Control

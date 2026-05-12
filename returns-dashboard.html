@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
     (function() {
@@ -152,7 +153,7 @@ async function viewHistory(id, sn) {
             <div style="width:8px; height:8px; border-radius:50%; background:var(--pp-accent); margin-top:5px; flex-shrink:0;"></div>
             <div>
                 <div style="font-weight:700; font-size:12px; color:#0a1628;">${log.action.toUpperCase()}</div>
-                <div style="font-size:11px; color:#94a3b8; margin-top:2px;">${new Date(log.created_at).toLocaleString()}</div>
+                <div style="font-size:11px; color:#94a3b8; margin-top:2px;">${fmtDateTime(log.created_at)}</div>
                 <div style="font-size:11px; color:#475569; margin-top:2px;">${log.from_location || ''} → ${log.to_location || ''}</div>
                 ${log.notes ? `<div style="font-size:11px; color:#64748b; margin-top:4px; font-style:italic;">${log.notes}</div>` : ''}
             </div>
@@ -187,7 +188,7 @@ async function fetchReturns() {
                     ${r.return_id || 'PENDING'}
                     ${r.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">TICKET</span>` : ''}
                 </td>
-                <td style="color:#94a3b8; font-size:12px;">${new Date(r.created_at).toLocaleDateString()}</td>
+                <td style="color:#94a3b8; font-size:12px;">${fmtDate(r.created_at)}</td>
                 <td style="font-weight:600;">${r.merchants?.dba_name || '---'}</td>
                 <td class="hide-mobile">
                     <div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}</div>
