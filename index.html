@@ -582,11 +582,13 @@
         html += section('Deployments', deployments, d => {
             const col = statusColor(d.status);
             const date = d.created_at ? new Date(d.created_at).toLocaleDateString() : '';
-            return `<a class="gsr-item" href="deployments-dashboard.html?q=${encodeURIComponent(d.tracking_id || d.deployment_id)}">
+            const titleParts = [d.deployment_id, d.tracking_id].filter(Boolean);
+            const sub = [titleParts[1], date].filter(Boolean).join(' · ');
+            return `<a class="gsr-item" href="deployments-dashboard.html?q=${encodeURIComponent(d.deployment_id || d.tracking_id)}">
                 <span class="material-icons gsr-icon" style="color:#0284c7;">local_shipping</span>
                 <div class="gsr-main">
-                    <div class="gsr-title">${esc(d.tracking_id || d.deployment_id || '—')}</div>
-                    <div class="gsr-sub">${esc(d.deployment_id || '')}${date ? ` · ${date}` : ''}</div>
+                    <div class="gsr-title">${esc(titleParts[0] || '—')}</div>
+                    <div class="gsr-sub">${esc(sub)}</div>
                 </div>
                 ${d.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(d.status)}</span>` : ''}
             </a>`;

@@ -921,7 +921,9 @@ async function saveNote() {
 
             row.innerHTML = `
                 <td style="font-weight:700; color:var(--pp-blue);">
-                    ${item.serial_number}
+                    ${isDeployed
+                        ? `<a href="deployments-dashboard.html?q=${encodeURIComponent(item.serial_number)}" title="View deployment for this unit" style="color:var(--pp-blue);text-decoration:underline;text-decoration-color:#bfdbfe;text-underline-offset:2px;">${item.serial_number}</a>`
+                        : item.serial_number}
                     ${isStaleRepair ? `<span class="material-icons" style="font-size:14px; color:#e11d48; vertical-align:middle; margin-left:4px;" title="Stale: ${diffDays} days in repair">warning</span>` : ''}
                 </td>
                 <td>${item.terminal_type || '---'}</td>
