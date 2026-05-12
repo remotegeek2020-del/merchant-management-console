@@ -1083,6 +1083,11 @@ async function executeBulk(validData) {
             const me = (result.data || []).find(u => String(u.id) === String(uid));
             if (me) currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
         } catch(e) {}
+        const urlQ = new URLSearchParams(window.location.search).get('q');
+        if (urlQ) {
+            const el = document.getElementById('depSearch');
+            if (el) el.value = urlQ;
+        }
         fetchDeployments();
     };
 

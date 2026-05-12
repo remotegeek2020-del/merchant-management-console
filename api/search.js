@@ -34,6 +34,7 @@ export default async function handler(req, res) {
             equipBySerial, equipByModel,
             agentIdsRes,
             deploysByTracking,
+            deploysByDepId,
             returnsByRmaId,
         ] = await Promise.all([
             // Merchants — 4 fields
@@ -58,8 +59,9 @@ export default async function handler(req, res) {
             // Agent IDs
             supabase.from('agent_identifiers').select('id_string, agent_id').ilike('id_string', like).limit(5),
 
-            // Deployments by tracking ID or deployment ID
+            // Deployments by tracking ID or deployment_id
             supabase.from('deployments').select('id, deployment_id, tracking_id, status, created_at').ilike('tracking_id', like).order('created_at', { ascending: false }).limit(5),
+            supabase.from('deployments').select('id, deployment_id, tracking_id, status, created_at').ilike('deployment_id', like).order('created_at', { ascending: false }).limit(5),
 
             // Returns by RMA ID
             supabase.from('returns').select('id, return_id, return_reason, status, return_date_initiated').ilike('return_id', like).order('return_date_initiated', { ascending: false }).limit(5),
@@ -87,7 +89,7 @@ export default async function handler(req, res) {
             'id'
         ).slice(0, 5);
 
-        const deployments = (deploysByTracking.data || []).slice(0, 5);
+        const deployments = dedup([...(deploysByTracking.data || []), ...(deploysByDepId.data || [])], 'id').slice(0, 5);
         const returns     = (returnsByRmaId.data    || []).slice(0, 5);
 
         // Resolve agent IDs → partner name via agents → persons join
