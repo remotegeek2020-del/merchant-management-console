@@ -382,9 +382,9 @@ async function handleAIFile(input) {
             const result = await res.json();
 
             if (result.success) {
-                confirmAIImport(result.data);
+                confirmAIImport(result);
             } else {
-                Swal.fire('AI Error', 'Could not read the invoice format.', 'error');
+                Swal.fire('AI Error', result.message || 'Could not read the invoice format.', 'error');
             }
         } catch (err) {
             Swal.fire('Connection Error', err.message, 'error');
@@ -407,42 +407,13 @@ async function handleAIFile(input) {
  * STAGE 1: The Review Table
  * This function triggers automatically when the AI extraction succeeds
  */
-// STEP 1: Comparison & Categorization
-async function confirmAIImport(result) {
-    const extractedData = result.data;
+// STEP 1: Review & Confirm
+function confirmAIImport(result) {
+    const newItems   = result.new_items  || [];
+    const duplicates = result.duplicates || [];
     const invoiceDate = result.invoice_date || new Date().toISOString().split('T')[0];
 
-    // 1. PULL LIVE DATA: Call the new 'getAllSerials' action for 100% visibility
-    const checkRes = await fetch('/api/equipments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'getAllSerials' }) 
-    });
-    const checkResult = await checkRes.json();
-    
-    if (!checkResult.success) {
-        Swal.fire('Sync Error', 'Could not fetch current inventory for comparison.', 'error');
-        return;
-    }
-
-    // 2. CREATE A SEARCH SET: Strip all non-alphanumeric so dashes/dots/spaces never cause mismatches
-    const normSerial = sn => String(sn || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-    const existingSerials = new Set((checkResult.serials || []).map(normSerial));
-
-    const newItems = [];
-    const duplicates = [];
-
-    // 3. CROSS-REFERENCE: Compare AI extraction vs. the global list
-    extractedData.forEach(item => {
-        const cleanSN = normSerial(item.serial_number);
-        if (existingSerials.has(cleanSN)) {
-            duplicates.push(item);
-        } else {
-            newItems.push({ ...item, received_date: invoiceDate });
-        }
-    });
-
-    // 4. RENDER ACCURATE UI: Only show the "Proceed" button if there is something new to add
+    // Render UI — server already did the DB comparison
     let html = `
         <div style="text-align:left; font-size:13px;">
             <div style="margin-bottom:15px; padding:10px; background:#f0f9ff; border-radius:8px; border:1px solid #00a1e0; color:#0369a1;">
