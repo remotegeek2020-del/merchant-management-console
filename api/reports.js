@@ -15,8 +15,11 @@ export default async function handler(req, res) {
 
             // ── INVENTORY ──────────────────────────────────
             if (reportType === 'inventory') {
+                // Skip merchants join — equipments has two duplicate FKs to merchants
+                // which causes PostgREST ambiguity. current_location already holds
+                // the merchant name for deployed units.
                 let query = supabase.from('equipments')
-                    .select(`serial_number, terminal_type, status, current_location, received_date, merchants:merchant_id(dba_name, merchant_id)`, { count: 'exact' });
+                    .select(`serial_number, terminal_type, status, current_location, received_date`, { count: 'exact' });
 
                 if (subFilter) query = query.eq('current_location', subFilter);
                 if (startDate) query = query.gte('received_date', startDate);
@@ -29,10 +32,8 @@ export default async function handler(req, res) {
                     'Serial Number': d.serial_number || '—',
                     'Terminal Type': d.terminal_type || '—',
                     'Status': d.status || '—',
-                    'Location': d.current_location || '—',
+                    'Location / Merchant': d.current_location || '—',
                     'Received Date': d.received_date ? new Date(d.received_date).toLocaleDateString() : '—',
-                    'Current Merchant': d.merchants?.dba_name || 'In Stock',
-                    'Merchant ID': d.merchants?.merchant_id || '—'
                 }));
 
                 return res.status(200).json({ success: true, rawData, totalCount: count });
@@ -41,7 +42,7 @@ export default async function handler(req, res) {
             // ── DEPLOYMENTS ───────────────────────────────
             if (reportType === 'deployments') {
                 const { data, count, error } = await supabase.from('deployments')
-                    .select(`id, status, created_at, tracking_id, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)`, { count: 'exact' })
+                    .select(`id, status, created_at, tracking_id, merchants!deployments_merchant_id_fkey(dba_name, merchant_id), equipments!deployments_equipment_id_fkey(serial_number, terminal_type)`, { count: 'exact' })
                     .gte('created_at', startDate + 'T00:00:00')
                     .lte('created_at', endDate + 'T23:59:59')
                     .order('created_at', { ascending: false })
@@ -65,7 +66,7 @@ export default async function handler(req, res) {
             // ── RETURNS ───────────────────────────────────
             if (reportType === 'returns') {
                 const { data, count, error } = await supabase.from('returns')
-                    .select(`return_id, return_reason, condition, status, destination, return_date_initiated, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)`, { count: 'exact' })
+                    .select(`return_id, return_reason, condition, status, destination, return_date_initiated, merchants!returns_merchant_id_fkey(dba_name, merchant_id), equipments!returns_equipment_id_fkey(serial_number, terminal_type)`, { count: 'exact' })
                     .gte('return_date_initiated', startDate)
                     .lte('return_date_initiated', endDate)
                     .order('return_date_initiated', { ascending: false })

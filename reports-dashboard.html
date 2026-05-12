@@ -178,25 +178,31 @@ async function runReport() {
             })
         });
         const result = await res.json();
-       if (result.success && result.rawData && result.rawData.length > 0) {
-                currentRawData = result.rawData;
-                totalRecordsAvailable = result.totalCount || result.rawData.length; // Save scale
-                
-                renderPreviewTable(result.rawData);
-                document.getElementById('resultsCard').style.display = 'block';
-                
-                // Update title with record count
-                const typeLabel = document.getElementById('reportType').options[document.getElementById('reportType').selectedIndex].text;
-                document.getElementById('previewTitle').innerText = typeLabel;
-                document.getElementById('previewSub').innerText = `Showing ${result.rawData.length} of ${totalRecordsAvailable.toLocaleString()} total records`;
-                
-                Swal.close();
-            } else {
-                document.getElementById('resultsCard').style.display = 'none';
-                Swal.fire('No Data', 'No records found for the selected criteria.', 'info');
-            }
+
+        if (!result.success) {
+            document.getElementById('resultsCard').style.display = 'none';
+            Swal.fire('Report Error', result.message || 'Unknown error from server.', 'error');
+            return;
+        }
+
+        if (result.rawData && result.rawData.length > 0) {
+            currentRawData = result.rawData;
+            totalRecordsAvailable = result.totalCount || result.rawData.length;
+
+            renderPreviewTable(result.rawData);
+            document.getElementById('resultsCard').style.display = 'block';
+
+            const typeLabel = document.getElementById('reportType').options[document.getElementById('reportType').selectedIndex].text;
+            document.getElementById('previewTitle').innerText = typeLabel;
+            document.getElementById('previewSub').innerText = `Showing ${result.rawData.length} of ${totalRecordsAvailable.toLocaleString()} total records`;
+
+            Swal.close();
+        } else {
+            document.getElementById('resultsCard').style.display = 'none';
+            Swal.fire('No Data', 'No records found for the selected criteria.', 'info');
+        }
         } catch (err) {
-            Swal.fire('Error', 'Report generation failed.', 'error');
+            Swal.fire('Error', err.message || 'Report generation failed.', 'error');
         }
     }
 function renderPreviewTable(data) {
@@ -331,6 +337,8 @@ function renderPreviewTable(data) {
     function printReportPDF() {
         window.print();
     }
+
+    window.onload = toggleFilters;
 </script>
 
 <style type="text/css" media="print">
