@@ -478,8 +478,8 @@
             return;
         }
 
-        const { merchants, partners, agent_ids, tickets, equipment } = data.results;
-        const total = merchants.length + partners.length + (agent_ids||[]).length + tickets.length + equipment.length;
+        const { merchants, partners, agent_ids, tickets, equipment, deployments, returns } = data.results;
+        const total = merchants.length + partners.length + (agent_ids||[]).length + tickets.length + equipment.length + (deployments||[]).length + (returns||[]).length;
 
         if (total === 0) {
             panel.innerHTML = `<div class="gsr-empty">No results for "<strong>${esc(q)}</strong>"</div>`;
@@ -488,89 +488,113 @@
 
         let html = '';
 
-        const qParam = encodeURIComponent(q);
-
-        if (merchants.length) {
-            html += '<div class="gsr-section-label">Merchants</div>';
-            html += merchants.map(m => {
-                const sub = [m.merchant_id, m.agent_id ? `Agent ${m.agent_id}` : ''].filter(Boolean).join(' · ');
-                const col = statusColor(m.account_status);
-                const url = `merchants-dashboard.html?q=${encodeURIComponent(m._matchedBy === 'merchant_id' ? m.merchant_id : m.dba_name)}&filterBy=${encodeURIComponent(m._matchedBy || 'dba_name')}`;
-                return `<a class="gsr-item" href="${url}">
-                    <span class="material-icons gsr-icon" style="color:#0ea5e9;">storefront</span>
-                    <div class="gsr-main">
-                        <div class="gsr-title">${esc(m.dba_name)}</div>
-                        <div class="gsr-sub">${esc(sub)}</div>
-                    </div>
-                    ${m.account_status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(m.account_status)}</span>` : ''}
-                </a>`;
-            }).join('<hr class="gsr-divider">');
+        // Helper to build a section
+        function section(label, items, rowFn) {
+            if (!items || !items.length) return '';
+            return (html ? '<hr class="gsr-divider">' : '') +
+                `<div class="gsr-section-label">${label}</div>` +
+                items.map(rowFn).join('<hr class="gsr-divider">');
         }
 
-        if (partners.length) {
-            if (html) html += '<hr class="gsr-divider">';
-            html += '<div class="gsr-section-label">Partners</div>';
-            html += partners.map(p => {
-                const col = p.is_portal_active ? '#22c55e' : '#64748b';
-                return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(p.full_name)}">
-                    <span class="material-icons gsr-icon" style="color:#8b5cf6;">handshake</span>
-                    <div class="gsr-main">
-                        <div class="gsr-title">${esc(p.full_name)}</div>
-                        <div class="gsr-sub">${esc(p.email)}</div>
-                    </div>
-                    <span class="gsr-tag" style="background:${col}22; color:${col};">${p.is_portal_active ? 'Active' : 'Inactive'}</span>
-                </a>`;
-            }).join('<hr class="gsr-divider">');
-        }
+        // Merchants — show what matched (DBA, MID, agent, partner)
+        html += section('Merchants', merchants, m => {
+            const col = statusColor(m.account_status);
+            const url = `merchants-dashboard.html?q=${encodeURIComponent(['merchant_id','dba_name'].includes(m._matchedBy) ? (m._matchedBy === 'merchant_id' ? m.merchant_id : m.dba_name) : m.dba_name)}&filterBy=${encodeURIComponent(m._matchedBy === 'merchant_id' ? 'merchant_id' : 'dba_name')}`;
+            const matchHint = {
+                agent_name:       `Agent: ${m.agent_name}`,
+                partner_full_name:`Partner: ${m.partner_full_name}`,
+                merchant_id:      m.merchant_id,
+                dba_name:         m.merchant_id,
+            }[m._matchedBy] || m.merchant_id;
+            return `<a class="gsr-item" href="${url}">
+                <span class="material-icons gsr-icon" style="color:#0ea5e9;">storefront</span>
+                <div class="gsr-main">
+                    <div class="gsr-title">${esc(m.dba_name)}</div>
+                    <div class="gsr-sub">${esc(matchHint)}</div>
+                </div>
+                ${m.account_status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(m.account_status)}</span>` : ''}
+            </a>`;
+        });
 
-        if (agent_ids && agent_ids.length) {
-            if (html) html += '<hr class="gsr-divider">';
-            html += '<div class="gsr-section-label">Agent IDs</div>';
-            html += agent_ids.map(a => {
-                const sub = [a.partner_name, a.partner_email].filter(Boolean).join(' · ');
-                return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(a.id_string)}">
-                    <span class="material-icons gsr-icon" style="color:#a78bfa;">badge</span>
-                    <div class="gsr-main">
-                        <div class="gsr-title" style="font-family:monospace;">${esc(a.id_string)}</div>
-                        ${sub ? `<div class="gsr-sub">${esc(sub)}</div>` : ''}
-                    </div>
-                    <span class="gsr-tag" style="background:#7c3aed22; color:#a78bfa;">Agent ID</span>
-                </a>`;
-            }).join('<hr class="gsr-divider">');
-        }
+        // Partners
+        html += section('Partners', partners, p => {
+            const col = p.is_portal_active ? '#22c55e' : '#64748b';
+            return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(p.full_name)}">
+                <span class="material-icons gsr-icon" style="color:#8b5cf6;">handshake</span>
+                <div class="gsr-main">
+                    <div class="gsr-title">${esc(p.full_name)}</div>
+                    <div class="gsr-sub">${esc(p.email || '')}</div>
+                </div>
+                <span class="gsr-tag" style="background:${col}22; color:${col};">${p.is_portal_active ? 'Active' : 'Inactive'}</span>
+            </a>`;
+        });
 
-        if (tickets.length) {
-            if (html) html += '<hr class="gsr-divider">';
-            html += '<div class="gsr-section-label">Tickets</div>';
-            html += tickets.map(t => {
-                const col = statusColor(t.status);
-                const prioColor = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' }[t.priority] || '#64748b';
-                return `<a class="gsr-item" href="tickets-dashboard.html?q=${encodeURIComponent(t.ticket_number)}">
-                    <span class="material-icons gsr-icon" style="color:#0d9488;">confirmation_number</span>
-                    <div class="gsr-main">
-                        <div class="gsr-title">${esc(t.subject)}</div>
-                        <div class="gsr-sub">${esc(t.ticket_number)}${t.priority ? ` · <span style="color:${prioColor};">${esc(t.priority)}</span>` : ''}</div>
-                    </div>
-                    ${t.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(t.status)}</span>` : ''}
-                </a>`;
-            }).join('<hr class="gsr-divider">');
-        }
+        // Agent IDs
+        html += section('Agent IDs', agent_ids, a => {
+            const sub = [a.partner_name, a.partner_email].filter(Boolean).join(' · ');
+            return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(a.id_string)}">
+                <span class="material-icons gsr-icon" style="color:#a78bfa;">badge</span>
+                <div class="gsr-main">
+                    <div class="gsr-title" style="font-family:monospace;">${esc(a.id_string)}</div>
+                    ${sub ? `<div class="gsr-sub">${esc(sub)}</div>` : ''}
+                </div>
+                <span class="gsr-tag" style="background:#7c3aed22; color:#a78bfa;">Agent ID</span>
+            </a>`;
+        });
 
-        if (equipment.length) {
-            if (html) html += '<hr class="gsr-divider">';
-            html += '<div class="gsr-section-label">Equipment</div>';
-            html += equipment.map(eq => {
-                const col = statusColor(eq.status);
-                return `<a class="gsr-item" href="equipments-dashboard.html?q=${encodeURIComponent(eq.serial_number)}">
-                    <span class="material-icons gsr-icon" style="color:#f59e0b;">inventory_2</span>
-                    <div class="gsr-main">
-                        <div class="gsr-title">${esc(eq.serial_number)}</div>
-                        <div class="gsr-sub">${esc(eq.terminal_type)}${eq.current_location ? ` · ${esc(eq.current_location)}` : ''}</div>
-                    </div>
-                    ${eq.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(eq.status)}</span>` : ''}
-                </a>`;
-            }).join('<hr class="gsr-divider">');
-        }
+        // Tickets
+        html += section('Tickets', tickets, t => {
+            const col = statusColor(t.status);
+            const prioColor = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' }[t.priority] || '#64748b';
+            return `<a class="gsr-item" href="tickets-dashboard.html?q=${encodeURIComponent(t.ticket_number)}">
+                <span class="material-icons gsr-icon" style="color:#0d9488;">confirmation_number</span>
+                <div class="gsr-main">
+                    <div class="gsr-title">${esc(t.subject)}</div>
+                    <div class="gsr-sub">${esc(t.ticket_number)}${t.priority ? ` · <span style="color:${prioColor};">${esc(t.priority)}</span>` : ''}</div>
+                </div>
+                ${t.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(t.status)}</span>` : ''}
+            </a>`;
+        });
+
+        // Equipment
+        html += section('Equipment', equipment, eq => {
+            const col = statusColor(eq.status);
+            return `<a class="gsr-item" href="equipments-dashboard.html?q=${encodeURIComponent(eq.serial_number)}">
+                <span class="material-icons gsr-icon" style="color:#f59e0b;">inventory_2</span>
+                <div class="gsr-main">
+                    <div class="gsr-title">${esc(eq.serial_number)}</div>
+                    <div class="gsr-sub">${esc(eq.terminal_type)}${eq.current_location ? ` · ${esc(eq.current_location)}` : ''}</div>
+                </div>
+                ${eq.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(eq.status)}</span>` : ''}
+            </a>`;
+        });
+
+        // Deployments
+        html += section('Deployments', deployments, d => {
+            const col = statusColor(d.status);
+            const date = d.created_at ? new Date(d.created_at).toLocaleDateString() : '';
+            return `<a class="gsr-item" href="deployments-dashboard.html?q=${encodeURIComponent(d.tracking_id || d.deployment_id)}">
+                <span class="material-icons gsr-icon" style="color:#0284c7;">local_shipping</span>
+                <div class="gsr-main">
+                    <div class="gsr-title">${esc(d.tracking_id || d.deployment_id || '—')}</div>
+                    <div class="gsr-sub">${esc(d.deployment_id || '')}${date ? ` · ${date}` : ''}</div>
+                </div>
+                ${d.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(d.status)}</span>` : ''}
+            </a>`;
+        });
+
+        // Returns
+        html += section('Returns', returns, r => {
+            const col = statusColor(r.status);
+            return `<a class="gsr-item" href="returns-dashboard.html?q=${encodeURIComponent(r.return_id)}">
+                <span class="material-icons gsr-icon" style="color:#dc2626;">undo</span>
+                <div class="gsr-main">
+                    <div class="gsr-title">${esc(r.return_id)}</div>
+                    <div class="gsr-sub">${esc(r.return_reason || '')}${r.return_date_initiated ? ` · ${r.return_date_initiated}` : ''}</div>
+                </div>
+                ${r.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(r.status)}</span>` : ''}
+            </a>`;
+        });
 
         panel.style.display = 'block';
         panel.innerHTML = html;
