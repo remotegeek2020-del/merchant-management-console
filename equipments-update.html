@@ -6,7 +6,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
-    
+    <script src="js/tz.js"></script>
     <style>
         :root { 
             --pp-blue: #004990; 
@@ -173,7 +173,7 @@
                 if (rawDate && rawDate !== '---') {
                     const d = new Date(rawDate);
                     if (!isNaN(d.getTime())) {
-                        document.getElementById('receive_date').value = d.toISOString().split('T')[0];
+                        document.getElementById('receive_date').value = fmtDateInput(d);
                     }
                 }
                 document.getElementById('saveBtn').disabled = false;

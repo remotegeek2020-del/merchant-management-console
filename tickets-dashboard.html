@@ -693,7 +693,7 @@ async function createLinkedDeployment() {
                 </div>
                 <div>
                     <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TARGET DATE</label>
-                    <input id="dep-date" type="date" class="swal2-input" style="margin:0;" value="${new Date().toISOString().split('T')[0]}">
+                    <input id="dep-date" type="date" class="swal2-input" style="margin:0;" value="${fmtDateInput(new Date())}">
                 </div>
             </div>
             <div style="margin-bottom:14px;">
@@ -798,7 +798,7 @@ async function createLinkedRMA() {
             </div>
             <div style="margin-bottom:14px;">
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">DATE INITIATED</label>
-                <input id="rma-date" type="date" class="swal2-input" style="margin:0;" value="${new Date().toISOString().split('T')[0]}">
+                <input id="rma-date" type="date" class="swal2-input" style="margin:0;" value="${fmtDateInput(new Date())}">
             </div>
             <div>
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">NOTES</label>

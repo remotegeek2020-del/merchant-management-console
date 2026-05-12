@@ -408,7 +408,7 @@ async function logAuditAction(action, details) {
     // 1. Ask for the Date Received first
     const { value: receivedDate } = await Swal.fire({
         title: 'Confirm Receipt Date',
-        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}">`,
+        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${fmtDateInput(new Date())}">`,
         showCancelButton: true,
         preConfirm: () => document.getElementById('swal-receive-date').value
     });
@@ -604,7 +604,7 @@ async function processReturn() {
     // Add a date input prompt via SweetAlert
     const { value: initiateDate } = await Swal.fire({
         title: 'Return Initiation Date',
-        html: `<input type="date" id="swal-init-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}">`,
+        html: `<input type="date" id="swal-init-date" class="slds-input" value="${fmtDateInput(new Date())}">`,
         showCancelButton: true,
         preConfirm: () => document.getElementById('swal-init-date').value
     });
@@ -847,7 +847,7 @@ async function processReturn() {
             const el = document.getElementById(id);
             if(el) el.value = '';
         });
-        document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+        document.getElementById('dateInput').value = fmtDateInput(new Date());
     }
 
 async function openEditModal(index) {
@@ -864,7 +864,7 @@ async function openEditModal(index) {
     document.getElementById('editPurchaseType').value = d.purchase_type || 'Free Placement';
     
     if (d.target_deployment_date) {
-        document.getElementById('editDate').value = new Date(d.target_deployment_date).toISOString().split('T')[0];
+        document.getElementById('editDate').value = fmtDateInput(d.target_deployment_date);
     } else {
         document.getElementById('editDate').value = '';
     }
@@ -1073,7 +1073,7 @@ async function executeBulk(validData) {
         const el = document.getElementById(id);
         if(el) el.value = '';
     });
-    document.getElementById('dateInput').value = new Date().toISOString().split('T')[0];
+    document.getElementById('dateInput').value = fmtDateInput(new Date());
 }
 
     window.onload = async () => {

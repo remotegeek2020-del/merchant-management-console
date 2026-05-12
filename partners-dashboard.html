@@ -922,7 +922,7 @@ async function submitOnboarding() {
     document.querySelector('#step3 button[onclick*="goToStep(2)"]').style.display = 'block'; // Show back button
     
     var _df = document.getElementById('partnerActivationDate');
-    if (_df && !_df.value) _df.value = new Date().toISOString().split('T')[0];
+    if (_df && !_df.value) _df.value = fmtDateInput(new Date());
     document.getElementById('onboardingWizard').classList.add('active');
     renderIdList();
     loadWizardCompanies();
@@ -1346,7 +1346,7 @@ async function submitOnboarding() {
             <div style="display:flex; align-items:center; gap:8px; font-size:13px; color:#475569;">
                 <span class="material-icons" style="font-size:16px;">calendar_today</span>
                 <span>Activated: <b>${p.enrolled_at ? fmtDate(p.enrolled_at) : 'Not set'}</b></span>
-                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? new Date(p.enrolled_at).toISOString().split('T')[0] : ''}')">edit</span>
+                <span class="material-icons" style="font-size:14px; color:#94a3b8; cursor:pointer;" onclick="editEnrolledAt('${p.id}', '${p.enrolled_at ? fmtDateInput(p.enrolled_at) : ''}')">edit</span>
             </div>
             ${hlLink ? `<a href="${hlLink}" target="_blank" style="font-size:11px; color:#0369a1; text-decoration:none; font-weight:700; margin-top:8px;">VIEW IN HIGHLEVEL →</a>` : ''}
         </div>

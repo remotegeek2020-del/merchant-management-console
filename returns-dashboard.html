@@ -227,7 +227,7 @@ async function finalizeRMA(id, equipment_id) {
     // Step 1: Confirm receipt date
     const { value: receivedDate } = await Swal.fire({
         title: 'Confirm Receipt Date',
-        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${new Date().toISOString().split('T')[0]}" style="margin-top:10px;">`,
+        html: `<input type="date" id="swal-receive-date" class="slds-input" value="${fmtDateInput(new Date())}" style="margin-top:10px;">`,
         showCancelButton: true,
         confirmButtonColor: '#004990',
         confirmButtonText: 'Next',

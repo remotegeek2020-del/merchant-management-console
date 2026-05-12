@@ -412,7 +412,7 @@ async function handleAIFile(input) {
 function confirmAIImport(result) {
     const newItems   = result.new_items  || [];
     const duplicates = result.duplicates || [];
-    const invoiceDate = result.invoice_date || new Date().toISOString().split('T')[0];
+    const invoiceDate = result.invoice_date || fmtDateInput(new Date());
 
     // Render UI — server already did the DB comparison
     let html = `
@@ -679,7 +679,7 @@ async function processFinalImport(itemsToCreate) {
         document.getElementById('edit-status').value = item.status === 'deployed' ? 'stocked' : item.status;
         
         if (item.received_date) {
-            document.getElementById('edit-received-date').value = new Date(item.received_date).toISOString().split('T')[0];
+            document.getElementById('edit-received-date').value = fmtDateInput(item.received_date);
         } else {
             document.getElementById('edit-received-date').value = '';
         }
