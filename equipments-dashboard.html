@@ -1055,7 +1055,12 @@ async function fetchCombinedLogs() {
 
     window.onload = () => {
         const urlQ = new URLSearchParams(window.location.search).get('q');
-        if (urlQ) document.getElementById('invSearch').value = urlQ;
+        if (urlQ) {
+            document.getElementById('invSearch').value = urlQ;
+            // Clear all tab filters so a deployed/retired serial isn't hidden
+            currentFilter = null;
+            document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+        }
         fetchInventory();
     };
 </script>
