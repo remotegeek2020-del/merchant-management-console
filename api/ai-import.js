@@ -63,15 +63,23 @@ export default async function handler(req, res) {
     try {
         // ── 1. FETCH EXISTING SERIALS FROM DATABASE ──────────────────────
         const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-        const { data: existingRows, error: dbError } = await supabase
-            .from('equipments')
-            .select('serial_number');
+        // Paginate to get all serials — Supabase default cap is 1000 rows
+        let existingRows = [];
+        let from = 0;
+        const PAGE = 1000;
+        while (true) {
+            const { data, error: dbError } = await supabase
+                .from('equipments')
+                .select('serial_number')
+                .range(from, from + PAGE - 1);
+            if (dbError) return fail(500, `Database error: ${dbError.message}`);
+            if (!data || data.length === 0) break;
+            existingRows = existingRows.concat(data);
+            if (data.length < PAGE) break;
+            from += PAGE;
+        }
 
-        if (dbError) return fail(500, `Database error: ${dbError.message}`);
-
-        const existingSet = new Set(
-            (existingRows || []).map(r => normalizeSN(r.serial_number))
-        );
+        const existingSet = new Set(existingRows.map(r => normalizeSN(r.serial_number)));
 
         // ── 2. CALL GEMINI FOR OCR ────────────────────────────────────────
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
