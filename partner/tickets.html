@@ -379,9 +379,15 @@ async function viewTicket(ticketId) {
         </div>`;
     }
     if (t.linked_return_id) {
-        linkedBanners += `<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;margin-bottom:10px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:8px;">
-            <span class="material-icons" style="font-size:18px;">assignment_return</span>
-            <div><strong>Return / RMA Initiated</strong><br>Your equipment return is in transit for inspection. Reference: <span style="font-family:'DM Mono',monospace;font-weight:700;">${t.linked_return_id}</span></div>
+        linkedBanners += `<div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:11px 14px;margin-bottom:10px;font-size:12px;color:#92400e;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:${t.status !== 'closed' && t.status !== 'resolved' ? '8' : '0'}px;">
+                <span class="material-icons" style="font-size:18px;">assignment_return</span>
+                <div><strong>Return / RMA Initiated</strong><br>Your equipment return is in transit for inspection. Reference: <span style="font-family:'DM Mono',monospace;font-weight:700;">${t.linked_return_id}</span></div>
+            </div>
+            ${t.status !== 'closed' && t.status !== 'resolved' ? `
+            <button onclick="addEquipToRMA('${t.linked_return_id}', ${t.id})" style="background:#92400e;color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;">
+                <span class="material-icons" style="font-size:14px;">add_circle_outline</span> Add Equipment to This RMA
+            </button>` : ''}
         </div>`;
     }
 
@@ -450,6 +456,60 @@ async function submitPartnerComment() {
     } else {
         if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:16px;">send</span> Send'; }
         Swal.fire('Error', result.message || 'Could not send reply.', 'error');
+    }
+}
+
+async function addEquipToRMA(returnDisplayId, ticketId) {
+    Swal.fire({ title: 'Loading available units...', didOpen: () => Swal.showLoading() });
+    const r = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_rma_addable_items', token, return_display_id: returnDisplayId })
+    });
+    const result = await r.json();
+    Swal.close();
+
+    if (!result.success) { Swal.fire('Error', result.message || 'Could not load units.', 'error'); return; }
+    if (!result.items?.length) {
+        Swal.fire('No Units Available', 'All units from this deployment are already included in the RMA.', 'info');
+        return;
+    }
+
+    const { value: selected } = await Swal.fire({
+        title: 'Add Equipment to RMA',
+        showCancelButton: true,
+        confirmButtonColor: '#0d9488',
+        confirmButtonText: 'Add Equipment',
+        html: `
+        <div style="text-align:left;font-size:13px;">
+            <div style="background:#fef3c7;border-radius:8px;padding:10px 12px;margin-bottom:14px;font-size:11px;color:#92400e;">
+                Select additional equipment to add to <strong>${returnDisplayId}</strong>.
+            </div>
+            ${result.items.map(item => `
+                <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;font-size:12px;">
+                    <input type="checkbox" class="add-equip-cb" value="${item.equipment_id}" style="width:14px;height:14px;flex-shrink:0;">
+                    <span>${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
+                </label>
+            `).join('')}
+        </div>`,
+        preConfirm: () => {
+            const ids = [...document.querySelectorAll('.add-equip-cb:checked')].map(cb => cb.value);
+            if (!ids.length) { Swal.showValidationMessage('Please select at least one unit'); return false; }
+            return ids;
+        }
+    });
+
+    if (!selected) return;
+    Swal.fire({ title: 'Adding equipment...', didOpen: () => Swal.showLoading() });
+    const r2 = await fetch('/api/tickets', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_items_to_rma', token, return_uuid: result.rma_uuid, equipment_ids: selected })
+    });
+    const res2 = await r2.json();
+    if (res2.success) {
+        await Swal.fire({ icon: 'success', title: 'Equipment Added!', html: `${res2.added} unit(s) added to <strong>${returnDisplayId}</strong>. Our team will include them in the return.`, confirmButtonColor: '#0d9488' });
+        loadTickets();
+    } else {
+        Swal.fire('Error', res2.message || 'Could not add equipment.', 'error');
     }
 }
 

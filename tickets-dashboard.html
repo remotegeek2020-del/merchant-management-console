@@ -490,6 +490,7 @@ async function openTicket(ticketId) {
     }
     if (t.linked_return_id) {
         linkedHtml += `<div class="linked-record-box" style="margin-top:8px;background:#fefce8;border-color:#fde047;color:#713f12;"><span class="material-icons">assignment_return</span>RMA: <strong style="font-family:'DM Mono',monospace;">${t.linked_return_id}</strong></div>`;
+        if (!isLocked) linkedHtml += `<button class="create-record-btn btn-create-rma" style="margin-top:6px;" onclick="addUnitsToRMA('${t.linked_return_id}')"><span class="material-icons" style="font-size:14px;">add_circle_outline</span>Add Units to RMA</button>`;
     } else if (t.type === 'rma_request') {
         linkedHtml += `<button class="create-record-btn btn-create-rma" style="margin-top:8px;" onclick="createLinkedRMA()" ${isLocked ? 'disabled style="opacity:0.45;cursor:not-allowed;"' : ''}><span class="material-icons" style="font-size:14px;">add</span>Create RMA Record</button>`;
     }
@@ -853,6 +854,61 @@ async function createLinkedDeployment() {
     });
 }
 
+async function addUnitsToRMA(returnDisplayId) {
+    Swal.fire({ title: 'Loading available units...', didOpen: () => Swal.showLoading() });
+    const r = await fetch('/api/returns', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_addable_items', return_display_id: returnDisplayId })
+    });
+    const result = await r.json();
+    Swal.close();
+
+    if (!result.success) { Swal.fire('Error', result.message || 'Could not load units.', 'error'); return; }
+    if (!result.items?.length) {
+        Swal.fire('No Units Available', 'All units from this deployment are already in the RMA or have been returned.', 'info');
+        return;
+    }
+
+    const { value: selected } = await Swal.fire({
+        title: `Add Units to ${returnDisplayId}`,
+        width: 520,
+        showCancelButton: true,
+        confirmButtonColor: '#92400e',
+        confirmButtonText: 'Add to RMA',
+        html: `
+        <div style="text-align:left;font-size:13px;">
+            <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;">
+                Select additional units to add to this open RMA.
+            </div>
+            ${result.items.map(item => `
+                <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;">
+                    <input type="checkbox" class="add-unit-cb" value="${item.equipment_id}" style="width:14px;height:14px;flex-shrink:0;">
+                    <span style="font-size:12px;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
+                </label>
+            `).join('')}
+        </div>`,
+        preConfirm: () => {
+            const ids = [...document.querySelectorAll('.add-unit-cb:checked')].map(cb => cb.value);
+            if (!ids.length) { Swal.showValidationMessage('Please select at least one unit'); return false; }
+            return ids;
+        }
+    });
+
+    if (!selected) return;
+    Swal.fire({ title: 'Adding units...', didOpen: () => Swal.showLoading() });
+    const r2 = await fetch('/api/returns', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add_items', return_uuid: result.rma_uuid, equipment_ids: selected })
+    });
+    const res2 = await r2.json();
+    if (res2.success) {
+        await Swal.fire({ icon: 'success', title: 'Units Added!', html: `${res2.added} unit(s) added to <strong>${returnDisplayId}</strong>.`, confirmButtonColor: '#001e3c' });
+        openTicket(currentTicketId);
+    } else {
+        Swal.fire('Error', res2.message || 'Could not add units.', 'error');
+    }
+}
+
 async function createLinkedRMA() {
     const t = currentTicketData;
     if (!t || !t.merchant_id) {
@@ -873,6 +929,16 @@ async function createLinkedRMA() {
 
     window._rmaDepsMap = {};
     deps.forEach(d => { window._rmaDepsMap[d.id] = d; });
+
+    // Parse partner-requested serials from ticket description
+    const requestedSerials = new Set();
+    const descMatch = (currentTicketData?.description || '').match(/Units requested for return:\s*([^\n]+)/);
+    if (descMatch) {
+        descMatch[1].split(',').forEach(part => {
+            const m = part.match(/[—-]\s*(\S+)/);
+            if (m) requestedSerials.add(m[1].trim());
+        });
+    }
 
     const depOptions = deps.map(d => {
         if (d.is_bulk) {
@@ -931,14 +997,18 @@ async function createLinkedRMA() {
                 const wrap = document.getElementById('rma-unit-picker-wrap');
                 if (dep?.is_bulk && dep.deployment_items?.length) {
                     const activeItems = dep.deployment_items.filter(i => i.equip?.status === 'deployed');
+                    const hasRequested = requestedSerials.size > 0;
                     wrap.innerHTML = `
-                        <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">SELECT UNITS TO RETURN (partial ok)</label>
-                        ${activeItems.map(item => `
-                            <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;">
-                                <input type="checkbox" class="rma-unit-cb" value="${item.equipment_id}" checked style="width:14px;height:14px;flex-shrink:0;">
-                                <span style="font-size:12px;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
-                            </label>
-                        `).join('')}
+                        <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">SELECT UNITS TO RETURN (partial ok)</label>
+                        ${hasRequested ? '<div style="font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:5px 8px;margin-bottom:6px;">★ = Partner requested return</div>' : ''}
+                        ${activeItems.map(item => {
+                            const isReq = requestedSerials.has(item.equip?.serial_number);
+                            return `<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:2px solid ${isReq ? '#f59e0b' : '#e2e8f0'};border-radius:6px;margin-bottom:4px;cursor:pointer;background:${isReq ? '#fffbeb' : 'white'};">
+                                <input type="checkbox" class="rma-unit-cb" value="${item.equipment_id}" ${isReq ? 'checked' : ''} style="width:14px;height:14px;flex-shrink:0;">
+                                <span style="font-size:12px;flex:1;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
+                                ${isReq ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fde68a;padding:2px 6px;border-radius:4px;">★ Requested</span>' : ''}
+                            </label>`;
+                        }).join('')}
                         ${activeItems.length === 0 ? '<div style="color:#94a3b8;font-size:12px;padding:6px;">All units from this deployment have already been returned.</div>' : ''}
                     `;
                     wrap.style.display = 'block';

@@ -681,6 +681,56 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // Partner-authenticated RMA add-items actions
+        if (action === 'get_rma_addable_items') {
+            const { token, return_display_id } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data: rma } = await supabase.from('returns')
+                .select('id, status, deployment_id').eq('return_id', return_display_id).single();
+            if (!rma) return res.status(404).json({ success: false, message: 'RMA not found.' });
+            if (rma.status !== 'Open') return res.status(400).json({ success: false, message: 'RMA is already closed.' });
+
+            const { data: depItems } = await supabase.from('deployment_items')
+                .select('equipment_id, equip:equipment_id(id, serial_number, terminal_type, status)')
+                .eq('deployment_id', rma.deployment_id);
+
+            const { data: existing } = await supabase.from('return_items')
+                .select('equipment_id').eq('return_id', rma.id);
+            const existingIds = new Set((existing || []).map(e => e.equipment_id));
+
+            const addable = (depItems || []).filter(di =>
+                di.equip?.status === 'deployed' && !existingIds.has(di.equipment_id)
+            );
+
+            return res.status(200).json({ success: true, items: addable, rma_uuid: rma.id });
+        }
+
+        if (action === 'add_items_to_rma') {
+            const { token, return_uuid, equipment_ids } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data: rma } = await supabase.from('returns')
+                .select('id, return_id, status, merchant_id').eq('id', return_uuid).single();
+            if (!rma) return res.status(404).json({ success: false, message: 'RMA not found.' });
+            if (rma.status !== 'Open') return res.status(400).json({ success: false, message: 'RMA is already closed.' });
+
+            await supabase.from('return_items').insert(
+                equipment_ids.map(eqId => ({ return_id: rma.id, equipment_id: eqId, condition: 'IN TRANSIT' }))
+            );
+            await supabase.from('equipment_logs').insert(
+                equipment_ids.map(eqId => ({
+                    equipment_id: eqId, merchant_id: rma.merchant_id,
+                    action: 'Added to RMA', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
+                    notes: `Partner added to existing RMA ${rma.return_id}`
+                }))
+            );
+
+            return res.status(200).json({ success: true, added: equipment_ids.length });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {
