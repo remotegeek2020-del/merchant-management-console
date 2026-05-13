@@ -50,26 +50,9 @@ export default async function handler(req, res) {
         }
 
         if (action === 'get_at_risk') {
-            const { data, error } = await supabase
-                .from('merchants')
-                .select('merchant_id, dba_name, agent_id, agent_name, volume_30_day, volume_90_day, last_batch_date')
-                .eq('account_status', 'Approved')
-                .gt('volume_90_day', 0)
-                .order('volume_30_day', { ascending: true })
-                .limit(2000);
-
+            const { data, error } = await supabase.rpc('get_at_risk_merchants', { drop_threshold: 15 });
             if (error) throw error;
-
-            const atRisk = (data || [])
-                .map(m => {
-                    const baseline = parseFloat(m.volume_90_day) / 3;
-                    const vol30 = parseFloat(m.volume_30_day);
-                    return { ...m, baseline, drop_pct: Math.round((1 - vol30 / baseline) * 100) };
-                })
-                .filter(m => m.drop_pct >= 15)
-                .sort((a, b) => b.drop_pct - a.drop_pct);
-
-            return res.status(200).json({ success: true, data: atRisk });
+            return res.status(200).json({ success: true, data: data || [] });
         }
 
         if (action === 'get_merchant_detail') {

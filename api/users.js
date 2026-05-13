@@ -14,7 +14,7 @@ export default async function handler(req, res) {
         if (req.method === 'GET' || req.query.action === 'list') {
             // Only return non-sensitive fields
             const { data, error } = await supabase.from('app_users')
-                .select('userid,id,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_reports,access_tickets,access_partners,access_community,access_tasks,can_delete_tickets,created_at')
+                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_reports,access_tickets,access_partners,access_community,access_tasks,can_delete_tickets,created_at')
                 .order('first_name');
             if (error) throw error;
             return res.status(200).json({ success: true, data });
