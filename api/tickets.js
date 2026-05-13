@@ -50,22 +50,38 @@ export default async function handler(req, res) {
                 .from('merchants').select('id, dba_name').eq('merchant_id', merchant_id).single();
             if (!merchant) return res.status(404).json({ success: false, message: 'Merchant not found.' });
 
-            const { data: deployments } = await supabase
-                .from('deployments')
-                .select('id, deployment_id, status, is_bulk, equipments:equipment_id(id, serial_number, terminal_type, status), deployment_items(equipment_id, equip:equipment_id(id, serial_number, terminal_type, status)), returns(id, status)')
-                .eq('merchant_id', merchant.id)
-                .order('created_at', { ascending: false });
+            // Single units: query equipments directly — deployment record status is unreliable
+            const { data: singleEquip } = await supabase
+                .from('equipments')
+                .select('id, serial_number, terminal_type, deployments!equipment_id(id, deployment_id, created_at)')
+                .eq('status', 'deployed')
+                .eq('merchant_id', merchant.id);
 
-            // Use actual equipment status as source of truth for both bulk and single
-            const eligible = (deployments || []).filter(d => {
-                if (d.is_bulk) {
-                    return d.deployment_items?.some(item => item.equip?.status === 'deployed');
-                }
-                // Single: equipment must be deployed AND deployment must not be closed
-                return d.status !== 'Closed' && d.equipments?.status === 'deployed';
+            const singles = (singleEquip || []).map(e => {
+                const deps = Array.isArray(e.deployments) ? e.deployments : (e.deployments ? [e.deployments] : []);
+                const latest = deps.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+                return {
+                    id: e.id,
+                    serial_number: e.serial_number,
+                    terminal_type: e.terminal_type,
+                    deployment_internal_id: latest?.id || null,
+                    deployment_display_id: latest?.deployment_id || null
+                };
             });
 
-            return res.status(200).json({ success: true, deployments: eligible });
+            // Bulk deployments: check active units via deployment_items
+            const { data: bulkDeps } = await supabase
+                .from('deployments')
+                .select('id, deployment_id, deployment_items(equipment_id, equip:equipment_id(id, serial_number, terminal_type, status))')
+                .eq('merchant_id', merchant.id)
+                .eq('is_bulk', true)
+                .order('created_at', { ascending: false });
+
+            const bulks = (bulkDeps || []).filter(d =>
+                d.deployment_items?.some(item => item.equip?.status === 'deployed')
+            );
+
+            return res.status(200).json({ success: true, singles, bulks });
         }
 
         if (action === 'create') {

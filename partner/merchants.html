@@ -319,7 +319,8 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
             Swal.fire({ icon: 'error', title: 'Error', text: result.message, confirmButtonColor: '#0d9488' });
             return;
         }
-        if (!result.deployments || !result.deployments.length) {
+        const hasEquipment = (result.singles?.length > 0) || (result.bulks?.length > 0);
+        if (!hasEquipment) {
             Swal.fire({
                 icon: 'info', title: 'No Active Equipment',
                 html: `<p style="color:#475569;">There is no active equipment deployed for <b>${merchantName}</b>.</p><p style="color:#94a3b8;font-size:13px;">An RMA can only be requested when a merchant has equipment actively deployed.</p>`,
@@ -328,7 +329,7 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
             return;
         }
         Swal.close();
-        openTicketForm(merchantId, merchantName, 'rma_request', result.deployments, []);
+        openTicketForm(merchantId, merchantName, 'rma_request', result.singles || [], result.bulks || [], []);
     } else {
         // Fetch terminal types from DB for deployment form
         Swal.fire({ title: 'Loading...', didOpen: () => Swal.showLoading() });
@@ -346,23 +347,28 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
     }
 };
 
-window.openTicketForm = async function(merchantId, merchantName, type, deployments, terminalTypes = []) {
+window.openTicketForm = async function(merchantId, merchantName, type, singles, bulks, terminalTypes = []) {
     const isDeployment = type === 'deployment_request';
 
-    // Build lookup map for unit picker
-    window._partnerDepsMap = {};
-    if (!isDeployment) deployments.forEach(d => { window._partnerDepsMap[d.id] = d; });
+    // Build lookup maps keyed by prefixed ID
+    window._partnerSinglesMap = {};
+    window._partnerBulksMap = {};
+    if (!isDeployment) {
+        (singles || []).forEach(s => { window._partnerSinglesMap[s.id] = s; });
+        (bulks || []).forEach(b => { window._partnerBulksMap[b.id] = b; });
+    }
 
-    const equipmentOptions = !isDeployment ? deployments.map(d => {
-        const depLabel = d.deployment_id ? ` [${d.deployment_id}]` : '';
-        if (d.is_bulk) {
-            const count = d.deployment_items?.length || 0;
-            return `<option value="${d.id}">Bulk Deployment — ${count} unit${count !== 1 ? 's' : ''}${depLabel}</option>`;
-        }
-        const e = d.equipments;
-        const label = [e?.terminal_type, e?.serial_number].filter(Boolean).join(' — ') + depLabel;
-        return `<option value="${d.id}">${label || 'Unknown equipment'}</option>`;
-    }).join('') : '';
+    const equipmentOptions = !isDeployment ? [
+        ...(singles || []).map(s => {
+            const label = [s.terminal_type, s.serial_number].filter(Boolean).join(' — ');
+            const depRef = s.deployment_display_id ? ` [${s.deployment_display_id}]` : '';
+            return `<option value="s:${s.id}">[UNIT] ${label || 'Unknown'}${depRef}</option>`;
+        }),
+        ...(bulks || []).map(d => {
+            const activeCount = d.deployment_items?.filter(i => i.equip?.status === 'deployed').length || 0;
+            return `<option value="b:${d.id}">[BULK] ${d.deployment_id} — ${activeCount} active unit${activeCount !== 1 ? 's' : ''}</option>`;
+        })
+    ].join('') : '';
 
     const typeOptions = terminalTypes.length > 0
         ? terminalTypes.map(t => `<option value="${t}">${t}</option>`).join('')
@@ -417,11 +423,12 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
             if (!equip) return;
 
             const renderUnitPicker = () => {
-                const dep = window._partnerDepsMap[equip.value];
+                const val = equip.value;
                 const wrap = document.getElementById('tickUnitPicker');
                 if (!wrap) return;
-                if (dep?.is_bulk && dep.deployment_items?.length) {
-                    const activeItems = dep.deployment_items.filter(i => i.equip?.status === 'deployed');
+                if (val.startsWith('b:')) {
+                    const dep = window._partnerBulksMap[val.slice(2)];
+                    const activeItems = dep?.deployment_items?.filter(i => i.equip?.status === 'deployed') || [];
                     wrap.innerHTML = `
                         <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Select units to return (partial ok)</div>
                         ${activeItems.map(item => `
@@ -430,7 +437,7 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
                                 <span>${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
                             </label>
                         `).join('')}
-                        ${activeItems.length === 0 ? '<div style="color:#94a3b8;font-size:12px;">All units from this deployment have already been returned.</div>' : ''}
+                        ${activeItems.length === 0 ? '<div style="color:#94a3b8;font-size:12px;">All units have already been returned.</div>' : ''}
                     `;
                     wrap.style.display = 'block';
                 } else {
@@ -446,24 +453,29 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
             const subject = document.getElementById('tickSubject').value.trim();
             if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
             if (!isDeployment) {
-                const depId = document.getElementById('tickEquip')?.value;
+                const val = document.getElementById('tickEquip')?.value;
                 const reason = document.getElementById('tickCategory')?.value;
-                if (!depId) { Swal.showValidationMessage('Please select equipment to return'); return false; }
+                if (!val) { Swal.showValidationMessage('Please select equipment to return'); return false; }
                 if (!reason) { Swal.showValidationMessage('Please select a return reason'); return false; }
 
-                const dep = window._partnerDepsMap[depId];
-                let description = document.getElementById('tickDesc').value || '';
-                let selectedEquipIds = null;
+                const desc = document.getElementById('tickDesc').value || '';
+                const priority = document.getElementById('tickPriority').value;
 
-                if (dep?.is_bulk) {
+                if (val.startsWith('b:')) {
+                    const depId = val.slice(2);
                     const checked = [...document.querySelectorAll('.tick-unit-cb:checked')];
                     if (!checked.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
-                    selectedEquipIds = checked.map(cb => cb.value);
+                    const selectedEquipIds = checked.map(cb => cb.value);
                     const unitList = checked.map(cb => `${cb.dataset.type} — ${cb.dataset.serial}`).join(', ');
-                    description = `Units requested for return: ${unitList}${description ? '\n\n' + description : ''}`;
+                    const description = `Units requested for return: ${unitList}${desc ? '\n\n' + desc : ''}`;
+                    return { subject, category: reason, deployment_id: depId, selected_equipment_ids: selectedEquipIds, priority, description };
+                } else {
+                    const equipId = val.slice(2);
+                    const unit = window._partnerSinglesMap[equipId];
+                    const label = [unit?.terminal_type, unit?.serial_number].filter(Boolean).join(' — ');
+                    const description = `Unit requested for return: ${label}${desc ? '\n\n' + desc : ''}`;
+                    return { subject, category: reason, deployment_id: unit?.deployment_internal_id || null, equipment_serial: unit?.serial_number || null, priority, description };
                 }
-
-                return { subject, category: reason, deployment_id: depId, selected_equipment_ids: selectedEquipIds, priority: document.getElementById('tickPriority').value, description: description || null };
             }
             return { subject, category: document.getElementById('tickCategory').value || null, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
         }
