@@ -44,8 +44,14 @@
 
     // --- Favicon ---
     if (cfg.favicon_url) {
-        const fav = document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
-        if (fav) fav.href = cfg.favicon_url;
+        let fav = document.querySelector('link[rel="icon"], link[rel="shortcut icon"]');
+        if (!fav) {
+            fav = document.createElement('link');
+            fav.rel = 'icon';
+            fav.type = 'image/png';
+            document.head.appendChild(fav);
+        }
+        fav.href = cfg.favicon_url;
     }
 
     // --- Brand colors — set ALL relevant CSS custom properties ---
