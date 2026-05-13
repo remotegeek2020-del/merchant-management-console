@@ -83,19 +83,32 @@
         });
     }
 
-    // --- Software branding footer ---
+    // --- Software branding ---
     if (cfg.software_name || cfg.software_logo_url) {
-        // Don't double-inject
+        // Login card slot (index.html)
+        const loginBrand = document.getElementById('login-sw-brand');
+        if (loginBrand) {
+            if (cfg.software_logo_url) {
+                const logoEl = document.getElementById('login-sw-logo');
+                if (logoEl) { logoEl.src = cfg.software_logo_url; logoEl.style.display = 'block'; }
+            }
+            if (cfg.software_name) {
+                const nameEl = document.getElementById('login-sw-name');
+                if (nameEl) nameEl.textContent = cfg.software_name;
+            }
+            loginBrand.style.display = 'flex';
+        }
+
+        // Global footer bar on all other pages
         if (!document.getElementById('pp-sw-footer')) {
             const bar = document.createElement('div');
             bar.id = 'pp-sw-footer';
             bar.style.cssText = [
                 'position:fixed', 'bottom:0', 'left:0', 'right:0',
-                'height:28px', 'background:rgba(255,255,255,0.92)',
-                'backdrop-filter:blur(6px)', '-webkit-backdrop-filter:blur(6px)',
+                'height:30px', 'background:#f1f5f9',
                 'border-top:1px solid #e2e8f0',
                 'display:flex', 'align-items:center', 'justify-content:center',
-                'gap:6px', 'z-index:99999',
+                'gap:6px', 'z-index:99998',
                 'font-family:"DM Sans",sans-serif', 'font-size:10px',
                 'font-weight:600', 'color:#94a3b8', 'letter-spacing:0.3px',
                 'pointer-events:none', 'user-select:none'
@@ -106,13 +119,14 @@
                 inner += `<img src="${cfg.software_logo_url}" alt="" style="height:14px;width:auto;object-fit:contain;vertical-align:middle;">`;
             }
             if (cfg.software_name) {
-                inner += `<span style="font-weight:800;color:#64748b;">${cfg.software_name}</span>`;
+                inner += `<span style="font-weight:800;color:#475569;">${cfg.software_name}</span>`;
             }
             bar.innerHTML = inner;
             document.body.appendChild(bar);
 
-            // Push page content up so footer doesn't overlap
-            document.body.style.paddingBottom = 'max(' + (document.body.style.paddingBottom || '0px') + ', 32px)';
+            // Ensure content doesn't hide behind the bar
+            const pb = parseInt(window.getComputedStyle(document.body).paddingBottom) || 0;
+            if (pb < 32) document.body.style.paddingBottom = '32px';
         }
     }
 })();
