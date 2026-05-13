@@ -110,7 +110,7 @@ export default async function handler(req, res) {
                 for (const d of (data || [])) {
                     const base = {
                         'RMA ID':            d.return_id || '—',
-                        'Deployment Ticket': d.deployments?.deployment_id || '—',
+                        'Origin Deployment': d.deployments?.deployment_id || '—',
                         'Merchant':          d.merchants?.dba_name || '—',
                         'Merchant ID':       d.merchants?.merchant_id || '—',
                         'Reason':            d.return_reason || '—',
