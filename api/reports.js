@@ -47,9 +47,9 @@ export default async function handler(req, res) {
                         equipments!deployments_equipment_id_fkey(serial_number, terminal_type),
                         deployment_items(equipment_id, tid, equip:equipment_id(serial_number, terminal_type))`,
                         { count: 'exact' })
-                    .gte('created_at', startDate + 'T00:00:00')
-                    .lte('created_at', endDate + 'T23:59:59')
-                    .order('created_at', { ascending: false })
+                    .gte('target_deployment_date', startDate)
+                    .lte('target_deployment_date', endDate)
+                    .order('target_deployment_date', { ascending: false })
                     .range(offset, offset + limit - 1);
 
                 if (error) throw error;
