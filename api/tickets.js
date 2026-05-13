@@ -81,7 +81,11 @@ export default async function handler(req, res) {
                 d.deployment_items?.some(item => item.equip?.status === 'deployed')
             );
 
-            return res.status(200).json({ success: true, singles, bulks });
+            // Remove from singles any unit already covered by a bulk deployment
+            const bulkEquipIds = new Set(bulks.flatMap(d => (d.deployment_items || []).map(i => i.equipment_id)));
+            const filteredSingles = singles.filter(s => !bulkEquipIds.has(s.id));
+
+            return res.status(200).json({ success: true, singles: filteredSingles, bulks });
         }
 
         if (action === 'create') {
