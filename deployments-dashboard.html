@@ -952,18 +952,24 @@ async function openEditModal(index) {
     toggleMerchantReceivedField(d.status || 'Open');
     document.getElementById('editMerchantReceived').value = d.merchant_received_date ? fmtDateInput(d.merchant_received_date) : '';
 
-    // Bulk items section
+    // Bulk items section — show per-item status
     const editItemsSection = document.getElementById('editItemsSection');
     const editItemsList = document.getElementById('editItemsList');
     if (d.is_bulk && d.items?.length > 0) {
         editItemsSection.style.display = 'block';
-        editItemsList.innerHTML = d.items.map(i => `
+        editItemsList.innerHTML = d.items.map(i => {
+            const st = i.status || 'unknown';
+            const stLabel = st === 'deployed' ? 'At Merchant' : st === 'stocked' ? 'Restocked' : st === 'repairing' ? 'In Repairs' : st === 'repairing' ? 'In Repairs' : 'In Transit';
+            const stColor = st === 'deployed' ? '#166534' : st === 'stocked' ? '#92400e' : st === 'repairing' ? '#9a3412' : '#92400e';
+            const stBg   = st === 'deployed' ? '#dcfce7' : st === 'stocked' ? '#fef3c7' : st === 'repairing' ? '#ffedd5' : '#fef3c7';
+            return `
             <div style="display:flex; gap:10px; align-items:center; padding:7px 10px; background:white; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:4px;">
                 <code style="font-size:12px; color:#004990;">${i.serial_number || '---'}</code>
                 <span style="font-size:11px; color:#64748b;">${i.terminal_type || ''}</span>
-                <span style="font-size:11px; font-weight:600; margin-left:auto;">TID: ${i.tid || '—'}</span>
-            </div>
-        `).join('');
+                ${i.tid ? `<span style="font-size:10px; color:#64748b;">TID: ${i.tid}</span>` : ''}
+                <span style="font-size:9px; font-weight:700; padding:2px 7px; border-radius:99px; background:${stBg}; color:${stColor}; margin-left:auto; text-transform:uppercase;">${stLabel}</span>
+            </div>`;
+        }).join('');
     } else {
         editItemsSection.style.display = 'none';
     }
@@ -1005,28 +1011,57 @@ async function openEditModal(index) {
             body: JSON.stringify({ action: 'check_rma', payload: { deployment_id: d.id } })
         });
         const result = await res.json();
-        
-        if (result.success && result.data) {
-            returnBox.style.display = 'none';
-            rmaBadge.style.display = 'block';
-            
-            // Requirement: Use return_id from table
-            document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
-            document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason || 'N/A';
 
-            // --- THE FIX: Button visibility logic ---
-            if (result.data.status === 'Closed') {
-                if (completeBtn) completeBtn.style.display = 'none'; // Hide it if closed
-                rmaBadge.style.background = '#f0fdf4'; // Green
-                
-                // ARCHIVE LOCK: If both are closed, lock everything
+        if (result.isBulk) {
+            // ── BULK DEPLOYMENT LOGIC ──────────────────────────────
+            const deployedCount = result.deployedCount || 0;
+            rmaBadge.style.display = 'none'; // No single-RMA badge for bulk
+
+            if (deployedCount > 0) {
+                // Units still at merchant — allow initiating (more) returns
+                returnBox.style.display = 'block';
+                const returnBoxLabel = returnBox.querySelector('label');
+                if (returnBoxLabel) {
+                    returnBoxLabel.innerHTML = `<span class="material-icons" style="font-size:14px; vertical-align:middle;">assignment_return</span>
+                        Initiate Return
+                        <span style="background:#fef9c3; color:#854d0e; font-size:9px; padding:2px 7px; border-radius:99px; margin-left:6px; font-weight:700;">${deployedCount} unit${deployedCount !== 1 ? 's' : ''} at merchant</span>`;
+                }
+                // If there are also open returns in the Returns ledger, show a note
+                if (result.data) {
+                    const infoBar = document.createElement('div');
+                    infoBar.style.cssText = 'font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;margin-bottom:10px;';
+                    infoBar.innerHTML = `<span class="material-icons" style="font-size:12px;vertical-align:middle;">info</span> Open return in progress — complete it in the <a href="returns-dashboard.html" style="color:#b45309;font-weight:700;">Returns Ledger</a>.`;
+                    returnBox.insertAdjacentElement('beforebegin', infoBar);
+                }
+            } else {
+                // All units accounted for
+                returnBox.style.display = 'none';
                 if (d.status === 'Closed') {
                     document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
                     if (updateBtn) updateBtn.style.display = 'none';
                 }
-            } else {
-                if (completeBtn) completeBtn.style.display = 'block'; // Show it if open
-                rmaBadge.style.background = '#fffbeb'; // Yellow
+            }
+        } else {
+            // ── SINGLE UNIT LOGIC (unchanged) ─────────────────────
+            if (result.success && result.data) {
+                returnBox.style.display = 'none';
+                rmaBadge.style.display = 'block';
+
+                document.getElementById('rmaIdText').innerText = `RMA ID: ${result.data.return_id || 'PENDING'}`;
+                document.getElementById('rmaCurrentReasonText').innerText = result.data.return_reason || 'N/A';
+
+                if (result.data.status === 'Closed') {
+                    if (completeBtn) completeBtn.style.display = 'none';
+                    rmaBadge.style.background = '#f0fdf4';
+
+                    if (d.status === 'Closed') {
+                        document.querySelectorAll('#editDepForm input, #editDepForm select, #editDepForm textarea').forEach(el => el.disabled = true);
+                        if (updateBtn) updateBtn.style.display = 'none';
+                    }
+                } else {
+                    if (completeBtn) completeBtn.style.display = 'block';
+                    rmaBadge.style.background = '#fffbeb';
+                }
             }
         }
     } catch (e) { console.error("RMA Load Error:", e); }

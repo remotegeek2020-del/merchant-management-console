@@ -187,7 +187,38 @@ if (action === 'update') {
 
 if (action === 'check_rma') {
     const { deployment_id } = body.payload;
-    const { data, error } = await supabase
+
+    // For bulk deployments: return per-item deployment status instead of a single return record
+    const { data: dep } = await supabase.from('deployments')
+        .select('is_bulk').eq('id', deployment_id).single();
+
+    if (dep?.is_bulk) {
+        const { data: depItems } = await supabase.from('deployment_items')
+            .select('equipment_id, equip:equipment_id(status)')
+            .eq('deployment_id', deployment_id);
+
+        const deployedCount = (depItems || []).filter(i => i.equip?.status === 'deployed').length;
+        const totalCount = depItems?.length || 0;
+
+        // Check if any open return exists (to show in-progress indicator)
+        const { data: openReturn } = await supabase.from('returns')
+            .select('return_id, id, status, return_reason')
+            .eq('deployment_id', deployment_id)
+            .eq('status', 'Open')
+            .limit(1)
+            .maybeSingle();
+
+        return res.status(200).json({
+            success: true,
+            data: openReturn || null,
+            isBulk: true,
+            deployedCount,
+            totalCount
+        });
+    }
+
+    // Single unit: original logic
+    const { data } = await supabase
         .from('returns')
         .select('return_id, id, status, return_reason')
         .eq('deployment_id', deployment_id)
@@ -282,7 +313,7 @@ if (action === 'delete') {
                     *,
                     merchants:merchant_id(dba_name, merchant_id),
                     equipments:equipment_id(id, serial_number, terminal_type),
-                    deployment_items(id, equipment_id, tid, equip:equipment_id(serial_number, terminal_type))
+                    deployment_items(id, equipment_id, tid, equip:equipment_id(serial_number, terminal_type, status))
                 `, { count: 'exact' });
 
             if (query) {
@@ -322,7 +353,7 @@ if (action === 'delete') {
             // Normalize to items[] for unified frontend handling
             const safeData = (data || []).map(d => {
                 d.items = d.is_bulk
-                    ? (d.deployment_items || []).map(i => ({ equipment_id: i.equipment_id, tid: i.tid, serial_number: i.equip?.serial_number, terminal_type: i.equip?.terminal_type, item_id: i.id }))
+                    ? (d.deployment_items || []).map(i => ({ equipment_id: i.equipment_id, tid: i.tid, serial_number: i.equip?.serial_number, terminal_type: i.equip?.terminal_type, status: i.equip?.status, item_id: i.id }))
                     : (d.equipment_id ? [{ equipment_id: d.equipment_id, tid: d.tid, serial_number: d.equipments?.serial_number, terminal_type: d.equipments?.terminal_type, item_id: null }] : []);
                 return d;
             });
@@ -497,7 +528,8 @@ if (action === 'return_to_office') {
                 }
                 const { data: depItems } = await depItemsQuery;
 
-                const { data: ret, error: retErr } = await supabase.from('returns').upsert({
+                // INSERT (not upsert) — bulk deployments can have multiple partial returns
+                const { data: ret, error: retErr } = await supabase.from('returns').insert({
                     deployment_id,
                     equipment_id: null,
                     merchant_id,
@@ -507,7 +539,7 @@ if (action === 'return_to_office') {
                     destination: 'In Transit / RMA',
                     status: 'Open',
                     is_bulk: true
-                }, { onConflict: 'deployment_id' }).select().single();
+                }).select().single();
                 if (retErr) throw retErr;
 
                 // Delete any existing return_items for this return and re-insert
