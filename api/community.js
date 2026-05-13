@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 import crypto from 'crypto';
 
 export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
@@ -39,6 +40,9 @@ async function getOrCreateProfile(user) {
 }
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'POST') return res.status(405).json({ success: false });
     

@@ -1,7 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     res.setHeader('Content-Type', 'application/json');
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 

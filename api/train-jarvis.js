@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
     const { topic, logic, userId } = req.body;

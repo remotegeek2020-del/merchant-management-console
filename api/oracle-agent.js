@@ -1,9 +1,13 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { validateSession, sessionErrorResponse } from './_validate.js';
 import { createClient } from '@supabase/supabase-js';
 // CRITICAL: This import connects Jarvis to your existing merchant logic
 import merchantHandler from './merchants.js'; 
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     if (req.method !== 'POST') {
         return res.status(405).json({ answer: "Method not allowed, Sir." });
     }

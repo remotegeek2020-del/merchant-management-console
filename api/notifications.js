@@ -1,8 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 
 const SECTIONS = ['partners', 'merchants', 'inventory', 'deployments', 'returns', 'tickets', 'tasks', 'ideas'];
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     if (req.method !== 'POST') return res.status(405).json({ success: false });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, userid, section } = req.body;

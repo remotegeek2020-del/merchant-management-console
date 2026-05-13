@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 
 function dedup(arr, key) {
     const seen = new Set();
@@ -11,6 +12,9 @@ function dedup(arr, key) {
 }
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
 
     const { q, userid } = req.body;

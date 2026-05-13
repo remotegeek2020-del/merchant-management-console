@@ -3,6 +3,16 @@ import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import { ServerClient } from 'postmark';
 
+async function createStaffSession(supabase, userid, req) {
+    const { data } = await supabase.from('staff_sessions').insert({
+        userid,
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        user_agent: req.headers['user-agent'] || null,
+        ip_address: req.headers['x-forwarded-for'] || 'Internal'
+    }).select('session_token').single();
+    return data?.session_token || null;
+}
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).send('Method Not Allowed');
 
@@ -13,6 +23,7 @@ export default async function handler(req, res) {
         let user = null;
         let error = null;
         let generatedDeviceToken = null;
+        let generatedSessionToken = null;
 
         // --- FORGOT PASSWORD ---
         if (action === 'forgotPassword') {
@@ -32,9 +43,32 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // --- VALIDATE ---
+        // --- LOGOUT (invalidate session token) ---
+        else if (action === 'logout') {
+            const authHeader = req.headers['authorization'];
+            if (authHeader?.startsWith('Bearer ')) {
+                const token = authHeader.slice(7).trim();
+                await supabase.from('staff_sessions').delete().eq('session_token', token);
+            }
+            return res.status(200).json({ success: true });
+        }
+
+        // --- VALIDATE (requires valid session token) ---
         else if (action === 'validate') {
-            const { data, error: valError } = await supabase.from('app_users').select('*').eq('userid', userId).single();
+            const authHeader = req.headers['authorization'];
+            if (!authHeader || !authHeader.startsWith('Bearer ')) {
+                return res.status(401).json({ success: false, message: 'No session. Please log in.', reason: 'no_token' });
+            }
+            const token = authHeader.slice(7).trim();
+            const { data: session } = await supabase.from('staff_sessions')
+                .select('userid, expires_at').eq('session_token', token).maybeSingle();
+            if (!session || new Date(session.expires_at) < new Date()) {
+                if (session) await supabase.from('staff_sessions').delete().eq('session_token', token);
+                return res.status(401).json({ success: false, message: 'Session expired.', reason: 'session_expired' });
+            }
+            // Refresh last_used (fire-and-forget)
+            supabase.from('staff_sessions').update({ last_used: new Date().toISOString() }).eq('session_token', token);
+            const { data, error: valError } = await supabase.from('app_users').select('*').eq('userid', session.userid).single();
             user = data;
             error = valError;
         }
@@ -65,6 +99,7 @@ export default async function handler(req, res) {
                 }
                 await supabase.from('app_users').update({ tfa_code: null, tfa_attempts: 0, last_seen: new Date().toISOString() }).eq('userid', userId);
                 user = tfaUser;
+                generatedSessionToken = await createStaffSession(supabase, userId, req);
             } else {
                 await supabase.from('app_users').update({ tfa_attempts: attempts }).eq('userid', userId);
                 const remaining = MAX_ATTEMPTS - attempts;
@@ -80,7 +115,7 @@ export default async function handler(req, res) {
             } else {
                 if (!dbUser.is_active) return res.status(401).json({ success: false, message: 'Account not activated.' });
                 if (bcrypt.compareSync(passkey, dbUser.password_hash)) {
-                    
+
                     const sentToken = (deviceToken && deviceToken !== "null") ? deviceToken : null;
                     let trusted = null;
 
@@ -98,6 +133,7 @@ export default async function handler(req, res) {
                         await supabase.from('trusted_devices').update({ last_used: new Date().toISOString() }).eq('id', trusted.id);
                         await supabase.from('app_users').update({ last_seen: new Date().toISOString() }).eq('userid', dbUser.userid);
                         user = dbUser;
+                        generatedSessionToken = await createStaffSession(supabase, dbUser.userid, req);
                     } else {
                         const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
                         await supabase.from('app_users').update({ tfa_code: tfaCode, tfa_attempts: 0 }).eq('userid', dbUser.userid);
@@ -109,11 +145,11 @@ export default async function handler(req, res) {
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 450px; margin: auto; padding: 40px; border: 1px solid #e2e8f0; border-radius: 24px; color: #1e293b; background-color: #ffffff; text-align: center;">
         <h2 style="color: #004990; margin-bottom: 10px;">Security Verification</h2>
         <p style="font-size: 15px; color: #64748b; margin-bottom: 30px;">A login attempt was made from a new device. Use the code below to authorize access:</p>
-        
+
         <div style="background-color: #f8fafc; border: 2px dashed #cbd5e1; border-radius: 12px; padding: 20px; margin-bottom: 30px;">
             <h1 style="font-size: 36px; letter-spacing: 8px; color: #004990; margin: 0; font-family: monospace;">${tfaCode}</h1>
         </div>
-        
+
         <p style="font-size: 12px; color: #94a3b8;">If you did not request this, please change your password immediately.</p>
         <hr style="border: 0; border-top: 1px solid #f1f5f9; margin: 30px 0;">
         <p style="font-size: 11px; color: #94a3b8;">PayProTec Hardware Management Console</p>
@@ -138,13 +174,16 @@ export default async function handler(req, res) {
 
         return res.status(200).json({
             success: true,
+            sessionToken: generatedSessionToken,
             user: {
-                userid: user.userid, first_name: user.first_name, email: user.email, role: user.role,
+                userid: user.userid, first_name: user.first_name, last_name: user.last_name,
+                email: user.email, role: user.role,
                 access_inventory: user.access_inventory, access_deployments: user.access_deployments,
                 access_returns: user.access_returns, access_merchants: user.access_merchants,
                 access_partners: user.access_partners,
                 access_jarvis: user.access_jarvis,
-                access_admin_dashboard: user.access_admin_dashboard
+                access_admin_dashboard: user.access_admin_dashboard,
+                can_delete_tickets: user.can_delete_tickets
             },
             newDeviceToken: generatedDeviceToken
         });

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 
 export const config = { api: { bodyParser: { sizeLimit: '1mb' } } };
 
@@ -20,6 +21,9 @@ function inferCategory(action, provided) {
 }
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     res.setHeader('Content-Type', 'application/json');
 
     // ── GET LOGS ──────────────────────────────────────────

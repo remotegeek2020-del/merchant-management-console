@@ -1,9 +1,13 @@
 import { createClient } from '@supabase/supabase-js'
+import { validateSession, sessionErrorResponse } from './_validate.js';
 
 // Increase body size limit to 50MB for large CSV bulk uploads
 export const config = { api: { bodyParser: { sizeLimit: '50mb' } } };
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, id, payload, query, filterBy, statusFilter, page = 0, limit = 20, user } = req.body;
     

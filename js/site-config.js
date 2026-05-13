@@ -1,3 +1,34 @@
+// Auto-attach session token to all /api/ calls and handle 401 session expiry globally
+(function () {
+    const EXEMPT = ['/api/login', '/api/partner-auth', '/api/setup-password', '/api/partner-data'];
+    const _fetch = window.fetch.bind(window);
+    window.fetch = function (url, opts) {
+        opts = opts ? Object.assign({}, opts) : {};
+        const urlStr = typeof url === 'string' ? url : (url?.url || '');
+        const needsToken = urlStr.startsWith('/api/') && !EXEMPT.some(e => urlStr.startsWith(e));
+        if (needsToken) {
+            const token = localStorage.getItem('pp_session_token');
+            if (token) {
+                opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
+            }
+        }
+        return _fetch(url, opts).then(function (res) {
+            if (res.status === 401 && needsToken) {
+                res.clone().json().then(function (data) {
+                    if (data.reason === 'session_expired' || data.reason === 'no_token' || data.reason === 'invalid_token') {
+                        const devTok = localStorage.getItem('pp_device_token');
+                        localStorage.clear();
+                        if (devTok) localStorage.setItem('pp_device_token', devTok);
+                        const isLogin = ['/', '/index.html', ''].some(p => window.location.pathname === p || window.location.pathname.endsWith('/index.html'));
+                        if (!isLogin) window.location.href = '/index.html?reason=session_expired';
+                    }
+                }).catch(function () {});
+            }
+            return res;
+        });
+    };
+})();
+
 (async function () {
     'use strict';
     const CACHE_KEY = 'pp_sc';

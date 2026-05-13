@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 
 async function isSuperAdmin(supabase, userid) {
     if (!userid) return false;
@@ -7,6 +8,9 @@ async function isSuperAdmin(supabase, userid) {
 }
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action } = req.body;

@@ -1,9 +1,22 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
+
+// Partner actions carry their own `token` and use validatePartner() internally.
+// All other actions are staff-only and require a valid staff session.
+const PARTNER_ACTIONS = new Set([
+    'get_merchant_equipment','create','list_for_partner',
+    'get_detail','add_comment','get_linked_deployment','mark_delivered'
+]);
 
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action } = req.body;
+
+    if (!PARTNER_ACTIONS.has(action)) {
+        const session = await validateSession(req);
+        if (!session) return sessionErrorResponse(res);
+    }
 
     try {
         async function validatePartner(token) {

@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const config = {
@@ -51,6 +52,9 @@ function expandItem(item) {
 }
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     const fail = (status, message) => res.status(status).json({ success: false, message });
 
     if (req.method !== 'POST') return fail(405, 'Method Not Allowed');

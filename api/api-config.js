@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateSession, sessionErrorResponse } from './_validate.js';
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'crypto';
 
 // Derive a 32-byte AES key from the service role key so we never need a separate env var.
@@ -54,6 +55,9 @@ async function verifySuperAdmin(supabase, userid) {
 }
 
 export default async function handler(req, res) {
+    const session = await validateSession(req);
+    if (!session) return sessionErrorResponse(res);
+
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action, userid } = req.body;

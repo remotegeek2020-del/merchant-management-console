@@ -32,19 +32,24 @@ async function initGatekeeper() {
         const userId = urlUserId || cachedUserId;
         if (!userId) { showLoginUI(); return; }
 
+        const sessionToken = localStorage.getItem('pp_session_token');
         const response = await fetch('/api/login', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                ...(sessionToken ? { 'Authorization': `Bearer ${sessionToken}` } : {})
+            },
             body: JSON.stringify({ userId: userId, action: 'validate' })
         });
         const result = await response.json();
 
         if (result.success && result.user) {
-            // ✅ NEW: Sync RLS session so Supabase queries from this page are authorized
             await syncRLSSession(result.user.userid);
             authorizeUser(result.user);
         } else {
+            const devTok = localStorage.getItem('pp_device_token');
             localStorage.clear();
+            if (devTok) localStorage.setItem('pp_device_token', devTok);
             showLoginUI();
         }
     } catch (err) {
@@ -109,12 +114,13 @@ function showLoginUI() {
     if (loginUI) loginUI.style.display = 'block';
 }
 
-async function authorizeUser(user) {
+async function authorizeUser(user, sessionToken) {
     if (!user) return;
     try {
         const deviceToken = localStorage.getItem('pp_device_token');
         localStorage.clear();
-        if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
+        if (deviceToken) localStorage.setItem('pp_device_token', deviceToken);
+        if (sessionToken) localStorage.setItem('pp_session_token', sessionToken);
 
         localStorage.setItem('pp_userid', user.userid || '');
         localStorage.setItem('pp_role', user.role || 'Regular User');
@@ -395,9 +401,8 @@ async function handleManualLogin() {
                     verify2FACode(result.userid, tfaCode, remember);
                 }
             } else {
-                // ✅ NEW: Sync RLS session after direct login (trusted device / no 2FA)
                 await syncRLSSession(result.user?.userid);
-                authorizeUser(result.user);
+                authorizeUser(result.user, result.sessionToken);
             }
         } else {
             Swal.fire('Error', result.message || 'Invalid credentials.', 'error');
@@ -422,9 +427,8 @@ async function verify2FACode(uid, code, remember) {
             if (result.newDeviceToken) {
                 localStorage.setItem('pp_device_token', result.newDeviceToken);
             }
-            // ✅ NEW: Sync RLS session after 2FA verification
             await syncRLSSession(result.user?.userid);
-            authorizeUser(result.user);
+            authorizeUser(result.user, result.sessionToken);
         } else {
             Swal.fire('Error', result.message || 'Invalid code.', 'error');
         }
@@ -440,14 +444,24 @@ async function handleLogout() {
         confirmButtonText: 'Yes, Logout',
         confirmButtonColor: '#d33',
         cancelButtonColor: '#3085d6'
-    }).then((result) => {
+    }).then(async (result) => {
         if (result.isConfirmed) {
             const deviceToken = localStorage.getItem('pp_device_token');
-            
+            const sessionToken = localStorage.getItem('pp_session_token');
+
+            // Invalidate session server-side (fire-and-forget)
+            if (sessionToken) {
+                fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+                    body: JSON.stringify({ action: 'logout' })
+                }).catch(() => {});
+            }
+
             localStorage.clear();
             sessionStorage.clear();
-            
-            if(deviceToken) localStorage.setItem('pp_device_token', deviceToken);
+
+            if (deviceToken) localStorage.setItem('pp_device_token', deviceToken);
 
             const jarvisBtn = document.getElementById('jarvis-trigger');
             const jarvisSidebar = document.getElementById('jarvis-sidebar');
