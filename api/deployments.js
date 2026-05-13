@@ -633,11 +633,15 @@ if (action === 'return_to_office') {
             }
 
             if (isBulk) {
-                // BULK: close all return_items equipment
-                const { data: retRecord } = await supabase.from('returns')
-                    .select('id').eq('deployment_id', deployment_id).single();
+                // Find the most recent open return for this deployment
+                const { data: openRets } = await supabase.from('returns')
+                    .select('id').eq('deployment_id', deployment_id).eq('status', 'Open')
+                    .order('created_at', { ascending: false }).limit(1);
+                const retRecord = openRets?.[0];
+                if (!retRecord) throw new Error('No open return found for this deployment');
+
                 const { data: retItems } = await supabase.from('return_items')
-                    .select('equipment_id').eq('return_id', retRecord?.id);
+                    .select('equipment_id').eq('return_id', retRecord.id);
 
                 for (const ri of (retItems || [])) {
                     await supabase.from('equipments').update({
@@ -647,12 +651,31 @@ if (action === 'return_to_office') {
                     }).eq('id', ri.equipment_id);
                 }
 
+                // Close only the specific return being processed
                 await supabase.from('returns').update({
                     status: 'Closed',
                     condition: finalCondition,
                     destination: finalDestination,
                     equipment_received_date
-                }).eq('deployment_id', deployment_id);
+                }).eq('id', retRecord.id);
+
+                // Update per-item condition
+                await supabase.from('return_items').update({ condition: finalCondition }).eq('return_id', retRecord.id);
+
+                // Only close deployment if all units across all RMAs are returned
+                const { count: totalItems } = await supabase.from('deployment_items')
+                    .select('id', { count: 'exact', head: true }).eq('deployment_id', deployment_id);
+                const { data: closedRets } = await supabase.from('returns')
+                    .select('id').eq('deployment_id', deployment_id).eq('status', 'Closed');
+                let returnedCount = 0;
+                for (const cr of (closedRets || [])) {
+                    const { count } = await supabase.from('return_items')
+                        .select('id', { count: 'exact', head: true }).eq('return_id', cr.id);
+                    returnedCount += count || 0;
+                }
+                if (totalItems > 0 && returnedCount >= totalItems) {
+                    await supabase.from('deployments').update({ status: 'Closed' }).eq('id', deployment_id);
+                }
 
                 if (retItems?.length) {
                     await supabase.from('equipment_logs').insert(

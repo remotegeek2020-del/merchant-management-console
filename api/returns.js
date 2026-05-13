@@ -146,11 +146,37 @@ if (action === 'complete_return') {
         }]);
     }
 
-    // Close linked deployment
+    // Close linked deployment — for bulk, only close when ALL units are returned
     if (rmaData?.deployment_id) {
-        await supabase.from('deployments')
-            .update({ status: 'Closed' })
-            .eq('id', rmaData.deployment_id);
+        let shouldClose = true;
+        if (isBulk) {
+            const { count: totalItems } = await supabase
+                .from('deployment_items')
+                .select('id', { count: 'exact', head: true })
+                .eq('deployment_id', rmaData.deployment_id);
+
+            // Sum return_items across already-closed returns
+            const { data: closedRets } = await supabase
+                .from('returns')
+                .select('id')
+                .eq('deployment_id', rmaData.deployment_id)
+                .eq('status', 'Closed');
+            let returnedCount = 0;
+            for (const cr of (closedRets || [])) {
+                const { count } = await supabase.from('return_items')
+                    .select('id', { count: 'exact', head: true }).eq('return_id', cr.id);
+                returnedCount += count || 0;
+            }
+            // Add current RMA's items (about to be closed)
+            const { count: currentItems } = await supabase.from('return_items')
+                .select('id', { count: 'exact', head: true }).eq('return_id', rmaId);
+            returnedCount += currentItems || 0;
+
+            shouldClose = totalItems > 0 && returnedCount >= totalItems;
+        }
+        if (shouldClose) {
+            await supabase.from('deployments').update({ status: 'Closed' }).eq('id', rmaData.deployment_id);
+        }
     }
 
     // Close the RMA
