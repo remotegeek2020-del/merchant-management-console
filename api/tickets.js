@@ -61,7 +61,8 @@ export default async function handler(req, res) {
                 if (d.is_bulk) {
                     return d.deployment_items?.some(item => item.equip?.status === 'deployed');
                 }
-                return d.equipments?.status === 'deployed';
+                // Single: equipment must be deployed AND deployment must not be closed
+                return d.status !== 'Closed' && d.equipments?.status === 'deployed';
             });
 
             return res.status(200).json({ success: true, deployments: eligible });
