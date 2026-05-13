@@ -143,14 +143,15 @@ if (action === 'getMonthlyReport') {
         // --- ACTION: UPDATE (Restored for Standard Ticket Updates) ---
 // Inside api/deployments.js -> action === 'update'
 if (action === 'update') {
-    const { 
-        deployment_id, 
-        status, 
-        tracking_id, 
-        target_date, 
-        notes, 
-        purchase_type // FIXED: Now explicitly defined
-    } = payload; 
+    const {
+        deployment_id,
+        status,
+        tracking_id,
+        target_date,
+        notes,
+        purchase_type,
+        merchant_received_date
+    } = payload;
 
     // 1. Fetch current data to ensure it exists
     const { data: oldDep, error: fetchError } = await supabase
@@ -166,12 +167,13 @@ if (action === 'update') {
     // 2. Perform the Update with the new purchase_type
     const { error: updateError } = await supabase
         .from('deployments')
-        .update({ 
-            status: status, 
-            tracking_id: tracking_id, 
-            target_deployment_date: target_date, 
-            notes: notes,
-            purchase_type: purchase_type // FIXED: Included in update
+        .update({
+            status,
+            tracking_id,
+            target_deployment_date: target_date,
+            notes,
+            purchase_type,
+            merchant_received_date: merchant_received_date || null
         })
         .eq('id', deployment_id);
 

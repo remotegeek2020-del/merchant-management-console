@@ -146,7 +146,7 @@
                 <input type="text" id="tidInput" class="slds-input" placeholder="TID">
            </div>
             <div style="margin-bottom: 15px;">
-                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TARGET DEPLOYMENT DATE</label>
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">DEPLOYMENT DATE</label>
                 <input type="date" id="dateInput" class="slds-input" required>
             </div>
           <div style="margin-bottom: 15px;">
@@ -223,7 +223,7 @@
 
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TICKET STATUS</label>
-                <select id="editStatus" class="slds-select" style="border-radius:8px;">
+                <select id="editStatus" class="slds-select" style="border-radius:8px;" onchange="toggleMerchantReceivedField(this.value)">
                     <option value="Open">Open</option>
                     <option value="In Transit">In Transit</option>
                     <option value="Closed">Closed / Delivered</option>
@@ -231,8 +231,16 @@
             </div>
 
             <div style="margin-bottom:15px;">
-                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TARGET DATE</label>
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">DEPLOYMENT DATE</label>
                 <input type="date" id="editDate" class="slds-input" style="border-radius:8px;">
+            </div>
+
+            <div id="merchantReceivedWrap" style="margin-bottom:15px; display:none; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#166534; margin-bottom:5px; text-transform:uppercase; letter-spacing:0.5px;">
+                    <span class="material-icons" style="font-size:13px; vertical-align:middle;">check_circle</span>
+                    Equipment Date Received by Merchant
+                </label>
+                <input type="date" id="editMerchantReceived" class="slds-input" style="border-radius:8px;">
             </div>
 
             <div style="margin-bottom:15px;">
@@ -506,6 +514,7 @@ if (document.getElementById('kpi-total')) {
                     currentDeployments.forEach((d, index) => {
                         const row = tbody.insertRow();
                         const dateStr = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
+                        const receivedStr = (d.status === 'Closed' && d.merchant_received_date) ? fmtDate(d.merchant_received_date) : null;
                         const merchantName = d.merchants?.dba_name || '---';
                         const serialNum = d.equipments?.serial_number || '---';
                         const safeDba = merchantName.replace(/'/g, "\\'");
@@ -519,7 +528,10 @@ if (document.getElementById('kpi-total')) {
                             <td><code>${serialNum}</code></td>
                             <td>${d.tid || '---'}</td>
                             <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
-                            <td>${dateStr}</td>
+                            <td>
+                                <div>${dateStr}</div>
+                                ${receivedStr ? `<div style="font-size:10px; color:#166534; font-weight:600; margin-top:2px;"><span class="material-icons" style="font-size:10px; vertical-align:middle;">check_circle</span> Rcvd: ${receivedStr}</div>` : ''}
+                            </td>
                             <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
                             <td style="display:flex; gap:5px;">
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>
@@ -560,13 +572,15 @@ if (document.getElementById('kpi-total')) {
     btn.disabled = true;
     btn.innerText = "UPDATING...";
 
+    const editStatus = document.getElementById('editStatus').value;
     const payload = {
         deployment_id: document.getElementById('editId').value,
-        status: document.getElementById('editStatus').value,
+        status: editStatus,
         tracking_id: document.getElementById('editTracking').value,
         target_date: document.getElementById('editDate').value,
         notes: document.getElementById('editNotes').value,
-        purchase_type: document.getElementById('editPurchaseType').value
+        purchase_type: document.getElementById('editPurchaseType').value,
+        merchant_received_date: editStatus === 'Closed' ? (document.getElementById('editMerchantReceived').value || null) : null
     };
 
     try {
@@ -724,6 +738,7 @@ async function processReturn() {
         const d = currentDeployments[index];
         if (!d) return;
         const targetDate = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
+        const merchantReceivedDate = d.merchant_received_date ? fmtDate(d.merchant_received_date) : null;
         const merchantName = d.merchants?.dba_name || '---';
         const merchantId = d.merchants?.merchant_id || '---';
         const serialNumber = d.equipments?.serial_number || '---';
@@ -760,7 +775,7 @@ async function processReturn() {
                 </div>
                 <div class="info-section">
                     <div class="info-box"><h3>Merchant Information</h3><p>${merchantName}</p><p><span>MID:</span> ${merchantId}</p></div>
-                    <div class="info-box"><h3>Ticket Details</h3><p><span>ID:</span> ${d.deployment_id || '---'}</p><p><span>Target:</span> ${targetDate}</p><p><span>Tracking:</span> ${d.tracking_id || 'Not Assigned'}</p></div>
+                    <div class="info-box"><h3>Ticket Details</h3><p><span>ID:</span> ${d.deployment_id || '---'}</p><p><span>Deployment Date:</span> ${targetDate}</p>${merchantReceivedDate ? `<p><span>Received by Merchant:</span> ${merchantReceivedDate}</p>` : ''}<p><span>Tracking:</span> ${d.tracking_id || 'Not Assigned'}</p></div>
                 </div>
                 <table class="item-table">
                     <thead><tr><th style="width: 25%;">Model</th><th style="width: 35%;">Serial Number</th><th style="width: 20%;">TID</th><th style="width: 20%;">Condition</th></tr></thead>
@@ -850,6 +865,12 @@ async function processReturn() {
         document.getElementById('dateInput').value = fmtDateInput(new Date());
     }
 
+function toggleMerchantReceivedField(status) {
+    const wrap = document.getElementById('merchantReceivedWrap');
+    if (!wrap) return;
+    wrap.style.display = (status === 'Closed') ? 'block' : 'none';
+}
+
 async function openEditModal(index) {
     const d = currentDeployments[index];
     if (!d) return;
@@ -860,14 +881,17 @@ async function openEditModal(index) {
     document.getElementById('editStatus').value = d.status || 'Open';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
-    // ADD THIS LINE:
     document.getElementById('editPurchaseType').value = d.purchase_type || 'Free Placement';
-    
+
     if (d.target_deployment_date) {
         document.getElementById('editDate').value = fmtDateInput(d.target_deployment_date);
     } else {
         document.getElementById('editDate').value = '';
     }
+
+    // Merchant received date — only relevant when Closed/Delivered
+    toggleMerchantReceivedField(d.status || 'Open');
+    document.getElementById('editMerchantReceived').value = d.merchant_received_date ? fmtDateInput(d.merchant_received_date) : '';
 
     // 2. RESET UI ELEMENTS
     const rmaBadge = document.getElementById('rmaStatusBadge');
