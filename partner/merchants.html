@@ -350,29 +350,37 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
 window.openTicketForm = async function(merchantId, merchantName, type, singles, bulks, terminalTypes = []) {
     const isDeployment = type === 'deployment_request';
 
-    // Build lookup maps keyed by prefixed ID
-    window._partnerSinglesMap = {};
-    window._partnerBulksMap = {};
-    if (!isDeployment) {
-        (singles || []).forEach(s => { window._partnerSinglesMap[s.id] = s; });
-        (bulks || []).forEach(b => { window._partnerBulksMap[b.id] = b; });
-    }
-
-    const equipmentOptions = !isDeployment ? [
-        ...(singles || []).map(s => {
-            const label = [s.terminal_type, s.serial_number].filter(Boolean).join(' — ');
-            const depRef = s.deployment_display_id ? ` [${s.deployment_display_id}]` : '';
-            return `<option value="s:${s.id}">[UNIT] ${label || 'Unknown'}${depRef}</option>`;
-        }),
-        ...(bulks || []).map(d => {
-            const activeCount = d.deployment_items?.filter(i => i.equip?.status === 'deployed').length || 0;
-            return `<option value="b:${d.id}">[BULK] ${d.deployment_id} — ${activeCount} active unit${activeCount !== 1 ? 's' : ''}</option>`;
-        })
-    ].join('') : '';
-
     const typeOptions = terminalTypes.length > 0
         ? terminalTypes.map(t => `<option value="${t}">${t}</option>`).join('')
         : `<option value="Wireless Terminal">Wireless Terminal</option><option value="Countertop Terminal">Countertop Terminal</option><option value="POS System">POS System</option><option value="PIN Pad">PIN Pad</option><option value="Other">Other</option>`;
+
+    // Build flat checkbox list for RMA: singles then bulk items grouped by deployment
+    let equipCheckboxes = '';
+    if (!isDeployment) {
+        if ((singles || []).length) {
+            equipCheckboxes += `<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;margin-top:4px;">Individual Units</div>`;
+            equipCheckboxes += (singles || []).map(s => {
+                const label = [s.terminal_type, s.serial_number].filter(Boolean).join(' — ');
+                const depRef = s.deployment_display_id ? ` [${s.deployment_display_id}]` : '';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;font-size:12px;">
+                    <input type="checkbox" class="tick-unit-cb" value="s:${s.id}" data-serial="${s.serial_number || ''}" data-type="${s.terminal_type || ''}" data-depid="${s.deployment_internal_id || ''}" style="width:14px;height:14px;flex-shrink:0;">
+                    <span style="flex:1;">${label || 'Unknown'}</span>
+                    <span style="font-size:9px;font-weight:700;background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:4px;white-space:nowrap;">UNIT${depRef}</span>
+                </label>`;
+            }).join('');
+        }
+        (bulks || []).forEach(d => {
+            const activeItems = d.deployment_items?.filter(i => i.equip?.status === 'deployed') || [];
+            if (!activeItems.length) return;
+            equipCheckboxes += `<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;margin-top:10px;">Bulk — ${d.deployment_id}</div>`;
+            equipCheckboxes += activeItems.map(item => `
+                <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;font-size:12px;">
+                    <input type="checkbox" class="tick-unit-cb" value="b:${item.equipment_id}" data-serial="${item.equip?.serial_number || ''}" data-type="${item.equip?.terminal_type || ''}" data-depid="${d.id}" style="width:14px;height:14px;flex-shrink:0;">
+                    <span style="flex:1;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
+                    <span style="font-size:9px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;white-space:nowrap;">BULK</span>
+                </label>`).join('');
+        });
+    }
 
     const { value: form } = await Swal.fire({
         title: isDeployment ? `Deployment Request — ${merchantName}` : `Returns Request — ${merchantName}`,
@@ -392,12 +400,10 @@ window.openTicketForm = async function(merchantId, merchantName, type, singles, 
                     <option value="">Select type...</option>
                     ${typeOptions}
                 </select>` : `
-                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment to Return *</label>
-                <select id="tickEquip" class="swal2-input" style="margin:0 0 8px;">
-                    <option value="">Select equipment...</option>
-                    ${equipmentOptions}
-                </select>
-                <div id="tickUnitPicker" style="display:none;margin-bottom:12px;"></div>
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment to Return * <span style="font-weight:400;text-transform:none;color:#94a3b8;">(select one or more)</span></label>
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:12px;max-height:220px;overflow-y:auto;background:#f8fafc;">
+                    ${equipCheckboxes}
+                </div>
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Return Reason *</label>
                 <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
                     <option value="">Select reason...</option>
@@ -417,65 +423,27 @@ window.openTicketForm = async function(merchantId, merchantName, type, singles, 
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Additional Notes</label>
                 <textarea id="tickDesc" class="swal2-textarea" placeholder="Please provide any relevant details..." style="margin:0;height:80px;"></textarea>
             </div>`,
-        didOpen: () => {
-            if (isDeployment) return;
-            const equip = document.getElementById('tickEquip');
-            if (!equip) return;
-
-            const renderUnitPicker = () => {
-                const val = equip.value;
-                const wrap = document.getElementById('tickUnitPicker');
-                if (!wrap) return;
-                if (val.startsWith('b:')) {
-                    const dep = window._partnerBulksMap[val.slice(2)];
-                    const activeItems = dep?.deployment_items?.filter(i => i.equip?.status === 'deployed') || [];
-                    wrap.innerHTML = `
-                        <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Select units to return (partial ok)</div>
-                        ${activeItems.map(item => `
-                            <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;font-size:12px;">
-                                <input type="checkbox" class="tick-unit-cb" value="${item.equipment_id}" data-serial="${item.equip?.serial_number || ''}" data-type="${item.equip?.terminal_type || ''}" checked style="width:14px;height:14px;flex-shrink:0;">
-                                <span>${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
-                            </label>
-                        `).join('')}
-                        ${activeItems.length === 0 ? '<div style="color:#94a3b8;font-size:12px;">All units have already been returned.</div>' : ''}
-                    `;
-                    wrap.style.display = 'block';
-                } else {
-                    wrap.innerHTML = '';
-                    wrap.style.display = 'none';
-                }
-            };
-
-            equip.addEventListener('change', renderUnitPicker);
-            renderUnitPicker();
-        },
+        didOpen: () => {},
         preConfirm: () => {
             const subject = document.getElementById('tickSubject').value.trim();
             if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
             if (!isDeployment) {
-                const val = document.getElementById('tickEquip')?.value;
                 const reason = document.getElementById('tickCategory')?.value;
-                if (!val) { Swal.showValidationMessage('Please select equipment to return'); return false; }
                 if (!reason) { Swal.showValidationMessage('Please select a return reason'); return false; }
+
+                const checked = [...document.querySelectorAll('.tick-unit-cb:checked')];
+                if (!checked.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
 
                 const desc = document.getElementById('tickDesc').value || '';
                 const priority = document.getElementById('tickPriority').value;
 
-                if (val.startsWith('b:')) {
-                    const depId = val.slice(2);
-                    const checked = [...document.querySelectorAll('.tick-unit-cb:checked')];
-                    if (!checked.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
-                    const selectedEquipIds = checked.map(cb => cb.value);
-                    const unitList = checked.map(cb => `${cb.dataset.type} — ${cb.dataset.serial}`).join(', ');
-                    const description = `Units requested for return: ${unitList}${desc ? '\n\n' + desc : ''}`;
-                    return { subject, category: reason, deployment_id: depId, selected_equipment_ids: selectedEquipIds, priority, description };
-                } else {
-                    const equipId = val.slice(2);
-                    const unit = window._partnerSinglesMap[equipId];
-                    const label = [unit?.terminal_type, unit?.serial_number].filter(Boolean).join(' — ');
-                    const description = `Unit requested for return: ${label}${desc ? '\n\n' + desc : ''}`;
-                    return { subject, category: reason, deployment_id: unit?.deployment_internal_id || null, equipment_serial: unit?.serial_number || null, priority, description };
-                }
+                const unitList = checked.map(cb => `${cb.dataset.type} — ${cb.dataset.serial}`).join(', ');
+                const description = `Units requested for return: ${unitList}${desc ? '\n\n' + desc : ''}`;
+
+                // Use the first selected item's deployment as primary reference
+                const primaryDepId = checked[0]?.dataset.depid || null;
+
+                return { subject, category: reason, deployment_id: primaryDepId, priority, description };
             }
             return { subject, category: document.getElementById('tickCategory').value || null, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
         }
