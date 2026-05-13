@@ -581,7 +581,7 @@ if (document.getElementById('kpi-total')) {
                             </td>
                             <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
                             <td style="display:flex; gap:5px;">
-                                ${!isBulk ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>` : ''}
+                                ${!isBulk ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print Packing Slip"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>` : `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateBulkPackingSlip(${index})" title="Print Bulk Packing Slip"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>`}
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${histEquipId}', '${safeSerial}')"><span class="material-icons" style="font-size:18px;">history</span></button>
                                 ${canDeleteTickets ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${safeSerial}', '${d.equipment_id || ''}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>` : ''}
@@ -904,6 +904,143 @@ async function processReturn() {
                 <div class="sign-off"><div class="signature-line">Released By</div><div class="signature-line">Accepted By</div></div>
                 <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 700); }<\/script>
 </body>
+            </html>
+        `);
+        printWindow.document.close();
+    }
+
+    function generateBulkPackingSlip(index) {
+        const d = currentDeployments[index];
+        if (!d || !d.is_bulk) return;
+        const items = d.items || [];
+        const merchantName = d.merchants?.dba_name || '---';
+        const merchantId   = d.merchants?.merchant_id || '---';
+        const merchantCity = d.merchants?.merchant_city || '';
+        const merchantState= d.merchants?.merchant_state || '';
+        const targetDate   = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
+        const receivedDate = d.merchant_received_date  ? fmtDate(d.merchant_received_date)  : null;
+        const logoUrl      = (window.ppCfg?.logo_url) || 'https://cdn.prod.website-files.com/617aeb477b067ad6d4afee78/63dafce12a177260d7ec306e_pptlogo-orange.svg';
+        const portalName   = (window.ppCfg?.portal_name) || 'PayProTec';
+
+        const itemRows = items.map((item, i) => `
+            <tr>
+                <td style="text-align:center;color:#64748b;font-size:12px;">${i + 1}</td>
+                <td><strong>${item.terminal_type || '---'}</strong></td>
+                <td><code style="font-size:12px;background:#f8fafc;padding:2px 6px;border-radius:4px;">${item.serial_number || '---'}</code></td>
+                <td style="text-align:center;">${item.tid || '<span style="color:#cbd5e1;">—</span>'}</td>
+                <td style="text-align:center;"><span style="background:#dcfce7;color:#166534;font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;">VERIFIED</span></td>
+                <td style="width:90px;border-bottom:1px solid #cbd5e1;"></td>
+            </tr>`).join('');
+
+        const printWindow = window.open('', '_blank');
+        printWindow.document.write(`
+            <html>
+            <head>
+                <title>Bulk Packing Slip — ${d.deployment_id}</title>
+                <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+                <style>
+                    * { box-sizing: border-box; margin: 0; padding: 0; }
+                    body { font-family: 'Inter', sans-serif; padding: 40px; color: #1e293b; font-size: 13px; line-height: 1.5; }
+                    .header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 3px solid #004990; padding-bottom: 18px; margin-bottom: 28px; }
+                    .logo-area img { height: 42px; width: auto; object-fit: contain; }
+                    .slip-title { font-size: 18px; font-weight: 800; color: #004990; letter-spacing: -0.5px; }
+                    .slip-subtitle { font-size: 11px; color: #64748b; font-weight: 600; text-align: right; margin-top: 3px; }
+                    .meta-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; margin-bottom: 28px; }
+                    .meta-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
+                    .meta-box .label { font-size: 9px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; color: #94a3b8; margin-bottom: 6px; }
+                    .meta-box .val { font-size: 14px; font-weight: 700; color: #0f172a; }
+                    .meta-box .sub { font-size: 11px; color: #64748b; margin-top: 2px; }
+                    .section-title { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; color: #64748b; margin-bottom: 10px; }
+                    table { width: 100%; border-collapse: collapse; margin-bottom: 28px; }
+                    thead th { background: #004990; color: white; padding: 10px 12px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; text-align: left; }
+                    thead th:first-child { border-radius: 6px 0 0 0; text-align: center; }
+                    thead th:last-child { border-radius: 0 6px 0 0; }
+                    tbody tr { border-bottom: 1px solid #f1f5f9; }
+                    tbody tr:nth-child(even) { background: #f8fafc; }
+                    tbody td { padding: 10px 12px; }
+                    .notes-box { background: #fff7ed; border: 1px solid #fed7aa; border-radius: 8px; padding: 14px 16px; margin-bottom: 28px; }
+                    .notes-box .label { font-size: 9px; font-weight: 800; text-transform: uppercase; color: #c2410c; margin-bottom: 6px; }
+                    .summary-bar { background: #004990; color: white; border-radius: 8px; padding: 12px 20px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 36px; }
+                    .sign-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 40px; margin-top: 20px; }
+                    .sign-line { border-top: 1.5px solid #94a3b8; padding-top: 8px; font-size: 10px; color: #64748b; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; text-align: center; }
+                    .footer { margin-top: 48px; border-top: 1px solid #e2e8f0; padding-top: 12px; font-size: 10px; color: #94a3b8; display: flex; justify-content: space-between; }
+                    @media print {
+                        body { padding: 24px; }
+                        @page { margin: 0.5in; }
+                    }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <div class="logo-area"><img src="${logoUrl}" alt="${portalName}"></div>
+                    <div style="text-align:right;">
+                        <div class="slip-title">Bulk Packing Slip</div>
+                        <div class="slip-subtitle">Deployment ID: <strong>${d.deployment_id || '---'}</strong></div>
+                        <div class="slip-subtitle">Printed: ${new Date().toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}</div>
+                    </div>
+                </div>
+
+                <div class="meta-grid">
+                    <div class="meta-box">
+                        <div class="label">Ship To / Merchant</div>
+                        <div class="val">${merchantName}</div>
+                        <div class="sub">MID: ${merchantId}</div>
+                        ${merchantCity ? `<div class="sub">${merchantCity}${merchantState ? ', ' + merchantState : ''}</div>` : ''}
+                    </div>
+                    <div class="meta-box">
+                        <div class="label">Deployment Details</div>
+                        <div class="val">${targetDate}</div>
+                        <div class="sub">Target deployment date</div>
+                        ${receivedDate ? `<div class="sub" style="color:#166534;font-weight:700;">✓ Received: ${receivedDate}</div>` : ''}
+                    </div>
+                    <div class="meta-box">
+                        <div class="label">Tracking / Status</div>
+                        <div class="val">${d.tracking_id || 'Not assigned'}</div>
+                        <div class="sub">Status: ${d.status || 'Open'}</div>
+                        <div class="sub">${items.length} unit${items.length !== 1 ? 's' : ''} in shipment</div>
+                    </div>
+                </div>
+
+                <div class="section-title">Equipment Manifest — ${items.length} Unit${items.length !== 1 ? 's' : ''}</div>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width:40px;">#</th>
+                            <th>Terminal Type / Model</th>
+                            <th>Serial Number</th>
+                            <th style="text-align:center;">TID</th>
+                            <th style="text-align:center;">Condition</th>
+                            <th style="text-align:center;">Initials</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemRows}</tbody>
+                </table>
+
+                ${d.notes ? `
+                <div class="notes-box">
+                    <div class="label">Logistics & Setup Notes</div>
+                    <div style="color:#431407;">${d.notes}</div>
+                </div>` : ''}
+
+                <div class="summary-bar">
+                    <span style="font-size:13px;font-weight:700;">Total Units Shipped</span>
+                    <span style="font-size:28px;font-weight:800;">${items.length}</span>
+                </div>
+
+                <div class="section-title">Acknowledgement</div>
+                <div class="sign-grid">
+                    <div class="sign-line">Prepared By</div>
+                    <div class="sign-line">Released / Shipped By</div>
+                    <div class="sign-line">Accepted By (Merchant)</div>
+                </div>
+
+                <div class="footer">
+                    <span>${portalName} · Bulk Deployment · ${d.deployment_id || ''}</span>
+                    <span>Page 1 of 1</span>
+                </div>
+
+                <script>window.onload = function() { window.print(); setTimeout(() => { window.close(); }, 800); }<\/script>
+            </body>
             </html>
         `);
         printWindow.document.close();
