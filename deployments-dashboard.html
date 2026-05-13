@@ -483,6 +483,14 @@ async function logAuditAction(action, details) {
     } catch (e) { console.error(e); }
 }
     // --- 1. FETCH AND RENDER DEPLOYMENTS (With Search & Pagination) ---
+    let pageSize = 20;
+
+    function setPageSize(n) {
+        pageSize = n;
+        document.querySelectorAll('.dep-page-size-btn').forEach(b => b.classList.toggle('active', parseInt(b.dataset.size) === n));
+        fetchDeployments(1);
+    }
+
     async function fetchDeployments(page = 1) {
         currentPage = page;
         const tbody = document.getElementById('deploymentTableBody');
@@ -499,10 +507,10 @@ async function logAuditAction(action, details) {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
-                        action: 'list', 
-                        query: queryValue, 
-                        page: currentPage, 
-                        limit: 10 
+                        action: 'list',
+                        query: queryValue,
+                        page: currentPage,
+                        limit: pageSize
                     })
                 });
                 
@@ -532,7 +540,9 @@ if (document.getElementById('kpi-total')) {
                         const dateStr = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
                         const receivedStr = (d.status === 'Closed' && d.merchant_received_date) ? fmtDate(d.merchant_received_date) : null;
                         const merchantName = d.merchants?.dba_name || '---';
+                        const merchantMid = d.merchants?.merchant_id || '';
                         const safeDba = merchantName.replace(/'/g, "\\'");
+                        const safeMid = merchantMid.replace(/'/g, "\\'");
                         const isBulk = d.is_bulk;
                         const itemCount = d.items?.length || 0;
 
@@ -557,7 +567,10 @@ if (document.getElementById('kpi-total')) {
                                 ${d.deployment_id || '---'}
                                 ${d.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;letter-spacing:0.3px;">TICKET</span>` : ''}
                             </td>
-                            <td style="font-weight:600;">${merchantName}</td>
+                            <td>
+                                <div style="font-weight:600; color:#004990; cursor:pointer; text-decoration:underline; text-underline-offset:2px;" onclick="showMerchantInfo(${index})">${merchantName}</div>
+                                ${merchantMid ? `<div style="font-size:10px; color:#94a3b8; font-family:monospace; margin-top:1px;">${merchantMid}</div>` : ''}
+                            </td>
                             <td>${hardwareCell}</td>
                             <td>${tidCell}</td>
                             <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
@@ -590,10 +603,16 @@ if (document.getElementById('kpi-total')) {
         const container = document.getElementById('paginationControls');
         if (!container) return;
         container.innerHTML = `
-            <div style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:20px; padding:10px; background:#f8fafc; border-radius:8px;">
-                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>Previous</button>
-                <span style="font-weight:700; color:#475569;">Page ${currentPage} of ${totalPages}</span>
-                <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:12px; margin-top:20px; padding:10px 16px; background:#f8fafc; border-radius:8px; flex-wrap:wrap;">
+                <div style="display:flex; align-items:center; gap:6px;">
+                    <span style="font-size:11px; font-weight:700; color:#94a3b8; text-transform:uppercase; letter-spacing:0.4px;">Show:</span>
+                    ${[20,50,100].map(n => `<button class="dep-page-size-btn${pageSize===n?' active':''}" data-size="${n}" onclick="setPageSize(${n})" style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:${pageSize===n?'#004990':'white'};color:${pageSize===n?'white':'#475569'};font-size:11px;font-weight:700;cursor:pointer;">${n}</button>`).join('')}
+                </div>
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage - 1})" ${currentPage <= 1 ? 'disabled' : ''}>Previous</button>
+                    <span style="font-weight:700; color:#475569;">Page ${currentPage} of ${totalPages}</span>
+                    <button class="slds-button slds-button_neutral" onclick="fetchDeployments(${currentPage + 1})" ${currentPage >= totalPages ? 'disabled' : ''}>Next</button>
+                </div>
             </div>
         `;
     }
@@ -728,6 +747,34 @@ async function processReturn() {
         Swal.fire('System Error', 'Check Network Tab', 'error');
     }
 }
+    // --- MERCHANT INFO POPUP ---
+    function showMerchantInfo(index) {
+        const d = currentDeployments[index];
+        const m = d?.merchants;
+        if (!m) return;
+        const location = [m.merchant_city, m.merchant_state].filter(Boolean).join(', ');
+        Swal.fire({
+            title: m.dba_name,
+            html: `
+                <div style="text-align:left; font-size:13px; display:flex; flex-direction:column; gap:10px;">
+                    <div style="background:#f8fafc; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">Merchant Details</div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">MID</span><span style="font-weight:700; font-family:monospace;">${m.merchant_id || '—'}</span></div>
+                        ${location ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Location</span><span style="font-weight:600;">${location}</span></div>` : ''}
+                        ${m.merchant_phone ? `<div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Phone</span><span style="font-weight:600;">${m.merchant_phone}</span></div>` : ''}
+                    </div>
+                    <div style="background:#f0f9ff; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">This Deployment</div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">ID</span><span style="font-weight:700; font-family:monospace; color:#004990;">${d.deployment_id || '—'}</span></div>
+                        <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Status</span><span style="font-weight:600;">${d.status || '—'}</span></div>
+                        <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Type</span><span style="font-weight:600;">${d.purchase_type || '—'}</span></div>
+                    </div>
+                </div>`,
+            confirmButtonColor: '#004990',
+            confirmButtonText: 'Close'
+        });
+    }
+
     // --- 3. DELETE & HISTORY LOGIC ---
   async function confirmDelete(id, dba, sn, equipId, merchantId) {
     const { value: confirmContent } = await Swal.fire({

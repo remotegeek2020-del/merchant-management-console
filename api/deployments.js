@@ -325,7 +325,7 @@ if (action === 'delete') {
 }
 
         if (action === 'list') {
-            const { query, page = 1, limit = 10 } = body;
+            const { query, page = 1, limit = 20 } = body;
             const from = (page - 1) * limit;
             const to = from + limit - 1;
 
@@ -333,7 +333,7 @@ if (action === 'delete') {
                 .from('deployments')
                 .select(`
                     *,
-                    merchants:merchant_id(dba_name, merchant_id),
+                    merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone),
                     equipments:equipment_id(id, serial_number, terminal_type),
                     deployment_items(id, equipment_id, tid, equip:equipment_id(serial_number, terminal_type, status))
                 `, { count: 'exact' });
