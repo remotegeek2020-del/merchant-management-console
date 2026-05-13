@@ -52,12 +52,15 @@ export default async function handler(req, res) {
 
             const { data: deployments } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, equipments:equipment_id(id, serial_number, terminal_type), returns(id, status)')
+                .select('id, deployment_id, status, is_bulk, equipments:equipment_id(id, serial_number, terminal_type), deployment_items(equipment_id, equip:equipment_id(serial_number, terminal_type)), returns(id, status)')
                 .eq('merchant_id', merchant.id)
+                .neq('status', 'Closed')
                 .order('created_at', { ascending: false });
 
-            // Only show deployments that don't already have a completed RMA
+            // Single: exclude if already has a closed return (RMA completed)
+            // Bulk: always show while deployment is open — partial returns are allowed
             const eligible = (deployments || []).filter(d => {
+                if (d.is_bulk) return true;
                 const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
                 return !rets.some(r => r.status === 'Closed');
             });

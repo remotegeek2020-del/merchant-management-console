@@ -350,8 +350,12 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
     const isDeployment = type === 'deployment_request';
 
     const equipmentOptions = !isDeployment ? deployments.map(d => {
-        const e = d.equipments;
         const depLabel = d.deployment_id ? ` [${d.deployment_id}]` : '';
+        if (d.is_bulk) {
+            const count = d.deployment_items?.length || 0;
+            return `<option value="${d.id}">Bulk Deployment — ${count} unit${count !== 1 ? 's' : ''}${depLabel}</option>`;
+        }
+        const e = d.equipments;
         const label = [e?.terminal_type, e?.serial_number].filter(Boolean).join(' — ') + depLabel;
         return `<option value="${d.id}">${label || 'Unknown equipment'}</option>`;
     }).join('') : '';
