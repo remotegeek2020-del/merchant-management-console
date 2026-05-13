@@ -115,6 +115,9 @@ if (action === 'complete_return') {
             }).eq('id', ri.equipment_id);
         }
 
+        // Update per-item condition so reports always reflect final state
+        await supabase.from('return_items').update({ condition }).eq('return_id', rmaId);
+
         await supabase.from('equipment_logs').insert(
             (retItems || []).map(ri => ({
                 equipment_id: ri.equipment_id,

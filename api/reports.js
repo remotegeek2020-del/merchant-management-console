@@ -120,10 +120,15 @@ export default async function handler(req, res) {
                     };
                     if (d.is_bulk && d.return_items?.length > 0) {
                         for (const item of d.return_items) {
+                            // return_items.condition may still be 'IN TRANSIT' for older records;
+                            // fall back to the parent return's condition which is always updated on close
+                            const itemCondition = (item.condition && item.condition !== 'IN TRANSIT')
+                                ? item.condition
+                                : (d.condition || '—');
                             rawData.push({ ...base,
                                 'Serial Number': item.equip?.serial_number || '—',
                                 'Terminal Type': item.equip?.terminal_type || '—',
-                                'Condition':     item.condition || '—',
+                                'Condition':     itemCondition,
                             });
                         }
                     } else {
