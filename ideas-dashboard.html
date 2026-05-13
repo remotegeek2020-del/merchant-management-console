@@ -304,6 +304,7 @@ function renderIdeas() {
 
     el.innerHTML = list.map(idea => {
         const controls = isAdmin ? buildAdminControls(idea) : '';
+        const commentCount = idea.comment_count || 0;
         return `<div class="idea-card" id="idea-${idea.id}">
             <button class="vote-btn ${idea.voted_by_me ? 'voted' : ''}" onclick="toggleVote('${idea.id}')" title="${idea.voted_by_me ? 'Remove vote' : 'Upvote this idea'}">
                 <span class="material-icons">arrow_upward</span>
@@ -320,6 +321,10 @@ function renderIdeas() {
                 <div class="idea-meta">
                     <span class="idea-requester"><span class="material-icons" style="font-size:13px;">person</span>${escHtml(idea.requested_by_name)}</span>
                     <span class="idea-date">${fmtDate(idea.created_at)}</span>
+                    <button onclick="openComments('${idea.id}', ${JSON.stringify(escHtml(idea.title))})" style="display:flex;align-items:center;gap:3px;background:none;border:none;cursor:pointer;color:#64748b;font-size:11px;font-weight:600;padding:0;font-family:inherit;" title="View comments">
+                        <span class="material-icons" style="font-size:14px;">chat_bubble_outline</span>
+                        <span id="cc-${idea.id}">${commentCount}</span>
+                    </button>
                 </div>
             </div>
             ${controls}
@@ -380,6 +385,74 @@ async function deleteIdea(id) {
         allIdeas = allIdeas.filter(i => i.id !== id);
         document.getElementById('total-count').textContent = allIdeas.length;
         renderIdeas();
+    }
+}
+
+async function openComments(ideaId, ideaTitle) {
+    const loadHtml = () => `<div style="text-align:center;padding:20px;color:#94a3b8;">Loading…</div>`;
+    const buildThread = (comments) => {
+        if (!comments.length) return `<div style="text-align:center;padding:16px;color:#94a3b8;font-size:13px;">No comments yet. Be the first!</div>`;
+        return comments.map(c => `
+            <div style="padding:10px 0;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;">
+                <div style="width:30px;height:30px;border-radius:50%;background:#e2e8f0;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <span class="material-icons" style="font-size:16px;color:#94a3b8;">person</span>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px;">
+                        <span style="font-size:12px;font-weight:700;color:#1e293b;">${escHtml(c.posted_by_name)}</span>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:11px;color:#94a3b8;">${fmtDate(c.created_at)}</span>
+                            ${(c.posted_by_userid === userId || isSuperAdmin) ? `<button onclick="deleteComment('${c.id}','${ideaId}')" style="background:none;border:none;cursor:pointer;color:#cbd5e1;padding:0;" title="Delete"><span class="material-icons" style="font-size:15px;">close</span></button>` : ''}
+                        </div>
+                    </div>
+                    <div style="font-size:13px;color:#475569;line-height:1.5;">${escHtml(c.body)}</div>
+                </div>
+            </div>`).join('');
+    };
+
+    const { value: commentText } = await Swal.fire({
+        title: `<span style="font-size:15px;font-weight:700;">💬 ${ideaTitle}</span>`,
+        html: `
+            <div id="comment-thread" style="text-align:left;max-height:300px;overflow-y:auto;margin-bottom:12px;">${loadHtml()}</div>
+            <textarea id="new-comment" class="swal2-textarea" style="margin:0;width:100%;height:72px;resize:none;" placeholder="Write a comment…"></textarea>`,
+        confirmButtonText: 'Post Comment',
+        confirmButtonColor: '#0d9488',
+        showCancelButton: true,
+        cancelButtonText: 'Close',
+        focusConfirm: false,
+        didOpen: async () => {
+            const r = await api('list_comments', { idea_id: ideaId });
+            document.getElementById('comment-thread').innerHTML = buildThread(r.comments || []);
+        },
+        preConfirm: () => {
+            const v = document.getElementById('new-comment')?.value.trim();
+            if (!v) { Swal.showValidationMessage('Comment cannot be empty'); return false; }
+            return v;
+        }
+    });
+
+    if (!commentText) return;
+    const r = await api('add_comment', { idea_id: ideaId, body: commentText, posted_by_userid: userId, posted_by_name: userName });
+    if (r.success) {
+        const ccEl = document.getElementById(`cc-${ideaId}`);
+        const idea = allIdeas.find(i => i.id === ideaId);
+        if (idea) idea.comment_count = (idea.comment_count || 0) + 1;
+        if (ccEl) ccEl.textContent = idea?.comment_count || '';
+    } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: r.message });
+    }
+}
+
+async function deleteComment(commentId, ideaId) {
+    const r = await api('delete_comment', { id: commentId, userid: userId });
+    if (r.success) {
+        const idea = allIdeas.find(i => i.id === ideaId);
+        if (idea) idea.comment_count = Math.max(0, (idea.comment_count || 1) - 1);
+        const ccEl = document.getElementById(`cc-${ideaId}`);
+        if (ccEl) ccEl.textContent = idea?.comment_count || '0';
+        Swal.fire({ icon: 'success', title: 'Deleted', timer: 900, showConfirmButton: false });
+    } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: r.message });
     }
 }
 
@@ -456,7 +529,10 @@ function renderActivities() {
                         </span>
                         <div class="dev-title">${escHtml(a.title)}</div>
                     </div>
-                    ${isSuperAdmin ? `<button onclick="deleteActivity('${a.id}')" style="background:none;border:none;cursor:pointer;color:#cbd5e1;padding:0;flex-shrink:0;" title="Delete"><span class="material-icons" style="font-size:18px;">delete_outline</span></button>` : ''}
+                    ${isSuperAdmin ? `<div style="display:flex;gap:6px;flex-shrink:0;">
+                        <button onclick="openEditActivity('${a.id}')" style="background:none;border:none;cursor:pointer;color:#94a3b8;padding:0;" title="Edit"><span class="material-icons" style="font-size:18px;">edit</span></button>
+                        <button onclick="deleteActivity('${a.id}')" style="background:none;border:none;cursor:pointer;color:#cbd5e1;padding:0;" title="Delete"><span class="material-icons" style="font-size:18px;">delete_outline</span></button>
+                    </div>` : ''}
                 </div>
                 <div class="dev-body">${escHtml(a.body)}</div>
                 <div class="dev-meta">
@@ -502,6 +578,47 @@ async function openAddActivity() {
         document.getElementById('dev-count').textContent = allActivities.length;
         renderActivities();
         Swal.fire({ icon: 'success', title: 'Activity Posted!', timer: 1800, showConfirmButton: false });
+    } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: r.message });
+    }
+}
+
+async function openEditActivity(id) {
+    const a = allActivities.find(x => x.id === id);
+    if (!a) return;
+    const { value: fv } = await Swal.fire({
+        title: 'Edit Developer Log',
+        html: `<div style="text-align:left;">
+            <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">TAG *</label>
+            <select id="edit-tag" class="swal2-input" style="margin:0 0 14px;width:100%;">
+                <option value="completed" ${a.tag==='completed'?'selected':''}>✅ Completed</option>
+                <option value="in_progress" ${a.tag==='in_progress'?'selected':''}>🔄 In Progress</option>
+                <option value="planned" ${a.tag==='planned'?'selected':''}>📋 Planned</option>
+                <option value="fix" ${a.tag==='fix'?'selected':''}>🐛 Bug Fix</option>
+                <option value="update" ${a.tag==='update'?'selected':''}>📝 Update</option>
+            </select>
+            <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">TITLE *</label>
+            <input id="edit-title" class="swal2-input" style="margin:0 0 14px;width:100%;" value="${escHtml(a.title)}">
+            <label style="font-size:12px;font-weight:700;color:#475569;display:block;margin-bottom:4px;">DETAILS *</label>
+            <textarea id="edit-body" class="swal2-textarea" style="margin:0;width:100%;height:110px;">${escHtml(a.body)}</textarea>
+        </div>`,
+        confirmButtonText: 'Save Changes', confirmButtonColor: '#4338ca', showCancelButton: true, focusConfirm: false,
+        preConfirm: () => {
+            const tag   = document.getElementById('edit-tag').value;
+            const title = document.getElementById('edit-title').value.trim();
+            const body  = document.getElementById('edit-body').value.trim();
+            if (!title) { Swal.showValidationMessage('Title is required'); return false; }
+            if (!body)  { Swal.showValidationMessage('Details are required'); return false; }
+            return { tag, title, body };
+        }
+    });
+    if (!fv) return;
+    const r = await api('dev_activity_update', { userid: userId, id, ...fv });
+    if (r.success) {
+        const idx = allActivities.findIndex(x => x.id === id);
+        if (idx !== -1) allActivities[idx] = { ...allActivities[idx], ...r.activity };
+        renderActivities();
+        Swal.fire({ icon: 'success', title: 'Updated!', timer: 1500, showConfirmButton: false });
     } else {
         Swal.fire({ icon: 'error', title: 'Error', text: r.message });
     }

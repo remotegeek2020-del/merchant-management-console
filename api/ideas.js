@@ -16,7 +16,7 @@ export default async function handler(req, res) {
             const { userid } = req.body;
             const { data, error } = await supabase
                 .from('feature_ideas')
-                .select('*')
+                .select('*, idea_comments(id)')
                 .order('votes', { ascending: false })
                 .order('created_at', { ascending: false });
             if (error) throw error;
@@ -29,7 +29,12 @@ export default async function handler(req, res) {
                 votedSet = new Set((votes || []).map(v => v.idea_id));
             }
 
-            const ideas = (data || []).map(i => ({ ...i, voted_by_me: votedSet.has(i.id) }));
+            const ideas = (data || []).map(i => ({
+                ...i,
+                voted_by_me: votedSet.has(i.id),
+                comment_count: Array.isArray(i.idea_comments) ? i.idea_comments.length : 0,
+                idea_comments: undefined
+            }));
             return res.status(200).json({ success: true, ideas });
         }
 
@@ -116,12 +121,71 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, activity: data });
         }
 
+        // ── DEV ACTIVITY — update (super_admin only) ─────────────────────────
+        if (action === 'dev_activity_update') {
+            const { userid, id, title, body, tag } = req.body;
+            if (!(await isSuperAdmin(supabase, userid))) return res.status(403).json({ success: false, message: 'Access denied.' });
+            if (!id) return res.status(400).json({ success: false, message: 'ID is required.' });
+            if (!title?.trim()) return res.status(400).json({ success: false, message: 'Title is required.' });
+            if (!body?.trim())  return res.status(400).json({ success: false, message: 'Details are required.' });
+            const allowed = ['completed', 'in_progress', 'planned', 'fix', 'update'];
+            const safeTag = allowed.includes(tag) ? tag : 'update';
+            const { data, error } = await supabase
+                .from('dev_activities')
+                .update({ title: title.trim(), body: body.trim(), tag: safeTag })
+                .eq('id', id)
+                .select().single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, activity: data });
+        }
+
         // ── DEV ACTIVITY — delete (super_admin only) ─────────────────────────
         if (action === 'dev_activity_delete') {
             const { userid, id } = req.body;
             if (!(await isSuperAdmin(supabase, userid))) return res.status(403).json({ success: false, message: 'Access denied.' });
             if (!id) return res.status(400).json({ success: false, message: 'ID is required.' });
             const { error } = await supabase.from('dev_activities').delete().eq('id', id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // ── IDEA COMMENTS — list ──────────────────────────────────────────────
+        if (action === 'list_comments') {
+            const { idea_id } = req.body;
+            if (!idea_id) return res.status(400).json({ success: false, message: 'idea_id is required.' });
+            const { data, error } = await supabase
+                .from('idea_comments')
+                .select('*')
+                .eq('idea_id', idea_id)
+                .order('created_at', { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true, comments: data || [] });
+        }
+
+        // ── IDEA COMMENTS — add ───────────────────────────────────────────────
+        if (action === 'add_comment') {
+            const { idea_id, body, posted_by_userid, posted_by_name } = req.body;
+            if (!idea_id) return res.status(400).json({ success: false, message: 'idea_id is required.' });
+            if (!body?.trim()) return res.status(400).json({ success: false, message: 'Comment cannot be empty.' });
+            if (!posted_by_userid) return res.status(400).json({ success: false, message: 'User ID is required.' });
+            const { data, error } = await supabase
+                .from('idea_comments')
+                .insert({ idea_id, body: body.trim(), posted_by_userid, posted_by_name: posted_by_name || 'Staff' })
+                .select().single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, comment: data });
+        }
+
+        // ── IDEA COMMENTS — delete ────────────────────────────────────────────
+        if (action === 'delete_comment') {
+            const { id, userid } = req.body;
+            if (!id) return res.status(400).json({ success: false, message: 'ID is required.' });
+            // Allow own comment deletion or admin
+            const { data: comment } = await supabase.from('idea_comments').select('posted_by_userid').eq('id', id).single();
+            const isOwn = comment?.posted_by_userid === userid;
+            const isAdm = await isSuperAdmin(supabase, userid);
+            if (!isOwn && !isAdm) return res.status(403).json({ success: false, message: 'Access denied.' });
+            const { error } = await supabase.from('idea_comments').delete().eq('id', id);
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
