@@ -349,6 +349,10 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
 window.openTicketForm = async function(merchantId, merchantName, type, deployments, terminalTypes = []) {
     const isDeployment = type === 'deployment_request';
 
+    // Build lookup map for unit picker
+    window._partnerDepsMap = {};
+    if (!isDeployment) deployments.forEach(d => { window._partnerDepsMap[d.id] = d; });
+
     const equipmentOptions = !isDeployment ? deployments.map(d => {
         const depLabel = d.deployment_id ? ` [${d.deployment_id}]` : '';
         if (d.is_bulk) {
@@ -383,10 +387,11 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
                     ${typeOptions}
                 </select>` : `
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Equipment to Return *</label>
-                <select id="tickEquip" class="swal2-input" style="margin:0 0 12px;">
+                <select id="tickEquip" class="swal2-input" style="margin:0 0 8px;">
                     <option value="">Select equipment...</option>
                     ${equipmentOptions}
                 </select>
+                <div id="tickUnitPicker" style="display:none;margin-bottom:12px;"></div>
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Return Reason *</label>
                 <select id="tickCategory" class="swal2-input" style="margin:0 0 12px;">
                     <option value="">Select reason...</option>
@@ -406,6 +411,35 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
                 <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Additional Notes</label>
                 <textarea id="tickDesc" class="swal2-textarea" placeholder="Please provide any relevant details..." style="margin:0;height:80px;"></textarea>
             </div>`,
+        didOpen: () => {
+            if (isDeployment) return;
+            const equip = document.getElementById('tickEquip');
+            if (!equip) return;
+
+            const renderUnitPicker = () => {
+                const dep = window._partnerDepsMap[equip.value];
+                const wrap = document.getElementById('tickUnitPicker');
+                if (!wrap) return;
+                if (dep?.is_bulk && dep.deployment_items?.length) {
+                    wrap.innerHTML = `
+                        <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">Select units to return (partial ok)</div>
+                        ${dep.deployment_items.map(item => `
+                            <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;font-size:12px;">
+                                <input type="checkbox" class="tick-unit-cb" value="${item.equipment_id}" data-serial="${item.equip?.serial_number || ''}" data-type="${item.equip?.terminal_type || ''}" checked style="width:14px;height:14px;flex-shrink:0;">
+                                <span>${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
+                            </label>
+                        `).join('')}
+                    `;
+                    wrap.style.display = 'block';
+                } else {
+                    wrap.innerHTML = '';
+                    wrap.style.display = 'none';
+                }
+            };
+
+            equip.addEventListener('change', renderUnitPicker);
+            renderUnitPicker();
+        },
         preConfirm: () => {
             const subject = document.getElementById('tickSubject').value.trim();
             if (!subject) { Swal.showValidationMessage('Subject is required'); return false; }
@@ -414,7 +448,20 @@ window.openTicketForm = async function(merchantId, merchantName, type, deploymen
                 const reason = document.getElementById('tickCategory')?.value;
                 if (!depId) { Swal.showValidationMessage('Please select equipment to return'); return false; }
                 if (!reason) { Swal.showValidationMessage('Please select a return reason'); return false; }
-                return { subject, category: reason, deployment_id: depId, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
+
+                const dep = window._partnerDepsMap[depId];
+                let description = document.getElementById('tickDesc').value || '';
+                let selectedEquipIds = null;
+
+                if (dep?.is_bulk) {
+                    const checked = [...document.querySelectorAll('.tick-unit-cb:checked')];
+                    if (!checked.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
+                    selectedEquipIds = checked.map(cb => cb.value);
+                    const unitList = checked.map(cb => `${cb.dataset.type} — ${cb.dataset.serial}`).join(', ');
+                    description = `Units requested for return: ${unitList}${description ? '\n\n' + description : ''}`;
+                }
+
+                return { subject, category: reason, deployment_id: depId, selected_equipment_ids: selectedEquipIds, priority: document.getElementById('tickPriority').value, description: description || null };
             }
             return { subject, category: document.getElementById('tickCategory').value || null, priority: document.getElementById('tickPriority').value, description: document.getElementById('tickDesc').value || null };
         }
