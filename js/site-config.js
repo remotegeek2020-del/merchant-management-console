@@ -105,18 +105,18 @@
             bar.id = 'pp-sw-footer';
             bar.style.cssText = [
                 'position:fixed', 'bottom:0', 'left:0', 'right:0',
-                'height:30px', 'background:#f1f5f9',
+                'height:36px', 'background:#f1f5f9',
                 'border-top:1px solid #e2e8f0',
                 'display:flex', 'align-items:center', 'justify-content:center',
-                'gap:6px', 'z-index:99998',
+                'gap:8px', 'z-index:99998',
                 'font-family:"DM Sans",sans-serif', 'font-size:10px',
                 'font-weight:600', 'color:#94a3b8', 'letter-spacing:0.3px',
                 'pointer-events:none', 'user-select:none'
             ].join(';');
 
-            let inner = '<span>Powered by</span>';
+            let inner = '<span style="opacity:0.7;">Powered by</span>';
             if (cfg.software_logo_url) {
-                inner += `<img src="${cfg.software_logo_url}" alt="" style="height:14px;width:auto;object-fit:contain;vertical-align:middle;">`;
+                inner += `<img src="${cfg.software_logo_url}" alt="" style="height:22px;width:auto;max-width:120px;object-fit:contain;vertical-align:middle;">`;
             }
             if (cfg.software_name) {
                 inner += `<span style="font-weight:800;color:#475569;">${cfg.software_name}</span>`;
