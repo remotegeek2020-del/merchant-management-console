@@ -63,7 +63,7 @@ export default async function handler(req, res) {
                         expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
                     });
                 }
-                await supabase.from('app_users').update({ tfa_code: null, tfa_attempts: 0 }).eq('userid', userId);
+                await supabase.from('app_users').update({ tfa_code: null, tfa_attempts: 0, last_seen: new Date().toISOString() }).eq('userid', userId);
                 user = tfaUser;
             } else {
                 await supabase.from('app_users').update({ tfa_attempts: attempts }).eq('userid', userId);
@@ -96,6 +96,7 @@ export default async function handler(req, res) {
 
                     if (trusted) {
                         await supabase.from('trusted_devices').update({ last_used: new Date().toISOString() }).eq('id', trusted.id);
+                        await supabase.from('app_users').update({ last_seen: new Date().toISOString() }).eq('userid', dbUser.userid);
                         user = dbUser;
                     } else {
                         const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();

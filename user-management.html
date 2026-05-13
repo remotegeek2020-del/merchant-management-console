@@ -19,47 +19,59 @@
     })();
     </script>
     <style>
-        .access-toggle { display:inline-flex; align-items:center; justify-content:center; }
-        .access-toggle input[type=checkbox] {
-            width: 36px; height: 20px; appearance: none; -webkit-appearance: none;
-            border-radius: 99px; background: #e2e8f0; cursor: pointer;
-            transition: background 0.2s; position: relative; flex-shrink: 0;
-        }
-        .access-toggle input[type=checkbox]:checked { background: #004990; }
-        .access-toggle input[type=checkbox]::after {
-            content: ''; position: absolute; width: 14px; height: 14px;
-            border-radius: 50%; background: white; top: 3px; left: 3px;
-            transition: transform 0.2s; box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-        }
-        .access-toggle input[type=checkbox]:checked::after { transform: translateX(16px); }
-        .access-toggle input[type=checkbox]:disabled { opacity: 0.4; cursor: not-allowed; }
-
-        .role-badge { padding: 3px 10px; border-radius: 99px; font-size: 10px; font-weight: 800; text-transform: uppercase; }
-        .role-super { background: #fef3c7; color: #92400e; }
-        .role-admin { background: #e0f2fe; color: #0369a1; }
-        .role-standard { background: #f1f5f9; color: #475569; }
+        .role-badge { padding: 3px 12px; border-radius: 99px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.4px; }
+        .role-super   { background: #fef3c7; color: #92400e; }
+        .role-admin   { background: #e0f2fe; color: #0369a1; }
+        .role-standard{ background: #f1f5f9; color: #475569; }
 
         .status-pill {
             display: inline-flex; align-items: center; gap: 5px;
             padding: 4px 12px; border-radius: 99px; font-size: 10px; font-weight: 800;
             cursor: pointer; transition: all 0.2s; border: none; font-family: 'DM Sans', sans-serif;
         }
-        .status-active { background: #dcfce7; color: #166534; }
+        .status-active   { background: #dcfce7; color: #166534; }
         .status-inactive { background: #fee2e2; color: #991b1b; }
 
-        .save-bar {
-            position: fixed; bottom: 0; left: 0; right: 0;
-            background: #004990; color: white;
-            padding: 14px 24px; display: none;
-            justify-content: space-between; align-items: center;
-            z-index: 1000; box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+        .perm-chip {
+            display: inline-flex; align-items: center;
+            padding: 2px 7px; border-radius: 5px; font-size: 9px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.3px; margin: 1px;
         }
-        .save-bar.show { display: flex; }
+        .perm-on  { background: #dbeafe; color: #1d4ed8; }
+        .perm-off { background: #f1f5f9; color: #cbd5e1; }
 
-        .col-access { width: 52px; text-align: center; }
-        .col-access-label { font-size: 9px; font-weight: 800; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; text-align: center; }
+        .pp-toggle { display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px; }
+        .pp-toggle input[type=checkbox] {
+            width:38px;height:21px;appearance:none;-webkit-appearance:none;
+            border-radius:99px;background:#e2e8f0;cursor:pointer;
+            transition:background 0.2s;position:relative;flex-shrink:0;
+        }
+        .pp-toggle input[type=checkbox]:checked { background: #004990; }
+        .pp-toggle input[type=checkbox]::after {
+            content:'';position:absolute;width:15px;height:15px;
+            border-radius:50%;background:white;top:3px;left:3px;
+            transition:transform 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.2);
+        }
+        .pp-toggle input[type=checkbox]:checked::after { transform:translateX(17px); }
+        .pp-toggle input[type=checkbox]:disabled { opacity:0.4;cursor:not-allowed; }
+
+        .save-bar {
+            position:fixed;bottom:0;left:0;right:0;
+            background:#004990;color:white;
+            padding:14px 24px;display:none;
+            justify-content:space-between;align-items:center;
+            z-index:1000;box-shadow:0 -4px 20px rgba(0,0,0,0.15);
+        }
+        .save-bar.show { display:flex; }
 
         @keyframes spin { to { transform: rotate(360deg); } }
+
+        .pp-table td { vertical-align: middle; }
+        .user-avatar {
+            width: 36px; height: 36px; border-radius: 50%; display: inline-flex;
+            align-items: center; justify-content: center;
+            font-size: 13px; font-weight: 800; flex-shrink: 0;
+        }
     </style>
 </head>
 <body>
@@ -103,21 +115,16 @@
             <thead>
                 <tr>
                     <th style="width:36px;"><input type="checkbox" id="selectAll" onchange="toggleSelectAll(this)" title="Select all" style="accent-color:#004990;cursor:pointer;"></th>
-                    <th style="min-width:160px;">Name</th>
+                    <th style="min-width:180px;">Name</th>
                     <th>Email</th>
-                    <th style="width:100px;">Status</th>
-                    <th class="col-access-label" title="Inventory">Inv</th>
-                    <th class="col-access-label" title="Deployments">Dep</th>
-                    <th class="col-access-label" title="Returns">Ret</th>
-                    <th class="col-access-label" title="Merchants">Mer</th>
-                    <th class="col-access-label" title="Jarvis AI">Jar</th>
-                    <th class="col-access-label" title="Partners">Prt</th>
-                    <th style="width:130px;">Role</th>
-                    <th style="width:160px;text-align:center;">Actions</th>
+                    <th style="width:110px;">Status</th>
+                    <th style="width:140px;">Role</th>
+                    <th>Permissions</th>
+                    <th style="width:130px;text-align:center;">Actions</th>
                 </tr>
             </thead>
             <tbody id="userList">
-                <tr><td colspan="12"><div class="pp-empty">
+                <tr><td colspan="7"><div class="pp-empty">
                     <div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto;"></div>
                 </div></td></tr>
             </tbody>
@@ -143,37 +150,21 @@
     </div>
 </div>
 
-<!-- SAVE BAR -->
-<div class="save-bar" id="saveBar">
-    <div style="display:flex;align-items:center;gap:10px;">
-        <span class="material-icons">warning_amber</span>
-        <span style="font-weight:700;">You have unsaved permission changes</span>
-    </div>
-    <div style="display:flex;gap:10px;">
-        <button onclick="discardChanges()" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.3);color:white;padding:8px 16px;border-radius:8px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">Discard</button>
-        <button onclick="saveAllChanges()" style="background:white;color:#004990;padding:8px 20px;border-radius:8px;font-weight:800;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;">
-            <span class="material-icons" style="font-size:14px;vertical-align:middle;">save</span> Save All Changes
-        </button>
-    </div>
-</div>
-
 <script>
 const myId = localStorage.getItem('pp_userid');
 const myRole = localStorage.getItem('pp_role') || '';
 const iAmSuper = myRole.toLowerCase().includes('super');
 
 let allUsers = [];
-let pendingChanges = {};
 
-// ── ACCESS FLAGS ──────────────────────────────────────────
 const ACCESS_FLAGS = [
-    { key: 'access_inventory',   label: 'Inventory' },
-    { key: 'access_deployments', label: 'Deployments' },
-    { key: 'access_returns',     label: 'Returns' },
-    { key: 'access_merchants',   label: 'Merchants' },
-    { key: 'access_jarvis',      label: 'Jarvis AI' },
-    { key: 'access_partners',    label: 'Partners' },
-    { key: 'can_delete_tickets', label: 'Delete Tickets' },
+    { key: 'access_inventory',   label: 'Inventory',      short: 'INV' },
+    { key: 'access_deployments', label: 'Deployments',    short: 'DEP' },
+    { key: 'access_returns',     label: 'Returns',        short: 'RET' },
+    { key: 'access_merchants',   label: 'Merchants',      short: 'MER' },
+    { key: 'access_jarvis',      label: 'Jarvis AI',      short: 'AI'  },
+    { key: 'access_partners',    label: 'Partners',       short: 'PRT' },
+    { key: 'can_delete_tickets', label: 'Delete Tickets', short: 'DEL' },
 ];
 
 // ── API ───────────────────────────────────────────────────
@@ -199,7 +190,7 @@ async function logAction(action, category = 'users') {
     }).catch(() => {});
 }
 
-// ── LOAD USERS ────────────────────────────────────────────
+// ── LOAD ──────────────────────────────────────────────────
 async function loadUsers() {
     try {
         const result = await apiGet();
@@ -207,9 +198,8 @@ async function loadUsers() {
         allUsers = result.data || [];
         renderUsers(allUsers);
     } catch (err) {
-        console.error('Load error:', err);
         document.getElementById('userList').innerHTML = `
-            <tr><td colspan="11"><div class="pp-empty">
+            <tr><td colspan="7"><div class="pp-empty">
                 <span class="material-icons">error_outline</span>
                 <p>Failed to load users: ${err.message}</p>
             </div></td></tr>`;
@@ -233,21 +223,10 @@ function filterUsers() {
     renderUsers(filtered);
 }
 
-function exportUsers() {
-    const headers = ['First Name','Last Name','Email','Role','Status','Last Seen','Inventory','Deployments','Returns','Merchants','Partners','Jarvis'];
-    const rows = allUsers.map(u => [
-        u.first_name||'', u.last_name||'', u.email||'', u.role||'',
-        u.is_active ? 'Active' : 'Inactive',
-        u.last_seen ? fmtDateTime(u.last_seen) : 'Never',
-        u.access_inventory?'Yes':'No', u.access_deployments?'Yes':'No',
-        u.access_returns?'Yes':'No', u.access_merchants?'Yes':'No',
-        u.access_partners?'Yes':'No', u.access_jarvis?'Yes':'No'
-    ]);
-    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `users_${new Date().toISOString().slice(0,10)}.csv`;
-    a.click();
+function avatarColor(name) {
+    const colors = ['#6366f1','#0ea5e9','#10b981','#f59e0b','#ec4899','#8b5cf6','#14b8a6','#f97316'];
+    let h = 0; for (const c of name) h = (h * 31 + c.charCodeAt(0)) % colors.length;
+    return colors[h];
 }
 
 function renderUsers(data) {
@@ -255,7 +234,7 @@ function renderUsers(data) {
     const tbody = document.getElementById('userList');
 
     if (!data.length) {
-        tbody.innerHTML = `<tr><td colspan="12"><div class="pp-empty"><span class="material-icons">group_off</span><p>No users found</p></div></td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="7"><div class="pp-empty"><span class="material-icons">group_off</span><p>No users found</p></div></td></tr>`;
         return;
     }
 
@@ -264,52 +243,56 @@ function renderUsers(data) {
         const cantEdit = isTargetSuper && !iAmSuper;
         const isActive = user.is_active;
         const isPending = !isActive && !user.last_seen;
-        const lastSeen = user.last_seen ? fmtDate(user.last_seen) : null;
+        const lastSeen = user.last_seen ? `Last seen ${fmtDate(user.last_seen)}` : isPending ? '⏳ Invite pending' : 'Never logged in';
+        const lastSeenColor = user.last_seen ? '#94a3b8' : isPending ? '#f59e0b' : '#ef4444';
         const roleClass = isTargetSuper ? 'role-super' : user.role?.toLowerCase().includes('admin') ? 'role-admin' : 'role-standard';
         const fullName = `${user.first_name||''} ${user.last_name||''}`.trim();
+        const initials = ((user.first_name||'')[0]||'') + ((user.last_name||'')[0]||'');
+        const bg = avatarColor(fullName || user.email || '?');
 
-        const toggles = ACCESS_FLAGS.map(f => `
-            <td class="col-access">
-                <div class="access-toggle">
-                    <input type="checkbox" data-uid="${user.userid}" data-field="${f.key}"
-                        ${user[f.key] ? 'checked' : ''}
-                        ${cantEdit ? 'disabled' : ''}
-                        onchange="queueChange('${user.userid}', '${f.key}', this.checked)"
-                        title="${f.label}: ${user[f.key] ? 'Enabled' : 'Disabled'}">
-                </div>
-            </td>`).join('');
+        const permChips = ACCESS_FLAGS.map(f =>
+            `<span class="perm-chip ${user[f.key] ? 'perm-on' : 'perm-off'}" title="${f.label}">${f.short}</span>`
+        ).join('');
 
         return `<tr>
             <td><input type="checkbox" class="row-select" value="${user.userid}" onchange="onRowSelect()" ${cantEdit?'disabled':''} style="accent-color:#004990;cursor:pointer;"></td>
             <td>
-                <div style="font-weight:700;">${fullName || '—'}</div>
-                <div style="font-size:10px;color:#94a3b8;margin-top:1px;">${lastSeen ? `Last seen ${lastSeen}` : isPending ? '<span style="color:#f59e0b;">⏳ Invite pending</span>' : 'Never logged in'}</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                    <div class="user-avatar" style="background:${bg};color:white;">${initials||'?'}</div>
+                    <div>
+                        <div style="font-weight:700;font-size:13px;">${fullName || '—'}</div>
+                        <div style="font-size:10px;color:${lastSeenColor};margin-top:1px;">${lastSeen}</div>
+                    </div>
+                </div>
             </td>
             <td style="font-size:12px;color:#475569;">${user.email||'—'}</td>
             <td>
                 <button class="status-pill ${isActive?'status-active':'status-inactive'}"
                     onclick="${cantEdit?'':'toggleActive(\''+user.userid+'\','+isActive+')'}"
-                    ${cantEdit?'disabled':''} title="Click to toggle">
+                    ${cantEdit?'disabled':''}>
                     <span class="material-icons" style="font-size:12px;">${isActive?'check_circle':'cancel'}</span>
                     ${isActive?'Active':'Inactive'}
                 </button>
             </td>
-            ${toggles}
-            <td><span class="role-badge ${roleClass}">${user.role||'—'}</span></td>
-            <td style="text-align:center;">
+            <td><span class="role-badge ${roleClass}">${(user.role||'—').replace('_',' ')}</span></td>
+            <td><div style="display:flex;flex-wrap:wrap;gap:2px;">${permChips}</div></td>
+            <td>
                 <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
-                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;"
+                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;" title="Edit user"
                         onclick="editUser('${user.userid}','${fullName.replace(/'/g,"\\'")}','${(user.email||'').replace(/'/g,"\\'")}','${user.role||''}')"
                         ${cantEdit?'disabled':''}>
                         <span class="material-icons" style="font-size:13px;">edit</span>
                     </button>
+                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;" title="Manage permissions"
+                        onclick="editPermissions('${user.userid}','${fullName.replace(/'/g,"\\'")}')">
+                        <span class="material-icons" style="font-size:13px;">tune</span>
+                    </button>
                     ${!isActive ? `
-                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#fef9c3;border-color:#fbbf24;color:#92400e;"
-                        onclick="resendInvite('${user.userid}','${(user.email||'').replace(/'/g,"\\'")}','${fullName.replace(/'/g,"\\'")}')"
-                        title="Resend invite email">
+                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#fef9c3;border-color:#fbbf24;color:#92400e;" title="Resend invite"
+                        onclick="resendInvite('${user.userid}','${(user.email||'').replace(/'/g,"\\'")}','${fullName.replace(/'/g,"\\'")}')">
                         <span class="material-icons" style="font-size:13px;">send</span>
                     </button>` : ''}
-                    <button class="pp-btn" style="padding:5px 10px;font-size:11px;background:#fee2e2;color:#991b1b;"
+                    <button class="pp-btn" style="padding:5px 10px;font-size:11px;background:#fee2e2;color:#991b1b;" title="Delete user"
                         onclick="deleteUser('${user.userid}','${fullName.replace(/'/g,"\\'")}')"
                         ${cantEdit?'disabled':''}>
                         <span class="material-icons" style="font-size:13px;">delete</span>
@@ -320,31 +303,51 @@ function renderUsers(data) {
     }).join('');
 }
 
-// ── PERMISSION CHANGES ────────────────────────────────────
-function queueChange(userId, field, value) {
-    if (!pendingChanges[userId]) pendingChanges[userId] = {};
-    pendingChanges[userId][field] = value;
-    document.getElementById('saveBar').classList.add('show');
-}
+// ── PERMISSIONS MODAL ─────────────────────────────────────
+async function editPermissions(uid, name) {
+    const user = allUsers.find(u => u.userid === uid);
+    if (!user) return;
+    const isTargetSuper = user.role === 'super_admin';
+    const cantEdit = isTargetSuper && !iAmSuper;
 
-async function saveAllChanges() {
-    Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading() });
-    const result = await apiPost({ action: 'updateBatch', payload: pendingChanges });
+    const { value: perms } = await Swal.fire({
+        title: `<span style="font-size:16px;">Permissions — ${name}</span>`,
+        width: 480,
+        html: `
+            <div style="text-align:left;">
+                <p style="font-size:12px;color:#64748b;margin-bottom:16px;">Toggle access rights for this user. Changes take effect on their next login.</p>
+                <div style="display:flex;flex-direction:column;gap:12px;">
+                    ${ACCESS_FLAGS.map(f => `
+                    <label class="pp-toggle" style="${cantEdit?'opacity:0.5;pointer-events:none;':''}">
+                        <input type="checkbox" id="perm-${f.key}" ${user[f.key]?'checked':''} ${cantEdit?'disabled':''}>
+                        <div>
+                            <div style="font-weight:700;font-size:13px;">${f.label}</div>
+                        </div>
+                    </label>`).join('')}
+                </div>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: cantEdit ? 'Close' : 'Save Permissions',
+        showConfirmButton: true,
+        preConfirm: () => {
+            if (cantEdit) return null;
+            const result = {};
+            ACCESS_FLAGS.forEach(f => { result[f.key] = document.getElementById(`perm-${f.key}`)?.checked || false; });
+            return result;
+        }
+    });
+
+    if (!perms || cantEdit) return;
+    Swal.fire({ title: 'Saving…', didOpen: () => Swal.showLoading() });
+    const result = await apiPost({ action: 'updateBatch', payload: { [uid]: perms } });
     if (result.success) {
-        await logAction(`Updated permissions for ${Object.keys(pendingChanges).length} user(s)`);
-        pendingChanges = {};
-        document.getElementById('saveBar').classList.remove('show');
+        await logAction(`Updated permissions for ${name}`);
         await loadUsers();
-        Swal.fire({ icon: 'success', title: 'Saved!', timer: 1200, showConfirmButton: false });
+        Swal.fire({ icon: 'success', title: 'Permissions saved!', timer: 1200, showConfirmButton: false });
     } else {
         Swal.fire('Error', result.message || 'Save failed', 'error');
     }
-}
-
-function discardChanges() {
-    pendingChanges = {};
-    document.getElementById('saveBar').classList.remove('show');
-    loadUsers();
 }
 
 // ── TOGGLE ACTIVE ─────────────────────────────────────────
@@ -403,12 +406,12 @@ async function addUser() {
                 <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Role *</label>
                 <select id="u-role" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:14px;">${roleOptions}</select>
                 <div style="background:#f0f7ff;border-radius:10px;padding:12px 14px;">
-                    <div style="font-size:10px;font-weight:800;color:#004990;text-transform:uppercase;margin-bottom:8px;">Initial Access Permissions</div>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <div style="font-size:10px;font-weight:800;color:#004990;text-transform:uppercase;margin-bottom:10px;">Initial Access Permissions</div>
+                    <div style="display:flex;flex-direction:column;gap:10px;">
                         ${ACCESS_FLAGS.map(f => `
-                            <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;">
+                            <label class="pp-toggle">
                                 <input type="checkbox" id="perm-${f.key}" style="accent-color:#004990;">
-                                ${f.label}
+                                <span>${f.label}</span>
                             </label>`).join('')}
                     </div>
                 </div>
@@ -503,6 +506,25 @@ async function deleteUser(uid, name) {
     } else {
         Swal.fire('Error', result.message, 'error');
     }
+}
+
+// ── EXPORT ────────────────────────────────────────────────
+function exportUsers() {
+    const headers = ['First Name','Last Name','Email','Role','Status','Last Seen','Inventory','Deployments','Returns','Merchants','Partners','Jarvis','Delete Tickets'];
+    const rows = allUsers.map(u => [
+        u.first_name||'', u.last_name||'', u.email||'', u.role||'',
+        u.is_active ? 'Active' : 'Inactive',
+        u.last_seen ? fmtDateTime(u.last_seen) : 'Never',
+        u.access_inventory?'Yes':'No', u.access_deployments?'Yes':'No',
+        u.access_returns?'Yes':'No', u.access_merchants?'Yes':'No',
+        u.access_partners?'Yes':'No', u.access_jarvis?'Yes':'No',
+        u.can_delete_tickets?'Yes':'No'
+    ]);
+    const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+    a.download = `users_${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
 }
 
 // ── BULK SELECTION ────────────────────────────────────────
