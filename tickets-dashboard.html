@@ -668,6 +668,7 @@ async function createLinkedDeployment() {
     }
 
     const merchantLabel = t.merchants?.dba_name ? `${t.merchants.dba_name} (${t.merchant_id})` : t.merchant_id;
+    window._bulkDepItems = [];
 
     await Swal.fire({
         title: 'Create Deployment Record',
@@ -677,49 +678,155 @@ async function createLinkedDeployment() {
         confirmButtonText: 'Create Deployment',
         html: `
         <div style="text-align:left; font-size:13px;">
-            <div style="background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; padding:10px 14px; margin-bottom:16px; font-size:12px; color:#0f766e;">
+            <div style="background:#f0fdfa; border:1px solid #99f6e4; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:#0f766e;">
                 <strong>Merchant:</strong> ${merchantLabel}
             </div>
-            <div style="position:relative; margin-bottom:14px;">
-                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">HARDWARE (SERIAL NUMBER) *</label>
-                <input id="dep-eq-search" class="swal2-input" style="margin:0;" placeholder="Type serial to search..." oninput="searchDepEquipment(this.value)" autocomplete="off">
-                <input type="hidden" id="dep-eq-id">
-                <div id="dep-eq-suggestions" style="position:absolute;z-index:99999;background:white;width:100%;border:1px solid #e2e8f0;border-radius:8px;max-height:160px;overflow-y:auto;display:none;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,0.12);"></div>
+            <div style="margin-bottom:14px;">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:12px;font-weight:600;color:#334155;">
+                    <input type="checkbox" id="dep-bulk-toggle" style="width:14px;height:14px;">
+                    Bulk Deployment (multiple units)
+                </label>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-                <div>
+            <div id="dep-single-mode">
+                <div style="position:relative; margin-bottom:14px;">
+                    <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">HARDWARE (SERIAL NUMBER) *</label>
+                    <input id="dep-eq-search" class="swal2-input" style="margin:0;" placeholder="Type serial to search..." oninput="searchDepEquipment(this.value)" autocomplete="off">
+                    <input type="hidden" id="dep-eq-id">
+                    <div id="dep-eq-suggestions" style="position:absolute;z-index:99999;background:white;width:100%;border:1px solid #e2e8f0;border-radius:8px;max-height:160px;overflow-y:auto;display:none;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,0.12);"></div>
+                </div>
+                <div style="margin-bottom:14px;">
                     <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TID</label>
                     <input id="dep-tid" class="swal2-input" style="margin:0;" placeholder="Terminal ID">
                 </div>
+            </div>
+            <div id="dep-bulk-mode" style="display:none;margin-bottom:14px;">
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">ADD UNITS *</label>
+                <div style="display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;">
+                    <div style="position:relative;flex:1;">
+                        <input id="dep-bulk-search" class="swal2-input" style="margin:0;" placeholder="Search serial..." autocomplete="off">
+                        <div id="dep-bulk-suggestions" style="position:absolute;z-index:99999;background:white;width:100%;border:1px solid #e2e8f0;border-radius:8px;max-height:140px;overflow-y:auto;display:none;margin-top:2px;box-shadow:0 8px 24px rgba(0,0,0,0.12);"></div>
+                    </div>
+                    <input id="dep-bulk-tid" class="swal2-input" style="margin:0;width:110px;" placeholder="TID">
+                    <button type="button" onclick="window._addBulkDepItem()" style="background:#0d9488;color:white;border:none;border-radius:8px;padding:9px 14px;cursor:pointer;font-size:12px;font-weight:700;white-space:nowrap;">+ Add</button>
+                </div>
+                <input type="hidden" id="dep-bulk-eq-id">
+                <input type="hidden" id="dep-bulk-eq-serial">
+                <input type="hidden" id="dep-bulk-eq-type">
+                <div id="dep-bulk-list" style="min-height:36px;border:1px dashed #e2e8f0;border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;">No units added yet.</div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
                 <div>
                     <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TARGET DATE</label>
                     <input id="dep-date" type="date" class="swal2-input" style="margin:0;" value="${fmtDateInput(new Date())}">
+                </div>
+                <div>
+                    <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">PURCHASE TYPE *</label>
+                    <select id="dep-pt" class="swal2-input" style="margin:0;">
+                        <option value="Free Placement">Free Placement</option>
+                        <option value="Agent Purchase">Agent Purchase</option>
+                        <option value="Rental">Rental</option>
+                        <option value="Reprogram">Reprogram</option>
+                        <option value="Swap">Swap</option>
+                        <option value="Swap/No Return">Swap/No Return</option>
+                    </select>
                 </div>
             </div>
             <div style="margin-bottom:14px;">
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">TRACKING NUMBER</label>
                 <input id="dep-tracking" class="swal2-input" style="margin:0;" placeholder="Carrier tracking number">
             </div>
-            <div style="margin-bottom:14px;">
-                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">PURCHASE TYPE *</label>
-                <select id="dep-pt" class="swal2-input" style="margin:0;">
-                    <option value="Free Placement">Free Placement</option>
-                    <option value="Agent Purchase">Agent Purchase</option>
-                    <option value="Rental">Rental</option>
-                    <option value="Reprogram">Reprogram</option>
-                    <option value="Swap">Swap</option>
-                    <option value="Swap/No Return">Swap/No Return</option>
-                </select>
-            </div>
             <div>
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">INTERNAL NOTES</label>
                 <textarea id="dep-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Internal notes..."></textarea>
             </div>
         </div>`,
+        didOpen: () => {
+            window._bulkDepItems = [];
+
+            document.getElementById('dep-bulk-toggle').addEventListener('change', function() {
+                const bulk = this.checked;
+                document.getElementById('dep-single-mode').style.display = bulk ? 'none' : 'block';
+                document.getElementById('dep-bulk-mode').style.display = bulk ? 'block' : 'none';
+            });
+
+            let bulkSearchTimeout;
+            document.getElementById('dep-bulk-search').addEventListener('input', function() {
+                const val = this.value;
+                const sugg = document.getElementById('dep-bulk-suggestions');
+                document.getElementById('dep-bulk-eq-id').value = '';
+                if (!val) { sugg.style.display = 'none'; return; }
+                clearTimeout(bulkSearchTimeout);
+                bulkSearchTimeout = setTimeout(async () => {
+                    try {
+                        const res = await fetch('/api/deployments', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'getLookups', query: val }) });
+                        const result = await res.json();
+                        const items = result.inventory || [];
+                        if (!items.length) { sugg.style.display = 'none'; return; }
+                        sugg.innerHTML = items.map(e =>
+                            `<div onclick="window._selectBulkDepEquip('${e.id}','${e.serial_number}','${(e.terminal_type||'').replace(/'/g,"\\'")}')">
+                                <style>.dep-sugg-row:hover{background:#f0fdfa}</style>
+                                <div class="dep-sugg-row" style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:12px;display:flex;justify-content:space-between;align-items:center;">
+                                    <div><strong style="color:#004990;">${e.serial_number}</strong><div style="font-size:10px;color:#64748b;">${e.terminal_type||''}</div></div>
+                                    <span style="font-size:9px;background:#f0fdf4;color:#166534;padding:2px 6px;border-radius:4px;font-weight:700;">${(e.status||'').toUpperCase()}</span>
+                                </div>
+                            </div>`
+                        ).join('');
+                        sugg.style.display = 'block';
+                    } catch(e) { console.error(e); }
+                }, 250);
+            });
+
+            window._selectBulkDepEquip = (id, serial, type) => {
+                document.getElementById('dep-bulk-search').value = `${serial}${type ? ' (' + type + ')' : ''}`;
+                document.getElementById('dep-bulk-eq-id').value = id;
+                document.getElementById('dep-bulk-eq-serial').value = serial;
+                document.getElementById('dep-bulk-eq-type').value = type;
+                document.getElementById('dep-bulk-suggestions').style.display = 'none';
+            };
+
+            window._addBulkDepItem = () => {
+                const eqId = document.getElementById('dep-bulk-eq-id').value;
+                const serial = document.getElementById('dep-bulk-eq-serial').value;
+                const type = document.getElementById('dep-bulk-eq-type').value;
+                const tid = document.getElementById('dep-bulk-tid').value.trim();
+                if (!eqId) { Swal.showValidationMessage('Select equipment from search first'); return; }
+                if (window._bulkDepItems.some(i => i.equipment_id === eqId)) { Swal.showValidationMessage('Unit already added'); return; }
+                window._bulkDepItems.push({ equipment_id: eqId, serial_number: serial, terminal_type: type, tid });
+                const list = document.getElementById('dep-bulk-list');
+                list.innerHTML = window._bulkDepItems.map((item, idx) =>
+                    `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;background:white;">
+                        <div style="font-size:12px;">
+                            <strong style="color:#0d9488;">${item.serial_number}</strong>
+                            <span style="color:#64748b;margin-left:6px;">${item.terminal_type||''}</span>
+                            ${item.tid ? `<span style="font-family:'DM Mono',monospace;font-size:10px;color:#334155;margin-left:8px;">TID: ${item.tid}</span>` : ''}
+                        </div>
+                        <button type="button" onclick="window._bulkDepItems.splice(${idx},1);window._addBulkDepItem.renderList&&window._addBulkDepItem.renderList()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:14px;padding:2px;">✕</button>
+                    </div>`
+                ).join('');
+                document.getElementById('dep-bulk-search').value = '';
+                document.getElementById('dep-bulk-eq-id').value = '';
+                document.getElementById('dep-bulk-eq-serial').value = '';
+                document.getElementById('dep-bulk-eq-type').value = '';
+                document.getElementById('dep-bulk-tid').value = '';
+            };
+        },
         preConfirm: () => {
+            const isBulk = document.getElementById('dep-bulk-toggle').checked;
+            if (isBulk) {
+                if (!window._bulkDepItems.length) { Swal.showValidationMessage('Please add at least one unit'); return false; }
+                return {
+                    is_bulk: true,
+                    bulk_items: window._bulkDepItems,
+                    target_date: document.getElementById('dep-date').value,
+                    tracking_id: document.getElementById('dep-tracking').value,
+                    purchase_type: document.getElementById('dep-pt').value,
+                    notes: document.getElementById('dep-notes').value
+                };
+            }
             const eqId = document.getElementById('dep-eq-id').value;
             if (!eqId) { Swal.showValidationMessage('Please select equipment from the search results'); return false; }
             return {
+                is_bulk: false,
                 equipment_id: eqId,
                 tid: document.getElementById('dep-tid').value,
                 target_date: document.getElementById('dep-date').value,
@@ -760,13 +867,20 @@ async function createLinkedRMA() {
     Swal.close();
 
     if (!deps.length) {
-        Swal.fire('No Deployments', 'There are no deployment records for this merchant. An RMA requires an existing deployment (equipment lifecycle rule).', 'warning');
+        Swal.fire('No Deployments', 'There are no eligible deployment records for this merchant.', 'warning');
         return;
     }
 
+    window._rmaDepsMap = {};
+    deps.forEach(d => { window._rmaDepsMap[d.id] = d; });
+
     const depOptions = deps.map(d => {
+        if (d.is_bulk) {
+            const count = d.deployment_items?.length || 0;
+            return `<option value="${d.id}">Bulk — ${count} unit${count !== 1 ? 's' : ''} [${d.deployment_id}] · ${d.status}</option>`;
+        }
         const eq = d.equipments;
-        const label = eq ? `${eq.terminal_type || ''} ${eq.model || ''} — SN: ${eq.serial_number || ''}`.trim() : 'No equipment';
+        const label = eq ? `${eq.terminal_type || ''} — SN: ${eq.serial_number || ''}`.trim() : 'No equipment';
         return `<option value="${d.id}">${d.deployment_id || d.id} · ${label} · ${d.status}</option>`;
     }).join('');
 
@@ -785,9 +899,10 @@ async function createLinkedRMA() {
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">LINKED DEPLOYMENT *</label>
                 <select id="rma-dep" class="swal2-input" style="margin:0;">${depOptions}</select>
             </div>
+            <div id="rma-unit-picker-wrap" style="margin-bottom:14px;display:none;"></div>
             <div style="margin-bottom:14px;">
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">RETURN REASON *</label>
-                <select id="rma-reason-sel" class="swal2-input" style="margin:0 0 8px;" onchange="document.getElementById('rma-reason-other').style.display=this.value==='Other'?'block':'none'">
+                <select id="rma-reason-sel" class="swal2-input" style="margin:0 0 8px;">
                     <option value="">Select reason...</option>
                     <option value="Merchant Cancellation">Merchant Cancellation</option>
                     <option value="Equipment Type Swap">Equipment Type Swap</option>
@@ -805,13 +920,52 @@ async function createLinkedRMA() {
                 <textarea id="rma-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Additional notes..."></textarea>
             </div>
         </div>`,
+        didOpen: () => {
+            const depSel = document.getElementById('rma-dep');
+            document.getElementById('rma-reason-sel').addEventListener('change', function() {
+                document.getElementById('rma-reason-other').style.display = this.value === 'Other' ? 'block' : 'none';
+            });
+
+            const renderUnitPicker = () => {
+                const dep = window._rmaDepsMap[depSel.value];
+                const wrap = document.getElementById('rma-unit-picker-wrap');
+                if (dep?.is_bulk && dep.deployment_items?.length) {
+                    wrap.innerHTML = `
+                        <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">SELECT UNITS TO RETURN (partial ok)</label>
+                        ${dep.deployment_items.map(item => `
+                            <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;">
+                                <input type="checkbox" class="rma-unit-cb" value="${item.equipment_id}" checked style="width:14px;height:14px;flex-shrink:0;">
+                                <span style="font-size:12px;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
+                            </label>
+                        `).join('')}
+                    `;
+                    wrap.style.display = 'block';
+                } else {
+                    wrap.innerHTML = '';
+                    wrap.style.display = 'none';
+                }
+            };
+            depSel.addEventListener('change', renderUnitPicker);
+            renderUnitPicker();
+        },
         preConfirm: () => {
+            const depId = document.getElementById('rma-dep').value;
+            const dep = window._rmaDepsMap[depId];
             const reasonSel = document.getElementById('rma-reason-sel').value;
             const reasonOther = document.getElementById('rma-reason-other').value.trim();
             const finalReason = reasonSel === 'Other' ? reasonOther : reasonSel;
             if (!finalReason) { Swal.showValidationMessage('Please select or enter a return reason'); return false; }
+
+            let selectedEquipIds = null;
+            if (dep?.is_bulk) {
+                selectedEquipIds = [...document.querySelectorAll('.rma-unit-cb:checked')].map(cb => cb.value);
+                if (!selectedEquipIds.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
+            }
+
             return {
-                deployment_internal_id: document.getElementById('rma-dep').value,
+                deployment_internal_id: depId,
+                is_bulk: dep?.is_bulk || false,
+                selected_equipment_ids: selectedEquipIds,
                 return_reason: finalReason,
                 return_date_initiated: document.getElementById('rma-date').value,
                 notes: document.getElementById('rma-notes').value
@@ -826,7 +980,7 @@ async function createLinkedRMA() {
         });
         const res = await r.json();
         if (res.success) {
-            await Swal.fire({ icon: 'success', title: 'RMA Initiated!', html: `RMA ID: <strong style="font-family:'DM Mono',monospace;">${res.return_id}</strong><br><span style="font-size:12px;color:#64748b;">Unit marked In Transit. Complete inspection from Returns & RMA ledger.</span>`, confirmButtonColor: '#001e3c' });
+            await Swal.fire({ icon: 'success', title: 'RMA Initiated!', html: `RMA ID: <strong style="font-family:'DM Mono',monospace;">${res.return_id}</strong><br><span style="font-size:12px;color:#64748b;">Unit(s) marked In Transit. Complete inspection from Returns & RMA ledger.</span>`, confirmButtonColor: '#001e3c' });
             openTicket(currentTicketId);
             loadTickets();
         } else {
