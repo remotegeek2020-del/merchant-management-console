@@ -52,15 +52,18 @@ export default async function handler(req, res) {
 
             const { data: deployments } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, is_bulk, equipments:equipment_id(id, serial_number, terminal_type), deployment_items(equipment_id, equip:equipment_id(serial_number, terminal_type)), returns(id, status)')
+                .select('id, deployment_id, status, is_bulk, equipments:equipment_id(id, serial_number, terminal_type, status), deployment_items(equipment_id, equip:equipment_id(id, serial_number, terminal_type, status)), returns(id, status)')
                 .eq('merchant_id', merchant.id)
-                .neq('status', 'Closed')
                 .order('created_at', { ascending: false });
 
-            // Single: exclude if already has a closed return (RMA completed)
-            // Bulk: always show while deployment is open — partial returns are allowed
+            // Bulk: eligible if any unit is still deployed (guards against deployment
+            //   being incorrectly Closed after a partial return)
+            // Single: eligible if deployment is not Closed and has no completed RMA
             const eligible = (deployments || []).filter(d => {
-                if (d.is_bulk) return true;
+                if (d.is_bulk) {
+                    return d.deployment_items?.some(item => item.equip?.status === 'deployed');
+                }
+                if (d.status === 'Closed') return false;
                 const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
                 return !rets.some(r => r.status === 'Closed');
             });
@@ -359,16 +362,19 @@ export default async function handler(req, res) {
             if (!merchant) return res.status(404).json({ success: false, message: 'Merchant not found.' });
 
             const { data, error } = await supabase.from('deployments')
-                .select('id, deployment_id, status, is_bulk, created_at, equipments:equipment_id(serial_number, terminal_type), deployment_items(equipment_id, equip:equipment_id(serial_number, terminal_type)), returns(id, status)')
+                .select('id, deployment_id, status, is_bulk, created_at, equipments:equipment_id(serial_number, terminal_type, status), deployment_items(equipment_id, equip:equipment_id(serial_number, terminal_type, status)), returns(id, status)')
                 .eq('merchant_id', merchant.id)
-                .neq('status', 'Closed')
                 .order('created_at', { ascending: false });
             if (error) throw error;
 
-            // Bulk: eligible while deployment is open (partial returns allowed)
-            // Single: exclude if already has a completed RMA
+            // Bulk: eligible if any unit is still deployed (guards against deployment
+            //   being incorrectly Closed after a partial return)
+            // Single: eligible if deployment not Closed and no completed RMA
             const eligible = (data || []).filter(d => {
-                if (d.is_bulk) return true;
+                if (d.is_bulk) {
+                    return d.deployment_items?.some(item => item.equip?.status === 'deployed');
+                }
+                if (d.status === 'Closed') return false;
                 const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
                 return !rets.some(r => r.status === 'Closed');
             });
