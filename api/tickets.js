@@ -505,7 +505,7 @@ export default async function handler(req, res) {
 
             const { data: dep, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, tracking_id, target_deployment_date, merchant_received_date, notes, purchase_type, created_at, ticket_id, equipments:equipment_id(terminal_type, serial_number), merchants:merchant_id(dba_name, merchant_id)')
+                .select('id, deployment_id, status, tracking_id, target_deployment_date, merchant_received_date, notes, purchase_type, created_at, ticket_id, is_bulk, equipments:equipment_id(terminal_type, serial_number), merchants:merchant_id(dba_name, merchant_id), deployment_items(id, equipment_id, tid, equip:equipment_id(serial_number, terminal_type))')
                 .eq('deployment_id', deployment_id)
                 .single();
             if (error || !dep) return res.status(404).json({ success: false, message: 'Deployment record not found. It may have been archived or processed.' });
@@ -519,7 +519,7 @@ export default async function handler(req, res) {
 
             const { data: dep } = await supabase
                 .from('deployments')
-                .select('id, status, ticket_id, equipment_id, merchant_id, merchants:merchant_id(dba_name)')
+                .select('id, status, ticket_id, equipment_id, merchant_id, is_bulk, merchants:merchant_id(dba_name)')
                 .eq('deployment_id', deployment_id)
                 .single();
             if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
@@ -530,16 +530,36 @@ export default async function handler(req, res) {
                 .update({ status: 'Closed', merchant_received_date: today })
                 .eq('id', dep.id);
 
-            // Log delivery to equipment_logs
-            await supabase.from('equipment_logs').insert({
-                equipment_id: dep.equipment_id,
-                merchant_id: dep.merchant_id,
-                deployment_id: dep.id,
-                action: 'Delivered',
-                from_location: 'In Transit',
-                to_location: dep.merchants?.dba_name || 'Merchant',
-                notes: 'Marked as delivered by partner via portal'
-            });
+            // Log delivery for each unit (single or bulk)
+            if (dep.is_bulk) {
+                const { data: depItems } = await supabase
+                    .from('deployment_items')
+                    .select('equipment_id')
+                    .eq('deployment_id', dep.id);
+                if (depItems?.length) {
+                    await supabase.from('equipment_logs').insert(
+                        depItems.map(di => ({
+                            equipment_id: di.equipment_id,
+                            merchant_id: dep.merchant_id,
+                            deployment_id: dep.id,
+                            action: 'Delivered',
+                            from_location: 'In Transit',
+                            to_location: dep.merchants?.dba_name || 'Merchant',
+                            notes: 'Marked as delivered by partner via portal (bulk)'
+                        }))
+                    );
+                }
+            } else {
+                await supabase.from('equipment_logs').insert({
+                    equipment_id: dep.equipment_id,
+                    merchant_id: dep.merchant_id,
+                    deployment_id: dep.id,
+                    action: 'Delivered',
+                    from_location: 'In Transit',
+                    to_location: dep.merchants?.dba_name || 'Merchant',
+                    notes: 'Marked as delivered by partner via portal'
+                });
+            }
 
             // Close the linked ticket
             const finalTicketId = ticket_id || dep.ticket_id;

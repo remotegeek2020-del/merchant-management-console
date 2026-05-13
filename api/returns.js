@@ -13,8 +13,6 @@ export default async function handler(req, res) {
         const body = req.body || {};
         const { action, id, payload, query } = body;
 
-     // Inside api/returns.js handler
-// Inside api/returns.js
 if (action === 'getMonthlyReport') {
     const { startDate, endDate, offset = 0, limit = 1000 } = req.body;
 
@@ -26,7 +24,7 @@ if (action === 'getMonthlyReport') {
             status,
             return_date_initiated,
             merchants:merchant_id (
-                dba_name, 
+                dba_name,
                 merchant_id
             ),
             equipments:equipment_id (serial_number)
@@ -40,7 +38,7 @@ if (action === 'getMonthlyReport') {
     const rawData = data.map(d => ({
         "Return ID": d.return_id,
         "Date Initiated": d.return_date_initiated || '---',
-        "Merchant ID": d.merchants?.merchant_id || 'N/A', // Correctly nested
+        "Merchant ID": d.merchants?.merchant_id || 'N/A',
         "Merchant Name": d.merchants?.dba_name || 'N/A',
         "Serial": d.equipments?.serial_number || 'N/A',
         "Reason": d.return_reason,
@@ -49,14 +47,16 @@ if (action === 'getMonthlyReport') {
 
     return res.status(200).json({ success: true, rawData, totalCount: count });
 }
-       if (action === 'list') {
+
+if (action === 'list') {
     const searchQuery = query || '';
     let q = supabase.from('returns').select(`
         id, return_id, return_reason, condition, destination, status, created_at,
         return_date_initiated, equipment_received_date,
-        merchant_id, equipment_id, ticket_id,
+        merchant_id, equipment_id, ticket_id, is_bulk,
         merchants:merchant_id (dba_name, merchant_id),
-        equipments:equipment_id (serial_number, terminal_type)
+        equipments:equipment_id (serial_number, terminal_type),
+        return_items(id, equipment_id, condition, equip:equipment_id(serial_number, terminal_type))
     `).order('return_date_initiated', { ascending: false });
 
     if (searchQuery) {
@@ -64,59 +64,100 @@ if (action === 'getMonthlyReport') {
     }
 
     const { data, error } = await q;
-
     if (error) throw error;
 
+    // Normalize to items[] for unified frontend handling
+    const normalized = (data || []).map(r => {
+        r.items = r.is_bulk
+            ? (r.return_items || []).map(i => ({ equipment_id: i.equipment_id, condition: i.condition, serial_number: i.equip?.serial_number, terminal_type: i.equip?.terminal_type, item_id: i.id }))
+            : (r.equipment_id ? [{ equipment_id: r.equipment_id, condition: r.condition, serial_number: r.equipments?.serial_number, terminal_type: r.equipments?.terminal_type, item_id: null }] : []);
+        return r;
+    });
+
     const metrics = {
-        open: data ? data.filter(d => d.status.toLowerCase() === 'open').length : 0,
-        defective: data ? data.filter(d => d.condition && d.condition.includes('Defective')).length : 0
+        open: normalized.filter(d => d.status.toLowerCase() === 'open').length,
+        defective: normalized.filter(d => d.condition && d.condition.includes('Defective')).length
     };
 
     return res.status(200).json({
         success: true,
-        data: data || [],
+        data: normalized,
         metrics,
-        count: data?.length || 0
+        count: normalized.length
     });
 }
 
-    // Inside api/returns.js -> action === 'complete_return'
 if (action === 'complete_return') {
     const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
-    if (!rmaId || !equipment_id) throw new Error("Missing IDs in payload");
+    if (!rmaId) throw new Error("Missing RMA ID in payload");
 
-    // 1. Fetch linked deployment_id, merchant_id, and ticket_id
+    // Fetch the return record
     const { data: rmaData } = await supabase
         .from('returns')
-        .select('deployment_id, merchant_id, ticket_id')
+        .select('deployment_id, merchant_id, ticket_id, is_bulk, equipment_id')
         .eq('id', rmaId)
         .single();
 
     const resolved_merchant_id = merchant_id || rmaData?.merchant_id || null;
+    const isBulk = rmaData?.is_bulk || false;
+    const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
 
+    if (isBulk) {
+        // Process all return_items
+        const { data: retItems } = await supabase
+            .from('return_items')
+            .select('equipment_id')
+            .eq('return_id', rmaId);
+
+        for (const ri of (retItems || [])) {
+            await supabase.from('equipments').update({
+                status: finalStatus, current_location: destination, merchant_id: null
+            }).eq('id', ri.equipment_id);
+        }
+
+        await supabase.from('equipment_logs').insert(
+            (retItems || []).map(ri => ({
+                equipment_id: ri.equipment_id,
+                merchant_id: resolved_merchant_id,
+                action: 'RMA Completed',
+                from_location: 'In Transit / RMA',
+                to_location: destination,
+                notes: `Bulk inspection finished. Unit marked as ${condition}.`
+            }))
+        );
+    } else {
+        const actualEquipId = equipment_id || rmaData?.equipment_id;
+        if (!actualEquipId) throw new Error("Missing equipment_id for single return");
+
+        await supabase.from('equipments').update({
+            status: finalStatus, current_location: destination, merchant_id: null
+        }).eq('id', actualEquipId);
+
+        await supabase.from('equipment_logs').insert([{
+            equipment_id: actualEquipId,
+            merchant_id: resolved_merchant_id,
+            action: 'RMA Completed',
+            from_location: 'In Transit / RMA',
+            to_location: destination,
+            notes: `Inspection finished. Unit marked as ${condition}.`
+        }]);
+    }
+
+    // Close linked deployment
     if (rmaData?.deployment_id) {
-        // 2. Close the linked deployment
         await supabase.from('deployments')
             .update({ status: 'Closed' })
             .eq('id', rmaData.deployment_id);
     }
 
-    // 3. Close RMA with capital-C status (consistent with check_rma comparison)
+    // Close the RMA
     await supabase.from('returns').update({
         status: 'Closed',
         condition: condition,
         destination: destination
     }).eq('id', rmaId);
 
-    // 4. Update equipment status
-    const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
-    await supabase.from('equipments').update({
-        status: finalStatus,
-        current_location: destination,
-        merchant_id: null
-    }).eq('id', equipment_id);
-
-    // 5. Auto-close the linked support ticket
+    // Auto-close linked support ticket
     if (rmaData?.ticket_id) {
         await supabase.from('support_tickets')
             .update({ status: 'closed', updated_at: new Date().toISOString() })
@@ -130,20 +171,11 @@ if (action === 'complete_return') {
         });
     }
 
-    // 6. Log equipment history
-    await supabase.from('equipment_logs').insert([{
-        equipment_id,
-        merchant_id: resolved_merchant_id,
-        action: 'RMA Completed',
-        from_location: 'In Transit / RMA',
-        to_location: destination,
-        notes: `Inspection finished. Unit marked as ${condition}.`
-    }]);
-
     return res.status(200).json({ success: true });
 }
+
         if (action === 'getHistory') {
-            const targetId = body.equipment_id; 
+            const targetId = body.equipment_id;
             const { data, error } = await supabase.from('equipment_logs').select('*').eq('equipment_id', targetId).order('created_at', { ascending: false });
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });

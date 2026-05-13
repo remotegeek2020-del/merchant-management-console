@@ -127,7 +127,14 @@
 <div id="newDepModal" class="modal-backdrop" onclick="closeModal(event, 'newDepModal')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('newDepModal').style.display='none'">close</span>
-        <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:20px;">Create Deployment Ticket</h2>
+        <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:15px;">Create Deployment Ticket</h2>
+
+        <!-- Mode toggle -->
+        <div style="display:flex; gap:8px; margin-bottom:15px;">
+            <button type="button" id="modeSingleBtn" onclick="setDepMode('single')" class="slds-button" style="flex:1; border-radius:8px; background:var(--pp-blue); color:white; font-weight:700; font-size:11px; border:none; padding:8px;">Single Unit</button>
+            <button type="button" id="modeBulkBtn" onclick="setDepMode('bulk')" class="slds-button slds-button_neutral" style="flex:1; border-radius:8px; font-weight:700; font-size:11px; padding:8px;">Multiple Units (Bulk)</button>
+        </div>
+
         <form id="newDepForm" onsubmit="saveDeployment(event)">
             <div style="position:relative; margin-bottom: 15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">MERCHANT</label>
@@ -135,16 +142,31 @@
                 <input type="hidden" id="selectedMerchantId" required>
                 <div id="mSuggestions" class="suggestions-list"></div>
             </div>
-            <div style="position:relative; margin-bottom: 15px;">
-    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">HARDWARE (SERIAL NUMBER)</label>
-    <input type="text" id="eSearch" class="slds-input" placeholder="Type Serial Number..." onkeyup="handleEquipSearch(this.value)" autocomplete="off">
-    <input type="hidden" id="equipSelect" required>
-    <div id="eSuggestions" class="suggestions-list"></div>
-</div>
-           <div style="margin-bottom: 15px;">
-                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TID</label>
-                <input type="text" id="tidInput" class="slds-input" placeholder="TID">
-           </div>
+
+            <!-- SINGLE mode: existing serial + TID -->
+            <div id="singleModeFields">
+                <div style="position:relative; margin-bottom: 15px;">
+                    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">HARDWARE (SERIAL NUMBER)</label>
+                    <input type="text" id="eSearch" class="slds-input" placeholder="Type Serial Number..." onkeyup="handleEquipSearch(this.value)" autocomplete="off">
+                    <input type="hidden" id="equipSelect">
+                    <div id="eSuggestions" class="suggestions-list"></div>
+                </div>
+                <div style="margin-bottom: 15px;">
+                    <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TID</label>
+                    <input type="text" id="tidInput" class="slds-input" placeholder="TID">
+                </div>
+            </div>
+
+            <!-- BULK mode: multi-item picker -->
+            <div id="bulkModeFields" style="display:none; margin-bottom:15px;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">ADD UNITS</label>
+                <div style="position:relative; margin-bottom:8px;">
+                    <input type="text" id="bulkESearch" class="slds-input" placeholder="Search serial number..." onkeyup="handleBulkEquipSearch(this.value)" autocomplete="off">
+                    <div id="bulkESuggestions" class="suggestions-list"></div>
+                </div>
+                <div id="bulkItemsList" style="min-height:50px; border:1px solid #e2e8f0; border-radius:8px; padding:8px; background:#f8fafc; margin-bottom:6px;"></div>
+                <div id="bulkItemCount" style="font-size:11px; font-weight:700; color:#004990;"></div>
+            </div>
             <div style="margin-bottom: 15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">DEPLOYMENT DATE</label>
                 <input type="date" id="dateInput" class="slds-input" required>
@@ -233,6 +255,14 @@
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">DEPLOYMENT DATE</label>
                 <input type="date" id="editDate" class="slds-input" style="border-radius:8px;">
+            </div>
+
+            <!-- Bulk items list (read-only) -->
+            <div id="editItemsSection" style="display:none; margin-bottom:15px; padding:12px; background:#f0f7ff; border:1px solid #bfdbfe; border-radius:8px;">
+                <div style="font-size:10px; font-weight:700; color:#1d4ed8; text-transform:uppercase; margin-bottom:8px; letter-spacing:0.5px;">
+                    <span class="material-icons" style="font-size:13px; vertical-align:middle;">inventory_2</span> Equipment Units
+                </div>
+                <div id="editItemsList"></div>
             </div>
 
             <div id="merchantReceivedWrap" style="margin-bottom:15px; display:none; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px;">
@@ -328,20 +358,6 @@
     let currentStaffName = '';
 
 
-async function executeBulk(validData) {
-    Swal.fire({ title: 'Creating Deployments...', didOpen: () => Swal.showLoading() });
-    const res = await fetch('/api/deployments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'bulk_create', payload: validData })
-    });
-    const result = await res.json();
-    if (result.success) {
-        document.getElementById('bulkPreviewModal').style.display = 'none';
-        Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
-        fetchDeployments();
-    }
-}
     /**
  * AUDIT LOGGER 
  * Sends activity to the central activity_logs table
@@ -516,8 +532,20 @@ if (document.getElementById('kpi-total')) {
                         const dateStr = d.target_deployment_date ? fmtDate(d.target_deployment_date) : '---';
                         const receivedStr = (d.status === 'Closed' && d.merchant_received_date) ? fmtDate(d.merchant_received_date) : null;
                         const merchantName = d.merchants?.dba_name || '---';
-                        const serialNum = d.equipments?.serial_number || '---';
                         const safeDba = merchantName.replace(/'/g, "\\'");
+                        const isBulk = d.is_bulk;
+                        const itemCount = d.items?.length || 0;
+
+                        // Serial / hardware display
+                        const hardwareCell = isBulk
+                            ? `<span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:3px 9px;border-radius:4px;font-weight:700;">${itemCount} UNIT${itemCount !== 1 ? 'S' : ''}</span>`
+                            : `<code>${d.equipments?.serial_number || '---'}</code>`;
+                        const tidCell = isBulk ? `<span style="color:#94a3b8;font-size:11px;">—</span>` : (d.tid || '---');
+
+                        // For history & delete: use first item's equipment_id for bulk, or the deployment's equipment_id for single
+                        const histEquipId = isBulk ? (d.items?.[0]?.equipment_id || '') : (d.equipment_id || '');
+                        const histSerial = isBulk ? (d.items?.[0]?.serial_number || 'bulk') : (d.equipments?.serial_number || '---');
+                        const safeSerial = histSerial.replace(/'/g, "\\'");
 
                         row.innerHTML = `
                             <td style="font-weight:700; color:var(--pp-blue);">
@@ -525,8 +553,8 @@ if (document.getElementById('kpi-total')) {
                                 ${d.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;letter-spacing:0.3px;">TICKET</span>` : ''}
                             </td>
                             <td style="font-weight:600;">${merchantName}</td>
-                            <td><code>${serialNum}</code></td>
-                            <td>${d.tid || '---'}</td>
+                            <td>${hardwareCell}</td>
+                            <td>${tidCell}</td>
                             <td><span style="font-size:0.8rem; color:#64748b;">${d.tracking_id || '---'}</span></td>
                             <td>
                                 <div>${dateStr}</div>
@@ -534,10 +562,10 @@ if (document.getElementById('kpi-total')) {
                             </td>
                             <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
                             <td style="display:flex; gap:5px;">
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>
+                                ${!isBulk ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>` : ''}
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${d.equipment_id}', '${serialNum}')"><span class="material-icons" style="font-size:18px;">history</span></button>
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${serialNum}', '${d.equipment_id}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${histEquipId}', '${safeSerial}')"><span class="material-icons" style="font-size:18px;">history</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${safeSerial}', '${d.equipment_id || ''}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
                             </td>
                         `;
                     });
@@ -856,15 +884,6 @@ async function processReturn() {
         document.getElementById('eSuggestions').style.display = 'none';
     }
 
-    function openNewDeploymentModal() {
-        document.getElementById('newDepModal').style.display = 'flex';
-        ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput'].forEach(id => {
-            const el = document.getElementById(id);
-            if(el) el.value = '';
-        });
-        document.getElementById('dateInput').value = fmtDateInput(new Date());
-    }
-
 function toggleMerchantReceivedField(status) {
     const wrap = document.getElementById('merchantReceivedWrap');
     if (!wrap) return;
@@ -892,6 +911,22 @@ async function openEditModal(index) {
     // Merchant received date — only relevant when Closed/Delivered
     toggleMerchantReceivedField(d.status || 'Open');
     document.getElementById('editMerchantReceived').value = d.merchant_received_date ? fmtDateInput(d.merchant_received_date) : '';
+
+    // Bulk items section
+    const editItemsSection = document.getElementById('editItemsSection');
+    const editItemsList = document.getElementById('editItemsList');
+    if (d.is_bulk && d.items?.length > 0) {
+        editItemsSection.style.display = 'block';
+        editItemsList.innerHTML = d.items.map(i => `
+            <div style="display:flex; gap:10px; align-items:center; padding:7px 10px; background:white; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:4px;">
+                <code style="font-size:12px; color:#004990;">${i.serial_number || '---'}</code>
+                <span style="font-size:11px; color:#64748b;">${i.terminal_type || ''}</span>
+                <span style="font-size:11px; font-weight:600; margin-left:auto;">TID: ${i.tid || '—'}</span>
+            </div>
+        `).join('');
+    } else {
+        editItemsSection.style.display = 'none';
+    }
 
     // 2. RESET UI ELEMENTS
     const rmaBadge = document.getElementById('rmaStatusBadge');
@@ -958,27 +993,137 @@ async function openEditModal(index) {
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
+// Bulk items state
+let bulkItems = []; // [{equipment_id, serial_number, terminal_type, tid}]
+let currentDepMode = 'single';
+
+function setDepMode(mode) {
+    currentDepMode = mode;
+    const single = document.getElementById('singleModeFields');
+    const bulk = document.getElementById('bulkModeFields');
+    const singleBtn = document.getElementById('modeSingleBtn');
+    const bulkBtn = document.getElementById('modeBulkBtn');
+    if (mode === 'single') {
+        single.style.display = 'block';
+        bulk.style.display = 'none';
+        singleBtn.style.background = 'var(--pp-blue)'; singleBtn.style.color = 'white'; singleBtn.className = 'slds-button';
+        bulkBtn.style.background = ''; bulkBtn.style.color = ''; bulkBtn.className = 'slds-button slds-button_neutral';
+    } else {
+        single.style.display = 'none';
+        bulk.style.display = 'block';
+        bulkBtn.style.background = 'var(--pp-blue)'; bulkBtn.style.color = 'white'; bulkBtn.className = 'slds-button';
+        singleBtn.style.background = ''; singleBtn.style.color = ''; singleBtn.className = 'slds-button slds-button_neutral';
+    }
+}
+
+async function handleBulkEquipSearch(val) {
+    const list = document.getElementById('bulkESuggestions');
+    if (val.length < 1) { list.style.display = 'none'; return; }
+    clearTimeout(lookupTimeout);
+    lookupTimeout = setTimeout(async () => {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.inventory || []).map(e => `
+                <div class="suggestion-item" onclick="addBulkItem('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
+                    <div>
+                        <strong>${e.serial_number}</strong>
+                        <div style="font-size:10px; color:#64748b;">${e.terminal_type}</div>
+                    </div>
+                    <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800;">STOCKED</span>
+                </div>
+            `).join('') || '<div style="padding:10px;color:#94a3b8;font-size:12px;">No stocked units found</div>';
+            list.style.display = 'block';
+        } catch (e) { console.error(e); }
+    }, 200);
+}
+
+function addBulkItem(equipment_id, serial_number, terminal_type) {
+    if (bulkItems.find(i => i.equipment_id === equipment_id)) {
+        document.getElementById('bulkESuggestions').style.display = 'none';
+        document.getElementById('bulkESearch').value = '';
+        return;
+    }
+    bulkItems.push({ equipment_id, serial_number, terminal_type, tid: '' });
+    document.getElementById('bulkESuggestions').style.display = 'none';
+    document.getElementById('bulkESearch').value = '';
+    renderBulkItems();
+}
+
+function removeBulkItem(equipment_id) {
+    bulkItems = bulkItems.filter(i => i.equipment_id !== equipment_id);
+    renderBulkItems();
+}
+
+function renderBulkItems() {
+    const list = document.getElementById('bulkItemsList');
+    const count = document.getElementById('bulkItemCount');
+    if (bulkItems.length === 0) {
+        list.innerHTML = '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:10px;">No units added yet — search above to add</div>';
+        count.innerText = '';
+        return;
+    }
+    list.innerHTML = bulkItems.map((item, i) => `
+        <div style="display:flex; gap:8px; align-items:center; padding:7px; background:white; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:4px;">
+            <code style="font-size:12px; color:#004990; flex:0 0 auto;">${item.serial_number}</code>
+            <span style="font-size:11px; color:#64748b; flex:1;">${item.terminal_type}</span>
+            <input type="text" value="${item.tid}" placeholder="TID" onchange="bulkItems[${i}].tid=this.value"
+                style="width:90px; font-size:11px; padding:3px 7px; border:1px solid #cbd5e1; border-radius:5px;">
+            <button type="button" onclick="removeBulkItem('${item.equipment_id}')" style="background:none;border:none;cursor:pointer;color:#e11d48;padding:0;">
+                <span class="material-icons" style="font-size:16px;">remove_circle</span>
+            </button>
+        </div>
+    `).join('');
+    count.innerText = `${bulkItems.length} unit${bulkItems.length !== 1 ? 's' : ''} selected`;
+}
+
 async function saveDeployment(event) {
     event.preventDefault();
-    const payload = {
-        merchant_id: document.getElementById('selectedMerchantId').value,
-        equipment_id: document.getElementById('equipSelect').value,
-        tid: document.getElementById('tidInput').value,
-        tracking_id: document.getElementById('trackingInput').value,
-        target_date: document.getElementById('dateInput').value,
-        purchase_type: document.getElementById('purchaseType').value, // Must match backend name
-        notes: document.getElementById('notesInput').value
-    };
-    
+    const merchantId = document.getElementById('selectedMerchantId').value;
+    if (!merchantId) return Swal.fire('Error', 'Please select a merchant', 'warning');
+
+    let payload;
+
+    if (currentDepMode === 'bulk') {
+        if (bulkItems.length === 0) return Swal.fire('Error', 'Please add at least one unit', 'warning');
+        payload = {
+            merchant_id: merchantId,
+            is_bulk: true,
+            items: bulkItems.map(i => ({ equipment_id: i.equipment_id, tid: i.tid || null })),
+            tracking_id: document.getElementById('trackingInput').value,
+            target_date: document.getElementById('dateInput').value,
+            purchase_type: document.getElementById('purchaseType').value,
+            notes: document.getElementById('notesInput').value
+        };
+    } else {
+        const equipId = document.getElementById('equipSelect').value;
+        if (!equipId) return Swal.fire('Error', 'Please select a hardware unit', 'warning');
+        payload = {
+            merchant_id: merchantId,
+            equipment_id: equipId,
+            tid: document.getElementById('tidInput').value,
+            tracking_id: document.getElementById('trackingInput').value,
+            target_date: document.getElementById('dateInput').value,
+            purchase_type: document.getElementById('purchaseType').value,
+            notes: document.getElementById('notesInput').value
+        };
+    }
+
     try {
-        const res = await fetch('/api/deployments', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ action: 'create', payload }) 
+        const res = await fetch('/api/deployments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'create', payload })
         });
         const result = await res.json();
         if (result.success) {
-            await logAuditAction('Deployment Created', `Ticket created for Merchant ID: ${payload.merchant_id} (TID: ${payload.tid || 'N/A'})`);
+            await logAuditAction('Deployment Created', currentDepMode === 'bulk'
+                ? `Bulk ticket created: ${bulkItems.length} units for Merchant ${merchantId}`
+                : `Ticket created for Merchant ID: ${merchantId}`);
             Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
             document.getElementById('newDepModal').style.display = 'none';
             await fetchDeployments();
@@ -1091,13 +1236,16 @@ async function executeBulk(validData) {
     }
 }
     function openNewDeploymentModal() {
+    // Reset mode to single
+    bulkItems = [];
+    setDepMode('single');
     document.getElementById('newDepModal').style.display = 'flex';
-    // Added purchaseType to the list of cleared fields
-    ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput','purchaseType'].forEach(id => {
+    ['mSearch','selectedMerchantId','eSearch','equipSelect','tidInput','trackingInput','notesInput','purchaseType','bulkESearch'].forEach(id => {
         const el = document.getElementById(id);
         if(el) el.value = '';
     });
     document.getElementById('dateInput').value = fmtDateInput(new Date());
+    renderBulkItems();
 }
 
     window.onload = async () => {
