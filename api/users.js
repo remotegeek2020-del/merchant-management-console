@@ -8,7 +8,10 @@ export default async function handler(req, res) {
     
     try {
         if (req.method === 'GET' || req.query.action === 'list') {
-            const { data, error } = await supabase.from('app_users').select('*').order('first_name');
+            // Only return non-sensitive fields
+            const { data, error } = await supabase.from('app_users')
+                .select('userid,id,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_reports,access_tickets,access_partners,access_community,access_tasks,can_delete_tickets,created_at')
+                .order('first_name');
             if (error) throw error;
             return res.status(200).json({ success: true, data });
         }
@@ -17,9 +20,12 @@ export default async function handler(req, res) {
             const { action, payload, userid, performerRole } = req.body;
 
             if (action === 'insert') {
-                // RULE 1: Only super_admin can create super_admin
-                if (payload.role === 'super_admin' && performerRole !== 'super_admin') {
-                    return res.status(403).json({ success: false, message: 'Only Super Admins can grant God Mode.' });
+                // RULE 1: Only super_admin can create super_admin — verify role from DB, not client
+                if (payload.role === 'super_admin') {
+                    const { data: performer } = await supabase.from('app_users').select('role').eq('userid', userid).single();
+                    if (!performer || performer.role !== 'super_admin') {
+                        return res.status(403).json({ success: false, message: 'Only Super Admins can grant God Mode.' });
+                    }
                 }
 
                 const invitationToken = crypto.randomUUID();
@@ -81,8 +87,21 @@ export default async function handler(req, res) {
             } 
             
             if (action === 'updateBatch') {
+                // Whitelist allowed fields — prevent role/credential escalation via this endpoint
+                const ALLOWED_BATCH_FIELDS = [
+                    'first_name','last_name','email','role','is_active',
+                    'access_admin_dashboard','access_merchants','access_deployments',
+                    'access_returns','access_inventory','access_reports',
+                    'access_tickets','access_partners','access_community',
+                    'access_tasks','can_delete_tickets'
+                ];
                 for (const uid of Object.keys(payload)) {
-                    await supabase.from('app_users').update(payload[uid]).eq('userid', uid);
+                    const safePayload = Object.fromEntries(
+                        Object.entries(payload[uid]).filter(([k]) => ALLOWED_BATCH_FIELDS.includes(k))
+                    );
+                    if (Object.keys(safePayload).length > 0) {
+                        await supabase.from('app_users').update(safePayload).eq('userid', uid);
+                    }
                 }
                 return res.status(200).json({ success: true });
             }
@@ -101,7 +120,6 @@ export default async function handler(req, res) {
                 let emailSent = false;
                 if (process.env.POSTMARK_SERVER_TOKEN) {
                     try {
-                        const { ServerClient } = await import('postmark');
                         const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
                         await client.sendEmail({
                             "From": process.env.EMAIL_FROM,

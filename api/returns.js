@@ -79,10 +79,12 @@ if (action === 'list') {
         return r;
     });
 
-    const metrics = {
-        open: normalized.filter(d => d.status.toLowerCase() === 'open').length,
-        defective: normalized.filter(d => d.condition && d.condition.includes('Defective')).length
-    };
+    // Metrics from full dataset, not just current page
+    const [{ count: openCount }, { count: defectiveCount }] = await Promise.all([
+        supabase.from('returns').select('id', { count: 'exact', head: true }).ilike('status', 'open'),
+        supabase.from('returns').select('id', { count: 'exact', head: true }).ilike('condition', '%defective%')
+    ]);
+    const metrics = { open: openCount || 0, defective: defectiveCount || 0 };
 
     return res.status(200).json({
         success: true,
@@ -94,7 +96,7 @@ if (action === 'list') {
 }
 
 if (action === 'complete_return') {
-    const { id: rmaId, equipment_id, condition, destination, merchant_id } = payload || {};
+    const { id: rmaId, equipment_id, condition, destination, merchant_id, equipment_received_date } = payload || {};
     if (!rmaId) throw new Error("Missing RMA ID in payload");
 
     // Fetch the return record
@@ -106,6 +108,7 @@ if (action === 'complete_return') {
 
     const resolved_merchant_id = merchant_id || rmaData?.merchant_id || null;
     const isBulk = rmaData?.is_bulk || false;
+    if (!condition) throw new Error("Missing condition for complete_return");
     const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
 
     if (isBulk) {
@@ -186,11 +189,9 @@ if (action === 'complete_return') {
     }
 
     // Close the RMA
-    await supabase.from('returns').update({
-        status: 'Closed',
-        condition: condition,
-        destination: destination
-    }).eq('id', rmaId);
+    const returnUpdate = { status: 'Closed', condition, destination };
+    if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
+    await supabase.from('returns').update(returnUpdate).eq('id', rmaId);
 
     // Auto-close linked support ticket
     if (rmaData?.ticket_id) {

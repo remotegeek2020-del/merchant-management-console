@@ -35,7 +35,7 @@
         </div>
         <div class="pp-search" style="width:280px;">
             <span class="material-icons pp-search-icon">search</span>
-            <input type="text" id="retSearch" placeholder="Search RMA or condition..." onkeyup="fetchReturns()">
+            <input type="text" id="retSearch" placeholder="Search RMA or condition..." onkeyup="debounceRetSearch()">
         </div>
     </div>
 
@@ -85,6 +85,8 @@ let currentReturns = [];
 let retPageSize = 20;
 let retCurrentPage = 0;
 let retTotalCount = 0;
+let retSearchTimeout = null;
+function debounceRetSearch() { clearTimeout(retSearchTimeout); retSearchTimeout = setTimeout(() => { retCurrentPage = 0; fetchReturns(); }, 350); }
 const canDeleteTickets = localStorage.getItem('pp_role') === 'super_admin' || localStorage.getItem('pp_can_delete_tickets') === 'true';
 
 window.onload = async () => {
@@ -393,7 +395,7 @@ async function finalizeRMA(id, equipment_id) {
     try {
         const res = await fetch('/api/returns', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'complete_return', payload: { id, equipment_id, condition: finalCondition, destination: finalDestination } })
+            body: JSON.stringify({ action: 'complete_return', payload: { id, equipment_id, condition: finalCondition, destination: finalDestination, equipment_received_date: receivedDate } })
         });
         const r = await res.json();
         if (r.success) {
