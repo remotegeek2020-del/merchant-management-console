@@ -47,6 +47,23 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // Admin — upload an image to cms-assets bucket, return public URL
+        if (body.action === 'upload_asset') {
+            if (!(await isSuperAdmin(supabase, body.userid))) return res.status(403).json({ success: false, message: 'Access denied.' });
+            const { filename, data: b64, contentType } = body;
+            if (!filename || !b64 || !contentType) return res.status(400).json({ success: false, message: 'filename, data, and contentType are required.' });
+            const buffer = Buffer.from(b64, 'base64');
+            const ext = filename.split('.').pop().toLowerCase();
+            const safeName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+            const { error: upErr } = await supabase.storage.from('cms-assets').upload(safeName, buffer, {
+                contentType,
+                upsert: false,
+            });
+            if (upErr) throw upErr;
+            const { data: urlData } = supabase.storage.from('cms-assets').getPublicUrl(safeName);
+            return res.status(200).json({ success: true, url: urlData.publicUrl });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });

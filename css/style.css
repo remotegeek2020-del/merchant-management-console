@@ -45,7 +45,7 @@ body {
     display: none;
     position: fixed;
     inset: 0;
-    background: linear-gradient(135deg, var(--pp-navy) 0%, #003366 60%, #004990 100%);
+    background: linear-gradient(135deg, var(--pp-navy) 0%, var(--pp-navy) 60%, var(--pp-blue) 100%);
     z-index: 1000;
 }
 
