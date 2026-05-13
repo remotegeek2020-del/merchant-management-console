@@ -321,7 +321,7 @@ function renderIdeas() {
                 <div class="idea-meta">
                     <span class="idea-requester"><span class="material-icons" style="font-size:13px;">person</span>${escHtml(idea.requested_by_name)}</span>
                     <span class="idea-date">${fmtDate(idea.created_at)}</span>
-                    <button onclick="openComments('${idea.id}', ${JSON.stringify(escHtml(idea.title))})" style="display:flex;align-items:center;gap:3px;background:none;border:none;cursor:pointer;color:#64748b;font-size:11px;font-weight:600;padding:0;font-family:inherit;" title="View comments">
+                    <button onclick="openComments('${idea.id}')" style="display:flex;align-items:center;gap:3px;background:none;border:none;cursor:pointer;color:#64748b;font-size:11px;font-weight:600;padding:0;font-family:inherit;" title="View comments">
                         <span class="material-icons" style="font-size:14px;">chat_bubble_outline</span>
                         <span id="cc-${idea.id}">${commentCount}</span>
                     </button>
@@ -388,7 +388,9 @@ async function deleteIdea(id) {
     }
 }
 
-async function openComments(ideaId, ideaTitle) {
+async function openComments(ideaId) {
+    const idea = allIdeas.find(i => i.id === ideaId);
+    const ideaTitle = idea ? escHtml(idea.title) : '';
     const loadHtml = () => `<div style="text-align:center;padding:20px;color:#94a3b8;">Loading…</div>`;
     const buildThread = (comments) => {
         if (!comments.length) return `<div style="text-align:center;padding:16px;color:#94a3b8;font-size:13px;">No comments yet. Be the first!</div>`;
