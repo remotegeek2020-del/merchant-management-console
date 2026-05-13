@@ -12,17 +12,19 @@
                 opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
             }
         }
-        return _fetch(url, opts).then(function (res) {
+        return _fetch(url, opts).then(async function (res) {
             if (res.status === 401 && needsToken) {
-                res.clone().json().then(function (data) {
-                    if (data.reason === 'session_expired' || data.reason === 'no_token' || data.reason === 'invalid_token') {
-                        const devTok = localStorage.getItem('pp_device_token');
-                        localStorage.clear();
-                        if (devTok) localStorage.setItem('pp_device_token', devTok);
-                        const isLogin = ['/', '/index.html', ''].some(p => window.location.pathname === p || window.location.pathname.endsWith('/index.html'));
-                        if (!isLogin) window.location.href = '/index.html?reason=session_expired';
-                    }
-                }).catch(function () {});
+                let data = {};
+                try { data = await res.clone().json(); } catch (e) {}
+                if (data.reason === 'session_expired' || data.reason === 'no_token' || data.reason === 'invalid_token') {
+                    const devTok = localStorage.getItem('pp_device_token');
+                    localStorage.clear();
+                    if (devTok) localStorage.setItem('pp_device_token', devTok);
+                    const isLogin = window.location.pathname === '/' || window.location.pathname.endsWith('/index.html') || window.location.pathname === '';
+                    if (!isLogin) window.location.href = '/index.html?reason=session_expired';
+                    // Throw so downstream page code never processes the 401 response
+                    throw new Error('Session expired. Redirecting to login.');
+                }
             }
             return res;
         });

@@ -118,9 +118,12 @@ async function authorizeUser(user, sessionToken) {
     if (!user) return;
     try {
         const deviceToken = localStorage.getItem('pp_device_token');
+        const existingSessionToken = localStorage.getItem('pp_session_token');
         localStorage.clear();
         if (deviceToken) localStorage.setItem('pp_device_token', deviceToken);
-        if (sessionToken) localStorage.setItem('pp_session_token', sessionToken);
+        // Use new token if provided (fresh login), otherwise keep the existing one (validate path)
+        const tokenToStore = sessionToken || existingSessionToken;
+        if (tokenToStore) localStorage.setItem('pp_session_token', tokenToStore);
 
         localStorage.setItem('pp_userid', user.userid || '');
         localStorage.setItem('pp_role', user.role || 'Regular User');
