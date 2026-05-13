@@ -504,7 +504,8 @@ async function showDeploymentDetail(deploymentId, ticketId) {
                     <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:6px;">Tracking</div>
                     ${trackingHtml}
                 </div>
-                ${dep.target_deployment_date ? `<div style="font-size:11px;color:#64748b;margin-bottom:12px;">Target date: <strong>${new Date(dep.target_deployment_date).toLocaleDateString()}</strong></div>` : ''}
+                ${dep.target_deployment_date ? `<div style="font-size:11px;color:#64748b;margin-bottom:12px;">Deployment date: <strong>${new Date(dep.target_deployment_date.includes('T') ? dep.target_deployment_date : dep.target_deployment_date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}
+                ${dep.merchant_received_date ? `<div style="font-size:11px;color:#166534;margin-bottom:12px;font-weight:600;"><span style="vertical-align:middle;">✓</span> Received: <strong>${new Date(dep.merchant_received_date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}
                 ${deliverBtn}
             </div>`,
         showConfirmButton: false,

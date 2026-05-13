@@ -505,7 +505,7 @@ export default async function handler(req, res) {
 
             const { data: dep, error } = await supabase
                 .from('deployments')
-                .select('id, deployment_id, status, tracking_id, target_deployment_date, notes, purchase_type, created_at, ticket_id, equipments:equipment_id(terminal_type, serial_number), merchants:merchant_id(dba_name, merchant_id)')
+                .select('id, deployment_id, status, tracking_id, target_deployment_date, merchant_received_date, notes, purchase_type, created_at, ticket_id, equipments:equipment_id(terminal_type, serial_number), merchants:merchant_id(dba_name, merchant_id)')
                 .eq('deployment_id', deployment_id)
                 .single();
             if (error || !dep) return res.status(404).json({ success: false, message: 'Deployment record not found. It may have been archived or processed.' });
@@ -524,9 +524,10 @@ export default async function handler(req, res) {
                 .single();
             if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
 
-            // Close the deployment (keep ticket_id so badge stays as historical record)
+            // Close the deployment and stamp the merchant received date
+            const today = new Date().toISOString().split('T')[0];
             await supabase.from('deployments')
-                .update({ status: 'Closed' })
+                .update({ status: 'Closed', merchant_received_date: today })
                 .eq('id', dep.id);
 
             // Log delivery to equipment_logs
