@@ -82,4 +82,37 @@
             el.textContent = cfg.ai_name;
         });
     }
+
+    // --- Software branding footer ---
+    if (cfg.software_name || cfg.software_logo_url) {
+        // Don't double-inject
+        if (!document.getElementById('pp-sw-footer')) {
+            const bar = document.createElement('div');
+            bar.id = 'pp-sw-footer';
+            bar.style.cssText = [
+                'position:fixed', 'bottom:0', 'left:0', 'right:0',
+                'height:28px', 'background:rgba(255,255,255,0.92)',
+                'backdrop-filter:blur(6px)', '-webkit-backdrop-filter:blur(6px)',
+                'border-top:1px solid #e2e8f0',
+                'display:flex', 'align-items:center', 'justify-content:center',
+                'gap:6px', 'z-index:99999',
+                'font-family:"DM Sans",sans-serif', 'font-size:10px',
+                'font-weight:600', 'color:#94a3b8', 'letter-spacing:0.3px',
+                'pointer-events:none', 'user-select:none'
+            ].join(';');
+
+            let inner = '<span>Powered by</span>';
+            if (cfg.software_logo_url) {
+                inner += `<img src="${cfg.software_logo_url}" alt="" style="height:14px;width:auto;object-fit:contain;vertical-align:middle;">`;
+            }
+            if (cfg.software_name) {
+                inner += `<span style="font-weight:800;color:#64748b;">${cfg.software_name}</span>`;
+            }
+            bar.innerHTML = inner;
+            document.body.appendChild(bar);
+
+            // Push page content up so footer doesn't overlap
+            document.body.style.paddingBottom = 'max(' + (document.body.style.paddingBottom || '0px') + ', 32px)';
+        }
+    }
 })();
