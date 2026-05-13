@@ -100,8 +100,8 @@
                 <button class="slds-button slds-button_neutral" style="border-radius:8px;" onclick="printReportPDF()">
                     <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">picture_as_pdf</span> Print PDF
                 </button>
-                <button class="slds-button slds-button_success" style="background:#166534;color:white;border-radius:8px;" onclick="handleCSVExport()">
-                    <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">download</span> Export Full CSV
+                <button class="slds-button slds-button_success" style="background:#166534;color:white;border-radius:8px;" onclick="openColumnPicker()">
+                    <span class="material-icons" style="font-size:16px;vertical-align:middle;margin-right:4px;">tune</span> Choose Fields & Export
                 </button>
             </div>
         </div>
@@ -234,8 +234,48 @@ function renderPreviewTable(data) {
         return `<td>${val}</td>`;
     }).join('')}</tr>`).join('');
 }
+    // ── COLUMN PICKER ────────────────────────────────────────────────────────
+    async function openColumnPicker() {
+        if (!currentRawData.length) return;
+        const allKeys = Object.keys(currentRawData[0]);
+
+        const checkboxHtml = `
+            <div style="text-align:left;">
+                <div style="display:flex;gap:8px;margin-bottom:12px;">
+                    <button type="button" onclick="document.querySelectorAll('.col-pick').forEach(c=>c.checked=true)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-weight:700;">Select All</button>
+                    <button type="button" onclick="document.querySelectorAll('.col-pick').forEach(c=>c.checked=false)" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-weight:700;">Deselect All</button>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;">
+                    ${allKeys.map(k => `
+                        <label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:#1e293b;padding:5px 8px;border-radius:6px;background:#f8fafc;cursor:pointer;">
+                            <input type="checkbox" class="col-pick" value="${k}" checked style="accent-color:#004990;width:14px;height:14px;">
+                            ${k}
+                        </label>`).join('')}
+                </div>
+            </div>`;
+
+        const pickerResult = await Swal.fire({
+            title: '<span style="font-size:16px;font-weight:800;">Choose Export Fields</span>',
+            html: checkboxHtml,
+            showCancelButton: true,
+            confirmButtonText: '<span class="material-icons" style="font-size:14px;vertical-align:middle;">download</span> Export CSV',
+            confirmButtonColor: '#166534',
+            cancelButtonText: 'Cancel',
+            width: 560,
+            preConfirm: () => {
+                const selected = [...document.querySelectorAll('.col-pick:checked')].map(c => c.value);
+                if (!selected.length) { Swal.showValidationMessage('Please select at least one field.'); return false; }
+                return selected;
+            }
+        });
+
+        if (!pickerResult.isConfirmed) return;
+        await handleCSVExport(pickerResult.value);
+    }
+    // ─────────────────────────────────────────────────────────────────────────
+
     // UPDATED: Scalable CSV Export loop
-    async function handleCSVExport() {
+    async function handleCSVExport(selectedFields = null) {
     const type = document.getElementById('reportType').value;
     const start = document.getElementById('startDate').value;
     const end = document.getElementById('endDate').value;
@@ -289,33 +329,31 @@ function renderPreviewTable(data) {
             offset += limit;
         }
 
-        downloadCSV(allData, `${type}_report_${start}_to_${end}.csv`);
+        downloadCSV(allData, `${type}_report_${start}_to_${end}.csv`, selectedFields);
         Swal.fire('Complete', `${allData.length} records exported.`, 'success');
     } catch (err) {
         Swal.fire('Error', 'Full export failed.', 'error');
     }
 }
 
- function downloadCSV(data, filename) {
+ function downloadCSV(data, filename, selectedFields = null) {
     if (!data || data.length === 0) return;
 
-    const headers = Object.keys(data[0]).join(',');
-    const rows = data.map(row => 
-       Object.keys(row).map(k => {
-        let val = row[k];
-        
-        // Flatten objects for CSV export
-        if (val && typeof val === 'object') {
-            if (k === 'merchants') val = val.dba_name;
-            else if (k === 'equipments') val = val.serial_number;
-            else val = JSON.stringify(val); // Fallback
-        }
-        
-        let str = val === null || val === undefined ? "" : String(val);
-        return `"${str.replace(/"/g, '""')}"`;
-    }).join(',')
-);
-    
+    const keys = selectedFields ? selectedFields.filter(k => k in data[0]) : Object.keys(data[0]);
+    const headers = keys.map(k => `"${k}"`).join(',');
+    const rows = data.map(row =>
+        keys.map(k => {
+            let val = row[k];
+            if (val && typeof val === 'object') {
+                if (k === 'merchants') val = val.dba_name;
+                else if (k === 'equipments') val = val.serial_number;
+                else val = JSON.stringify(val);
+            }
+            let str = val === null || val === undefined ? "" : String(val);
+            return `"${str.replace(/"/g, '""')}"`;
+        }).join(',')
+    );
+
     const csvContent = headers + "\n" + rows.join("\n");
     
     // Create a Blob object for the CSV data

@@ -42,7 +42,7 @@ export default async function handler(req, res) {
             // ── DEPLOYMENTS ───────────────────────────────
             if (reportType === 'deployments') {
                 const { data, count, error } = await supabase.from('deployments')
-                    .select(`id, status, created_at, tracking_id, merchants!deployments_merchant_id_fkey(dba_name, merchant_id), equipments!deployments_equipment_id_fkey(serial_number, terminal_type)`, { count: 'exact' })
+                    .select(`deployment_id, tid, status, purchase_type, tracking_id, target_deployment_date, merchant_received_date, created_at, merchants!deployments_merchant_id_fkey(dba_name, merchant_id), equipments!deployments_equipment_id_fkey(serial_number, terminal_type)`, { count: 'exact' })
                     .gte('created_at', startDate + 'T00:00:00')
                     .lte('created_at', endDate + 'T23:59:59')
                     .order('created_at', { ascending: false })
@@ -50,14 +50,21 @@ export default async function handler(req, res) {
 
                 if (error) throw error;
 
+                const fmt = d => d ? (String(d).match(/^\d{4}-\d{2}-\d{2}$/) ? d : new Date(d).toLocaleDateString()) : '—';
+
                 const rawData = (data||[]).map(d => ({
-                    'DBA Name': d.merchants?.dba_name || '—',
-                    'Merchant ID': d.merchants?.merchant_id || '—',
-                    'Serial Number': d.equipments?.serial_number || '—',
-                    'Terminal Type': d.equipments?.terminal_type || '—',
-                    'Status': d.status || '—',
-                    'Tracking ID': d.tracking_id || '—',
-                    'Date': d.created_at ? new Date(d.created_at).toLocaleDateString() : '—'
+                    'Deployment ID':      d.deployment_id || '—',
+                    'DBA Name':           d.merchants?.dba_name || '—',
+                    'Merchant ID':        d.merchants?.merchant_id || '—',
+                    'Serial Number':      d.equipments?.serial_number || '—',
+                    'Terminal Type':      d.equipments?.terminal_type || '—',
+                    'TID':                d.tid || '—',
+                    'Purchase Type':      d.purchase_type || '—',
+                    'Status':             d.status || '—',
+                    'Tracking ID':        d.tracking_id || '—',
+                    'Deployment Date':    fmt(d.target_deployment_date),
+                    'Merchant Received':  fmt(d.merchant_received_date),
+                    'Created':            fmt(d.created_at),
                 }));
 
                 return res.status(200).json({ success: true, rawData, totalCount: count });
