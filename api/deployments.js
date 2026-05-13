@@ -333,7 +333,7 @@ if (action === 'delete') {
                 .from('deployments')
                 .select(`
                     *,
-                    merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone),
+                    merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone, email, agent_id, agent_name),
                     equipments:equipment_id(id, serial_number, terminal_type),
                     deployment_items(id, equipment_id, tid, equip:equipment_id(serial_number, terminal_type, status))
                 `, { count: 'exact' });

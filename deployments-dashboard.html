@@ -761,7 +761,14 @@ async function processReturn() {
                         <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">Merchant Details</div>
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">MID</span><span style="font-weight:700; font-family:monospace;">${m.merchant_id || '—'}</span></div>
                         ${location ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Location</span><span style="font-weight:600;">${location}</span></div>` : ''}
-                        ${m.merchant_phone ? `<div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Phone</span><span style="font-weight:600;">${m.merchant_phone}</span></div>` : ''}
+                        ${m.merchant_phone ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Phone</span><span style="font-weight:600;">${m.merchant_phone}</span></div>` : ''}
+                        ${m.email ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Email</span><span style="font-weight:600; color:#0369a1;">${m.email}</span></div>` : ''}
+                    </div>
+                    <div style="background:#f0fdf4; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">Partner / Agent</div>
+                        ${m.agent_name ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Agent</span><span style="font-weight:600;">${m.agent_name}</span></div>` : ''}
+                        ${m.agent_id ? `<div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Agent ID</span><span style="font-weight:700; font-family:monospace;">${m.agent_id}</span></div>` : ''}
+                        ${!m.agent_name && !m.agent_id ? `<div style="color:#94a3b8; font-size:12px;">No partner linked</div>` : ''}
                     </div>
                     <div style="background:#f0f9ff; border-radius:8px; padding:12px 14px;">
                         <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">This Deployment</div>

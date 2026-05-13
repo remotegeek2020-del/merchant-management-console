@@ -81,6 +81,11 @@
 
 <script>
 let currentStaffName = '';
+let currentReturns = [];
+let retPageSize = 20;
+let retCurrentPage = 0;
+let retTotalCount = 0;
+
 window.onload = async () => {
     try {
         const res = await fetch('/api/users');
@@ -96,6 +101,12 @@ window.onload = async () => {
     }
     fetchReturns();
 };
+
+function setRetPageSize(n) {
+    retPageSize = n;
+    retCurrentPage = 0;
+    fetchReturns();
+}
 
 async function closeLinkedTicket(ticketId, btnEl) {
     const confirm = await Swal.fire({
@@ -162,29 +173,68 @@ async function viewHistory(id, sn) {
     Swal.update({ html: `<div style="text-align:left; max-height:400px; overflow-y:auto;">${timeline}</div>` });
 }
 
+function showReturnMerchantInfo(index) {
+    const r = currentReturns[index];
+    const m = r?.merchants;
+    if (!m) return;
+    const location = [m.merchant_city, m.merchant_state].filter(Boolean).join(', ');
+    Swal.fire({
+        title: m.dba_name,
+        html: `
+            <div style="text-align:left; font-size:13px; display:flex; flex-direction:column; gap:10px;">
+                <div style="background:#f8fafc; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">Merchant Details</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">MID</span><span style="font-weight:700; font-family:monospace;">${m.merchant_id || '—'}</span></div>
+                    ${location ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Location</span><span style="font-weight:600;">${location}</span></div>` : ''}
+                    ${m.merchant_phone ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Phone</span><span style="font-weight:600;">${m.merchant_phone}</span></div>` : ''}
+                    ${m.email ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Email</span><span style="font-weight:600; color:#0369a1;">${m.email}</span></div>` : ''}
+                </div>
+                <div style="background:#f0fdf4; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">Partner / Agent</div>
+                    ${m.agent_name ? `<div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Agent</span><span style="font-weight:600;">${m.agent_name}</span></div>` : ''}
+                    ${m.agent_id ? `<div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Agent ID</span><span style="font-weight:700; font-family:monospace;">${m.agent_id}</span></div>` : ''}
+                    ${!m.agent_name && !m.agent_id ? `<div style="color:#94a3b8; font-size:12px;">No partner linked</div>` : ''}
+                </div>
+                <div style="background:#fff7ed; border-radius:8px; padding:12px 14px;">
+                    <div style="font-size:10px; font-weight:700; color:#94a3b8; text-transform:uppercase; margin-bottom:8px;">This RMA</div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">ID</span><span style="font-weight:700; font-family:monospace; color:#c2410c;">${r.return_id || 'PENDING'}</span></div>
+                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Status</span><span style="font-weight:600;">${r.status || '—'}</span></div>
+                    <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Reason</span><span style="font-weight:600;">${r.return_reason || '—'}</span></div>
+                </div>
+            </div>`,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Close'
+    });
+}
+
 async function fetchReturns() {
     const tbody = document.getElementById('returnsTableBody');
     tbody.innerHTML = `<tr><td colspan="9"><div class="pp-empty"><div class="pp-spinner"></div></div></td></tr>`;
     try {
         const res = await fetch('/api/returns', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'list', query: document.getElementById('retSearch').value })
+            body: JSON.stringify({ action: 'list', query: document.getElementById('retSearch').value, limit: retPageSize, offset: retCurrentPage * retPageSize })
         });
         const result = await res.json();
 
+        retTotalCount = result.totalCount || 0;
         document.getElementById('kpi-open').innerText = result.metrics.open;
         document.getElementById('kpi-defective').innerText = result.metrics.defective;
-        document.getElementById('kpi-total').innerText = result.count;
+        document.getElementById('kpi-total').innerText = retTotalCount;
 
-        if (!result.data.length) {
+        currentReturns = result.data || [];
+
+        if (!currentReturns.length) {
             tbody.innerHTML = `<tr><td colspan="9"><div class="pp-empty"><span class="material-icons">inbox</span><p>No returns found</p></div></td></tr>`;
+            renderRetPagination();
             return;
         }
 
-        tbody.innerHTML = result.data.map(r => {
+        tbody.innerHTML = currentReturns.map((r, index) => {
             const isOpen = r.status.toLowerCase() === 'open';
             const isBulk = r.is_bulk;
             const itemCount = r.items?.length || 0;
+            const merchantMid = r.merchants?.merchant_id || '';
             const equipCell = isBulk
                 ? `<div><span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:3px 9px;border-radius:4px;font-weight:700;">${itemCount} UNIT${itemCount !== 1 ? 'S' : ''}</span></div>`
                 : `<div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}</div><div class="pp-muted">${r.equipments?.serial_number || ''}</div>`;
@@ -194,7 +244,10 @@ async function fetchReturns() {
                     ${r.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">TICKET</span>` : ''}
                 </td>
                 <td style="color:#94a3b8; font-size:12px;">${fmtDate(r.created_at)}</td>
-                <td style="font-weight:600;">${r.merchants?.dba_name || '---'}</td>
+                <td>
+                    <div style="font-weight:600; color:#004990; cursor:pointer; text-decoration:underline; text-underline-offset:2px;" onclick="showReturnMerchantInfo(${index})">${r.merchants?.dba_name || '---'}</div>
+                    ${merchantMid ? `<div style="font-size:10px; color:#64748b; font-family:'DM Mono',monospace;">${merchantMid}</div>` : ''}
+                </td>
                 <td class="hide-mobile">${equipCell}</td>
                 <td class="hide-mobile" style="font-size:12px; color:#475569;">${r.return_reason || '---'}</td>
                 <td>${conditionBadge(r.condition)}</td>
@@ -219,10 +272,41 @@ async function fetchReturns() {
                 </td>
             </tr>`;
         }).join('');
+        renderRetPagination();
     } catch (err) {
         tbody.innerHTML = `<tr><td colspan="9"><div class="pp-empty"><span class="material-icons">error_outline</span><p>Failed to load returns</p></div></td></tr>`;
         console.error("Fetch Error:", err);
     }
+}
+
+function renderRetPagination() {
+    let pag = document.getElementById('retPagination');
+    if (!pag) {
+        pag = document.createElement('div');
+        pag.id = 'retPagination';
+        pag.style.cssText = 'display:flex; justify-content:space-between; align-items:center; padding:10px 16px; border-top:1px solid #e2e8f0; flex-wrap:wrap; gap:8px;';
+        document.querySelector('.pp-table-card').appendChild(pag);
+    }
+    const totalPages = Math.ceil(retTotalCount / retPageSize) || 1;
+    const from = retCurrentPage * retPageSize + 1;
+    const to = Math.min((retCurrentPage + 1) * retPageSize, retTotalCount);
+    pag.innerHTML = `
+        <div style="display:flex; gap:4px; align-items:center;">
+            ${[20,50,100].map(n => `<button onclick="setRetPageSize(${n})" style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:${retPageSize===n?'#004990':'white'};color:${retPageSize===n?'white':'#475569'};font-size:11px;font-weight:700;cursor:pointer;">${n}</button>`).join('')}
+        </div>
+        <div style="display:flex; gap:6px; align-items:center;">
+            <span style="font-size:12px; color:#94a3b8;">${from}–${to} of ${retTotalCount}</span>
+            <button onclick="retGotoPage(${retCurrentPage-1})" ${retCurrentPage===0?'disabled':''} style="padding:4px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">‹ Prev</button>
+            <span style="font-size:12px; font-weight:700; color:#004990;">Page ${retCurrentPage+1} / ${totalPages}</span>
+            <button onclick="retGotoPage(${retCurrentPage+1})" ${retCurrentPage>=totalPages-1?'disabled':''} style="padding:4px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">Next ›</button>
+        </div>`;
+}
+
+function retGotoPage(p) {
+    const totalPages = Math.ceil(retTotalCount / retPageSize) || 1;
+    if (p < 0 || p >= totalPages) return;
+    retCurrentPage = p;
+    fetchReturns();
 }
 
 async function finalizeRMA(id, equipment_id) {

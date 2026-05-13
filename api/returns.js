@@ -50,20 +50,25 @@ if (action === 'getMonthlyReport') {
 
 if (action === 'list') {
     const searchQuery = query || '';
+    const limit = req.body.limit || 20;
+    const offset = req.body.offset || 0;
+
     let q = supabase.from('returns').select(`
         id, return_id, return_reason, condition, destination, status, created_at,
         return_date_initiated, equipment_received_date,
         merchant_id, equipment_id, ticket_id, is_bulk,
-        merchants:merchant_id (dba_name, merchant_id),
+        merchants:merchant_id (dba_name, merchant_id, merchant_city, merchant_state, merchant_phone, email, agent_id, agent_name),
         equipments:equipment_id (serial_number, terminal_type),
         return_items(id, equipment_id, condition, equip:equipment_id(serial_number, terminal_type))
-    `).order('return_date_initiated', { ascending: false });
+    `, { count: 'exact' }).order('return_date_initiated', { ascending: false });
 
     if (searchQuery) {
         q = q.or(`return_id.ilike.%${searchQuery}%,condition.ilike.%${searchQuery}%`);
     }
 
-    const { data, error } = await q;
+    q = q.range(offset, offset + limit - 1);
+
+    const { data, error, count } = await q;
     if (error) throw error;
 
     // Normalize to items[] for unified frontend handling
@@ -83,7 +88,8 @@ if (action === 'list') {
         success: true,
         data: normalized,
         metrics,
-        count: normalized.length
+        count,
+        totalCount: count
     });
 }
 
