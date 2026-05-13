@@ -952,24 +952,12 @@ async function openEditModal(index) {
     toggleMerchantReceivedField(d.status || 'Open');
     document.getElementById('editMerchantReceived').value = d.merchant_received_date ? fmtDateInput(d.merchant_received_date) : '';
 
-    // Bulk items section — show per-item status
+    // Bulk items section — show per-item status (RMA info filled in after check_rma returns)
     const editItemsSection = document.getElementById('editItemsSection');
     const editItemsList = document.getElementById('editItemsList');
     if (d.is_bulk && d.items?.length > 0) {
         editItemsSection.style.display = 'block';
-        editItemsList.innerHTML = d.items.map(i => {
-            const st = i.status || 'unknown';
-            const stLabel = st === 'deployed' ? 'At Merchant' : st === 'stocked' ? 'Restocked' : st === 'repairing' ? 'In Repairs' : st === 'repairing' ? 'In Repairs' : 'In Transit';
-            const stColor = st === 'deployed' ? '#166534' : st === 'stocked' ? '#92400e' : st === 'repairing' ? '#9a3412' : '#92400e';
-            const stBg   = st === 'deployed' ? '#dcfce7' : st === 'stocked' ? '#fef3c7' : st === 'repairing' ? '#ffedd5' : '#fef3c7';
-            return `
-            <div style="display:flex; gap:10px; align-items:center; padding:7px 10px; background:white; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:4px;">
-                <code style="font-size:12px; color:#004990;">${i.serial_number || '---'}</code>
-                <span style="font-size:11px; color:#64748b;">${i.terminal_type || ''}</span>
-                ${i.tid ? `<span style="font-size:10px; color:#64748b;">TID: ${i.tid}</span>` : ''}
-                <span style="font-size:9px; font-weight:700; padding:2px 7px; border-radius:99px; background:${stBg}; color:${stColor}; margin-left:auto; text-transform:uppercase;">${stLabel}</span>
-            </div>`;
-        }).join('');
+        editItemsList.innerHTML = renderEditItemsList(d.items, {});
     } else {
         editItemsSection.style.display = 'none';
     }
@@ -1016,6 +1004,11 @@ async function openEditModal(index) {
             // ── BULK DEPLOYMENT LOGIC ──────────────────────────────
             const deployedCount = result.deployedCount || 0;
             rmaBadge.style.display = 'none'; // No single-RMA badge for bulk
+
+            // Re-render items list with RMA completion info
+            if (d.is_bulk && d.items?.length > 0) {
+                editItemsList.innerHTML = renderEditItemsList(d.items, result.returnedEquipMap || {});
+            }
 
             if (deployedCount > 0) {
                 // Units still at merchant — allow initiating (more) returns
@@ -1068,6 +1061,29 @@ async function openEditModal(index) {
 
     document.getElementById('editDepModal').style.display = 'flex';
 }
+function renderEditItemsList(items, returnedEquipMap) {
+    returnedEquipMap = returnedEquipMap || {};
+    return items.map(i => {
+        const rmaId = returnedEquipMap[i.equipment_id];
+        const st = i.status || 'unknown';
+        const stLabel = rmaId ? 'RMA Completed'
+            : st === 'deployed'  ? 'At Merchant'
+            : st === 'stocked'   ? 'Restocked'
+            : st === 'repairing' ? 'In Repairs'
+            : 'In Transit';
+        const stSub   = rmaId ? ` · ${rmaId}` : '';
+        const stColor = rmaId ? '#1e40af' : st === 'deployed' ? '#166534' : st === 'stocked' ? '#92400e' : st === 'repairing' ? '#9a3412' : '#92400e';
+        const stBg    = rmaId ? '#dbeafe'  : st === 'deployed' ? '#dcfce7' : st === 'stocked' ? '#fef3c7' : st === 'repairing' ? '#ffedd5' : '#fef3c7';
+        return `
+        <div style="display:flex; gap:10px; align-items:center; padding:7px 10px; background:white; border:1px solid #e2e8f0; border-radius:6px; margin-bottom:4px;">
+            <code style="font-size:12px; color:#004990;">${i.serial_number || '---'}</code>
+            <span style="font-size:11px; color:#64748b;">${i.terminal_type || ''}</span>
+            ${i.tid ? `<span style="font-size:10px; color:#64748b;">TID: ${i.tid}</span>` : ''}
+            <span style="font-size:9px; font-weight:700; padding:2px 8px; border-radius:99px; background:${stBg}; color:${stColor}; margin-left:auto; white-space:nowrap; text-transform:uppercase;">${stLabel}${stSub}</span>
+        </div>`;
+    }).join('');
+}
+
 // Bulk items state
 let bulkItems = []; // [{equipment_id, serial_number, terminal_type, tid}]
 let currentDepMode = 'single';

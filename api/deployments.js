@@ -200,7 +200,7 @@ if (action === 'check_rma') {
         const deployedCount = (depItems || []).filter(i => i.equip?.status === 'deployed').length;
         const totalCount = depItems?.length || 0;
 
-        // Check if any open return exists (to show in-progress indicator)
+        // Check if any open return exists (in-progress indicator)
         const { data: openReturn } = await supabase.from('returns')
             .select('return_id, id, status, return_reason')
             .eq('deployment_id', deployment_id)
@@ -208,12 +208,34 @@ if (action === 'check_rma') {
             .limit(1)
             .maybeSingle();
 
+        // Build map: equipment_id → RMA display ID for completed returns
+        const returnedEquipMap = {};
+        const { data: closedReturns } = await supabase.from('returns')
+            .select('id, return_id')
+            .eq('deployment_id', deployment_id)
+            .eq('status', 'Closed');
+
+        if (closedReturns?.length) {
+            const closedIds = closedReturns.map(r => r.id);
+            const rmaIdByRow = {};
+            closedReturns.forEach(r => { rmaIdByRow[r.id] = r.return_id; });
+
+            const { data: retItems } = await supabase.from('return_items')
+                .select('equipment_id, return_id')
+                .in('return_id', closedIds);
+
+            (retItems || []).forEach(ri => {
+                returnedEquipMap[ri.equipment_id] = rmaIdByRow[ri.return_id] || null;
+            });
+        }
+
         return res.status(200).json({
             success: true,
             data: openReturn || null,
             isBulk: true,
             deployedCount,
-            totalCount
+            totalCount,
+            returnedEquipMap
         });
     }
 
@@ -326,7 +348,22 @@ if (action === 'delete') {
                 const equipIds = (matchedEquip || []).map(e => e.id);
 
                 if (equipIds.length > 0) {
-                    request = request.or(`deployment_id.ilike.${term},equipment_id.in.(${equipIds.join(',')})`);
+                    // Also find bulk deployments that have this serial in deployment_items
+                    const { data: bulkDeps } = await supabase
+                        .from('deployment_items')
+                        .select('deployment_id')
+                        .in('equipment_id', equipIds);
+
+                    const bulkDepIds = [...new Set((bulkDeps || []).map(d => d.deployment_id))];
+
+                    const conditions = [
+                        `deployment_id.ilike.${term}`,
+                        `equipment_id.in.(${equipIds.join(',')})`
+                    ];
+                    if (bulkDepIds.length > 0) {
+                        conditions.push(`id.in.(${bulkDepIds.join(',')})`);
+                    }
+                    request = request.or(conditions.join(','));
                 } else {
                     request = request.ilike('deployment_id', term);
                 }
