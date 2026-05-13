@@ -930,14 +930,16 @@ async function createLinkedRMA() {
                 const dep = window._rmaDepsMap[depSel.value];
                 const wrap = document.getElementById('rma-unit-picker-wrap');
                 if (dep?.is_bulk && dep.deployment_items?.length) {
+                    const activeItems = dep.deployment_items.filter(i => i.equip?.status === 'deployed');
                     wrap.innerHTML = `
                         <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">SELECT UNITS TO RETURN (partial ok)</label>
-                        ${dep.deployment_items.map(item => `
+                        ${activeItems.map(item => `
                             <label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;">
                                 <input type="checkbox" class="rma-unit-cb" value="${item.equipment_id}" checked style="width:14px;height:14px;flex-shrink:0;">
                                 <span style="font-size:12px;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
                             </label>
                         `).join('')}
+                        ${activeItems.length === 0 ? '<div style="color:#94a3b8;font-size:12px;padding:6px;">All units from this deployment have already been returned.</div>' : ''}
                     `;
                     wrap.style.display = 'block';
                 } else {
