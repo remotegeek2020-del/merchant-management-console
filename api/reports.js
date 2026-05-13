@@ -42,7 +42,11 @@ export default async function handler(req, res) {
             // ── DEPLOYMENTS ───────────────────────────────
             if (reportType === 'deployments') {
                 const { data, count, error } = await supabase.from('deployments')
-                    .select(`deployment_id, tid, status, purchase_type, tracking_id, target_deployment_date, merchant_received_date, created_at, merchants!deployments_merchant_id_fkey(dba_name, merchant_id), equipments!deployments_equipment_id_fkey(serial_number, terminal_type)`, { count: 'exact' })
+                    .select(`deployment_id, tid, status, purchase_type, tracking_id, target_deployment_date, merchant_received_date, created_at, is_bulk,
+                        merchants!deployments_merchant_id_fkey(dba_name, merchant_id),
+                        equipments!deployments_equipment_id_fkey(serial_number, terminal_type),
+                        deployment_items(equipment_id, tid, equip:equipment_id(serial_number, terminal_type))`,
+                        { count: 'exact' })
                     .gte('created_at', startDate + 'T00:00:00')
                     .lte('created_at', endDate + 'T23:59:59')
                     .order('created_at', { ascending: false })
@@ -52,20 +56,36 @@ export default async function handler(req, res) {
 
                 const fmt = d => d ? (String(d).match(/^\d{4}-\d{2}-\d{2}$/) ? d : new Date(d).toLocaleDateString()) : '—';
 
-                const rawData = (data||[]).map(d => ({
-                    'Deployment ID':      d.deployment_id || '—',
-                    'DBA Name':           d.merchants?.dba_name || '—',
-                    'Merchant ID':        d.merchants?.merchant_id || '—',
-                    'Serial Number':      d.equipments?.serial_number || '—',
-                    'Terminal Type':      d.equipments?.terminal_type || '—',
-                    'TID':                d.tid || '—',
-                    'Purchase Type':      d.purchase_type || '—',
-                    'Status':             d.status || '—',
-                    'Tracking ID':        d.tracking_id || '—',
-                    'Deployment Date':    fmt(d.target_deployment_date),
-                    'Merchant Received':  fmt(d.merchant_received_date),
-                    'Created':            fmt(d.created_at),
-                }));
+                const rawData = [];
+                for (const d of (data || [])) {
+                    const base = {
+                        'Deployment ID':     d.deployment_id || '—',
+                        'DBA Name':          d.merchants?.dba_name || '—',
+                        'Merchant ID':       d.merchants?.merchant_id || '—',
+                        'Purchase Type':     d.purchase_type || '—',
+                        'Status':            d.status || '—',
+                        'Tracking ID':       d.tracking_id || '—',
+                        'Deployment Date':   fmt(d.target_deployment_date),
+                        'Merchant Received': fmt(d.merchant_received_date),
+                        'Created':           fmt(d.created_at),
+                    };
+                    if (d.is_bulk && d.deployment_items?.length > 0) {
+                        // Expand: one row per unit
+                        for (const item of d.deployment_items) {
+                            rawData.push({ ...base,
+                                'Serial Number': item.equip?.serial_number || '—',
+                                'Terminal Type': item.equip?.terminal_type || '—',
+                                'TID':           item.tid || '—',
+                            });
+                        }
+                    } else {
+                        rawData.push({ ...base,
+                            'Serial Number': d.equipments?.serial_number || '—',
+                            'Terminal Type': d.equipments?.terminal_type || '—',
+                            'TID':           d.tid || '—',
+                        });
+                    }
+                }
 
                 return res.status(200).json({ success: true, rawData, totalCount: count });
             }
@@ -73,7 +93,12 @@ export default async function handler(req, res) {
             // ── RETURNS ───────────────────────────────────
             if (reportType === 'returns') {
                 const { data, count, error } = await supabase.from('returns')
-                    .select(`return_id, return_reason, condition, status, destination, return_date_initiated, merchants!returns_merchant_id_fkey(dba_name, merchant_id), equipments!returns_equipment_id_fkey(serial_number, terminal_type)`, { count: 'exact' })
+                    .select(`return_id, return_reason, condition, status, destination, return_date_initiated, is_bulk,
+                        merchants!returns_merchant_id_fkey(dba_name, merchant_id),
+                        equipments!returns_equipment_id_fkey(serial_number, terminal_type),
+                        deployments!returns_deployment_id_fkey(deployment_id),
+                        return_items(equipment_id, condition, equip:equipment_id(serial_number, terminal_type))`,
+                        { count: 'exact' })
                     .gte('return_date_initiated', startDate)
                     .lte('return_date_initiated', endDate)
                     .order('return_date_initiated', { ascending: false })
@@ -81,18 +106,34 @@ export default async function handler(req, res) {
 
                 if (error) throw error;
 
-                const rawData = (data||[]).map(d => ({
-                    'RMA ID': d.return_id || '—',
-                    'Merchant': d.merchants?.dba_name || '—',
-                    'Merchant ID': d.merchants?.merchant_id || '—',
-                    'Serial Number': d.equipments?.serial_number || '—',
-                    'Terminal Type': d.equipments?.terminal_type || '—',
-                    'Reason': d.return_reason || '—',
-                    'Condition': d.condition || '—',
-                    'Destination': d.destination || '—',
-                    'Status': d.status || '—',
-                    'Date Initiated': d.return_date_initiated ? new Date(d.return_date_initiated).toLocaleDateString() : '—'
-                }));
+                const rawData = [];
+                for (const d of (data || [])) {
+                    const base = {
+                        'RMA ID':            d.return_id || '—',
+                        'Deployment Ticket': d.deployments?.deployment_id || '—',
+                        'Merchant':          d.merchants?.dba_name || '—',
+                        'Merchant ID':       d.merchants?.merchant_id || '—',
+                        'Reason':            d.return_reason || '—',
+                        'Destination':       d.destination || '—',
+                        'Status':            d.status || '—',
+                        'Date Initiated':    d.return_date_initiated ? new Date(d.return_date_initiated).toLocaleDateString() : '—',
+                    };
+                    if (d.is_bulk && d.return_items?.length > 0) {
+                        for (const item of d.return_items) {
+                            rawData.push({ ...base,
+                                'Serial Number': item.equip?.serial_number || '—',
+                                'Terminal Type': item.equip?.terminal_type || '—',
+                                'Condition':     item.condition || '—',
+                            });
+                        }
+                    } else {
+                        rawData.push({ ...base,
+                            'Serial Number': d.equipments?.serial_number || '—',
+                            'Terminal Type': d.equipments?.terminal_type || '—',
+                            'Condition':     d.condition || '—',
+                        });
+                    }
+                }
 
                 return res.status(200).json({ success: true, rawData, totalCount: count });
             }
