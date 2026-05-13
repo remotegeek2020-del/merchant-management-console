@@ -474,7 +474,7 @@ function renderDeployments(data) {
             <div style="text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
                 <span class="badge ${statusClass(d.status)}">${d.status}</span>
                 <div style="font-size:10px; color:var(--text-muted);">${timeAgo(d.created_at)}</div>
-                <button onclick="openDepDetail(${d.id})" style="font-size:10px; font-weight:700; color:var(--pp-blue); background:none; border:1px solid var(--border); padding:2px 8px; border-radius:5px; cursor:pointer;">View →</button>
+                <button onclick="openDepDetail('${d.id}')" style="font-size:10px; font-weight:700; color:var(--pp-blue); background:none; border:1px solid var(--border); padding:2px 8px; border-radius:5px; cursor:pointer;">View →</button>
             </div>
         </div>`).join('');
 }
@@ -622,6 +622,7 @@ async function loadStaffAccess() {
             { key: 'access_returns', label: 'Returns' },
             { key: 'access_merchants', label: 'Merchants' },
             { key: 'access_partners', label: 'Partners' },
+            { key: 'access_jarvis', label: 'Jarvis AI' },
         ];
 
         const headerHtml = `
