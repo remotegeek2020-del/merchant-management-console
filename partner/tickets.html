@@ -276,6 +276,10 @@ function renderTickets() {
                     ${t.merchants?.dba_name ? `<span>${t.merchants.dba_name}</span> · ` : ''}
                     Opened ${timeAgo(t.created_at)} · Updated ${timeAgo(t.updated_at)}
                 </div>
+                ${(t.linked_deployment_id || t.linked_return_id) ? `<div style="margin-top:5px; display:flex; gap:4px; flex-wrap:wrap;">
+                    ${t.linked_deployment_id ? `<span style="font-size:10px; font-family:'DM Mono',monospace; background:#1e3a5f; color:#60a5fa; border-radius:4px; padding:2px 7px; white-space:nowrap;">DPL ${t.linked_deployment_id}</span>` : ''}
+                    ${t.linked_return_id ? `<span style="font-size:10px; font-family:'DM Mono',monospace; background:#3b1f1f; color:#f87171; border-radius:4px; padding:2px 7px; white-space:nowrap;">RMA ${t.linked_return_id}</span>` : ''}
+                </div>` : ''}
             </div>
             <div class="ticket-right">
                 <span class="badge badge-${t.status}">${t.status.replace('_',' ')}</span>

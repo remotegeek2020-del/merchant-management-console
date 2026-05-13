@@ -114,7 +114,7 @@ export default async function handler(req, res) {
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
 
             const { data, error } = await supabase.from('support_tickets')
-                .select('id, ticket_number, type, category, subject, status, priority, created_at, updated_at, merchant_id, merchants:merchant_id(dba_name)')
+                .select('id, ticket_number, type, category, subject, status, priority, created_at, updated_at, merchant_id, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name)')
                 .eq('person_id', personId)
                 .order('created_at', { ascending: false });
 
@@ -543,20 +543,31 @@ export default async function handler(req, res) {
                     return res.status(200).json({ success: true, return_id: finalReturnId });
 
                 } else {
-                    const { data: ret, error: retErr } = await supabase.from('returns').upsert({
-                        return_id: returnId,
-                        deployment_id: dep.id,
-                        equipment_id: dep.equipment_id,
-                        merchant_id: dep.merchant_id,
-                        return_reason,
-                        notes: notes || null,
-                        return_date_initiated: dateInitiated,
-                        condition: 'IN TRANSIT',
-                        destination: 'In Transit / RMA',
-                        status: 'Open',
-                        ticket_id: parseInt(ticket_id)
-                    }, { onConflict: 'deployment_id' }).select('id, return_id').single();
-                    if (retErr) throw retErr;
+                    // Check for existing open RMA for this deployment before inserting
+                    const { data: existingRet } = await supabase.from('returns')
+                        .select('id, return_id').eq('deployment_id', dep.id).eq('status', 'Open')
+                        .limit(1).maybeSingle();
+
+                    let ret;
+                    if (existingRet) {
+                        ret = existingRet;
+                    } else {
+                        const { data: newRet, error: retErr } = await supabase.from('returns').insert({
+                            return_id: returnId,
+                            deployment_id: dep.id,
+                            equipment_id: dep.equipment_id,
+                            merchant_id: dep.merchant_id,
+                            return_reason,
+                            notes: notes || null,
+                            return_date_initiated: dateInitiated,
+                            condition: 'IN TRANSIT',
+                            destination: 'In Transit / RMA',
+                            status: 'Open',
+                            ticket_id: parseInt(ticket_id)
+                        }).select('id, return_id').single();
+                        if (retErr) throw retErr;
+                        ret = newRet;
+                    }
 
                     await supabase.from('equipment_logs').insert({
                         equipment_id: dep.equipment_id, merchant_id: dep.merchant_id, deployment_id: dep.id,
