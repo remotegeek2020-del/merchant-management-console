@@ -478,7 +478,8 @@ if (action === 'return_to_office') {
         return_type,
         notes,
         return_date_initiated,
-        equipment_received_date
+        equipment_received_date,
+        selected_equipment_ids
     } = req.body.payload;
 
     try {
@@ -486,11 +487,15 @@ if (action === 'return_to_office') {
 
         if (return_type === 'In Transit') {
             if (isBulk) {
-                // BULK: get all deployment items
-                const { data: depItems } = await supabase
+                // BULK: get deployment items, optionally filtered to selected units
+                let depItemsQuery = supabase
                     .from('deployment_items')
                     .select('equipment_id')
                     .eq('deployment_id', deployment_id);
+                if (selected_equipment_ids?.length) {
+                    depItemsQuery = depItemsQuery.in('equipment_id', selected_equipment_ids);
+                }
+                const { data: depItems } = await depItemsQuery;
 
                 const { data: ret, error: retErr } = await supabase.from('returns').upsert({
                     deployment_id,

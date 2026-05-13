@@ -226,7 +226,7 @@
         <form id="editDepForm" onsubmit="submitUpdate(event)">
             <input type="hidden" id="editId">
             
-            <div style="margin-bottom:15px;">
+            <div id="editTidWrap" style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TERMINAL ID (TID)</label>
                 <input type="text" id="editTid" class="slds-input" style="border-radius:8px; background:#f8fafc; color:#64748b;">
             </div>
@@ -540,7 +540,12 @@ if (document.getElementById('kpi-total')) {
                         const hardwareCell = isBulk
                             ? `<span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:3px 9px;border-radius:4px;font-weight:700;">${itemCount} UNIT${itemCount !== 1 ? 'S' : ''}</span>`
                             : `<code>${d.equipments?.serial_number || '---'}</code>`;
-                        const tidCell = isBulk ? `<span style="color:#94a3b8;font-size:11px;">—</span>` : (d.tid || '---');
+                        const tidsFromItems = isBulk ? (d.items || []).filter(i => i.tid).map(i => i.tid) : [];
+                        const tidCell = isBulk
+                            ? (tidsFromItems.length
+                                ? tidsFromItems.slice(0, 2).map(t => `<span style="font-size:10px;display:block;line-height:1.5;">${t}</span>`).join('') + (tidsFromItems.length > 2 ? `<span style="font-size:9px;color:#94a3b8;">+${tidsFromItems.length - 2} more</span>` : '')
+                                : `<span style="color:#94a3b8;font-size:11px;">—</span>`)
+                            : (d.tid || '---');
 
                         // For history & delete: use first item's equipment_id for bulk, or the deployment's equipment_id for single
                         const histEquipId = isBulk ? (d.items?.[0]?.equipment_id || '') : (d.equipment_id || '');
@@ -642,36 +647,66 @@ async function processReturn() {
 
     const reasonDropdown = document.getElementById('returnReason');
     const otherText = document.getElementById('otherReasonText');
-    
-    // Add a date input prompt via SweetAlert
+
+    let finalReason = reasonDropdown.value;
+    if (finalReason === 'Other') finalReason = otherText.value;
+    if (!finalReason) return Swal.fire('Error', 'Please select a reason', 'warning');
+
+    // For bulk: let user pick which units to return
+    let selectedEquipmentIds = null;
+    if (d.is_bulk && d.items?.length > 0) {
+        const pickerResult = await Swal.fire({
+            title: 'Select Units to Return',
+            html: `<div style="text-align:left;">
+                <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Check the units being returned:</div>
+                ${d.items.map(item => `
+                    <label style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;margin-bottom:5px;cursor:pointer;">
+                        <input type="checkbox" class="bulk-return-cb" value="${item.equipment_id}" checked style="width:15px;height:15px;cursor:pointer;">
+                        <div>
+                            <div style="font-weight:700;font-size:12px;color:#004990;">${item.serial_number || '---'}</div>
+                            <div style="font-size:10px;color:#64748b;">${item.terminal_type || ''}${item.tid ? ' · TID: ' + item.tid : ''}</div>
+                        </div>
+                    </label>
+                `).join('')}
+            </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Continue →',
+            confirmButtonColor: '#004990',
+            preConfirm: () => {
+                const checked = Array.from(document.querySelectorAll('.bulk-return-cb:checked')).map(cb => cb.value);
+                if (!checked.length) { Swal.showValidationMessage('Select at least one unit to return'); return false; }
+                return checked;
+            }
+        });
+        if (!pickerResult.isConfirmed) return;
+        selectedEquipmentIds = pickerResult.value;
+    }
+
+    // Ask for initiation date
     const { value: initiateDate } = await Swal.fire({
         title: 'Return Initiation Date',
         html: `<input type="date" id="swal-init-date" class="slds-input" value="${fmtDateInput(new Date())}">`,
         showCancelButton: true,
         preConfirm: () => document.getElementById('swal-init-date').value
     });
-
     if (!initiateDate) return;
 
-    let finalReason = reasonDropdown.value;
-    if (finalReason === 'Other') finalReason = otherText.value;
-    if (!finalReason) return Swal.fire('Error', 'Please select a reason', 'warning');
-
     Swal.fire({ title: 'Processing Logistics...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-    
+
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'return_to_office', 
+            body: JSON.stringify({
+                action: 'return_to_office',
                 payload: {
-                    equipment_id: d.equipment_id,
+                    equipment_id: d.equipment_id || null,
                     merchant_id: d.merchant_id,
                     deployment_id: d.id,
                     return_type: 'In Transit',
-                    return_date_initiated: initiateDate, // New field
-                    notes: finalReason
+                    return_date_initiated: initiateDate,
+                    notes: finalReason,
+                    selected_equipment_ids: selectedEquipmentIds
                 }
             })
         });
@@ -680,16 +715,17 @@ async function processReturn() {
         Swal.close();
 
         if (result.success) {
-            Swal.fire('In Transit', 'RMA initiated.', 'success').then(() => {
+            const msg = selectedEquipmentIds ? `${selectedEquipmentIds.length} unit${selectedEquipmentIds.length !== 1 ? 's' : ''} marked In Transit.` : 'RMA initiated.';
+            Swal.fire('In Transit', msg, 'success').then(() => {
                 document.getElementById('editDepModal').style.display = 'none';
                 fetchDeployments(currentPage);
             });
         } else {
             Swal.fire('Error', result.message, 'error');
         }
-    } catch (err) { 
+    } catch (err) {
         Swal.close();
-        Swal.fire('System Error', 'Check Network Tab', 'error'); 
+        Swal.fire('System Error', 'Check Network Tab', 'error');
     }
 }
     // --- 3. DELETE & HISTORY LOGIC ---
@@ -898,6 +934,10 @@ async function openEditModal(index) {
     document.getElementById('editId').value = d.id || '';
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
+
+    // Hide TID field for bulk (per-item TIDs are shown in the items section below)
+    const editTidWrap = document.getElementById('editTidWrap');
+    if (editTidWrap) editTidWrap.style.display = d.is_bulk ? 'none' : 'block';
     document.getElementById('editTracking').value = d.tracking_id || '';
     document.getElementById('editNotes').value = d.notes || '';
     document.getElementById('editPurchaseType').value = d.purchase_type || 'Free Placement';
