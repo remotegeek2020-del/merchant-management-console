@@ -85,6 +85,7 @@ let currentReturns = [];
 let retPageSize = 20;
 let retCurrentPage = 0;
 let retTotalCount = 0;
+const canDeleteTickets = localStorage.getItem('pp_role') === 'super_admin' || localStorage.getItem('pp_can_delete_tickets') === 'true';
 
 window.onload = async () => {
     try {
@@ -268,6 +269,10 @@ async function fetchReturns() {
                             <span class="btn-label">Close Ticket</span>
                         </button>` : ''}` : `
                         <span style="font-size:11px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Processed</span>`}
+                        ${canDeleteTickets ? `
+                        <button class="pp-btn" onclick="deleteReturn('${r.id}', '${(r.return_id || 'this return').replace(/'/g,"\\'")}', '${(r.merchants?.dba_name || '').replace(/'/g,"\\'")}'" )" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;" title="Delete Return">
+                            <span class="material-icons" style="font-size:14px;">delete_forever</span>
+                        </button>` : ''}
                     </div>
                 </td>
             </tr>`;
@@ -307,6 +312,41 @@ function retGotoPage(p) {
     if (p < 0 || p >= totalPages) return;
     retCurrentPage = p;
     fetchReturns();
+}
+
+async function deleteReturn(returnUuid, returnId, dbaName) {
+    const { value: confirmed } = await Swal.fire({
+        title: 'Delete Return?',
+        html: `<div style="text-align:left;font-size:13px;">
+            <p>You are about to permanently delete <b>${returnId}</b> for <b>${dbaName}</b>.</p>
+            <p style="margin-top:8px;color:#64748b;">Equipment will be reset to stock. This cannot be undone.</p>
+            <p style="margin-top:12px;">Type <b>DELETE</b> to confirm:</p>
+        </div>`,
+        input: 'text',
+        showCancelButton: true,
+        confirmButtonColor: '#b91c1c',
+        confirmButtonText: 'Delete Permanently',
+        inputValidator: v => v !== 'DELETE' && 'You must type DELETE to confirm'
+    });
+    if (confirmed !== 'DELETE') return;
+
+    Swal.fire({ title: 'Deleting…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    try {
+        const res = await fetch('/api/returns', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'delete', return_uuid: returnUuid })
+        });
+        const result = await res.json();
+        if (result.success) {
+            Swal.fire({ icon: 'success', title: 'Deleted', text: `${returnId} has been removed.`, timer: 1800, showConfirmButton: false })
+                .then(() => fetchReturns());
+        } else {
+            Swal.fire('Error', result.message || 'Delete failed', 'error');
+        }
+    } catch (err) {
+        Swal.fire('Error', 'Server communication failed', 'error');
+    }
 }
 
 async function finalizeRMA(id, equipment_id) {

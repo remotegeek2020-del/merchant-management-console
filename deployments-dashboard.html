@@ -356,6 +356,7 @@
     let totalPages = 1;
     let lookupTimeout;
     let currentStaffName = '';
+    const canDeleteTickets = localStorage.getItem('pp_role') === 'super_admin' || localStorage.getItem('pp_can_delete_tickets') === 'true';
 
 
     /**
@@ -583,7 +584,7 @@ if (document.getElementById('kpi-total')) {
                                 ${!isBulk ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>` : ''}
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${histEquipId}', '${safeSerial}')"><span class="material-icons" style="font-size:18px;">history</span></button>
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${safeSerial}', '${d.equipment_id || ''}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>
+                                ${canDeleteTickets ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${safeSerial}', '${d.equipment_id || ''}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>` : ''}
                             </td>
                         `;
                     });

@@ -263,6 +263,45 @@ if (action === 'complete_return') {
             return res.status(200).json({ success: true, added: equipment_ids.length });
         }
 
+        if (action === 'delete') {
+            const { return_uuid } = body;
+            if (!return_uuid) return res.status(400).json({ success: false, message: 'return_uuid required.' });
+
+            const { data: rma, error: fetchErr } = await supabase
+                .from('returns')
+                .select('id, return_id, equipment_id, merchant_id, is_bulk')
+                .eq('id', return_uuid)
+                .single();
+            if (fetchErr || !rma) return res.status(404).json({ success: false, message: 'Return not found.' });
+
+            // Reset equipment back to stocked
+            if (!rma.is_bulk && rma.equipment_id) {
+                await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', rma.equipment_id);
+                await supabase.from('equipment_logs').insert([{
+                    equipment_id: rma.equipment_id, merchant_id: rma.merchant_id,
+                    action: 'RETURN_DELETED', from_location: 'In Transit / RMA', to_location: 'Warsaw Office',
+                    notes: `Return ${rma.return_id} deleted. Unit reset to stock.`
+                }]);
+            } else if (rma.is_bulk) {
+                const { data: items } = await supabase.from('return_items').select('equipment_id').eq('return_id', rma.id);
+                for (const item of (items || [])) {
+                    await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', item.equipment_id);
+                    await supabase.from('equipment_logs').insert([{
+                        equipment_id: item.equipment_id, merchant_id: rma.merchant_id,
+                        action: 'RETURN_DELETED', from_location: 'In Transit / RMA', to_location: 'Warsaw Office',
+                        notes: `Bulk return ${rma.return_id} deleted. Unit reset to stock.`
+                    }]);
+                }
+            }
+
+            // Delete return_items then the return
+            await supabase.from('return_items').delete().eq('return_id', rma.id);
+            const { error: delErr } = await supabase.from('returns').delete().eq('id', rma.id);
+            if (delErr) throw delErr;
+
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: "Invalid action" });
     } catch (err) {
         return res.status(500).json({ success: false, message: "Server Error: " + err.message });

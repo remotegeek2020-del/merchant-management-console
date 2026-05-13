@@ -123,6 +123,7 @@ async function authorizeUser(user) {
         localStorage.setItem('pp_user_email', user.email || '');
         localStorage.setItem('pp_user_last_name', user.last_name || '');
         localStorage.setItem('userid', user.userid || '');
+        localStorage.setItem('pp_can_delete_tickets', user.can_delete_tickets ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
 
