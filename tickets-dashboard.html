@@ -1111,7 +1111,7 @@ document.getElementById('ticket-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('ticket-modal')) closeModal();
 });
 
-init();
+window.addEventListener('load', function() { init(); });
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'tickets'})});})();</script>
 <script src="/js/site-config.js"></script>

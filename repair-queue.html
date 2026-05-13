@@ -256,7 +256,7 @@ async function closeRepair(id, serial, outcome) {
     }
 }
 
-loadQueue();
+window.addEventListener('load', function() { loadQueue(); });
 </script>
 <script src="/js/site-config.js"></script>
 </body>

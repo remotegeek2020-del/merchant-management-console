@@ -249,8 +249,10 @@ function renderReport(report) {
         ${sectionsHtml}`;
 }
 
-loadEmails();
-loadLastReport();
+window.addEventListener('load', function() {
+    loadEmails();
+    loadLastReport();
+});
 </script>
 <script src="/js/site-config.js"></script>
 </body>

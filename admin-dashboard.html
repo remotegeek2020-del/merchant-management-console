@@ -719,8 +719,10 @@ const canManageStaff = ppRole === 'admin' || ppRole === 'super_admin';
 const staffPanel = document.querySelector('.panel[data-panel="staff-access"]');
 if (staffPanel) staffPanel.style.display = canManageStaff ? '' : 'none';
 
-loadAll();
-if (canManageStaff) loadStaffAccess();
+window.addEventListener('load', function() {
+    loadAll();
+    if (canManageStaff) loadStaffAccess();
+});
 </script>
 <script src="/js/site-config.js"></script>
 </body>
