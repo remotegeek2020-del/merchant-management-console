@@ -5,7 +5,8 @@ import { validateSession, sessionErrorResponse } from './_validate.js';
 // All other actions are staff-only and require a valid staff session.
 const PARTNER_ACTIONS = new Set([
     'get_merchant_equipment','create','list_for_partner',
-    'get_detail','add_comment','get_linked_deployment','mark_delivered'
+    'get_detail','add_comment','get_linked_deployment','mark_delivered',
+    'get_comments','get_rma_addable_items','add_items_to_rma','get_terminal_types'
 ]);
 
 export default async function handler(req, res) {
