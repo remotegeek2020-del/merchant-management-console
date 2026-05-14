@@ -520,24 +520,28 @@ For navigation suggestions: → Action description (url:/path)` + knowledgeBlock
         const chat = model.startChat({ history: formattedHistory });
 
         // ── FOLLOW-UP DETECTION ───────────────────────────────────────────────
-        // If the message looks like a follow-up and we have previous data context,
-        // inject that context directly into the query so Gemini can't miss it.
-        const followUpPatterns = /\b(it|that|this|them|the above|the merchant|the partner|the one|the same)\b|^(review|analyze|summarize|more|tell me more|what about|explain|give me|show me more|what's the|what is the|how about|and the|can you)/i;
-        const isFollowUp = query.trim().length < 120 && followUpPatterns.test(query.trim());
+        // Detect short follow-up questions that reference something already discussed.
+        // Inject the last assistant response directly into the query so Gemini
+        // cannot possibly miss the context.
+        const followUpWords = /\b(it|that|this|them|the above|the merchant|the partner|the same|the one)\b/i;
+        const followUpPhrases = /^(review|analyze|summarize|tell me more|what about|explain|more detail|give me|show me more|what('s| is) the|how about|can you|what do you think|is that|are they|why is|who is)/i;
+        const isFollowUp = query.trim().length < 150 && (followUpWords.test(query) || followUpPhrases.test(query.trim()));
 
         let queryToSend = query;
-        if (isFollowUp && history?.length) {
-            const lastCtxRow = [...(history || [])].reverse().find(h => h.role === 'assistant' && h.content.includes('[DATA CONTEXT:'));
-            if (lastCtxRow) {
-                const ctxMatch = lastCtxRow.content.match(/\[DATA CONTEXT: ([\s\S]+?)\]\n\n/);
-                if (ctxMatch) {
-                    queryToSend = `[The user is following up on data already retrieved. Do NOT call tools — answer using this context directly]\nPrevious data: ${ctxMatch[1].slice(0, 800)}\n\nUser follow-up: ${query}`;
-                }
+        if (isFollowUp && (history || []).length > 0) {
+            // history is in DESC order from DB — index 0 is the most recent row
+            const lastAssistant = (history || []).find(h => h.role === 'assistant');
+            if (lastAssistant) {
+                // Strip any DATA CONTEXT prefix, keep only the readable response
+                const lastResponse = lastAssistant.content
+                    .replace(/^\[DATA CONTEXT:.*?\n\n/s, '')
+                    .slice(0, 1200);
+                queryToSend = `IMPORTANT: The user is asking a follow-up question about information already retrieved. Do NOT call any tools. Answer directly using the previous response below.\n\nPrevious response:\n"""\n${lastResponse}\n"""\n\nUser follow-up: ${query}`;
             }
         }
 
         const toolCallsLog = [];
-        const toolDataSummary = []; // track what data was fetched for context storage
+        const toolDataSummary = [];
         let result = await chat.sendMessage(queryToSend);
         let maxIterations = 8;
 
@@ -570,14 +574,10 @@ For navigation suggestions: → Action description (url:/path)` + knowledgeBlock
         const cleanAnswer = finalAnswer.replace(/\s*\(url:[^)]+\)/g, '');
 
         // ── PERSIST HISTORY ───────────────────────────────────────────────────
-        // Store data context inside the assistant message so follow-up turns can reference it
-        const contextPrefix = toolDataSummary.length
-            ? `[DATA CONTEXT: ${toolDataSummary.join(' | ')}]\n\n`
-            : '';
         try {
             await supabase.from('chat_history').insert([
                 { userid: userId, role: 'user', content: query },
-                { userid: userId, role: 'assistant', content: contextPrefix + cleanAnswer }
+                { userid: userId, role: 'assistant', content: cleanAnswer }
             ]);
         } catch { /* non-fatal */ }
 
