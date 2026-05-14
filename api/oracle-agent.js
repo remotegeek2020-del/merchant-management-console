@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
     if (req.method !== 'POST') return res.status(405).json({ answer: "Method not allowed." });
 
-    const { query, userId, userName } = req.body;
+    const { query, userId, userName, lastResponse } = req.body;
     if (!query) return res.status(400).json({ answer: "No query provided." });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
@@ -509,61 +509,61 @@ TOOL USAGE:
 Formatting: use **bold** for names/numbers, bullet lists for items, keep responses concise.
 For navigation suggestions: → Action description (url:/path)` + knowledgeBlock;
 
-        // ── AGENTIC LOOP ──────────────────────────────────────────────────────
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
-            systemInstruction,
-            tools: [{ functionDeclarations }]
-        });
-
-        const chat = model.startChat({ history: formattedHistory });
 
         // ── FOLLOW-UP DETECTION ───────────────────────────────────────────────
-        // Detect short follow-up questions that reference something already discussed.
-        // Inject the last assistant response directly into the query so Gemini
-        // cannot possibly miss the context.
+        // lastResponse comes directly from the frontend (in-memory), so it's
+        // always reliable regardless of DB state or userId issues.
         const followUpWords = /\b(it|that|this|them|the above|the merchant|the partner|the same|the one)\b/i;
-        const followUpPhrases = /^(review|analyze|summarize|tell me more|what about|explain|more detail|give me|show me more|what('s| is) the|how about|can you|what do you think|is that|are they|why is|who is)/i;
+        const followUpPhrases = /^(review|analyze|summarize|tell me more|what about|explain|more detail|give me|show me more|what'?s? the|how about|can you|what do you think|is that|are they|why is|who is)/i;
         const isFollowUp = query.trim().length < 150 && (followUpWords.test(query) || followUpPhrases.test(query.trim()));
 
-        let queryToSend = query;
-        if (isFollowUp && (history || []).length > 0) {
-            // history is in DESC order from DB — index 0 is the most recent row
-            const lastAssistant = (history || []).find(h => h.role === 'assistant');
-            if (lastAssistant) {
-                // Strip any DATA CONTEXT prefix, keep only the readable response
-                const lastResponse = lastAssistant.content
-                    .replace(/^\[DATA CONTEXT:.*?\n\n/s, '')
-                    .slice(0, 1200);
-                queryToSend = `IMPORTANT: The user is asking a follow-up question about information already retrieved. Do NOT call any tools. Answer directly using the previous response below.\n\nPrevious response:\n"""\n${lastResponse}\n"""\n\nUser follow-up: ${query}`;
-            }
-        }
+        const hasLastResponse = !!(lastResponse && lastResponse.trim().length > 50);
 
         const toolCallsLog = [];
-        const toolDataSummary = [];
-        let result = await chat.sendMessage(queryToSend);
-        let maxIterations = 8;
-
-        while (maxIterations-- > 0) {
-            let calls;
-            try { calls = result.response.functionCalls(); } catch { calls = null; }
-            if (!calls || calls.length === 0) break;
-
-            const toolResponses = [];
-            for (const call of calls) {
-                toolCallsLog.push(call.name);
-                const toolResult = await executeTool(call.name, call.args || {});
-                toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
-                // Build a compact summary of fetched data for history storage
-                toolDataSummary.push(`[${call.name}${call.args?.query ? ': ' + call.args.query : call.args?.merchant_id ? ': ' + call.args.merchant_id : call.args?.status ? ': ' + call.args.status : ''}] → ${JSON.stringify(toolResult).slice(0, 400)}`);
-            }
-            result = await chat.sendMessage(toolResponses);
-        }
-
         let finalAnswer;
-        try { finalAnswer = result.response.text(); }
-        catch { finalAnswer = 'I encountered an issue generating a response. Please try again.'; }
+
+        if (isFollowUp && hasLastResponse) {
+            // ── FOLLOW-UP PATH: no tools, answer from prior context ────────────
+            // Uses a separate model instance with NO tools — Gemini cannot call
+            // tools when they're not registered on the model instance.
+            const prevResponse = lastResponse.slice(0, 2000);
+            const followUpModel = genAI.getGenerativeModel({
+                model: 'gemini-2.5-flash',
+                systemInstruction: `You are JARVIS, a business intelligence assistant for PayProTec. Address the user as ${userName || 'Sir'}. You are answering a follow-up question about data that was already retrieved. Use only the previous response provided as context — do not say you need more information or ask what they want to review. Give a direct, analytical answer. Use **bold** for key data points. End with "**Suggested Actions:**" listing 2-3 concrete next steps.`
+            });
+            const r = await followUpModel.generateContent(
+                `Previous JARVIS response containing the relevant data:\n"""\n${prevResponse}\n"""\n\nUser follow-up: ${query}\n\nAnswer directly and analytically. If they ask for a review or analysis, assess the merchant/partner/data from the previous response — comment on status, volume trends, risks, and what actions should be taken.`
+            );
+            try { finalAnswer = r.response.text(); }
+            catch { finalAnswer = 'Could not generate follow-up response. Please try rephrasing.'; }
+
+        } else {
+            // ── MAIN PATH: full agentic loop with tools ────────────────────────
+            const model = genAI.getGenerativeModel({
+                model: 'gemini-2.5-flash',
+                systemInstruction,
+                tools: [{ functionDeclarations }]
+            });
+            const chat = model.startChat({ history: formattedHistory });
+            let result = await chat.sendMessage(query);
+            let maxIterations = 8;
+
+            while (maxIterations-- > 0) {
+                let calls;
+                try { calls = result.response.functionCalls(); } catch { calls = null; }
+                if (!calls || calls.length === 0) break;
+                const toolResponses = [];
+                for (const call of calls) {
+                    toolCallsLog.push(call.name);
+                    const toolResult = await executeTool(call.name, call.args || {});
+                    toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
+                }
+                result = await chat.sendMessage(toolResponses);
+            }
+            try { finalAnswer = result.response.text(); }
+            catch { finalAnswer = 'I encountered an issue generating a response. Please try again.'; }
+        }
 
         // ── EXTRACT NAVIGATION SUGGESTIONS ────────────────────────────────────
         const suggestions = [];

@@ -505,12 +505,15 @@ window.clearJarvisHistory = async function() {
     if (!c.isConfirmed) return;
     const container = document.getElementById('jarvis-messages');
     if (container) container.innerHTML = '<div class="ai-bubble">Memory cleared. Fresh start, Sir.</div>';
+    _jarvisLastResponse = '';
     const userId = localStorage.getItem('pp_userid');
     if (userId) {
         fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'clear_history', userid: userId }) }).catch(() => {});
     }
 };
+
+let _jarvisLastResponse = '';
 
 async function askJarvis() {
     const input = document.getElementById('jarvis-input');
@@ -538,6 +541,7 @@ async function askJarvis() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 query,
+                lastResponse: _jarvisLastResponse,
                 userId: localStorage.getItem('pp_userid'),
                 userName: localStorage.getItem('pp_user_first_name')
             })
@@ -591,6 +595,7 @@ async function askJarvis() {
         }
 
         el.innerHTML = html;
+        _jarvisLastResponse = data.answer || '';
     } catch (err) {
         const el = document.getElementById(loadingId);
         if (el) el.innerHTML = `<span style="color:#ef4444;">Connection error: ${err.message}. Check that the API is reachable.</span>`;
@@ -598,70 +603,6 @@ async function askJarvis() {
 
     input.disabled = false;
     input.focus();
-    container.scrollTop = container.scrollHeight;
-}
-
-async function teachJarvis(userQuestion, wrongAnswer) {
-    const { value: correction } = await Swal.fire({
-        title: 'Correct Jarvis',
-        text: `You asked: "${userQuestion}"`,
-        input: 'textarea',
-        inputLabel: 'What is the correct factual information?',
-        inputPlaceholder: 'e.g. The correct Merchant ID for Kenosha Raceway is K-9988...',
-        showCancelButton: true,
-        confirmButtonColor: '#38bdf8'
-    });
-
-    if (correction) {
-        Swal.fire({ title: 'Ingesting Knowledge...', didOpen: () => Swal.showLoading() });
-        try {
-            await fetch('/api/train-jarvis', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    topic: userQuestion, 
-                    logic: correction,
-                    category: 'correction',
-                    userId: localStorage.getItem('pp_userid')
-                })
-            });
-            Swal.fire('Learned!', 'Jarvis has updated his core logic for this topic.', 'success');
-        } catch (e) {
-            Swal.fire('Error', 'Failed to update brain.', 'error');
-        }
-    }
-}
-
-async function askJarvis() {
-    const input = document.getElementById('jarvis-input');
-    const container = document.getElementById('jarvis-messages');
-    const query = input.value.trim();
-    if (!query) return;
-
-    container.innerHTML += `<div class="user-bubble">${query}</div>`;
-    input.value = '';
-    container.scrollTop = container.scrollHeight;
-
-    const loadingId = 'jarvis-' + Date.now();
-    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">Thinking...</div>`;
-    container.scrollTop = container.scrollHeight;
-
-    try {
-        const res = await fetch('/api/oracle-agent', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                query,
-                userId: localStorage.getItem('pp_userid'),
-                userName: localStorage.getItem('pp_user_first_name')
-            })
-        });
-        const data = await res.json();
-        const loadingEl = document.getElementById(loadingId);
-        loadingEl.innerHTML = `<div>${data.answer}</div>`;
-    } catch (err) {
-        document.getElementById(loadingId).innerText = "Jarvis is offline. Check API connectivity.";
-    }
     container.scrollTop = container.scrollHeight;
 }
 
