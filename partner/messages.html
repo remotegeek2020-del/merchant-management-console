@@ -125,12 +125,12 @@ var activeId = null;
 var activeUser = null;
 var refreshTimer = null;
 
-// ── API ── uses /api/chat with sender_id = partner's person UUID
+// ── API ── uses /api/chat with sender_id = partner's person UUID and partner_token for auth
 function chatApi(body) {
     return fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Object.assign({ sender_id: myId }, body))
+        body: JSON.stringify(Object.assign({ sender_id: myId, partner_token: token }, body))
     }).then(function(r) { return r.json(); });
 }
 

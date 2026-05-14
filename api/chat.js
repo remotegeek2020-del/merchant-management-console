@@ -5,19 +5,42 @@ export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-export default async function handler(req, res) {
-    const session = await validateSession(req);
-    if (!session) return sessionErrorResponse(res);
+// Partner-accessible actions — validated via partner_token in body, not staff session
+const PARTNER_ACTIONS = new Set(['getUserList', 'getHistory', 'sendMessage', 'getUnreadCount']);
 
+async function validatePartner(token) {
+    if (!token) return null;
+    const { data } = await supabase.from('partner_sessions')
+        .select('person_id, expires_at').eq('session_token', token).single();
+    if (!data || new Date(data.expires_at) < new Date()) return null;
+    return data.person_id;
+}
+
+export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
-    const { action, sender_id } = req.body;
+    const { action, sender_id, partner_token } = req.body;
+
+    // Determine if this is a partner request
+    let isPartner = false;
+    if (PARTNER_ACTIONS.has(action) && partner_token) {
+        const personId = await validatePartner(partner_token);
+        if (!personId) return res.status(401).json({ success: false, message: 'Invalid or expired partner session.', reason: 'invalid_token' });
+        isPartner = true;
+    } else {
+        const session = await validateSession(req);
+        if (!session) return sessionErrorResponse(res);
+    }
 
     try {
-        // Heartbeat — update last_seen
+        // Heartbeat — update last_seen (staff) or last_portal_login (partner)
         if (sender_id && action !== 'logout') {
-            await supabase.from('app_users').update({ last_seen: new Date().toISOString() }).eq('userid', sender_id);
+            if (isPartner) {
+                supabase.from('persons').update({ last_portal_login: new Date().toISOString() }).eq('id', sender_id);
+            } else {
+                await supabase.from('app_users').update({ last_seen: new Date().toISOString() }).eq('userid', sender_id);
+            }
         }
 
         // ── LOGOUT ────────────────────────────────────────
@@ -133,8 +156,14 @@ export default async function handler(req, res) {
             if (error) throw error;
 
             // Get sender name for notification
-            const { data: staffUser } = await supabase.from('app_users').select('first_name, last_name').eq('userid', sender_id).single();
-            const senderName = staffUser ? `${staffUser.first_name} ${staffUser.last_name||''}`.trim() : 'Staff';
+            let senderName;
+            if (isPartner) {
+                const { data: person } = await supabase.from('persons').select('full_name').eq('id', sender_id).single();
+                senderName = person?.full_name || 'Partner';
+            } else {
+                const { data: staffUser } = await supabase.from('app_users').select('first_name, last_name').eq('userid', sender_id).single();
+                senderName = staffUser ? `${staffUser.first_name} ${staffUser.last_name||''}`.trim() : 'Staff';
+            }
 
             // Create notification for recipient
             try {
