@@ -152,6 +152,10 @@ let allUsers = [], activeId = null, activeType = null, activeName = '';
 let currentSection = 'all';
 let msgPollInterval = null, userPollInterval = null;
 let lastMsgCount = 0;
+let chatPage = 0;
+let olderMsgs = [];
+let olderMsgsExhausted = false;
+let lastNewestId = null;
 
 function api(body) {
     return fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, sender_id: myId }) }).then(r=>r.json());
@@ -219,6 +223,7 @@ function filterUsers(q) { renderUserList(); }
 async function openChat(id, name, type, role) {
     if (activeId === id) return;
     activeId = id; activeName = name; activeType = type;
+    chatPage = 0; olderMsgs = []; olderMsgsExhausted = false; lastMsgCount = 0; lastNewestId = null;
 
     // Update sidebar active state
     renderUserList();
@@ -254,58 +259,97 @@ async function openChat(id, name, type, role) {
     document.getElementById('msgInput')?.focus();
 }
 
+function buildMsgHtml(m) {
+    const isMine = m.sender_id === myId;
+    const d = new Date(m.created_at);
+    const timeStr = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    const isDeleted = !!m.deleted_at;
+    const isEdited = !!m.edited_at;
+    const actions = isMine && !isDeleted ? `
+        <div class="msg-actions">
+            <button class="msg-action-btn" onclick="editMessage('${m.id}','${(m.content||'').replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:13px;">edit</span></button>
+            <button class="msg-action-btn" onclick="deleteMessage('${m.id}')"><span class="material-icons" style="font-size:13px;">delete</span></button>
+        </div>` : '';
+    return `<div class="msg-group ${isMine?'mine':'theirs'}">
+        <div class="msg-bubble ${isMine?'mine':'theirs'} ${isDeleted?'msg-deleted':''}">
+            ${actions}
+            ${m.content || 'This message was deleted.'}
+            ${isEdited&&!isDeleted?'<span class="msg-edited"> (edited)</span>':''}
+        </div>
+        <div class="msg-meta ${isMine?'mine':''}">
+            ${timeStr}
+            ${isMine?'<span class="material-icons" style="font-size:12px;">done_all</span>':''}
+        </div>
+    </div>`;
+}
+
+function renderAllMessages(currentMsgs, area) {
+    const wasAtBottom = area.scrollTop + area.clientHeight >= area.scrollHeight - 20;
+    const allMsgs = [...olderMsgs, ...currentMsgs];
+
+    let lastDate = '';
+    const msgHtml = allMsgs.map(m => {
+        const d = new Date(m.created_at);
+        const dateStr = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+        let dateDivider = '';
+        if (dateStr !== lastDate) { dateDivider = `<div class="date-divider">${dateStr}</div>`; lastDate = dateStr; }
+        return dateDivider + buildMsgHtml(m);
+    }).join('');
+
+    const loadOlderHtml = (!olderMsgsExhausted && currentMsgs.length >= 50)
+        ? `<div id="loadOlderBtn" style="text-align:center;padding:10px 0 6px;"><button onclick="loadOlderMessages()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:6px 18px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);font-family:'DM Sans',sans-serif;">↑ Load older messages</button></div>`
+        : '';
+
+    area.innerHTML = loadOlderHtml + (msgHtml || '<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px;">No messages yet. Say hello!</div>');
+    if (wasAtBottom || lastMsgCount <= 1) area.scrollTop = area.scrollHeight;
+}
+
 async function loadMessages() {
     if (!activeId) return;
     const res = await api({ action:'getHistory', recipient_id: activeId });
     if (!res.success) return;
 
     const msgs = res.data || [];
-    if (msgs.length === lastMsgCount) return; // no change
+    const newestId = msgs.length ? msgs[msgs.length - 1].id : null;
+    if (msgs.length === lastMsgCount && newestId === lastNewestId && olderMsgs.length === 0) return;
     lastMsgCount = msgs.length;
+    lastNewestId = newestId;
 
     const area = document.getElementById('messagesArea');
     if (!area) return;
-    const wasAtBottom = area.scrollTop + area.clientHeight >= area.scrollHeight - 20;
-
-    // Group by date
-    let lastDate = '';
-    const html = msgs.map(m => {
-        const isMine = m.sender_id === myId;
-        const d = new Date(m.created_at);
-        const dateStr = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
-        const timeStr = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
-        const isDeleted = !!m.deleted_at;
-        const isEdited = !!m.edited_at;
-
-        let dateDivider = '';
-        if (dateStr !== lastDate) { dateDivider = `<div class="date-divider">${dateStr}</div>`; lastDate = dateStr; }
-
-        const actions = isMine && !isDeleted ? `
-            <div class="msg-actions">
-                <button class="msg-action-btn" onclick="editMessage('${m.id}','${(m.content||'').replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:13px;">edit</span></button>
-                <button class="msg-action-btn" onclick="deleteMessage('${m.id}')"><span class="material-icons" style="font-size:13px;">delete</span></button>
-            </div>` : '';
-
-        return `${dateDivider}
-            <div class="msg-group ${isMine?'mine':'theirs'}">
-                <div class="msg-bubble ${isMine?'mine':'theirs'} ${isDeleted?'msg-deleted':''}">
-                    ${actions}
-                    ${m.content || 'This message was deleted.'}
-                    ${isEdited&&!isDeleted?'<span class="msg-edited"> (edited)</span>':''}
-                </div>
-                <div class="msg-meta ${isMine?'mine':''}">
-                    ${timeStr}
-                    ${isMine?'<span class="material-icons" style="font-size:12px;">done_all</span>':''}
-                </div>
-            </div>`;
-    }).join('');
-
-    area.innerHTML = html || '<div style="text-align:center;color:var(--muted);font-size:13px;padding:30px;">No messages yet. Say hello!</div>';
-    if (wasAtBottom || lastMsgCount <= 1) area.scrollTop = area.scrollHeight;
+    renderAllMessages(msgs, area);
 
     // Clear unread in sidebar
     const user = allUsers.find(u => u.id === activeId);
     if (user) { user.unread = 0; renderUserList(); }
+}
+
+async function loadOlderMessages() {
+    const btn = document.getElementById('loadOlderBtn');
+    const btnEl = btn?.querySelector('button');
+    if (btnEl) { btnEl.textContent = 'Loading...'; btnEl.disabled = true; }
+    chatPage++;
+    const res = await api({ action:'getHistory', recipient_id: activeId, page: chatPage });
+    if (!res.success) { chatPage--; if (btnEl) { btnEl.textContent = '↑ Load older messages'; btnEl.disabled = false; } return; }
+    const fetched = res.data || [];
+    if (!fetched.length) {
+        olderMsgsExhausted = true;
+        const area = document.getElementById('messagesArea');
+        const currentMsgs = (await api({ action:'getHistory', recipient_id: activeId })).data || [];
+        if (area) renderAllMessages(currentMsgs, area);
+        return;
+    }
+    // Prepend to olderMsgs (fetched older pages go before already-loaded older pages)
+    olderMsgs = [...fetched, ...olderMsgs];
+    if (fetched.length < 50) olderMsgsExhausted = true;
+
+    const area = document.getElementById('messagesArea');
+    if (!area) return;
+    const prevScrollHeight = area.scrollHeight;
+    const currentMsgs = (await api({ action:'getHistory', recipient_id: activeId })).data || [];
+    renderAllMessages(currentMsgs, area);
+    // Restore scroll so user sees same content
+    area.scrollTop = area.scrollHeight - prevScrollHeight;
 }
 
 async function sendMessage() {

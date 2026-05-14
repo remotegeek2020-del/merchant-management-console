@@ -124,6 +124,8 @@ var allUsers = [];
 var activeId = null;
 var activeUser = null;
 var refreshTimer = null;
+var chatPage = 0;
+var loadedMsgIds = new Set();
 
 // ── API ── uses /api/chat with sender_id = partner's person UUID and partner_token for auth
 function chatApi(body) {
@@ -225,6 +227,8 @@ function openConv(u) {
     activeUser = u;
     renderList(allUsers); // re-render active state
     clearInterval(refreshTimer);
+    chatPage = 0;
+    loadedMsgIds = new Set();
     // Build chat UI
     var col = document.getElementById('chatCol');
     var isStaff = u.user_type === 'staff';
@@ -239,8 +243,8 @@ function openConv(u) {
         + '<button class="send-btn" onclick="sendMsg()"><span class="material-icons" style="font-size:18px;">send</span></button>'
         + '</div>';
     setTimeout(function() {
-        loadMessages();
-        refreshTimer = setInterval(loadMessages, 4000);
+        loadMessages(true);
+        refreshTimer = setInterval(function(){ loadMessages(false); }, 4000);
     }, 50);
 }
 
@@ -254,32 +258,99 @@ async function openById(userId) {
     if (user) openConv(user);
 }
 
-async function loadMessages() {
+function buildMsgEl(m) {
+    var isMine = m.sender_id === myId;
+    var wrap = document.createElement('div'); wrap.className = 'msg-wrap' + (isMine ? ' mine' : '');
+    var av = document.createElement('div'); av.className = 'msg-av' + (isMine ? ' mine-av' : ''); av.textContent = ini(isMine ? myName : (activeUser ? activeUser.name : '?'));
+    var inner = document.createElement('div'); inner.className = 'msg-inner';
+    var bubble = document.createElement('div'); bubble.className = 'msg-bubble ' + (isMine ? 'mine' : 'theirs'); bubble.textContent = m.content || m.body || '';
+    var t = document.createElement('div'); t.className = 'msg-time' + (isMine ? ' mine-t' : ''); t.textContent = new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    inner.appendChild(bubble); inner.appendChild(t);
+    if (!isMine) { wrap.appendChild(av); wrap.appendChild(inner); }
+    else { wrap.appendChild(inner); wrap.appendChild(av); }
+    return wrap;
+}
+
+async function loadMessages(isInitial) {
     if (!activeId) return;
-    var res = await chatApi({ action: 'getHistory', recipient_id: activeId });
+    var res = await chatApi({ action: 'getHistory', recipient_id: activeId, page: 0 });
     if (!res.success) return;
     var msgs = res.data || [];
     var el = document.getElementById('chatMessages');
     if (!el) return;
-    var wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-    var prevCount = el.querySelectorAll('.msg-wrap').length;
-    el.innerHTML = '';
-    if (!msgs.length) { el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">No messages yet. Say hello!</div>'; return; }
-    msgs.forEach(function(m) {
-        var isMine = m.sender_id === myId;
-        var wrap = document.createElement('div'); wrap.className='msg-wrap'+(isMine?' mine':'');
-        var av = document.createElement('div'); av.className='msg-av'+(isMine?' mine-av':''); av.textContent=ini(isMine?myName:(activeUser?activeUser.name:'?'));
-        var inner = document.createElement('div'); inner.className='msg-inner';
-        var bubble = document.createElement('div'); bubble.className='msg-bubble '+(isMine?'mine':'theirs'); bubble.textContent=m.content||m.body||'';
-        var t = document.createElement('div'); t.className='msg-time'+(isMine?' mine-t':''); t.textContent=new Date(m.created_at).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});
-        inner.appendChild(bubble); inner.appendChild(t);
-        if (!isMine) { wrap.appendChild(av); wrap.appendChild(inner); }
-        else { wrap.appendChild(inner); wrap.appendChild(av); }
-        el.appendChild(wrap);
+
+    if (isInitial) {
+        el.innerHTML = '';
+        loadedMsgIds = new Set();
+        if (!msgs.length) {
+            el.innerHTML = '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">No messages yet. Say hello!</div>';
+            return;
+        }
+        if (msgs.length >= 50) {
+            var btn = document.createElement('div');
+            btn.id = 'loadOlderBtn';
+            btn.style.cssText = 'text-align:center;padding:8px 0 6px;';
+            btn.innerHTML = '<button onclick="loadOlderMessages()" style="background:none;border:1px solid var(--border);border-radius:20px;padding:5px 16px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);font-family:\'DM Sans\',sans-serif;">↑ Load older messages</button>';
+            el.appendChild(btn);
+        }
+        msgs.forEach(function(m) {
+            loadedMsgIds.add(m.id);
+            el.appendChild(buildMsgEl(m));
+        });
+        el.scrollTop = el.scrollHeight;
+    } else {
+        // Poll: only append genuinely new messages
+        var newMsgs = msgs.filter(function(m) { return !loadedMsgIds.has(m.id); });
+        if (!newMsgs.length) return;
+        var wasAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
+        newMsgs.forEach(function(m) {
+            loadedMsgIds.add(m.id);
+            el.appendChild(buildMsgEl(m));
+        });
+        if (wasAtBottom) el.scrollTop = el.scrollHeight;
+        loadUserList();
+    }
+}
+
+async function loadOlderMessages() {
+    var btn = document.getElementById('loadOlderBtn');
+    var btnEl = btn ? btn.querySelector('button') : null;
+    if (btnEl) { btnEl.textContent = 'Loading...'; btnEl.disabled = true; }
+    chatPage++;
+    var res = await chatApi({ action: 'getHistory', recipient_id: activeId, page: chatPage });
+    if (!res.success) {
+        chatPage--;
+        if (btnEl) { btnEl.textContent = '↑ Load older messages'; btnEl.disabled = false; }
+        return;
+    }
+    var olderMsgs = res.data || [];
+    var el = document.getElementById('chatMessages');
+    if (!el) return;
+    if (!olderMsgs.length) {
+        if (btn) btn.remove();
+        return;
+    }
+    var prevScrollHeight = el.scrollHeight;
+    var fragment = document.createDocumentFragment();
+    olderMsgs.forEach(function(m) {
+        loadedMsgIds.add(m.id);
+        fragment.appendChild(buildMsgEl(m));
     });
-    if (wasAtBottom || msgs.length > prevCount) el.scrollTop = el.scrollHeight;
-    // Update unread
-    if (msgs.length > prevCount) loadUserList();
+    // Insert older messages right after the "Load older" button
+    if (btn && btn.nextSibling) {
+        el.insertBefore(fragment, btn.nextSibling);
+    } else if (btn) {
+        el.appendChild(fragment);
+    } else {
+        el.insertBefore(fragment, el.firstChild);
+    }
+    // Maintain scroll position so user stays at same visual spot
+    el.scrollTop = el.scrollHeight - prevScrollHeight;
+    if (olderMsgs.length < 50) {
+        if (btn) btn.remove();
+    } else {
+        if (btnEl) { btnEl.textContent = '↑ Load older messages'; btnEl.disabled = false; }
+    }
 }
 
 function onKey(e) { if(e.key==='Enter'&&!e.shiftKey){ e.preventDefault(); sendMsg(); } }
@@ -290,7 +361,7 @@ async function sendMsg() {
     if (!content || !activeId) return;
     input.value = ''; input.style.height='auto';
     await chatApi({ action: 'sendMessage', recipient_id: activeId, content });
-    loadMessages();
+    loadMessages(false);
     loadUserList();
 }
 
