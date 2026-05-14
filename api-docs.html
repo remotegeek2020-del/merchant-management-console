@@ -96,6 +96,7 @@
     <a class="nav-link" href="#tickets-list"><span class="method-pill get">GET</span> List Tickets</a>
     <a class="nav-link" href="#tickets-detail"><span class="method-pill get">GET</span> Get Ticket</a>
     <a class="nav-link" href="#tickets-create"><span class="method-pill post">POST</span> Create Ticket</a>
+    <a class="nav-link" href="#reports"><span class="method-pill get">GET</span> Reports Summary</a>
     <div class="nav-section">Reference</div>
     <a class="nav-link" href="#use-cases">Use Cases</a>
     <a class="nav-link" href="#changelog">Changelog</a>
@@ -407,6 +408,61 @@
         </div>
     </div>
 
+    <!-- REPORTS -->
+    <h2 id="reports">Reports</h2>
+
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge get">GET</span>
+            <span class="endpoint-path">/api/v1/reports/summary</span>
+            <span class="endpoint-desc">Portfolio snapshot — merchants, volume, tickets</span>
+        </div>
+        <div class="endpoint-body">
+            <p>Returns a single aggregated summary of your entire portfolio. Useful for dashboards, automated reports, and health checks. No parameters required.</p>
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl https://portal.mypayprotec.com/api/v1/reports/summary \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+            <div class="code-block">
+                <div class="code-block-header">Response</div>
+                <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: {
+    <span class="hl-key">"merchants"</span>: {
+      <span class="hl-key">"total"</span>:    <span class="hl-num">42</span>,
+      <span class="hl-key">"approved"</span>: <span class="hl-num">38</span>,
+      <span class="hl-key">"pending"</span>:  <span class="hl-num">3</span>,
+      <span class="hl-key">"closed"</span>:   <span class="hl-num">1</span>,
+      <span class="hl-key">"at_risk"</span>:  <span class="hl-num">4</span>   <span class="hl-comment">// MTD volume &gt;5% below 90-day baseline</span>
+    },
+    <span class="hl-key">"volume"</span>: {
+      <span class="hl-key">"mtd"</span>:          <span class="hl-num">187420.50</span>,
+      <span class="hl-key">"last_30_days"</span>: <span class="hl-num">187420.50</span>,
+      <span class="hl-key">"last_90_days"</span>: <span class="hl-num">541200.00</span>
+    },
+    <span class="hl-key">"tickets"</span>: {
+      <span class="hl-key">"open"</span>:        <span class="hl-num">3</span>,
+      <span class="hl-key">"in_progress"</span>: <span class="hl-num">1</span>,
+      <span class="hl-key">"resolved"</span>:    <span class="hl-num">2</span>
+    },
+    <span class="hl-key">"generated_at"</span>: <span class="hl-str">"2026-05-14T18:32:00Z"</span>
+  }
+}</pre>
+            </div>
+            <h3>Field Notes</h3>
+            <table class="params-table">
+                <thead><tr><th>Field</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td class="param-name">merchants.at_risk</td><td>Approved merchants whose MTD volume is more than 5% below their 90-day monthly average — may need attention</td></tr>
+                    <tr><td class="param-name">volume.mtd</td><td>Total processing volume across all approved merchants month-to-date</td></tr>
+                    <tr><td class="param-name">volume.last_90_days</td><td>Cumulative volume over the trailing 90 days</td></tr>
+                    <tr><td class="param-name">tickets.open</td><td>Tickets in <code>open</code> status only — does not include closed tickets</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
     <!-- USE CASES -->
     <h2 id="use-cases">Use Cases</h2>
     <p>Real examples of what partners have built or can build using this API.</p>
@@ -453,6 +509,12 @@
             <div style="font-size:24px;margin-bottom:10px;">📈</div>
             <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Monthly Partner Reports</div>
             <p style="margin:0;font-size:13px;">Automate your monthly business review. Pull merchant counts, volume totals, and ticket stats via the API and generate a formatted PDF or email report — no manual data collection required.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">🚨</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">At-Risk Merchant Monitoring</div>
+            <p style="margin:0;font-size:13px;">Poll <code>GET /reports/summary</code> daily and alert your team when <code>merchants.at_risk</code> increases. Catch declining merchants before they churn — no manual review required.</p>
         </div>
 
         <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
