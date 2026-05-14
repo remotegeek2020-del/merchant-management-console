@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 import { validateSession, sessionErrorResponse } from './_validate.js';
+import { dispatchEvent } from './v1/_deliver.js';
 
 // Increase body size limit to 50MB for large CSV bulk uploads
 export const config = { api: { bodyParser: { sizeLimit: '50mb' } } };
@@ -510,10 +511,19 @@ if (action === 'list') {
     // 1. Validate ID
     if (!id) return res.status(400).json({ success: false, message: "Missing Merchant UUID" });
 
+    // Fetch current status if account_status is being changed
+    let oldStatus = null;
+    if (payload.account_status !== undefined) {
+        const { data: cur } = await supabase.from('merchants')
+            .select('account_status, dba_name, merchant_id, agent_id')
+            .eq('id', id).single();
+        oldStatus = cur;
+    }
+
     // 2. Perform the Update on the BASE TABLE
     const { data, error } = await supabase
         .from('merchants') // TARGET THE TABLE, NOT THE VIEW
-        .update(payload) 
+        .update(payload)
         .eq('id', id)
         .select(); // Select returns the updated row to verify it worked
 
@@ -532,6 +542,27 @@ if (action === 'list') {
         }]);
     } catch (noteErr) {
         console.warn("Update succeeded, but audit note failed:", noteErr.message);
+    }
+
+    // 4. Fire merchant.status_changed webhook event if status changed
+    if (oldStatus && payload.account_status && payload.account_status !== oldStatus.account_status) {
+        try {
+            const { data: identifier } = await supabase
+                .from('agent_identifiers')
+                .select('agents!agent_identifiers_agent_id_fkey(parent_agent_id)')
+                .eq('id_string', oldStatus.agent_id)
+                .single();
+            const personId = identifier?.agents?.parent_agent_id;
+            if (personId) {
+                dispatchEvent(personId, 'merchant.status_changed', {
+                    merchant_id: oldStatus.merchant_id,
+                    dba_name: oldStatus.dba_name,
+                    old_status: oldStatus.account_status,
+                    new_status: payload.account_status,
+                    changed_by: user || 'Admin'
+                }).catch(() => {});
+            }
+        } catch (e) { /* non-fatal */ }
     }
 
     return res.status(200).json({ success: true, data });
