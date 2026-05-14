@@ -507,7 +507,20 @@ TOOL USAGE:
 - Do NOT call tools when you already have the data from this conversation
 
 Formatting: use **bold** for names/numbers, bullet lists for items, keep responses concise.
-For navigation suggestions: → Action description (url:/path)` + knowledgeBlock;
+
+NAVIGATION ACTIONS — when suggesting a page to visit, use EXACTLY these URL formats (never invent paths):
+- Merchant list: → View all merchants (url:/merchants-dashboard.html)
+- Search merchants by name: → Search for [name] in merchants (url:/merchants-dashboard.html?q=[name])
+- Filter merchants by status: → View [status] merchants (url:/merchants-dashboard.html?filterBy=[status])
+- Partners list: → View all partners (url:/partners-dashboard.html)
+- Search partners: → Search for [name] in partners (url:/partners-dashboard.html?q=[name])
+- Deployments: → View deployments (url:/deployments-dashboard.html)
+- Search deployments: → Search deployments (url:/deployments-dashboard.html?q=[term])
+- Inventory/Equipment: → View inventory (url:/equipments-dashboard.html)
+- Search inventory: → Search inventory (url:/equipments-dashboard.html?q=[term])
+- Returns: → View returns (url:/returns-dashboard.html)
+- Search returns: → Search returns (url:/returns-dashboard.html?q=[term])
+Only include navigation actions when they are genuinely useful. Use real names/values in the URL query params, not placeholder text like [name].` + knowledgeBlock;
 
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
