@@ -276,6 +276,7 @@ async function openMerchantDetail(merchantId, name) {
     window._modalNotes = notes || [];
     window._notesPage = 0;
     window._currentMerchantUuid = merchantId;
+    window._currentMerchantStringId = m.merchant_id;
     Swal.update({ html: `
         <div style="text-align:left;">
             <!-- TAB BAR -->
@@ -338,14 +339,14 @@ window.mdTab = function(tab) {
 window.mdLoadTickets = async function() {
     var el = document.getElementById('md-tickets-list');
     if (!el) return;
-    const merchantUuid = window._currentMerchantUuid;
-    if (!merchantUuid) return;
+    const merchantStringId = window._currentMerchantStringId;
+    if (!merchantStringId) return;
     el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">Loading...</div>';
     try {
         const res = await fetch('/api/tickets', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'list_for_partner', token, merchant_uuid: merchantUuid })
+            body: JSON.stringify({ action: 'list_for_partner', token, merchant_uuid: merchantStringId })
         });
         const data = await res.json();
         const tickets = data.data || [];

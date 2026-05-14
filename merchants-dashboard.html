@@ -786,7 +786,7 @@ async function addTask(merchantUuid) {
                     <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:12px;">
                         <div class="field-section-title" style="grid-column: span 3; font-weight:800; color:#004990; border-bottom:1px solid #eee; margin-top:15px; text-transform:uppercase; font-size:10px;">Core Identity & Status</div>
                         <div><label class="edit-label">DBA Name</label><input id="edit-dba_name" class="modern-input" value="${m.dba_name || ''}"></div>
-                        <div><label class="edit-label">Merchant ID (Locked)</label><input class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
+                        <div><label class="edit-label">Merchant ID (Locked)</label><input id="modal-mid-string" class="modern-input" value="${m.merchant_id || ''}" disabled style="background:#f8fafc;"></div>
                         <div>
                             <label class="edit-label">Account Status</label>
                             <select id="edit-account_status" class="modern-input">
@@ -1044,16 +1044,16 @@ async function addTask(merchantUuid) {
     }
 }
     async function fetchMerchantTickets() {
-        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
-        if (!saveBtn) return;
-        const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+        const midInput = document.getElementById('modal-mid-string');
+        const merchantStringId = midInput?.value;
+        if (!merchantStringId) return;
         const el = document.getElementById('merchant-tickets-list');
         el.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">Loading...</p>';
         try {
             const res = await fetch('/api/tickets', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'list_for_staff', merchant_id: merchantUuid, limit: 100 })
+                body: JSON.stringify({ action: 'list_for_staff', merchant_id: merchantStringId, limit: 100 })
             });
             const data = await res.json();
             const tickets = data.data || [];
