@@ -126,6 +126,23 @@
             <button class="btn btn-teal" onclick="changePassword()"><span class="material-icons" style="font-size:16px;">lock_reset</span> Update Password</button>
         </div>
 
+        <!-- API KEYS -->
+        <div class="settings-section">
+            <div class="section-title">API Keys</div>
+            <div class="section-sub">Use API keys to access your data programmatically. Keep them secret — treat them like passwords.</div>
+
+            <div style="display:flex;gap:10px;margin-bottom:16px;">
+                <input type="text" id="newKeyLabel" placeholder="Label (e.g. My CRM Integration)" style="margin-bottom:0;flex:1;">
+                <button class="btn btn-teal" onclick="createApiKey()" style="white-space:nowrap;flex-shrink:0;"><span class="material-icons" style="font-size:16px;">add</span> Generate Key</button>
+            </div>
+
+            <div id="apiKeysList"><div style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Loading keys...</div></div>
+
+            <div style="margin-top:14px;padding:12px 14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;font-size:12px;color:#0f766e;">
+                <strong>Free tier:</strong> 10 req/min · 500 req/day &nbsp;·&nbsp; Need higher limits? Contact support.
+            </div>
+        </div>
+
         <!-- DANGER ZONE -->
         <div class="settings-section" style="border-color:#fecaca;">
             <div class="section-title" style="color:#991b1b;">Session</div>
@@ -259,12 +276,102 @@ async function changePassword() {
     }
 }
 
+// ── API KEYS ─────────────────────────────────────────────────
+function keysApi(body) {
+    return fetch('/api/v1/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...body, token })
+    }).then(r => r.json());
+}
+
+async function loadApiKeys() {
+    const res = await keysApi({ action: 'list' });
+    const el = document.getElementById('apiKeysList');
+    if (!res.success || !res.data.length) {
+        el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px;">No API keys yet. Generate one above.</div>';
+        return;
+    }
+    const tierColors = { free: '#0d9488', standard: '#2563eb', enterprise: '#7c3aed' };
+    el.innerHTML = res.data.map(k => `
+        <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:${k.is_active ? 'white' : '#f8fafc'};">
+            <span class="material-icons" style="color:${k.is_active ? '#0d9488' : '#94a3b8'};font-size:20px;">vpn_key</span>
+            <div style="flex:1;min-width:0;">
+                <div style="font-size:13px;font-weight:700;${k.is_active ? '' : 'color:var(--muted);text-decoration:line-through;'}">${k.label}</div>
+                <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;">${k.key_prefix}</div>
+                <div style="font-size:10px;color:var(--muted);margin-top:2px;">
+                    Created ${new Date(k.created_at).toLocaleDateString()} ·
+                    ${k.last_used_at ? 'Last used ' + new Date(k.last_used_at).toLocaleDateString() : 'Never used'}
+                </div>
+            </div>
+            <span style="background:${tierColors[k.tier] || '#94a3b8'}1a;color:${tierColors[k.tier] || '#94a3b8'};border-radius:99px;padding:2px 10px;font-size:10px;font-weight:800;text-transform:uppercase;">${k.tier}</span>
+            ${k.is_active ? `<button onclick="revokeApiKey('${k.id}')" class="btn btn-danger" style="padding:6px 12px;font-size:11px;">Revoke</button>` : '<span style="font-size:11px;color:var(--muted);padding:6px 12px;">Revoked</span>'}
+        </div>`).join('');
+}
+
+async function createApiKey() {
+    const label = document.getElementById('newKeyLabel').value.trim();
+    if (!label) return Swal.fire({ icon: 'warning', title: 'Enter a label', text: 'Give your key a name so you remember what it\'s for.', confirmButtonColor: '#0d9488' });
+
+    Swal.fire({ title: 'Generating key...', didOpen: () => Swal.showLoading() });
+    const res = await keysApi({ action: 'create', label });
+    if (!res.success) {
+        Swal.fire({ icon: 'error', title: 'Failed', text: res.error?.message || 'Could not create key.', confirmButtonColor: '#0d9488' });
+        return;
+    }
+
+    document.getElementById('newKeyLabel').value = '';
+    loadApiKeys();
+
+    // Show the raw key ONCE — user must copy it now
+    await Swal.fire({
+        icon: 'success',
+        title: 'API Key Created',
+        html: `<div style="margin-bottom:10px;font-size:13px;color:#475569;">Copy this key now. <strong>It will not be shown again.</strong></div>
+               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:12px;word-break:break-all;text-align:left;color:#0a1628;">${res.data.raw_key}</div>`,
+        confirmButtonText: 'I\'ve copied it',
+        confirmButtonColor: '#0d9488',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        didOpen: () => {
+            // Auto-select the key text for easy copying
+            const div = Swal.getHtmlContainer().querySelector('div div:last-child');
+            if (div) {
+                const range = document.createRange();
+                range.selectNode(div);
+                window.getSelection().removeAllRanges();
+                window.getSelection().addRange(range);
+            }
+        }
+    });
+}
+
+async function revokeApiKey(keyId) {
+    const confirm = await Swal.fire({
+        icon: 'warning',
+        title: 'Revoke this key?',
+        text: 'Any application using this key will stop working immediately.',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Yes, revoke it'
+    });
+    if (!confirm.isConfirmed) return;
+    const res = await keysApi({ action: 'revoke', key_id: keyId });
+    if (res.success) {
+        Swal.fire({ icon: 'success', title: 'Key revoked', timer: 1500, showConfirmButton: false });
+        loadApiKeys();
+    }
+}
+
 async function handleLogout() {
     await fetch('/api/partner-auth',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'logout',token})});
     localStorage.clear(); window.location.href='/partner';
 }
 
-window.onload = init;
+window.onload = async function() {
+    await init();
+    loadApiKeys();
+};
 </script>
 <script src="/js/site-config.js"></script>
 <script src="/js/partner-nav.js"></script>

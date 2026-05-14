@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner API Keys | PayProTec Admin</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=localStorage.getItem('pp_role');if(!u||v!=='true'||r!=='super_admin')window.location.href='index.html?reason=unauthorized';})();</script>
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--blue:#004990;--border:#e2e8f0;--surface:#f0f4f8;--text:#0a1628;--muted:#94a3b8;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased;}
+        .topbar{background:linear-gradient(135deg,#4338ca,#6366f1);padding:16px 28px;display:flex;align-items:center;gap:14px;}
+        .topbar-title{font-size:18px;font-weight:800;color:white;}
+        .topbar-sub{font-size:12px;color:#e0e7ff;margin-top:1px;}
+        .back-btn{display:flex;align-items:center;gap:4px;padding:7px 14px;background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.25);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;font-family:'DM Sans',sans-serif;margin-left:auto;}
+        .back-btn:hover{background:rgba(255,255,255,0.25);}
+        .content{max-width:1100px;margin:28px auto;padding:0 20px 60px;}
+        .stats-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:24px;}
+        .stat-card{background:white;border:1px solid var(--border);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow-sm);}
+        .stat-label{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;}
+        .stat-value{font-size:26px;font-weight:800;margin-top:4px;}
+        .card{background:white;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-sm);overflow:hidden;}
+        .card-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+        .card-title{font-size:14px;font-weight:800;}
+        .search-input{padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;width:220px;}
+        .search-input:focus{border-color:#6366f1;}
+        table{width:100%;border-collapse:collapse;}
+        th{font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;padding:10px 16px;text-align:left;border-bottom:1px solid var(--border);background:#f8fafc;}
+        td{padding:12px 16px;font-size:12px;border-bottom:1px solid #f8fafc;vertical-align:middle;}
+        tr:last-child td{border-bottom:none;}
+        tr:hover td{background:#f8fafc;}
+        .tier-badge{display:inline-block;padding:2px 10px;border-radius:99px;font-size:10px;font-weight:800;text-transform:uppercase;}
+        .tier-free{background:#f0fdfa;color:#0d9488;}
+        .tier-standard{background:#eff6ff;color:#2563eb;}
+        .tier-enterprise{background:#f5f3ff;color:#7c3aed;}
+        .status-active{color:#10b981;font-weight:700;display:flex;align-items:center;gap:4px;}
+        .status-revoked{color:#94a3b8;font-weight:700;display:flex;align-items:center;gap:4px;}
+        .mono{font-family:'DM Mono',monospace;font-size:11px;color:var(--muted);}
+        .action-btn{padding:4px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:none;font-family:'DM Sans',sans-serif;}
+        .btn-revoke{background:#fee2e2;color:#991b1b;}
+        .btn-revoke:hover{background:#ef4444;color:white;}
+        .btn-reactivate{background:#dcfce7;color:#166534;}
+        .btn-reactivate:hover{background:#22c55e;color:white;}
+        .tier-select{padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;font-family:'DM Sans',sans-serif;font-weight:700;cursor:pointer;outline:none;}
+        @keyframes spin{to{transform:rotate(360deg);}}
+        .spinner{width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#6366f1;border-radius:50%;animation:spin 0.8s linear infinite;margin:30px auto;}
+    </style>
+</head>
+<body>
+
+<div class="topbar">
+    <div>
+        <div class="topbar-title"><span class="material-icons" style="vertical-align:middle;margin-right:8px;font-size:20px;">vpn_key</span>Partner API Keys</div>
+        <div class="topbar-sub">Manage API keys issued to partners. Set tiers and revoke access.</div>
+    </div>
+    <a href="secret-dungeon.html" class="back-btn"><span class="material-icons" style="font-size:14px;">arrow_back</span> Back to Dungeon</a>
+</div>
+
+<div class="content">
+
+    <div class="stats-row" id="statsRow">
+        <div class="stat-card"><div class="stat-label">Total Keys</div><div class="stat-value" id="statTotal">—</div></div>
+        <div class="stat-card"><div class="stat-label">Active Keys</div><div class="stat-value" id="statActive" style="color:#10b981;">—</div></div>
+        <div class="stat-card"><div class="stat-label">Revoked Keys</div><div class="stat-value" id="statRevoked" style="color:#ef4444;">—</div></div>
+        <div class="stat-card"><div class="stat-label">Enterprise Tier</div><div class="stat-value" id="statEnterprise" style="color:#7c3aed;">—</div></div>
+    </div>
+
+    <div class="card">
+        <div class="card-header">
+            <div class="card-title">All API Keys</div>
+            <input class="search-input" type="text" placeholder="Search by partner or label..." id="searchInput" oninput="filterTable(this.value)">
+        </div>
+        <div id="tableWrap"><div class="spinner"></div></div>
+    </div>
+
+</div>
+
+<script>
+let allKeys = [];
+
+function staffApi(body) {
+    const token = localStorage.getItem('pp_session_token');
+    return fetch('/api/v1/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(body)
+    }).then(r => r.json());
+}
+
+async function loadKeys() {
+    const res = await staffApi({ action: 'list_all' });
+    if (!res.success) { document.getElementById('tableWrap').innerHTML = '<div style="padding:30px;text-align:center;color:#ef4444;">Failed to load keys.</div>'; return; }
+    allKeys = res.data || [];
+    updateStats();
+    renderTable(allKeys);
+}
+
+function updateStats() {
+    document.getElementById('statTotal').textContent = allKeys.length;
+    document.getElementById('statActive').textContent = allKeys.filter(k => k.is_active).length;
+    document.getElementById('statRevoked').textContent = allKeys.filter(k => !k.is_active).length;
+    document.getElementById('statEnterprise').textContent = allKeys.filter(k => k.tier === 'enterprise').length;
+}
+
+function filterTable(q) {
+    if (!q) { renderTable(allKeys); return; }
+    const lq = q.toLowerCase();
+    renderTable(allKeys.filter(k => (k.label||'').toLowerCase().includes(lq) || (k.persons?.full_name||'').toLowerCase().includes(lq)));
+}
+
+function renderTable(keys) {
+    const wrap = document.getElementById('tableWrap');
+    if (!keys.length) { wrap.innerHTML = '<div style="padding:30px;text-align:center;color:var(--muted);font-size:13px;">No keys found.</div>'; return; }
+    wrap.innerHTML = `<table>
+        <thead><tr>
+            <th>Partner</th>
+            <th>Label</th>
+            <th>Key Prefix</th>
+            <th>Tier</th>
+            <th>Status</th>
+            <th>Last Used</th>
+            <th>Created</th>
+            <th>Actions</th>
+        </tr></thead>
+        <tbody>${keys.map(k => `
+            <tr>
+                <td><div style="font-weight:700;font-size:12px;">${k.persons?.full_name || '—'}</div></td>
+                <td>${k.label}</td>
+                <td class="mono">${k.key_prefix}</td>
+                <td>
+                    <select class="tier-select" onchange="setTier('${k.id}', this.value)">
+                        <option value="free" ${k.tier==='free'?'selected':''}>Free</option>
+                        <option value="standard" ${k.tier==='standard'?'selected':''}>Standard</option>
+                        <option value="enterprise" ${k.tier==='enterprise'?'selected':''}>Enterprise</option>
+                    </select>
+                </td>
+                <td>
+                    ${k.is_active
+                        ? '<div class="status-active"><span class="material-icons" style="font-size:14px;">check_circle</span>Active</div>'
+                        : '<div class="status-revoked"><span class="material-icons" style="font-size:14px;">cancel</span>Revoked</div>'}
+                </td>
+                <td style="color:var(--muted);">${k.last_used_at ? new Date(k.last_used_at).toLocaleDateString() : 'Never'}</td>
+                <td style="color:var(--muted);">${new Date(k.created_at).toLocaleDateString()}</td>
+                <td>
+                    ${k.is_active
+                        ? `<button class="action-btn btn-revoke" onclick="revokeKey('${k.id}')">Revoke</button>`
+                        : `<button class="action-btn btn-reactivate" onclick="reactivateKey('${k.id}')">Reactivate</button>`}
+                </td>
+            </tr>`).join('')}
+        </tbody>
+    </table>`;
+}
+
+async function setTier(keyId, tier) {
+    const res = await staffApi({ action: 'set_tier', key_id: keyId, tier });
+    if (!res.success) { Swal.fire({ icon: 'error', title: 'Failed', text: res.error?.message, confirmButtonColor: '#6366f1' }); loadKeys(); return; }
+    const k = allKeys.find(k => k.id === keyId);
+    if (k) { k.tier = tier; updateStats(); }
+}
+
+async function revokeKey(keyId) {
+    const { isConfirmed } = await Swal.fire({ icon: 'warning', title: 'Revoke this key?', text: 'The partner\'s integration will stop working immediately.', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Yes, revoke' });
+    if (!isConfirmed) return;
+    await staffApi({ action: 'revoke_any', key_id: keyId });
+    loadKeys();
+}
+
+async function reactivateKey(keyId) {
+    await staffApi({ action: 'reactivate', key_id: keyId });
+    loadKeys();
+}
+
+window.onload = loadKeys;
+</script>
+<script src="/js/site-config.js"></script>
+</body>
+</html>
