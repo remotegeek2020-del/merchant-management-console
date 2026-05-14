@@ -97,6 +97,12 @@
     <a class="nav-link" href="#tickets-detail"><span class="method-pill get">GET</span> Get Ticket</a>
     <a class="nav-link" href="#tickets-create"><span class="method-pill post">POST</span> Create Ticket</a>
     <a class="nav-link" href="#reports"><span class="method-pill get">GET</span> Reports Summary</a>
+    <div class="nav-section">Webhooks</div>
+    <a class="nav-link" href="#webhooks-intro">Overview</a>
+    <a class="nav-link" href="#webhooks-list"><span class="method-pill get">GET</span> List Webhooks</a>
+    <a class="nav-link" href="#webhooks-create"><span class="method-pill post">POST</span> Create Webhook</a>
+    <a class="nav-link" href="#webhooks-events">Events</a>
+    <a class="nav-link" href="#webhooks-verify">Verify Signatures</a>
     <div class="nav-section">Reference</div>
     <a class="nav-link" href="#use-cases">Use Cases</a>
     <a class="nav-link" href="#changelog">Changelog</a>
@@ -463,6 +469,162 @@
         </div>
     </div>
 
+    <!-- WEBHOOKS -->
+    <h2 id="webhooks-intro">Webhooks</h2>
+    <p>Instead of polling the API, webhooks push data to your server in real-time when events happen in your account. Configure up to <strong>5 active webhook endpoints</strong> from your partner settings.</p>
+    <div class="alert alert-info">Webhooks are configured from <strong>Partner Settings → Webhooks</strong>. The API endpoint below lets you manage them programmatically if you prefer.</div>
+
+    <h3 id="webhooks-list" style="margin-top:32px;">List Webhooks + Delivery Log</h3>
+    <div class="endpoint-bar"><span class="method-pill get">GET</span><code>/api/v1/webhooks</code></div>
+    <p>Returns all your webhook endpoints and the last 20 delivery attempts across all endpoints.</p>
+
+    <div class="code-block">
+        <div class="code-block-header"><span>Example Response</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: {
+    <span class="hl-key">"endpoints"</span>: [
+      {
+        <span class="hl-key">"id"</span>: <span class="hl-str">"wh_abc123"</span>,
+        <span class="hl-key">"label"</span>: <span class="hl-str">"My CRM"</span>,
+        <span class="hl-key">"url"</span>: <span class="hl-str">"https://yourapp.com/webhooks/paypro"</span>,
+        <span class="hl-key">"events"</span>: [<span class="hl-str">"ticket.created"</span>, <span class="hl-str">"ticket.updated"</span>],
+        <span class="hl-key">"is_active"</span>: <span class="hl-bool">true</span>,
+        <span class="hl-key">"last_triggered_at"</span>: <span class="hl-str">"2026-05-14T10:30:00Z"</span>,
+        <span class="hl-key">"last_status"</span>: <span class="hl-num">200</span>,
+        <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-05-01T09:00:00Z"</span>
+      }
+    ],
+    <span class="hl-key">"deliveries"</span>: [
+      {
+        <span class="hl-key">"id"</span>: <span class="hl-num">1042</span>,
+        <span class="hl-key">"webhook_id"</span>: <span class="hl-str">"wh_abc123"</span>,
+        <span class="hl-key">"event"</span>: <span class="hl-str">"ticket.created"</span>,
+        <span class="hl-key">"status_code"</span>: <span class="hl-num">200</span>,
+        <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+        <span class="hl-key">"attempts"</span>: <span class="hl-num">1</span>,
+        <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-05-14T10:30:01Z"</span>
+      }
+    ]
+  }
+}</pre>
+    </div>
+
+    <h3 id="webhooks-create" style="margin-top:32px;">Manage Webhooks</h3>
+    <div class="endpoint-bar"><span class="method-pill post">POST</span><code>/api/v1/webhooks</code></div>
+    <p>Create, update, delete, or rotate the signing secret for a webhook endpoint.</p>
+
+    <table>
+        <thead><tr><th>action</th><th>Required fields</th><th>Description</th></tr></thead>
+        <tbody>
+            <tr><td><code>create</code></td><td><code>url</code>, <code>events</code></td><td>Register a new endpoint. Returns the signing secret (shown once).</td></tr>
+            <tr><td><code>update</code></td><td><code>webhook_id</code></td><td>Change the label, url, or subscribed events.</td></tr>
+            <tr><td><code>delete</code></td><td><code>webhook_id</code></td><td>Remove the endpoint permanently.</td></tr>
+            <tr><td><code>rotate_secret</code></td><td><code>webhook_id</code></td><td>Generate a new signing secret. Old secret stops working immediately.</td></tr>
+        </tbody>
+    </table>
+
+    <div class="code-block" style="margin-top:16px;">
+        <div class="code-block-header"><span>Create a Webhook</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>POST /api/v1/webhooks
+Authorization: Bearer pk_live_...
+
+{
+  <span class="hl-key">"action"</span>: <span class="hl-str">"create"</span>,
+  <span class="hl-key">"label"</span>: <span class="hl-str">"My CRM"</span>,
+  <span class="hl-key">"url"</span>: <span class="hl-str">"https://yourapp.com/webhooks/paypro"</span>,
+  <span class="hl-key">"events"</span>: [<span class="hl-str">"ticket.created"</span>, <span class="hl-str">"ticket.updated"</span>, <span class="hl-str">"merchant.status_changed"</span>]
+}
+
+<span class="hl-comment">// Response (201)</span>
+{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: {
+    <span class="hl-key">"id"</span>: <span class="hl-str">"wh_abc123"</span>,
+    <span class="hl-key">"secret"</span>: <span class="hl-str">"a1b2c3d4..."</span>, <span class="hl-comment">// shown ONCE — store securely</span>
+    <span class="hl-key">"secret_note"</span>: <span class="hl-str">"Store this secret securely. It will not be shown again."</span>
+  }
+}</pre>
+    </div>
+
+    <h3 id="webhooks-events" style="margin-top:32px;">Event Types</h3>
+    <p>Subscribe to one or more of these events when creating a webhook:</p>
+    <table>
+        <thead><tr><th>Event</th><th>Fires when…</th></tr></thead>
+        <tbody>
+            <tr><td><code>ticket.created</code></td><td>A new support ticket is opened (via portal or API)</td></tr>
+            <tr><td><code>ticket.updated</code></td><td>A ticket's status or priority changes</td></tr>
+            <tr><td><code>ticket.comment_added</code></td><td>Staff or partner posts a reply on a ticket</td></tr>
+            <tr><td><code>merchant.status_changed</code></td><td>A merchant's approval status changes</td></tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top:16px;">Each delivery sends a <strong>POST</strong> with these headers:</p>
+    <table>
+        <thead><tr><th>Header</th><th>Value</th></tr></thead>
+        <tbody>
+            <tr><td><code>X-PayProTec-Event</code></td><td>The event name (e.g. <code>ticket.created</code>)</td></tr>
+            <tr><td><code>X-PayProTec-Signature</code></td><td>HMAC-SHA256 signature (see below)</td></tr>
+            <tr><td><code>X-PayProTec-Timestamp</code></td><td>ISO 8601 UTC timestamp</td></tr>
+            <tr><td><code>User-Agent</code></td><td><code>PayProTec-Webhooks/1.0</code></td></tr>
+        </tbody>
+    </table>
+
+    <p style="margin-top:16px;">Delivery is retried up to 3 times (at 2s and 5s intervals) if your server returns a non-2xx status or times out. Your endpoint should respond within <strong>10 seconds</strong>.</p>
+
+    <h3 id="webhooks-verify" style="margin-top:32px;">Verifying Signatures</h3>
+    <p>Each request includes an <code>X-PayProTec-Signature</code> header so you can confirm the payload came from PayProTec and wasn't tampered with.</p>
+    <p>The signature is <code>sha256=</code> followed by the HMAC-SHA256 hex digest of the raw request body, signed with your endpoint's secret.</p>
+
+    <div class="code-block">
+        <div class="code-block-header"><span>Verify in Node.js</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>import crypto from 'crypto';
+
+function verifyWebhook(rawBody, signature, secret) {
+  const expected = 'sha256=' + crypto
+    .createHmac('sha256', secret)
+    .update(rawBody)
+    .digest('hex');
+
+  return crypto.timingSafeEqual(
+    Buffer.from(expected),
+    Buffer.from(signature)
+  );
+}
+
+<span class="hl-comment">// Express example</span>
+app.post('/webhooks/paypro', express.raw({ type: 'application/json' }), (req, res) => {
+  const sig = req.headers['x-paypro-signature'];
+  if (!verifyWebhook(req.body, sig, process.env.WEBHOOK_SECRET)) {
+    return res.status(401).send('Invalid signature');
+  }
+  const event = JSON.parse(req.body);
+  console.log('Event:', req.headers['x-paypro-event'], event);
+  res.sendStatus(200);
+});</pre>
+    </div>
+
+    <div class="code-block" style="margin-top:16px;">
+        <div class="code-block-header"><span>Verify in Python</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>import hmac, hashlib
+
+def verify_webhook(raw_body: bytes, signature: str, secret: str) -> bool:
+    expected = 'sha256=' + hmac.new(
+        secret.encode(), raw_body, hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(expected, signature)
+
+<span class="hl-comment"># Flask example</span>
+@app.route('/webhooks/paypro', methods=['POST'])
+def webhook():
+    sig = request.headers.get('X-PayProTec-Signature', '')
+    if not verify_webhook(request.data, sig, WEBHOOK_SECRET):
+        return 'Invalid signature', 401
+    event = request.get_json()
+    print('Event:', request.headers.get('X-PayProTec-Event'), event)
+    return '', 200</pre>
+    </div>
+
     <!-- USE CASES -->
     <h2 id="use-cases">Use Cases</h2>
     <p>Real examples of what partners have built or can build using this API.</p>
@@ -529,7 +691,8 @@
 
     <!-- CHANGELOG -->
     <h2 id="changelog">Changelog</h2>
-    <p><strong>v1.0 — May 2026</strong><br>Initial release. Endpoints: profile, merchants (list + detail), tickets (list + detail + create).</p>
+    <p><strong>v1.1 — May 2026</strong><br>Added webhook management endpoints: create, update, delete, rotate_secret. Added event delivery log. Added HMAC-SHA256 signature verification on all deliveries.</p>
+    <p><strong>v1.0 — May 2026</strong><br>Initial release. Endpoints: profile, merchants (list + detail), tickets (list + detail + create), reports summary.</p>
 
 </div>
 

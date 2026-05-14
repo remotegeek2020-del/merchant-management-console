@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
+import { dispatchEvent } from './v1/_deliver.js';
 
 // Partner actions carry their own `token` and use validatePartner() internally.
 // All other actions are staff-only and require a valid staff session.
@@ -135,6 +136,18 @@ export default async function handler(req, res) {
                 change_summary: 'Ticket created',
                 is_internal: true
             });
+
+            // Fire webhooks (fire-and-forget)
+            const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).single();
+            dispatchEvent(personId, 'ticket.created', {
+                ticket_number: ticket.ticket_number,
+                subject,
+                type,
+                priority: priority || 'normal',
+                status: ticket.status,
+                partner_name: person?.full_name || 'Partner',
+                created_at: ticket.created_at
+            }).catch(() => {});
 
             return res.status(200).json({ success: true, ticket });
         }
@@ -286,6 +299,19 @@ export default async function handler(req, res) {
                 }
             }
 
+            // Fire webhook event for status/priority changes
+            if (changes.length > 0 && oldTicket?.person_id) {
+                dispatchEvent(oldTicket.person_id, 'ticket.updated', {
+                    ticket_id,
+                    ticket_number: oldTicket.ticket_number,
+                    subject: oldTicket.subject,
+                    change: changes.join(' · '),
+                    new_status: updates.status || oldTicket.status,
+                    new_priority: updates.priority || oldTicket.priority,
+                    updated_by: staff_name || 'Staff'
+                }).catch(() => {});
+            }
+
             return res.status(200).json({ success: true });
         }
 
@@ -383,6 +409,20 @@ export default async function handler(req, res) {
             }).select().single();
 
             if (error) throw error;
+
+            // Fire comment webhook (fire-and-forget)
+            const { data: ticketForEvent } = await supabase.from('support_tickets')
+                .select('person_id, ticket_number, subject').eq('id', ticket_id).single();
+            if (ticketForEvent?.person_id) {
+                dispatchEvent(ticketForEvent.person_id, 'ticket.comment_added', {
+                    ticket_number: ticketForEvent.ticket_number,
+                    subject: ticketForEvent.subject,
+                    author_name: authorName,
+                    author_type: authorType,
+                    body: body.trim().slice(0, 500)
+                }).catch(() => {});
+            }
+
             return res.status(200).json({ success: true, comment });
         }
 

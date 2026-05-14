@@ -51,6 +51,8 @@
         .strength-fill{height:100%;border-radius:99px;transition:all 0.3s;}
         @media(max-width:640px){.sidebar{transform:translateX(-100%);}.main{margin-left:0;}.content{padding:16px;}}
         @keyframes spin{to{transform:rotate(360deg);}}
+        .wh-chip{display:inline-flex;align-items:center;padding:4px 10px;border-radius:99px;font-size:11px;font-weight:700;cursor:pointer;border:1.5px solid var(--border);background:white;transition:all 0.15s;font-family:'DM Sans',sans-serif;color:var(--muted);}
+        .wh-chip.active{background:#f0fdfa;border-color:var(--teal);color:var(--teal);}
     </style>
 </head>
 <body>
@@ -142,6 +144,29 @@
                 <div><strong>Free tier:</strong> 10 req/min · 500 req/day &nbsp;·&nbsp; Need higher limits? Contact support.</div>
                 <a href="/api-docs.html" target="_blank" style="color:#0f766e;font-weight:700;white-space:nowrap;text-decoration:none;">📄 API Docs →</a>
             </div>
+        </div>
+
+        <!-- WEBHOOKS -->
+        <div class="settings-section">
+            <div class="section-title">Webhooks</div>
+            <div class="section-sub">Receive real-time HTTP POST notifications when events happen in your account. Up to 5 active webhooks.</div>
+
+            <div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                <input type="text" id="whLabel" placeholder="Label (e.g. My CRM)" style="margin-bottom:0;flex:1;min-width:140px;">
+                <input type="url" id="whUrl" placeholder="https://your-server.com/webhook" style="margin-bottom:0;flex:2;min-width:200px;">
+            </div>
+            <div style="margin-bottom:12px;">
+                <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.4px;margin-bottom:8px;">Subscribe to Events</div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;" id="whEventPicker">
+                    <button type="button" class="wh-chip" data-event="ticket.created" onclick="toggleWhEvent(this)">ticket.created</button>
+                    <button type="button" class="wh-chip" data-event="ticket.updated" onclick="toggleWhEvent(this)">ticket.updated</button>
+                    <button type="button" class="wh-chip" data-event="ticket.comment_added" onclick="toggleWhEvent(this)">ticket.comment_added</button>
+                    <button type="button" class="wh-chip" data-event="merchant.status_changed" onclick="toggleWhEvent(this)">merchant.status_changed</button>
+                </div>
+            </div>
+            <button class="btn btn-teal" onclick="createWebhook()" style="margin-bottom:18px;"><span class="material-icons" style="font-size:16px;">add</span> Add Webhook</button>
+
+            <div id="webhooksList"><div style="text-align:center;padding:16px;color:var(--muted);font-size:12px;">Loading webhooks...</div></div>
         </div>
 
         <!-- DANGER ZONE -->
@@ -369,9 +394,123 @@ async function handleLogout() {
     localStorage.clear(); window.location.href='/partner';
 }
 
+// ── WEBHOOKS ──────────────────────────────────────────────────
+function whApi(body) {
+    return fetch('/api/v1/webhooks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify(body)
+    }).then(r => r.json());
+}
+
+function whApiGet() {
+    return fetch('/api/v1/webhooks', {
+        headers: { 'Authorization': 'Bearer ' + token }
+    }).then(r => r.json());
+}
+
+function toggleWhEvent(btn) { btn.classList.toggle('active'); }
+
+function getSelectedEvents() {
+    return Array.from(document.querySelectorAll('.wh-chip.active')).map(b => b.dataset.event);
+}
+
+async function loadWebhooks() {
+    const res = await whApiGet();
+    const el = document.getElementById('webhooksList');
+    if (!res.success || !res.data.endpoints.length) {
+        el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted);font-size:12px;">No webhooks yet. Add one above.</div>';
+        return;
+    }
+    el.innerHTML = res.data.endpoints.map(ep => {
+        const ok = ep.last_status >= 200 && ep.last_status < 300;
+        const statusDot = ep.last_triggered_at
+            ? `<span style="width:8px;height:8px;border-radius:50%;display:inline-block;background:${ok ? '#22c55e' : '#ef4444'};flex-shrink:0;"></span>`
+            : `<span style="width:8px;height:8px;border-radius:50%;display:inline-block;background:#94a3b8;flex-shrink:0;"></span>`;
+        return `<div style="border:1px solid var(--border);border-radius:10px;padding:14px;margin-bottom:10px;background:white;">
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
+                ${statusDot}
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:700;">${ep.label}</div>
+                    <div style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;word-break:break-all;">${ep.url}</div>
+                    <div style="font-size:10px;color:var(--muted);margin-top:4px;">${(ep.events||[]).join(' · ')}</div>
+                </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <button onclick="rotateSecret('${ep.id}')" class="btn btn-outline" style="padding:5px 10px;font-size:11px;"><span class="material-icons" style="font-size:13px;">refresh</span> Rotate Secret</button>
+                <button onclick="deleteWebhook('${ep.id}')" class="btn btn-danger" style="padding:5px 10px;font-size:11px;">Delete</button>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+async function createWebhook() {
+    const label = document.getElementById('whLabel').value.trim();
+    const url = document.getElementById('whUrl').value.trim();
+    const events = getSelectedEvents();
+    if (!url) return Swal.fire({ icon: 'warning', title: 'URL required', confirmButtonColor: '#0d9488' });
+    if (!events.length) return Swal.fire({ icon: 'warning', title: 'Select at least one event', confirmButtonColor: '#0d9488' });
+
+    Swal.fire({ title: 'Creating webhook...', didOpen: () => Swal.showLoading() });
+    const res = await whApi({ action: 'create', label: label || 'My Webhook', url, events });
+    if (!res.success) {
+        Swal.fire({ icon: 'error', title: 'Failed', text: res.error?.message || 'Could not create webhook.', confirmButtonColor: '#0d9488' });
+        return;
+    }
+
+    document.getElementById('whLabel').value = '';
+    document.getElementById('whUrl').value = '';
+    document.querySelectorAll('.wh-chip.active').forEach(c => c.classList.remove('active'));
+    loadWebhooks();
+
+    await Swal.fire({
+        icon: 'success',
+        title: 'Webhook Created',
+        html: `<div style="margin-bottom:10px;font-size:13px;color:#475569;">Save this signing secret. <strong>It will not be shown again.</strong> Use it to verify incoming payloads.</div>
+               <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;word-break:break-all;text-align:left;color:#0a1628;">${res.data.secret}</div>`,
+        confirmButtonText: "I've saved it",
+        confirmButtonColor: '#0d9488',
+        allowOutsideClick: false
+    });
+}
+
+async function rotateSecret(id) {
+    const confirmed = await Swal.fire({
+        icon: 'warning',
+        title: 'Rotate signing secret?',
+        text: 'Your current secret will stop working immediately. Update your app with the new secret.',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Rotate'
+    });
+    if (!confirmed.isConfirmed) return;
+    const res = await whApi({ action: 'rotate_secret', webhook_id: id });
+    if (!res.success) return Swal.fire({ icon: 'error', title: 'Failed', confirmButtonColor: '#0d9488' });
+    await Swal.fire({
+        icon: 'success',
+        title: 'New Secret',
+        html: `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:12px;font-family:'DM Mono',monospace;font-size:11px;word-break:break-all;text-align:left;">${res.data.secret}</div>`,
+        confirmButtonText: "I've saved it",
+        confirmButtonColor: '#0d9488',
+        allowOutsideClick: false
+    });
+}
+
+async function deleteWebhook(id) {
+    const confirmed = await Swal.fire({
+        icon: 'warning', title: 'Delete webhook?',
+        text: 'All deliveries will stop immediately.',
+        showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Delete'
+    });
+    if (!confirmed.isConfirmed) return;
+    const res = await whApi({ action: 'delete', webhook_id: id });
+    if (res.success) { Swal.fire({ icon: 'success', title: 'Deleted', timer: 1200, showConfirmButton: false }); loadWebhooks(); }
+}
+
 window.onload = async function() {
     await init();
     loadApiKeys();
+    loadWebhooks();
 };
 </script>
 <script src="/js/site-config.js"></script>
