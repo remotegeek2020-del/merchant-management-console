@@ -232,7 +232,7 @@ export default async function handler(req, res) {
 
             // Notify partner of changes (status, priority, assignment)
             if (changes.length > 0 && oldTicket?.person_id) {
-                supabase.rpc('increment_partner_unread', { tid: ticket_id });
+                await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
             }
 
             // When ticket is closed, clear ticket_id from linked return so its badge disappears
@@ -336,7 +336,7 @@ export default async function handler(req, res) {
 
                 // Notify partner of new staff activity (non-internal only)
                 if (!is_internal) {
-                    supabase.rpc('increment_partner_unread', { tid: ticket_id });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                 }
 
                 // Email partner for non-internal staff notes
@@ -506,7 +506,7 @@ export default async function handler(req, res) {
                         change_summary: `Bulk deployment created: <strong>${deploymentId}</strong> — ${bulk_items.length} unit(s) being prepared for dispatch.`,
                         is_internal: false
                     });
-                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
 
                 } else {
@@ -550,7 +550,7 @@ export default async function handler(req, res) {
                         change_summary: `Deployment record created: <strong>${deploymentId}</strong> — your hardware is being prepared for dispatch.`,
                         is_internal: false
                     });
-                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
                 }
 
@@ -606,7 +606,7 @@ export default async function handler(req, res) {
                         change_summary: `Bulk Return/RMA initiated: <strong>${finalReturnId}</strong> — ${equipIds.length} unit(s) marked In Transit.`,
                         is_internal: false
                     });
-                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, return_id: finalReturnId });
 
                 } else {
@@ -649,7 +649,7 @@ export default async function handler(req, res) {
                         change_summary: `Return/RMA initiated: <strong>${finalReturnId}</strong> — unit is being returned for inspection.`,
                         is_internal: false
                     });
-                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, return_id: finalReturnId });
                 }
             }
