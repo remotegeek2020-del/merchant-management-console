@@ -482,7 +482,7 @@ export default async function handler(req, res) {
             .select('role, content')
             .eq('userid', userId)
             .order('created_at', { ascending: false })
-            .limit(8);
+            .limit(12);
 
         const formattedHistory = (history || []).map(h => ({
             role: h.role === 'user' ? 'user' : 'model',
@@ -492,17 +492,22 @@ export default async function handler(req, res) {
         // ── SYSTEM PROMPT ─────────────────────────────────────────────────────
         const systemInstruction = `You are JARVIS, the AI business intelligence agent for PayProTec's merchant management console. Address the user as ${userName || 'Sir'}.
 
-Your focus areas: Merchants, Partners, Deployments, Inventory, and Returns. You have live database access to all five areas via tools.
+Your focus areas: Merchants, Partners, Deployments, Inventory, and Returns. You have live database access via tools.
 
-Rules:
-1. For any business question, call the relevant tools first — never guess or make up numbers
-2. For greetings or non-business questions, respond briefly and offer to help with the 5 focus areas
-3. Cross-reference data when useful (e.g. at-risk merchant also has open returns)
-4. End substantive answers with "**Suggested Actions:**" listing 2-4 concrete next steps
+CRITICAL CONVERSATION RULES:
+1. Always read the full conversation history before deciding what to do.
+2. For follow-up questions ("review it", "what about that merchant", "tell me more", "can you analyze it"), use the data already retrieved in previous messages — do NOT call tools again or ask "what would you like to review?" You already have the context.
+3. Pronouns like "it", "that", "this merchant", "the above" always refer to the most recently discussed subject in the conversation history.
+4. Only call tools when genuinely NEW data is needed (e.g. a different merchant, a new topic, or refreshing stale data).
+5. For greetings or fully off-topic messages, respond briefly.
+6. End substantive answers with "**Suggested Actions:**" listing 2-4 concrete next steps.
 
-Formatting: use **bold** for names/numbers, bullet lists for multiple items, keep responses concise.
-For navigation suggestions, append (url:/path) at end of the action line. Example:
-→ Review at-risk merchants (url:/merchants-dashboard.html)` + knowledgeBlock;
+TOOL USAGE:
+- Call tools for fresh data lookups
+- Do NOT call tools when you already have the data from this conversation
+
+Formatting: use **bold** for names/numbers, bullet lists for items, keep responses concise.
+For navigation suggestions: → Action description (url:/path)` + knowledgeBlock;
 
         // ── AGENTIC LOOP ──────────────────────────────────────────────────────
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -515,6 +520,7 @@ For navigation suggestions, append (url:/path) at end of the action line. Exampl
         const chat = model.startChat({ history: formattedHistory });
 
         const toolCallsLog = [];
+        const toolDataSummary = []; // track what data was fetched for context storage
         let result = await chat.sendMessage(query);
         let maxIterations = 8;
 
@@ -528,6 +534,8 @@ For navigation suggestions, append (url:/path) at end of the action line. Exampl
                 toolCallsLog.push(call.name);
                 const toolResult = await executeTool(call.name, call.args || {});
                 toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
+                // Build a compact summary of fetched data for history storage
+                toolDataSummary.push(`[${call.name}${call.args?.query ? ': ' + call.args.query : call.args?.merchant_id ? ': ' + call.args.merchant_id : call.args?.status ? ': ' + call.args.status : ''}] → ${JSON.stringify(toolResult).slice(0, 400)}`);
             }
             result = await chat.sendMessage(toolResponses);
         }
@@ -545,10 +553,14 @@ For navigation suggestions, append (url:/path) at end of the action line. Exampl
         const cleanAnswer = finalAnswer.replace(/\s*\(url:[^)]+\)/g, '');
 
         // ── PERSIST HISTORY ───────────────────────────────────────────────────
+        // Store data context inside the assistant message so follow-up turns can reference it
+        const contextPrefix = toolDataSummary.length
+            ? `[DATA CONTEXT: ${toolDataSummary.join(' | ')}]\n\n`
+            : '';
         try {
             await supabase.from('chat_history').insert([
                 { userid: userId, role: 'user', content: query },
-                { userid: userId, role: 'assistant', content: cleanAnswer }
+                { userid: userId, role: 'assistant', content: contextPrefix + cleanAnswer }
             ]);
         } catch { /* non-fatal */ }
 
