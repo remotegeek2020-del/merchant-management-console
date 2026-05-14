@@ -4,7 +4,7 @@ import { validateSession, sessionErrorResponse } from './_validate.js';
 // Partner actions carry their own `token` and use validatePartner() internally.
 // All other actions are staff-only and require a valid staff session.
 const PARTNER_ACTIONS = new Set([
-    'get_merchant_equipment','create','list_for_partner','get_unread_total',
+    'get_merchant_equipment','create','list_for_partner','get_unread_total','get_partner_unread_counts',
     'get_detail','add_comment','get_linked_deployment','mark_delivered',
     'get_comments','get_rma_addable_items','add_items_to_rma','get_terminal_types'
 ]);
@@ -166,6 +166,17 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, total });
         }
 
+        if (action === 'get_partner_unread_counts') {
+            const { token } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data } = await supabase.from('support_tickets')
+                .select('id, partner_unread_count')
+                .eq('person_id', personId);
+            return res.status(200).json({ success: true, counts: data || [] });
+        }
+
         if (action === 'list_for_staff') {
             const { status, type, limit = 200, mine_name } = req.body;
             let query = supabase.from('support_tickets')
@@ -196,7 +207,7 @@ export default async function handler(req, res) {
                 if (!personId || ticket.person_id !== personId)
                     return res.status(403).json({ success: false, message: 'Access denied.' });
                 // Reset partner badge when partner opens the ticket
-                supabase.from('support_tickets').update({ partner_unread_count: 0 }).eq('id', ticket_id);
+                await supabase.from('support_tickets').update({ partner_unread_count: 0 }).eq('id', ticket_id);
             }
 
             return res.status(200).json({ success: true, ticket });

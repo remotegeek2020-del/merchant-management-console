@@ -354,6 +354,10 @@ async function viewTicket(ticketId) {
     document.getElementById('t-modal-sub').textContent = '';
     document.getElementById('t-modal-body').innerHTML = '<div style="padding:40px;text-align:center;color:var(--muted);">Loading...</div>';
     document.getElementById('t-modal').classList.add('open');
+    // Clear badge immediately in DOM and local state
+    const existing = allTickets.find(a => a.id === ticketId);
+    if (existing) { existing.partner_unread_count = 0; }
+    updatePartnerBadgeInDOM(ticketId, 0);
 
     const [ticketRes, commentsRes] = await Promise.all([
         fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_detail', ticket_id: ticketId, token }) }),
@@ -705,11 +709,11 @@ async function pollPartnerUnread() {
     try {
         const r = await fetch('/api/tickets', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'list_for_partner', token })
+            body: JSON.stringify({ action: 'get_partner_unread_counts', token })
         });
         const result = await r.json();
         if (!result.success) return;
-        (result.data || []).forEach(t => {
+        (result.counts || []).forEach(t => {
             const existing = allTickets.find(a => a.id === t.id);
             if (existing && existing.partner_unread_count !== t.partner_unread_count) {
                 existing.partner_unread_count = t.partner_unread_count;
