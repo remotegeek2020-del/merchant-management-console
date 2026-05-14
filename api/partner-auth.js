@@ -219,6 +219,71 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── TOGGLE PORTAL ACCESS (single or bulk) ────────────────────────────
+        if (action === 'toggle_portal') {
+            const { person_id, person_ids, active } = req.body;
+            if (typeof active !== 'boolean') return res.status(400).json({ success: false, message: 'active (boolean) required' });
+            if (person_ids && Array.isArray(person_ids)) {
+                await supabase.from('persons').update({ is_portal_active: active }).in('id', person_ids);
+                if (!active) {
+                    // Kill all active sessions for these users
+                    await supabase.from('partner_sessions').delete().in('person_id', person_ids);
+                }
+                return res.status(200).json({ success: true, updated: person_ids.length });
+            }
+            if (!person_id) return res.status(400).json({ success: false, message: 'person_id required' });
+            await supabase.from('persons').update({ is_portal_active: active }).eq('id', person_id);
+            if (!active) {
+                await supabase.from('partner_sessions').delete().eq('person_id', person_id);
+            }
+            return res.status(200).json({ success: true });
+        }
+
+        // ── BULK INVITE ───────────────────────────────────────────────────────
+        if (action === 'bulk_invite') {
+            const { person_ids } = req.body;
+            if (!Array.isArray(person_ids) || person_ids.length === 0) {
+                return res.status(400).json({ success: false, message: 'person_ids array required' });
+            }
+            const { data: persons } = await supabase.from('persons').select('id, full_name, email').in('id', person_ids);
+            if (!persons?.length) return res.status(400).json({ success: false, message: 'No persons found.' });
+
+            const results = { sent: [], skipped: [], failed: [] };
+            for (const person of persons) {
+                if (!person.email) { results.skipped.push(person.full_name); continue; }
+                try {
+                    const inviteToken = generateToken(32);
+                    const expires = new Date(Date.now() + 72 * 60 * 60 * 1000);
+                    await supabase.from('persons').update({ portal_invite_token: inviteToken, invite_expires_at: expires.toISOString(), is_portal_active: true }).eq('id', person.id);
+                    const inviteUrl = `${process.env.SITE_URL || 'https://portal.mypayprotec.com'}/partner?token=${inviteToken}`;
+                    if (process.env.POSTMARK_SERVER_TOKEN) {
+                        const { ServerClient } = await import('postmark');
+                        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                        await client.sendEmail({
+                            From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                            To: person.email,
+                            Subject: "You've been invited to the PayProTec Partner Portal",
+                            HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:520px;margin:0 auto;padding:40px 20px;border:1px solid #e2e8f0;border-radius:16px;">
+                                <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:36px;margin-bottom:24px;display:block;">
+                                <h2 style="color:#001e3c;font-size:22px;margin-bottom:8px;">Welcome to your Partner Portal</h2>
+                                <p style="color:#475569;line-height:1.6;margin-bottom:24px;">Hi <strong>${person.full_name}</strong>, you've been invited to access the PayProTec Partner Portal — your dedicated dashboard for tracking your merchant portfolio, volumes, and more.</p>
+                                <div style="text-align:center;margin:28px 0;">
+                                    <a href="${inviteUrl}" style="display:inline-block;padding:14px 32px;background:#0d9488;color:white;border-radius:10px;text-decoration:none;font-weight:700;font-size:15px;">Set Up My Account →</a>
+                                </div>
+                                <p style="color:#94a3b8;font-size:12px;line-height:1.5;">This link expires in 72 hours. If you didn't expect this, you can safely ignore it.</p>
+                            </div>`,
+                            TextBody: `Hi ${person.full_name}, you've been invited to the PayProTec Partner Portal. Set up your account: ${inviteUrl}`,
+                            MessageStream: 'outbound'
+                        });
+                    }
+                    results.sent.push(person.full_name);
+                } catch(e) {
+                    results.failed.push(person.full_name);
+                }
+            }
+            return res.status(200).json({ success: true, results });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {

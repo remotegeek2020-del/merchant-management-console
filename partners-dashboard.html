@@ -14,8 +14,19 @@
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; }
+        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; }
         .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
+        .partner-card.selected { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.18); transform: none; }
+        .card-checkbox { position: absolute; top: 14px; left: 14px; width: 18px; height: 18px; cursor: pointer; display: none; accent-color: #0d9488; z-index: 10; }
+        body.bulk-mode .card-checkbox { display: block; }
+        body.bulk-mode .partner-card { padding-left: 40px; }
+        #bulk-bar { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #001e3c; color: white; border-radius: 16px; padding: 14px 24px; display: flex; align-items: center; gap: 12px; box-shadow: 0 8px 32px rgba(0,0,0,.3); z-index: 9999; transition: opacity .2s; min-width: 520px; }
+        #bulk-bar.hidden { display: none; }
+        .bulk-btn { padding: 8px 18px; border-radius: 8px; border: none; font-weight: 800; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+        .bulk-btn.invite { background: #0d9488; color: white; }
+        .bulk-btn.enable { background: #16a34a; color: white; }
+        .bulk-btn.disable { background: #dc2626; color: white; }
+        .bulk-btn.clear { background: transparent; color: #94a3b8; border: 1px solid #334155; }
         .id-badge { background: #f1f5f9; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; border: 1px solid #e2e8f0; }
         .modal-tab-btn { padding: 14px 20px; border: none; background: none; font-weight: 700; color: #94a3b8; cursor: pointer; border-bottom: 3px solid transparent; }
         .active-tab { color: var(--pp-blue) !important; border-bottom-color: var(--pp-blue) !important; }
@@ -232,6 +243,10 @@ input[type=number] {
             <button onclick="openOnboardingWizard()" class="pagination-btn" style="background: var(--pp-blue); color: white; border: none; display: flex; align-items: center; gap: 8px;">
                 <span class="material-icons" style="font-size:18px;">person_add</span>
                 <span>ADD PARTNER</span>
+            </button>
+            <button id="bulk-mode-btn" onclick="toggleBulkMode()" class="pagination-btn" style="background:#f8fafc;border:1.5px solid #e2e8f0;color:#64748b;display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:18px;">checklist</span>
+                <span>BULK SELECT</span>
             </button>
         </div>
         <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Partner Network</h1>
@@ -1058,11 +1073,24 @@ async function submitOnboarding() {
         p.statusTrend = pTrend; 
 
         // Return your existing card HTML
+        const _safeName = p.name.replace(/'/g, String.fromCharCode(39));
+        const _safeEmail = (p.email||'').replace(/'/g, String.fromCharCode(39));
+        const _pActive = p.portal_active;
+        const _pSetup = p.portal_setup;
+        // Portal invite button: invite / resend if not fully active; otherwise just show status
+        const _inviteBtn = (!_pActive || !_pSetup)
+            ? `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${_safeName}','${_safeEmail}')" style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">${_pActive?'mark_email_read':'send'}</span> ${_pActive?'Resend Invite':'Invite to Portal'}</button>`
+            : `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${_safeName}','${_safeEmail}')" title="Click to resend invite" style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">verified</span> Portal Active</button>`;
+        // Portal toggle button
+        const _toggleBtn = _pActive
+            ? `<button onclick="event.stopPropagation();toggleSinglePortal('${p.id}','${_safeName}',true,event)" title="Disable portal access" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:2px;"><span class="material-icons" style="font-size:14px;">block</span></button>`
+            : `<button onclick="event.stopPropagation();toggleSinglePortal('${p.id}','${_safeName}',false,event)" title="Enable portal access" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:2px;"><span class="material-icons" style="font-size:14px;">lock_open</span></button>`;
         return `
-            <div class="partner-card" onclick="openPartnerDetails('${p.id}')">
+            <div class="partner-card" data-pid="${p.id}" onclick="_bulkMode?toggleCardSelect('${p.id}',event):openPartnerDetails('${p.id}')">
+                <input type="checkbox" class="card-checkbox" onclick="toggleCardSelect('${p.id}',event)">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px; flex:1;">${p.name}</h2>
-                    <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')" 
+                    <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
                             style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
                         <span class="material-icons" style="font-size:14px;">add</span> ID
                     </button>
@@ -1075,7 +1103,8 @@ async function submitOnboarding() {
                 `).join('')}
                 <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
                     <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">person</span> View Detail</button>
-                    <button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${p.name.replace(/'/g,String.fromCharCode(39))}','${(p.email||'').replace(/'/g,String.fromCharCode(39))}')" style="flex:1;background:${(p.portal_active&&p.portal_setup)?'#f0fdf4':'#f0fdfa'};border:1px solid ${(p.portal_active&&p.portal_setup)?'#bbf7d0':'#99f6e4'};color:${(p.portal_active&&p.portal_setup)?'#166534':'#0d9488'};border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;" ${(p.portal_active&&p.portal_setup)?'disabled':''}><span class="material-icons" style="font-size:14px;">${(p.portal_active&&p.portal_setup)?'verified':(p.portal_active?'mark_email_read':'send')}</span> ${(p.portal_active&&p.portal_setup)?'Portal Active':(p.portal_active?'Resend Invite':'Invite to Portal')}</button>
+                    ${_inviteBtn}
+                    ${_toggleBtn}
                 </div>
             </div>`;
     }).join('');
@@ -2226,4 +2255,144 @@ function loadScorecard(personId) {
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'partners'})});})();</script>
 <script src="/js/site-config.js"></script>
+
+<!-- BULK ACTION BAR -->
+<div id="bulk-bar" class="hidden">
+    <span id="bulk-count" style="font-weight:800;font-size:13px;margin-right:4px;">0 selected</span>
+    <button class="bulk-btn invite" onclick="bulkInvite()">
+        <span class="material-icons" style="font-size:15px;">send</span> Invite to Portal
+    </button>
+    <button class="bulk-btn enable" onclick="bulkTogglePortal(true)">
+        <span class="material-icons" style="font-size:15px;">lock_open</span> Enable Portal
+    </button>
+    <button class="bulk-btn disable" onclick="bulkTogglePortal(false)">
+        <span class="material-icons" style="font-size:15px;">block</span> Disable Portal
+    </button>
+    <div style="flex:1"></div>
+    <button class="bulk-btn" style="background:transparent;color:#94a3b8;border:1px solid #334155;" onclick="selectAll()">Select All</button>
+    <button class="bulk-btn" style="background:transparent;color:#94a3b8;border:1px solid #334155;" onclick="clearSelection()">Clear</button>
+    <button class="bulk-btn" style="background:transparent;color:#ef4444;border:1px solid #7f1d1d;" onclick="toggleBulkMode()">Exit</button>
+</div>
+
+<script>
+// ── BULK SELECTION ────────────────────────────────────────────────────────────
+let _bulkMode = false;
+const _selected = new Set();
+
+window.toggleBulkMode = function() {
+    _bulkMode = !_bulkMode;
+    document.body.classList.toggle('bulk-mode', _bulkMode);
+    const btn = document.getElementById('bulk-mode-btn');
+    if (btn) {
+        btn.style.background = _bulkMode ? '#0d9488' : '#f8fafc';
+        btn.style.color = _bulkMode ? 'white' : '#64748b';
+        btn.style.borderColor = _bulkMode ? '#0d9488' : '#e2e8f0';
+    }
+    if (!_bulkMode) { _selected.clear(); _updateBulkBar(); }
+};
+
+function _updateBulkBar() {
+    const bar = document.getElementById('bulk-bar');
+    const cnt = document.getElementById('bulk-count');
+    if (!bar) return;
+    bar.classList.toggle('hidden', _selected.size === 0);
+    if (cnt) cnt.textContent = _selected.size + ' selected';
+    // Reflect selection on cards
+    document.querySelectorAll('.partner-card[data-pid]').forEach(card => {
+        const pid = card.getAttribute('data-pid');
+        card.classList.toggle('selected', _selected.has(pid));
+        const cb = card.querySelector('.card-checkbox');
+        if (cb) cb.checked = _selected.has(pid);
+    });
+}
+
+window.toggleCardSelect = function(pid, ev) {
+    if (ev) ev.stopPropagation();
+    if (_selected.has(pid)) _selected.delete(pid); else _selected.add(pid);
+    _updateBulkBar();
+};
+
+window.selectAll = function() {
+    document.querySelectorAll('.partner-card[data-pid]').forEach(card => {
+        _selected.add(card.getAttribute('data-pid'));
+    });
+    _updateBulkBar();
+};
+
+window.clearSelection = function() { _selected.clear(); _updateBulkBar(); };
+
+window.bulkInvite = async function() {
+    const ids = [..._selected];
+    if (!ids.length) return;
+    const names = ids.map(id => allPartners.find(p => p.id === id)?.name || id).join(', ');
+    const c = await Swal.fire({
+        title: 'Send Bulk Invites?',
+        html: `<p>Send portal invite to <b>${ids.length}</b> partner(s)?</p><p style="font-size:12px;color:#64748b;margin-top:8px;">${names}</p>`,
+        icon: 'question', showCancelButton: true,
+        confirmButtonColor: '#0d9488', confirmButtonText: 'Send Invites'
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({ title: 'Sending invites...', didOpen: () => Swal.showLoading() });
+    try {
+        const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'bulk_invite', person_ids: ids }) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message);
+        const r = d.results;
+        Swal.fire({ icon: 'success', title: 'Done!',
+            html: `<b>${r.sent.length}</b> invite(s) sent` + (r.skipped.length ? `<br><span style="color:#d97706">${r.skipped.length} skipped (no email)</span>` : '') + (r.failed.length ? `<br><span style="color:#ef4444">${r.failed.length} failed</span>` : ''),
+            confirmButtonColor: '#0d9488' });
+        clearSelection();
+        loadPartners();
+    } catch (err) { Swal.fire({ icon: 'error', title: 'Failed', text: err.message }); }
+};
+
+window.bulkTogglePortal = async function(active) {
+    const ids = [..._selected];
+    if (!ids.length) return;
+    const label = active ? 'enable' : 'disable';
+    const c = await Swal.fire({
+        title: (active ? 'Enable' : 'Disable') + ' Portal Access?',
+        html: `<p>${active ? 'Enable' : 'Disable'} portal access for <b>${ids.length}</b> partner(s)?</p>` + (!active ? '<p style="font-size:12px;color:#ef4444;">Active sessions will be invalidated immediately.</p>' : ''),
+        icon: active ? 'question' : 'warning', showCancelButton: true,
+        confirmButtonColor: active ? '#16a34a' : '#dc2626',
+        confirmButtonText: active ? 'Enable' : 'Disable'
+    });
+    if (!c.isConfirmed) return;
+    Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+    try {
+        const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle_portal', person_ids: ids, active }) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message);
+        Swal.fire({ icon: 'success', title: 'Done!', text: `Portal access ${label}d for ${d.updated} partner(s).`, confirmButtonColor: '#0d9488' });
+        clearSelection();
+        loadPartners();
+    } catch (err) { Swal.fire({ icon: 'error', title: 'Failed', text: err.message }); }
+};
+
+// Single card portal toggle
+window.toggleSinglePortal = async function(personId, name, currentlyActive, ev) {
+    if (ev) ev.stopPropagation();
+    if (_bulkMode) { toggleCardSelect(personId, ev); return; }
+    const goingActive = !currentlyActive;
+    const c = await Swal.fire({
+        title: (goingActive ? 'Enable' : 'Disable') + ' Portal Access?',
+        html: `<p>${goingActive ? 'Enable' : 'Disable'} portal access for <b>${name}</b>?</p>` + (!goingActive ? '<p style="font-size:12px;color:#ef4444;margin-top:8px;">Their active sessions will be invalidated.</p>' : ''),
+        icon: goingActive ? 'question' : 'warning', showCancelButton: true,
+        confirmButtonColor: goingActive ? '#16a34a' : '#dc2626',
+        confirmButtonText: goingActive ? 'Enable' : 'Disable'
+    });
+    if (!c.isConfirmed) return;
+    try {
+        const res = await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'toggle_portal', person_id: personId, active: goingActive }) });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message);
+        Swal.fire({ icon: 'success', title: goingActive ? 'Portal Enabled' : 'Portal Disabled',
+            text: name + ' portal access ' + (goingActive ? 'enabled' : 'disabled') + '.', confirmButtonColor: '#0d9488', timer: 2000, showConfirmButton: false });
+        loadPartners();
+    } catch (err) { Swal.fire({ icon: 'error', title: 'Failed', text: err.message }); }
+};
+</script>
 </body>
