@@ -97,6 +97,7 @@
     <a class="nav-link" href="#tickets-detail"><span class="method-pill get">GET</span> Get Ticket</a>
     <a class="nav-link" href="#tickets-create"><span class="method-pill post">POST</span> Create Ticket</a>
     <div class="nav-section">Reference</div>
+    <a class="nav-link" href="#use-cases">Use Cases</a>
     <a class="nav-link" href="#changelog">Changelog</a>
 </div>
 
@@ -405,6 +406,64 @@
             </div>
         </div>
     </div>
+
+    <!-- USE CASES -->
+    <h2 id="use-cases">Use Cases</h2>
+    <p>Real examples of what partners have built or can build using this API.</p>
+
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:16px;margin:20px 0 32px;">
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">📊</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Live Portfolio Dashboard</div>
+            <p style="margin:0;font-size:13px;">Build your own internal dashboard that shows all your merchants, their volume trends, and at-risk accounts — refreshed automatically without logging into the portal. Use <code>GET /merchants</code> on a schedule to keep it current.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">📋</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Google Sheets Sync</div>
+            <p style="margin:0;font-size:13px;">Use Google Apps Script to call <code>GET /merchants</code> every morning and populate a spreadsheet with your full merchant list, statuses, and volume numbers. Share it with your team without giving them portal access.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">🔔</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Slack / Teams Alerts</div>
+            <p style="margin:0;font-size:13px;">Poll <code>GET /tickets?status=open</code> every hour and post a summary to your team's Slack or Teams channel. Catch new support issues without anyone having to remember to check the portal.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">🤝</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">CRM Integration</div>
+            <p style="margin:0;font-size:13px;">Sync your merchant data into HubSpot, Salesforce, or any CRM using <code>GET /merchants</code>. Keep your sales pipeline and merchant portfolio in one place so your team has full context when talking to a merchant.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">🎫</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Auto-Submit Tickets</div>
+            <p style="margin:0;font-size:13px;">Integrate <code>POST /tickets</code> into your own merchant-facing tools. When a merchant reports an issue through your system, automatically open a support ticket on their behalf — already linked to their merchant record.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">📱</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Mobile App for Your Team</div>
+            <p style="margin:0;font-size:13px;">Build a lightweight mobile app for your sales reps using <code>GET /merchants/:id</code>. Before a site visit, they can pull up the merchant's current status, volume, equipment, and open tickets — all from their phone.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">📈</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Monthly Partner Reports</div>
+            <p style="margin:0;font-size:13px;">Automate your monthly business review. Pull merchant counts, volume totals, and ticket stats via the API and generate a formatted PDF or email report — no manual data collection required.</p>
+        </div>
+
+        <div style="background:white;border:1px solid var(--border);border-radius:12px;padding:20px;box-shadow:var(--shadow-sm);">
+            <div style="font-size:24px;margin-bottom:10px;">⚡</div>
+            <div style="font-size:14px;font-weight:800;margin-bottom:6px;">Zapier / Make Workflows</div>
+            <p style="margin:0;font-size:13px;">Connect the API to Zapier or Make (formerly Integromat) using their HTTP module. Trigger workflows when you detect new merchants, ticket updates, or volume changes — no code required.</p>
+        </div>
+
+    </div>
+
+    <div class="alert alert-info">Built something with the API? Contact your account manager — we'd love to feature it here.</div>
 
     <!-- CHANGELOG -->
     <h2 id="changelog">Changelog</h2>
