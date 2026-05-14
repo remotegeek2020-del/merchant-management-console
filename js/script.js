@@ -485,6 +485,114 @@ function toggleJarvis() {
     if (sidebar) sidebar.classList.toggle('active');
 }
 
+function _jarvisMd(text) {
+    return text
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.+?)\*/g, '<em>$1</em>')
+        .replace(/^### (.+)$/gm, '<h4>$1</h4>')
+        .replace(/^## (.+)$/gm, '<h3>$1</h3>')
+        .replace(/^→ (.+)$/gm, '<div style="margin:4px 0;">→ $1</div>')
+        .replace(/^[-•] (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>')
+        .replace(/`(.+?)`/g, '<code>$1</code>')
+        .replace(/---/g, '<hr>')
+        .replace(/\n\n/g, '<br><br>')
+        .replace(/\n/g, '<br>');
+}
+
+window.clearJarvisHistory = async function() {
+    const c = await Swal.fire({ title: 'Clear chat history?', icon: 'question', showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'Clear' });
+    if (!c.isConfirmed) return;
+    const container = document.getElementById('jarvis-messages');
+    if (container) container.innerHTML = '<div class="ai-bubble">Memory cleared. Fresh start, Sir.</div>';
+    const userId = localStorage.getItem('pp_userid');
+    if (userId) {
+        fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'clear_history', userid: userId }) }).catch(() => {});
+    }
+};
+
+async function askJarvis() {
+    const input = document.getElementById('jarvis-input');
+    const container = document.getElementById('jarvis-messages');
+    const query = input.value.trim();
+    if (!query) return;
+
+    input.disabled = true;
+    container.innerHTML += `<div style="text-align:right;margin-bottom:10px;"><span style="display:inline-block;background:#004990;color:white;border-radius:12px 12px 2px 12px;padding:9px 14px;font-size:13px;max-width:90%;">${query}</span></div>`;
+    input.value = '';
+    container.scrollTop = container.scrollHeight;
+
+    const loadingId = 'jarvis-' + Date.now();
+    container.innerHTML += `<div class="ai-bubble" id="${loadingId}">
+        <div style="display:flex;align-items:center;gap:8px;color:#7dd3fc;">
+            <span class="material-icons" style="font-size:16px;animation:spin 1s linear infinite;">sync</span>
+            <span style="font-size:12px;">Consulting data systems...</span>
+        </div>
+    </div>`;
+    container.scrollTop = container.scrollHeight;
+
+    try {
+        const res = await fetch('/api/oracle-agent', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                query,
+                userId: localStorage.getItem('pp_userid'),
+                userName: localStorage.getItem('pp_user_first_name')
+            })
+        });
+        const data = await res.json();
+        const el = document.getElementById(loadingId);
+        if (!el) return;
+
+        let html = '';
+
+        // Tool call tags
+        if (data.tools_used && data.tools_used.length > 0) {
+            const toolLabels = {
+                get_dashboard_summary: 'Dashboard Summary',
+                search_merchants: 'Merchant Search',
+                get_merchant_detail: 'Merchant Detail',
+                get_at_risk_merchants: 'At-Risk Analysis',
+                get_open_tickets: 'Support Tickets',
+                get_pending_tasks: 'Task Queue',
+                get_open_returns: 'Returns',
+                get_recent_deployments: 'Deployments'
+            };
+            html += '<div style="margin-bottom:10px;">';
+            data.tools_used.forEach(t => {
+                html += `<span class="jarvis-tool-tag"><span class="material-icons" style="font-size:10px;">database</span>${toolLabels[t] || t}</span>`;
+            });
+            html += '</div>';
+        }
+
+        // Main answer
+        html += _jarvisMd(data.answer || 'No response.');
+
+        // Action buttons
+        if (data.suggestions && data.suggestions.length > 0) {
+            html += '<div style="margin-top:12px;border-top:1px solid #334155;padding-top:10px;">';
+            html += '<div style="font-size:10px;font-weight:800;color:#64748b;letter-spacing:.5px;margin-bottom:6px;text-transform:uppercase;">Quick Actions</div>';
+            data.suggestions.forEach(s => {
+                const safeLabel = s.label.replace(/"/g, '&quot;');
+                const safeUrl = s.url.replace(/"/g, '&quot;');
+                html += `<button class="jarvis-action-btn" onclick="window.location.href='${safeUrl}'"><span class="material-icons" style="font-size:13px;">open_in_new</span>${safeLabel}</button>`;
+            });
+            html += '</div>';
+        }
+
+        el.innerHTML = html;
+    } catch (err) {
+        const el = document.getElementById(loadingId);
+        if (el) el.innerHTML = '<span style="color:#ef4444;">Jarvis is offline. Check API connectivity.</span>';
+    }
+
+    input.disabled = false;
+    input.focus();
+    container.scrollTop = container.scrollHeight;
+}
+
 async function teachJarvis(userQuestion, wrongAnswer) {
     const { value: correction } = await Swal.fire({
         title: 'Correct Jarvis',

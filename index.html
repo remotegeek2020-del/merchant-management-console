@@ -309,23 +309,44 @@
 <div id="jarvis-sidebar" class="oracle-sidebar" style="display: none;">
     <div class="oracle-header">
         <div style="display:flex; align-items:center; gap:10px;">
-            <span class="material-icons" style="color: #38bdf8;">blur_on</span>
-            <span style="font-weight: 800; letter-spacing: 1px;">JARVIS</span>
+            <span class="material-icons" style="color: #38bdf8; animation: jarvis-pulse 2s ease-in-out infinite;">blur_on</span>
+            <div>
+                <div style="font-weight: 800; letter-spacing: 1px; font-size:13px;">JARVIS</div>
+                <div style="font-size:9px; color:#7dd3fc; font-weight:500; letter-spacing:.5px;">AI BUSINESS INTELLIGENCE</div>
+            </div>
         </div>
-        <button onclick="toggleJarvis()" style="background:none; border:none; color:white; cursor:pointer;">
-            <span class="material-icons">close</span>
-        </button>
+        <div style="display:flex;gap:6px;align-items:center;">
+            <button onclick="clearJarvisHistory()" title="Clear chat" style="background:none;border:none;color:#475569;cursor:pointer;padding:4px;">
+                <span class="material-icons" style="font-size:16px;">delete_sweep</span>
+            </button>
+            <button onclick="toggleJarvis()" style="background:none; border:none; color:white; cursor:pointer;">
+                <span class="material-icons">close</span>
+            </button>
+        </div>
     </div>
 
     <div id="jarvis-messages" class="oracle-chat-body">
-        <div class="ai-bubble">System core online. How can I assist you, Sir?</div>
+        <div class="ai-bubble jarvis-welcome">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span class="material-icons" style="color:#38bdf8;font-size:20px;">blur_on</span>
+                <b>System core online.</b>
+            </div>
+            <div style="font-size:12px;color:#94a3b8;line-height:1.6;">I can analyze your business data and suggest actions. Try asking:
+                <ul style="margin:8px 0 0 16px;padding:0;font-size:11px;">
+                    <li>What needs my attention today?</li>
+                    <li>Show me at-risk merchants</li>
+                    <li>Any overdue tasks or tickets?</li>
+                    <li>Search for [merchant name]</li>
+                </ul>
+            </div>
+        </div>
     </div>
 
     <div class="oracle-footer">
-        <input type="text" id="jarvis-input" placeholder="Ask Jarvis..." 
+        <input type="text" id="jarvis-input" placeholder="Ask Jarvis anything..."
                onkeypress="if(event.key==='Enter') askJarvis()">
-        <button onclick="askJarvis()" style="background: #38bdf8; border: none; border-radius: 4px; cursor: pointer; padding: 5px 10px;">
-            <span class="material-icons" style="color: #0f172a;">send</span>
+        <button onclick="askJarvis()" style="background: #38bdf8; border: none; border-radius: 8px; cursor: pointer; padding: 8px 12px; display:flex;align-items:center;">
+            <span class="material-icons" style="color: #0f172a; font-size:18px;">send</span>
         </button>
     </div>
 </div>
@@ -333,6 +354,20 @@
 <button id="jarvis-trigger" class="oracle-float-btn" onclick="toggleJarvis()" style="display:none;">
     <span class="material-icons">blur_on</span>
 </button>
+
+<style>
+@keyframes jarvis-pulse { 0%,100%{opacity:1;} 50%{opacity:.5;} }
+.jarvis-tool-tag { display:inline-flex;align-items:center;gap:4px;background:#0f2744;border:1px solid #1e3a5f;color:#7dd3fc;border-radius:99px;padding:2px 10px;font-size:10px;font-weight:700;margin:2px 2px 6px 0; }
+.jarvis-action-btn { display:inline-flex;align-items:center;gap:6px;background:#0d9488;color:white;border:none;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;cursor:pointer;margin:4px 4px 0 0; }
+.jarvis-action-btn:hover { background:#0f766e; }
+.ai-bubble { background:#1e293b;color:#e2e8f0;border-radius:12px 12px 12px 2px;padding:12px 16px;margin-bottom:10px;font-size:13px;line-height:1.6;max-width:95%; }
+.ai-bubble h3,.ai-bubble h4 { color:#38bdf8;margin:10px 0 4px; font-size:13px; }
+.ai-bubble strong { color:#f1f5f9; }
+.ai-bubble ul,.ai-bubble ol { margin:6px 0 6px 18px;padding:0; }
+.ai-bubble li { margin-bottom:3px; }
+.ai-bubble hr { border:0;border-top:1px solid #334155;margin:10px 0; }
+.ai-bubble code { background:#0f172a;color:#7dd3fc;padding:1px 6px;border-radius:4px;font-size:11px; }
+</style>
 
 <script>
 (function() {
