@@ -156,7 +156,7 @@ export default async function handler(req, res) {
         if (action === 'list_for_staff') {
             const { status, type, limit = 200, mine_name } = req.body;
             let query = supabase.from('support_tickets')
-                .select('id, ticket_number, type, category, subject, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, has_unread_partner_comment, unread_count, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
+                .select('id, ticket_number, type, category, subject, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, has_unread_partner_comment, unread_count, partner_unread_count, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
@@ -182,6 +182,8 @@ export default async function handler(req, res) {
                 const personId = await validatePartner(token);
                 if (!personId || ticket.person_id !== personId)
                     return res.status(403).json({ success: false, message: 'Access denied.' });
+                // Reset partner badge when partner opens the ticket
+                supabase.from('support_tickets').update({ partner_unread_count: 0 }).eq('id', ticket_id);
             }
 
             return res.status(200).json({ success: true, ticket });
@@ -214,6 +216,11 @@ export default async function handler(req, res) {
 
             const { error } = await supabase.from('support_tickets').update(updates).eq('id', ticket_id);
             if (error) throw error;
+
+            // Notify partner of changes (status, priority, assignment)
+            if (changes.length > 0 && oldTicket?.person_id) {
+                supabase.rpc('increment_partner_unread', { tid: ticket_id });
+            }
 
             // When ticket is closed, clear ticket_id from linked return so its badge disappears
             if (updates.status === 'closed') {
@@ -313,6 +320,11 @@ export default async function handler(req, res) {
                 authorName = staff_name || 'Staff';
 
                 await supabase.from('support_tickets').update({ updated_at: new Date().toISOString() }).eq('id', ticket_id);
+
+                // Notify partner of new staff activity (non-internal only)
+                if (!is_internal) {
+                    supabase.rpc('increment_partner_unread', { tid: ticket_id });
+                }
 
                 // Email partner for non-internal staff notes
                 if (!is_internal) {
@@ -473,6 +485,7 @@ export default async function handler(req, res) {
                         change_summary: `Bulk deployment created: <strong>${deploymentId}</strong> — ${bulk_items.length} unit(s) being prepared for dispatch.`,
                         is_internal: false
                     });
+                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
 
                 } else {
@@ -516,6 +529,7 @@ export default async function handler(req, res) {
                         change_summary: `Deployment record created: <strong>${deploymentId}</strong> — your hardware is being prepared for dispatch.`,
                         is_internal: false
                     });
+                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
                 }
 
@@ -571,6 +585,7 @@ export default async function handler(req, res) {
                         change_summary: `Bulk Return/RMA initiated: <strong>${finalReturnId}</strong> — ${equipIds.length} unit(s) marked In Transit.`,
                         is_internal: false
                     });
+                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, return_id: finalReturnId });
 
                 } else {
@@ -613,6 +628,7 @@ export default async function handler(req, res) {
                         change_summary: `Return/RMA initiated: <strong>${finalReturnId}</strong> — unit is being returned for inspection.`,
                         is_internal: false
                     });
+                    supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     return res.status(200).json({ success: true, return_id: finalReturnId });
                 }
             }
