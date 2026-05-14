@@ -336,6 +336,9 @@
 
 <script>
 (function() {
+    const SUPABASE_URL  = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+    const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow';
+
     function showBadge(id, count) {
         const el = document.getElementById('badge-' + id);
         if (!el) return;
@@ -347,9 +350,12 @@
         }
     }
 
+    let _fetching = false;
     async function loadNotifBadges() {
+        if (_fetching) return;
+        _fetching = true;
         const userid = localStorage.getItem('pp_userid');
-        if (!userid) return;
+        if (!userid) { _fetching = false; return; }
         try {
             const r = await fetch('/api/notifications', {
                 method: 'POST',
@@ -368,19 +374,39 @@
             showBadge('tasks',       c.tasks);
             showBadge('ideas',       c.ideas);
         } catch (e) { /* silent */ }
+        finally { _fetching = false; }
+    }
+
+    function startRealtime() {
+        if (typeof window.supabase === 'undefined' || !window.supabase.createClient) return;
+        try {
+            const _sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+            _sb.channel('notif-pulse')
+                .on('postgres_changes', {
+                    event: 'UPDATE',
+                    schema: 'public',
+                    table: 'notification_pulse'
+                }, () => loadNotifBadges())
+                .subscribe();
+        } catch (e) { /* silent fallback to polling */ }
+    }
+
+    function init() {
+        loadNotifBadges();
+        startRealtime();
+        // Fallback poll every 30s in case websocket drops
+        setInterval(loadNotifBadges, 30000);
+        // Refresh immediately when tab becomes visible
+        document.addEventListener('visibilitychange', () => {
+            if (!document.hidden) loadNotifBadges();
+        });
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', loadNotifBadges);
+        document.addEventListener('DOMContentLoaded', init);
     } else {
-        loadNotifBadges();
+        init();
     }
-    // Poll every 15 seconds
-    setInterval(loadNotifBadges, 15000);
-    // Refresh immediately when tab becomes visible again
-    document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) loadNotifBadges();
-    });
 })();
 </script>
 
