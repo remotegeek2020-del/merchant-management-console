@@ -1,74 +1,59 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 
-const SECTIONS = ['partners', 'merchants', 'inventory', 'deployments', 'returns', 'tickets', 'tasks', 'ideas'];
+const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
 
     if (req.method !== 'POST') return res.status(405).json({ success: false });
-    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
-    const { action, userid, section } = req.body;
 
+    const { action, userid } = req.body;
     if (!userid) return res.status(400).json({ success: false, message: 'userid required' });
 
-    // Mark a section as seen for this user
-    if (action === 'mark_seen') {
-        if (!section || !SECTIONS.includes(section)) return res.status(400).json({ success: false });
-        await supabase.from('user_section_seen').upsert(
-            { userid, section, last_seen_at: new Date().toISOString() },
-            { onConflict: 'userid,section' }
-        );
-        return res.status(200).json({ success: true });
-    }
-
-    // Get new-item counts per section for this user
     if (action === 'get_counts') {
-        // Load this user's last_seen timestamps from DB
-        const { data: seenRows } = await supabase
-            .from('user_section_seen')
-            .select('section, last_seen_at')
-            .eq('userid', userid);
-
-        const seenMap = {};
-        (seenRows || []).forEach(r => { seenMap[r.section] = r.last_seen_at; });
-
-        // Baseline: start of today — never show activity older than today
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayISO = todayStart.toISOString();
-
-        // For each section, since = max(last_seen_at, todayStart)
-        function since(s) {
-            const ls = seenMap[s];
-            if (!ls) return todayISO;
-            return ls > todayISO ? ls : todayISO;
-        }
-
-        async function count(table, col, sinceISO, extra) {
+        async function count(table, filter) {
             try {
-                let q = supabase.from(table).select('*', { count: 'exact', head: true }).gte(col, sinceISO);
-                if (extra) q = extra(q);
+                let q = supabase.from(table).select('*', { count: 'exact', head: true });
+                q = filter(q);
                 const { count: n } = await q;
                 return n || 0;
             } catch { return 0; }
         }
 
-        const [partners, deployments, returns_, inventory, merchants, tickets, tasks, ideas] = await Promise.all([
-            count('persons',         'enrolled_at',    since('partners')),
-            count('deployments',     'created_at',     since('deployments')),
-            count('returns',         'created_at',     since('returns')),
-            count('equipments',      'created_at',     since('inventory')),
-            count('merchants',       'enrollment_date', since('merchants')),
-            count('support_tickets', 'created_at',     since('tickets')),
-            count('merchant_tasks',  'created_at',     since('tasks'), q => q.eq('assigned_to', userid)),
-            count('feature_ideas',   'created_at',     since('ideas')),
+        const [tickets, returns_, deployments, tasks, ideas] = await Promise.all([
+            // Tickets: open/in_progress where partner has replied (needs staff attention)
+            count('support_tickets', q =>
+                q.in('status', ['open', 'in_progress', 'pending_partner'])
+                 .gt('unread_count', 0)
+            ),
+            // Returns: currently open
+            count('returns', q => q.eq('status', 'Open')),
+            // Deployments: pending
+            count('deployments', q => q.eq('status', 'Pending')),
+            // Tasks: pending and assigned to this user
+            count('merchant_tasks', q =>
+                q.eq('assigned_to', userid).eq('status', 'Pending')
+            ),
+            // Ideas: open/pending — awaiting staff review
+            count('feature_ideas', q =>
+                q.not('status', 'in', '(Done,Closed,Rejected)')
+            ),
         ]);
 
         return res.status(200).json({
             success: true,
-            counts: { partners, deployments, returns: returns_, inventory, merchants, tickets, tasks, ideas }
+            counts: {
+                partners: 0,
+                merchants: 0,
+                inventory: 0,
+                deployments,
+                returns: returns_,
+                tickets,
+                tasks,
+                ideas,
+            }
         });
     }
 

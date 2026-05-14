@@ -375,8 +375,12 @@
     } else {
         loadNotifBadges();
     }
-    // Poll every 30 seconds for real-time feel
-    setInterval(loadNotifBadges, 30000);
+    // Poll every 15 seconds
+    setInterval(loadNotifBadges, 15000);
+    // Refresh immediately when tab becomes visible again
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) loadNotifBadges();
+    });
 })();
 </script>
 
