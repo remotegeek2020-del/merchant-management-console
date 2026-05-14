@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>API Reference | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        *,*::before,*::after{box-sizing:border-box;}
+        :root{--blue:#004990;--teal:#0d9488;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--muted:#64748b;--code-bg:#0f172a;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);}
+        body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);-webkit-font-smoothing:antialiased;display:flex;min-height:100vh;}
+        /* SIDEBAR */
+        .sidebar{width:240px;background:var(--code-bg);flex-shrink:0;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;}
+        .sidebar-logo{padding:20px 18px;border-bottom:1px solid rgba(255,255,255,0.08);}
+        .sidebar-logo img{height:22px;filter:brightness(0) invert(1);}
+        .sidebar-logo .badge{display:inline-block;margin-top:6px;background:#0d9488;color:white;font-size:9px;font-weight:800;padding:1px 7px;border-radius:99px;letter-spacing:0.4px;}
+        .nav-section{padding:18px 18px 4px;font-size:9px;font-weight:800;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:0.8px;}
+        .nav-link{display:flex;align-items:center;gap:8px;padding:7px 18px;font-size:12px;font-weight:600;color:rgba(255,255,255,0.55);text-decoration:none;transition:all 0.15s;border-left:3px solid transparent;}
+        .nav-link:hover{color:white;background:rgba(255,255,255,0.06);}
+        .nav-link.active{color:#38bdf8;border-left-color:#38bdf8;background:rgba(56,189,248,0.08);}
+        .method-pill{font-size:9px;font-weight:800;padding:1px 6px;border-radius:4px;font-family:'DM Mono',monospace;}
+        .get{background:#166534;color:#bbf7d0;}
+        .post{background:#1e3a5f;color:#bfdbfe;}
+        /* MAIN */
+        .main{flex:1;min-width:0;padding:40px 48px 80px;}
+        h1{font-size:2rem;font-weight:800;letter-spacing:-0.5px;margin:0 0 6px;}
+        h2{font-size:1.3rem;font-weight:800;margin:56px 0 6px;padding-bottom:10px;border-bottom:1px solid var(--border);}
+        h3{font-size:1rem;font-weight:800;margin:32px 0 8px;}
+        p{font-size:14px;line-height:1.7;color:var(--muted);margin:0 0 14px;}
+        a{color:var(--teal);text-decoration:none;}
+        a:hover{text-decoration:underline;}
+        /* ENDPOINT */
+        .endpoint{background:white;border:1px solid var(--border);border-radius:12px;margin-bottom:24px;overflow:hidden;box-shadow:var(--shadow-sm);}
+        .endpoint-header{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid var(--border);}
+        .method-badge{font-size:11px;font-weight:800;padding:3px 10px;border-radius:6px;font-family:'DM Mono',monospace;flex-shrink:0;}
+        .endpoint-path{font-family:'DM Mono',monospace;font-size:14px;font-weight:500;color:var(--text);}
+        .endpoint-desc{font-size:12px;color:var(--muted);margin-left:auto;}
+        .endpoint-body{padding:18px;}
+        /* PARAMS TABLE */
+        .params-table{width:100%;border-collapse:collapse;font-size:12px;margin:10px 0 0;}
+        .params-table th{text-align:left;padding:7px 12px;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;background:#f8fafc;border-bottom:1px solid var(--border);}
+        .params-table td{padding:9px 12px;border-bottom:1px solid #f8fafc;vertical-align:top;}
+        .params-table tr:last-child td{border-bottom:none;}
+        .param-name{font-family:'DM Mono',monospace;font-size:11px;font-weight:600;color:#0f172a;}
+        .param-type{font-family:'DM Mono',monospace;font-size:10px;color:#7c3aed;background:#f5f3ff;padding:1px 6px;border-radius:4px;}
+        .param-req{font-size:10px;font-weight:700;color:#dc2626;}
+        .param-opt{font-size:10px;font-weight:700;color:#94a3b8;}
+        /* CODE BLOCKS */
+        .code-block{background:var(--code-bg);border-radius:10px;overflow:hidden;margin:12px 0;}
+        .code-block-header{padding:8px 14px;background:rgba(255,255,255,0.05);font-size:10px;font-weight:700;color:rgba(255,255,255,0.4);text-transform:uppercase;letter-spacing:0.5px;display:flex;justify-content:space-between;align-items:center;}
+        .copy-btn{background:none;border:1px solid rgba(255,255,255,0.15);color:rgba(255,255,255,0.4);padding:2px 9px;border-radius:4px;font-size:10px;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;}
+        .copy-btn:hover{border-color:rgba(255,255,255,0.4);color:white;}
+        pre{margin:0;padding:16px;overflow-x:auto;font-family:'DM Mono',monospace;font-size:12px;line-height:1.6;color:#e2e8f0;}
+        .hl-key{color:#7dd3fc;}
+        .hl-str{color:#86efac;}
+        .hl-num{color:#fda4af;}
+        .hl-bool{color:#c4b5fd;}
+        .hl-comment{color:#64748b;font-style:italic;}
+        /* ALERTS */
+        .alert{padding:12px 16px;border-radius:8px;font-size:13px;margin:16px 0;border-left:3px solid;}
+        .alert-info{background:#f0f9ff;border-color:#0ea5e9;color:#0369a1;}
+        .alert-warn{background:#fffbeb;border-color:#f59e0b;color:#92400e;}
+        /* RATE LIMIT TABLE */
+        .tier-table{width:100%;border-collapse:collapse;font-size:13px;margin:12px 0;}
+        .tier-table th{padding:10px 14px;text-align:left;font-size:11px;font-weight:800;color:var(--muted);text-transform:uppercase;background:#f8fafc;border-bottom:1px solid var(--border);}
+        .tier-table td{padding:11px 14px;border-bottom:1px solid var(--border);}
+        .tier-free{color:#0d9488;font-weight:700;}
+        .tier-std{color:#2563eb;font-weight:700;}
+        .tier-ent{color:#7c3aed;font-weight:700;}
+        /* ERROR TABLE */
+        .error-table{width:100%;border-collapse:collapse;font-size:12px;}
+        .error-table th{padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;background:#f8fafc;border-bottom:1px solid var(--border);}
+        .error-table td{padding:10px 12px;border-bottom:1px solid #f8fafc;vertical-align:top;}
+        .error-table tr:last-child td{border-bottom:none;}
+        code{font-family:'DM Mono',monospace;font-size:12px;background:#f1f5f9;padding:1px 6px;border-radius:4px;color:#0f172a;}
+        @media(max-width:700px){.sidebar{display:none;}.main{padding:24px;}}
+    </style>
+</head>
+<body>
+
+<!-- SIDEBAR -->
+<div class="sidebar">
+    <div class="sidebar-logo">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProTec">
+        <div class="badge">API v1</div>
+    </div>
+    <div class="nav-section">Getting Started</div>
+    <a class="nav-link active" href="#intro">Introduction</a>
+    <a class="nav-link" href="#auth">Authentication</a>
+    <a class="nav-link" href="#rate-limits">Rate Limits</a>
+    <a class="nav-link" href="#errors">Errors</a>
+    <div class="nav-section">Endpoints</div>
+    <a class="nav-link" href="#profile"><span class="method-pill get">GET</span> Profile</a>
+    <a class="nav-link" href="#merchants-list"><span class="method-pill get">GET</span> List Merchants</a>
+    <a class="nav-link" href="#merchants-detail"><span class="method-pill get">GET</span> Get Merchant</a>
+    <a class="nav-link" href="#tickets-list"><span class="method-pill get">GET</span> List Tickets</a>
+    <a class="nav-link" href="#tickets-detail"><span class="method-pill get">GET</span> Get Ticket</a>
+    <a class="nav-link" href="#tickets-create"><span class="method-pill post">POST</span> Create Ticket</a>
+    <div class="nav-section">Reference</div>
+    <a class="nav-link" href="#changelog">Changelog</a>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+    <h1 id="intro">PayProTec API Reference</h1>
+    <p>The PayProTec REST API lets you access your partner data programmatically — merchants, tickets, and your profile. Use it to build integrations, automate workflows, or sync data with your own tools.</p>
+    <p><strong>Base URL:</strong> <code>https://console.mypayprotec.com/api/v1</code></p>
+    <div class="alert alert-info">All requests and responses use <strong>JSON</strong>. Every response includes a <code>success</code> boolean. On success, data lives under the <code>data</code> key. On failure, the error is under the <code>error</code> key.</div>
+
+    <!-- AUTH -->
+    <h2 id="auth">Authentication</h2>
+    <p>Every request must include your API key in the <code>Authorization</code> header. Generate keys from your Partner Portal under <strong>Settings → API Keys</strong>.</p>
+
+    <div class="code-block">
+        <div class="code-block-header">Request Header <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>Authorization: Bearer pk_live_your_api_key_here</pre>
+    </div>
+
+    <div class="alert alert-warn"><strong>Keep your key secret.</strong> It grants full read access to your merchant and ticket data. Never expose it in client-side code or public repositories. If compromised, revoke it immediately from your Settings page.</div>
+
+    <!-- RATE LIMITS -->
+    <h2 id="rate-limits">Rate Limits</h2>
+    <p>Rate limits are enforced per API key. Every response includes headers showing your current usage.</p>
+
+    <table class="tier-table">
+        <thead><tr><th>Tier</th><th>Requests / Minute</th><th>Requests / Day</th><th>How to Upgrade</th></tr></thead>
+        <tbody>
+            <tr><td class="tier-free">Free</td><td>10</td><td>500</td><td>Default for all partners</td></tr>
+            <tr><td class="tier-std">Standard</td><td>60</td><td>5,000</td><td>Contact support</td></tr>
+            <tr><td class="tier-ent">Enterprise</td><td>300</td><td>50,000</td><td>Contact your account manager</td></tr>
+        </tbody>
+    </table>
+
+    <h3>Rate Limit Headers</h3>
+    <table class="params-table">
+        <thead><tr><th>Header</th><th>Description</th></tr></thead>
+        <tbody>
+            <tr><td class="param-name">X-RateLimit-Limit</td><td>Max requests per minute for your tier</td></tr>
+            <tr><td class="param-name">X-RateLimit-Remaining</td><td>Requests left in the current minute</td></tr>
+            <tr><td class="param-name">X-RateLimit-Daily-Limit</td><td>Max requests per day</td></tr>
+            <tr><td class="param-name">X-RateLimit-Daily-Remaining</td><td>Requests left today</td></tr>
+            <tr><td class="param-name">X-RateLimit-Reset</td><td>ISO timestamp when the current window resets</td></tr>
+            <tr><td class="param-name">Retry-After</td><td>Seconds to wait before retrying (only on 429)</td></tr>
+        </tbody>
+    </table>
+
+    <!-- ERRORS -->
+    <h2 id="errors">Errors</h2>
+    <p>All errors follow the same shape. HTTP status codes indicate the category of error.</p>
+
+    <div class="code-block">
+        <div class="code-block-header">Error Response</div>
+        <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">false</span>,
+  <span class="hl-key">"error"</span>: {
+    <span class="hl-key">"code"</span>: <span class="hl-str">"RATE_LIMIT_EXCEEDED"</span>,
+    <span class="hl-key">"message"</span>: <span class="hl-str">"Rate limit exceeded. Max 10 requests/minute on the free tier."</span>,
+    <span class="hl-key">"retry_after"</span>: <span class="hl-num">42</span>
+  }
+}</pre>
+    </div>
+
+    <table class="error-table">
+        <thead><tr><th>HTTP Status</th><th>Code</th><th>Meaning</th></tr></thead>
+        <tbody>
+            <tr><td><code>401</code></td><td><code>MISSING_KEY</code></td><td>No Authorization header provided</td></tr>
+            <tr><td><code>401</code></td><td><code>INVALID_KEY</code></td><td>Key not found in the system</td></tr>
+            <tr><td><code>401</code></td><td><code>KEY_REVOKED</code></td><td>Key exists but has been revoked</td></tr>
+            <tr><td><code>400</code></td><td><code>MISSING_PARAM</code></td><td>A required parameter is missing</td></tr>
+            <tr><td><code>400</code></td><td><code>INVALID_PARAM</code></td><td>A parameter has an invalid value</td></tr>
+            <tr><td><code>403</code></td><td><code>FORBIDDEN</code></td><td>Resource exists but belongs to another account</td></tr>
+            <tr><td><code>404</code></td><td><code>NOT_FOUND</code></td><td>Resource does not exist</td></tr>
+            <tr><td><code>405</code></td><td><code>METHOD_NOT_ALLOWED</code></td><td>Wrong HTTP method for this endpoint</td></tr>
+            <tr><td><code>429</code></td><td><code>RATE_LIMIT_EXCEEDED</code></td><td>Per-minute limit hit</td></tr>
+            <tr><td><code>429</code></td><td><code>DAILY_LIMIT_EXCEEDED</code></td><td>Daily limit hit — resets at midnight UTC</td></tr>
+            <tr><td><code>500</code></td><td><code>DB_ERROR</code></td><td>Unexpected server error</td></tr>
+        </tbody>
+    </table>
+
+    <!-- PROFILE -->
+    <h2 id="profile">Profile</h2>
+
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge get">GET</span>
+            <span class="endpoint-path">/api/v1/profile</span>
+            <span class="endpoint-desc">Your partner profile and stats</span>
+        </div>
+        <div class="endpoint-body">
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl https://console.mypayprotec.com/api/v1/profile \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+            <div class="code-block">
+                <div class="code-block-header">Response</div>
+                <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: {
+    <span class="hl-key">"id"</span>: <span class="hl-str">"uuid"</span>,
+    <span class="hl-key">"full_name"</span>: <span class="hl-str">"Jane Smith"</span>,
+    <span class="hl-key">"email"</span>: <span class="hl-str">"jane@example.com"</span>,
+    <span class="hl-key">"phone_number"</span>: <span class="hl-str">"+1 555 000 0000"</span>,
+    <span class="hl-key">"enrolled_at"</span>: <span class="hl-str">"2024-01-15T00:00:00Z"</span>,
+    <span class="hl-key">"companies"</span>: [<span class="hl-str">"Smith Payments LLC"</span>],
+    <span class="hl-key">"stats"</span>: {
+      <span class="hl-key">"total_merchants"</span>: <span class="hl-num">42</span>,
+      <span class="hl-key">"open_tickets"</span>: <span class="hl-num">3</span>
+    }
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- MERCHANTS LIST -->
+    <h2 id="merchants-list">Merchants</h2>
+
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge get">GET</span>
+            <span class="endpoint-path">/api/v1/merchants</span>
+            <span class="endpoint-desc">List your merchants (paginated)</span>
+        </div>
+        <div class="endpoint-body">
+            <h3>Query Parameters</h3>
+            <table class="params-table">
+                <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td class="param-name">page</td><td><span class="param-type">integer</span></td><td class="param-opt">Optional</td><td>Page number, 0-indexed. Default: <code>0</code></td></tr>
+                    <tr><td class="param-name">limit</td><td><span class="param-type">integer</span></td><td class="param-opt">Optional</td><td>Results per page. Default: <code>25</code>, Max: <code>100</code></td></tr>
+                    <tr><td class="param-name">search</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td>Filter by merchant DBA name (partial match)</td></tr>
+                    <tr><td class="param-name">status</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td><code>Approved</code>, <code>Pending</code>, <code>Closed</code></td></tr>
+                </tbody>
+            </table>
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl "https://console.mypayprotec.com/api/v1/merchants?page=0&limit=25&status=Approved" \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+            <div class="code-block">
+                <div class="code-block-header">Response</div>
+                <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: [
+    {
+      <span class="hl-key">"id"</span>: <span class="hl-str">"uuid"</span>,
+      <span class="hl-key">"merchant_id"</span>: <span class="hl-str">"123456789"</span>,
+      <span class="hl-key">"dba_name"</span>: <span class="hl-str">"Acme Coffee Co."</span>,
+      <span class="hl-key">"account_status"</span>: <span class="hl-str">"Approved"</span>,
+      <span class="hl-key">"enrollment_date"</span>: <span class="hl-str">"2024-03-01T00:00:00Z"</span>,
+      <span class="hl-key">"volume_mtd"</span>: <span class="hl-num">12480.50</span>,
+      <span class="hl-key">"volume_30_day"</span>: <span class="hl-num">11200.00</span>,
+      <span class="hl-key">"volume_90_day"</span>: <span class="hl-num">34100.00</span>,
+      <span class="hl-key">"merchant_city"</span>: <span class="hl-str">"Austin"</span>,
+      <span class="hl-key">"merchant_state"</span>: <span class="hl-str">"TX"</span>
+    }
+  ],
+  <span class="hl-key">"meta"</span>: {
+    <span class="hl-key">"page"</span>: <span class="hl-num">0</span>,
+    <span class="hl-key">"limit"</span>: <span class="hl-num">25</span>,
+    <span class="hl-key">"total"</span>: <span class="hl-num">42</span>,
+    <span class="hl-key">"has_more"</span>: <span class="hl-bool">true</span>
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- MERCHANT DETAIL -->
+    <h2 id="merchants-detail"></h2>
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge get">GET</span>
+            <span class="endpoint-path">/api/v1/merchants/:id</span>
+            <span class="endpoint-desc">Single merchant with equipment, notes &amp; tickets</span>
+        </div>
+        <div class="endpoint-body">
+            <p><code>:id</code> accepts either the merchant UUID or the <code>merchant_id</code> string (e.g. <code>123456789</code>).</p>
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl "https://console.mypayprotec.com/api/v1/merchants/123456789" \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+            <div class="code-block">
+                <div class="code-block-header">Response</div>
+                <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: {
+    <span class="hl-key">"id"</span>: <span class="hl-str">"uuid"</span>,
+    <span class="hl-key">"merchant_id"</span>: <span class="hl-str">"123456789"</span>,
+    <span class="hl-key">"dba_name"</span>: <span class="hl-str">"Acme Coffee Co."</span>,
+    <span class="hl-key">"account_status"</span>: <span class="hl-str">"Approved"</span>,
+    <span class="hl-key">"merchant_address"</span>: <span class="hl-str">"123 Main St"</span>,
+    <span class="hl-key">"merchant_city"</span>: <span class="hl-str">"Austin"</span>,
+    <span class="hl-key">"merchant_state"</span>: <span class="hl-str">"TX"</span>,
+    <span class="hl-key">"email"</span>: <span class="hl-str">"owner@acmecoffee.com"</span>,
+    <span class="hl-key">"volume_mtd"</span>: <span class="hl-num">12480.50</span>,
+    <span class="hl-key">"equipment"</span>: [
+      { <span class="hl-key">"serial_number"</span>: <span class="hl-str">"SN-001"</span>, <span class="hl-key">"terminal_type"</span>: <span class="hl-str">"Clover Mini"</span>, <span class="hl-key">"status"</span>: <span class="hl-str">"deployed"</span> }
+    ],
+    <span class="hl-key">"recent_notes"</span>: [],
+    <span class="hl-key">"recent_tickets"</span>: []
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- TICKETS LIST -->
+    <h2 id="tickets-list">Tickets</h2>
+
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge get">GET</span>
+            <span class="endpoint-path">/api/v1/tickets</span>
+            <span class="endpoint-desc">List your support tickets</span>
+        </div>
+        <div class="endpoint-body">
+            <h3>Query Parameters</h3>
+            <table class="params-table">
+                <thead><tr><th>Parameter</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td class="param-name">page</td><td><span class="param-type">integer</span></td><td class="param-opt">Optional</td><td>Page number, 0-indexed. Default: <code>0</code></td></tr>
+                    <tr><td class="param-name">limit</td><td><span class="param-type">integer</span></td><td class="param-opt">Optional</td><td>Results per page. Default: <code>25</code>, Max: <code>100</code></td></tr>
+                    <tr><td class="param-name">status</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td><code>open</code>, <code>in_progress</code>, <code>resolved</code>, <code>closed</code></td></tr>
+                    <tr><td class="param-name">type</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td><code>general</code>, <code>equipment</code>, <code>billing</code>, <code>rma</code>, <code>deployment</code></td></tr>
+                </tbody>
+            </table>
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl "https://console.mypayprotec.com/api/v1/tickets?status=open" \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- TICKET DETAIL -->
+    <h2 id="tickets-detail"></h2>
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge get">GET</span>
+            <span class="endpoint-path">/api/v1/tickets/:id</span>
+            <span class="endpoint-desc">Single ticket with comments</span>
+        </div>
+        <div class="endpoint-body">
+            <p><code>:id</code> accepts either the numeric ticket ID or the ticket number string (e.g. <code>TKT-202405-00123</code>).</p>
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl "https://console.mypayprotec.com/api/v1/tickets/TKT-202405-00123" \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- CREATE TICKET -->
+    <h2 id="tickets-create"></h2>
+    <div class="endpoint">
+        <div class="endpoint-header">
+            <span class="method-badge post">POST</span>
+            <span class="endpoint-path">/api/v1/tickets</span>
+            <span class="endpoint-desc">Create a support ticket</span>
+        </div>
+        <div class="endpoint-body">
+            <h3>Request Body</h3>
+            <table class="params-table">
+                <thead><tr><th>Field</th><th>Type</th><th>Required</th><th>Description</th></tr></thead>
+                <tbody>
+                    <tr><td class="param-name">subject</td><td><span class="param-type">string</span></td><td class="param-req">Required</td><td>Short summary of the issue</td></tr>
+                    <tr><td class="param-name">description</td><td><span class="param-type">string</span></td><td class="param-req">Required</td><td>Full details of the issue</td></tr>
+                    <tr><td class="param-name">type</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td><code>general</code> · <code>equipment</code> · <code>billing</code> · <code>rma</code> · <code>deployment</code> · <code>other</code>. Default: <code>general</code></td></tr>
+                    <tr><td class="param-name">category</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td>Freeform category label. Default: <code>other</code></td></tr>
+                    <tr><td class="param-name">priority</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td><code>low</code> · <code>medium</code> · <code>high</code> · <code>urgent</code>. Default: <code>medium</code></td></tr>
+                    <tr><td class="param-name">merchant_id</td><td><span class="param-type">string</span></td><td class="param-opt">Optional</td><td>Link the ticket to a merchant (UUID or merchant_id string)</td></tr>
+                </tbody>
+            </table>
+            <div class="code-block">
+                <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+                <pre>curl -X POST https://console.mypayprotec.com/api/v1/tickets \
+  -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span> \
+  -H <span class="hl-str">"Content-Type: application/json"</span> \
+  -d '{
+    <span class="hl-key">"subject"</span>: <span class="hl-str">"Terminal not printing receipts"</span>,
+    <span class="hl-key">"description"</span>: <span class="hl-str">"The Clover Mini at Acme Coffee stopped printing since yesterday."</span>,
+    <span class="hl-key">"type"</span>: <span class="hl-str">"equipment"</span>,
+    <span class="hl-key">"priority"</span>: <span class="hl-str">"high"</span>,
+    <span class="hl-key">"merchant_id"</span>: <span class="hl-str">"123456789"</span>
+  }'</pre>
+            </div>
+            <div class="code-block">
+                <div class="code-block-header">Response <code>201 Created</code></div>
+                <pre>{
+  <span class="hl-key">"success"</span>: <span class="hl-bool">true</span>,
+  <span class="hl-key">"data"</span>: {
+    <span class="hl-key">"id"</span>: <span class="hl-num">9</span>,
+    <span class="hl-key">"ticket_number"</span>: <span class="hl-str">"TKT-202405-00042"</span>,
+    <span class="hl-key">"subject"</span>: <span class="hl-str">"Terminal not printing receipts"</span>,
+    <span class="hl-key">"type"</span>: <span class="hl-str">"equipment"</span>,
+    <span class="hl-key">"priority"</span>: <span class="hl-str">"high"</span>,
+    <span class="hl-key">"status"</span>: <span class="hl-str">"open"</span>,
+    <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-05-14T18:32:00Z"</span>
+  }
+}</pre>
+            </div>
+        </div>
+    </div>
+
+    <!-- CHANGELOG -->
+    <h2 id="changelog">Changelog</h2>
+    <p><strong>v1.0 — May 2026</strong><br>Initial release. Endpoints: profile, merchants (list + detail), tickets (list + detail + create).</p>
+
+</div>
+
+<script>
+function copyCode(btn) {
+    const pre = btn.closest('.code-block').querySelector('pre');
+    navigator.clipboard.writeText(pre.innerText).then(() => {
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = 'Copy', 1800);
+    });
+}
+// Highlight active nav link on scroll
+const sections = document.querySelectorAll('[id]');
+const navLinks = document.querySelectorAll('.nav-link[href^="#"]');
+window.addEventListener('scroll', () => {
+    let current = '';
+    sections.forEach(s => { if (window.scrollY >= s.offsetTop - 80) current = s.id; });
+    navLinks.forEach(l => {
+        l.classList.toggle('active', l.getAttribute('href') === '#' + current);
+    });
+}, { passive: true });
+</script>
+</body>
+</html>
