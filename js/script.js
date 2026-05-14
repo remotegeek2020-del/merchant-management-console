@@ -593,7 +593,7 @@ async function askJarvis() {
         el.innerHTML = html;
     } catch (err) {
         const el = document.getElementById(loadingId);
-        if (el) el.innerHTML = '<span style="color:#ef4444;">Jarvis is offline. Check API connectivity.</span>';
+        if (el) el.innerHTML = `<span style="color:#ef4444;">Connection error: ${err.message}. Check that the API is reachable.</span>`;
     }
 
     input.disabled = false;

@@ -462,86 +462,96 @@ export default async function handler(req, res) {
         }
     }
 
-    // ── CHAT HISTORY ──────────────────────────────────────────────────────────
-    const { data: history } = await supabase
-        .from('chat_history')
-        .select('role, content')
-        .eq('userid', userId)
-        .order('created_at', { ascending: false })
-        .limit(8);
+    try {
 
-    const formattedHistory = (history || []).map(h => ({
-        role: h.role === 'user' ? 'user' : 'model',
-        parts: [{ text: h.content }]
-    })).reverse();
+        // ── CHAT HISTORY ──────────────────────────────────────────────────────
+        const { data: history } = await supabase
+            .from('chat_history')
+            .select('role, content')
+            .eq('userid', userId)
+            .order('created_at', { ascending: false })
+            .limit(8);
 
-    // ── SYSTEM PROMPT ─────────────────────────────────────────────────────────
-    const systemInstruction = `You are JARVIS, the AI business intelligence agent for PayProTec's merchant management console. You address the user as ${userName || 'Sir'}.
+        const formattedHistory = (history || []).map(h => ({
+            role: h.role === 'user' ? 'user' : 'model',
+            parts: [{ text: h.content }]
+        })).reverse();
 
-Your focus areas are: **Merchants**, **Partners**, **Deployments**, **Inventory**, and **Returns**. You have live access to data in all five areas.
+        // ── SYSTEM PROMPT ─────────────────────────────────────────────────────
+        const systemInstruction = `You are JARVIS, the AI business intelligence agent for PayProTec's merchant management console. Address the user as ${userName || 'Sir'}.
 
-Your job is to:
-1. Always call the relevant tools to get real data before answering — never guess
-2. Cross-reference data when it adds insight (e.g. partner has at-risk merchants + open returns)
-3. Give concise, actionable analysis — not just a raw data dump
-4. End every substantive answer with "**Suggested Actions:**" listing 2-4 concrete next steps
+Your focus areas: Merchants, Partners, Deployments, Inventory, and Returns. You have live database access to all five areas via tools.
 
-Formatting rules:
-- Use **bold** for names and key numbers
-- Use bullet lists for multiple items
-- Keep responses focused and scannable
-- When a suggested action involves navigating to a specific page, include a URL hint in parentheses at the end of that action line like: (url:/merchants-dashboard.html?q=MERCHANTNAME) or (url:/partners-dashboard.html) or (url:/deployments.html) etc. Only include the URL hint, no other parenthetical text.
+Rules:
+1. For any business question, call the relevant tools first — never guess or make up numbers
+2. For greetings or non-business questions, respond briefly and offer to help with the 5 focus areas
+3. Cross-reference data when useful (e.g. at-risk merchant also has open returns)
+4. End substantive answers with "**Suggested Actions:**" listing 2-4 concrete next steps
 
-Example suggested action format:
-→ Review at-risk merchant ACME Corp — volume down 42% this month (url:/merchants-dashboard.html?q=ACME)
-→ Invite 3 partners who don't have portal access yet (url:/partners-dashboard.html)`;
+Formatting: use **bold** for names/numbers, bullet lists for multiple items, keep responses concise.
+For navigation suggestions, append (url:/path) at end of the action line. Example:
+→ Review at-risk merchants (url:/merchants-dashboard.html)`;
 
-    // ── AGENTIC LOOP ──────────────────────────────────────────────────────────
-    const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-    const model = genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash',
-        systemInstruction,
-        tools: [{ functionDeclarations }]
-    });
+        // ── AGENTIC LOOP ──────────────────────────────────────────────────────
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        const model = genAI.getGenerativeModel({
+            model: 'gemini-1.5-flash',
+            systemInstruction,
+            tools: [{ functionDeclarations }]
+        });
 
-    const chat = model.startChat({ history: formattedHistory });
+        const chat = model.startChat({ history: formattedHistory });
 
-    const toolCallsLog = [];
-    let result = await chat.sendMessage(query);
-    let maxIterations = 8;
+        const toolCallsLog = [];
+        let result = await chat.sendMessage(query);
+        let maxIterations = 8;
 
-    while (maxIterations-- > 0) {
-        const calls = result.response.functionCalls();
-        if (!calls || calls.length === 0) break;
+        while (maxIterations-- > 0) {
+            let calls;
+            try { calls = result.response.functionCalls(); } catch { calls = null; }
+            if (!calls || calls.length === 0) break;
 
-        const toolResponses = [];
-        for (const call of calls) {
-            toolCallsLog.push(call.name);
-            const toolResult = await executeTool(call.name, call.args || {});
-            toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
+            const toolResponses = [];
+            for (const call of calls) {
+                toolCallsLog.push(call.name);
+                const toolResult = await executeTool(call.name, call.args || {});
+                toolResponses.push({ functionResponse: { name: call.name, response: toolResult } });
+            }
+            result = await chat.sendMessage(toolResponses);
         }
-        result = await chat.sendMessage(toolResponses);
+
+        let finalAnswer;
+        try { finalAnswer = result.response.text(); }
+        catch { finalAnswer = 'I encountered an issue generating a response. Please try again.'; }
+
+        // ── EXTRACT NAVIGATION SUGGESTIONS ────────────────────────────────────
+        const suggestions = [];
+        const urlMatches = [...finalAnswer.matchAll(/→\s*([^\n(]+)\(url:([^)]+)\)/g)];
+        for (const m of urlMatches) {
+            suggestions.push({ label: m[1].trim().replace(/\*\*/g, ''), url: m[2].trim() });
+        }
+        const cleanAnswer = finalAnswer.replace(/\s*\(url:[^)]+\)/g, '');
+
+        // ── PERSIST HISTORY ───────────────────────────────────────────────────
+        try {
+            await supabase.from('chat_history').insert([
+                { userid: userId, role: 'user', content: query },
+                { userid: userId, role: 'assistant', content: cleanAnswer }
+            ]);
+        } catch { /* non-fatal */ }
+
+        return res.status(200).json({
+            answer: cleanAnswer,
+            suggestions,
+            tools_used: [...new Set(toolCallsLog)]
+        });
+
+    } catch (err) {
+        console.error('[Jarvis Error]', err?.message || err);
+        return res.status(200).json({
+            answer: `I hit an error, ${userName || 'Sir'}: ${err?.message || 'Unknown error'}. Please check the server logs.`,
+            suggestions: [],
+            tools_used: []
+        });
     }
-
-    const finalAnswer = result.response.text();
-
-    // ── EXTRACT NAVIGATION SUGGESTIONS ────────────────────────────────────────
-    const suggestions = [];
-    const urlMatches = [...finalAnswer.matchAll(/→\s*([^\n(]+)\(url:([^)]+)\)/g)];
-    for (const m of urlMatches) {
-        suggestions.push({ label: m[1].trim().replace(/\*\*/g, ''), url: m[2].trim() });
-    }
-    const cleanAnswer = finalAnswer.replace(/\s*\(url:[^)]+\)/g, '');
-
-    // ── PERSIST HISTORY ───────────────────────────────────────────────────────
-    await supabase.from('chat_history').insert([
-        { userid: userId, role: 'user', content: query },
-        { userid: userId, role: 'assistant', content: cleanAnswer }
-    ]);
-
-    return res.status(200).json({
-        answer: cleanAnswer,
-        suggestions,
-        tools_used: [...new Set(toolCallsLog)]
-    });
 }
