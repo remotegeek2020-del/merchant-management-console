@@ -40,12 +40,17 @@ async function getOrCreateProfile(user) {
 }
 
 export default async function handler(req, res) {
-    const session = await validateSession(req);
-    if (!session) return sessionErrorResponse(res);
+    // Partners send their session as `token` in the body and are validated by resolveUser().
+    // Staff requests carry no `token` and must pass the staff session header check.
+    const { token } = req.body || {};
+    if (!token) {
+        const session = await validateSession(req);
+        if (!session) return sessionErrorResponse(res);
+    }
 
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'POST') return res.status(405).json({ success: false });
-    
+
     const { action } = req.body || {};
     if (!action) return res.status(400).json({ success: false, message: 'No action' });
 
