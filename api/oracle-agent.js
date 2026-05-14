@@ -519,9 +519,26 @@ For navigation suggestions: → Action description (url:/path)` + knowledgeBlock
 
         const chat = model.startChat({ history: formattedHistory });
 
+        // ── FOLLOW-UP DETECTION ───────────────────────────────────────────────
+        // If the message looks like a follow-up and we have previous data context,
+        // inject that context directly into the query so Gemini can't miss it.
+        const followUpPatterns = /\b(it|that|this|them|the above|the merchant|the partner|the one|the same)\b|^(review|analyze|summarize|more|tell me more|what about|explain|give me|show me more|what's the|what is the|how about|and the|can you)/i;
+        const isFollowUp = query.trim().length < 120 && followUpPatterns.test(query.trim());
+
+        let queryToSend = query;
+        if (isFollowUp && history?.length) {
+            const lastCtxRow = [...(history || [])].reverse().find(h => h.role === 'assistant' && h.content.includes('[DATA CONTEXT:'));
+            if (lastCtxRow) {
+                const ctxMatch = lastCtxRow.content.match(/\[DATA CONTEXT: ([\s\S]+?)\]\n\n/);
+                if (ctxMatch) {
+                    queryToSend = `[The user is following up on data already retrieved. Do NOT call tools — answer using this context directly]\nPrevious data: ${ctxMatch[1].slice(0, 800)}\n\nUser follow-up: ${query}`;
+                }
+            }
+        }
+
         const toolCallsLog = [];
         const toolDataSummary = []; // track what data was fetched for context storage
-        let result = await chat.sendMessage(query);
+        let result = await chat.sendMessage(queryToSend);
         let maxIterations = 8;
 
         while (maxIterations-- > 0) {
