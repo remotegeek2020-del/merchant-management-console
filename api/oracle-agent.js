@@ -525,11 +525,11 @@ Only include navigation actions when they are genuinely useful. Use real names/v
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
         // ── FOLLOW-UP DETECTION ───────────────────────────────────────────────
-        // lastResponse comes directly from the frontend (in-memory), so it's
-        // always reliable regardless of DB state or userId issues.
-        const followUpWords = /\b(it|that|this|them|the above|the merchant|the partner|the same|the one)\b/i;
-        const followUpPhrases = /^(review|analyze|summarize|tell me more|what about|explain|more detail|give me|show me more|what'?s? the|how about|can you|what do you think|is that|are they|why is|who is)/i;
-        const isFollowUp = query.trim().length < 150 && (followUpWords.test(query) || followUpPhrases.test(query.trim()));
+        // Only send to the tools-free path when the user is clearly asking for
+        // commentary/assessment on data already shown — NOT when they're asking
+        // for new data lookups ("analyze his merchants", "show me his volume", etc.)
+        const followUpPhrases = /^(review it|summarize( it| that| this)?|tell me more|more detail|explain( it| that| this)?|what do you think|give me a summary|give me a review)/i;
+        const isFollowUp = query.trim().length < 120 && followUpPhrases.test(query.trim());
 
         const hasLastResponse = !!(lastResponse && lastResponse.trim().length > 50);
 
@@ -537,28 +537,39 @@ Only include navigation actions when they are genuinely useful. Use real names/v
         let finalAnswer;
 
         if (isFollowUp && hasLastResponse) {
-            // ── FOLLOW-UP PATH: no tools, answer from prior context ────────────
-            // Uses a separate model instance with NO tools — Gemini cannot call
-            // tools when they're not registered on the model instance.
+            // ── FOLLOW-UP PATH: no tools, assess data already shown ───────────
+            // Uses a separate model instance with NO tools registered — Gemini
+            // cannot call tools when they're not on the model instance.
             const prevResponse = lastResponse.slice(0, 2000);
             const followUpModel = genAI.getGenerativeModel({
                 model: 'gemini-2.5-flash',
-                systemInstruction: `You are JARVIS, a business intelligence assistant for PayProTec. Address the user as ${userName || 'Sir'}. You are answering a follow-up question about data that was already retrieved. Use only the previous response provided as context — do not say you need more information or ask what they want to review. Give a direct, analytical answer. Use **bold** for key data points. End with "**Suggested Actions:**" listing 2-3 concrete next steps.`
+                systemInstruction: `You are JARVIS, a business intelligence assistant for PayProTec. Address the user as ${userName || 'Sir'}. You are providing an assessment of data that was already retrieved. Give a direct analytical opinion — comment on status, volume trends, risks, and recommended actions. Use **bold** for key data points. End with "**Suggested Actions:**" listing 2-3 concrete next steps.`
             });
             const r = await followUpModel.generateContent(
-                `Previous JARVIS response containing the relevant data:\n"""\n${prevResponse}\n"""\n\nUser follow-up: ${query}\n\nAnswer directly and analytically. If they ask for a review or analysis, assess the merchant/partner/data from the previous response — comment on status, volume trends, risks, and what actions should be taken.`
+                `Previous JARVIS response containing the relevant data:\n"""\n${prevResponse}\n"""\n\nUser follow-up: ${query}\n\nProvide your analytical assessment of the data shown above.`
             );
             try { finalAnswer = r.response.text(); }
             catch { finalAnswer = 'Could not generate follow-up response. Please try rephrasing.'; }
 
         } else {
             // ── MAIN PATH: full agentic loop with tools ────────────────────────
+            // If there's a previous response, inject it at the start of history
+            // so the model knows what subject was being discussed (e.g. which
+            // partner to look up when asked "analyze his merchants").
+            const historyWithContext = hasLastResponse
+                ? [
+                    { role: 'user', parts: [{ text: 'What was the last thing you showed me?' }] },
+                    { role: 'model', parts: [{ text: lastResponse.slice(0, 1500) }] },
+                    ...formattedHistory.slice(0, 8)
+                  ]
+                : formattedHistory;
+
             const model = genAI.getGenerativeModel({
                 model: 'gemini-2.5-flash',
                 systemInstruction,
                 tools: [{ functionDeclarations }]
             });
-            const chat = model.startChat({ history: formattedHistory });
+            const chat = model.startChat({ history: historyWithContext });
             let result = await chat.sendMessage(query);
             let maxIterations = 8;
 
