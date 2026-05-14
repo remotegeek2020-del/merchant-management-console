@@ -24,16 +24,16 @@ export default async function handler(req, res) {
         {
             name: 'get_merchant_overview',
             description: 'Get a high-level merchant health summary: total active, suspended, at-risk count, average monthly volume, and top performers.',
-            parameters: { type: 'OBJECT', properties: {}, required: [] }
+            parameters: { type: 'object', properties: {}, required: [] }
         },
         {
             name: 'search_merchants',
             description: 'Search merchants by business name (DBA) or merchant ID (MID). Returns status, volume, agent.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    query: { type: 'STRING', description: 'Name or MID to search for' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 10' }
+                    query: { type: 'string', description: 'Name or MID to search for' },
+                    limit: { type: 'number', description: 'Max results, default 10' }
                 },
                 required: ['query']
             }
@@ -42,9 +42,9 @@ export default async function handler(req, res) {
             name: 'get_merchant_detail',
             description: 'Get full profile for a specific merchant by MID string: status, volume trend, agent, open returns, active deployments.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    merchant_id: { type: 'STRING', description: 'The merchant MID string' }
+                    merchant_id: { type: 'string', description: 'The merchant MID string' }
                 },
                 required: ['merchant_id']
             }
@@ -53,10 +53,10 @@ export default async function handler(req, res) {
             name: 'get_at_risk_merchants',
             description: 'Get merchants whose 30-day processing volume has dropped 15%+ below their 90-day monthly baseline. Sorted by largest drop first.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    limit: { type: 'NUMBER', description: 'Max results, default 20' },
-                    min_drop_pct: { type: 'NUMBER', description: 'Minimum drop % to include, default 15' }
+                    limit: { type: 'number', description: 'Max results, default 20' },
+                    min_drop_pct: { type: 'number', description: 'Minimum drop % to include, default 15' }
                 },
                 required: []
             }
@@ -65,10 +65,10 @@ export default async function handler(req, res) {
             name: 'get_merchants_by_status',
             description: 'Get merchants filtered by account status (Approved, Suspended, Terminated, Pending, PCI Non-Compliant, etc.).',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    status: { type: 'STRING', description: 'Account status value' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 20' }
+                    status: { type: 'string', description: 'Account status value' },
+                    limit: { type: 'number', description: 'Max results, default 20' }
                 },
                 required: ['status']
             }
@@ -78,16 +78,16 @@ export default async function handler(req, res) {
         {
             name: 'get_partner_overview',
             description: 'Get a summary of the partner network: total partners, how many have portal access, top partners by volume.',
-            parameters: { type: 'OBJECT', properties: {}, required: [] }
+            parameters: { type: 'object', properties: {}, required: [] }
         },
         {
             name: 'search_partners',
             description: 'Search for partners (agents/reps) by name. Returns their merchant count, total volume, and portal status.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    query: { type: 'STRING', description: 'Partner name to search' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 10' }
+                    query: { type: 'string', description: 'Partner name to search' },
+                    limit: { type: 'number', description: 'Max results, default 10' }
                 },
                 required: ['query']
             }
@@ -96,9 +96,9 @@ export default async function handler(req, res) {
             name: 'get_partner_detail',
             description: 'Get detailed portfolio for a specific partner by their person_id: their merchants, volumes, at-risk merchants.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    person_id: { type: 'STRING', description: 'The partner person UUID' }
+                    person_id: { type: 'string', description: 'The partner person UUID' }
                 },
                 required: ['person_id']
             }
@@ -107,9 +107,9 @@ export default async function handler(req, res) {
             name: 'get_partners_without_portal',
             description: 'Get partners who have NOT yet been given portal access (is_portal_active is false).',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    limit: { type: 'NUMBER', description: 'Max results, default 20' }
+                    limit: { type: 'number', description: 'Max results, default 20' }
                 },
                 required: []
             }
@@ -119,16 +119,16 @@ export default async function handler(req, res) {
         {
             name: 'get_deployment_overview',
             description: 'Get deployment pipeline summary: count by status (Pending, In Progress, Delivered, Cancelled), recent activity.',
-            parameters: { type: 'OBJECT', properties: {}, required: [] }
+            parameters: { type: 'object', properties: {}, required: [] }
         },
         {
             name: 'get_deployments',
             description: 'Get deployments filtered by status. Status options: Pending, In Progress, Delivered, Cancelled.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    status: { type: 'STRING', description: 'Deployment status filter, or omit for all recent' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 15' }
+                    status: { type: 'string', description: 'Deployment status filter, or omit for all recent' },
+                    limit: { type: 'number', description: 'Max results, default 15' }
                 },
                 required: []
             }
@@ -138,16 +138,16 @@ export default async function handler(req, res) {
         {
             name: 'get_inventory_overview',
             description: 'Get inventory health: total equipment count, stocked units, deployed units, units in repair, decommissioned count.',
-            parameters: { type: 'OBJECT', properties: {}, required: [] }
+            parameters: { type: 'object', properties: {}, required: [] }
         },
         {
             name: 'search_inventory',
             description: 'Search inventory by serial number or terminal/device type.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    query: { type: 'STRING', description: 'Serial number or device type to search' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 15' }
+                    query: { type: 'string', description: 'Serial number or device type to search' },
+                    limit: { type: 'number', description: 'Max results, default 15' }
                 },
                 required: ['query']
             }
@@ -156,10 +156,10 @@ export default async function handler(req, res) {
             name: 'get_inventory_by_location',
             description: 'Get equipment at a specific location. Locations: Warsaw Office, Warsaw Repairs, Merchant Site, In Transit.',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    location: { type: 'STRING', description: 'Location name' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 20' }
+                    location: { type: 'string', description: 'Location name' },
+                    limit: { type: 'number', description: 'Max results, default 20' }
                 },
                 required: ['location']
             }
@@ -169,16 +169,16 @@ export default async function handler(req, res) {
         {
             name: 'get_returns_overview',
             description: 'Get returns summary: open count, pending count, defective rate, recent return activity.',
-            parameters: { type: 'OBJECT', properties: {}, required: [] }
+            parameters: { type: 'object', properties: {}, required: [] }
         },
         {
             name: 'get_returns',
             description: 'Get return requests filtered by status (Open, Pending, Completed, Cancelled).',
             parameters: {
-                type: 'OBJECT',
+                type: 'object',
                 properties: {
-                    status: { type: 'STRING', description: 'Return status, or omit for open/pending' },
-                    limit: { type: 'NUMBER', description: 'Max results, default 15' }
+                    status: { type: 'string', description: 'Return status, or omit for open/pending' },
+                    limit: { type: 'number', description: 'Max results, default 15' }
                 },
                 required: []
             }
