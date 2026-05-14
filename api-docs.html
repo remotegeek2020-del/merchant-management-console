@@ -105,7 +105,7 @@
 
     <h1 id="intro">PayProTec API Reference</h1>
     <p>The PayProTec REST API lets you access your partner data programmatically — merchants, tickets, and your profile. Use it to build integrations, automate workflows, or sync data with your own tools.</p>
-    <p><strong>Base URL:</strong> <code>https://console.mypayprotec.com/api/v1</code></p>
+    <p><strong>Base URL:</strong> <code>https://portal.mypayprotec.com/api/v1</code></p>
     <div class="alert alert-info">All requests and responses use <strong>JSON</strong>. Every response includes a <code>success</code> boolean. On success, data lives under the <code>data</code> key. On failure, the error is under the <code>error</code> key.</div>
 
     <!-- AUTH -->
@@ -190,7 +190,7 @@
         <div class="endpoint-body">
             <div class="code-block">
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-                <pre>curl https://console.mypayprotec.com/api/v1/profile \
+                <pre>curl https://portal.mypayprotec.com/api/v1/profile \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
             </div>
             <div class="code-block">
@@ -236,7 +236,7 @@
             </table>
             <div class="code-block">
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-                <pre>curl "https://console.mypayprotec.com/api/v1/merchants?page=0&limit=25&status=Approved" \
+                <pre>curl "https://portal.mypayprotec.com/api/v1/merchants?page=0&limit=25&status=Approved" \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
             </div>
             <div class="code-block">
@@ -280,7 +280,7 @@
             <p><code>:id</code> accepts either the merchant UUID or the <code>merchant_id</code> string (e.g. <code>123456789</code>).</p>
             <div class="code-block">
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-                <pre>curl "https://console.mypayprotec.com/api/v1/merchants/123456789" \
+                <pre>curl "https://portal.mypayprotec.com/api/v1/merchants/123456789" \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
             </div>
             <div class="code-block">
@@ -330,7 +330,7 @@
             </table>
             <div class="code-block">
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-                <pre>curl "https://console.mypayprotec.com/api/v1/tickets?status=open" \
+                <pre>curl "https://portal.mypayprotec.com/api/v1/tickets?status=open" \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
             </div>
         </div>
@@ -348,7 +348,7 @@
             <p><code>:id</code> accepts either the numeric ticket ID or the ticket number string (e.g. <code>TKT-202405-00123</code>).</p>
             <div class="code-block">
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-                <pre>curl "https://console.mypayprotec.com/api/v1/tickets/TKT-202405-00123" \
+                <pre>curl "https://portal.mypayprotec.com/api/v1/tickets/TKT-202405-00123" \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
             </div>
         </div>
@@ -377,7 +377,7 @@
             </table>
             <div class="code-block">
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
-                <pre>curl -X POST https://console.mypayprotec.com/api/v1/tickets \
+                <pre>curl -X POST https://portal.mypayprotec.com/api/v1/tickets \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span> \
   -H <span class="hl-str">"Content-Type: application/json"</span> \
   -d '{
