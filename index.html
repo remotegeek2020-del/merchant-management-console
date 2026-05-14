@@ -391,9 +391,37 @@
         } catch (e) { /* silent fallback to polling */ }
     }
 
+    async function markSeen(section) {
+        const userid = localStorage.getItem('pp_userid');
+        if (!userid) return;
+        // Clear badge instantly in UI
+        showBadge(section, 0);
+        // Persist to DB (fire-and-forget)
+        fetch('/api/notifications', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'mark_seen', userid, section })
+        }).catch(() => {});
+    }
+
+    function wireCardClicks() {
+        const map = {
+            'card-tickets':     'tickets',
+            'card-returns':     'returns',
+            'card-deployments': 'deployments',
+            'card-tasks':       'tasks',
+            'card-ideas':       'ideas',
+        };
+        Object.entries(map).forEach(([cardId, section]) => {
+            const el = document.getElementById(cardId);
+            if (el) el.addEventListener('click', () => markSeen(section), { capture: true });
+        });
+    }
+
     function init() {
         loadNotifBadges();
         startRealtime();
+        wireCardClicks();
         // Fallback poll every 30s in case websocket drops
         setInterval(loadNotifBadges, 30000);
         // Refresh immediately when tab becomes visible
