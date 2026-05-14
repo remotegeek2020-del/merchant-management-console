@@ -32,7 +32,7 @@ export default async function handler(req, res) {
             return_reason: reason,
             notes,
             return_date_initiated,
-            status: 'open'
+            status: 'Open'
         }]);
 
     if (returnError) throw returnError;
@@ -60,7 +60,7 @@ export default async function handler(req, res) {
     const { error: updateReturnError } = await supabase
         .from('returns')
         .update({
-            status: 'completed',
+            status: 'Closed',
             destination,
             equipment_received_date
         })

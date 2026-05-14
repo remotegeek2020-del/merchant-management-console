@@ -1166,19 +1166,11 @@ async function openEditModal(index) {
     returnBox.style.display = 'block';
     if(updateBtn) updateBtn.style.display = 'block';
 
-    // Linked ticket section — check live ticket status so we don't show Close button after it's closed
+    // Linked ticket section — show whenever this deployment has a linked ticket
     if (d.ticket_id && linkedSection) {
-        linkedSection.style.display = 'none'; // hide by default while fetching
-        fetch('/api/tickets', {
-            method: 'POST', headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ action: 'get_detail', ticket_id: d.ticket_id })
-        }).then(r => r.json()).then(tr => {
-            if (tr.success && tr.ticket.status !== 'closed') {
-                linkedSection.style.display = 'block';
-                const closeBtn = document.getElementById('closeTicketBtn');
-                if (closeBtn) closeBtn.onclick = () => closeLinkedTicket(d.ticket_id);
-            }
-        }).catch(() => {});
+        linkedSection.style.display = 'block';
+        const closeBtn = document.getElementById('closeTicketBtn');
+        if (closeBtn) closeBtn.onclick = () => closeLinkedTicket(d.ticket_id);
     } else if (linkedSection) {
         linkedSection.style.display = 'none';
     }

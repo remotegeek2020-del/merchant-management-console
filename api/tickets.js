@@ -656,6 +656,15 @@ export default async function handler(req, res) {
                 .single();
             if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
 
+            // Ownership check: the linked ticket must belong to this partner
+            const ownerTicketId = ticket_id || dep.ticket_id;
+            if (!ownerTicketId) return res.status(403).json({ success: false, message: 'Cannot verify ownership: no linked ticket.' });
+            const { data: ownerCheck } = await supabase.from('support_tickets')
+                .select('person_id').eq('id', ownerTicketId).single();
+            if (!ownerCheck || ownerCheck.person_id !== personId) {
+                return res.status(403).json({ success: false, message: 'Access denied: this deployment does not belong to your account.' });
+            }
+
             // Close the deployment and stamp the merchant received date
             const today = new Date().toISOString().split('T')[0];
             await supabase.from('deployments')
