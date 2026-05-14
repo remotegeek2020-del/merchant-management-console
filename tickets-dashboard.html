@@ -246,12 +246,15 @@ async function init() {
     }
     currentUserRole = localStorage.getItem('pp_role') || '';
     loadTickets().then(() => {
-        const urlQ = new URLSearchParams(window.location.search).get('q');
+        const params = new URLSearchParams(window.location.search);
+        const urlQ = params.get('q');
         if (urlQ) {
             const searchEl = document.getElementById('ticket-search');
             if (searchEl) searchEl.value = urlQ;
             setSearchQuery(urlQ);
         }
+        const openId = params.get('open');
+        if (openId) openTicket(parseInt(openId));
     });
 }
 

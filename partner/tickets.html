@@ -724,7 +724,10 @@ async function pollPartnerUnread() {
 }
 
 window.addEventListener('load', function() {
-    loadTickets();
+    loadTickets().then(() => {
+        const openId = new URLSearchParams(window.location.search).get('open');
+        if (openId) viewTicket(parseInt(openId));
+    });
     setInterval(pollPartnerUnread, 20000);
 });
 </script>

@@ -153,15 +153,18 @@ export default async function handler(req, res) {
         }
 
         if (action === 'list_for_partner') {
-            const { token } = req.body;
+            const { token, merchant_uuid } = req.body;
             const personId = await validatePartner(token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
 
-            const { data, error } = await supabase.from('support_tickets')
+            let query = supabase.from('support_tickets')
                 .select('id, ticket_number, type, category, subject, status, priority, partner_unread_count, created_at, updated_at, merchant_id, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name)')
                 .eq('person_id', personId)
                 .order('created_at', { ascending: false });
 
+            if (merchant_uuid) query = query.eq('merchant_id', merchant_uuid);
+
+            const { data, error } = await query;
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });
         }
@@ -191,7 +194,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'list_for_staff') {
-            const { status, type, limit = 200, mine_name } = req.body;
+            const { status, type, limit = 200, mine_name, merchant_id, person_id } = req.body;
             let query = supabase.from('support_tickets')
                 .select('id, ticket_number, type, category, subject, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, has_unread_partner_comment, unread_count, partner_unread_count, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
                 .order('created_at', { ascending: false })
@@ -200,6 +203,8 @@ export default async function handler(req, res) {
             if (status && status !== 'all') query = query.eq('status', status);
             if (type && type !== 'all') query = query.eq('type', type);
             if (mine_name) query = query.eq('assigned_to', mine_name);
+            if (merchant_id) query = query.eq('merchant_id', merchant_id);
+            if (person_id) query = query.eq('person_id', person_id);
 
             const { data, error } = await query;
             if (error) throw error;

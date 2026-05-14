@@ -1360,6 +1360,7 @@ async function submitOnboarding() {
                         <button onclick="ppSwitchTab('ids')" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
                         <button onclick="ppSwitchTab('scorecard')" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
                         <button onclick="ppSwitchTab('notes')" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
+                        <button onclick="ppSwitchTab('tickets')" id="pptab-tickets" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Tickets</button>
                     </div>
 
                     <!-- IDS PANEL -->
@@ -1390,6 +1391,11 @@ async function submitOnboarding() {
                         <div id="pp-notes-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
                             <div style="text-align:center;color:#94a3b8;padding:20px;">Loading notes...</div>
                         </div>
+                    </div>
+
+                    <!-- TICKETS PANEL -->
+                    <div id="pppanel-tickets" style="display:none;">
+                        <div id="pp-tickets-list"><div style="text-align:center;color:#94a3b8;padding:20px;">Loading tickets...</div></div>
                     </div>
                 </div>`
         });
@@ -1867,7 +1873,7 @@ function pAPI(body) {
 
 // Tab switcher - scoped to Swal modal to avoid duplicate ID issues
 window.ppSwitchTab = function(tab) {
-    ['ids','scorecard','notes'].forEach(function(t) {
+    ['ids','scorecard','notes','tickets'].forEach(function(t) {
         var btn = document.getElementById('pptab-' + t);
         var panel = document.getElementById('pppanel-' + t);
         if (btn) {
@@ -1877,6 +1883,47 @@ window.ppSwitchTab = function(tab) {
         }
         if (panel) panel.style.display = t === tab ? 'block' : 'none';
     });
+    if (tab === 'tickets') ppLoadPartnerTickets();
+};
+
+window.ppLoadPartnerTickets = async function() {
+    var el = document.getElementById('pp-tickets-list');
+    if (!el) return;
+    // Get person_id from the submit note button's onclick
+    var noteBtn = document.querySelector('#pppanel-notes button[onclick]');
+    var personId = noteBtn ? noteBtn.getAttribute('onclick').match(/'([^']+)'/)?.[1] : null;
+    if (!personId) { el.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">Could not identify partner.</p>'; return; }
+
+    el.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">Loading...</p>';
+    try {
+        const res = await fetch('/api/tickets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'list_for_staff', person_id: personId, limit: 100 })
+        });
+        const data = await res.json();
+        const tickets = data.data || [];
+        if (!tickets.length) { el.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">No tickets for this partner.</p>'; return; }
+        const statusColor = s => ({ open:'#2563eb', in_progress:'#d97706', resolved:'#16a34a', closed:'#94a3b8', pending_partner:'#7c3aed' }[s] || '#94a3b8');
+        el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+            <thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Ticket #</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Subject</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Merchant</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Status</th>
+                <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Date</th>
+            </tr></thead>
+            <tbody>${tickets.map(t => `<tr onclick="window.open('tickets-dashboard.html?open=${t.id}','_self')" style="cursor:pointer;border-bottom:1px solid #f8fafc;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''">
+                <td style="padding:9px 12px;font-family:monospace;font-weight:700;color:#004990;">${t.ticket_number}</td>
+                <td style="padding:9px 12px;font-weight:600;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.subject}</td>
+                <td style="padding:9px 12px;color:#64748b;">${t.merchants?.dba_name || '—'}</td>
+                <td style="padding:9px 12px;"><span style="background:${statusColor(t.status)}1a;color:${statusColor(t.status)};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;text-transform:uppercase;">${t.status}</span></td>
+                <td style="padding:9px 12px;color:#94a3b8;">${new Date(t.created_at).toLocaleDateString()}</td>
+            </tr>`).join('')}</tbody>
+        </table>`;
+    } catch (e) {
+        el.innerHTML = '<p style="padding:20px;text-align:center;color:#ef4444;">Failed to load tickets.</p>';
+    }
 };
 
 // Submit a note

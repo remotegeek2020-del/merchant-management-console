@@ -779,6 +779,7 @@ async function addTask(merchantUuid) {
                     <button onclick="switchTab('tasks')" id="tab-tasks" class="modal-tab-btn">TASKS</button>
                     <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
                     <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
+                    <button onclick="switchTab('tickets')" id="tab-tickets" class="modal-tab-btn">TICKETS</button>
                 </div>
 
                 <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
@@ -976,6 +977,10 @@ async function addTask(merchantUuid) {
                         ${logs.map(l => `<div style="padding:12px; border-bottom:1px solid #f1f5f9; font-size:12px;"><span style="color:#94a3b8; font-weight:600;">[${fmtDateTime(l.created_at)}]</span> ${l.body}</div>`).join('') || '<p style="padding:20px;">No history recorded.</p>'}
                     </div>
                 </div>
+
+                <div id="content-tickets" class="tab-content" style="display:none; text-align:left;">
+                    <div id="merchant-tickets-list"><p style="padding:20px; text-align:center; color:#94a3b8;">Loading tickets...</p></div>
+                </div>
             `,
             showConfirmButton: false, showCloseButton: true
         });
@@ -991,6 +996,7 @@ async function addTask(merchantUuid) {
         if (tab === 'equipment') fetchMerchantEquipment();
         if (tab === 'lifecycle') fetchMerchantLifecycle();
         if (tab === 'tasks') fetchMerchantTasks();
+        if (tab === 'tickets') fetchMerchantTickets();
     };
 
     // SURGICAL ADD: fetchMerchantLifecycle function
@@ -1037,6 +1043,46 @@ async function addTask(merchantUuid) {
         listDiv.innerHTML = '<p style="text-align:center; color:red;">History load error.</p>';
     }
 }
+    async function fetchMerchantTickets() {
+        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+        if (!saveBtn) return;
+        const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+        const el = document.getElementById('merchant-tickets-list');
+        el.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">Loading...</p>';
+        try {
+            const res = await fetch('/api/tickets', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'list_for_staff', merchant_id: merchantUuid, limit: 100 })
+            });
+            const data = await res.json();
+            const tickets = data.data || [];
+            if (!tickets.length) {
+                el.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">No tickets for this merchant.</p>';
+                return;
+            }
+            const statusColor = s => ({ open:'#2563eb', in_progress:'#d97706', resolved:'#16a34a', closed:'#94a3b8', pending_partner:'#7c3aed' }[s] || '#94a3b8');
+            el.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead><tr style="background:#f8fafc;border-bottom:1px solid #e2e8f0;">
+                    <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Ticket #</th>
+                    <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Subject</th>
+                    <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Type</th>
+                    <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Status</th>
+                    <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Date</th>
+                </tr></thead>
+                <tbody>${tickets.map(t => `<tr onclick="window.open('tickets-dashboard.html?open=${t.id}','_self')" style="cursor:pointer;border-bottom:1px solid #f8fafc;" onmouseover="this.style.background='#f0f9ff'" onmouseout="this.style.background=''">
+                    <td style="padding:10px 12px;font-family:monospace;font-weight:700;color:#004990;">${t.ticket_number}</td>
+                    <td style="padding:10px 12px;font-weight:600;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.subject}</td>
+                    <td style="padding:10px 12px;color:#64748b;text-transform:capitalize;">${(t.type||'').replace('_',' ')}</td>
+                    <td style="padding:10px 12px;"><span style="background:${statusColor(t.status)}1a;color:${statusColor(t.status)};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;text-transform:uppercase;">${t.status}</span></td>
+                    <td style="padding:10px 12px;color:#94a3b8;">${new Date(t.created_at).toLocaleDateString()}</td>
+                </tr>`).join('')}</tbody>
+            </table>`;
+        } catch (e) {
+            el.innerHTML = '<p style="padding:20px;text-align:center;color:#ef4444;">Failed to load tickets.</p>';
+        }
+    }
+
     async function fetchMerchantEquipment() {
         const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
         if (!saveBtn) return;

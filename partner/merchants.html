@@ -275,36 +275,95 @@ async function openMerchantDetail(merchantId, name) {
     const { merchant: m, equipment, notes, rmas } = data.data;
     window._modalNotes = notes || [];
     window._notesPage = 0;
+    window._currentMerchantUuid = merchantId;
     Swal.update({ html: `
         <div style="text-align:left;">
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #e2e8f0;">
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Merchant ID</div><div style="font-family:'DM Mono',monospace;font-weight:700;color:#0d9488;">${m.merchant_id}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Status</div><div style="font-weight:700;">${m.account_status}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Email</div><div style="font-size:12px;">${m.email||'—'}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Phone</div><div style="font-size:12px;">${m.merchant_phone||'—'}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">MTD Volume</div><div style="font-family:'DM Mono',monospace;font-weight:700;">$${parseFloat(m.volume_mtd||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
-                <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">30D Volume</div><div style="font-family:'DM Mono',monospace;font-weight:700;">$${parseFloat(m.volume_30_day||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+            <!-- TAB BAR -->
+            <div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;">
+                <button onclick="mdTab('overview')" id="mdtab-overview" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#0d9488;box-shadow:0 1px 3px rgba(0,0,0,.08);">Overview</button>
+                <button onclick="mdTab('tickets')" id="mdtab-tickets" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Tickets</button>
             </div>
-            <div style="margin-bottom:14px;">
-                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Equipment (${equipment.length})</div>
-                ${equipment.length ? equipment.map(e=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;"><span style="font-weight:700;">${e.terminal_type}</span><span style="font-family:'DM Mono',monospace;color:#0d9488;">${e.serial_number}</span><span style="color:#94a3b8;">${e.status}</span></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No equipment</div>'}
+
+            <!-- OVERVIEW PANEL -->
+            <div id="mdpanel-overview">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #e2e8f0;">
+                    <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Merchant ID</div><div style="font-family:'DM Mono',monospace;font-weight:700;color:#0d9488;">${m.merchant_id}</div></div>
+                    <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Status</div><div style="font-weight:700;">${m.account_status}</div></div>
+                    <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Email</div><div style="font-size:12px;">${m.email||'—'}</div></div>
+                    <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">Phone</div><div style="font-size:12px;">${m.merchant_phone||'—'}</div></div>
+                    <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">MTD Volume</div><div style="font-family:'DM Mono',monospace;font-weight:700;">$${parseFloat(m.volume_mtd||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+                    <div><div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;">30D Volume</div><div style="font-family:'DM Mono',monospace;font-weight:700;">$${parseFloat(m.volume_30_day||0).toLocaleString(undefined,{minimumFractionDigits:2})}</div></div>
+                </div>
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Equipment (${equipment.length})</div>
+                    ${equipment.length ? equipment.map(e=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;"><span style="font-weight:700;">${e.terminal_type}</span><span style="font-family:'DM Mono',monospace;color:#0d9488;">${e.serial_number}</span><span style="color:#94a3b8;">${e.status}</span></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No equipment</div>'}
+                </div>
+                <div style="margin-bottom:14px;">
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Recent RMAs (${rmas.length})</div>
+                    ${rmas.length ? rmas.slice(0,3).map(r=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:700;color:#0d9488;">${r.return_id||'—'}</span><span>${r.return_reason||'—'}</span><span style="background:${r.status==='Open'?'#e0f2fe':'#f1f5f9'};color:${r.status==='Open'?'#0369a1':'#475569'};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">${r.status}</span></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No RMAs</div>'}
+                </div>
+                <div>
+                    <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Notes (${notes.length})</div>
+                    <div id="modal-notes-body"></div>
+                </div>
+                <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
+                    <button onclick="addNote('${merchantId}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">note_add</span>Add Note</button>
+                    <button onclick="openTicketMenu('${m.merchant_id}','${m.dba_name}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">confirmation_number</span>Open Ticket</button>
+                </div>
             </div>
-            <div style="margin-bottom:14px;">
-                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Recent RMAs (${rmas.length})</div>
-                ${rmas.length ? rmas.slice(0,3).map(r=>`<div style="background:#f8fafc;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:12px;display:flex;justify-content:space-between;align-items:center;"><span style="font-weight:700;color:#0d9488;">${r.return_id||'—'}</span><span>${r.return_reason||'—'}</span><span style="background:${r.status==='Open'?'#e0f2fe':'#f1f5f9'};color:${r.status==='Open'?'#0369a1':'#475569'};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">${r.status}</span></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No RMAs</div>'}
-            </div>
-            <div>
-                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Notes (${notes.length})</div>
-                <div id="modal-notes-body"></div>
-            </div>
-            <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
-                <button onclick="addNote('${merchantId}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">note_add</span>Add Note</button>
-                <button onclick="openTicketMenu('${m.merchant_id}','${m.dba_name}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">confirmation_number</span>Open Ticket</button>
+
+            <!-- TICKETS PANEL -->
+            <div id="mdpanel-tickets" style="display:none;">
+                <div id="md-tickets-list"><div style="text-align:center;color:#94a3b8;padding:20px;">Loading tickets...</div></div>
             </div>
         </div>
     ` });
     window.renderNotesSection();
 }
+
+window.mdTab = function(tab) {
+    ['overview','tickets'].forEach(function(t) {
+        var btn = document.getElementById('mdtab-' + t);
+        var panel = document.getElementById('mdpanel-' + t);
+        if (btn) {
+            btn.style.background = t === tab ? 'white' : 'transparent';
+            btn.style.color = t === tab ? '#0d9488' : '#64748b';
+            btn.style.boxShadow = t === tab ? '0 1px 3px rgba(0,0,0,.08)' : 'none';
+        }
+        if (panel) panel.style.display = t === tab ? 'block' : 'none';
+    });
+    if (tab === 'tickets') mdLoadTickets();
+};
+
+window.mdLoadTickets = async function() {
+    var el = document.getElementById('md-tickets-list');
+    if (!el) return;
+    const merchantUuid = window._currentMerchantUuid;
+    if (!merchantUuid) return;
+    el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">Loading...</div>';
+    try {
+        const res = await fetch('/api/tickets', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'list_for_partner', token, merchant_uuid: merchantUuid })
+        });
+        const data = await res.json();
+        const tickets = data.data || [];
+        if (!tickets.length) { el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:20px;">No tickets for this merchant.</div>'; return; }
+        const statusColor = s => ({ open:'#2563eb', in_progress:'#d97706', resolved:'#16a34a', closed:'#94a3b8', pending_partner:'#7c3aed' }[s] || '#94a3b8');
+        el.innerHTML = tickets.map(t => `
+            <div onclick="window.location.href='/partner/tickets?open=${t.id}'" style="cursor:pointer;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:8px;background:white;" onmouseover="this.style.borderColor='#0d9488'" onmouseout="this.style.borderColor='#e2e8f0'">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                    <span style="font-family:'DM Mono',monospace;font-size:11px;font-weight:700;color:#0d9488;">${t.ticket_number}</span>
+                    <span style="background:${statusColor(t.status)}1a;color:${statusColor(t.status)};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;text-transform:uppercase;">${t.status}</span>
+                </div>
+                <div style="font-size:13px;font-weight:700;margin-bottom:2px;">${t.subject}</div>
+                <div style="font-size:11px;color:#94a3b8;">${new Date(t.created_at).toLocaleDateString()} · ${(t.type||'').replace(/_/g,' ')}</div>
+            </div>`).join('');
+    } catch (e) {
+        el.innerHTML = '<div style="text-align:center;color:#ef4444;padding:20px;">Failed to load tickets.</div>';
+    }
+};
 
 window.addNote = async function(merchantId) {
     const { value: formValues } = await Swal.fire({ title: 'Add Note', html: `<input id="noteTitle" class="swal2-input" placeholder="Title"><textarea id="noteBody" class="swal2-textarea" placeholder="Note content..."></textarea>`, focusConfirm: false, showCancelButton: true, confirmButtonColor: '#0d9488', confirmButtonText: 'Add Note', preConfirm: () => ({ title: document.getElementById('noteTitle').value, body: document.getElementById('noteBody').value }) });
