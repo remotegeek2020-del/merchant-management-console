@@ -238,12 +238,43 @@ async function loadMerchants() {
 
 function changePage(dir) { currentPage += dir; loadMerchants(); }
 
+const NOTES_PER_PAGE = 5;
+window._modalNotes = [];
+window._notesPage = 0;
+
+window.renderNotesSection = function() {
+    const el = document.getElementById('modal-notes-body');
+    if (!el) return;
+    const total = window._modalNotes.length;
+    if (!total) { el.innerHTML = '<div style="color:#94a3b8;font-size:12px;">No notes</div>'; return; }
+    const totalPages = Math.ceil(total / NOTES_PER_PAGE);
+    const start = window._notesPage * NOTES_PER_PAGE;
+    const page = window._modalNotes.slice(start, start + NOTES_PER_PAGE);
+    const btnStyle = 'background:white;border:1px solid #e2e8f0;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif;color:#475569;';
+    const disabledStyle = 'opacity:0.4;cursor:default;';
+    el.innerHTML = page.map(n => `
+        <div style="border-left:3px solid #0d9488;padding:8px 12px;margin-bottom:6px;background:#f0fdfa;border-radius:0 8px 8px 0;">
+            <div style="font-weight:700;font-size:12px;">${n.title || '(no title)'}</div>
+            <div style="font-size:11px;color:#475569;margin-top:4px;line-height:1.5;">${n.body || ''}</div>
+            ${n.created_at ? `<div style="font-size:10px;color:#94a3b8;margin-top:4px;">${new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>` : ''}
+        </div>`).join('') + (totalPages > 1 ? `
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">
+            <span style="font-size:11px;color:#94a3b8;">${start+1}–${Math.min(start+NOTES_PER_PAGE,total)} of ${total} notes</span>
+            <div style="display:flex;gap:6px;">
+                <button onclick="window._notesPage--;window.renderNotesSection();" ${window._notesPage===0?'disabled':''} style="${btnStyle}${window._notesPage===0?disabledStyle:''}">← Prev</button>
+                <button onclick="window._notesPage++;window.renderNotesSection();" ${window._notesPage>=totalPages-1?'disabled':''} style="${btnStyle}${window._notesPage>=totalPages-1?disabledStyle:''}">Next →</button>
+            </div>
+        </div>` : '');
+};
+
 async function openMerchantDetail(merchantId, name) {
     Swal.fire({ title: name, html: '<div style="text-align:center;padding:20px;color:#94a3b8;">Loading merchant details...</div>', showConfirmButton: false, showCloseButton: true, width: 700 });
     const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'get_merchant_detail', token, merchant_uuid:merchantId }) });
     const data = await res.json();
     if (!data.success) { Swal.update({ html: '<p style="color:#ef4444;">Failed to load details.</p>' }); return; }
     const { merchant: m, equipment, notes, rmas } = data.data;
+    window._modalNotes = notes || [];
+    window._notesPage = 0;
     Swal.update({ html: `
         <div style="text-align:left;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid #e2e8f0;">
@@ -264,7 +295,7 @@ async function openMerchantDetail(merchantId, name) {
             </div>
             <div>
                 <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:8px;">Notes (${notes.length})</div>
-                ${notes.length ? notes.slice(0,3).map(n=>`<div style="border-left:3px solid #0d9488;padding:8px 12px;margin-bottom:6px;background:#f0fdfa;border-radius:0 8px 8px 0;"><div style="font-weight:700;font-size:12px;">${n.title}</div><div style="font-size:11px;color:#475569;margin-top:4px;">${n.body}</div></div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No notes</div>'}
+                <div id="modal-notes-body"></div>
             </div>
             <div style="margin-top:16px;padding-top:16px;border-top:1px solid #e2e8f0;display:flex;gap:8px;">
                 <button onclick="addNote('${merchantId}')" style="background:#0d9488;color:white;border:none;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">note_add</span>Add Note</button>
@@ -272,6 +303,7 @@ async function openMerchantDetail(merchantId, name) {
             </div>
         </div>
     ` });
+    window.renderNotesSection();
 }
 
 window.addNote = async function(merchantId) {
