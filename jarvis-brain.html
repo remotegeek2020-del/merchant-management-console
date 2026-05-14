@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Jarvis Brain | Secure Console</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        :root { --bg: #0a0f1e; --surface: #111827; --surface2: #1e293b; --border: #1e3a5f; --accent: #38bdf8; --accent2: #0369a1; --text: #e2e8f0; --muted: #64748b; }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { background: var(--bg); color: var(--text); font-family: 'DM Sans', sans-serif; min-height: 100vh; padding: 30px 24px 60px; }
+        .page-header { max-width: 1100px; margin: 0 auto 28px; display: flex; align-items: center; gap: 14px; }
+        .page-header .icon { width: 48px; height: 48px; background: linear-gradient(135deg, #0c2340, #0369a1); border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .page-header h1 { font-size: 22px; font-weight: 800; }
+        .page-header p { font-size: 13px; color: var(--muted); margin-top: 2px; }
+        .back-btn { margin-left: auto; background: var(--surface2); border: 1px solid var(--border); color: var(--muted); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 700; display: flex; align-items: center; gap: 6px; text-decoration: none; }
+        .back-btn:hover { color: var(--text); }
+
+        .main { max-width: 1100px; margin: 0 auto; display: grid; grid-template-columns: 340px 1fr; gap: 20px; }
+        @media (max-width: 800px) { .main { grid-template-columns: 1fr; } }
+
+        /* ── INGEST PANEL ── */
+        .ingest-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; }
+        .tab-bar { display: flex; border-bottom: 1px solid var(--border); }
+        .tab-btn { flex: 1; padding: 13px 8px; background: none; border: none; color: var(--muted); font-size: 11px; font-weight: 800; cursor: pointer; text-transform: uppercase; letter-spacing: .5px; border-bottom: 2px solid transparent; transition: all .15s; display: flex; align-items: center; justify-content: center; gap: 5px; }
+        .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); background: rgba(56,189,248,.05); }
+        .tab-panel { padding: 20px; display: none; }
+        .tab-panel.active { display: block; }
+        label.field-label { display: block; font-size: 10px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 6px; }
+        .field { margin-bottom: 14px; }
+        input.ji, textarea.ji { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 10px 12px; border-radius: 8px; font-size: 13px; font-family: 'DM Sans', sans-serif; outline: none; transition: border-color .15s; }
+        input.ji:focus, textarea.ji:focus { border-color: var(--accent); }
+        textarea.ji { resize: vertical; min-height: 90px; }
+        .submit-btn { width: 100%; padding: 11px; background: var(--accent2); color: white; border: none; border-radius: 8px; font-weight: 800; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; transition: background .15s; }
+        .submit-btn:hover { background: #0284c7; }
+        .submit-btn:disabled { opacity: .5; cursor: not-allowed; }
+
+        /* drop zone */
+        .drop-zone { border: 2px dashed var(--border); border-radius: 12px; padding: 30px 20px; text-align: center; cursor: pointer; transition: all .2s; }
+        .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: rgba(56,189,248,.05); }
+        .drop-zone .material-icons { font-size: 36px; color: var(--muted); display: block; margin-bottom: 8px; }
+        .drop-zone p { font-size: 13px; color: var(--muted); }
+        .drop-zone p strong { color: var(--accent); }
+        #file-input { display: none; }
+        .file-info { margin-top: 12px; background: rgba(56,189,248,.08); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; font-size: 12px; display: none; }
+        .file-info .fname { font-weight: 700; color: var(--text); }
+        .file-info .fsize { color: var(--muted); }
+
+        /* chunks preview */
+        .chunks-preview { margin-top: 14px; display: none; }
+        .chunk-item { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; }
+        .chunk-topic { font-size: 10px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 3px; }
+        .chunk-logic { font-size: 12px; color: var(--text); line-height: 1.5; }
+
+        /* ── KNOWLEDGE LIST ── */
+        .knowledge-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; }
+        .kp-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
+        .kp-header h2 { font-size: 14px; font-weight: 800; }
+        .kp-count { background: var(--accent2); color: white; border-radius: 99px; padding: 2px 10px; font-size: 11px; font-weight: 800; }
+        .kp-filter { padding: 12px 20px; border-bottom: 1px solid var(--border); display: flex; gap: 8px; flex-wrap: wrap; }
+        .filter-chip { padding: 4px 12px; border-radius: 99px; border: 1px solid var(--border); background: none; color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; transition: all .15s; }
+        .filter-chip.active { background: var(--accent2); color: white; border-color: var(--accent2); }
+        .kp-list { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+        .kp-list::-webkit-scrollbar { width: 4px; }
+        .kp-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        .kp-empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+        .kp-empty .material-icons { font-size: 40px; display: block; margin-bottom: 10px; opacity: .4; }
+
+        .k-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; gap: 10px; }
+        .k-source-badge { flex-shrink: 0; width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+        .k-source-badge.manual { background: rgba(56,189,248,.15); color: var(--accent); }
+        .k-source-badge.document { background: rgba(139,92,246,.15); color: #a78bfa; }
+        .k-source-badge.url { background: rgba(16,185,129,.15); color: #34d399; }
+        .k-body { flex: 1; min-width: 0; }
+        .k-topic { font-size: 11px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .4px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .k-logic { font-size: 12px; color: #94a3b8; line-height: 1.55; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .k-meta { font-size: 10px; color: var(--muted); margin-top: 5px; }
+        .k-del { flex-shrink: 0; background: none; border: none; color: var(--muted); cursor: pointer; padding: 4px; border-radius: 6px; transition: color .15s; }
+        .k-del:hover { color: #ef4444; }
+
+        .progress-bar { height: 3px; background: var(--border); border-radius: 3px; overflow: hidden; margin-top: 10px; display: none; }
+        .progress-bar-fill { height: 100%; background: var(--accent); border-radius: 3px; animation: progress-anim 2s ease-in-out infinite; }
+        @keyframes progress-anim { 0%{width:0%;} 50%{width:70%;} 100%{width:100%;} }
+
+        .stat-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .stat-box { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; text-align: center; }
+        .stat-box .num { font-size: 22px; font-weight: 800; color: var(--accent); }
+        .stat-box .lbl { font-size: 10px; color: var(--muted); font-weight: 700; text-transform: uppercase; margin-top: 2px; }
+    </style>
+</head>
+<body>
+
+<div class="page-header">
+    <div class="icon"><span class="material-icons" style="color:#38bdf8;font-size:26px;">psychology</span></div>
+    <div>
+        <h1>Jarvis Brain</h1>
+        <p>Manage JARVIS's knowledge base — inject rules, upload documents, crawl URLs</p>
+    </div>
+    <a href="secret-dungeon.html" class="back-btn"><span class="material-icons" style="font-size:15px;">arrow_back</span> Back</a>
+</div>
+
+<div class="main">
+
+    <!-- ── INGEST PANEL ── -->
+    <div class="ingest-panel">
+        <div class="tab-bar">
+            <button class="tab-btn active" onclick="switchTab('manual')" id="tab-manual">
+                <span class="material-icons" style="font-size:14px;">edit_note</span> Manual
+            </button>
+            <button class="tab-btn" onclick="switchTab('document')" id="tab-document">
+                <span class="material-icons" style="font-size:14px;">upload_file</span> Document
+            </button>
+            <button class="tab-btn" onclick="switchTab('url')" id="tab-url">
+                <span class="material-icons" style="font-size:14px;">language</span> URL
+            </button>
+        </div>
+
+        <!-- Manual -->
+        <div class="tab-panel active" id="panel-manual">
+            <div class="field">
+                <label class="field-label">Topic / Subject</label>
+                <input class="ji" id="manual-topic" placeholder="e.g. PCI Compliance Policy">
+            </div>
+            <div class="field">
+                <label class="field-label">Knowledge / Rule</label>
+                <textarea class="ji" id="manual-logic" placeholder="e.g. Any merchant flagged as PCI Non-Compliant must have a follow-up task created within 48 hours and their agent notified."></textarea>
+            </div>
+            <button class="submit-btn" onclick="submitManual()">
+                <span class="material-icons" style="font-size:16px;">bolt</span> Inject Knowledge
+            </button>
+        </div>
+
+        <!-- Document -->
+        <div class="tab-panel" id="panel-document">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Upload a PDF or text file. Jarvis will extract and store the key business knowledge automatically.</p>
+            <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()">
+                <span class="material-icons">cloud_upload</span>
+                <p>Drop a file here or <strong>click to browse</strong></p>
+                <p style="font-size:11px;margin-top:4px;">PDF, TXT, MD — max 5MB</p>
+            </div>
+            <input type="file" id="file-input" accept=".pdf,.txt,.md,.csv" onchange="handleFileSelect(this)">
+            <div class="file-info" id="file-info">
+                <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#a78bfa;">description</span>
+                <span class="fname" id="file-name"></span>
+                <span class="fsize" id="file-size"></span>
+            </div>
+            <div class="progress-bar" id="doc-progress"><div class="progress-bar-fill"></div></div>
+            <div class="chunks-preview" id="doc-chunks"></div>
+            <button class="submit-btn" id="doc-submit" onclick="submitDocument()" style="margin-top:14px;" disabled>
+                <span class="material-icons" style="font-size:16px;">auto_awesome</span> Extract & Store Knowledge
+            </button>
+        </div>
+
+        <!-- URL -->
+        <div class="tab-panel" id="panel-url">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.6;">Enter a URL to crawl. Jarvis will fetch the page, extract useful business knowledge, and store it.</p>
+            <div class="field">
+                <label class="field-label">Page URL</label>
+                <input class="ji" id="url-input" placeholder="https://example.com/pricing" type="url">
+            </div>
+            <div class="progress-bar" id="url-progress"><div class="progress-bar-fill"></div></div>
+            <div class="chunks-preview" id="url-chunks"></div>
+            <button class="submit-btn" onclick="submitUrl()">
+                <span class="material-icons" style="font-size:16px;">travel_explore</span> Crawl & Extract
+            </button>
+        </div>
+    </div>
+
+    <!-- ── KNOWLEDGE LIST ── -->
+    <div class="knowledge-panel">
+        <div class="kp-header">
+            <h2>Knowledge Base</h2>
+            <span class="kp-count" id="k-count">0</span>
+        </div>
+        <div class="kp-filter">
+            <button class="filter-chip active" onclick="setFilter('all')">All</button>
+            <button class="filter-chip" onclick="setFilter('manual')">
+                <span class="material-icons" style="font-size:11px;vertical-align:middle;">edit_note</span> Manual
+            </button>
+            <button class="filter-chip" onclick="setFilter('document')">
+                <span class="material-icons" style="font-size:11px;vertical-align:middle;">upload_file</span> Document
+            </button>
+            <button class="filter-chip" onclick="setFilter('url')">
+                <span class="material-icons" style="font-size:11px;vertical-align:middle;">language</span> URL
+            </button>
+        </div>
+        <div class="kp-list" id="k-list">
+            <div class="kp-empty"><span class="material-icons">psychology_alt</span>Loading knowledge base...</div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+const userId = localStorage.getItem('pp_userid') || '';
+let allKnowledge = [];
+let activeFilter = 'all';
+
+// ── TAB SWITCHER ──────────────────────────────────────────────────────────────
+function switchTab(name) {
+    ['manual','document','url'].forEach(t => {
+        document.getElementById('tab-' + t).classList.toggle('active', t === name);
+        document.getElementById('panel-' + t).classList.toggle('active', t === name);
+    });
+}
+
+// ── KNOWLEDGE LIST ────────────────────────────────────────────────────────────
+async function loadKnowledge() {
+    const res = await fetch('/api/jarvis-ingest', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'list', userId }) });
+    const d = await res.json();
+    allKnowledge = d.data || [];
+    renderList();
+}
+
+function setFilter(f) {
+    activeFilter = f;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    event.target.closest('.filter-chip').classList.add('active');
+    renderList();
+}
+
+const sourceIcon = { manual: 'edit_note', document: 'description', url: 'language' };
+const sourceLabel = { manual: 'Manual', document: 'Document', url: 'URL' };
+
+function renderList() {
+    const list = document.getElementById('k-list');
+    const count = document.getElementById('k-count');
+    const items = activeFilter === 'all' ? allKnowledge : allKnowledge.filter(k => k.source === activeFilter);
+    count.textContent = allKnowledge.length;
+    if (!items.length) {
+        list.innerHTML = `<div class="kp-empty"><span class="material-icons">psychology_alt</span>${allKnowledge.length ? 'No entries for this filter.' : 'No knowledge yet. Add some above!'}</div>`;
+        return;
+    }
+    list.innerHTML = items.map(k => `
+        <div class="k-card">
+            <div class="k-source-badge ${k.source || 'manual'}">
+                <span class="material-icons" style="font-size:15px;">${sourceIcon[k.source] || 'edit_note'}</span>
+            </div>
+            <div class="k-body">
+                <div class="k-topic">${esc(k.topic)}</div>
+                <div class="k-logic">${esc(k.correct_logic)}</div>
+                <div class="k-meta">${sourceLabel[k.source] || 'Manual'}${k.source_name ? ' · ' + esc(k.source_name.length > 40 ? k.source_name.slice(0,40)+'…' : k.source_name) : ''} · ${new Date(k.created_at).toLocaleDateString()}</div>
+            </div>
+            <button class="k-del" onclick="deleteEntry('${k.id}')" title="Delete"><span class="material-icons" style="font-size:16px;">delete_outline</span></button>
+        </div>
+    `).join('');
+}
+
+async function deleteEntry(id) {
+    const c = await Swal.fire({ title: 'Delete this entry?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626', confirmButtonText: 'Delete', background: '#111827', color: '#e2e8f0' });
+    if (!c.isConfirmed) return;
+    await fetch('/api/jarvis-ingest', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'delete', id, userId }) });
+    loadKnowledge();
+}
+
+function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ── MANUAL ────────────────────────────────────────────────────────────────────
+async function submitManual() {
+    const topic = document.getElementById('manual-topic').value.trim();
+    const logic = document.getElementById('manual-logic').value.trim();
+    if (!topic || !logic) { Swal.fire({ title: 'Both fields required', icon: 'warning', background: '#111827', color: '#e2e8f0' }); return; }
+    Swal.fire({ title: 'Injecting...', didOpen: () => Swal.showLoading(), background: '#111827', color: '#e2e8f0' });
+    const res = await fetch('/api/jarvis-ingest', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ action: 'manual', topic, logic, userId }) });
+    const d = await res.json();
+    if (d.success) {
+        Swal.fire({ icon: 'success', title: 'Knowledge injected!', background: '#111827', color: '#e2e8f0', timer: 1500, showConfirmButton: false });
+        document.getElementById('manual-topic').value = '';
+        document.getElementById('manual-logic').value = '';
+        loadKnowledge();
+    } else {
+        Swal.fire({ icon: 'error', title: 'Failed', text: d.message, background: '#111827', color: '#e2e8f0' });
+    }
+}
+
+// ── DOCUMENT ──────────────────────────────────────────────────────────────────
+let selectedFile = null;
+let extractedText = '';
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); const f = e.dataTransfer.files[0]; if (f) processFile(f); });
+
+function handleFileSelect(input) { if (input.files[0]) processFile(input.files[0]); }
+
+async function processFile(file) {
+    if (file.size > 5 * 1024 * 1024) { alert('File too large (max 5MB)'); return; }
+    selectedFile = file;
+    document.getElementById('file-info').style.display = 'block';
+    document.getElementById('file-name').textContent = file.name + ' ';
+    document.getElementById('file-size').textContent = '(' + (file.size / 1024).toFixed(1) + ' KB)';
+    document.getElementById('doc-chunks').style.display = 'none';
+    document.getElementById('doc-chunks').innerHTML = '';
+
+    // Read text
+    if (file.type === 'application/pdf') {
+        extractedText = await readPdfText(file);
+    } else {
+        extractedText = await file.text();
+    }
+    document.getElementById('doc-submit').disabled = false;
+}
+
+async function readPdfText(file) {
+    // Use PDF.js if available, otherwise treat as binary and warn
+    if (window.pdfjsLib) {
+        const ab = await file.arrayBuffer();
+        const pdf = await window.pdfjsLib.getDocument({ data: ab }).promise;
+        let text = '';
+        for (let i = 1; i <= Math.min(pdf.numPages, 30); i++) {
+            const page = await pdf.getPage(i);
+            const content = await page.getTextContent();
+            text += content.items.map(s => s.str).join(' ') + '\n';
+        }
+        return text;
+    }
+    // Fallback: read as text (works for text-based PDFs)
+    return await file.text();
+}
+
+async function submitDocument() {
+    if (!extractedText) return;
+    const btn = document.getElementById('doc-submit');
+    btn.disabled = true;
+    const prog = document.getElementById('doc-progress');
+    prog.style.display = 'block';
+    document.getElementById('doc-chunks').style.display = 'none';
+
+    const res = await fetch('/api/jarvis-ingest', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: 'ingest_text', text: extractedText, source_name: selectedFile?.name || 'document', userId }) });
+    const d = await res.json();
+    prog.style.display = 'none';
+    btn.disabled = false;
+
+    if (d.success) {
+        if (d.inserted === 0) {
+            Swal.fire({ icon: 'info', title: 'Nothing extracted', text: 'No useful business knowledge found in this document.', background: '#111827', color: '#e2e8f0' });
+        } else {
+            showChunks(d.chunks, 'doc-chunks');
+            Swal.fire({ icon: 'success', title: `${d.inserted} entries stored!`, text: 'Jarvis has absorbed the document knowledge.', background: '#111827', color: '#e2e8f0', timer: 2000, showConfirmButton: false });
+            loadKnowledge();
+        }
+    } else {
+        Swal.fire({ icon: 'error', title: 'Failed', text: d.message, background: '#111827', color: '#e2e8f0' });
+    }
+}
+
+// ── URL ───────────────────────────────────────────────────────────────────────
+async function submitUrl() {
+    const url = document.getElementById('url-input').value.trim();
+    if (!url) return;
+    const prog = document.getElementById('url-progress');
+    prog.style.display = 'block';
+    document.getElementById('url-chunks').style.display = 'none';
+
+    const res = await fetch('/api/jarvis-ingest', { method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ action: 'ingest_url', url, userId }) });
+    const d = await res.json();
+    prog.style.display = 'none';
+
+    if (d.success) {
+        if (d.inserted === 0) {
+            Swal.fire({ icon: 'info', title: 'Nothing extracted', text: d.message || 'No useful knowledge found on this page.', background: '#111827', color: '#e2e8f0' });
+        } else {
+            showChunks(d.chunks, 'url-chunks');
+            Swal.fire({ icon: 'success', title: `${d.inserted} entries stored!`, text: 'Knowledge extracted from URL.', background: '#111827', color: '#e2e8f0', timer: 2000, showConfirmButton: false });
+            document.getElementById('url-input').value = '';
+            loadKnowledge();
+        }
+    } else {
+        Swal.fire({ icon: 'error', title: 'Failed', text: d.message, background: '#111827', color: '#e2e8f0' });
+    }
+}
+
+function showChunks(chunks, containerId) {
+    if (!chunks?.length) return;
+    const el = document.getElementById(containerId);
+    el.style.display = 'block';
+    el.innerHTML = '<p style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Extracted entries:</p>' +
+        chunks.map(c => `<div class="chunk-item"><div class="chunk-topic">${esc(c.topic)}</div><div class="chunk-logic">${esc(c.logic)}</div></div>`).join('');
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+loadKnowledge();
+</script>
+
+<!-- pdf.js for PDF parsing -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>if (window.pdfjsLib) window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
+<script src="/js/site-config.js"></script>
+</body>
+</html>

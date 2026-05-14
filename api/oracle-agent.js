@@ -464,6 +464,18 @@ export default async function handler(req, res) {
 
     try {
 
+        // ── LOAD KNOWLEDGE BASE ───────────────────────────────────────────────
+        const { data: knowledgeRows } = await supabase
+            .from('jarvis_knowledge')
+            .select('topic, correct_logic')
+            .order('created_at', { ascending: false })
+            .limit(40);
+
+        const knowledgeBlock = (knowledgeRows || []).length > 0
+            ? '\n\nINTERNAL KNOWLEDGE BASE (always apply these rules and facts):\n' +
+              (knowledgeRows || []).map(k => `• [${k.topic}] ${k.correct_logic}`).join('\n')
+            : '';
+
         // ── CHAT HISTORY ──────────────────────────────────────────────────────
         const { data: history } = await supabase
             .from('chat_history')
@@ -490,7 +502,7 @@ Rules:
 
 Formatting: use **bold** for names/numbers, bullet lists for multiple items, keep responses concise.
 For navigation suggestions, append (url:/path) at end of the action line. Example:
-→ Review at-risk merchants (url:/merchants-dashboard.html)`;
+→ Review at-risk merchants (url:/merchants-dashboard.html)` + knowledgeBlock;
 
         // ── AGENTIC LOOP ──────────────────────────────────────────────────────
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
