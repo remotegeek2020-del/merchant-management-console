@@ -551,14 +551,22 @@ async function askJarvis() {
         // Tool call tags
         if (data.tools_used && data.tools_used.length > 0) {
             const toolLabels = {
-                get_dashboard_summary: 'Dashboard Summary',
+                get_merchant_overview: 'Merchant Overview',
                 search_merchants: 'Merchant Search',
                 get_merchant_detail: 'Merchant Detail',
                 get_at_risk_merchants: 'At-Risk Analysis',
-                get_open_tickets: 'Support Tickets',
-                get_pending_tasks: 'Task Queue',
-                get_open_returns: 'Returns',
-                get_recent_deployments: 'Deployments'
+                get_merchants_by_status: 'Merchant Status',
+                get_partner_overview: 'Partner Overview',
+                search_partners: 'Partner Search',
+                get_partner_detail: 'Partner Detail',
+                get_partners_without_portal: 'Portal Access',
+                get_deployment_overview: 'Deployments',
+                get_deployments: 'Deployment List',
+                get_inventory_overview: 'Inventory',
+                search_inventory: 'Inventory Search',
+                get_inventory_by_location: 'Inventory Location',
+                get_returns_overview: 'Returns Overview',
+                get_returns: 'Returns List'
             };
             html += '<div style="margin-bottom:10px;">';
             data.tools_used.forEach(t => {
