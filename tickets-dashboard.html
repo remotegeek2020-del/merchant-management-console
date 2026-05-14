@@ -303,7 +303,7 @@ function renderTickets() {
     }
 
     document.getElementById('ticket-table').innerHTML = pageItems.map(t => `
-        <div class="ticket-row" onclick="openTicket(${t.id})">
+        <div class="ticket-row" data-id="${t.id}" onclick="openTicket(${t.id})">
             <div class="ticket-icon ${typeIconClass(t.type)}">
                 <span class="material-icons" style="font-size:18px;">${typeIconName(t.type)}</span>
                 ${t.unread_count > 0 ? `<div class="unread-dot">${t.unread_count > 9 ? '9+' : t.unread_count}</div>` : ''}
@@ -1111,7 +1111,44 @@ document.getElementById('ticket-modal').addEventListener('click', e => {
     if (e.target === document.getElementById('ticket-modal')) closeModal();
 });
 
-window.addEventListener('load', function() { init(); });
+function updateBadgeInDOM(id, count) {
+    const row = document.querySelector(`.ticket-row[data-id="${id}"]`);
+    if (!row) return;
+    const icon = row.querySelector('.ticket-icon');
+    if (!icon) return;
+    let dot = icon.querySelector('.unread-dot');
+    if (count > 0) {
+        const label = count > 9 ? '9+' : count;
+        if (dot) { dot.textContent = label; }
+        else { icon.insertAdjacentHTML('beforeend', `<div class="unread-dot">${label}</div>`); }
+    } else {
+        if (dot) dot.remove();
+    }
+}
+
+async function pollUnreadCounts() {
+    if (document.hidden) return;
+    try {
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_unread_counts' })
+        });
+        const result = await r.json();
+        if (!result.success) return;
+        result.counts.forEach(({ id, unread_count }) => {
+            const ticket = allTickets.find(t => t.id === id);
+            if (ticket && ticket.unread_count !== unread_count) {
+                ticket.unread_count = unread_count;
+                updateBadgeInDOM(id, unread_count);
+            }
+        });
+    } catch (e) {}
+}
+
+window.addEventListener('load', function() {
+    init();
+    setInterval(pollUnreadCounts, 20000);
+});
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'tickets'})});})();</script>
 <script src="/js/site-config.js"></script>

@@ -266,7 +266,7 @@ function renderTickets() {
     const pageItems = filtered.slice(start, start + pageSize);
 
     container.innerHTML = pageItems.map(t => `
-        <div class="ticket-card" onclick="viewTicket(${t.id})">
+        <div class="ticket-card" data-id="${t.id}" onclick="viewTicket(${t.id})">
             <div class="ticket-icon ${typeClass(t.type)}">
                 <span class="material-icons" style="font-size:20px;">${typeIcon(t.type)}</span>
                 ${t.partner_unread_count > 0 ? `<div class="unread-dot">${t.partner_unread_count > 9 ? '9+' : t.partner_unread_count}</div>` : ''}
@@ -685,7 +685,44 @@ async function handleLogout() {
     localStorage.clear(); window.location.href = '/partner';
 }
 
-loadTickets();
+function updatePartnerBadgeInDOM(id, count) {
+    const card = document.querySelector(`.ticket-card[data-id="${id}"]`);
+    if (!card) return;
+    const icon = card.querySelector('.ticket-icon');
+    if (!icon) return;
+    let dot = icon.querySelector('.unread-dot');
+    if (count > 0) {
+        const label = count > 9 ? '9+' : count;
+        if (dot) { dot.textContent = label; }
+        else { icon.insertAdjacentHTML('beforeend', `<div class="unread-dot">${label}</div>`); }
+    } else {
+        if (dot) dot.remove();
+    }
+}
+
+async function pollPartnerUnread() {
+    if (document.hidden) return;
+    try {
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'list_for_partner', token })
+        });
+        const result = await r.json();
+        if (!result.success) return;
+        (result.data || []).forEach(t => {
+            const existing = allTickets.find(a => a.id === t.id);
+            if (existing && existing.partner_unread_count !== t.partner_unread_count) {
+                existing.partner_unread_count = t.partner_unread_count;
+                updatePartnerBadgeInDOM(t.id, t.partner_unread_count);
+            }
+        });
+    } catch (e) {}
+}
+
+window.addEventListener('load', function() {
+    loadTickets();
+    setInterval(pollPartnerUnread, 20000);
+});
 </script>
 <script src="/js/site-config.js"></script>
 </body>

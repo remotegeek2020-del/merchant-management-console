@@ -380,6 +380,14 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, comments: data || [] });
         }
 
+        if (action === 'get_unread_counts') {
+            const { data, error } = await supabase.from('support_tickets')
+                .select('id, unread_count, partner_unread_count')
+                .neq('status', 'closed');
+            if (error) throw error;
+            return res.status(200).json({ success: true, counts: data || [] });
+        }
+
         if (action === 'mark_read') {
             const { ticket_id } = req.body;
             if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
