@@ -329,7 +329,7 @@ if (action === 'delete') {
 }
 
         if (action === 'list') {
-            const { query, page = 1, limit = 20 } = body;
+            const { query, page = 1, limit = 20, dateFrom, dateTo } = body;
             const from = (page - 1) * limit;
             const to = from + limit - 1;
 
@@ -341,6 +341,9 @@ if (action === 'delete') {
                     equipments:equipment_id(id, serial_number, terminal_type),
                     deployment_items(id, equipment_id, tid, equip:equipment_id(serial_number, terminal_type, status))
                 `, { count: 'exact' });
+
+            if (dateFrom) request = request.gte('target_deployment_date', dateFrom);
+            if (dateTo) request = request.lte('target_deployment_date', dateTo + 'T23:59:59');
 
             if (query) {
                 const term = `%${query}%`;

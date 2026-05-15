@@ -65,17 +65,32 @@
             </a>
             <h1 style="font-size: 1.6rem; font-weight: 800; color: #002d5a; margin: 0;">Logistics & Deployments</h1>
         </div>
-        <div style="display: flex; gap: 10px;">
-            <div class="slds-form-element" style="margin-right: 15px;">
+        <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+            <div class="slds-form-element">
     <div class="slds-form-element__control slds-input-has-icon slds-input-has-icon_left">
         <span class="material-icons" style="position: absolute; left: 10px; top: 8px; color: #94a3b8; font-size: 18px; z-index: 2;">search</span>
-        <input type="text" id="depSearch" 
-               placeholder="Search ID or Serial..." 
-               oninput="fetchDeployments()" 
-               class="slds-input" 
-               style="width: 320px; height: 36px; padding-left: 35px; border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: none;">
+        <input type="text" id="depSearch"
+               placeholder="Search ID or Serial..."
+               oninput="fetchDeployments()"
+               class="slds-input"
+               style="width: 260px; height: 36px; padding-left: 35px; border-radius: 8px; border: 1px solid #cbd5e1; box-shadow: none;">
     </div>
 </div>
+            <div style="display:flex; align-items:center; gap:6px; background:#f8fafc; border:1px solid #cbd5e1; border-radius:8px; padding:0 10px; height:36px;">
+                <span class="material-icons" style="font-size:16px; color:#94a3b8;">calendar_today</span>
+                <input type="date" id="dateFrom" onchange="fetchDeployments()"
+                       style="border:none; background:transparent; font-size:13px; color:#334155; outline:none; height:100%;"
+                       title="Date from">
+                <span style="color:#94a3b8; font-size:12px;">–</span>
+                <input type="date" id="dateTo" onchange="fetchDeployments()"
+                       style="border:none; background:transparent; font-size:13px; color:#334155; outline:none; height:100%;"
+                       title="Date to">
+                <button onclick="document.getElementById('dateFrom').value=''; document.getElementById('dateTo').value=''; fetchDeployments();"
+                        title="Clear dates"
+                        style="background:none; border:none; cursor:pointer; padding:0; color:#94a3b8; display:flex; align-items:center; line-height:1;">
+                    <span class="material-icons" style="font-size:15px;">close</span>
+                </button>
+            </div>
             <input type="file" id="csvUploader" accept=".csv" style="display:none;" onchange="handleBulkUpload(this)">
 
 <button class="slds-button slds-button_neutral" style="border-radius:10px; border: 1px solid #cbd5e1;" onclick="document.getElementById('csvUploader').click()">
@@ -504,12 +519,16 @@ async function logAuditAction(action, details) {
         searchTimeout = setTimeout(async () => {
             try {
                 const queryValue = document.getElementById('depSearch')?.value || '';
+                const dateFrom = document.getElementById('dateFrom')?.value || '';
+                const dateTo = document.getElementById('dateTo')?.value || '';
                 const res = await fetch('/api/deployments', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                         action: 'list',
                         query: queryValue,
+                        dateFrom,
+                        dateTo,
                         page: currentPage,
                         limit: pageSize
                     })
