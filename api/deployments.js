@@ -370,7 +370,7 @@ if (action === 'delete') {
                     bulkDepIds = [...new Set([...bulkDepIds, ...extra])];
                 }
 
-                const conditions = [`deployment_id.ilike.${term}`, `tid.ilike.${term}`];
+                const conditions = [`deployment_id.ilike.${term}`, `tid.ilike.${term}`, `tracking_id.ilike.${term}`];
                 if (merchantIds.length > 0) conditions.push(`merchant_id.in.(${merchantIds.join(',')})`);
                 if (equipIds.length > 0)   conditions.push(`equipment_id.in.(${equipIds.join(',')})`);
                 if (bulkDepIds.length > 0) conditions.push(`id.in.(${bulkDepIds.join(',')})`);
