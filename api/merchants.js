@@ -418,11 +418,15 @@ if (action === 'get_merchant_equipment') {
         .order('created_at', { ascending: false });
     if (e2) throw e2;
 
+    // Exclude equipment that is currently deployed to this merchant
+    const currentEquipIds = new Set(equipIds);
+
     const past = [];
     for (const dep of (closedDeps || [])) {
         const returnDisplayId = dep.returns?.[0]?.return_id || null;
         if (dep.is_bulk) {
             for (const item of (dep.deployment_items || [])) {
+                if (currentEquipIds.has(item.equipment_id)) continue;
                 past.push({
                     serial_number: item.equip?.serial_number || 'N/A',
                     terminal_type: item.equip?.terminal_type || 'N/A',
@@ -431,6 +435,7 @@ if (action === 'get_merchant_equipment') {
                 });
             }
         } else if (dep.equipment_id) {
+            if (currentEquipIds.has(dep.equipment_id)) continue;
             past.push({
                 serial_number: dep.equipments?.serial_number || 'N/A',
                 terminal_type: dep.equipments?.terminal_type || 'N/A',
