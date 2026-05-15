@@ -739,7 +739,7 @@ async function loadAll() {
 
     if (kpi?.success) {
         renderKPIs(kpi.kpis);
-        renderActivity(kpi.recent_activity);
+        if (isAdminRole) renderActivity(kpi.recent_activity);
     }
     if (risk?.success) renderAtRisk(risk.data);
     else document.getElementById('risk-table').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error: ${risk?.message || 'Could not load at-risk data.'}</div>`;
@@ -751,11 +751,14 @@ async function loadAll() {
     document.getElementById('last-updated').textContent = 'Last updated: ' + fmtTime(new Date());
 }
 
-// Only admins and super_admins can see Staff Access Control
+// Only admins and super_admins can see Staff Access Control and Activity Log
 const ppRole = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
-const canManageStaff = ppRole === 'admin' || ppRole === 'super_admin';
+const canManageStaff = ppRole === 'admin' || ppRole === 'super_admin' || ppRole === 'operations_admin';
+const isAdminRole = ppRole === 'admin' || ppRole === 'super_admin' || ppRole === 'operations_admin';
 const staffWidget = document.querySelector('[data-widget="staff-access"]');
 if (staffWidget) staffWidget.style.display = canManageStaff ? '' : 'none';
+const activityWidget = document.querySelector('[data-widget="activity-log"]');
+if (activityWidget) activityWidget.style.display = isAdminRole ? '' : 'none';
 
 // ── PER-USER DASHBOARD LAYOUT ─────────────────────────────
 const _layoutKey = 'pp_dash_layout_' + (localStorage.getItem('pp_userid') || 'guest');
