@@ -296,8 +296,18 @@ function showReturnMerchantInfo(index) {
                     <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Reason</span><span style="font-weight:600;">${r.return_reason || '—'}</span></div>
                 </div>
             </div>`,
+        showConfirmButton: true,
         confirmButtonColor: '#004990',
-        confirmButtonText: 'Close'
+        confirmButtonText: '<span class="material-icons" style="font-size:15px;vertical-align:middle;margin-right:5px;">storefront</span> View in Merchants',
+        showCancelButton: true,
+        cancelButtonText: 'Close',
+        cancelButtonColor: '#64748b',
+        reverseButtons: true
+    }).then(result => {
+        if (result.isConfirmed) {
+            const mid = m.merchant_id;
+            window.location.href = `merchants-dashboard.html?q=${encodeURIComponent(mid || m.dba_name)}&filterBy=${mid ? 'merchant_id' : 'dba_name'}`;
+        }
     });
 }
 
@@ -349,7 +359,7 @@ async function fetchReturns() {
                 </td>
                 <td style="color:#94a3b8; font-size:12px;">${fmtDate(r.created_at)}</td>
                 <td>
-                    <a href="merchants-dashboard.html?q=${encodeURIComponent(merchantMid || r.merchants?.dba_name || '')}&filterBy=${merchantMid ? 'merchant_id' : 'dba_name'}" style="font-weight:600; color:#004990; text-decoration:underline; text-underline-offset:2px; display:block;" title="Open in Merchant Portfolio">${r.merchants?.dba_name || '---'}</a>
+                    <div style="font-weight:600; color:#004990; cursor:pointer; text-decoration:underline; text-underline-offset:2px;" onclick="showReturnMerchantInfo(${index})">${r.merchants?.dba_name || '---'}</div>
                     ${merchantMid ? `<div style="font-size:10px; color:#64748b; font-family:'DM Mono',monospace;">${merchantMid}</div>` : ''}
                 </td>
                 <td class="hide-mobile">${equipCell}</td>

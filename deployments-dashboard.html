@@ -651,7 +651,7 @@ if (document.getElementById('kpi-total')) {
                                 ${d.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;letter-spacing:0.3px;">TICKET</span>` : ''}
                             </td>
                             <td>
-                                <a href="merchants-dashboard.html?q=${encodeURIComponent(merchantMid || merchantName)}&filterBy=${merchantMid ? 'merchant_id' : 'dba_name'}" style="font-weight:600; color:#004990; text-decoration:underline; text-underline-offset:2px; display:block;" title="Open in Merchant Portfolio">${merchantName}</a>
+                                <div style="font-weight:600; color:#004990; cursor:pointer; text-decoration:underline; text-underline-offset:2px;" onclick="showMerchantInfo(${index})">${merchantName}</div>
                                 ${merchantMid ? `<div style="font-size:10px; color:#94a3b8; font-family:monospace; margin-top:1px;">${merchantMid}</div>` : ''}
                             </td>
                             <td>${hardwareCell}</td>
@@ -860,8 +860,18 @@ async function processReturn() {
                         <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Type</span><span style="font-weight:600;">${d.purchase_type || '—'}</span></div>
                     </div>
                 </div>`,
+            showConfirmButton: true,
             confirmButtonColor: '#004990',
-            confirmButtonText: 'Close'
+            confirmButtonText: '<span class="material-icons" style="font-size:15px;vertical-align:middle;margin-right:5px;">storefront</span> View in Merchants',
+            showCancelButton: true,
+            cancelButtonText: 'Close',
+            cancelButtonColor: '#64748b',
+            reverseButtons: true
+        }).then(result => {
+            if (result.isConfirmed) {
+                const mid = m.merchant_id;
+                window.location.href = `merchants-dashboard.html?q=${encodeURIComponent(mid || m.dba_name)}&filterBy=${mid ? 'merchant_id' : 'dba_name'}`;
+            }
         });
     }
 
