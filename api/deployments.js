@@ -329,7 +329,7 @@ if (action === 'delete') {
 }
 
         if (action === 'list') {
-            const { query, page = 1, limit = 20, dateFrom, dateTo } = body;
+            const { query, page = 1, limit = 20, dateFrom, dateTo, statusFilter, purchaseTypeFilter } = body;
             const from = (page - 1) * limit;
             const to = from + limit - 1;
 
@@ -344,6 +344,8 @@ if (action === 'delete') {
 
             if (dateFrom) request = request.gte('target_deployment_date', dateFrom);
             if (dateTo) request = request.lte('target_deployment_date', dateTo + 'T23:59:59');
+            if (statusFilter) request = request.eq('status', statusFilter);
+            if (purchaseTypeFilter) request = request.eq('purchase_type', purchaseTypeFilter);
 
             if (query) {
                 const term = `%${query}%`;
