@@ -121,20 +121,30 @@
     /* Card Arrange Mode */
     #home-arrange-btn {
         display: none;
+        align-items: center;
+        gap: 5px;
+        padding: 8px 16px 8px 12px;
         border-radius: 50px;
-        padding: 0 15px;
-        margin-right: 8px;
-        border: 1px solid #e2e8f0;
-        background: white;
-        color: #475569;
-        font-size: 13px;
-        font-weight: 600;
+        border: 1px solid rgba(255,255,255,0.25);
+        background: rgba(255,255,255,0.12);
+        backdrop-filter: blur(10px);
+        color: white;
+        font-size: 12px;
+        font-weight: 700;
         cursor: pointer;
+        font-family: 'DM Sans', sans-serif;
         transition: all 0.2s;
-        font-family: 'Inter', sans-serif;
+        letter-spacing: 0.3px;
+        white-space: nowrap;
     }
-    #home-arrange-btn:hover { border-color: #0d9488; color: #0d9488; }
-    #home-arrange-btn.active { background: #0d9488; color: white; border-color: #0d9488; }
+    #home-arrange-btn:hover { background: rgba(255,255,255,0.2); }
+    #home-arrange-btn.active {
+        background: rgba(13,148,136,0.85);
+        border-color: rgba(13,148,136,0.6);
+        backdrop-filter: blur(10px);
+    }
+    #home-arrange-btn .material-icons { font-size: 15px; opacity: 0.9; }
+    .header-right-group { display: flex; align-items: center; gap: 8px; }
     .drag-handle {
         position: absolute;
         top: 8px;
@@ -204,10 +214,14 @@
             <div class="header-top-bar">
                
                 <div id="user-greeting">System Authorizing...</div>
-                <button id="home-arrange-btn" onclick="toggleHomeArrangeMode()">Arrange</button>
-                <button id="logout-btn" class="slds-button slds-button_destructive" style="display:none; border-radius: 50px; padding: 0 15px;" onclick="handleLogout()">
-                    Logout
-                </button>
+                <div class="header-right-group">
+                    <button id="home-arrange-btn" onclick="toggleHomeArrangeMode()">
+                        <span class="material-icons">dashboard_customize</span>Arrange
+                    </button>
+                    <button id="logout-btn" class="slds-button slds-button_destructive" style="display:none; border-radius: 50px; padding: 0 15px;" onclick="handleLogout()">
+                        Logout
+                    </button>
+                </div>
             </div>
             <div class="brand-center">
                 <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" alt="PayProtec" class="logo-img">
@@ -866,7 +880,7 @@
         grid.addEventListener('drop', onDrop);
         grid.addEventListener('click', onArrangeClick, true);
         var btn = document.getElementById('home-arrange-btn');
-        if (btn) { btn.textContent = 'Done Arranging'; btn.classList.add('active'); }
+        if (btn) { btn.innerHTML = '<span class="material-icons">check_circle</span>Done'; btn.classList.add('active'); }
     }
 
     function disableArrangeMode() {
@@ -885,7 +899,7 @@
         grid.removeEventListener('drop', onDrop);
         grid.removeEventListener('click', onArrangeClick, true);
         var btn = document.getElementById('home-arrange-btn');
-        if (btn) { btn.textContent = 'Arrange'; btn.classList.remove('active'); }
+        if (btn) { btn.innerHTML = '<span class="material-icons">dashboard_customize</span>Arrange'; btn.classList.remove('active'); }
     }
 
     window.toggleHomeArrangeMode = function() {
@@ -903,7 +917,7 @@
                     grid = document.querySelector('.card-grid');
                     applyHomeLayout();
                     var btn = document.getElementById('home-arrange-btn');
-                    if (btn) btn.style.display = 'inline-block';
+                    if (btn) btn.style.display = 'inline-flex';
                 }, 150);
             }
         });
