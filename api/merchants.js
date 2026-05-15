@@ -367,29 +367,57 @@ if (action === 'get_merchant_history') {
 if (action === 'get_merchant_equipment') {
     const { merchant_uuid } = req.body;
 
-    // Currently assigned equipment
+    // Currently assigned equipment — no FK join, just base fields
     const { data: current, error: e1 } = await supabase
         .from('equipments')
-        .select('id, serial_number, terminal_type, status, received_date, last_deployment_id, deployment:last_deployment_id(deployment_id)')
+        .select('id, serial_number, terminal_type, status, received_date')
         .eq('merchant_id', merchant_uuid)
         .order('serial_number');
     if (e1) throw e1;
+
+    // Find active deployment display IDs for these units
+    const equipIds = (current || []).map(e => e.id);
+    const equipToDepId = {};
+    if (equipIds.length > 0) {
+        // Single-unit deployments
+        const { data: singleDeps } = await supabase
+            .from('deployments')
+            .select('deployment_id, equipment_id')
+            .in('equipment_id', equipIds)
+            .neq('status', 'Closed');
+        (singleDeps || []).forEach(d => { equipToDepId[d.equipment_id] = d.deployment_id; });
+
+        // Bulk deployments via deployment_items
+        const { data: bulkItems } = await supabase
+            .from('deployment_items')
+            .select('equipment_id, dep:deployment_id(deployment_id, status)')
+            .in('equipment_id', equipIds);
+        (bulkItems || []).forEach(item => {
+            if (item.dep?.status !== 'Closed' && !equipToDepId[item.equipment_id]) {
+                equipToDepId[item.equipment_id] = item.dep?.deployment_id;
+            }
+        });
+    }
+
+    const currentWithDep = (current || []).map(e => ({
+        ...e,
+        deployment_display_id: equipToDepId[e.id] || null
+    }));
 
     // Closed deployments for this merchant (past equipment)
     const { data: closedDeps, error: e2 } = await supabase
         .from('deployments')
         .select(`
-            id, deployment_id, created_at, is_bulk, equipment_id,
+            id, deployment_id, is_bulk, equipment_id,
             equipments:equipment_id(serial_number, terminal_type),
             deployment_items(equipment_id, equip:equipment_id(serial_number, terminal_type)),
-            returns(return_id, status)
+            returns(return_id)
         `)
         .eq('merchant_id', merchant_uuid)
         .eq('status', 'Closed')
         .order('created_at', { ascending: false });
     if (e2) throw e2;
 
-    // Flatten closed deployments into per-unit past items
     const past = [];
     for (const dep of (closedDeps || [])) {
         const returnDisplayId = dep.returns?.[0]?.return_id || null;
@@ -412,7 +440,7 @@ if (action === 'get_merchant_equipment') {
         }
     }
 
-    return res.status(200).json({ success: true, current: current || [], past });
+    return res.status(200).json({ success: true, current: currentWithDep, past });
 }
         // --- ACTION: ADD ATTACHMENT RECORD ---
         if (action === 'add_attachment') {

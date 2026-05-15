@@ -1133,7 +1133,7 @@ async function addTask(merchantUuid) {
                 emptyState.style.display = 'block';
             } else {
                 result.current.forEach(e => {
-                    const depId = e.deployment?.deployment_id;
+                    const depId = e.deployment_display_id;
                     const serialCell = depId
                         ? `<a href="deployments-dashboard.html?q=${encodeURIComponent(depId)}" style="font-weight:700; color:var(--pp-blue); font-size:12px; text-decoration:underline; text-underline-offset:2px;" title="View deployment">${e.serial_number}</a>`
                         : `<span style="font-weight:700; color:var(--pp-blue); font-size:12px;">${e.serial_number}</span>`;
