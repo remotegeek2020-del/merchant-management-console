@@ -7,6 +7,65 @@ async function isSuperAdmin(supabase, userid) {
     return data?.is_active === true && data?.role === 'super_admin';
 }
 
+async function isAdminOrDev(supabase, userid) {
+    if (!userid) return false;
+    const { data } = await supabase.from('app_users').select('role, is_active').eq('userid', userid).single();
+    return data?.is_active === true && ['super_admin', 'developer'].includes(data?.role);
+}
+
+// Send in-app notification and trigger realtime pulse
+async function sendNotification(supabase, { recipientId, type, title, body, actorId, actorName, ideaId }) {
+    try {
+        await supabase.from('notifications').insert({
+            recipient_id: recipientId,
+            recipient_type: 'staff',
+            type,
+            title,
+            body,
+            actor_id: actorId || '',
+            actor_name: actorName || '',
+            reference_id: ideaId,
+            link: '/ideas-dashboard.html',
+            is_read: false
+        });
+        // Trigger realtime badge refresh for all subscribers
+        await supabase.from('notification_pulse').update({ updated_at: new Date().toISOString() }).gt('id', 0);
+    } catch (e) {
+        console.error('[Ideas Notification Error]', e.message);
+    }
+}
+
+// Send email via Postmark
+async function sendEmail(to, subject, htmlBody, textBody) {
+    if (!process.env.POSTMARK_SERVER_TOKEN || !to) return;
+    try {
+        const { ServerClient } = await import('postmark');
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        await client.sendEmail({
+            From: process.env.EMAIL_FROM,
+            To: to,
+            Subject: subject,
+            HtmlBody: htmlBody,
+            TextBody: textBody,
+            MessageStream: 'outbound'
+        });
+    } catch (e) {
+        console.error('[Ideas Email Error]', e.message);
+    }
+}
+
+function ideaEmailWrapper(content) {
+    return `<div style="font-family:'Inter',Arial,sans-serif;max-width:540px;margin:auto;padding:32px;border:1px solid #e2e8f0;border-radius:16px;color:#1e293b;background:#ffffff;">
+        <div style="text-align:center;margin-bottom:24px;">
+            <h2 style="color:#004990;margin:0;font-size:22px;">PayProTec</h2>
+            <p style="color:#64748b;font-size:12px;margin:4px 0 0;">Ideas & Feature Requests</p>
+        </div>
+        ${content}
+        <hr style="border:0;border-top:1px solid #f1f5f9;margin:28px 0;">
+        <p style="font-size:11px;color:#94a3b8;text-align:center;">This is an automated notification from PayProTec Operations.</p>
+    </div>`;
+}
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
@@ -25,7 +84,6 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false });
             if (error) throw error;
 
-            // Fetch which ideas this user has voted on
             let votedSet = new Set();
             if (userid) {
                 const { data: votes } = await supabase
@@ -46,7 +104,6 @@ export default async function handler(req, res) {
             const { id, userid } = req.body;
             if (!id || !userid) return res.status(400).json({ success: false, message: 'ID and userid are required.' });
 
-            // Check if already voted
             const { data: existing } = await supabase
                 .from('idea_votes').select('idea_id').eq('idea_id', id).eq('userid', userid).maybeSingle();
 
@@ -75,19 +132,91 @@ export default async function handler(req, res) {
                 .insert({ title: title.trim(), body: body.trim(), requested_by_userid, requested_by_name, category: safeCat })
                 .select().single();
             if (error) throw error;
+
+            // Email all super admins about the new request
+            try {
+                const { data: admins } = await supabase
+                    .from('app_users').select('email, first_name').eq('role', 'super_admin').eq('is_active', true);
+                for (const admin of admins || []) {
+                    if (!admin.email) continue;
+                    await sendEmail(
+                        admin.email,
+                        `💡 New Feature Request: "${title.trim()}"`,
+                        ideaEmailWrapper(`
+                            <h3 style="color:#0d9488;margin:0 0 8px;">New Feature Request</h3>
+                            <p style="margin:0 0 16px;line-height:1.6;">A new idea has been submitted by <strong>${requested_by_name}</strong>.</p>
+                            <div style="background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:20px;">
+                                <p style="font-weight:700;margin:0 0 6px;color:#1e293b;">${escapeHtml(title.trim())}</p>
+                                <p style="color:#475569;margin:0;font-size:13px;line-height:1.6;">${escapeHtml(body.trim().slice(0, 300))}${body.length > 300 ? '…' : ''}</p>
+                            </div>
+                            <div style="text-align:center;">
+                                <a href="https://${req.headers.host}/ideas-dashboard.html" style="background:#004990;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">Review Request</a>
+                            </div>`),
+                        `New feature request from ${requested_by_name}: "${title.trim()}". Visit the Ideas dashboard to review.`
+                    );
+                }
+            } catch (e) {
+                console.error('[Ideas add email error]', e.message);
+            }
+
             return res.status(200).json({ success: true, idea: { ...data, voted_by_me: false } });
         }
 
         if (action === 'update_status') {
-            const { id, status } = req.body;
+            const { id, status, actor_userid, actor_name } = req.body;
             const allowed = ['pending', 'in_progress', 'done', 'rejected'];
             if (!id) return res.status(400).json({ success: false, message: 'ID is required.' });
             if (!allowed.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status.' });
+
+            // Fetch the idea before updating (to get creator info)
+            const { data: idea } = await supabase
+                .from('feature_ideas').select('title, requested_by_userid, requested_by_name').eq('id', id).single();
+
             const { error } = await supabase
                 .from('feature_ideas')
                 .update({ status, updated_at: new Date().toISOString() })
                 .eq('id', id);
             if (error) throw error;
+
+            // Notify creator when marked done or rejected (only if someone else made the change)
+            if (idea && (status === 'done' || status === 'rejected') && idea.requested_by_userid !== actor_userid) {
+                const isDone = status === 'done';
+                const statusLabel = isDone ? 'implemented ✅' : 'declined ❌';
+                const notifTitle = isDone ? 'Your idea was implemented!' : 'Your idea was declined';
+                const notifBody = idea.title.slice(0, 100);
+
+                // In-app notification
+                await sendNotification(supabase, {
+                    recipientId: idea.requested_by_userid,
+                    type: 'idea_status',
+                    title: notifTitle,
+                    body: notifBody,
+                    actorId: actor_userid || '',
+                    actorName: actor_name || 'Admin',
+                    ideaId: id
+                });
+
+                // Email the creator
+                const { data: creator } = await supabase
+                    .from('app_users').select('email, first_name').eq('userid', idea.requested_by_userid).single();
+                if (creator?.email) {
+                    await sendEmail(
+                        creator.email,
+                        `${isDone ? '✅ Implemented' : '❌ Declined'}: Your idea "${idea.title}"`,
+                        ideaEmailWrapper(`
+                            <h3 style="color:${isDone ? '#0d9488' : '#dc2626'};margin:0 0 8px;">${isDone ? 'Great news!' : 'Status Update'}</h3>
+                            <p style="margin:0 0 16px;line-height:1.6;">Hi <strong>${creator.first_name || 'there'}</strong>, your feature request has been <strong>${statusLabel}</strong>.</p>
+                            <div style="background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:20px;">
+                                <p style="font-weight:700;margin:0;color:#1e293b;">${escapeHtml(idea.title)}</p>
+                            </div>
+                            <div style="text-align:center;">
+                                <a href="https://${req.headers.host}/ideas-dashboard.html" style="background:#004990;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">View Ideas Board</a>
+                            </div>`),
+                        `Hi ${creator.first_name || 'there'}, your idea "${idea.title}" has been ${statusLabel}.`
+                    );
+                }
+            }
+
             return res.status(200).json({ success: true });
         }
 
@@ -99,7 +228,47 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
-        // ── DEV ACTIVITY — list (all staff) ──────────────────────────────────
+        // ── LIST STAFF (for @mention autocomplete) ────────────────────────────
+        if (action === 'list_staff') {
+            const { data } = await supabase
+                .from('app_users')
+                .select('userid, first_name, last_name')
+                .eq('is_active', true)
+                .order('first_name');
+            const staff = (data || []).map(u => ({
+                userid: u.userid,
+                name: [u.first_name, u.last_name].filter(Boolean).join(' ')
+            }));
+            return res.status(200).json({ success: true, staff });
+        }
+
+        // ── GET MY NOTIFICATIONS ──────────────────────────────────────────────
+        if (action === 'get_my_notifications') {
+            const { userid } = req.body;
+            if (!userid) return res.status(400).json({ success: false, message: 'userid required.' });
+            const { data } = await supabase
+                .from('notifications')
+                .select('id, type, title, body, actor_name, is_read, created_at')
+                .eq('recipient_id', userid)
+                .in('type', ['idea_status', 'idea_mention'])
+                .order('created_at', { ascending: false })
+                .limit(20);
+            const unread = (data || []).filter(n => !n.is_read).length;
+            return res.status(200).json({ success: true, notifications: data || [], unread });
+        }
+
+        // ── MARK NOTIFICATION READ ────────────────────────────────────────────
+        if (action === 'mark_notifications_read') {
+            const { userid } = req.body;
+            if (!userid) return res.status(400).json({ success: false });
+            await supabase.from('notifications')
+                .update({ is_read: true })
+                .eq('recipient_id', userid)
+                .in('type', ['idea_status', 'idea_mention']);
+            return res.status(200).json({ success: true });
+        }
+
+        // ── DEV ACTIVITY — list ──────────────────────────────────────────────
         if (action === 'dev_activity_list') {
             const { data, error } = await supabase
                 .from('dev_activities')
@@ -168,7 +337,7 @@ export default async function handler(req, res) {
 
         // ── IDEA COMMENTS — add ───────────────────────────────────────────────
         if (action === 'add_comment') {
-            const { idea_id, body, posted_by_userid, posted_by_name } = req.body;
+            const { idea_id, body, posted_by_userid, posted_by_name, mentions } = req.body;
             if (!idea_id) return res.status(400).json({ success: false, message: 'idea_id is required.' });
             if (!body?.trim()) return res.status(400).json({ success: false, message: 'Comment cannot be empty.' });
             if (!posted_by_userid) return res.status(400).json({ success: false, message: 'User ID is required.' });
@@ -177,6 +346,22 @@ export default async function handler(req, res) {
                 .insert({ idea_id, body: body.trim(), posted_by_userid, posted_by_name: posted_by_name || 'Staff' })
                 .select().single();
             if (error) throw error;
+
+            // Send notifications to all @mentioned users
+            const safeMentions = Array.isArray(mentions) ? mentions.slice(0, 10) : [];
+            for (const m of safeMentions) {
+                if (!m.userid || m.userid === posted_by_userid) continue;
+                await sendNotification(supabase, {
+                    recipientId: m.userid,
+                    type: 'idea_mention',
+                    title: `${posted_by_name} mentioned you in a comment`,
+                    body: body.trim().slice(0, 100),
+                    actorId: posted_by_userid,
+                    actorName: posted_by_name,
+                    ideaId: idea_id
+                });
+            }
+
             return res.status(200).json({ success: true, comment: data });
         }
 
@@ -184,7 +369,6 @@ export default async function handler(req, res) {
         if (action === 'delete_comment') {
             const { id, userid } = req.body;
             if (!id) return res.status(400).json({ success: false, message: 'ID is required.' });
-            // Allow own comment deletion or admin
             const { data: comment } = await supabase.from('idea_comments').select('posted_by_userid').eq('id', id).single();
             const isOwn = comment?.posted_by_userid === userid;
             const isAdm = await isSuperAdmin(supabase, userid);
@@ -199,4 +383,8 @@ export default async function handler(req, res) {
         console.error('Ideas API Error:', err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
+}
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
