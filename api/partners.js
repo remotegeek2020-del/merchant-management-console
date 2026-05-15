@@ -2,6 +2,24 @@ import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 
+async function sendEmail(to, subject, htmlBody, textBody) {
+    if (!process.env.POSTMARK_SERVER_TOKEN || !to) return;
+    try {
+        const { ServerClient } = await import('postmark');
+        const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+        await client.sendEmail({
+            From: process.env.EMAIL_FROM,
+            To: to,
+            Subject: subject,
+            HtmlBody: htmlBody,
+            TextBody: textBody,
+            MessageStream: 'outbound'
+        });
+    } catch (e) {
+        console.error('[Partners Email Error]', e.message);
+    }
+}
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
@@ -589,6 +607,107 @@ if (action === 'get_merchant_data_raw') {
     }
     return res.status(200).json({ success: true, data: allMerchants, total: allMerchants.length });
 }
+        if (action === 'send_risk_alert') {
+    const { agent_id_string, merchants, sender_name } = body;
+    if (!agent_id_string || !merchants?.length) {
+        return res.status(400).json({ success: false, message: 'agent_id_string and merchants required.' });
+    }
+
+    // Resolve agent_id_string → person
+    const { data: identRec } = await supabase
+        .from('agent_identifiers')
+        .select('agent_id')
+        .eq('id_string', agent_id_string)
+        .single();
+    if (!identRec) return res.status(404).json({ success: false, message: 'Agent identifier not found.' });
+
+    const { data: agentRec } = await supabase
+        .from('agents')
+        .select('parent_agent_id')
+        .eq('id', identRec.agent_id)
+        .single();
+    if (!agentRec?.parent_agent_id) return res.status(404).json({ success: false, message: 'Agent has no linked person.' });
+
+    const { data: person } = await supabase
+        .from('persons')
+        .select('id, full_name, email, is_portal_active, portal_password_set')
+        .eq('id', agentRec.parent_agent_id)
+        .single();
+    if (!person) return res.status(404).json({ success: false, message: 'Person not found.' });
+
+    const partnerName = person.full_name || 'Partner';
+    const atRisk = merchants.filter(m => m.impact < 0);
+    if (!atRisk.length) return res.status(200).json({ success: true, message: 'No at-risk merchants.' });
+
+    // Build email HTML
+    const rowsHtml = atRisk.map(m => `
+        <tr>
+            <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9;">
+                <div style="font-weight:700; font-size:13px; color:#002d5a;">${m.dba}</div>
+                <div style="font-size:11px; color:#94a3b8;">MID: ${m.mid}</div>
+            </td>
+            <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; color:#64748b; text-align:center;">${m.lastBatch}</td>
+            <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; text-align:right;">$${Number(m.baseline).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+            <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; text-align:right;">$${Number(m.current).toLocaleString(undefined, {maximumFractionDigits:0})}</td>
+            <td style="padding:10px 12px; border-bottom:1px solid #f1f5f9; font-size:12px; font-weight:800; color:#ef4444; text-align:right; background:#fef2f2;">$${Math.abs(Number(m.impact)).toLocaleString(undefined, {maximumFractionDigits:0})} down</td>
+        </tr>`).join('');
+
+    const emailHtml = `
+        <div style="font-family:'Inter',Arial,sans-serif;max-width:600px;margin:auto;padding:32px;border:1px solid #e2e8f0;border-radius:16px;color:#1e293b;background:#ffffff;">
+            <div style="text-align:center;margin-bottom:24px;">
+                <h2 style="color:#004990;margin:0;font-size:22px;">PayProTec</h2>
+                <p style="color:#64748b;font-size:12px;margin:4px 0 0;">Partner Risk Alert</p>
+            </div>
+            <p style="font-size:14px;margin-bottom:8px;">Hi <strong>${partnerName}</strong>,</p>
+            <p style="font-size:13px;color:#475569;margin-bottom:20px;">
+                We've identified ${atRisk.length === 1 ? 'a merchant in your portfolio' : `${atRisk.length} merchants in your portfolio`} showing a significant decline in processing volume compared to their 90-day average. Please review and reach out to these accounts if needed.
+            </p>
+            <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                <thead>
+                    <tr style="background:#f8fafc;">
+                        <th style="padding:10px 12px;font-size:10px;color:#94a3b8;text-transform:uppercase;text-align:left;">Merchant</th>
+                        <th style="padding:10px 12px;font-size:10px;color:#94a3b8;text-transform:uppercase;text-align:center;">Last Batch</th>
+                        <th style="padding:10px 12px;font-size:10px;color:#94a3b8;text-transform:uppercase;text-align:right;">Avg (90d)</th>
+                        <th style="padding:10px 12px;font-size:10px;color:#94a3b8;text-transform:uppercase;text-align:right;">Current</th>
+                        <th style="padding:10px 12px;font-size:10px;color:#94a3b8;text-transform:uppercase;text-align:right;">Variance</th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+            <p style="font-size:12px;color:#94a3b8;margin-top:24px;text-align:center;">
+                This alert was generated by ${sender_name || 'PayProTec Staff'}. Please log in to your partner portal for more details.
+            </p>
+        </div>`;
+
+    const textBody = `Hi ${partnerName},\n\nThe following merchants in your portfolio are showing a volume decline:\n\n` +
+        atRisk.map(m => `- ${m.dba} (MID: ${m.mid}): $${Number(m.impact).toLocaleString(undefined, {maximumFractionDigits:0})} variance`).join('\n') +
+        `\n\nPlease reach out to these accounts if needed.\n\n— ${sender_name || 'PayProTec Staff'}`;
+
+    if (person.email) {
+        await sendEmail(
+            person.email,
+            `⚠️ Risk Alert: ${atRisk.length === 1 ? atRisk[0].dba : `${atRisk.length} merchants`} showing volume decline`,
+            emailHtml,
+            textBody
+        );
+    }
+
+    // Portal notification if active
+    if (person.is_portal_active && person.portal_password_set) {
+        await supabase.from('notifications').insert({
+            recipient_id: String(person.id),
+            recipient_type: 'partner',
+            type: 'risk_alert',
+            title: `⚠️ Risk Alert: ${atRisk.length} merchant${atRisk.length > 1 ? 's' : ''} need attention`,
+            body: atRisk.map(m => `${m.dba}: $${Number(m.impact).toLocaleString(undefined, {maximumFractionDigits:0})} variance`).join(' | '),
+            actor_name: sender_name || 'PayProTec Staff',
+            is_read: false
+        });
+    }
+
+    return res.status(200).json({ success: true, emailed: !!person.email, portal: !!(person.is_portal_active && person.portal_password_set) });
+}
+
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);

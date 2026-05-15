@@ -717,10 +717,15 @@ async function drillDownTrend(agentId) {
 
 // --- TREND DRILLER: UI DISPLAY ---
 function showTrendTable(agentId, movers) {
-    const rows = movers.map(m => {
+    const atRiskMerchants = movers.filter(m => m.impact < 0);
+    const moversJson = JSON.stringify(movers).replace(/"/g, '&quot;');
+    const atRiskJson = JSON.stringify(atRiskMerchants).replace(/"/g, '&quot;');
+
+    const rows = movers.map((m, idx) => {
         const isNegative = m.impact < 0;
         const impactColor = isNegative ? '#ef4444' : '#059669';
-        
+        const mJson = JSON.stringify([m]).replace(/"/g, '&quot;');
+
         return `
             <tr>
                 <td style="padding: 10px; border-bottom: 1px solid #f1f5f9;">
@@ -739,22 +744,32 @@ function showTrendTable(agentId, movers) {
                 <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; font-size: 11px; font-weight: 900; color: ${impactColor}; text-align: right; background: ${isNegative ? '#fef2f2' : '#f0fdf4'};">
                     ${m.impact >= 0 ? '+' : ''}$${m.impact.toLocaleString(undefined, {maximumFractionDigits:0})}
                 </td>
+                <td style="padding: 10px; border-bottom: 1px solid #f1f5f9; text-align: center;">
+                    ${isNegative ? `<button onclick="sendRiskAlert('${agentId}', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify([m]))}')))" style="background:#ef4444;color:white;border:none;border-radius:8px;padding:4px 10px;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px;"><span class='material-icons' style='font-size:12px;'>warning</span>Alert</button>` : '<span style="font-size:10px;color:#cbd5e1;">—</span>'}
+                </td>
             </tr>
         `;
     }).join('');
 
+    const bulkAlertBtn = atRiskMerchants.length >= 2
+        ? `<button onclick="sendRiskAlert('${agentId}', JSON.parse(decodeURIComponent('${encodeURIComponent(JSON.stringify(atRiskMerchants))}')))" style="background:#ef4444;color:white;border:none;border-radius:8px;padding:5px 13px;font-size:11px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:5px;"><span class='material-icons' style='font-size:13px;'>warning</span>Alert All (${atRiskMerchants.length} at risk)</button>`
+        : '';
+
     Swal.fire({
         title: `<div style="text-align:left; font-size: 18px; font-weight: 800; color: #002d5a;">Trend Contributors: ${agentId}</div>`,
-        width: '900px',
+        width: '960px',
         showConfirmButton: false,
         showCloseButton: true,
         html: `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 8px; flex-wrap: wrap;">
                 <div style="text-align: left; font-size: 12px; color: #64748b;">Comparison: Current vs. 90-Day Avg</div>
-                <button onclick="exportTrendToCSV('${agentId}', ${JSON.stringify(movers).replace(/"/g, '&quot;')})" 
-                        class="slds-button slds-button_neutral" style="font-size: 11px; font-weight: 700;">
-                    <span class="material-icons" style="font-size:14px; margin-right:5px;">file_download</span> EXPORT CSV
-                </button>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    ${bulkAlertBtn}
+                    <button onclick="exportTrendToCSV('${agentId}', ${moversJson})"
+                            class="slds-button slds-button_neutral" style="font-size: 11px; font-weight: 700;">
+                        <span class="material-icons" style="font-size:14px; margin-right:5px;">file_download</span> EXPORT CSV
+                    </button>
+                </div>
             </div>
             <div style="max-height: 500px; overflow-y: auto; border: 1px solid #e2e8f0; border-radius: 12px;">
                 <table style="width: 100%; border-collapse: collapse; text-align: left;">
@@ -765,6 +780,7 @@ function showTrendTable(agentId, movers) {
                             <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: right;">Avg (90d)</th>
                             <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: right;">Current</th>
                             <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: right;">Variance</th>
+                            <th style="padding: 12px 10px; font-size: 9px; color: #94a3b8; text-transform: uppercase; text-align: center;">Alert</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
@@ -772,6 +788,44 @@ function showTrendTable(agentId, movers) {
             </div>
         `
     });
+}
+
+async function sendRiskAlert(agentId, merchants) {
+    const count = merchants.length;
+    const label = count === 1 ? `<strong>${merchants[0].dba}</strong>` : `<strong>${count} at-risk merchants</strong>`;
+    const confirm = await Swal.fire({
+        title: 'Send Risk Alert?',
+        html: `Send a risk alert to the partner for ${label}?<br><span style="font-size:12px;color:#64748b;">An email will be sent and a portal notification created if the partner portal is active.</span>`,
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonText: '<span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">send</span> Send Alert',
+        confirmButtonColor: '#ef4444',
+        cancelButtonText: 'Cancel',
+        cancelButtonColor: '#64748b',
+        reverseButtons: true
+    });
+    if (!confirm.isConfirmed) return;
+
+    const senderName = localStorage.getItem('pp_user_first_name') || 'PayProTec Staff';
+
+    try {
+        const resp = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send_risk_alert', agent_id_string: agentId, merchants, sender_name: senderName })
+        });
+        const result = await resp.json();
+        if (result.success) {
+            const parts = [];
+            if (result.emailed) parts.push('email sent');
+            if (result.portal) parts.push('portal notification created');
+            Swal.fire('Alert Sent!', parts.length ? `Partner notified via: ${parts.join(' & ')}.` : 'Alert processed.', 'success');
+        } else {
+            Swal.fire('Error', result.message || 'Could not send alert.', 'error');
+        }
+    } catch (e) {
+        Swal.fire('Error', 'Network error sending alert.', 'error');
+    }
 }
 
 // --- CSV EXPORT HELPER ---
