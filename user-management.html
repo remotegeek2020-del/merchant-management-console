@@ -163,8 +163,9 @@ const ACCESS_FLAGS = [
     { key: 'access_returns',     label: 'Returns',        short: 'RET' },
     { key: 'access_merchants',   label: 'Merchants',      short: 'MER' },
     { key: 'access_jarvis',      label: 'Jarvis AI',      short: 'AI'  },
-    { key: 'access_partners',    label: 'Partners',       short: 'PRT' },
-    { key: 'can_delete_tickets', label: 'Delete Tickets', short: 'DEL' },
+    { key: 'access_partners',        label: 'Partners',         short: 'PRT' },
+    { key: 'access_admin_dashboard', label: 'Admin Dashboard',  short: 'ADM' },
+    { key: 'can_delete_tickets',     label: 'Delete Tickets',   short: 'DEL' },
 ];
 
 // ── API ───────────────────────────────────────────────────
@@ -510,7 +511,7 @@ async function deleteUser(uid, name) {
 
 // ── EXPORT ────────────────────────────────────────────────
 function exportUsers() {
-    const headers = ['First Name','Last Name','Email','Role','Status','Last Seen','Inventory','Deployments','Returns','Merchants','Partners','Jarvis','Delete Tickets'];
+    const headers = ['First Name','Last Name','Email','Role','Status','Last Seen','Inventory','Deployments','Returns','Merchants','Partners','Jarvis AI','Admin Dashboard','Delete Tickets'];
     const rows = allUsers.map(u => [
         u.first_name||'', u.last_name||'', u.email||'', u.role||'',
         u.is_active ? 'Active' : 'Inactive',
@@ -518,7 +519,7 @@ function exportUsers() {
         u.access_inventory?'Yes':'No', u.access_deployments?'Yes':'No',
         u.access_returns?'Yes':'No', u.access_merchants?'Yes':'No',
         u.access_partners?'Yes':'No', u.access_jarvis?'Yes':'No',
-        u.can_delete_tickets?'Yes':'No'
+        u.access_admin_dashboard?'Yes':'No', u.can_delete_tickets?'Yes':'No'
     ]);
     const csv = [headers.join(','), ...rows.map(r => r.map(v => `"${v}"`).join(','))].join('\n');
     const a = document.createElement('a');
