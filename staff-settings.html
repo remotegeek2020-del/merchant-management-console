@@ -226,6 +226,63 @@
         </div>
     </div>
 
+    <!-- HOME PAGE LAYOUT -->
+    <div class="settings-card">
+        <div class="settings-title">Home Page Layout</div>
+        <div class="settings-sub">Choose how the portal home page looks for you</div>
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px;" id="view-picker">
+
+            <!-- Grid -->
+            <div class="view-option" data-view="grid" onclick="selectView('grid')" style="border:2px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:all 0.2s;text-align:center;">
+                <div style="background:#f8fafc;border-radius:10px;padding:12px 8px;margin-bottom:10px;">
+                    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;">
+                        <div style="background:#e0f2fe;border-radius:5px;padding:8px 4px;"><div style="width:14px;height:14px;background:#bae6fd;border-radius:3px;margin:0 auto 4px;"></div><div style="height:3px;background:#7dd3fc;border-radius:2px;margin-bottom:3px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:5px;padding:8px 4px;"><div style="width:14px;height:14px;background:#bae6fd;border-radius:3px;margin:0 auto 4px;"></div><div style="height:3px;background:#7dd3fc;border-radius:2px;margin-bottom:3px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:5px;padding:8px 4px;"><div style="width:14px;height:14px;background:#bae6fd;border-radius:3px;margin:0 auto 4px;"></div><div style="height:3px;background:#7dd3fc;border-radius:2px;margin-bottom:3px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:5px;padding:8px 4px;"><div style="width:14px;height:14px;background:#bae6fd;border-radius:3px;margin:0 auto 4px;"></div><div style="height:3px;background:#7dd3fc;border-radius:2px;margin-bottom:3px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:5px;padding:8px 4px;"><div style="width:14px;height:14px;background:#bae6fd;border-radius:3px;margin:0 auto 4px;"></div><div style="height:3px;background:#7dd3fc;border-radius:2px;margin-bottom:3px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:5px;padding:8px 4px;"><div style="width:14px;height:14px;background:#bae6fd;border-radius:3px;margin:0 auto 4px;"></div><div style="height:3px;background:#7dd3fc;border-radius:2px;margin-bottom:3px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;"></div></div>
+                    </div>
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--text-primary);">Grid</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">3 columns · with descriptions</div>
+            </div>
+
+            <!-- Compact -->
+            <div class="view-option" data-view="compact" onclick="selectView('compact')" style="border:2px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:all 0.2s;text-align:center;">
+                <div style="background:#f8fafc;border-radius:10px;padding:12px 8px;margin-bottom:10px;">
+                    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;">
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:7px 2px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;margin:0 auto 3px;"></div><div style="height:2px;background:#7dd3fc;border-radius:2px;"></div></div>
+                    </div>
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--text-primary);">Compact</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">4 columns · icons &amp; titles only</div>
+            </div>
+
+            <!-- List -->
+            <div class="view-option" data-view="list" onclick="selectView('list')" style="border:2px solid var(--border);border-radius:14px;padding:16px;cursor:pointer;transition:all 0.2s;text-align:center;">
+                <div style="background:#f8fafc;border-radius:10px;padding:12px 8px;margin-bottom:10px;">
+                    <div style="display:flex;flex-direction:column;gap:4px;">
+                        <div style="background:#e0f2fe;border-radius:4px;padding:5px 6px;display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;flex-shrink:0;"></div><div style="flex:1;"><div style="height:2px;background:#7dd3fc;border-radius:2px;margin-bottom:2px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;width:70%;"></div></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:5px 6px;display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;flex-shrink:0;"></div><div style="flex:1;"><div style="height:2px;background:#7dd3fc;border-radius:2px;margin-bottom:2px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;width:55%;"></div></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:5px 6px;display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;flex-shrink:0;"></div><div style="flex:1;"><div style="height:2px;background:#7dd3fc;border-radius:2px;margin-bottom:2px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;width:80%;"></div></div></div>
+                        <div style="background:#e0f2fe;border-radius:4px;padding:5px 6px;display:flex;align-items:center;gap:5px;"><div style="width:10px;height:10px;background:#bae6fd;border-radius:2px;flex-shrink:0;"></div><div style="flex:1;"><div style="height:2px;background:#7dd3fc;border-radius:2px;margin-bottom:2px;"></div><div style="height:2px;background:#bae6fd;border-radius:2px;width:65%;"></div></div></div>
+                    </div>
+                </div>
+                <div style="font-size:12px;font-weight:700;color:var(--text-primary);">List</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">2 columns · horizontal rows</div>
+            </div>
+
+        </div>
+    </div>
+
     <!-- SESSION -->
     <div class="settings-card" style="border-color:#fecaca;">
         <div class="settings-title" style="color:#991b1b;">Session</div>
@@ -425,7 +482,28 @@ async function handleLogout() {
     window.location.href = 'index.html';
 }
 
-window.onload = async () => { await init(); await loadBusinessProfile(); };
+// ── HOME VIEW PICKER ─────────────────────────────────────────────────────────
+const VIEW_KEY = 'pp_home_view_' + staffId;
+
+function selectView(view) {
+    localStorage.setItem(VIEW_KEY, view);
+    document.querySelectorAll('.view-option').forEach(function(el) {
+        var isActive = el.dataset.view === view;
+        el.style.borderColor = isActive ? '#0d9488' : 'var(--border)';
+        el.style.background  = isActive ? '#f0fdfa' : '';
+        var label = el.querySelector('div:last-child');
+        if (label) label.style.color = isActive ? '#0d9488' : '';
+    });
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Layout updated — takes effect on the home page', timer: 2000, showConfirmButton: false });
+}
+
+function initViewPicker() {
+    var current = localStorage.getItem(VIEW_KEY) || 'grid';
+    selectView(current);
+}
+// ─────────────────────────────────────────────────────────────────────────────
+
+window.onload = async () => { await init(); await loadBusinessProfile(); initViewPicker(); };
 </script>
 <script src="/js/site-config.js"></script>
 </body>

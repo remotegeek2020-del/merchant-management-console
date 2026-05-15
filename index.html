@@ -167,6 +167,29 @@
     .arrange-mode .console-card.card-dragging { opacity: 0.35; }
     .arrange-mode .console-card.drag-over { outline: 2px dashed #0d9488; outline-offset: 3px; background: #f0fdfa !important; }
 
+    /* ── Home View Modes ───────────────────────────────────── */
+    /* Compact: 4-column, no description, tighter cards */
+    .card-grid.view-compact { grid-template-columns: repeat(4, 1fr); gap: 14px; }
+    .card-grid.view-compact .console-card { padding: 20px 16px; }
+    .card-grid.view-compact .card-desc { display: none; }
+    .card-grid.view-compact .card-icon-header { width: 42px; height: 42px; border-radius: 10px; margin-bottom: 12px; font-size: 18px; }
+    .card-grid.view-compact .card-title { font-size: 13px; margin-bottom: 0; }
+    .card-grid.view-compact #task-count-badge { display: none !important; }
+
+    /* List: 2-column, horizontal row per card */
+    .card-grid.view-list { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    .card-grid.view-list .console-card { flex-direction: row; align-items: center; padding: 14px 18px; gap: 16px; }
+    .card-grid.view-list .console-card:hover { transform: translateY(-2px); }
+    .card-grid.view-list .card-icon-header { flex-shrink: 0; margin-bottom: 0; width: 44px; height: 44px; }
+    .card-grid.view-list .card-title { font-size: 13.5px; margin-bottom: 3px; }
+    .card-grid.view-list .card-desc { font-size: 11.5px; line-height: 1.5; }
+    .card-grid.view-list .msg-badge,
+    .card-grid.view-list .notif-badge { top: -6px; right: -6px; }
+    @media (max-width: 900px) {
+        .card-grid.view-compact { grid-template-columns: repeat(3, 1fr); }
+        .card-grid.view-list { grid-template-columns: 1fr; }
+    }
+
 </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -774,6 +797,7 @@
 <script>
 (function() {
     var LAYOUT_KEY_PREFIX = 'pp_home_layout_';
+    var VIEW_KEY_PREFIX   = 'pp_home_view_';
     var grid = null;
     var arrangeMode = false;
     var dragSrc = null;
@@ -782,6 +806,23 @@
         var uid = localStorage.getItem('pp_userid');
         return uid ? LAYOUT_KEY_PREFIX + uid : null;
     }
+
+    function applyHomeView() {
+        if (!grid) return;
+        var uid = localStorage.getItem('pp_userid');
+        var view = uid ? (localStorage.getItem(VIEW_KEY_PREFIX + uid) || 'grid') : 'grid';
+        grid.classList.remove('view-compact', 'view-list');
+        if (view === 'compact') grid.classList.add('view-compact');
+        else if (view === 'list') grid.classList.add('view-list');
+    }
+
+    window.setHomeView = function(view) {
+        var uid = localStorage.getItem('pp_userid');
+        if (!uid) return;
+        localStorage.setItem(VIEW_KEY_PREFIX + uid, view);
+        if (!grid) grid = document.querySelector('.card-grid');
+        applyHomeView();
+    };
 
     function getAllCards() {
         if (!grid) return [];
@@ -916,6 +957,7 @@
                 setTimeout(function() {
                     grid = document.querySelector('.card-grid');
                     applyHomeLayout();
+                    applyHomeView();
                     var btn = document.getElementById('home-arrange-btn');
                     if (btn) btn.style.display = 'inline-flex';
                 }, 150);
