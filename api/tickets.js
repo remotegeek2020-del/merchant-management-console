@@ -15,12 +15,28 @@ export default async function handler(req, res) {
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
     const { action } = req.body;
 
+    let staffSession = null;
     if (!PARTNER_ACTIONS.has(action)) {
-        const session = await validateSession(req);
-        if (!session) return sessionErrorResponse(res);
+        staffSession = await validateSession(req);
+        if (!staffSession) return sessionErrorResponse(res);
     }
 
     try {
+        function logActivity({ email, action: logAction, target_id, severity = 'info', old_value, new_value }) {
+            supabase.from('activity_logs').insert({
+                email: email || 'System',
+                action: logAction,
+                status: 'success',
+                category: 'ticket',
+                target_id: target_id ? String(target_id) : null,
+                target_type: 'ticket',
+                severity,
+                old_value: old_value || null,
+                new_value: new_value || null,
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || 'Internal'
+            }).then(() => {}).catch(e => console.error('[ActivityLog]', e.message));
+        }
         async function validatePartner(token) {
             if (!token) return null;
             const { data } = await supabase.from('partner_sessions')
@@ -138,7 +154,8 @@ export default async function handler(req, res) {
             });
 
             // Fire webhooks (fire-and-forget)
-            const { data: person } = await supabase.from('persons').select('full_name').eq('id', personId).single();
+            const { data: person } = await supabase.from('persons').select('full_name, email').eq('id', personId).single();
+            logActivity({ email: person?.email || `partner:${personId}`, action: `Ticket created: "${subject}" [${ticket.ticket_number}]`, target_id: ticket.id });
             dispatchEvent(personId, 'ticket.created', {
                 ticket_number: ticket.ticket_number,
                 subject,
@@ -304,6 +321,9 @@ export default async function handler(req, res) {
                 }
             }
 
+            if (changes.length > 0) {
+                logActivity({ email: staffSession?.email || staff_name || 'Staff', action: `Ticket ${oldTicket?.ticket_number}: ${changes.join(' · ')}`, target_id: ticket_id, old_value: oldTicket?.status, new_value: updates.status || oldTicket?.status });
+            }
             // Fire webhook event for status/priority changes
             if (changes.length > 0 && oldTicket?.person_id) {
                 dispatchEvent(oldTicket.person_id, 'ticket.updated', {
@@ -418,6 +438,8 @@ export default async function handler(req, res) {
             // Fire comment webhook (fire-and-forget)
             const { data: ticketForEvent } = await supabase.from('support_tickets')
                 .select('person_id, ticket_number, subject').eq('id', ticket_id).single();
+            const commentLabel = token ? 'Partner comment' : (is_internal ? 'Internal note' : 'Staff comment');
+            logActivity({ email: token ? `partner:${authorName}` : (staffSession?.email || authorName || 'Staff'), action: `${commentLabel} added on ticket ${ticketForEvent?.ticket_number || ticket_id} by ${authorName}`, target_id: ticket_id });
             if (ticketForEvent?.person_id) {
                 dispatchEvent(ticketForEvent.person_id, 'ticket.comment_added', {
                     ticket_number: ticketForEvent.ticket_number,
@@ -563,6 +585,7 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    logActivity({ email: staffSession?.email || author, action: `Bulk deployment ${deploymentId} created from ticket ${ticket_id} (${bulk_items.length} unit(s))`, target_id: ticket_id });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
 
                 } else {
@@ -607,6 +630,7 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    logActivity({ email: staffSession?.email || author, action: `Deployment ${deploymentId} created from ticket ${ticket_id}`, target_id: ticket_id });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
                 }
 
@@ -663,6 +687,7 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    logActivity({ email: staffSession?.email || author, action: `Bulk RMA ${finalReturnId} created from ticket ${ticket_id} (${equipIds.length} unit(s))`, target_id: ticket_id });
                     return res.status(200).json({ success: true, return_id: finalReturnId });
 
                 } else {
@@ -706,6 +731,7 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id}`, target_id: ticket_id });
                     return res.status(200).json({ success: true, return_id: finalReturnId });
                 }
             }
@@ -811,6 +837,7 @@ export default async function handler(req, res) {
                 });
             }
 
+            logActivity({ email: `partner:${personId}`, action: `Deployment ${deployment_id} marked as delivered by partner; ticket closed`, target_id: finalTicketId || ticket_id });
             return res.status(200).json({ success: true });
         }
 
@@ -818,10 +845,12 @@ export default async function handler(req, res) {
             const { ticket_id } = req.body;
             if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
 
+            const { data: deletedTicket } = await supabase.from('support_tickets').select('ticket_number, subject').eq('id', ticket_id).single();
             // Delete comments first (FK), then the ticket
             await supabase.from('ticket_comments').delete().eq('ticket_id', ticket_id);
             const { error } = await supabase.from('support_tickets').delete().eq('id', ticket_id);
             if (error) throw error;
+            logActivity({ email: staffSession?.email || 'Staff', action: `Ticket deleted: "${deletedTicket?.subject || ''}" [${deletedTicket?.ticket_number || ticket_id}]`, target_id: ticket_id, severity: 'warning' });
             return res.status(200).json({ success: true });
         }
 
