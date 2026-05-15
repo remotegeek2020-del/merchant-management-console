@@ -495,12 +495,20 @@ function highlightView(view) {
 
 function selectView(view) {
     localStorage.setItem('pp_home_view', view);
+    sessionStorage.setItem('pp_home_view', view);
+    var readBack = localStorage.getItem('pp_home_view');
     highlightView(view);
-    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Saved! Navigate to Home to see the new layout.', timer: 2200, showConfirmButton: false });
+    var ok = readBack === view;
+    Swal.fire({
+        toast: true, position: 'top-end',
+        icon: ok ? 'success' : 'error',
+        title: ok ? 'Saved "' + view + '" — go to Home to apply' : 'Save failed (got: ' + readBack + ')',
+        timer: 3000, showConfirmButton: false
+    });
 }
 
 function initViewPicker() {
-    var current = localStorage.getItem('pp_home_view') || 'grid';
+    var current = sessionStorage.getItem('pp_home_view') || localStorage.getItem('pp_home_view') || 'grid';
     highlightView(current);
 }
 // ─────────────────────────────────────────────────────────────────────────────

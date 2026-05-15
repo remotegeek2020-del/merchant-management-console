@@ -14,7 +14,7 @@
     <script>
     (function(){
         try {
-            var v = localStorage.getItem('pp_home_view') || 'grid';
+            var v = sessionStorage.getItem('pp_home_view') || localStorage.getItem('pp_home_view') || 'grid';
             window._homeView = v;
             var css = '';
             if (v === 'compact') {
@@ -244,6 +244,7 @@
                
                 <div id="user-greeting">System Authorizing...</div>
                 <div class="header-right-group">
+                    <span id="home-view-label" style="display:none;font-size:10px;font-weight:700;color:rgba(255,255,255,0.5);letter-spacing:0.5px;text-transform:uppercase;"></span>
                     <button id="home-arrange-btn" onclick="toggleHomeArrangeMode()">
                         <span class="material-icons">dashboard_customize</span>Arrange
                     </button>
@@ -814,7 +815,10 @@
     }
 
     function applyHomeView() {
-        var view = localStorage.getItem(VIEW_KEY) || 'grid';
+        var view = sessionStorage.getItem(VIEW_KEY) || localStorage.getItem(VIEW_KEY) || 'grid';
+        // Update visible label so user can confirm which view is active
+        var lbl = document.getElementById('home-view-label');
+        if (lbl) { lbl.textContent = 'View: ' + view; lbl.style.display = 'inline'; }
         var existing = document.getElementById('home-view-css');
         if (existing) existing.remove();
         var css = '';
