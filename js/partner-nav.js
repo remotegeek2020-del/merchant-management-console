@@ -55,13 +55,15 @@
                 var icon = isRisk ? 'warning' : 'notifications';
                 var iconColor = isRisk ? '#ef4444' : '#0d9488';
                 var date = n.created_at ? new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
-                return '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left;">' +
+                var hasLink = n.link && n.link.trim();
+                var clickAttr = hasLink ? 'onclick="Swal.close();window.location.href=\'' + n.link + '\';" style="cursor:pointer;" onmouseover="this.style.borderColor=\'' + (isRisk ? '#fca5a5' : '#99f6e4') + '\';" onmouseout="this.style.borderColor=\'' + border + '\';"' : '';
+                return '<div ' + clickAttr + ' style="background:' + bg + ';border:1px solid ' + border + ';border-radius:10px;padding:12px 14px;margin-bottom:8px;text-align:left;transition:border-color 0.15s;">' +
                     '<div style="display:flex;align-items:flex-start;gap:10px;">' +
                     '<span class="material-icons" style="font-size:18px;color:' + iconColor + ';margin-top:1px;flex-shrink:0;">' + icon + '</span>' +
                     '<div style="flex:1;min-width:0;">' +
                     '<div style="font-size:13px;font-weight:700;color:#0a1628;margin-bottom:3px;">' + (n.title||'') + '</div>' +
                     (n.body ? '<div style="font-size:12px;color:#475569;line-height:1.5;margin-bottom:4px;">' + n.body + '</div>' : '') +
-                    '<div style="font-size:10px;color:#94a3b8;">' + (n.actor_name ? 'From: ' + n.actor_name + ' · ' : '') + date + '</div>' +
+                    '<div style="font-size:10px;color:#94a3b8;display:flex;align-items:center;gap:6px;">' + (n.actor_name ? 'From: ' + n.actor_name + ' · ' : '') + date + (hasLink ? ' <span style="color:' + iconColor + ';font-weight:700;">View →</span>' : '') + '</div>' +
                     '</div></div></div>';
             }).join('') + '</div>';
             if (d.unread > 0) {

@@ -141,11 +141,12 @@
                         <th>Status</th>
                         <th>MTD Volume</th>
                         <th>30D Volume</th>
+                        <th>Trend</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="merchantsTable">
-                    <tr><td colspan="8"><div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>
+                    <tr><td colspan="9"><div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>
                 </tbody>
             </table>
             <div class="pagination" id="pagination">
@@ -199,19 +200,33 @@ async function loadMerchants() {
     const search = document.getElementById('searchInput').value;
     const status = document.getElementById('statusFilter').value;
     const tbody = document.getElementById('merchantsTable');
-    tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><div style="animation:spin 1s linear infinite;width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>`;
 
     const res = await fetch('/api/partner-data', {
         method:'POST', headers:{'Content-Type':'application/json'},
         body: JSON.stringify({ action:'get_merchants', token, page:currentPage, limit, search, status_filter:status })
     });
     const data = await res.json();
-    if (!data.success) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><span class="material-icons">error</span><p>Failed to load merchants</p></div></td></tr>`; return; }
+    if (!data.success) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><span class="material-icons">error</span><p>Failed to load merchants</p></div></td></tr>`; return; }
     totalCount = data.count;
-    if (!data.data.length) { tbody.innerHTML = `<tr><td colspan="8"><div class="empty"><span class="material-icons">storefront</span><p>No merchants found</p></div></td></tr>`; }
+    if (!data.data.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><span class="material-icons">storefront</span><p>No merchants found</p></div></td></tr>`; }
     else {
         tbody.innerHTML = data.data.map(m => {
             const st = (m.account_status||'').toLowerCase().replace(/[\s-]+/g,'-');
+            const vol30 = parseFloat(m.volume_30_day||0);
+            const baseline = parseFloat(m.volume_90_day||0) / 3;
+            let trendBadge;
+            if (m.account_status !== 'Approved') {
+                trendBadge = '';
+            } else if (vol30 === 0 && baseline === 0) {
+                trendBadge = '<span style="background:#f1f5f9;color:#94a3b8;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;">No Data</span>';
+            } else if (baseline === 0 || vol30 > baseline * 1.05) {
+                trendBadge = '<span style="background:#dcfce7;color:#166534;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:11px;">trending_up</span>Growth</span>';
+            } else if (vol30 < baseline * 0.95) {
+                trendBadge = '<span style="background:#fee2e2;color:#991b1b;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:11px;">trending_down</span>At Risk</span>';
+            } else {
+                trendBadge = '<span style="background:#e0f2fe;color:#0369a1;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:11px;">trending_flat</span>Stable</span>';
+            }
             return `<tr onclick="openMerchantDetail('${m.id}', '${m.dba_name.replace(/'/g,"\\'")}')">
                 <td style="font-weight:700;">${m.dba_name}</td>
                 <td class="mono" style="color:var(--teal);">${m.merchant_id}</td>
@@ -219,7 +234,8 @@ async function loadMerchants() {
                 <td style="font-size:12px;color:var(--muted);">${m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : '—'}</td>
                 <td><span class="badge ${st}">${m.account_status||'—'}</span></td>
                 <td class="mono">$${parseFloat(m.volume_mtd||0).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
-                <td class="mono">$${parseFloat(m.volume_30_day||0).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
+                <td class="mono">$${vol30.toLocaleString(undefined,{minimumFractionDigits:2})}</td>
+                <td>${trendBadge}</td>
                 <td onclick="event.stopPropagation()">
                     <div style="display:flex;gap:4px;">
                         <button class="btn btn-outline" style="padding:5px 8px;" onclick="openMerchantDetail('${m.id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">open_in_new</span></button>

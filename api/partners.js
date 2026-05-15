@@ -701,6 +701,7 @@ if (action === 'get_merchant_data_raw') {
             title: `⚠️ Risk Alert: ${atRisk.length} merchant${atRisk.length > 1 ? 's' : ''} need attention`,
             body: atRisk.map(m => `${m.dba}: $${Number(m.impact).toLocaleString(undefined, {maximumFractionDigits:0})} variance`).join(' | '),
             actor_name: sender_name || 'PayProTec Staff',
+            link: '/partner/merchants',
             is_read: false
         });
     }
