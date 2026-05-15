@@ -349,7 +349,7 @@ async function fetchReturns() {
                 </td>
                 <td style="color:#94a3b8; font-size:12px;">${fmtDate(r.created_at)}</td>
                 <td>
-                    <div style="font-weight:600; color:#004990; cursor:pointer; text-decoration:underline; text-underline-offset:2px;" onclick="showReturnMerchantInfo(${index})">${r.merchants?.dba_name || '---'}</div>
+                    <a href="merchants-dashboard.html?q=${encodeURIComponent(merchantMid || r.merchants?.dba_name || '')}&filterBy=${merchantMid ? 'merchant_id' : 'dba_name'}" style="font-weight:600; color:#004990; text-decoration:underline; text-underline-offset:2px; display:block;" title="Open in Merchant Portfolio">${r.merchants?.dba_name || '---'}</a>
                     ${merchantMid ? `<div style="font-size:10px; color:#64748b; font-family:'DM Mono',monospace;">${merchantMid}</div>` : ''}
                 </td>
                 <td class="hide-mobile">${equipCell}</td>
