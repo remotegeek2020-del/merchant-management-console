@@ -15,7 +15,26 @@
     (function(){
         try {
             var v = localStorage.getItem('pp_home_view') || 'grid';
-            document.documentElement.setAttribute('data-home-view', v);
+            window._homeView = v;
+            var css = '';
+            if (v === 'compact') {
+                css = '.card-grid{grid-template-columns:repeat(4,1fr)!important;gap:14px!important}'
+                    + '.card-grid .console-card{padding:20px 16px!important}'
+                    + '.card-grid .card-desc{display:none!important}'
+                    + '.card-grid .card-icon-header{width:42px!important;height:42px!important;border-radius:10px!important;margin-bottom:12px!important}'
+                    + '.card-grid .card-title{font-size:13px!important;margin-bottom:0!important}';
+            } else if (v === 'list') {
+                css = '.card-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important}'
+                    + '.card-grid .console-card{flex-direction:row!important;align-items:center!important;padding:14px 18px!important;gap:16px!important}'
+                    + '.card-grid .card-icon-header{flex-shrink:0!important;margin-bottom:0!important;width:44px!important;height:44px!important}'
+                    + '.card-grid .card-title{font-size:13.5px!important;margin-bottom:3px!important}';
+            }
+            if (css) {
+                var s = document.createElement('style');
+                s.id = 'home-view-css';
+                s.textContent = css;
+                document.head.appendChild(s);
+            }
         } catch(e) {}
     })();
     </script>
@@ -175,28 +194,7 @@
     .arrange-mode .console-card.card-dragging { opacity: 0.35; }
     .arrange-mode .console-card.drag-over { outline: 2px dashed #0d9488; outline-offset: 3px; background: #f0fdfa !important; }
 
-    /* ── Home View Modes ───────────────────────────────────── */
-    /* Compact: 4-column, no description, tighter cards */
-    html[data-home-view="compact"] .card-grid { grid-template-columns: repeat(4, 1fr) !important; gap: 14px !important; }
-    html[data-home-view="compact"] .console-card { padding: 20px 16px !important; }
-    html[data-home-view="compact"] .card-desc { display: none !important; }
-    html[data-home-view="compact"] .card-icon-header { width: 42px !important; height: 42px !important; border-radius: 10px !important; margin-bottom: 12px !important; font-size: 18px !important; }
-    html[data-home-view="compact"] .card-title { font-size: 13px !important; margin-bottom: 0 !important; }
-    html[data-home-view="compact"] #task-count-badge { display: none !important; }
-
-    /* List: 2-column, horizontal row per card */
-    html[data-home-view="list"] .card-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
-    html[data-home-view="list"] .console-card { flex-direction: row !important; align-items: center !important; padding: 14px 18px !important; gap: 16px !important; }
-    html[data-home-view="list"] .console-card:hover { transform: translateY(-2px) !important; }
-    html[data-home-view="list"] .card-icon-header { flex-shrink: 0 !important; margin-bottom: 0 !important; width: 44px !important; height: 44px !important; }
-    html[data-home-view="list"] .card-title { font-size: 13.5px !important; margin-bottom: 3px !important; }
-    html[data-home-view="list"] .card-desc { font-size: 11.5px !important; line-height: 1.5 !important; }
-    html[data-home-view="list"] .msg-badge,
-    html[data-home-view="list"] .notif-badge { top: -6px !important; right: -6px !important; }
-    @media (max-width: 900px) {
-        html[data-home-view="compact"] .card-grid { grid-template-columns: repeat(3, 1fr) !important; }
-        html[data-home-view="list"] .card-grid { grid-template-columns: 1fr !important; }
-    }
+    /* Home view modes are applied via dynamic <style id="home-view-css"> injected in <head> */
 
 </style>
     
@@ -817,7 +815,27 @@
 
     function applyHomeView() {
         var view = localStorage.getItem(VIEW_KEY) || 'grid';
-        document.documentElement.setAttribute('data-home-view', view);
+        var existing = document.getElementById('home-view-css');
+        if (existing) existing.remove();
+        var css = '';
+        if (view === 'compact') {
+            css = '.card-grid{grid-template-columns:repeat(4,1fr)!important;gap:14px!important}'
+                + '.card-grid .console-card{padding:20px 16px!important}'
+                + '.card-grid .card-desc{display:none!important}'
+                + '.card-grid .card-icon-header{width:42px!important;height:42px!important;border-radius:10px!important;margin-bottom:12px!important}'
+                + '.card-grid .card-title{font-size:13px!important;margin-bottom:0!important}';
+        } else if (view === 'list') {
+            css = '.card-grid{grid-template-columns:repeat(2,1fr)!important;gap:10px!important}'
+                + '.card-grid .console-card{flex-direction:row!important;align-items:center!important;padding:14px 18px!important;gap:16px!important}'
+                + '.card-grid .card-icon-header{flex-shrink:0!important;margin-bottom:0!important;width:44px!important;height:44px!important}'
+                + '.card-grid .card-title{font-size:13.5px!important;margin-bottom:3px!important}';
+        }
+        if (css) {
+            var s = document.createElement('style');
+            s.id = 'home-view-css';
+            s.textContent = css;
+            document.head.appendChild(s);
+        }
     }
 
     // Re-apply on bfcache restore (browser back button)
