@@ -71,10 +71,18 @@ export default async function handler(req, res) {
 
     // ── WRITE LOG ─────────────────────────────────────────
     if (req.method === 'POST') {
-        const { email, action, status, category = 'general', target_id, target_type, severity = 'info', old_value, new_value } = req.body;
+        const { action, status, category = 'general', target_id, target_type, severity = 'info', old_value, new_value } = req.body;
+
+        // Resolve email from session — never trust client-provided email for audit trails
+        const { data: actor } = await supabase
+            .from('app_users')
+            .select('email')
+            .eq('userid', session.userid)
+            .single();
+        const actorEmail = actor?.email || 'Unknown';
 
         const { error } = await supabase.from('activity_logs').insert([{
-            email: email || 'System',
+            email: actorEmail,
             action,
             status: status || 'success',
             category: inferCategory(action, category),

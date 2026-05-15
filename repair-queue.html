@@ -117,10 +117,15 @@ const STAGES = ['Received', 'Diagnosis', 'Under Repair', 'Testing'];
 const STAGE_CLASSES = { 'Received': 'stage-received', 'Diagnosis': 'stage-diagnosis', 'Under Repair': 'stage-repair', 'Testing': 'stage-testing' };
 const technician = localStorage.getItem('pp_user_first_name') || 'Staff';
 
+function equipHeaders() {
+    const token = localStorage.getItem('pp_session_token') || '';
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
 async function equipApi(action, extra = {}) {
     const r = await fetch('/api/equipments', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: equipHeaders(),
         body: JSON.stringify({ action, ...extra })
     });
     return r.json();

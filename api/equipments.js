@@ -8,6 +8,16 @@ export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
 
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // Resolve actor identity from session — never trust client-provided headers for logging
+    const { data: actor } = await supabase
+        .from('app_users')
+        .select('email, first_name, last_name')
+        .eq('userid', session.userid)
+        .single();
+    const actorEmail = actor?.email || 'Unknown';
+    const actorName  = [actor?.first_name, actor?.last_name].filter(Boolean).join(' ') || 'Staff';
+
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
 
     try {
@@ -114,7 +124,7 @@ if (action === 'getMonthlyReport') {
                 .insert([{ 
                     equipment_id: req.body.equipment_id, 
                     note_text: req.body.note_text, 
-                    author_name: req.headers['x-user-name'] || 'Staff Member' 
+                    author_name: actorName
                 }]);
 
             if (error) throw error;
@@ -202,7 +212,7 @@ if (action === 'getMonthlyReport') {
             if (updateError) throw updateError;
 
             await supabase.from('activity_logs').insert([{
-                email: req.headers['x-user-email'] || 'System Admin',
+                email: actorEmail,
                 action: 'Update Equipment',
                 status: `Serial ${payload.serial_number} set to ${payload.status}`,
                 user_agent: req.headers['user-agent'],
@@ -225,7 +235,7 @@ if (action === 'getMonthlyReport') {
         }
 
         if (action === 'log_repair_action') {
-            const { equipment_id, repair_stage, repair_notes, technician } = req.body;
+            const { equipment_id, repair_stage, repair_notes } = req.body;
             const { error } = await supabase.from('equipments')
                 .update({ repair_stage, repair_notes, condition: repair_stage })
                 .eq('id', equipment_id);
@@ -235,14 +245,20 @@ if (action === 'getMonthlyReport') {
                 action: 'repair_update',
                 from_location: 'Warsaw Repairs',
                 to_location: 'Warsaw Repairs',
-                notes: `Stage: ${repair_stage}. ${repair_notes || ''}. Tech: ${technician || 'Staff'}`
+                notes: `Stage: ${repair_stage}. ${repair_notes || ''}. Tech: ${actorName}`
+            }]);
+            await supabase.from('activity_logs').insert([{
+                email: actorEmail,
+                action: 'Repair Update',
+                status: `Equipment #${equipment_id} stage set to ${repair_stage}`,
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || 'internal'
             }]);
             return res.status(200).json({ success: true });
         }
 
         if (action === 'close_repair') {
-            const { equipment_id, outcome, technician } = req.body;
-            // outcome: 'return_to_stock' | 'scrap'
+            const { equipment_id, outcome } = req.body;
             const isScrap = outcome === 'scrap';
             const newStatus = isScrap ? 'decommissioned' : 'stocked';
             const newLocation = isScrap ? 'Scrapped' : 'Warsaw Office';
@@ -255,7 +271,14 @@ if (action === 'getMonthlyReport') {
                 action: isScrap ? 'scrapped' : 'repair_completed',
                 from_location: 'Warsaw Repairs',
                 to_location: newLocation,
-                notes: `Repair closed by ${technician || 'Staff'}. Outcome: ${isScrap ? 'Scrapped' : 'Returned to stock'}`
+                notes: `Repair closed by ${actorName}. Outcome: ${isScrap ? 'Scrapped' : 'Returned to stock'}`
+            }]);
+            await supabase.from('activity_logs').insert([{
+                email: actorEmail,
+                action: 'Repair Closed',
+                status: `Equipment #${equipment_id} — ${isScrap ? 'scrapped' : 'returned to stock'} by ${actorName}`,
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || 'internal'
             }]);
             return res.status(200).json({ success: true });
         }
