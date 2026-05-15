@@ -485,8 +485,7 @@ async function handleLogout() {
 // ── HOME VIEW PICKER ─────────────────────────────────────────────────────────
 const VIEW_KEY = 'pp_home_view_' + staffId;
 
-function selectView(view) {
-    localStorage.setItem(VIEW_KEY, view);
+function highlightView(view) {
     document.querySelectorAll('.view-option').forEach(function(el) {
         var isActive = el.dataset.view === view;
         el.style.borderColor = isActive ? '#0d9488' : 'var(--border)';
@@ -494,12 +493,17 @@ function selectView(view) {
         var label = el.querySelector('div:last-child');
         if (label) label.style.color = isActive ? '#0d9488' : '';
     });
-    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Layout updated — takes effect on the home page', timer: 2000, showConfirmButton: false });
+}
+
+function selectView(view) {
+    localStorage.setItem(VIEW_KEY, view);
+    highlightView(view);
+    Swal.fire({ toast: true, position: 'top-end', icon: 'success', title: 'Saved! Navigate to Home to see the new layout.', timer: 2200, showConfirmButton: false });
 }
 
 function initViewPicker() {
     var current = localStorage.getItem(VIEW_KEY) || 'grid';
-    selectView(current);
+    highlightView(current);
 }
 // ─────────────────────────────────────────────────────────────────────────────
 

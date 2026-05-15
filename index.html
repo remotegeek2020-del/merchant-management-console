@@ -948,6 +948,13 @@
         if (arrangeMode) disableArrangeMode(); else enableArrangeMode();
     };
 
+    function applyEarly() {
+        // Apply view immediately — pp_userid is already in localStorage for
+        // returning sessions, so we don't need to wait for auth to complete.
+        grid = document.querySelector('.card-grid');
+        if (grid) applyHomeView();
+    }
+
     function waitForAuth() {
         var curtain = document.getElementById('page-curtain');
         if (!curtain) return;
@@ -968,15 +975,17 @@
             setTimeout(function() {
                 grid = document.querySelector('.card-grid');
                 applyHomeLayout();
+                applyHomeView();
                 var btn = document.getElementById('home-arrange-btn');
-                if (btn) btn.style.display = 'inline-block';
+                if (btn) btn.style.display = 'inline-flex';
             }, 150);
         }
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', waitForAuth);
+        document.addEventListener('DOMContentLoaded', function() { applyEarly(); waitForAuth(); });
     } else {
+        applyEarly();
         waitForAuth();
     }
 })();
