@@ -521,6 +521,27 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, url: urlData.publicUrl, type: content_type.startsWith('video') ? 'video' : 'image' });
         }
 
+        if (action === 'get_notifications') {
+            const { data } = await supabase
+                .from('notifications')
+                .select('id, type, title, body, actor_name, is_read, created_at, link')
+                .eq('recipient_type', 'partner')
+                .eq('recipient_id', String(personId))
+                .order('created_at', { ascending: false })
+                .limit(50);
+            const unread = (data || []).filter(n => !n.is_read).length;
+            return res.status(200).json({ success: true, notifications: data || [], unread });
+        }
+
+        if (action === 'mark_notifications_read') {
+            await supabase.from('notifications')
+                .update({ is_read: true })
+                .eq('recipient_type', 'partner')
+                .eq('recipient_id', String(personId))
+                .eq('is_read', false);
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {
