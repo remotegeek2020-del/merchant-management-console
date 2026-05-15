@@ -281,10 +281,15 @@ const timeAgo = d => {
     return Math.floor(s/86400) + 'd ago';
 };
 
+function authHeaders(extra = {}) {
+    const token = localStorage.getItem('pp_session_token') || '';
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...extra };
+}
+
 async function api(action, extra = {}) {
     const r = await fetch('/api/admin-dashboard', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: authHeaders(),
         body: JSON.stringify({ action, ...extra })
     });
     return r.json();
@@ -636,7 +641,7 @@ let pendingAccessChanges = {};
 async function loadStaffAccess() {
     const container = document.getElementById('staff-access-table');
     try {
-        const res = await fetch('/api/users', { method: 'GET' });
+        const res = await fetch('/api/users', { method: 'GET', headers: authHeaders() });
         const result = await res.json();
         if (!result.success) throw new Error(result.message);
         staffData = result.data || [];
@@ -700,7 +705,7 @@ async function saveAccessChanges() {
     try {
         const res = await fetch('/api/users', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ action: 'updateBatch', payload: pendingAccessChanges })
         });
         const result = await res.json();
