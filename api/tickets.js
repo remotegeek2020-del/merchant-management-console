@@ -509,13 +509,16 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false });
             if (error) throw error;
 
-            // Bulk: eligible if any unit is still deployed (guards against deployment
-            //   being incorrectly Closed after a partial return)
-            // Single: eligible if deployment not Closed and no completed RMA
+            // Bulk: eligible if any unit is still deployed
+            // Single: eligible if equipment is still deployed (takes priority — a Closed
+            //   deployment with equipment still at the merchant is a data inconsistency
+            //   but the equipment still needs to come back), OR deployment is not Closed
+            //   and has no completed RMA
             const eligible = (data || []).filter(d => {
                 if (d.is_bulk) {
                     return d.deployment_items?.some(item => item.equip?.status === 'deployed');
                 }
+                if (d.equipments?.status === 'deployed') return true;
                 if (d.status === 'Closed') return false;
                 const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
                 return !rets.some(r => r.status === 'Closed');

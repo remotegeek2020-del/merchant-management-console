@@ -228,8 +228,22 @@ let depEquipLookupTimeout;
 let currentPage = 0;
 let pageSize = 20;
 
+function tkHeaders() {
+    const token = localStorage.getItem('pp_session_token') || '';
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+}
+
+async function tkApi(action, extra = {}) {
+    const r = await fetch('/api/tickets', {
+        method: 'POST',
+        headers: tkHeaders(),
+        body: JSON.stringify({ action, ...extra })
+    });
+    return r.json();
+}
+
 async function init() {
-    const staffRes = await fetch('/api/users', { method: 'GET' });
+    const staffRes = await fetch('/api/users', { method: 'GET', headers: tkHeaders() });
     const sr = await staffRes.json();
     staffList = (sr.data || []).filter(u => u.is_active);
     // Try to find current user's full name from staff list
@@ -260,12 +274,7 @@ async function init() {
 
 async function loadTickets() {
     document.getElementById('last-updated').textContent = 'Loading...';
-    const r = await fetch('/api/tickets', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'list_for_staff', limit: 500 })
-    });
-    const result = await r.json();
+    const result = await tkApi('list_for_staff', { limit: 500 });
     if (result.success) {
         allTickets = result.data || [];
         renderTickets();
@@ -430,8 +439,8 @@ async function openTicket(ticketId) {
     document.getElementById('ticket-modal').classList.add('is-open');
 
     const [ticketRes, commentsRes] = await Promise.all([
-        fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId }) }),
-        fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_comments', ticket_id: ticketId }) })
+        fetch('/api/tickets', { method: 'POST', headers: tkHeaders(), body: JSON.stringify({ action: 'get_detail', ticket_id: ticketId }) }),
+        fetch('/api/tickets', { method: 'POST', headers: tkHeaders(), body: JSON.stringify({ action: 'get_comments', ticket_id: ticketId }) })
     ]);
     const result = await ticketRes.json();
 
@@ -440,7 +449,7 @@ async function openTicket(ticketId) {
     const commentsOk = commentsResult?.success !== false;
 
     // Mark as read in background
-    fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'mark_read', ticket_id: ticketId }) });
+    fetch('/api/tickets', { method: 'POST', headers: tkHeaders(), body: JSON.stringify({ action: 'mark_read', ticket_id: ticketId }) });
 
     if (!result.success) {
         document.getElementById('modal-ticket-body').innerHTML = `<div style="padding:20px; color:var(--red-text);">Error loading ticket.</div>`;
@@ -598,7 +607,7 @@ async function submitComment() {
     if (btn) { btn.disabled = true; btn.textContent = 'Sending...'; }
 
     const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tkHeaders(),
         body: JSON.stringify({ action: 'add_comment', ticket_id: currentTicketId, body, is_internal, staff_name: currentStaffName })
     });
     const result = await r.json();
@@ -617,7 +626,7 @@ async function saveTicketUpdate(ticketId) {
     const staff_notes = document.getElementById('upd-notes').value.trim() || null;
 
     const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tkHeaders(),
         body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status, priority, assigned_to, staff_notes, staff_name: currentStaffName })
     });
     const result = await r.json();
@@ -641,7 +650,7 @@ async function searchDepEquipment(val) {
     depEquipLookupTimeout = setTimeout(async () => {
         try {
             const res = await fetch('/api/deployments', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: tkHeaders(),
                 body: JSON.stringify({ action: 'getLookups', query: val })
             });
             const result = await res.json();
@@ -847,7 +856,7 @@ async function createLinkedDeployment() {
         if (!result.isConfirmed || !result.value) return;
         Swal.fire({ title: 'Creating Deployment...', didOpen: () => Swal.showLoading() });
         const r = await fetch('/api/tickets', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: tkHeaders(),
             body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'deployment', staff_name: currentStaffName, ...result.value })
         });
         const res = await r.json();
@@ -864,7 +873,7 @@ async function createLinkedDeployment() {
 async function addUnitsToRMA(returnDisplayId) {
     Swal.fire({ title: 'Loading available units...', didOpen: () => Swal.showLoading() });
     const r = await fetch('/api/returns', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tkHeaders(),
         body: JSON.stringify({ action: 'get_addable_items', return_display_id: returnDisplayId })
     });
     const result = await r.json();
@@ -904,7 +913,7 @@ async function addUnitsToRMA(returnDisplayId) {
     if (!selected) return;
     Swal.fire({ title: 'Adding units...', didOpen: () => Swal.showLoading() });
     const r2 = await fetch('/api/returns', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tkHeaders(),
         body: JSON.stringify({ action: 'add_items', return_uuid: result.rma_uuid, equipment_ids: selected })
     });
     const res2 = await r2.json();
@@ -924,8 +933,7 @@ async function createLinkedRMA() {
     }
 
     Swal.fire({ title: 'Loading deployments...', didOpen: () => Swal.showLoading() });
-    const depRes = await fetch('/api/tickets', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_merchant_deployments', merchant_id: t.merchant_id }) });
-    const depData = await depRes.json();
+    const depData = await tkApi('get_merchant_deployments', { merchant_id: t.merchant_id });
     const deps = depData.deployments || [];
     Swal.close();
 
@@ -1054,7 +1062,7 @@ async function createLinkedRMA() {
         if (!result.isConfirmed || !result.value) return;
         Swal.fire({ title: 'Creating RMA...', didOpen: () => Swal.showLoading() });
         const r = await fetch('/api/tickets', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: tkHeaders(),
             body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'rma', staff_name: currentStaffName, ...result.value })
         });
         const res = await r.json();
@@ -1092,7 +1100,7 @@ async function deleteTicket() {
 
     Swal.fire({ title: 'Deleting...', didOpen: () => Swal.showLoading() });
     const r = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: tkHeaders(),
         body: JSON.stringify({ action: 'delete_ticket', ticket_id: t.id })
     });
     const result = await r.json();
@@ -1133,7 +1141,7 @@ async function pollUnreadCounts() {
     if (document.hidden) return;
     try {
         const r = await fetch('/api/tickets', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: tkHeaders(),
             body: JSON.stringify({ action: 'get_unread_counts' })
         });
         const result = await r.json();
