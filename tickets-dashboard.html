@@ -46,6 +46,9 @@
         .badge-high { background: var(--amber-bg); color: var(--amber-text); }
         .badge-normal { background: var(--gray-bg); color: var(--gray-text); }
         .badge-low { background: #f0fdf4; color: #166534; }
+        .req-badge { display:inline-flex; align-items:center; gap:4px; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; white-space:nowrap; max-width:200px; overflow:hidden; text-overflow:ellipsis; }
+        .req-badge-category { background:#f0fdf4; color:#166534; }
+        .req-badge-equipment { background:#eff6ff; color:#1d4ed8; }
         .empty-state { padding: 48px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
         .skeleton { background: linear-gradient(90deg,#f0f4f8 25%,#e2e8f0 50%,#f0f4f8 75%); background-size:400% 100%; animation:shimmer 1.2s infinite; border-radius:6px; }
         @keyframes shimmer { 0%{background-position:100% 0} 100%{background-position:-100% 0} }
@@ -212,6 +215,23 @@ const escapeHtml = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;')
 const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns/RMA' : 'General';
 const typeIconClass = t => t === 'deployment_request' ? 'icon-deployment' : t === 'rma_request' ? 'icon-rma' : 'icon-general';
 const typeIconName = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
+
+function requestedBadges(t) {
+    const parts = [];
+    if (t.category) {
+        const icon = t.type === 'deployment_request' ? 'devices' : 'info';
+        parts.push(`<span class="req-badge req-badge-category"><span class="material-icons" style="font-size:11px;">${icon}</span>${escapeHtml(t.category)}</span>`);
+    }
+    // Extract equipment from description: "Units requested for return: X — Y, ..."
+    if (t.type === 'rma_request' && t.description) {
+        const m = t.description.match(/^Units requested for return:\s*(.+?)(\n|$)/i);
+        if (m) {
+            parts.push(`<span class="req-badge req-badge-equipment"><span class="material-icons" style="font-size:11px;">memory</span>${escapeHtml(m[1])}</span>`);
+        }
+    }
+    if (!parts.length) return '';
+    return `<div style="margin-top:4px; display:flex; gap:4px; flex-wrap:wrap;">${parts.join('')}</div>`;
+}
 const fmt = fmtDateTime;
 
 let allTickets = [];
@@ -327,6 +347,7 @@ function renderTickets() {
                     ${t.persons?.full_name ? ` · ${t.persons.full_name}` : ''}
                     ${t.merchants?.dba_name ? ` · ${t.merchants.dba_name}` : ''}
                 </div>
+                ${requestedBadges(t)}
                 ${(t.linked_deployment_id || t.linked_return_id) ? `<div style="margin-top:3px; display:flex; gap:4px; flex-wrap:wrap;">
                     ${t.linked_deployment_id ? `<span style="font-size:10px; font-family:'DM Mono',monospace; background:#1e3a5f; color:#60a5fa; border-radius:4px; padding:1px 6px; white-space:nowrap;">DPL ${t.linked_deployment_id}</span>` : ''}
                     ${t.linked_return_id ? `<span style="font-size:10px; font-family:'DM Mono',monospace; background:#3b1f1f; color:#f87171; border-radius:4px; padding:1px 6px; white-space:nowrap;">RMA ${t.linked_return_id}</span>` : ''}

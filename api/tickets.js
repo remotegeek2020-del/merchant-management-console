@@ -213,7 +213,7 @@ export default async function handler(req, res) {
         if (action === 'list_for_staff') {
             const { status, type, limit = 200, mine_name, merchant_id, person_id } = req.body;
             let query = supabase.from('support_tickets')
-                .select('id, ticket_number, type, category, subject, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, has_unread_partner_comment, unread_count, partner_unread_count, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
+                .select('id, ticket_number, type, category, subject, description, status, priority, assigned_to, created_at, updated_at, merchant_id, person_id, has_unread_partner_comment, unread_count, partner_unread_count, linked_deployment_id, linked_return_id, merchants:merchant_id(dba_name), persons:person_id(full_name, email)')
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
