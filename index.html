@@ -12,14 +12,10 @@
     
     <link rel="stylesheet" href="css/style.css">
     <script>
-    // Apply home view before render to avoid layout flash
     (function(){
         try {
-            var uid = localStorage.getItem('pp_userid');
-            if (uid) {
-                var v = localStorage.getItem('pp_home_view_' + uid) || 'grid';
-                document.documentElement.setAttribute('data-home-view', v);
-            }
+            var v = localStorage.getItem('pp_home_view') || 'grid';
+            document.documentElement.setAttribute('data-home-view', v);
         } catch(e) {}
     })();
     </script>
@@ -809,7 +805,7 @@
 <script>
 (function() {
     var LAYOUT_KEY_PREFIX = 'pp_home_layout_';
-    var VIEW_KEY_PREFIX   = 'pp_home_view_';
+    var VIEW_KEY          = 'pp_home_view';
     var grid = null;
     var arrangeMode = false;
     var dragSrc = null;
@@ -820,17 +816,9 @@
     }
 
     function applyHomeView() {
-        var uid = localStorage.getItem('pp_userid');
-        var view = uid ? (localStorage.getItem(VIEW_KEY_PREFIX + uid) || 'grid') : 'grid';
+        var view = localStorage.getItem(VIEW_KEY) || 'grid';
         document.documentElement.setAttribute('data-home-view', view);
     }
-
-    window.setHomeView = function(view) {
-        var uid = localStorage.getItem('pp_userid');
-        if (!uid) return;
-        localStorage.setItem(VIEW_KEY_PREFIX + uid, view);
-        applyHomeView();
-    };
 
     // Re-apply on bfcache restore (browser back button)
     window.addEventListener('pageshow', function(e) {
