@@ -178,19 +178,22 @@ export default async function handler(req, res) {
                 .eq('id', id);
             if (error) throw error;
 
-            // Notify creator when marked done or rejected (only if someone else made the change)
-            if (idea && (status === 'done' || status === 'rejected') && idea.requested_by_userid !== actor_userid) {
-                const isDone = status === 'done';
-                const statusLabel = isDone ? 'implemented ✅' : 'declined ❌';
-                const notifTitle = isDone ? 'Your idea was implemented!' : 'Your idea was declined';
-                const notifBody = idea.title.slice(0, 100);
+            // Notify creator on all meaningful status changes (only if someone else made the change)
+            const notifyStatuses = ['done', 'rejected', 'in_progress'];
+            if (idea && notifyStatuses.includes(status) && idea.requested_by_userid && idea.requested_by_userid !== actor_userid) {
+                const statusMeta = {
+                    done:        { label: 'implemented ✅', notifTitle: 'Your idea was implemented!',    color: '#0d9488', heading: 'Great news!',    emoji: '✅' },
+                    rejected:    { label: 'declined ❌',    notifTitle: 'Your idea was declined',         color: '#dc2626', heading: 'Status Update', emoji: '❌' },
+                    in_progress: { label: 'in progress 🔧', notifTitle: 'Your idea is being worked on!', color: '#d97706', heading: 'In Progress!',   emoji: '🔧' }
+                };
+                const meta = statusMeta[status];
 
                 // In-app notification
                 await sendNotification(supabase, {
                     recipientId: idea.requested_by_userid,
                     type: 'idea_status',
-                    title: notifTitle,
-                    body: notifBody,
+                    title: meta.notifTitle,
+                    body: idea.title.slice(0, 100),
                     actorId: actor_userid || '',
                     actorName: actor_name || 'Admin',
                     ideaId: id
@@ -202,17 +205,17 @@ export default async function handler(req, res) {
                 if (creator?.email) {
                     await sendEmail(
                         creator.email,
-                        `${isDone ? '✅ Implemented' : '❌ Declined'}: Your idea "${idea.title}"`,
+                        `${meta.emoji} ${meta.notifTitle}: "${idea.title}"`,
                         ideaEmailWrapper(`
-                            <h3 style="color:${isDone ? '#0d9488' : '#dc2626'};margin:0 0 8px;">${isDone ? 'Great news!' : 'Status Update'}</h3>
-                            <p style="margin:0 0 16px;line-height:1.6;">Hi <strong>${creator.first_name || 'there'}</strong>, your feature request has been <strong>${statusLabel}</strong>.</p>
+                            <h3 style="color:${meta.color};margin:0 0 8px;">${meta.heading}</h3>
+                            <p style="margin:0 0 16px;line-height:1.6;">Hi <strong>${creator.first_name || 'there'}</strong>, your feature request has been marked as <strong>${meta.label}</strong>.</p>
                             <div style="background:#f8fafc;border-radius:10px;padding:16px;margin-bottom:20px;">
                                 <p style="font-weight:700;margin:0;color:#1e293b;">${escapeHtml(idea.title)}</p>
                             </div>
                             <div style="text-align:center;">
                                 <a href="https://${req.headers.host}/ideas-dashboard.html" style="background:#004990;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">View Ideas Board</a>
                             </div>`),
-                        `Hi ${creator.first_name || 'there'}, your idea "${idea.title}" has been ${statusLabel}.`
+                        `Hi ${creator.first_name || 'there'}, your idea "${idea.title}" has been ${meta.label}.`
                     );
                 }
             }
@@ -347,7 +350,12 @@ export default async function handler(req, res) {
                 .select().single();
             if (error) throw error;
 
-            // Send notifications to all @mentioned users
+            // Fetch idea title for context in emails
+            const { data: idea } = await supabase
+                .from('feature_ideas').select('title').eq('id', idea_id).single();
+            const ideaTitle = idea?.title || 'a feature request';
+
+            // Send in-app notification + email to each @mentioned user
             const safeMentions = Array.isArray(mentions) ? mentions.slice(0, 10) : [];
             for (const m of safeMentions) {
                 if (!m.userid || m.userid === posted_by_userid) continue;
@@ -360,6 +368,26 @@ export default async function handler(req, res) {
                     actorName: posted_by_name,
                     ideaId: idea_id
                 });
+                // Email the mentioned user
+                const { data: mentionedUser } = await supabase
+                    .from('app_users').select('email, first_name').eq('userid', m.userid).single();
+                if (mentionedUser?.email) {
+                    await sendEmail(
+                        mentionedUser.email,
+                        `💬 ${posted_by_name} mentioned you in a comment`,
+                        ideaEmailWrapper(`
+                            <h3 style="color:#004990;margin:0 0 8px;">You were mentioned</h3>
+                            <p style="margin:0 0 16px;line-height:1.6;">Hi <strong>${mentionedUser.first_name || 'there'}</strong>, <strong>${escapeHtml(posted_by_name)}</strong> mentioned you in a comment on:</p>
+                            <div style="background:#f8fafc;border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+                                <p style="font-weight:700;margin:0 0 8px;color:#1e293b;">${escapeHtml(ideaTitle)}</p>
+                                <p style="color:#475569;margin:0;font-size:13px;line-height:1.6;font-style:italic;">"${escapeHtml(body.trim().slice(0, 200))}${body.trim().length > 200 ? '…' : ''}"</p>
+                            </div>
+                            <div style="text-align:center;">
+                                <a href="https://${req.headers.host}/ideas-dashboard.html" style="background:#004990;color:white;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:700;display:inline-block;">View Ideas Board</a>
+                            </div>`),
+                        `${posted_by_name} mentioned you in a comment on "${ideaTitle}": "${body.trim().slice(0, 150)}"`
+                    );
+                }
             }
 
             return res.status(200).json({ success: true, comment: data });
