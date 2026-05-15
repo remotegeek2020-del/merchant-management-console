@@ -118,6 +118,45 @@
     .gsr-empty { padding: 20px; text-align: center; color: #475569; font-size: 13px; }
     .gsr-loading { padding: 16px; text-align: center; color: #64748b; font-size: 12px; }
 
+    /* Card Arrange Mode */
+    #home-arrange-btn {
+        display: none;
+        border-radius: 50px;
+        padding: 0 15px;
+        margin-right: 8px;
+        border: 1px solid #e2e8f0;
+        background: white;
+        color: #475569;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        font-family: 'Inter', sans-serif;
+    }
+    #home-arrange-btn:hover { border-color: #0d9488; color: #0d9488; }
+    #home-arrange-btn.active { background: #0d9488; color: white; border-color: #0d9488; }
+    .drag-handle {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 28px;
+        height: 28px;
+        background: rgba(0,0,0,0.07);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #64748b;
+        cursor: grab;
+        z-index: 10;
+        transition: background 0.15s;
+        pointer-events: none;
+    }
+    .arrange-mode .console-card[draggable="true"] { cursor: grab; user-select: none; }
+    .arrange-mode .console-card[draggable="true"]:hover { box-shadow: 0 8px 24px rgba(0,0,0,0.12); transform: translateY(-1px); }
+    .arrange-mode .console-card.card-dragging { opacity: 0.35; }
+    .arrange-mode .console-card.drag-over { outline: 2px dashed #0d9488; outline-offset: 3px; background: #f0fdfa !important; }
+
 </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -165,6 +204,7 @@
             <div class="header-top-bar">
                
                 <div id="user-greeting">System Authorizing...</div>
+                <button id="home-arrange-btn" onclick="toggleHomeArrangeMode()">Arrange</button>
                 <button id="logout-btn" class="slds-button slds-button_destructive" style="display:none; border-radius: 50px; padding: 0 15px;" onclick="handleLogout()">
                     Logout
                 </button>
@@ -716,5 +756,174 @@
 })();
 </script>
 <script src="/js/site-config.js"></script>
+
+<script>
+(function() {
+    var LAYOUT_KEY_PREFIX = 'pp_home_layout_';
+    var grid = null;
+    var arrangeMode = false;
+    var dragSrc = null;
+
+    function getLayoutKey() {
+        var uid = localStorage.getItem('pp_userid');
+        return uid ? LAYOUT_KEY_PREFIX + uid : null;
+    }
+
+    function getAllCards() {
+        if (!grid) return [];
+        return Array.from(grid.querySelectorAll('.console-card'));
+    }
+
+    function applyHomeLayout() {
+        var key = getLayoutKey();
+        if (!key) return;
+        var saved = null;
+        try { saved = JSON.parse(localStorage.getItem(key)); } catch(e) {}
+        if (!saved || !Array.isArray(saved) || !saved.length) return;
+        var cards = getAllCards();
+        var cardMap = {};
+        cards.forEach(function(c) { cardMap[c.id] = c; });
+        var seen = {};
+        saved.forEach(function(id) {
+            if (cardMap[id]) { grid.appendChild(cardMap[id]); seen[id] = true; }
+        });
+        cards.forEach(function(c) { if (!seen[c.id]) grid.appendChild(c); });
+    }
+
+    function saveHomeLayout() {
+        var key = getLayoutKey();
+        if (!key) return;
+        localStorage.setItem(key, JSON.stringify(getAllCards().map(function(c) { return c.id; })));
+    }
+
+    function onDragStart(e) {
+        var card = e.target.closest && e.target.closest('.console-card');
+        if (!card || !arrangeMode) { e.preventDefault(); return; }
+        dragSrc = card;
+        card.classList.add('card-dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', card.id);
+    }
+
+    function onDragEnd(e) {
+        var card = e.target.closest && e.target.closest('.console-card');
+        if (card) card.classList.remove('card-dragging');
+        getAllCards().forEach(function(c) { c.classList.remove('drag-over'); });
+        dragSrc = null;
+    }
+
+    function onDragOver(e) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        var card = e.target.closest && e.target.closest('.console-card');
+        if (!card || card === dragSrc) return;
+        getAllCards().forEach(function(c) { c.classList.remove('drag-over'); });
+        card.classList.add('drag-over');
+    }
+
+    function onDragLeave(e) {
+        var card = e.target.closest && e.target.closest('.console-card');
+        if (card) card.classList.remove('drag-over');
+    }
+
+    function onDrop(e) {
+        e.preventDefault();
+        var target = e.target.closest && e.target.closest('.console-card');
+        if (!target || target === dragSrc || !dragSrc) return;
+        target.classList.remove('drag-over');
+        var cards = getAllCards();
+        var srcIdx = cards.indexOf(dragSrc);
+        var tgtIdx = cards.indexOf(target);
+        if (srcIdx < tgtIdx) {
+            grid.insertBefore(dragSrc, target.nextSibling);
+        } else {
+            grid.insertBefore(dragSrc, target);
+        }
+        saveHomeLayout();
+    }
+
+    function onArrangeClick(e) {
+        if (arrangeMode) e.preventDefault();
+    }
+
+    function enableArrangeMode() {
+        arrangeMode = true;
+        grid.classList.add('arrange-mode');
+        getAllCards().forEach(function(card) {
+            if (window.getComputedStyle(card).display === 'none') return;
+            card.setAttribute('draggable', 'true');
+            if (!card.querySelector('.drag-handle')) {
+                var h = document.createElement('div');
+                h.className = 'drag-handle';
+                h.innerHTML = '<span class="material-icons" style="font-size:16px;">drag_indicator</span>';
+                card.appendChild(h);
+            }
+        });
+        grid.addEventListener('dragstart', onDragStart);
+        grid.addEventListener('dragend', onDragEnd);
+        grid.addEventListener('dragover', onDragOver);
+        grid.addEventListener('dragleave', onDragLeave);
+        grid.addEventListener('drop', onDrop);
+        grid.addEventListener('click', onArrangeClick, true);
+        var btn = document.getElementById('home-arrange-btn');
+        if (btn) { btn.textContent = 'Done Arranging'; btn.classList.add('active'); }
+    }
+
+    function disableArrangeMode() {
+        arrangeMode = false;
+        grid.classList.remove('arrange-mode');
+        getAllCards().forEach(function(card) {
+            card.removeAttribute('draggable');
+            card.classList.remove('card-dragging', 'drag-over');
+            var h = card.querySelector('.drag-handle');
+            if (h) h.remove();
+        });
+        grid.removeEventListener('dragstart', onDragStart);
+        grid.removeEventListener('dragend', onDragEnd);
+        grid.removeEventListener('dragover', onDragOver);
+        grid.removeEventListener('dragleave', onDragLeave);
+        grid.removeEventListener('drop', onDrop);
+        grid.removeEventListener('click', onArrangeClick, true);
+        var btn = document.getElementById('home-arrange-btn');
+        if (btn) { btn.textContent = 'Arrange'; btn.classList.remove('active'); }
+    }
+
+    window.toggleHomeArrangeMode = function() {
+        if (!grid) return;
+        if (arrangeMode) disableArrangeMode(); else enableArrangeMode();
+    };
+
+    function waitForAuth() {
+        var curtain = document.getElementById('page-curtain');
+        if (!curtain) return;
+        var observer = new MutationObserver(function() {
+            if (curtain.style.display && curtain.style.display !== 'none') {
+                observer.disconnect();
+                setTimeout(function() {
+                    grid = document.querySelector('.card-grid');
+                    applyHomeLayout();
+                    var btn = document.getElementById('home-arrange-btn');
+                    if (btn) btn.style.display = 'inline-block';
+                }, 150);
+            }
+        });
+        observer.observe(curtain, { attributes: true, attributeFilter: ['style'] });
+        if (curtain.style.display && curtain.style.display !== 'none') {
+            setTimeout(function() {
+                grid = document.querySelector('.card-grid');
+                applyHomeLayout();
+                var btn = document.getElementById('home-arrange-btn');
+                if (btn) btn.style.display = 'inline-block';
+            }, 150);
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', waitForAuth);
+    } else {
+        waitForAuth();
+    }
+})();
+</script>
 </body>
 </html>
