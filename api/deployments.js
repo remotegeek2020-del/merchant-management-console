@@ -349,33 +349,32 @@ if (action === 'delete') {
 
             if (query) {
                 const term = `%${query}%`;
-                const { data: matchedEquip } = await supabase
-                    .from('equipments')
-                    .select('id')
-                    .ilike('serial_number', term);
 
-                const equipIds = (matchedEquip || []).map(e => e.id);
+                // Parallel lookups for joined-table fields
+                const [merchantRes, equipRes, tidItemsRes] = await Promise.all([
+                    supabase.from('merchants').select('id').ilike('dba_name', term),
+                    supabase.from('equipments').select('id').or(`serial_number.ilike.${term},terminal_type.ilike.${term}`),
+                    supabase.from('deployment_items').select('deployment_id').ilike('tid', term)
+                ]);
 
+                const merchantIds = (merchantRes.data || []).map(m => m.id);
+                const equipIds    = (equipRes.data    || []).map(e => e.id);
+                // Deployment IDs found via TID on items
+                let bulkDepIds = [...new Set((tidItemsRes.data || []).map(d => d.deployment_id))];
+
+                // Also collect bulk deployment IDs that contain matching equipment
                 if (equipIds.length > 0) {
-                    // Also find bulk deployments that have this serial in deployment_items
                     const { data: bulkDeps } = await supabase
-                        .from('deployment_items')
-                        .select('deployment_id')
-                        .in('equipment_id', equipIds);
-
-                    const bulkDepIds = [...new Set((bulkDeps || []).map(d => d.deployment_id))];
-
-                    const conditions = [
-                        `deployment_id.ilike.${term}`,
-                        `equipment_id.in.(${equipIds.join(',')})`
-                    ];
-                    if (bulkDepIds.length > 0) {
-                        conditions.push(`id.in.(${bulkDepIds.join(',')})`);
-                    }
-                    request = request.or(conditions.join(','));
-                } else {
-                    request = request.ilike('deployment_id', term);
+                        .from('deployment_items').select('deployment_id').in('equipment_id', equipIds);
+                    const extra = (bulkDeps || []).map(d => d.deployment_id);
+                    bulkDepIds = [...new Set([...bulkDepIds, ...extra])];
                 }
+
+                const conditions = [`deployment_id.ilike.${term}`, `tid.ilike.${term}`];
+                if (merchantIds.length > 0) conditions.push(`merchant_id.in.(${merchantIds.join(',')})`);
+                if (equipIds.length > 0)   conditions.push(`equipment_id.in.(${equipIds.join(',')})`);
+                if (bulkDepIds.length > 0) conditions.push(`id.in.(${bulkDepIds.join(',')})`);
+                request = request.or(conditions.join(','));
             }
 
             const { data, error, count } = await request

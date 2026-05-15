@@ -68,7 +68,30 @@ if (action === 'list') {
     `, { count: 'exact' }).order('return_date_initiated', { ascending: false });
 
     if (searchQuery) {
-        q = q.or(`return_id.ilike.%${searchQuery}%,condition.ilike.%${searchQuery}%`);
+        const term = `%${searchQuery}%`;
+
+        // Parallel lookups for joined-table fields (merchant name, serial, terminal type)
+        const [merchantRes, equipRes] = await Promise.all([
+            supabase.from('merchants').select('id').ilike('dba_name', term),
+            supabase.from('equipments').select('id').or(`serial_number.ilike.${term},terminal_type.ilike.${term}`)
+        ]);
+
+        const merchantIds = (merchantRes.data || []).map(m => m.id);
+        const equipIds    = (equipRes.data    || []).map(e => e.id);
+
+        // Also find bulk return IDs whose items match the equipment
+        let bulkRetIds = [];
+        if (equipIds.length > 0) {
+            const { data: bulkRets } = await supabase
+                .from('return_items').select('return_id').in('equipment_id', equipIds);
+            bulkRetIds = [...new Set((bulkRets || []).map(r => r.return_id))];
+        }
+
+        const conditions = [`return_id.ilike.${term}`];
+        if (merchantIds.length > 0) conditions.push(`merchant_id.in.(${merchantIds.join(',')})`);
+        if (equipIds.length > 0)    conditions.push(`equipment_id.in.(${equipIds.join(',')})`);
+        if (bulkRetIds.length > 0)  conditions.push(`id.in.(${bulkRetIds.join(',')})`);
+        q = q.or(conditions.join(','));
     }
     if (statusFilter) q = q.ilike('status', statusFilter);
     if (conditionFilter) q = q.ilike('condition', `%${conditionFilter}%`);
