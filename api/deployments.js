@@ -23,6 +23,9 @@ export default async function handler(req, res) {
         return_date_initiated
     } = payload;
 
+    const { data: merchantRec0 } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+    const merchantDba0 = merchantRec0?.dba_name || 'Merchant Site';
+
     const { data: returnData, error: returnError } = await supabase
         .from('returns')
         .insert([{
@@ -41,7 +44,7 @@ export default async function handler(req, res) {
         equipment_id,
         merchant_id,
         action: 'return_initiated',
-        from_location: 'Merchant Site',
+        from_location: merchantDba0,
         to_location: 'In Transit',
         notes: `Return initiated: ${reason}`
     }]);
@@ -152,7 +155,7 @@ if (action === 'update') {
 
     const { data: oldDep, error: fetchError } = await supabase
         .from('deployments')
-        .select('status, tracking_id, equipment_id, merchant_id')
+        .select('status, tracking_id, equipment_id, merchant_id, merchants:merchant_id(dba_name)')
         .eq('id', deployment_id)
         .single();
 
@@ -180,8 +183,8 @@ if (action === 'update') {
             merchant_id: oldDep.merchant_id,
             deployment_id: deployment_id,
             action: 'TICKET_UPDATED',
-            from_location: 'Merchant Site',
-            to_location: 'Merchant Site',
+            from_location: oldDep.merchants?.dba_name || 'Merchant Site',
+            to_location: oldDep.merchants?.dba_name || 'Merchant Site',
             notes: `Status changed to ${status}. Purchase Type: ${purchase_type || 'N/A'}`
         }]);
     }
@@ -595,11 +598,14 @@ if (action === 'return_to_office') {
                     );
                 }
 
+                const { data: mRec } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+                const mDba = mRec?.dba_name || 'Merchant Site';
+
                 if (depItems?.length) {
                     await supabase.from('equipment_logs').insert(
                         depItems.map(di => ({
                             equipment_id: di.equipment_id, merchant_id, deployment_id,
-                            action: 'RMA Initiated', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
+                            action: 'RMA Initiated', from_location: mDba, to_location: 'In Transit / RMA',
                             notes: `Bulk RMA Initiated. Reason: ${notes || 'N/A'}`
                         }))
                     );
@@ -618,10 +624,13 @@ if (action === 'return_to_office') {
                 }, { onConflict: 'deployment_id' });
                 if (error) throw error;
 
+                const { data: mRecSingle } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
+                const mDbaSingle = mRecSingle?.dba_name || 'Merchant Site';
+
                 await supabase.from('equipment_logs').insert([{
                     equipment_id, merchant_id, deployment_id,
                     action: 'RMA Initiated',
-                    from_location: 'Merchant Site',
+                    from_location: mDbaSingle,
                     to_location: 'In Transit / RMA',
                     notes: `Unit marked In Transit. Reason: ${notes || 'N/A'}`
                 }]);

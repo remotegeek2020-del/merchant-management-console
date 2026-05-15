@@ -283,13 +283,16 @@ if (action === 'complete_return') {
             if (!rma) return res.status(404).json({ success: false, message: 'RMA not found.' });
             if (rma.status !== 'Open') return res.status(400).json({ success: false, message: 'RMA is already closed.' });
 
+            const { data: mRecAdd } = await supabase.from('merchants').select('dba_name').eq('id', rma.merchant_id).single();
+            const mDbaAdd = mRecAdd?.dba_name || 'Merchant Site';
+
             await supabase.from('return_items').insert(
                 equipment_ids.map(eqId => ({ return_id: rma.id, equipment_id: eqId, condition: 'IN TRANSIT' }))
             );
             await supabase.from('equipment_logs').insert(
                 equipment_ids.map(eqId => ({
                     equipment_id: eqId, merchant_id: rma.merchant_id,
-                    action: 'Added to RMA', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
+                    action: 'Added to RMA', from_location: mDbaAdd, to_location: 'In Transit / RMA',
                     notes: `Added to existing RMA ${rma.return_id}`
                 }))
             );
