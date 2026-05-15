@@ -638,18 +638,68 @@ export default async function handler(req, res) {
                 }
 
             } else if (record_type === 'rma') {
-                const { deployment_internal_id, return_reason, return_date_initiated, notes, is_bulk, selected_equipment_ids } = req.body;
-                if (!deployment_internal_id || !return_reason) return res.status(400).json({ success: false, message: 'deployment_internal_id and return_reason required.' });
+                // selected_units: [{ equipment_id, deployment_id }] — one entry per device staff chose
+                const { selected_units, return_reason, return_date_initiated, notes } = req.body;
+                if (!selected_units?.length || !return_reason) {
+                    return res.status(400).json({ success: false, message: 'selected_units and return_reason required.' });
+                }
 
+                // Use the first unit's deployment as the primary deployment for the returns record
+                const primaryDepId = selected_units[0].deployment_id;
                 const { data: dep } = await supabase.from('deployments')
-                    .select('id, equipment_id, merchant_id, deployment_id, is_bulk').eq('id', deployment_internal_id).single();
+                    .select('id, equipment_id, merchant_id, deployment_id, is_bulk').eq('id', primaryDepId).single();
                 if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found.' });
 
                 const returnId = genId('RMA');
                 const dateInitiated = return_date_initiated || new Date().toISOString().split('T')[0];
-                const isBulkDep = dep.is_bulk || is_bulk;
+                const isSingleUnit = selected_units.length === 1 && !dep.is_bulk;
 
-                if (isBulkDep) {
+                if (isSingleUnit) {
+                    // Single unit path — keep backward-compatible returns record shape
+                    const { data: existingRet } = await supabase.from('returns')
+                        .select('id, return_id').eq('deployment_id', dep.id).eq('status', 'Open')
+                        .limit(1).maybeSingle();
+
+                    let ret;
+                    if (existingRet) {
+                        ret = existingRet;
+                    } else {
+                        const { data: newRet, error: retErr } = await supabase.from('returns').insert({
+                            return_id: returnId,
+                            deployment_id: dep.id,
+                            equipment_id: selected_units[0].equipment_id,
+                            merchant_id: dep.merchant_id,
+                            return_reason,
+                            notes: notes || null,
+                            return_date_initiated: dateInitiated,
+                            condition: 'IN TRANSIT',
+                            destination: 'In Transit / RMA',
+                            status: 'Open',
+                            ticket_id: parseInt(ticket_id)
+                        }).select('id, return_id').single();
+                        if (retErr) throw retErr;
+                        ret = newRet;
+                    }
+
+                    await supabase.from('equipment_logs').insert({
+                        equipment_id: selected_units[0].equipment_id, merchant_id: dep.merchant_id, deployment_id: dep.id,
+                        action: 'RMA Initiated', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
+                        notes: `RMA initiated from support ticket. Reason: ${return_reason}`
+                    });
+
+                    const finalReturnId = ret.return_id || returnId;
+                    await supabase.from('support_tickets').update({ linked_return_id: finalReturnId }).eq('id', ticket_id);
+                    await supabase.from('ticket_comments').insert({
+                        ticket_id, author_type: 'system', author_name: author,
+                        change_summary: `Return/RMA initiated: <strong>${finalReturnId}</strong> — unit is being returned for inspection.`,
+                        is_internal: false
+                    });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id}`, target_id: ticket_id });
+                    return res.status(200).json({ success: true, return_id: finalReturnId, unit_count: 1 });
+
+                } else {
+                    // Multi-unit path — create one bulk return and add all selected units to return_items
                     const { data: ret, error: retErr } = await supabase.from('returns').insert({
                         return_id: returnId,
                         deployment_id: dep.id,
@@ -666,76 +716,32 @@ export default async function handler(req, res) {
                     }).select('id, return_id').single();
                     if (retErr) throw retErr;
 
-                    // Use selected units, or fall back to all deployment_items
-                    let equipIds = selected_equipment_ids?.length ? selected_equipment_ids : null;
-                    if (!equipIds) {
-                        const { data: depItems } = await supabase.from('deployment_items').select('equipment_id').eq('deployment_id', dep.id);
-                        equipIds = (depItems || []).map(di => di.equipment_id);
-                    }
-
-                    if (equipIds.length) {
-                        await supabase.from('return_items').insert(equipIds.map(eqId => ({ return_id: ret.id, equipment_id: eqId, condition: 'IN TRANSIT' })));
-                        await supabase.from('equipment_logs').insert(equipIds.map(eqId => ({
-                            equipment_id: eqId, merchant_id: dep.merchant_id, deployment_id: dep.id,
-                            action: 'RMA Initiated', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
-                            notes: `Bulk RMA initiated from support ticket. Reason: ${return_reason}`
-                        })));
-                    }
-
-                    const finalReturnId = ret.return_id || returnId;
-                    await supabase.from('support_tickets').update({ linked_return_id: finalReturnId }).eq('id', ticket_id);
-                    await supabase.from('ticket_comments').insert({
-                        ticket_id, author_type: 'system', author_name: author,
-                        change_summary: `Bulk Return/RMA initiated: <strong>${finalReturnId}</strong> — ${equipIds.length} unit(s) marked In Transit.`,
-                        is_internal: false
-                    });
-                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
-                    logActivity({ email: staffSession?.email || author, action: `Bulk RMA ${finalReturnId} created from ticket ${ticket_id} (${equipIds.length} unit(s))`, target_id: ticket_id });
-                    return res.status(200).json({ success: true, return_id: finalReturnId });
-
-                } else {
-                    // Check for existing open RMA for this deployment before inserting
-                    const { data: existingRet } = await supabase.from('returns')
-                        .select('id, return_id').eq('deployment_id', dep.id).eq('status', 'Open')
-                        .limit(1).maybeSingle();
-
-                    let ret;
-                    if (existingRet) {
-                        ret = existingRet;
-                    } else {
-                        const { data: newRet, error: retErr } = await supabase.from('returns').insert({
-                            return_id: returnId,
-                            deployment_id: dep.id,
-                            equipment_id: dep.equipment_id,
+                    const equipIds = selected_units.map(u => u.equipment_id);
+                    await supabase.from('return_items').insert(
+                        equipIds.map(eqId => ({ return_id: ret.id, equipment_id: eqId, condition: 'IN TRANSIT' }))
+                    );
+                    await supabase.from('equipment_logs').insert(
+                        selected_units.map(u => ({
+                            equipment_id: u.equipment_id,
                             merchant_id: dep.merchant_id,
-                            return_reason,
-                            notes: notes || null,
-                            return_date_initiated: dateInitiated,
-                            condition: 'IN TRANSIT',
-                            destination: 'In Transit / RMA',
-                            status: 'Open',
-                            ticket_id: parseInt(ticket_id)
-                        }).select('id, return_id').single();
-                        if (retErr) throw retErr;
-                        ret = newRet;
-                    }
-
-                    await supabase.from('equipment_logs').insert({
-                        equipment_id: dep.equipment_id, merchant_id: dep.merchant_id, deployment_id: dep.id,
-                        action: 'RMA Initiated', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
-                        notes: `RMA initiated from support ticket. Reason: ${return_reason}`
-                    });
+                            deployment_id: u.deployment_id,
+                            action: 'RMA Initiated',
+                            from_location: 'Merchant Site',
+                            to_location: 'In Transit / RMA',
+                            notes: `RMA initiated from support ticket. Reason: ${return_reason}`
+                        }))
+                    );
 
                     const finalReturnId = ret.return_id || returnId;
                     await supabase.from('support_tickets').update({ linked_return_id: finalReturnId }).eq('id', ticket_id);
                     await supabase.from('ticket_comments').insert({
                         ticket_id, author_type: 'system', author_name: author,
-                        change_summary: `Return/RMA initiated: <strong>${finalReturnId}</strong> — unit is being returned for inspection.`,
+                        change_summary: `Return/RMA initiated: <strong>${finalReturnId}</strong> — ${equipIds.length} unit(s) marked In Transit.`,
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
-                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id}`, target_id: ticket_id });
-                    return res.status(200).json({ success: true, return_id: finalReturnId });
+                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id} (${equipIds.length} unit(s))`, target_id: ticket_id });
+                    return res.status(200).json({ success: true, return_id: finalReturnId, unit_count: equipIds.length });
                 }
             }
 

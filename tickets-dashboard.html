@@ -953,7 +953,7 @@ async function createLinkedRMA() {
         return;
     }
 
-    Swal.fire({ title: 'Loading deployments...', didOpen: () => Swal.showLoading() });
+    Swal.fire({ title: 'Loading eligible equipment...', didOpen: () => Swal.showLoading() });
     const depData = await tkApi('get_merchant_deployments', { merchant_id: t.merchant_id });
     const deps = depData.deployments || [];
     Swal.close();
@@ -963,53 +963,85 @@ async function createLinkedRMA() {
         return;
     }
 
-    window._rmaDepsMap = {};
-    deps.forEach(d => { window._rmaDepsMap[d.id] = d; });
-
     // Parse partner-requested serials from ticket description
     const requestedSerials = new Set();
-    const descMatch = (currentTicketData?.description || '').match(/Units requested for return:\s*([^\n]+)/);
+    const descMatch = (t.description || '').match(/Units requested for return:\s*([^\n]+)/i);
     if (descMatch) {
         descMatch[1].split(',').forEach(part => {
-            const m = part.match(/[—-]\s*(\S+)/);
+            const m = part.match(/[—\-]\s*(\S+)/);
             if (m) requestedSerials.add(m[1].trim());
         });
     }
 
-    const depOptions = deps.map(d => {
+    // Flatten all eligible units from all deployments into one list
+    const allUnits = [];
+    deps.forEach(d => {
         if (d.is_bulk) {
-            const count = d.deployment_items?.length || 0;
-            return `<option value="${d.id}">Bulk — ${count} unit${count !== 1 ? 's' : ''} [${d.deployment_id}] · ${d.status}</option>`;
+            (d.deployment_items || [])
+                .filter(i => i.equip?.status === 'deployed')
+                .forEach(i => allUnits.push({
+                    equipment_id: i.equipment_id,
+                    deployment_id: d.id,
+                    deployment_display: d.deployment_id,
+                    serial_number: i.equip?.serial_number || '—',
+                    terminal_type: i.equip?.terminal_type || '—',
+                    is_bulk: true
+                }));
+        } else {
+            const eq = d.equipments;
+            if (eq) allUnits.push({
+                equipment_id: eq.id || d.equipment_id,
+                deployment_id: d.id,
+                deployment_display: d.deployment_id,
+                serial_number: eq.serial_number || '—',
+                terminal_type: eq.terminal_type || '—',
+                is_bulk: false
+            });
         }
-        const eq = d.equipments;
-        const label = eq ? `${eq.terminal_type || ''} — SN: ${eq.serial_number || ''}`.trim() : 'No equipment';
-        return `<option value="${d.id}">${d.deployment_id || d.id} · ${label} · ${d.status}</option>`;
+    });
+
+    // Deduplicate by equipment_id
+    const seen = new Set();
+    const units = allUnits.filter(u => { if (seen.has(u.equipment_id)) return false; seen.add(u.equipment_id); return true; });
+
+    const hasRequested = requestedSerials.size > 0;
+    const unitCheckboxes = units.map(u => {
+        const isReq = requestedSerials.has(u.serial_number);
+        return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:2px solid ${isReq ? '#f59e0b' : '#e2e8f0'};border-radius:6px;margin-bottom:4px;cursor:pointer;background:${isReq ? '#fffbeb' : 'white'};" onclick="event.stopPropagation()">
+            <input type="checkbox" class="rma-unit-cb" value="${u.equipment_id}" data-dep-id="${u.deployment_id}" ${isReq ? 'checked' : ''} style="width:14px;height:14px;flex-shrink:0;">
+            <span style="flex:1;font-size:12px;"><strong>${escapeHtml(u.terminal_type)}</strong> — <span style="font-family:'DM Mono',monospace;">${escapeHtml(u.serial_number)}</span></span>
+            <span style="font-size:10px;font-family:'DM Mono',monospace;background:#f1f5f9;color:#64748b;padding:2px 6px;border-radius:4px;white-space:nowrap;">${escapeHtml(u.deployment_display || '')}</span>
+            ${isReq ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fde68a;padding:2px 6px;border-radius:4px;white-space:nowrap;">★ Requested</span>' : ''}
+        </label>`;
     }).join('');
 
-    await Swal.fire({
+    // Pre-fill reason from ticket category
+    const reasonOptions = ['Merchant Cancellation','Equipment Malfunction','Equipment Type Swap','Switched to Desktop','Technical Issue Swap','Other']
+        .map(r => `<option value="${r}" ${t.category === r ? 'selected' : ''}>${r}</option>`).join('');
+
+    const { value: form } = await Swal.fire({
         title: 'Initiate RMA / Return',
-        width: 580,
+        width: 600,
         showCancelButton: true,
         confirmButtonColor: '#92400e',
         confirmButtonText: 'Create RMA',
         html: `
         <div style="text-align:left;font-size:13px;">
-            <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#92400e;">
-                <strong>Merchant:</strong> ${t.merchants?.dba_name || t.merchant_id}
+            <div style="background:#fef3c7;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#92400e;">
+                <strong>Merchant:</strong> ${escapeHtml(t.merchants?.dba_name || t.merchant_id)}
             </div>
+            ${hasRequested ? `<div style="font-size:11px;color:#92400e;background:#fff7ed;border:1px solid #fed7aa;border-radius:6px;padding:6px 10px;margin-bottom:12px;">★ <strong>Highlighted rows</strong> match what the partner requested.</div>` : ''}
             <div style="margin-bottom:14px;">
-                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">LINKED DEPLOYMENT *</label>
-                <select id="rma-dep" class="swal2-input" style="margin:0;">${depOptions}</select>
+                <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:6px;">SELECT DEVICES TO RETURN *</label>
+                <div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;max-height:240px;overflow-y:auto;background:#f8fafc;">
+                    ${unitCheckboxes || '<div style="color:#94a3b8;font-size:12px;padding:6px;">No eligible units found.</div>'}
+                </div>
             </div>
-            <div id="rma-unit-picker-wrap" style="margin-bottom:14px;display:none;"></div>
             <div style="margin-bottom:14px;">
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">RETURN REASON *</label>
                 <select id="rma-reason-sel" class="swal2-input" style="margin:0 0 8px;">
                     <option value="">Select reason...</option>
-                    <option value="Merchant Cancellation">Merchant Cancellation</option>
-                    <option value="Equipment Type Swap">Equipment Type Swap</option>
-                    <option value="Technical Issue Swap">Technical Issue Swap</option>
-                    <option value="Other">Other</option>
+                    ${reasonOptions}
                 </select>
                 <input id="rma-reason-other" class="swal2-input" style="margin:0;display:none;" placeholder="Specify reason...">
             </div>
@@ -1019,82 +1051,40 @@ async function createLinkedRMA() {
             </div>
             <div>
                 <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">NOTES</label>
-                <textarea id="rma-notes" class="swal2-textarea" style="margin:0;height:70px;" placeholder="Additional notes..."></textarea>
+                <textarea id="rma-notes" class="swal2-textarea" style="margin:0;height:60px;" placeholder="Additional notes..."></textarea>
             </div>
         </div>`,
         didOpen: () => {
-            const depSel = document.getElementById('rma-dep');
             document.getElementById('rma-reason-sel').addEventListener('change', function() {
                 document.getElementById('rma-reason-other').style.display = this.value === 'Other' ? 'block' : 'none';
             });
-
-            const renderUnitPicker = () => {
-                const dep = window._rmaDepsMap[depSel.value];
-                const wrap = document.getElementById('rma-unit-picker-wrap');
-                if (dep?.is_bulk && dep.deployment_items?.length) {
-                    const activeItems = dep.deployment_items.filter(i => i.equip?.status === 'deployed');
-                    const hasRequested = requestedSerials.size > 0;
-                    wrap.innerHTML = `
-                        <label style="display:block;font-weight:700;font-size:10px;color:#64748b;text-transform:uppercase;margin-bottom:4px;">SELECT UNITS TO RETURN (partial ok)</label>
-                        ${hasRequested ? '<div style="font-size:11px;color:#92400e;background:#fef3c7;border:1px solid #fde68a;border-radius:6px;padding:5px 8px;margin-bottom:6px;">★ = Partner requested return</div>' : ''}
-                        ${activeItems.map(item => {
-                            const isReq = requestedSerials.has(item.equip?.serial_number);
-                            return `<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:2px solid ${isReq ? '#f59e0b' : '#e2e8f0'};border-radius:6px;margin-bottom:4px;cursor:pointer;background:${isReq ? '#fffbeb' : 'white'};">
-                                <input type="checkbox" class="rma-unit-cb" value="${item.equipment_id}" ${isReq ? 'checked' : ''} style="width:14px;height:14px;flex-shrink:0;">
-                                <span style="font-size:12px;flex:1;">${item.equip?.terminal_type || '—'} — <span style="font-family:'DM Mono',monospace;">${item.equip?.serial_number || '—'}</span></span>
-                                ${isReq ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fde68a;padding:2px 6px;border-radius:4px;">★ Requested</span>' : ''}
-                            </label>`;
-                        }).join('')}
-                        ${activeItems.length === 0 ? '<div style="color:#94a3b8;font-size:12px;padding:6px;">All units from this deployment have already been returned.</div>' : ''}
-                    `;
-                    wrap.style.display = 'block';
-                } else {
-                    wrap.innerHTML = '';
-                    wrap.style.display = 'none';
-                }
-            };
-            depSel.addEventListener('change', renderUnitPicker);
-            renderUnitPicker();
         },
         preConfirm: () => {
-            const depId = document.getElementById('rma-dep').value;
-            const dep = window._rmaDepsMap[depId];
+            const checked = [...document.querySelectorAll('.rma-unit-cb:checked')];
+            if (!checked.length) { Swal.showValidationMessage('Please select at least one device to return'); return false; }
             const reasonSel = document.getElementById('rma-reason-sel').value;
             const reasonOther = document.getElementById('rma-reason-other').value.trim();
             const finalReason = reasonSel === 'Other' ? reasonOther : reasonSel;
             if (!finalReason) { Swal.showValidationMessage('Please select or enter a return reason'); return false; }
-
-            let selectedEquipIds = null;
-            if (dep?.is_bulk) {
-                selectedEquipIds = [...document.querySelectorAll('.rma-unit-cb:checked')].map(cb => cb.value);
-                if (!selectedEquipIds.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
-            }
-
             return {
-                deployment_internal_id: depId,
-                is_bulk: dep?.is_bulk || false,
-                selected_equipment_ids: selectedEquipIds,
+                selected_units: checked.map(cb => ({ equipment_id: cb.value, deployment_id: cb.dataset.depId })),
                 return_reason: finalReason,
                 return_date_initiated: document.getElementById('rma-date').value,
                 notes: document.getElementById('rma-notes').value
             };
         }
-    }).then(async result => {
-        if (!result.isConfirmed || !result.value) return;
-        Swal.fire({ title: 'Creating RMA...', didOpen: () => Swal.showLoading() });
-        const r = await fetch('/api/tickets', {
-            method: 'POST', headers: tkHeaders(),
-            body: JSON.stringify({ action: 'create_linked_record', ticket_id: currentTicketId, record_type: 'rma', staff_name: currentStaffName, ...result.value })
-        });
-        const res = await r.json();
-        if (res.success) {
-            await Swal.fire({ icon: 'success', title: 'RMA Initiated!', html: `RMA ID: <strong style="font-family:'DM Mono',monospace;">${res.return_id}</strong><br><span style="font-size:12px;color:#64748b;">Unit(s) marked In Transit. Complete inspection from Returns & RMA ledger.</span>`, confirmButtonColor: '#001e3c' });
-            openTicket(currentTicketId);
-            loadTickets();
-        } else {
-            Swal.fire('Error', res.message || 'Could not create RMA.', 'error');
-        }
     });
+
+    if (!form) return;
+    Swal.fire({ title: 'Creating RMA...', didOpen: () => Swal.showLoading() });
+    const res = await tkApi('create_linked_record', { ticket_id: currentTicketId, record_type: 'rma', staff_name: currentStaffName, ...form });
+    if (res.success) {
+        await Swal.fire({ icon: 'success', title: 'RMA Initiated!', html: `RMA ID: <strong style="font-family:'DM Mono',monospace;">${res.return_id}</strong><br><span style="font-size:12px;color:#64748b;">${res.unit_count} unit(s) marked In Transit. Complete inspection from Returns &amp; RMA ledger.</span>`, confirmButtonColor: '#001e3c' });
+        openTicket(currentTicketId);
+        loadTickets();
+    } else {
+        Swal.fire('Error', res.message || 'Could not create RMA.', 'error');
+    }
 }
 
 async function deleteTicket() {
