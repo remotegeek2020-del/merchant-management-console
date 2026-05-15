@@ -56,6 +56,7 @@ if (action === 'list') {
     const searchQuery = query || '';
     const limit = req.body.limit || 20;
     const offset = req.body.offset || 0;
+    const { statusFilter, conditionFilter, reasonFilter, dateFrom, dateTo } = req.body;
 
     let q = supabase.from('returns').select(`
         id, return_id, return_reason, condition, destination, status, created_at,
@@ -69,6 +70,11 @@ if (action === 'list') {
     if (searchQuery) {
         q = q.or(`return_id.ilike.%${searchQuery}%,condition.ilike.%${searchQuery}%`);
     }
+    if (statusFilter) q = q.ilike('status', statusFilter);
+    if (conditionFilter) q = q.ilike('condition', `%${conditionFilter}%`);
+    if (reasonFilter) q = q.eq('return_reason', reasonFilter);
+    if (dateFrom) q = q.gte('return_date_initiated', dateFrom);
+    if (dateTo) q = q.lte('return_date_initiated', dateTo + 'T23:59:59');
 
     q = q.range(offset, offset + limit - 1);
 
