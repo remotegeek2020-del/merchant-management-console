@@ -364,17 +364,55 @@ if (action === 'get_merchant_history') {
     return res.status(200).json({ success: true, data });
 }
 
-        // --- ADD THIS ACTION TO YOUR merchants.js ---
 if (action === 'get_merchant_equipment') {
     const { merchant_uuid } = req.body;
-    const { data, error } = await supabase
-        .from('equipments')
-        .select('*')
-        .eq('merchant_id', merchant_uuid)
-        .order('serial_number', { ascending: true });
 
-    if (error) throw error;
-    return res.status(200).json({ success: true, data: data || [] });
+    // Currently assigned equipment
+    const { data: current, error: e1 } = await supabase
+        .from('equipments')
+        .select('id, serial_number, terminal_type, status, received_date, last_deployment_id, deployment:last_deployment_id(deployment_id)')
+        .eq('merchant_id', merchant_uuid)
+        .order('serial_number');
+    if (e1) throw e1;
+
+    // Closed deployments for this merchant (past equipment)
+    const { data: closedDeps, error: e2 } = await supabase
+        .from('deployments')
+        .select(`
+            id, deployment_id, created_at, is_bulk, equipment_id,
+            equipments:equipment_id(serial_number, terminal_type),
+            deployment_items(equipment_id, equip:equipment_id(serial_number, terminal_type)),
+            returns(return_id, status)
+        `)
+        .eq('merchant_id', merchant_uuid)
+        .eq('status', 'Closed')
+        .order('created_at', { ascending: false });
+    if (e2) throw e2;
+
+    // Flatten closed deployments into per-unit past items
+    const past = [];
+    for (const dep of (closedDeps || [])) {
+        const returnDisplayId = dep.returns?.[0]?.return_id || null;
+        if (dep.is_bulk) {
+            for (const item of (dep.deployment_items || [])) {
+                past.push({
+                    serial_number: item.equip?.serial_number || 'N/A',
+                    terminal_type: item.equip?.terminal_type || 'N/A',
+                    deployment_display_id: dep.deployment_id,
+                    return_display_id: returnDisplayId
+                });
+            }
+        } else if (dep.equipment_id) {
+            past.push({
+                serial_number: dep.equipments?.serial_number || 'N/A',
+                terminal_type: dep.equipments?.terminal_type || 'N/A',
+                deployment_display_id: dep.deployment_id,
+                return_display_id: returnDisplayId
+            });
+        }
+    }
+
+    return res.status(200).json({ success: true, current: current || [], past });
 }
         // --- ACTION: ADD ATTACHMENT RECORD ---
         if (action === 'add_attachment') {

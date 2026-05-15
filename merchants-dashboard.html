@@ -859,7 +859,9 @@ async function addTask(merchantUuid) {
                 </div>
 
                 <div id="content-equipment" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                    <!-- Current Equipment -->
+                    <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px;">Currently Deployed</div>
+                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; margin-bottom:18px;">
                         <table class="slds-table slds-table_bordered slds-table_cell-buffer">
                             <thead>
                                 <tr class="slds-line-height_reset">
@@ -871,9 +873,28 @@ async function addTask(merchantUuid) {
                             </thead>
                             <tbody id="merchant-equip-list"></tbody>
                         </table>
-                        <div id="equip-empty-state" style="padding:40px; text-align:center; color:#94a3b8; display:none;">
-                            <span class="material-icons" style="font-size:48px; display:block; margin-bottom:10px;">devices_other</span>
-                            No equipment assigned to this merchant.
+                        <div id="equip-empty-state" style="padding:30px; text-align:center; color:#94a3b8; display:none;">
+                            <span class="material-icons" style="font-size:36px; display:block; margin-bottom:8px;">devices_other</span>
+                            No equipment currently deployed.
+                        </div>
+                    </div>
+                    <!-- Past Equipment -->
+                    <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px;">Past Equipment</div>
+                    <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden;">
+                        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                            <thead>
+                                <tr class="slds-line-height_reset">
+                                    <th scope="col" style="font-size:10px;">SERIAL NUMBER</th>
+                                    <th scope="col" style="font-size:10px;">MODEL</th>
+                                    <th scope="col" style="font-size:10px;">DEPLOYMENT</th>
+                                    <th scope="col" style="font-size:10px;">RMA</th>
+                                </tr>
+                            </thead>
+                            <tbody id="merchant-past-equip-list"></tbody>
+                        </table>
+                        <div id="equip-past-empty-state" style="padding:30px; text-align:center; color:#94a3b8; display:none;">
+                            <span class="material-icons" style="font-size:36px; display:block; margin-bottom:8px;">history</span>
+                            No past equipment history.
                         </div>
                     </div>
                 </div>
@@ -1089,11 +1110,14 @@ async function addTask(merchantUuid) {
         const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
         if (!saveBtn) return;
         const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
-        const tbody = document.getElementById('merchant-equip-list');
-        const emptyState = document.getElementById('equip-empty-state');
-        
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">Loading assets...</td></tr>';
-        emptyState.style.display = 'none';
+        const tbody     = document.getElementById('merchant-equip-list');
+        const pastTbody = document.getElementById('merchant-past-equip-list');
+        const emptyState     = document.getElementById('equip-empty-state');
+        const pastEmptyState = document.getElementById('equip-past-empty-state');
+
+        tbody.innerHTML     = '<tr><td colspan="4" style="text-align:center; padding:20px;">Loading...</td></tr>';
+        pastTbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:20px;">Loading...</td></tr>';
+        emptyState.style.display = pastEmptyState.style.display = 'none';
 
         try {
             const res = await fetch('/api/merchants', {
@@ -1102,23 +1126,54 @@ async function addTask(merchantUuid) {
                 body: JSON.stringify({ action: 'get_merchant_equipment', merchant_uuid: merchantUuid })
             });
             const result = await res.json();
-            
-            tbody.innerHTML = "";
-            if (!result.data || result.data.length === 0) {
+
+            // Current equipment
+            tbody.innerHTML = '';
+            if (!result.current?.length) {
                 emptyState.style.display = 'block';
             } else {
-                result.data.forEach(e => {
+                result.current.forEach(e => {
+                    const depId = e.deployment?.deployment_id;
+                    const serialCell = depId
+                        ? `<a href="deployments-dashboard.html?q=${encodeURIComponent(depId)}" style="font-weight:700; color:var(--pp-blue); font-size:12px; text-decoration:underline; text-underline-offset:2px;" title="View deployment">${e.serial_number}</a>`
+                        : `<span style="font-weight:700; color:var(--pp-blue); font-size:12px;">${e.serial_number}</span>`;
                     const row = tbody.insertRow();
                     row.innerHTML = `
-                        <td style="font-weight:700; color:var(--pp-blue); font-size:12px;">${e.serial_number}</td>
-                        <td style="font-size:12px;">${e.terminal_type}</td>
-                        <td><span class="badge" style="background:#e0f2fe; color:#0369a1;">${e.status}</span></td>
+                        <td>${serialCell}</td>
+                        <td style="font-size:12px;">${e.terminal_type || '---'}</td>
+                        <td><span class="badge" style="background:#dcfce7; color:#166534;">${e.status || '---'}</span></td>
                         <td style="font-size:11px; color:#64748b;">${e.received_date ? fmtDate(e.received_date) : '---'}</td>
+                    `;
+                });
+            }
+
+            // Past equipment
+            pastTbody.innerHTML = '';
+            if (!result.past?.length) {
+                pastEmptyState.style.display = 'block';
+            } else {
+                result.past.forEach(e => {
+                    const serialCell = e.return_display_id
+                        ? `<a href="returns-dashboard.html?q=${encodeURIComponent(e.return_display_id)}" style="font-weight:700; color:#64748b; font-size:12px; text-decoration:underline; text-underline-offset:2px;" title="View RMA">${e.serial_number}</a>`
+                        : `<span style="font-weight:700; color:#64748b; font-size:12px;">${e.serial_number}</span>`;
+                    const depCell = e.deployment_display_id
+                        ? `<a href="deployments-dashboard.html?q=${encodeURIComponent(e.deployment_display_id)}" style="font-size:11px; color:#004990; text-decoration:underline; text-underline-offset:2px;" title="View deployment">${e.deployment_display_id}</a>`
+                        : '---';
+                    const rmaCell = e.return_display_id
+                        ? `<a href="returns-dashboard.html?q=${encodeURIComponent(e.return_display_id)}" style="font-size:11px; color:#c2410c; text-decoration:underline; text-underline-offset:2px;" title="View RMA">${e.return_display_id}</a>`
+                        : '<span style="font-size:11px; color:#94a3b8;">No RMA</span>';
+                    const row = pastTbody.insertRow();
+                    row.innerHTML = `
+                        <td>${serialCell}</td>
+                        <td style="font-size:12px;">${e.terminal_type || '---'}</td>
+                        <td>${depCell}</td>
+                        <td>${rmaCell}</td>
                     `;
                 });
             }
         } catch (err) {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Failed to load equipment.</td></tr>';
+            pastTbody.innerHTML = '';
         }
     }
 
