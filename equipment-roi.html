@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Equipment ROI & Utilization | Secure Console</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
+    <script>
+    (function() {
+        const sessionUser = localStorage.getItem('pp_userid');
+        const isVerified  = localStorage.getItem('pp_verified');
+        if (!sessionUser || isVerified !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+        }
+    })();
+    </script>
+    <style>
+        body { font-family: 'DM Sans', sans-serif; }
+        .dashboard-container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .modern-header {
+            background: white;
+            border-radius: 16px;
+            padding: 16px 24px;
+            margin-bottom: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        /* KPI Cards */
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .kpi-card {
+            background: white;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            padding: 20px 24px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+        }
+        .kpi-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+        }
+        .kpi-val {
+            font-size: 2rem;
+            font-weight: 800;
+            font-family: 'DM Mono', monospace;
+            letter-spacing: -1px;
+            line-height: 1;
+            display: block;
+        }
+        .kpi-label {
+            font-size: 10px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.7px;
+            color: var(--text-muted);
+            display: block;
+            margin-top: 4px;
+        }
+
+        /* Main card / table */
+        .main-card {
+            background: white;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: var(--shadow-sm);
+            border: 1px solid var(--border);
+            margin-bottom: 20px;
+        }
+        .main-card-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .main-card-header h2 {
+            font-size: 14px;
+            font-weight: 800;
+            color: var(--text-primary);
+            margin: 0;
+        }
+        .slds-table thead th {
+            background: #f8fafc !important;
+            font-size: 10px !important;
+            font-weight: 700 !important;
+            color: var(--text-muted) !important;
+            text-transform: uppercase !important;
+            letter-spacing: 0.6px !important;
+            padding: 12px !important;
+        }
+        .slds-table tbody tr:hover td { background: var(--surface-2) !important; }
+        .slds-table tbody td { padding: 12px !important; font-size: 13px; }
+
+        /* Progress bar */
+        .util-bar-wrap {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .util-bar-bg {
+            flex: 1;
+            height: 8px;
+            background: #e2e8f0;
+            border-radius: 99px;
+            overflow: hidden;
+            min-width: 60px;
+        }
+        .util-bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.5s ease;
+        }
+        .util-label {
+            font-size: 11px;
+            font-weight: 800;
+            font-family: 'DM Mono', monospace;
+            min-width: 34px;
+            text-align: right;
+        }
+
+        /* Badges */
+        .badge {
+            font-weight: 700;
+            font-size: 10px;
+            padding: 3px 10px;
+            border-radius: 99px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            white-space: nowrap;
+        }
+        .badge-red   { background: #fee2e2; color: #991b1b; }
+        .badge-green { background: #dcfce7; color: #166534; }
+        .badge-gray  { background: #f1f5f9; color: #475569; }
+        .idle-badge  { background: #fff1f2; color: #e11d48; font-weight: 800; font-size: 11px; padding: 3px 10px; border-radius: 99px; }
+
+        /* Idle Alert section */
+        .idle-section {
+            background: white;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+        .idle-section-header {
+            padding: 16px 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .idle-section-header h2 {
+            font-size: 14px;
+            font-weight: 800;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Loading spinner */
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1.2s linear infinite; display: inline-block; vertical-align: middle; }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .kpi-grid { grid-template-columns: 1fr 1fr; }
+            .modern-header { flex-direction: column; align-items: stretch; }
+        }
+        @media (max-width: 600px) {
+            .kpi-grid { grid-template-columns: 1fr; }
+            .dashboard-container { padding: 12px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="dashboard-container">
+
+    <!-- Header -->
+    <div class="modern-header">
+        <div style="display: flex; align-items: center; gap: 14px; flex-wrap: wrap;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px; padding: 5px 12px; display:inline-flex; align-items:center; gap:5px;">
+                <span class="material-icons" style="font-size: 18px;">arrow_back</span>
+                <span style="font-weight: 700; font-size: 11px;">HOME</span>
+            </a>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:38px; height:38px; border-radius:10px; background:#f0fdfa; color:#0d9488; display:flex; align-items:center; justify-content:center;">
+                    <span class="material-icons" style="font-size:20px;">insights</span>
+                </div>
+                <div>
+                    <h1 style="font-size: 1.3rem; font-weight: 800; color: #002d5a; margin: 0; line-height:1.1;">Equipment ROI & Utilization</h1>
+                    <p style="font-size: 11px; color: var(--text-muted); margin: 0; font-weight: 500;">Fleet performance, idle stock analysis, and terminal utilization rates</p>
+                </div>
+            </div>
+            <div style="display:flex; align-items:center; gap:5px; margin-left:4px;">
+                <span style="color:#cbd5e1; font-size:18px; line-height:1;">|</span>
+                <a href="equipments-dashboard.html" style="display:inline-flex;align-items:center;gap:4px;padding:4px 11px;background:#eff6ff;color:#004990;border:1px solid #bfdbfe;border-radius:20px;font-size:11px;font-weight:700;text-decoration:none;" onmouseover="this.style.background='#004990';this.style.color='white';" onmouseout="this.style.background='#eff6ff';this.style.color='#004990';"><span class="material-icons" style="font-size:13px;">inventory_2</span>Inventory</a>
+            </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:10px;">
+            <span id="last-updated" style="font-size:11px; color:var(--text-muted); font-weight:600;"></span>
+            <button class="slds-button slds-button_neutral" id="refresh-btn" onclick="loadROI()" style="border-radius:10px; display:flex; align-items:center; gap:6px;">
+                <span class="material-icons" id="refresh-icon" style="font-size:18px;">refresh</span>
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#e0f2fe; color:#0369a1;">
+                <span class="material-icons" style="font-size:24px;">devices</span>
+            </div>
+            <div>
+                <span class="kpi-val" id="kpi-fleet" style="color:#002d5a;">—</span>
+                <span class="kpi-label">Total Fleet Size</span>
+            </div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #0d9488;">
+            <div class="kpi-icon" style="background:#f0fdfa; color:#0d9488;">
+                <span class="material-icons" style="font-size:24px;">donut_large</span>
+            </div>
+            <div>
+                <span class="kpi-val" id="kpi-utilization" style="color:#0d9488;">—</span>
+                <span class="kpi-label">Overall Utilization Rate</span>
+                <span id="kpi-util-sub" style="font-size:11px; color:var(--text-muted); display:block; margin-top:2px;"></span>
+            </div>
+        </div>
+        <div class="kpi-card" style="border-left: 4px solid #e11d48;">
+            <div class="kpi-icon" style="background:#fff1f2; color:#e11d48;">
+                <span class="material-icons" style="font-size:24px;">hourglass_bottom</span>
+            </div>
+            <div>
+                <span class="kpi-val" id="kpi-idle" style="color:#e11d48;">—</span>
+                <span class="kpi-label">Idle Units (&gt;90 Days)</span>
+                <span id="kpi-idle-sub" style="font-size:11px; color:var(--text-muted); display:block; margin-top:2px;"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Breakdown Table -->
+    <div class="main-card">
+        <div class="main-card-header">
+            <span class="material-icons" style="color:#0d9488; font-size:20px;">table_chart</span>
+            <h2>Model Breakdown</h2>
+            <span id="model-count" style="margin-left:auto; font-size:11px; font-weight:700; color:var(--text-muted); background:#f1f5f9; padding:3px 10px; border-radius:20px;"></span>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover" style="width:100%; min-width:700px;">
+                <thead>
+                    <tr>
+                        <th style="min-width:160px;">Model</th>
+                        <th style="text-align:center;">Total</th>
+                        <th style="text-align:center;">Deployed</th>
+                        <th style="text-align:center;">Stocked</th>
+                        <th style="text-align:center;">Repair</th>
+                        <th style="min-width:180px;">Utilization %</th>
+                        <th style="text-align:center;">Avg Days Stocked</th>
+                        <th style="text-align:center;">Idle Units</th>
+                    </tr>
+                </thead>
+                <tbody id="model-table-body">
+                    <tr>
+                        <td colspan="8" style="text-align:center; padding:40px;">
+                            <span class="material-icons spinner" style="font-size:28px; color:#cbd5e1;">sync</span>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Idle Stock Alert Section -->
+    <div class="idle-section">
+        <div class="idle-section-header">
+            <h2>
+                <span class="material-icons" style="color:#e11d48; font-size:20px;">warning</span>
+                Idle Stock Alert
+                <span id="idle-count-badge" style="background:#fee2e2; color:#991b1b; font-size:10px; font-weight:800; padding:3px 10px; border-radius:99px; display:none;"></span>
+            </h2>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span style="font-size:11px; color:var(--text-muted); font-weight:600;">Units stocked &gt; 90 days — potential dead stock</span>
+                <button id="idle-toggle-btn" class="slds-button slds-button_neutral" onclick="toggleIdleList()" style="border-radius:8px; font-size:11px; font-weight:700; display:flex; align-items:center; gap:5px;">
+                    <span class="material-icons" id="idle-toggle-icon" style="font-size:16px;">expand_more</span>
+                    Show Details
+                </button>
+            </div>
+        </div>
+        <div id="idle-list-container" style="display:none; overflow-x:auto;">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover" style="width:100%; min-width:600px;">
+                <thead>
+                    <tr>
+                        <th>Serial Number</th>
+                        <th>Model</th>
+                        <th>Location</th>
+                        <th>Date Stocked</th>
+                        <th style="text-align:center;">Days Idle</th>
+                    </tr>
+                </thead>
+                <tbody id="idle-table-body"></tbody>
+            </table>
+        </div>
+        <div id="idle-empty" style="display:none; padding:30px; text-align:center; color:var(--text-muted);">
+            <span class="material-icons" style="font-size:36px; color:#dcfce7; display:block; margin-bottom:8px;">check_circle</span>
+            <strong style="color:#166534;">No idle stock detected!</strong>
+            <p style="font-size:12px; margin-top:4px;">All stocked units have been received within the last 90 days.</p>
+        </div>
+    </div>
+
+</div><!-- end .dashboard-container -->
+
+<script src="/js/site-config.js"></script>
+<script>
+    let roiData = null;
+    let idleVisible = false;
+
+    function apiHeaders() {
+        const token = localStorage.getItem('pp_session_token') || '';
+        return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+    }
+
+    function utilColor(pct) {
+        if (pct >= 70) return '#16a34a';
+        if (pct >= 40) return '#d97706';
+        return '#dc2626';
+    }
+
+    function renderUtilBar(pct) {
+        const color = utilColor(pct);
+        return `
+            <div class="util-bar-wrap">
+                <div class="util-bar-bg">
+                    <div class="util-bar-fill" style="width:${pct}%; background:${color};"></div>
+                </div>
+                <span class="util-label" style="color:${color};">${pct}%</span>
+            </div>`;
+    }
+
+    async function loadROI() {
+        // Show spinners
+        document.getElementById('model-table-body').innerHTML = `
+            <tr><td colspan="8" style="text-align:center; padding:40px;">
+                <span class="material-icons spinner" style="font-size:28px; color:#cbd5e1;">sync</span>
+            </td></tr>`;
+        document.getElementById('kpi-fleet').textContent       = '…';
+        document.getElementById('kpi-utilization').textContent = '…';
+        document.getElementById('kpi-idle').textContent        = '…';
+
+        const icon = document.getElementById('refresh-icon');
+        icon.classList.add('spinner');
+        document.getElementById('refresh-btn').disabled = true;
+
+        try {
+            const res  = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: apiHeaders(),
+                body: JSON.stringify({ action: 'get_roi_stats' })
+            });
+            const data = await res.json();
+
+            if (!data.success) throw new Error(data.message || 'API error');
+            roiData = data;
+            renderDashboard(data);
+
+            const now = new Date();
+            document.getElementById('last-updated').textContent =
+                'Updated ' + now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        } catch (err) {
+            document.getElementById('model-table-body').innerHTML =
+                `<tr><td colspan="8" style="text-align:center; color:#e11d48; padding:30px;">Error: ${err.message}</td></tr>`;
+        } finally {
+            icon.classList.remove('spinner');
+            document.getElementById('refresh-btn').disabled = false;
+        }
+    }
+
+    function renderDashboard(data) {
+        const { summary, model_stats, idle_serials } = data;
+
+        // KPI cards
+        document.getElementById('kpi-fleet').textContent = summary.total_fleet.toLocaleString();
+
+        const utilEl = document.getElementById('kpi-utilization');
+        utilEl.textContent = summary.overall_utilization + '%';
+        utilEl.style.color = utilColor(summary.overall_utilization);
+        document.getElementById('kpi-util-sub').textContent =
+            `${summary.total_deployed.toLocaleString()} deployed of ${(summary.total_fleet - summary.total_scrapped).toLocaleString()} active units`;
+
+        document.getElementById('kpi-idle').textContent = summary.total_idle.toLocaleString();
+        document.getElementById('kpi-idle-sub').textContent =
+            `${summary.total_stocked.toLocaleString()} total stocked units`;
+
+        // Model count badge
+        document.getElementById('model-count').textContent = model_stats.length + ' models';
+
+        // Model table
+        const tbody = document.getElementById('model-table-body');
+        if (!model_stats.length) {
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:20px; color:#94a3b8;">No equipment data found.</td></tr>`;
+        } else {
+            tbody.innerHTML = model_stats.map(m => {
+                const idleBadge = m.idle_units > 0
+                    ? `<span class="idle-badge">${m.idle_units}</span>`
+                    : `<span class="badge badge-gray">0</span>`;
+                const avgDays = m.avg_days_stocked > 0
+                    ? `<span style="font-family:'DM Mono',monospace; font-weight:700;">${m.avg_days_stocked}d</span>`
+                    : `<span style="color:#cbd5e1;">—</span>`;
+                return `<tr>
+                    <td style="font-weight:700; color:#1e293b;">${esc(m.model)}</td>
+                    <td style="text-align:center; font-family:'DM Mono',monospace; font-weight:700;">${m.total_units}</td>
+                    <td style="text-align:center;">
+                        <span style="color:#0369a1; font-weight:700; font-family:'DM Mono',monospace;">${m.deployed_units}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        <span style="color:#166534; font-weight:700; font-family:'DM Mono',monospace;">${m.stocked_units}</span>
+                    </td>
+                    <td style="text-align:center;">
+                        <span style="color:#b45309; font-weight:700; font-family:'DM Mono',monospace;">${m.repair_units}</span>
+                    </td>
+                    <td>${renderUtilBar(m.utilization_rate)}</td>
+                    <td style="text-align:center;">${avgDays}</td>
+                    <td style="text-align:center;">${idleBadge}</td>
+                </tr>`;
+            }).join('');
+        }
+
+        // Idle serials section
+        const idleCountBadge = document.getElementById('idle-count-badge');
+        if (idle_serials.length > 0) {
+            idleCountBadge.textContent = idle_serials.length + ' units';
+            idleCountBadge.style.display = 'inline-block';
+            document.getElementById('idle-empty').style.display = 'none';
+
+            const idleTbody = document.getElementById('idle-table-body');
+            idleTbody.innerHTML = idle_serials.map(s => {
+                const stockedDate = s.stock_date ? fmtDate(s.stock_date) : '—';
+                const daysColor   = s.days_idle > 180 ? '#dc2626' : s.days_idle > 90 ? '#d97706' : '#64748b';
+                return `<tr>
+                    <td style="font-weight:700; color:var(--pp-blue); font-family:'DM Mono',monospace;">
+                        <a href="equipments-dashboard.html?q=${encodeURIComponent(s.serial_number)}"
+                           style="color:inherit; text-decoration:underline; text-decoration-color:#bfdbfe; text-underline-offset:2px;">
+                            ${esc(s.serial_number)}
+                        </a>
+                    </td>
+                    <td style="font-weight:600;">${esc(s.model)}</td>
+                    <td><span class="badge badge-gray">${esc(s.location || '—')}</span></td>
+                    <td style="color:var(--text-muted);">${stockedDate}</td>
+                    <td style="text-align:center;">
+                        <span style="font-family:'DM Mono',monospace; font-weight:800; color:${daysColor};">${s.days_idle}d</span>
+                    </td>
+                </tr>`;
+            }).join('');
+        } else {
+            idleCountBadge.style.display = 'none';
+            document.getElementById('idle-empty').style.display = 'block';
+            document.getElementById('idle-toggle-btn').style.display = 'none';
+        }
+    }
+
+    function toggleIdleList() {
+        idleVisible = !idleVisible;
+        const container = document.getElementById('idle-list-container');
+        const icon      = document.getElementById('idle-toggle-icon');
+        const btn       = document.getElementById('idle-toggle-btn');
+        container.style.display = idleVisible ? 'block' : 'none';
+        icon.textContent        = idleVisible ? 'expand_less' : 'expand_more';
+        btn.innerHTML = `<span class="material-icons" id="idle-toggle-icon" style="font-size:16px;">${idleVisible ? 'expand_less' : 'expand_more'}</span> ${idleVisible ? 'Hide Details' : 'Show Details'}`;
+    }
+
+    function esc(s) {
+        if (!s) return '';
+        return String(s)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+    }
+
+    // Load on page ready
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', loadROI);
+    } else {
+        loadROI();
+    }
+</script>
+</body>
+</html>

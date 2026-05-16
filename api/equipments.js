@@ -283,6 +283,121 @@ if (action === 'getMonthlyReport') {
             return res.status(200).json({ success: true });
         }
 
+        if (action === 'get_roi_stats') {
+            // Fetch all equipment with relevant fields for ROI/utilization analysis
+            const { data: allEquipment, error: allError } = await supabase
+                .from('equipments')
+                .select('id, serial_number, terminal_type, status, current_location, received_date, created_at');
+
+            if (allError) throw allError;
+
+            const now = new Date();
+            const IDLE_THRESHOLD_DAYS = 90;
+
+            // Group by terminal_type
+            const modelMap = {};
+            for (const unit of allEquipment) {
+                const model = unit.terminal_type || 'Unknown';
+                if (!modelMap[model]) {
+                    modelMap[model] = {
+                        model,
+                        total_units: 0,
+                        deployed_units: 0,
+                        stocked_units: 0,
+                        repair_units: 0,
+                        scrapped_units: 0,
+                        stocked_days_sum: 0,
+                        stocked_days_count: 0,
+                        idle_units: 0,
+                        idle_serials: []
+                    };
+                }
+                const m = modelMap[model];
+                m.total_units++;
+
+                const status = (unit.status || '').toLowerCase();
+                if (status === 'deployed') {
+                    m.deployed_units++;
+                } else if (status === 'stocked') {
+                    m.stocked_units++;
+                    // Calculate days in stock from received_date or created_at
+                    const stockDate = unit.received_date || unit.created_at;
+                    if (stockDate) {
+                        const d = new Date(stockDate);
+                        if (!isNaN(d.getTime())) {
+                            const days = Math.floor((now - d) / (1000 * 60 * 60 * 24));
+                            m.stocked_days_sum += days;
+                            m.stocked_days_count++;
+                            if (days > IDLE_THRESHOLD_DAYS) {
+                                m.idle_units++;
+                                m.idle_serials.push({
+                                    serial_number: unit.serial_number,
+                                    model: model,
+                                    location: unit.current_location,
+                                    days_idle: days,
+                                    stock_date: stockDate
+                                });
+                            }
+                        }
+                    }
+                } else if (status === 'repair' || status === 'repairing') {
+                    m.repair_units++;
+                } else if (status === 'decommissioned' || status === 'scrapped') {
+                    m.scrapped_units++;
+                }
+            }
+
+            // Build model stats array
+            const modelStats = Object.values(modelMap).map(m => {
+                const active = m.total_units - m.scrapped_units;
+                const utilization_rate = active > 0 ? Math.round((m.deployed_units / active) * 100) : 0;
+                const avg_days_stocked = m.stocked_days_count > 0 ? Math.round(m.stocked_days_sum / m.stocked_days_count) : 0;
+                return {
+                    model: m.model,
+                    total_units: m.total_units,
+                    deployed_units: m.deployed_units,
+                    stocked_units: m.stocked_units,
+                    repair_units: m.repair_units,
+                    scrapped_units: m.scrapped_units,
+                    utilization_rate,
+                    avg_days_stocked,
+                    idle_units: m.idle_units,
+                    idle_serials: m.idle_serials.sort((a, b) => b.days_idle - a.days_idle)
+                };
+            }).sort((a, b) => b.total_units - a.total_units);
+
+            // Build all idle serials list (sorted by days idle desc)
+            const allIdleSerials = modelStats
+                .flatMap(m => m.idle_serials)
+                .sort((a, b) => b.days_idle - a.days_idle);
+
+            // Overall summary
+            const totalFleet = allEquipment.length;
+            const totalScrapped = modelStats.reduce((s, m) => s + m.scrapped_units, 0);
+            const totalDeployed = modelStats.reduce((s, m) => s + m.deployed_units, 0);
+            const totalActive = totalFleet - totalScrapped;
+            const overallUtilization = totalActive > 0 ? Math.round((totalDeployed / totalActive) * 100) : 0;
+            const totalIdle = modelStats.reduce((s, m) => s + m.idle_units, 0);
+
+            // Strip idle_serials from per-model list (they come from allIdleSerials)
+            const modelStatsClean = modelStats.map(({ idle_serials, ...rest }) => rest);
+
+            return res.status(200).json({
+                success: true,
+                summary: {
+                    total_fleet: totalFleet,
+                    overall_utilization: overallUtilization,
+                    total_idle: totalIdle,
+                    total_deployed: totalDeployed,
+                    total_stocked: modelStats.reduce((s, m) => s + m.stocked_units, 0),
+                    total_repair: modelStats.reduce((s, m) => s + m.repair_units, 0),
+                    total_scrapped: totalScrapped
+                },
+                model_stats: modelStatsClean,
+                idle_serials: allIdleSerials
+            });
+        }
+
         return res.status(400).json({ message: 'Unknown action' });
 
     } catch (err) {
