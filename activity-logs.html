@@ -17,6 +17,19 @@
         .cat-badge{background:#f1f5f9;color:#475569;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;}
         .search-bar{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:16px;background:white;border-radius:14px;border:1px solid #e2e8f0;box-shadow:0 1px 3px rgba(0,0,0,0.05);}
         @keyframes spin{to{transform:rotate(360deg);}}
+
+        @media (max-width: 768px) {
+            .pp-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .search-bar { flex-direction: column; gap: 8px; }
+            #statsRow { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+            .pp-table-card { overflow-x: auto; }
+            .pp-table { min-width: 520px; }
+            .pp-table thead th.hide-mobile,
+            .pp-table tbody td.hide-mobile { display: none; }
+        }
+        @media (max-width: 480px) {
+            #statsRow { grid-template-columns: 1fr 1fr !important; }
+        }
     </style>
 </head>
 <body>
@@ -96,10 +109,10 @@
                     <th>Timestamp</th>
                     <th>User</th>
                     <th>Action</th>
-                    <th>Category</th>
-                    <th>Severity</th>
+                    <th class="hide-mobile">Category</th>
+                    <th class="hide-mobile">Severity</th>
                     <th>Status</th>
-                    <th>IP Address</th>
+                    <th class="hide-mobile">IP Address</th>
                 </tr>
             </thead>
             <tbody id="logTable">
@@ -168,10 +181,10 @@ async function loadLogs() {
                 <td style="font-size:11px;color:#64748b;white-space:nowrap;font-family:'DM Mono',monospace;">${ts}</td>
                 <td style="font-weight:600;font-size:12px;">${log.user_name||log.email||'System'}</td>
                 <td style="font-size:12px;max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${log.action}">${log.action||'—'}</td>
-                <td><span class="cat-badge">${cat}</span></td>
-                <td><span class="sev-${sev}">${sev}</span></td>
+                <td class="hide-mobile"><span class="cat-badge">${cat}</span></td>
+                <td class="hide-mobile"><span class="sev-${sev}">${sev}</span></td>
                 <td style="${statusClass}font-size:12px;">${log.status||'—'}</td>
-                <td style="font-size:11px;color:#94a3b8;font-family:'DM Mono',monospace;">${log.ip_address||'N/A'}</td>
+                <td class="hide-mobile" style="font-size:11px;color:#94a3b8;font-family:'DM Mono',monospace;">${log.ip_address||'N/A'}</td>
             </tr>`;
         }).join('');
     }

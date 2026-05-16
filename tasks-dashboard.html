@@ -30,6 +30,16 @@
         .stat-val{font-size:1.8rem;font-weight:800;font-family:'DM Mono',monospace;line-height:1;}
         .stat-label{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:3px;}
         @keyframes spin{to{transform:rotate(360deg);}}
+
+        @media (max-width: 768px) {
+            .pp-header { flex-direction: column; align-items: flex-start; gap: 12px; }
+            .pp-header > div:last-child { flex-wrap: wrap; }
+            .stats-grid { grid-template-columns: 1fr !important; }
+            .pp-table-card { overflow-x: auto; }
+            .pp-table { min-width: 500px; }
+            .pp-table thead th.hide-mobile,
+            .pp-table tbody td.hide-mobile { display: none; }
+        }
     </style>
 </head>
 <body>
@@ -54,7 +64,7 @@
     </div>
 
     <!-- STATS -->
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;">
+    <div class="stats-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:16px;">
         <div class="stat-card">
             <div class="stat-icon" style="background:#e0f2fe;color:#0369a1;"><span class="material-icons">assignment</span></div>
             <div><div class="stat-val pp-text-blue" id="statMine">—</div><div class="stat-label">My Pending Tasks</div></div>
@@ -94,8 +104,8 @@
             <thead>
                 <tr>
                     <th>Task</th>
-                    <th>Merchant</th>
-                    <th>Assigned To</th>
+                    <th class="hide-mobile">Merchant</th>
+                    <th class="hide-mobile">Assigned To</th>
                     <th>Priority</th>
                     <th>Due Date</th>
                     <th>Status</th>
@@ -194,8 +204,8 @@ async function loadTasks() {
                     <div style="font-weight:700;color:var(--pp-blue);">${t.title}</div>
                     ${t.body?`<div style="font-size:11px;color:#94a3b8;margin-top:2px;">${t.body.substring(0,60)}${t.body.length>60?'...':''}</div>`:''}
                 </td>
-                <td style="font-weight:600;">${t.merchants?.dba_name||'—'}</td>
-                <td style="font-size:12px;">${t.assigned_to_name}</td>
+                <td class="hide-mobile" style="font-weight:600;">${t.merchants?.dba_name||'—'}</td>
+                <td class="hide-mobile" style="font-size:12px;">${t.assigned_to_name}</td>
                 <td><span class="${pClass}">${t.priority||'Normal'}</span></td>
                 <td style="font-size:12px;${dueColor}">${t.due_date||'—'}${isOverdue?' ⚠️':''}</td>
                 <td>${statusBadge}</td>
