@@ -807,17 +807,24 @@ if (action === 'get_merchant_data_raw') {
 
         // --- ACTION: GET LEADERBOARD ---
         if (action === 'get_leaderboard') {
-            // 1. Get all agents with their parent persons
-            const { data: agents, error: agentsErr } = await supabase
-                .from('agents')
-                .select('id, agent_name, parent_agent_id, persons:parent_agent_id(id, full_name)');
-            if (agentsErr) throw agentsErr;
+            // fetchAll helper to bypass Supabase's 1000-row default limit
+            async function fetchAllRows(table, selectStr) {
+                let rows = [], from = 0, pageSize = 1000;
+                while (true) {
+                    const { data, error } = await supabase.from(table).select(selectStr).range(from, from + pageSize - 1);
+                    if (error) throw error;
+                    if (data) rows = rows.concat(data);
+                    if (!data || data.length < pageSize) break;
+                    from += pageSize;
+                }
+                return rows;
+            }
 
-            // 2. Get all agent_identifiers
-            const { data: identifiers, error: identErr } = await supabase
-                .from('agent_identifiers')
-                .select('id_string, agent_id');
-            if (identErr) throw identErr;
+            // 1. Get ALL agents with their parent persons
+            const agents = await fetchAllRows('agents', 'id, agent_name, parent_agent_id, persons:parent_agent_id(id, full_name)');
+
+            // 2. Get ALL agent_identifiers
+            const identifiers = await fetchAllRows('agent_identifiers', 'id_string, agent_id');
 
             // Build a map from id_string to agent_id
             const idStringToAgentId = {};

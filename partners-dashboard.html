@@ -2035,7 +2035,7 @@ window.quickAddId = async function(personId, name) {
                 </div>
                 <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:${tierStyle.bg};color:${tierStyle.color};">${tierStyle.label}</span>
                 <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:${growthBg};color:${growthColor};white-space:nowrap;">${growthSign}${p.growth_pct}%</span>
-                ${p.person_id ? `<button onclick="openPartnerByPersonId('${p.person_id}')" style="background:none;border:1px solid #e2e8f0;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;" title="View partner profile">View</button>` : ''}
+                ${p.person_id ? `<button onclick="openPartnerDetails('${p.person_id}')" style="background:none;border:1px solid #e2e8f0;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;" title="View partner profile">View</button>` : ''}
             </div>`;
         }).join('');
 
@@ -2054,7 +2054,7 @@ window.quickAddId = async function(personId, name) {
                         <div style="font-size:10px;color:#94a3b8;">${p.merchant_count} merchant${p.merchant_count !== 1 ? 's' : ''} &bull; ${vol} 30d vol</div>
                     </div>
                     <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:#fee2e2;color:#991b1b;white-space:nowrap;">${p.growth_pct}% vs baseline</span>
-                    ${p.person_id ? `<button onclick="openPartnerByPersonId('${p.person_id}')" style="background:#dc2626;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;">Take Action</button>` : ''}
+                    ${p.person_id ? `<button onclick="openPartnerDetails('${p.person_id}')" style="background:#dc2626;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;">Take Action</button>` : ''}
                 </div>`;
             }).join('');
         } else if (naSection) {
