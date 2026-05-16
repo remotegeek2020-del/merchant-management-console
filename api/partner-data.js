@@ -6,7 +6,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 
 async function validateSession(token) {
     if (!token) return null;
-    const { data } = await supabase.from('partner_sessions').select('person_id, expires_at').eq('session_token', token).single();
+    const { data, error } = await supabase.from('partner_sessions').select('person_id, expires_at').eq('session_token', token).single();
+    if (error) return 'db_error'; // transient DB issue — do not treat as session expiry
     if (!data || new Date(data.expires_at) < new Date()) return null;
     return data.person_id;
 }
@@ -30,6 +31,7 @@ export default async function handler(req, res) {
 
     const { action, token } = req.body || {};
     const personId = await validateSession(token);
+    if (personId === 'db_error') return res.status(503).json({ success: false, message: 'Service temporarily unavailable. Please try again.' });
     if (!personId) return res.status(401).json({ success: false, message: 'Session expired. Please log in again.' });
 
     const { agentUuids, idStrings, identifiers, companiesMap } = await getAgentIds(personId);

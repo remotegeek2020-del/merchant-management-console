@@ -33,11 +33,17 @@ async function createSession(personId, req) {
 
 async function validateSession(token) {
     if (!token) return null;
-    const { data } = await supabase.from('partner_sessions').select('person_id, expires_at').eq('session_token', token).single();
-    if (!data) return null;
+    const { data, error } = await supabase.from('partner_sessions').select('person_id, expires_at').eq('session_token', token).single();
+    if (error || !data) return null;
     if (new Date(data.expires_at) < new Date()) {
         await supabase.from('partner_sessions').delete().eq('session_token', token);
         return null;
+    }
+    // Sliding window: if less than 3 days remain, extend by 7 more days
+    const msRemaining = new Date(data.expires_at) - new Date();
+    if (msRemaining < 3 * 24 * 60 * 60 * 1000) {
+        const newExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+        await supabase.from('partner_sessions').update({ expires_at: newExpiry.toISOString() }).eq('session_token', token);
     }
     return data.person_id;
 }

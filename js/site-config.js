@@ -6,14 +6,19 @@
         opts = opts ? Object.assign({}, opts) : {};
         const urlStr = typeof url === 'string' ? url : (url?.url || '');
         const needsToken = urlStr.startsWith('/api/') && !EXEMPT.some(e => urlStr.startsWith(e));
+        let sentStaffToken = false;
         if (needsToken) {
             const token = localStorage.getItem('pp_session_token');
             if (token) {
                 opts.headers = Object.assign({}, opts.headers, { 'Authorization': 'Bearer ' + token });
+                sentStaffToken = true;
             }
         }
         return _fetch(url, opts).then(async function (res) {
-            if (res.status === 401 && needsToken) {
+            // Only treat 401 as session expiry if we actually sent a staff token.
+            // Partner portal pages call staff APIs without a staff token — a 401
+            // in that case means "not a staff user", not "session expired".
+            if (res.status === 401 && sentStaffToken) {
                 let data = {};
                 try { data = await res.clone().json(); } catch (e) {}
                 if (data.reason === 'session_expired' || data.reason === 'no_token' || data.reason === 'invalid_token') {
