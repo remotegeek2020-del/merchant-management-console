@@ -769,6 +769,33 @@ window.addEventListener('load', function() {
 // ── NOTIFICATIONS BELL ─────────────────────────────────────────
 let _notifPanelOpen = false;
 
+// Map a notification to the appropriate deep-link URL.
+// Uses the `link` field from the DB if present, otherwise falls back to type-based routing.
+// Appends ?highlight=<reference_id> when a reference_id is available.
+function getNotificationUrl(notif) {
+    // If the API stored an explicit link, honour it (but still append highlight if we have a ref)
+    if (notif.link && notif.link.trim()) {
+        const base = notif.link.trim();
+        if (notif.reference_id) {
+            const sep = base.includes('?') ? '&' : '?';
+            return base + sep + 'highlight=' + encodeURIComponent(notif.reference_id);
+        }
+        return base;
+    }
+    const type = (notif.type || '').toLowerCase();
+    const ref  = notif.reference_id ? ('?highlight=' + encodeURIComponent(notif.reference_id)) : '';
+    if (/ticket|support|case/.test(type))    return 'tickets-dashboard.html'    + ref;
+    if (/task/.test(type))                   return 'tasks-dashboard.html'       + ref;
+    if (/deploy/.test(type))                 return 'deployments-dashboard.html' + ref;
+    if (/merchant/.test(type))               return 'merchants-dashboard.html'   + ref;
+    if (/equip|inventory/.test(type))        return 'equipments-dashboard.html'  + ref;
+    if (/community|feed|post|comment/.test(type)) return 'staff-community.html' + ref;
+    if (/chat|message|dm/.test(type))        return 'chat.html'                  + ref;
+    if (/return|rma/.test(type))             return 'returns-dashboard.html'     + ref;
+    if (/idea/.test(type))                   return 'ideas-dashboard.html'       + ref;
+    return 'index.html';
+}
+
 async function loadNotifications() {
     if (!userId) return;
     const r = await api('get_my_notifications', { userid: userId }).catch(() => null);
@@ -790,18 +817,36 @@ function renderNotifList(notifs) {
         el.innerHTML = `<div style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No notifications yet</div>`;
         return;
     }
-    const typeIcon = { idea_status: 'check_circle', idea_mention: 'alternate_email' };
+    const typeIcon  = { idea_status: 'check_circle', idea_mention: 'alternate_email' };
     const typeColor = { idea_status: '#0d9488', idea_mention: '#6366f1' };
-    el.innerHTML = notifs.map(n => `
-        <div style="padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;${n.is_read ? '' : 'background:#f0fdf4;'}">
+    el.innerHTML = notifs.map(n => {
+        const url = getNotificationUrl(n);
+        const unreadDot = !n.is_read
+            ? `<span style="width:7px;height:7px;border-radius:50%;background:#0d9488;flex-shrink:0;margin-top:4px;"></span>`
+            : '';
+        return `
+        <a href="${url}" onclick="handleNotifClick(event,'${n.id}')"
+           style="padding:12px 16px;border-bottom:1px solid #f1f5f9;display:flex;gap:10px;align-items:flex-start;${n.is_read ? '' : 'background:#f0fdf4;'}cursor:pointer;text-decoration:none;color:inherit;transition:background 0.15s;"
+           onmouseover="this.style.background='#f1f5f9'" onmouseout="this.style.background='${n.is_read ? '' : '#f0fdf4'}'">
             <span class="material-icons" style="font-size:18px;color:${typeColor[n.type]||'#64748b'};flex-shrink:0;margin-top:1px;">${typeIcon[n.type]||'notifications'}</span>
             <div style="flex:1;min-width:0;">
                 <div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:2px;">${escHtml(n.title)}</div>
                 <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(n.body)}</div>
                 <div style="font-size:10px;color:#94a3b8;margin-top:3px;">${fmtDate(n.created_at)}</div>
             </div>
-            ${!n.is_read ? `<span style="width:7px;height:7px;border-radius:50%;background:#0d9488;flex-shrink:0;margin-top:4px;"></span>` : ''}
-        </div>`).join('');
+            ${unreadDot}
+        </a>`;
+    }).join('');
+}
+
+// Called when a notification item is clicked — marks it read then navigates.
+async function handleNotifClick(event, notifId) {
+    event.preventDefault();
+    const anchor = event.currentTarget;
+    const url = anchor.getAttribute('href');
+    // Fire-and-forget mark-as-read for this specific notification
+    api('mark_notifications_read', { userid: userId, notif_id: notifId }).catch(() => {});
+    window.location.href = url;
 }
 
 function toggleNotifPanel() {
