@@ -831,7 +831,7 @@ export default async function handler(req, res) {
 
             const { getValidAccessToken, sendViaGoogle, sendViaMicrosoft } = await import('./partner-oauth.js');
             const accessToken = await getValidAccessToken(personId, conn.provider);
-            if (!accessToken) return res.status(401).json({ success: false, message: 'Email session expired. Please reconnect your email in Settings.' });
+            if (!accessToken) return res.status(401).json({ success: false, message: 'Your email connection expired and needs to be reconnected. Please go to Settings and connect your Gmail again.' });
 
             const vol30  = parseFloat(merchant.volume_30_day  || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
             const vol90  = parseFloat(merchant.volume_90_day  || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });

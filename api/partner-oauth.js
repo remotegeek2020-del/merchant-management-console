@@ -93,7 +93,13 @@ export async function getValidAccessToken(personId, provider) {
         ? await refreshGoogleToken(refreshToken)
         : await refreshMicrosoftToken(refreshToken);
 
-    if (!fresh.access_token) return null;
+    if (!fresh.access_token) {
+        // Refresh token is dead (expired or revoked) — remove stale connection so
+        // Settings correctly shows "Not connected" instead of a broken Connected state.
+        await supabase.from('partner_email_connections')
+            .delete().eq('person_id', personId).eq('provider', provider);
+        return null;
+    }
 
     const newExpiry = new Date(Date.now() + (fresh.expires_in || 3600) * 1000);
     await supabase.from('partner_email_connections').update({
