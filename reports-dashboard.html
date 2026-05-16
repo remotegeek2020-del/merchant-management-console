@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Reports Center | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32" />
     <style>
@@ -34,9 +34,27 @@
             .slds-table { min-width: 500px; }
         }
         @media(max-width:600px){.filter-grid{grid-template-columns:1fr;}}
+        /* ── Cohort Retention Card ─────────────────────────────── */
+        .cohort-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 16px; }
+        .cohort-header { padding: 14px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
+        .cohort-title { font-size: 14px; font-weight: 800; color: #001e3c; display: flex; align-items: center; gap: 8px; }
+        .cohort-subtitle { font-size: 11px; color: #64748b; background: #e2e8f0; border-radius: 99px; padding: 2px 10px; font-weight: 600; }
+        .cohort-body { padding: 20px; }
+        .cohort-chart-wrap { position: relative; height: 300px; width: 100%; }
+        .cohort-table-wrap { margin-top: 20px; overflow-x: auto; }
+        .cohort-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+        .cohort-table th { background: #f8fafc; padding: 8px 12px; text-align: left; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #64748b; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+        .cohort-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; color: #1e293b; font-weight: 500; white-space: nowrap; }
+        .cohort-table tr:last-child td { border-bottom: none; }
+        .cohort-table tr:hover td { background: #f8fafc; }
+        .ret-pct { font-family: 'DM Mono', monospace; font-weight: 700; }
+        .ret-na { color: #cbd5e1; font-style: italic; }
+        .cohort-empty { text-align: center; padding: 48px 20px; color: #94a3b8; font-size: 13px; }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
     (function() {
         const sessionUser = localStorage.getItem('pp_userid');
@@ -58,6 +76,47 @@
             <p style="color:#64748b;margin:0;font-size:13px;">Generate, preview and export system-wide data reports</p>
         </div>
         <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px;">🏠 HOME</a>
+    </div>
+
+    <!-- COHORT RETENTION CHART -->
+    <div class="cohort-card">
+        <div class="cohort-header">
+            <div class="cohort-title">
+                <span class="material-icons" style="font-size:18px;color:#004990;">retention</span>
+                Merchant Cohort Retention
+            </div>
+            <span class="cohort-subtitle">Last 24 months</span>
+        </div>
+        <div class="cohort-body">
+            <div id="cohortLoading" style="text-align:center;padding:32px 0;color:#94a3b8;font-size:13px;">
+                <span class="material-icons" style="font-size:28px;display:block;margin-bottom:6px;animation:spin 1s linear infinite;">autorenew</span>
+                Loading cohort data…
+            </div>
+            <div id="cohortContent" style="display:none;">
+                <div class="cohort-chart-wrap">
+                    <canvas id="cohortChart"></canvas>
+                </div>
+                <div class="cohort-table-wrap">
+                    <table class="cohort-table">
+                        <thead>
+                            <tr>
+                                <th>Cohort</th>
+                                <th>Size</th>
+                                <th style="color:#3b82f6;">1-Month %</th>
+                                <th style="color:#22c55e;">3-Month %</th>
+                                <th style="color:#f97316;">6-Month %</th>
+                                <th style="color:#ef4444;">12-Month %</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cohortTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="cohortError" style="display:none;" class="cohort-empty">
+                <span class="material-icons" style="font-size:32px;display:block;margin-bottom:8px;">error_outline</span>
+                <span id="cohortErrorMsg">Unable to load cohort data.</span>
+            </div>
+        </div>
     </div>
 
     <!-- FILTERS -->
@@ -386,7 +445,164 @@ function renderPreviewTable(data) {
         window.print();
     }
 
-    window.onload = toggleFilters;
+    window.onload = function() {
+        toggleFilters();
+        loadCohortRetention();
+    };
+
+    // ── Cohort Retention ─────────────────────────────────────────────────────
+    let cohortChartInstance = null;
+
+    async function loadCohortRetention() {
+        try {
+            const res = await fetch('/api/reports', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_cohort_retention' })
+            });
+            const result = await res.json();
+
+            document.getElementById('cohortLoading').style.display = 'none';
+
+            if (!result.success) {
+                document.getElementById('cohortErrorMsg').textContent = result.message || 'Failed to load cohort data.';
+                document.getElementById('cohortError').style.display = 'block';
+                return;
+            }
+
+            const data = result.data || [];
+            if (!data.length) {
+                document.getElementById('cohortErrorMsg').textContent = 'No cohort data available.';
+                document.getElementById('cohortError').style.display = 'block';
+                return;
+            }
+
+            document.getElementById('cohortContent').style.display = 'block';
+            renderCohortChart(data);
+            renderCohortTable(data);
+        } catch (err) {
+            document.getElementById('cohortLoading').style.display = 'none';
+            document.getElementById('cohortErrorMsg').textContent = 'Network error loading cohort data.';
+            document.getElementById('cohortError').style.display = 'block';
+        }
+    }
+
+    function renderCohortChart(data) {
+        Chart.defaults.font.family = "'DM Sans', 'Inter', sans-serif";
+        Chart.defaults.font.size = 11;
+
+        const labels = data.map(d => d.cohort);
+
+        const datasets = [
+            {
+                label: '1-Month Retention',
+                data: data.map(d => d.ret_1),
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59,130,246,0.08)',
+                pointBackgroundColor: '#3b82f6',
+                tension: 0.3,
+                spanGaps: true,
+            },
+            {
+                label: '3-Month Retention',
+                data: data.map(d => d.ret_3),
+                borderColor: '#22c55e',
+                backgroundColor: 'rgba(34,197,94,0.08)',
+                pointBackgroundColor: '#22c55e',
+                tension: 0.3,
+                spanGaps: true,
+            },
+            {
+                label: '6-Month Retention',
+                data: data.map(d => d.ret_6),
+                borderColor: '#f97316',
+                backgroundColor: 'rgba(249,115,22,0.08)',
+                pointBackgroundColor: '#f97316',
+                tension: 0.3,
+                spanGaps: true,
+            },
+            {
+                label: '12-Month Retention',
+                data: data.map(d => d.ret_12),
+                borderColor: '#ef4444',
+                backgroundColor: 'rgba(239,68,68,0.08)',
+                pointBackgroundColor: '#ef4444',
+                tension: 0.3,
+                spanGaps: true,
+            },
+        ];
+
+        const ctx = document.getElementById('cohortChart').getContext('2d');
+        if (cohortChartInstance) cohortChartInstance.destroy();
+        cohortChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { labels, datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {
+                            font: { family: "'DM Sans', 'Inter', sans-serif", size: 12, weight: '600' },
+                            usePointStyle: true,
+                            pointStyleWidth: 10,
+                            padding: 20,
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: ctx => {
+                                const v = ctx.parsed.y;
+                                return v === null ? `${ctx.dataset.label}: N/A` : `${ctx.dataset.label}: ${v}%`;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            font: { family: "'DM Sans', 'Inter', sans-serif", size: 10 },
+                            maxRotation: 45,
+                            color: '#64748b',
+                        },
+                        grid: { color: '#f1f5f9' }
+                    },
+                    y: {
+                        min: 0,
+                        max: 100,
+                        ticks: {
+                            font: { family: "'DM Sans', 'Inter', sans-serif", size: 10 },
+                            color: '#64748b',
+                            callback: v => v + '%',
+                        },
+                        grid: { color: '#f1f5f9' }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderCohortTable(data) {
+        // Show last 6 cohorts in the summary table
+        const last6 = data.slice(-6);
+        const tbody = document.getElementById('cohortTableBody');
+        const fmtPct = v => v === null
+            ? '<span class="ret-na">—</span>'
+            : `<span class="ret-pct">${v}%</span>`;
+
+        tbody.innerHTML = last6.map(d => `
+            <tr>
+                <td style="font-weight:700;color:#001e3c;">${d.cohort}</td>
+                <td style="font-family:'DM Mono',monospace;">${d.size}</td>
+                <td>${fmtPct(d.ret_1)}</td>
+                <td>${fmtPct(d.ret_3)}</td>
+                <td>${fmtPct(d.ret_6)}</td>
+                <td>${fmtPct(d.ret_12)}</td>
+            </tr>
+        `).join('');
+    }
 </script>
 
 <style type="text/css" media="print">
