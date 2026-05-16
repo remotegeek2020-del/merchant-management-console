@@ -190,6 +190,19 @@
             </div>
         </div>
 
+        <!-- YOUR RANKING BANNER -->
+        <div id="rankingBanner" style="display:none;background:white;border:1px solid var(--border);border-radius:16px;padding:16px 20px;margin-bottom:24px;box-shadow:var(--shadow-sm);align-items:center;gap:16px;flex-wrap:wrap;" class="pp-animate">
+            <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                <div id="rankCircle" style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;background:#f8fafc;color:#64748b;flex-shrink:0;">—</div>
+                <div>
+                    <div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;">Your Ranking</div>
+                    <div id="rankLabel" style="font-size:13px;font-weight:800;color:var(--text);">Loading...</div>
+                </div>
+            </div>
+            <span id="rankTierBadge" style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:#f8fafc;color:#64748b;flex-shrink:0;"></span>
+            <div id="rankTopPct" style="font-size:12px;font-weight:700;color:var(--secondary);flex-shrink:0;"></div>
+        </div>
+
         <!-- TREND CARDS -->
         <div class="section-label"><span class="material-icons" style="font-size:14px;">trending_up</span> Merchant Health</div>
         <div class="trend-grid pp-animate" style="animation-delay:0.1s;">
@@ -392,8 +405,68 @@ async function init() {
             renderEnrollments(dash.new_enrollments.data, dash.new_enrollments.count);
         }
 
+        // ── LEADERBOARD RANKING ──
+        loadRanking(partner.id);
+
     } catch (err) {
         console.error('Dashboard init error:', err);
+    }
+}
+
+async function loadRanking(personId) {
+    try {
+        const res = await fetch('/api/partners', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_leaderboard' })
+        });
+        const d = await res.json();
+        if (!d.success || !d.data || !d.data.length) return;
+
+        const total = d.total || d.data.length;
+        const me = d.data.find(p => String(p.person_id) === String(personId));
+        if (!me) return;
+
+        const banner = document.getElementById('rankingBanner');
+        const circle = document.getElementById('rankCircle');
+        const label = document.getElementById('rankLabel');
+        const tierBadge = document.getElementById('rankTierBadge');
+        const topPct = document.getElementById('rankTopPct');
+
+        // Rank circle colors
+        const rankColors = me.rank === 1
+            ? { bg: '#fef9c3', color: '#92400e' }
+            : me.rank === 2
+            ? { bg: '#f1f5f9', color: '#475569' }
+            : me.rank === 3
+            ? { bg: '#fef3ec', color: '#9a3412' }
+            : { bg: '#f8fafc', color: '#64748b' };
+
+        circle.style.background = rankColors.bg;
+        circle.style.color = rankColors.color;
+        circle.textContent = '#' + me.rank;
+
+        label.textContent = `Ranked #${me.rank} out of ${total} partners`;
+
+        // Tier badge
+        const tierStyles = {
+            Gold: { bg: '#fef9c3', color: '#92400e', label: '🥇 Gold' },
+            Silver: { bg: '#f1f5f9', color: '#475569', label: '🥈 Silver' },
+            Bronze: { bg: '#fef3ec', color: '#9a3412', label: '🥉 Bronze' }
+        };
+        const ts = tierStyles[me.tier] || tierStyles.Bronze;
+        tierBadge.style.background = ts.bg;
+        tierBadge.style.color = ts.color;
+        tierBadge.textContent = ts.label;
+
+        // Top X% calculation
+        const pct = Math.round((me.rank / total) * 100);
+        topPct.textContent = pct <= 10 ? `You're in the top ${pct}% of partners` : `Top ${pct}% of the network`;
+
+        // Show banner (override the display:none)
+        banner.style.display = 'flex';
+    } catch (e) {
+        console.warn('Ranking load failed:', e.message);
     }
 }
 
