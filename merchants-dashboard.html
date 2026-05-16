@@ -780,6 +780,44 @@ async function addTask(merchantUuid) {
         }
     }
 
+    async function runAgentLookup() {
+        const v = (document.getElementById('add-agent_id')?.value || '').trim();
+        const resultEl = document.getElementById('add-agent-lookup-result');
+        const nameRow = document.getElementById('add-agent-name-row');
+        const nameEl = document.getElementById('add-agent_name');
+        if (!v) {
+            resultEl.style.display = 'none';
+            nameRow.style.display = 'none';
+            return;
+        }
+        resultEl.style.display = 'block';
+        resultEl.innerHTML = '<span style="color:#64748b; font-size:12px;">Looking up <strong>' + v + '</strong> in agent identifiers...</span>';
+        nameRow.style.display = 'none';
+
+        const data = await lookupAgentId(v);
+        if (data.found) {
+            resultEl.innerHTML = `<div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:10px;">
+                <span class="material-icons" style="color:#16a34a; font-size:18px;">check_circle</span>
+                <div>
+                    <div style="font-size:12px; font-weight:700; color:#166534;">Partner found in agent_identifiers</div>
+                    <div style="font-size:11px; color:#166534; margin-top:2px;">${data.agent_name} — will be linked automatically on save</div>
+                </div>
+            </div>`;
+            if (nameEl) { nameEl.value = data.agent_name; }
+            nameRow.style.display = 'none';
+        } else {
+            resultEl.innerHTML = `<div style="background:#fffbeb; border:1px solid #fde68a; border-radius:8px; padding:10px 14px; display:flex; align-items:center; gap:10px;">
+                <span class="material-icons" style="color:#d97706; font-size:18px;">warning</span>
+                <div>
+                    <div style="font-size:12px; font-weight:700; color:#92400e;">Partner ID not found in agent_identifiers</div>
+                    <div style="font-size:11px; color:#92400e; margin-top:2px;">A new partner record will be created when you save. Enter the partner name below.</div>
+                </div>
+            </div>`;
+            nameRow.style.display = 'block';
+            if (nameEl) { nameEl.value = ''; nameEl.focus(); }
+        }
+    }
+
     async function openAddMerchantModal() {
         Swal.fire({
             title: 'Add New Merchant',
@@ -822,32 +860,19 @@ async function addTask(merchantUuid) {
 
   <!-- SECTION 2: Partner -->
   <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Partner</div>
-  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
-    <div>
+  <div style="display:flex; gap:8px; align-items:flex-end; margin-bottom:8px;">
+    <div style="flex:1;">
       <label class="edit-label">Partner ID (Agent ID)</label>
-      <div style="display:flex; align-items:center; gap:8px;">
-        <input id="add-agent_id" class="modern-input" placeholder="e.g. AGT001" style="margin-bottom:0; flex:1;"
-          onblur="(async function(el){
-            const v = el.value.trim();
-            const badge = document.getElementById('add-agent-lookup-badge');
-            if (!v) { badge.innerHTML = ''; return; }
-            badge.innerHTML = '<span style=\'color:#64748b; font-size:11px;\'>Looking up...</span>';
-            const data = await lookupAgentId(v);
-            if (data.found) {
-              badge.innerHTML = '<span style=\'color:#166534; font-size:11px; font-weight:700;\'>✓ Found: ' + data.agent_name + '</span>';
-              const nameEl = document.getElementById('add-agent_name');
-              if (nameEl && !nameEl.value) nameEl.value = data.agent_name;
-            } else {
-              badge.innerHTML = '<span style=\'color:#92400e; font-size:11px; font-weight:700;\'>+ Will create new partner</span>';
-            }
-          })(this)">
-        <span id="add-agent-lookup-badge" style="white-space:nowrap;"></span>
-      </div>
+      <input id="add-agent_id" class="modern-input" placeholder="e.g. AGT001" style="margin-bottom:0;">
     </div>
-    <div>
-      <label class="edit-label">Agent / Partner Name</label>
-      <input id="add-agent_name" class="modern-input" placeholder="Partner name (auto-filled or enter new)">
-    </div>
+    <button type="button" onclick="runAgentLookup()" style="height:38px; padding:0 16px; background:#004990; color:white; border:none; border-radius:8px; font-family:'DM Sans',sans-serif; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap; display:flex; align-items:center; gap:6px; margin-bottom:0;">
+      <span class="material-icons" style="font-size:15px;">search</span> Lookup
+    </button>
+  </div>
+  <div id="add-agent-lookup-result" style="display:none; margin-bottom:10px;"></div>
+  <div id="add-agent-name-row" style="display:none;">
+    <label class="edit-label">Agent / Partner Name <span style="color:#dc2626;">*</span> <span style="font-weight:400; color:#64748b;">(required when creating new partner)</span></label>
+    <input id="add-agent_name" class="modern-input" placeholder="Enter partner name to create a new partner record">
   </div>
 
   <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
