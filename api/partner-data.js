@@ -38,6 +38,14 @@ export default async function handler(req, res) {
 
     try {
 
+        // ── MY RANK ────────────────────────────────────────
+        if (action === 'get_my_rank') {
+            const { data, error } = await supabase.rpc('get_partner_rank', { p_person_id: personId });
+            if (error || !data || !data.length) return res.status(200).json({ success: true, rank: null });
+            const r = data[0];
+            return res.status(200).json({ success: true, rank: Number(r.rank), total: Number(r.total), tier: r.tier, volume_30_day: parseFloat(r.volume_30_day) || 0 });
+        }
+
         // ── DASHBOARD OVERVIEW ─────────────────────────────
         if (action === 'get_overview') {
             if (!idStrings.length) return res.status(200).json({ success: true, data: { merchants: 0, approved: 0, pending: 0, mtd: 0, vol30: 0, vol90: 0, identifiers: [] } });

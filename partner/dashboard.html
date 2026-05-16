@@ -416,55 +416,48 @@ async function init() {
 
 async function loadRanking(personId) {
     try {
-        const res = await fetch('/api/partners', {
+        const token = localStorage.getItem('pp_partner_token');
+        const res = await fetch('/api/partner-data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_leaderboard' })
+            body: JSON.stringify({ action: 'get_my_rank', token })
         });
         const d = await res.json();
-        if (!d.success || !d.data || !d.data.length) return;
+        if (!d.success || !d.rank) return;
 
-        const total = d.total || d.data.length;
-        const me = d.data.find(p => String(p.person_id) === String(personId));
-        if (!me) return;
-
-        const banner = document.getElementById('rankingBanner');
-        const circle = document.getElementById('rankCircle');
-        const label = document.getElementById('rankLabel');
+        const banner   = document.getElementById('rankingBanner');
+        const circle   = document.getElementById('rankCircle');
+        const label    = document.getElementById('rankLabel');
         const tierBadge = document.getElementById('rankTierBadge');
-        const topPct = document.getElementById('rankTopPct');
+        const topPct   = document.getElementById('rankTopPct');
 
-        // Rank circle colors
-        const rankColors = me.rank === 1
+        const rankColors = d.rank === 1
             ? { bg: '#fef9c3', color: '#92400e' }
-            : me.rank === 2
+            : d.rank === 2
             ? { bg: '#f1f5f9', color: '#475569' }
-            : me.rank === 3
+            : d.rank === 3
             ? { bg: '#fef3ec', color: '#9a3412' }
             : { bg: '#f8fafc', color: '#64748b' };
 
         circle.style.background = rankColors.bg;
         circle.style.color = rankColors.color;
-        circle.textContent = '#' + me.rank;
+        circle.textContent = '#' + d.rank;
 
-        label.textContent = `Ranked #${me.rank} out of ${total} partners`;
+        label.textContent = `Ranked #${d.rank} out of ${d.total} partners`;
 
-        // Tier badge
         const tierStyles = {
-            Gold: { bg: '#fef9c3', color: '#92400e', label: '🥇 Gold' },
+            Gold:   { bg: '#fef9c3', color: '#92400e', label: '🥇 Gold' },
             Silver: { bg: '#f1f5f9', color: '#475569', label: '🥈 Silver' },
             Bronze: { bg: '#fef3ec', color: '#9a3412', label: '🥉 Bronze' }
         };
-        const ts = tierStyles[me.tier] || tierStyles.Bronze;
+        const ts = tierStyles[d.tier] || tierStyles.Bronze;
         tierBadge.style.background = ts.bg;
         tierBadge.style.color = ts.color;
         tierBadge.textContent = ts.label;
 
-        // Top X% calculation
-        const pct = Math.round((me.rank / total) * 100);
-        topPct.textContent = pct <= 10 ? `You're in the top ${pct}% of partners` : `Top ${pct}% of the network`;
+        const pct = Math.round((d.rank / d.total) * 100);
+        topPct.textContent = pct <= 10 ? `You're in the top ${pct}% of partners!` : `Top ${pct}% of the network`;
 
-        // Show banner (override the display:none)
         banner.style.display = 'flex';
     } catch (e) {
         console.warn('Ranking load failed:', e.message);
