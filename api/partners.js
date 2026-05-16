@@ -831,7 +831,8 @@ if (action === 'get_merchant_data_raw') {
             });
 
             const needsAttention = ranked.filter(p => p.growth_pct < -10).slice(0, 10);
-            return res.status(200).json({ success: true, data: ranked.slice(0, 20), needs_attention: needsAttention, total: ranked.length });
+            const allRanks = ranked.map(r => ({ person_id: r.person_id, rank: r.rank, tier: r.tier }));
+            return res.status(200).json({ success: true, data: ranked.slice(0, 20), needs_attention: needsAttention, ranks: allRanks, total: ranked.length });
         }
 
         if (action === 'refresh_leaderboard') {
