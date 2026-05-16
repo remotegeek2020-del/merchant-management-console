@@ -497,14 +497,34 @@ async function logAuditAction(action, details) {
 
     function processPartnerData(payload) {
     if (!payload || !payload.persons) return [];
-    const { persons, agents, identifiers, companies, stats } = payload; // stats should be passed here if available
+    const { persons, agents, identifiers, companies, stats } = payload;
+
+    // Build Maps once — O(n) — eliminates hundreds of thousands of .find() comparisons
+    const agentById       = new Map(agents.map(a => [a.id, a]));
+    const personById      = new Map(persons.map(p => [p.id, p]));
+    const companyById     = new Map(companies.map(c => [c.id, c]));
+    const identifierById  = new Map(identifiers.map(i => [i.id, i]));
+    const statsByIdString = new Map((stats || []).map(s => [String(s.agent_id).trim(), s]));
+
+    // Group identifiers by agent_id once
+    const identifiersByAgentId = new Map();
+    identifiers.forEach(i => {
+        if (!identifiersByAgentId.has(i.agent_id)) identifiersByAgentId.set(i.agent_id, []);
+        identifiersByAgentId.get(i.agent_id).push(i);
+    });
+
+    // Group agents by person (parent_agent_id) once
+    const agentsByPersonId = new Map();
+    agents.forEach(a => {
+        if (!agentsByPersonId.has(a.parent_agent_id)) agentsByPersonId.set(a.parent_agent_id, []);
+        agentsByPersonId.get(a.parent_agent_id).push(a);
+    });
+
     const idMap = {};
-    
-    // ... (Keep your existing idMap and parent/child logic at the start) ...
     identifiers.forEach(id => {
-        const myAgent = agents.find(a => a.id === id.agent_id);
-        const myPerson = persons.find(p => p.id === myAgent?.parent_agent_id);
-        idMap[id.id] = { 
+        const myAgent  = agentById.get(id.agent_id);
+        const myPerson = myAgent ? personById.get(myAgent.parent_agent_id) : null;
+        idMap[id.id] = {
             db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
             isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
             owner_name: myPerson ? myPerson.full_name : 'Unknown',
@@ -513,48 +533,50 @@ async function logAuditAction(action, details) {
         };
     });
 
-        identifiers.forEach(id => {
-            const current = idMap[id.id];
-            if (id.parent_config_id && idMap[id.parent_config_id]) {
-                const parentIdRecord = idMap[id.parent_config_id];
-                parentIdRecord.sub_ids.push(current);
-                current.upline_name = parentIdRecord.owner_name;
-                current.upline_string = parentIdRecord.string;
-            }
-        });
+    identifiers.forEach(id => {
+        const current = idMap[id.id];
+        if (id.parent_config_id && idMap[id.parent_config_id]) {
+            const parentIdRecord = idMap[id.parent_config_id];
+            parentIdRecord.sub_ids.push(current);
+            current.upline_name = parentIdRecord.owner_name;
+            current.upline_string = parentIdRecord.string;
+        }
+    });
 
-       return persons.map(person => {
-        const myAgents = agents.filter(a => a.parent_agent_id === person.id);
+    return persons.map(person => {
+        const myAgents = agentsByPersonId.get(person.id) || [];
         if (myAgents.length === 0) return null;
-        
+
         let totalCurrent = 0;
         let totalBaseline = 0;
         const groups = {};
 
         myAgents.forEach(agent => {
-            const co = companies.find(c => c.id === agent.company_id);
-            const coName = co ? co.company_name : "Independent";
-            const myIds = identifiers.filter(i => i.agent_id === agent.id && !(identifiers.find(p => p.id === i.parent_config_id && p.agent_id === i.agent_id)));
-            
+            const co     = companyById.get(agent.company_id);
+            const coName = co ? co.company_name : 'Independent';
+            const allIds = identifiersByAgentId.get(agent.id) || [];
+            // Only top-level ids (not children of another id under this same agent)
+            const myIds  = allIds.filter(i => {
+                if (!i.parent_config_id) return true;
+                const parent = identifierById.get(i.parent_config_id);
+                return !parent || parent.agent_id !== agent.id;
+            });
+
             if (myIds.length > 0) {
                 if (!groups[coName]) groups[coName] = [];
                 myIds.forEach(id => {
                     groups[coName].push(idMap[id.id]);
-                    
-                    // --- TREND CALCULATION LOGIC ---
-                    // Look for stats in the payload to calculate the partner's global trend
-                    const s = (payload.stats || []).find(row => String(row.agent_id) === String(id.id_string));
+                    const s = statsByIdString.get(id.id_string);
                     if (s) {
-                        totalCurrent += parseFloat(s.total_volume_sum || 0);
-                        totalBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
+                        totalCurrent  += parseFloat(s.total_volume_sum  || 0);
+                        totalBaseline += parseFloat(s.total_volume_90d_sum || 0) / 3;
                     }
                 });
             }
         });
 
         const formatted = Object.entries(groups).map(([name, ids]) => ({ name, ids }));
-        
-        // Assign the Trend String
+
         let trend = 'stable';
         if (totalBaseline > 0) {
             const diff = ((totalCurrent - totalBaseline) / totalBaseline) * 100;
@@ -562,7 +584,7 @@ async function logAuditAction(action, details) {
             else if (diff < -5) trend = 'risk';
         }
 
-        return formatted.length > 0 ? { 
+        return formatted.length > 0 ? {
             id: person.id, name: person.full_name,
             email: person.email || 'No email provided',
             phone: person.phone_number || 'No phone provided',
@@ -580,38 +602,13 @@ window.filterByTrend = function(trend) {
     activeTrendFilter = trend;
     const term = document.getElementById('partnerSearchInput').value.toLowerCase().trim();
     
-    // 1. We ALWAYS filter from the full global list (allPartners)
+    // 1. Filter from the full global list — statusTrend is pre-computed by processPartnerData
     let filtered = allPartners.filter(p => {
-        let pCurrent = 0;
-        let pBaseline = 0;
-
-        // Sum up every ID this partner owns to get the "Big Picture"
-        p.companies.forEach(co => {
-            co.ids.forEach(idObj => {
-                const s = statsRaw.find(raw => String(raw.agent_id).trim() === String(idObj.string).trim());
-                if (s) {
-                    pCurrent += parseFloat(s.total_volume_sum || 0);
-                    pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
-                }
-            });
-        });
-
-        let pTrend = 'stable';
-        if (pBaseline > 0) {
-            const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
-            if (pct > 5) pTrend = 'growth';
-            else if (pct < -5) pTrend = 'risk';
-        }
-
-        // Match against the Chip you clicked
-        const matchesTrend = (trend === 'all' || pTrend === trend);
-        
-        // Ensure we don't break the search bar results
+        const matchesTrend  = (trend === 'all' || p.statusTrend === trend);
         const matchesSearch = !term || (
-            p.name.toLowerCase().includes(term) || 
+            p.name.toLowerCase().includes(term) ||
             p.companies.some(co => co.name.toLowerCase().includes(term))
         );
-
         return matchesTrend && matchesSearch;
     });
 
@@ -1173,31 +1170,6 @@ async function submitOnboarding() {
     const paginatedData = data.slice(start, end);
 
     grid.innerHTML = paginatedData.map(p => {
-        // --- INJECTED TREND CALCULATION FOR FILTERING ---
-        let pCurrent = 0;
-        let pBaseline = 0;
-
-        // Sum up volume across all companies and IDs for this partner
-        p.companies.forEach(co => {
-            co.ids.forEach(idObj => {
-                // identifiersRaw was populated during loadPartners
-                const s = identifiersRaw.find(raw => raw.id_string === idObj.string);
-                if (s) {
-                    pCurrent += parseFloat(s.total_volume_sum || 0);
-                    pBaseline += (parseFloat(s.total_volume_90d_sum || 0) / 3);
-                }
-            });
-        });
-
-        // Assign trend to partner object so the filterByTrend function can find it
-        let pTrend = 'stable';
-        if (pBaseline > 0) {
-            const pct = ((pCurrent - pBaseline) / pBaseline) * 100;
-            if (pct > 5) pTrend = 'growth';
-            else if (pct < -5) pTrend = 'risk';
-        }
-        p.statusTrend = pTrend; 
-
         // Return your existing card HTML
         const _safeName = p.name.replace(/'/g, String.fromCharCode(39));
         const _safeEmail = (p.email||'').replace(/'/g, String.fromCharCode(39));
