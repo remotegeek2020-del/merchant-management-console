@@ -74,6 +74,33 @@
         .error-table tr:last-child td{border-bottom:none;}
         code{font-family:'DM Mono',monospace;font-size:12px;background:#f1f5f9;padding:1px 6px;border-radius:4px;color:#0f172a;}
         @media(max-width:700px){.sidebar{display:none;}.main{padding:24px;}}
+        /* TRY IT PANEL */
+        .try-it-toggle{display:inline-flex;align-items:center;gap:6px;margin-top:14px;padding:6px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;font-size:12px;font-weight:700;color:#0369a1;cursor:pointer;font-family:'DM Sans',sans-serif;transition:all 0.15s;user-select:none;}
+        .try-it-toggle:hover{background:#e0f2fe;border-color:#7dd3fc;}
+        .try-it-toggle svg{width:14px;height:14px;transition:transform 0.2s;}
+        .try-it-toggle.open svg{transform:rotate(180deg);}
+        .try-it-panel{background:#f8fafc;border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:10px;display:none;font-family:'DM Mono',monospace;}
+        .try-it-panel.open{display:block;}
+        .try-it-row{margin-bottom:12px;}
+        .try-it-row label{display:block;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;font-family:'DM Sans',sans-serif;}
+        .try-it-url-row{display:flex;gap:8px;align-items:center;}
+        .try-it-method{font-size:11px;font-weight:800;padding:6px 10px;border-radius:6px;font-family:'DM Mono',monospace;flex-shrink:0;border:none;}
+        .try-it-url{flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:12px;background:#fff;color:var(--text);}
+        .try-it-url[readonly]{background:#f1f5f9;color:var(--muted);}
+        .try-it-textarea{width:100%;padding:10px;border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:12px;line-height:1.55;background:#fff;color:var(--text);resize:vertical;min-height:120px;box-sizing:border-box;}
+        .try-it-input{width:100%;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-family:'DM Mono',monospace;font-size:12px;background:#fff;color:var(--text);box-sizing:border-box;}
+        .try-it-send{padding:8px 18px;background:#004990;color:white;border:none;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;transition:background 0.15s;}
+        .try-it-send:hover{background:#003870;}
+        .try-it-send:disabled{background:#94a3b8;cursor:not-allowed;}
+        .try-it-response{margin-top:14px;display:none;}
+        .try-it-response.visible{display:block;}
+        .try-it-status-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+        .try-it-status{font-size:12px;font-weight:700;padding:3px 10px;border-radius:99px;font-family:'DM Mono',monospace;}
+        .try-it-status.ok{background:#dcfce7;color:#166534;}
+        .try-it-status.err{background:#fee2e2;color:#991b1b;}
+        .try-it-status.warn{background:#fef9c3;color:#92400e;}
+        .try-it-response-body{background:var(--code-bg);border-radius:8px;padding:14px;font-size:12px;line-height:1.6;color:#e2e8f0;overflow-x:auto;white-space:pre;max-height:360px;overflow-y:auto;}
+        .try-it-divider{height:1px;background:var(--border);margin:14px 0;}
     </style>
 </head>
 <body>
@@ -219,6 +246,31 @@
   }
 }</pre>
             </div>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method get">GET</span>
+                        <input class="try-it-url" type="text" value="/api/v1/profile" readonly>
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'GET', '/api/v1/profile')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row">
+                        <span class="try-it-status"></span>
+                    </div>
+                    <div class="try-it-response-body"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -273,6 +325,29 @@
   }
 }</pre>
             </div>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method get">GET</span>
+                        <input class="try-it-url" type="text" value="/api/v1/merchants" placeholder="e.g. /api/v1/merchants?page=0&limit=10&status=Approved">
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'GET')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row"><span class="try-it-status"></span></div>
+                    <div class="try-it-response-body"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -313,6 +388,29 @@
   }
 }</pre>
             </div>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method get">GET</span>
+                        <input class="try-it-url" type="text" value="/api/v1/merchants/" placeholder="/api/v1/merchants/{id}">
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'GET')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row"><span class="try-it-status"></span></div>
+                    <div class="try-it-response-body"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -341,6 +439,29 @@
                 <pre>curl "https://portal.mypayprotec.com/api/v1/tickets?status=open" \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
             </div>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method get">GET</span>
+                        <input class="try-it-url" type="text" value="/api/v1/tickets" placeholder="e.g. /api/v1/tickets?status=open">
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'GET')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row"><span class="try-it-status"></span></div>
+                    <div class="try-it-response-body"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -358,6 +479,29 @@
                 <div class="code-block-header">Request <button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
                 <pre>curl "https://portal.mypayprotec.com/api/v1/tickets/TKT-202405-00123" \
   -H <span class="hl-str">"Authorization: Bearer pk_live_your_key"</span></pre>
+            </div>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method get">GET</span>
+                        <input class="try-it-url" type="text" value="/api/v1/tickets/" placeholder="/api/v1/tickets/{id or TKT-...}">
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'GET')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row"><span class="try-it-status"></span></div>
+                    <div class="try-it-response-body"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -410,6 +554,39 @@
     <span class="hl-key">"created_at"</span>: <span class="hl-str">"2026-05-14T18:32:00Z"</span>
   }
 }</pre>
+            </div>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method post">POST</span>
+                        <input class="try-it-url" type="text" value="/api/v1/tickets" readonly>
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <div class="try-it-row">
+                    <label>Request Body (JSON)</label>
+                    <textarea class="try-it-textarea">{
+  "subject": "Terminal not printing receipts",
+  "description": "The Clover Mini at Acme Coffee stopped printing since yesterday.",
+  "type": "equipment",
+  "priority": "high",
+  "merchant_id": "123456789"
+}</textarea>
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'POST', '/api/v1/tickets')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row"><span class="try-it-status"></span></div>
+                    <div class="try-it-response-body"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -466,6 +643,29 @@
                     <tr><td class="param-name">tickets.open</td><td>Tickets in <code>open</code> status only — does not include closed tickets</td></tr>
                 </tbody>
             </table>
+            <div class="try-it-divider"></div>
+            <button class="try-it-toggle" onclick="toggleTryIt(this)">
+                <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+                Try It
+            </button>
+            <div class="try-it-panel">
+                <div class="try-it-row">
+                    <label>Endpoint</label>
+                    <div class="try-it-url-row">
+                        <span class="try-it-method get">GET</span>
+                        <input class="try-it-url" type="text" value="/api/v1/reports/summary" readonly>
+                    </div>
+                </div>
+                <div class="try-it-row">
+                    <label>Authorization</label>
+                    <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+                </div>
+                <button class="try-it-send" onclick="sendRequest(this, 'GET', '/api/v1/reports/summary')">Send Request</button>
+                <div class="try-it-response">
+                    <div class="try-it-status-row"><span class="try-it-status"></span></div>
+                    <div class="try-it-response-body"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -510,6 +710,29 @@
 }</pre>
     </div>
 
+    <button class="try-it-toggle" onclick="toggleTryIt(this)" style="margin-top:4px;">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+        Try It
+    </button>
+    <div class="try-it-panel" style="margin-top:10px;margin-bottom:24px;">
+        <div class="try-it-row">
+            <label>Endpoint</label>
+            <div class="try-it-url-row">
+                <span class="try-it-method get">GET</span>
+                <input class="try-it-url" type="text" value="/api/v1/webhooks" readonly>
+            </div>
+        </div>
+        <div class="try-it-row">
+            <label>Authorization</label>
+            <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+        </div>
+        <button class="try-it-send" onclick="sendRequest(this, 'GET', '/api/v1/webhooks')">Send Request</button>
+        <div class="try-it-response">
+            <div class="try-it-status-row"><span class="try-it-status"></span></div>
+            <div class="try-it-response-body"></div>
+        </div>
+    </div>
+
     <h3 id="webhooks-create" style="margin-top:32px;">Manage Webhooks</h3>
     <div class="endpoint-bar"><span class="method-pill post">POST</span><code>/api/v1/webhooks</code></div>
     <p>Create, update, delete, or rotate the signing secret for a webhook endpoint.</p>
@@ -545,6 +768,38 @@ Authorization: Bearer pk_live_...
     <span class="hl-key">"secret_note"</span>: <span class="hl-str">"Store this secret securely. It will not be shown again."</span>
   }
 }</pre>
+    </div>
+
+    <button class="try-it-toggle" onclick="toggleTryIt(this)" style="margin-top:4px;">
+        <svg viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"/></svg>
+        Try It
+    </button>
+    <div class="try-it-panel" style="margin-top:10px;margin-bottom:24px;">
+        <div class="try-it-row">
+            <label>Endpoint</label>
+            <div class="try-it-url-row">
+                <span class="try-it-method post">POST</span>
+                <input class="try-it-url" type="text" value="/api/v1/webhooks" readonly>
+            </div>
+        </div>
+        <div class="try-it-row">
+            <label>Authorization</label>
+            <input class="try-it-input try-it-auth" type="text" placeholder="Bearer pk_live_...">
+        </div>
+        <div class="try-it-row">
+            <label>Request Body (JSON)</label>
+            <textarea class="try-it-textarea">{
+  "action": "create",
+  "label": "My CRM",
+  "url": "https://yourapp.com/webhooks/paypro",
+  "events": ["ticket.created", "ticket.updated", "merchant.status_changed"]
+}</textarea>
+        </div>
+        <button class="try-it-send" onclick="sendRequest(this, 'POST', '/api/v1/webhooks')">Send Request</button>
+        <div class="try-it-response">
+            <div class="try-it-status-row"><span class="try-it-status"></span></div>
+            <div class="try-it-response-body"></div>
+        </div>
     </div>
 
     <h3 id="webhooks-events" style="margin-top:32px;">Event Types</h3>
@@ -704,6 +959,7 @@ function copyCode(btn) {
         setTimeout(() => btn.textContent = 'Copy', 1800);
     });
 }
+
 // Highlight active nav link on scroll
 const sections = document.querySelectorAll('[id]');
 const navLinks = document.querySelectorAll('.nav-link[href^="#"]');
@@ -714,6 +970,121 @@ window.addEventListener('scroll', () => {
         l.classList.toggle('active', l.getAttribute('href') === '#' + current);
     });
 }, { passive: true });
+
+// Pre-fill auth fields from localStorage session token on page load
+document.addEventListener('DOMContentLoaded', () => {
+    const sessionToken = localStorage.getItem('pp_session_token');
+    if (sessionToken) {
+        document.querySelectorAll('.try-it-auth').forEach(input => {
+            input.value = 'Bearer ' + sessionToken;
+        });
+    }
+});
+
+// Toggle Try It panel open/closed
+function toggleTryIt(btn) {
+    const panel = btn.nextElementSibling;
+    const isOpen = panel.classList.toggle('open');
+    btn.classList.toggle('open', isOpen);
+
+    // Pre-fill auth if not already set
+    if (isOpen) {
+        const authInput = panel.querySelector('.try-it-auth');
+        if (authInput && !authInput.value) {
+            const sessionToken = localStorage.getItem('pp_session_token');
+            if (sessionToken) authInput.value = 'Bearer ' + sessionToken;
+        }
+    }
+}
+
+// Pretty-print JSON with syntax highlighting
+function syntaxHighlight(json) {
+    if (typeof json !== 'string') json = JSON.stringify(json, null, 2);
+    return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, match => {
+        let cls = 'hl-num';
+        if (/^"/.test(match)) {
+            cls = /:$/.test(match) ? 'hl-key' : 'hl-str';
+        } else if (/true|false/.test(match)) {
+            cls = 'hl-bool';
+        } else if (/null/.test(match)) {
+            cls = 'hl-bool';
+        }
+        return '<span class="' + cls + '">' + match + '</span>';
+    });
+}
+
+// Send a request from a Try It panel
+async function sendRequest(sendBtn, method, fixedUrl) {
+    const panel = sendBtn.closest('.try-it-panel');
+    const urlInput = panel.querySelector('.try-it-url');
+    const authInput = panel.querySelector('.try-it-auth');
+    const bodyTextarea = panel.querySelector('.try-it-textarea');
+    const responseDiv = panel.querySelector('.try-it-response');
+    const statusEl = panel.querySelector('.try-it-status');
+    const bodyEl = panel.querySelector('.try-it-response-body');
+
+    const url = fixedUrl || urlInput.value.trim();
+    if (!url) { alert('Please enter an endpoint URL.'); return; }
+
+    const headers = { 'Accept': 'application/json' };
+    const auth = authInput ? authInput.value.trim() : '';
+    if (auth) headers['Authorization'] = auth;
+
+    const fetchOpts = { method, headers };
+
+    if (bodyTextarea && (method === 'POST' || method === 'PUT' || method === 'PATCH')) {
+        const rawBody = bodyTextarea.value.trim();
+        if (rawBody) {
+            try {
+                JSON.parse(rawBody); // validate
+            } catch (e) {
+                alert('Invalid JSON in request body: ' + e.message);
+                return;
+            }
+            headers['Content-Type'] = 'application/json';
+            fetchOpts.body = rawBody;
+        }
+    }
+
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
+    responseDiv.classList.remove('visible');
+
+    let status, statusText, data;
+    try {
+        const res = await fetch(url, fetchOpts);
+        status = res.status;
+        statusText = res.statusText;
+        try {
+            data = await res.json();
+        } catch (_) {
+            data = await res.text();
+        }
+    } catch (err) {
+        status = 0;
+        statusText = 'Network Error';
+        data = { error: err.message };
+    }
+
+    // Render status badge
+    const isOk = status >= 200 && status < 300;
+    const isWarn = status >= 300 && status < 500;
+    statusEl.className = 'try-it-status ' + (status === 0 ? 'err' : isOk ? 'ok' : isWarn ? 'warn' : 'err');
+    statusEl.textContent = status ? status + ' ' + statusText : 'Network Error';
+
+    // Render response body
+    let bodyHtml;
+    if (typeof data === 'object') {
+        bodyHtml = syntaxHighlight(data);
+    } else {
+        bodyHtml = String(data).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    bodyEl.innerHTML = bodyHtml;
+
+    responseDiv.classList.add('visible');
+    sendBtn.disabled = false;
+    sendBtn.textContent = 'Send Request';
+}
 </script>
 </body>
 </html>
