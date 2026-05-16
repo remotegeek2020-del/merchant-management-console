@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sub-Partners | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --teal:#0d9488; --teal-dark:#0f766e; --teal-light:#ccfbf1; --teal-bg:#f0fdfa;
+            --navy:#001e3c; --border:#e2e8f0; --surface:#f8fafc; --white:#ffffff;
+            --text:#0a1628; --secondary:#475569; --muted:#94a3b8;
+            --green:#10b981; --green-bg:#dcfce7; --green-text:#166534;
+            --red:#ef4444; --red-bg:#fee2e2; --red-text:#991b1b;
+            --amber:#f59e0b; --amber-bg:#fef3c7; --amber-text:#92400e;
+            --blue-bg:#e0f2fe; --blue-text:#0369a1;
+            --shadow-sm:0 1px 3px rgba(0,0,0,0.06); --shadow-md:0 4px 16px rgba(0,0,0,0.07);
+        }
+        body { margin:0; padding:0; font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+
+        /* SIDEBAR */
+        .sidebar { position:fixed; top:0; left:0; width:240px; height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:100; box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px; filter:brightness(0) invert(1); display:block; margin-bottom:16px; }
+        .sidebar-partner { display:flex; align-items:center; gap:10px; }
+        .sidebar-avatar { width:36px; height:36px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:white; flex-shrink:0; }
+        .sidebar-name { font-size:13px; font-weight:700; color:white; line-height:1.3; }
+        .sidebar-tag { font-size:10px; color:rgba(255,255,255,0.4); font-weight:500; }
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; overflow-y:auto; }
+        .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); text-decoration:none; cursor:pointer; transition:all 0.2s; border:none; background:none; width:100%; font-family:'DM Sans',sans-serif; }
+        .nav-item:hover { background:rgba(255,255,255,0.08); color:white; }
+        .nav-item.active { background:var(--teal); color:white; }
+        .nav-item .material-icons { font-size:20px; flex-shrink:0; }
+        .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+
+        /* LAYOUT */
+        .main { margin-left:240px; min-height:100vh; }
+        .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:50; gap:12px; flex-wrap:wrap; }
+        .topbar-title { font-size:1.2rem; font-weight:800; color:var(--text); margin:0; letter-spacing:-0.2px; }
+        .content { padding:28px; }
+
+        /* BUTTONS */
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:12px; font-weight:700; font-family:'DM Sans',sans-serif; cursor:pointer; border:none; transition:all 0.2s; }
+        .btn-teal { background:var(--teal); color:white; }
+        .btn-teal:hover { background:var(--teal-dark); }
+        .btn-outline { background:white; color:var(--secondary); border:1px solid var(--border); }
+        .btn-outline:hover { border-color:var(--teal); color:var(--teal); }
+        .btn-sm { padding:5px 10px; font-size:11px; }
+
+        /* KPI GRID */
+        .kpi-grid { display:grid; grid-template-columns:repeat(3, 1fr); gap:16px; margin-bottom:24px; }
+        .kpi { background:white; border:1px solid var(--border); border-radius:16px; padding:20px; box-shadow:var(--shadow-sm); transition:box-shadow 0.2s; }
+        .kpi:hover { box-shadow:var(--shadow-md); }
+        .kpi.teal { background:linear-gradient(135deg,var(--teal),var(--teal-dark)); border-color:transparent; }
+        .kpi.navy { background:var(--navy); border-color:transparent; }
+        .kpi-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.8px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+        .kpi.teal .kpi-label, .kpi.navy .kpi-label { color:rgba(255,255,255,0.6); }
+        .kpi-value { font-size:1.8rem; font-weight:800; color:var(--text); line-height:1; letter-spacing:-0.5px; font-family:'DM Mono',monospace; }
+        .kpi.teal .kpi-value, .kpi.navy .kpi-value { color:white; }
+        .kpi-sub { font-size:11px; color:var(--muted); margin-top:6px; }
+        .kpi.teal .kpi-sub, .kpi.navy .kpi-sub { color:rgba(255,255,255,0.5); }
+
+        /* TABLE CARD */
+        .card { background:white; border:1px solid var(--border); border-radius:16px; box-shadow:var(--shadow-sm); overflow:hidden; }
+        .card-header { padding:16px 20px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; }
+        .card-title { font-size:14px; font-weight:800; color:var(--text); }
+        table { width:100%; border-collapse:collapse; font-size:13px; }
+        thead th { background:#f8fafc; padding:10px 16px; text-align:left; font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.6px; border-bottom:1px solid var(--border); white-space:nowrap; }
+        tbody tr { border-bottom:1px solid var(--border); transition:background 0.15s; }
+        tbody tr:last-child { border-bottom:none; }
+        tbody tr:hover { background:var(--teal-bg); }
+        tbody td { padding:12px 16px; vertical-align:middle; }
+
+        /* BADGES */
+        .badge { display:inline-flex; align-items:center; padding:3px 10px; border-radius:99px; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px; white-space:nowrap; }
+        .badge-active { background:var(--green-bg); color:var(--green-text); }
+        .badge-inactive { background:#f1f5f9; color:#475569; }
+        .id-pill { display:inline-flex; align-items:center; font-size:10px; font-weight:700; padding:2px 8px; border-radius:99px; background:#e0f2fe; color:#0369a1; margin:2px; font-family:'DM Mono',monospace; }
+
+        /* MONO */
+        .mono { font-family:'DM Mono',monospace; font-size:12px; font-weight:600; color:var(--teal); }
+
+        /* EMPTY STATE */
+        .empty { padding:60px; text-align:center; color:var(--muted); }
+        .empty .material-icons { font-size:48px; opacity:0.3; display:block; margin-bottom:12px; }
+        .empty-title { font-size:15px; font-weight:700; color:var(--secondary); margin-bottom:6px; }
+        .empty-sub { font-size:13px; color:var(--muted); }
+
+        /* INLINE REV SHARE EDITOR */
+        .rev-edit-wrap { display:inline-flex; align-items:center; gap:6px; }
+        .rev-display { cursor:pointer; display:inline-flex; align-items:center; gap:4px; }
+        .rev-display:hover { color:var(--teal); }
+        .rev-input-group { display:none; align-items:center; gap:4px; }
+        .rev-input-group input { width:60px; padding:4px 8px; border:1px solid var(--border); border-radius:6px; font-size:12px; font-family:'DM Mono',monospace; outline:none; }
+        .rev-input-group input:focus { border-color:var(--teal); }
+
+        @keyframes spin { to { transform:rotate(360deg); } }
+        @keyframes fadeInUp { from{opacity:0;transform:translateY(16px);} to{opacity:1;transform:translateY(0);} }
+        .pp-animate { animation:fadeInUp 0.4s ease both; }
+
+        @media (max-width:900px) { .kpi-grid { grid-template-columns:1fr 1fr; } }
+        @media (max-width:768px) {
+            .sidebar { transform:translateX(-100%); }
+            .main { margin-left:0; }
+            .content { padding:16px; }
+            .kpi-grid { grid-template-columns:1fr 1fr; gap:10px; }
+            .topbar { padding:12px 16px; }
+            .card { overflow-x:auto; }
+            table { min-width:560px; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="sidebarAvatar">?</div>
+            <div>
+                <div class="sidebar-name" id="sidebarName">Loading...</div>
+                <div class="sidebar-tag">Partner Portal</div>
+            </div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item active" href="/partner/sub-partners"><span class="material-icons">account_tree</span> Sub-Partners</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+    <div style="padding:16px;font-size:10px;color:rgba(255,255,255,0.25);text-align:center;">PayProTec Partner Portal v1.0</div>
+</div>
+
+<div class="main">
+    <div class="topbar">
+        <h1 class="topbar-title">Sub-Partners</h1>
+        <button class="btn btn-teal" onclick="openInviteModal()">
+            <span class="material-icons" style="font-size:16px;">person_add</span> Invite Sub-Partner
+        </button>
+    </div>
+
+    <div class="content">
+
+        <!-- KPI CARDS -->
+        <div class="kpi-grid pp-animate">
+            <div class="kpi teal">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">account_tree</span> Total Sub-Partners</div>
+                <div class="kpi-value" id="kpiTotal">—</div>
+                <div class="kpi-sub">In your network</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">attach_money</span> Sub-Partner Volume (30D)</div>
+                <div class="kpi-value" id="kpiVolume" style="color:var(--teal);">—</div>
+                <div class="kpi-sub">Combined 30-day volume</div>
+            </div>
+            <div class="kpi navy">
+                <div class="kpi-label"><span class="material-icons" style="font-size:14px;">verified_user</span> Active Portals</div>
+                <div class="kpi-value" id="kpiActive">—</div>
+                <div class="kpi-sub">Sub-partners with portal access</div>
+            </div>
+        </div>
+
+        <!-- SUB-PARTNER TABLE -->
+        <div class="card pp-animate" style="animation-delay:0.1s;">
+            <div class="card-header">
+                <div class="card-title">Your Sub-Partner Network</div>
+                <span style="font-size:12px;color:var(--muted);" id="tableSubtitle">Loading...</span>
+            </div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Agent IDs</th>
+                        <th>Merchants</th>
+                        <th>30D Volume</th>
+                        <th>Rev Share</th>
+                        <th>Portal Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="subPartnersTable">
+                    <tr><td colspan="7"><div class="empty"><div style="animation:spin 1s linear infinite;width:24px;height:24px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+
+let myIdentifiers = [];
+
+function fmt(n) {
+    return '$' + parseFloat(n || 0).toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+}
+
+// ── INIT ──────────────────────────────────────────────────
+async function init() {
+    try {
+        const authRes = await fetch('/api/partner-auth', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'validate', token })
+        });
+        const auth = await authRes.json();
+        if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
+
+        const { partner, identifiers } = auth;
+        myIdentifiers = identifiers || [];
+        const initials = partner.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
+        document.getElementById('sidebarAvatar').innerText = initials;
+        document.getElementById('sidebarName').innerText = partner.name;
+
+        loadSubPartners();
+    } catch (err) {
+        console.error('Init error:', err);
+    }
+}
+
+async function loadSubPartners() {
+    const tbody = document.getElementById('subPartnersTable');
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div style="animation:spin 1s linear infinite;width:24px;height:24px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>`;
+
+    const res = await fetch('/api/partners', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_sub_partners', token })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+        tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><span class="material-icons">error</span><p>Failed to load sub-partners.</p></div></td></tr>`;
+        return;
+    }
+
+    const partners = data.data || [];
+
+    // KPIs
+    document.getElementById('kpiTotal').innerText = partners.length;
+    const totalVol = partners.reduce((s, p) => s + parseFloat(p.volume_30_day || 0), 0);
+    document.getElementById('kpiVolume').innerText = fmt(totalVol);
+    const activeCount = partners.filter(p => p.is_portal_active).length;
+    document.getElementById('kpiActive').innerText = activeCount;
+    document.getElementById('tableSubtitle').innerText = partners.length + ' sub-partner' + (partners.length !== 1 ? 's' : '');
+
+    if (!partners.length) {
+        tbody.innerHTML = `<tr><td colspan="7">
+            <div class="empty">
+                <span class="material-icons">account_tree</span>
+                <div class="empty-title">No sub-partners yet</div>
+                <div class="empty-sub">You have no sub-partners yet. Invite your first sub-partner to start building your network.</div>
+            </div>
+        </td></tr>`;
+        return;
+    }
+
+    tbody.innerHTML = partners.map((p, idx) => {
+        const idPills = (p.agent_ids || []).map(id =>
+            `<span class="id-pill">${escHtml(id.id_string)}</span>`
+        ).join('');
+
+        // Rev share display — use first id's rev_share for the row, allow editing per identifier
+        const firstId = (p.agent_ids || [])[0];
+        const revShareDisplay = firstId
+            ? buildRevShareEditor(firstId, idx)
+            : '<span style="color:var(--muted);">—</span>';
+
+        const portalBadge = p.is_portal_active
+            ? '<span class="badge badge-active">Active</span>'
+            : '<span class="badge badge-inactive">Not Activated</span>';
+
+        return `<tr>
+            <td>
+                <div style="font-weight:700;">${escHtml(p.full_name)}</div>
+                <div style="font-size:11px;color:var(--muted);">${escHtml(p.email)}</div>
+            </td>
+            <td><div style="display:flex;flex-wrap:wrap;gap:2px;">${idPills || '<span style="color:var(--muted);">—</span>'}</div></td>
+            <td><span class="mono">${p.merchant_count || 0}</span></td>
+            <td><span class="mono">${fmt(p.volume_30_day)}</span></td>
+            <td>${revShareDisplay}</td>
+            <td>${portalBadge}</td>
+            <td>
+                <button class="btn btn-outline btn-sm" onclick="viewMerchants('${p.person_id}', '${escHtml(p.full_name).replace(/'/g,"\\'")}')">
+                    <span class="material-icons" style="font-size:14px;">storefront</span> View Merchants
+                </button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+function buildRevShareEditor(identObj, rowIdx) {
+    const idStr = identObj.id_string;
+    const identId = identObj.id || '';
+    const revVal = identObj.rev_share !== null && identObj.rev_share !== undefined ? identObj.rev_share : '';
+    return `<div class="rev-edit-wrap" id="revwrap-${rowIdx}">
+        <div class="rev-display" onclick="toggleRevEdit(${rowIdx})">
+            <span class="mono" id="revlabel-${rowIdx}">${revVal !== '' ? revVal + '%' : '—'}</span>
+            <span class="material-icons" style="font-size:13px;color:var(--muted);">edit</span>
+        </div>
+        <div class="rev-input-group" id="revinput-${rowIdx}">
+            <input type="number" min="0" max="100" step="0.1" value="${revVal}" id="revfield-${rowIdx}" data-idstring="${escHtml(idStr)}" data-identid="${escHtml(identId)}">
+            <button class="btn btn-teal btn-sm" onclick="saveRevShare(${rowIdx})">Save</button>
+            <button class="btn btn-outline btn-sm" onclick="cancelRevEdit(${rowIdx})">✕</button>
+        </div>
+    </div>`;
+}
+
+window.toggleRevEdit = function(idx) {
+    document.getElementById('revlabel-' + idx).closest('.rev-display').style.display = 'none';
+    const g = document.getElementById('revinput-' + idx);
+    g.style.display = 'inline-flex';
+    g.querySelector('input').focus();
+};
+
+window.cancelRevEdit = function(idx) {
+    document.getElementById('revlabel-' + idx).closest('.rev-display').style.display = 'inline-flex';
+    document.getElementById('revinput-' + idx).style.display = 'none';
+};
+
+window.saveRevShare = async function(idx) {
+    const field = document.getElementById('revfield-' + idx);
+    const idString = field.dataset.idstring;
+    const newVal = parseFloat(field.value);
+    if (isNaN(newVal) || newVal < 0 || newVal > 100) {
+        Swal.fire({ icon: 'error', title: 'Invalid', text: 'Rev share must be between 0 and 100.', confirmButtonColor: '#0d9488' });
+        return;
+    }
+
+    // Need to find the identifier_id from the idString
+    // We'll use the identifier id_string to look up - in practice we need the UUID
+    // Since the auth endpoint returns identifiers without IDs for sub-partners, we must search
+    // We'll store identifier_id as a data attribute
+    const identId = field.dataset.identid;
+    if (!identId) {
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Identifier ID not found. Please reload the page.', confirmButtonColor: '#0d9488' });
+        return;
+    }
+
+    const res = await fetch('/api/partners', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update_sub_partner_rev_share', token, identifier_id: identId, rev_share: newVal })
+    });
+    const data = await res.json();
+    if (data.success) {
+        document.getElementById('revlabel-' + idx).innerText = newVal + '%';
+        cancelRevEdit(idx);
+        Swal.fire({ icon: 'success', title: 'Saved!', timer: 1200, showConfirmButton: false });
+    } else {
+        Swal.fire({ icon: 'error', title: 'Error', text: data.message || 'Could not update rev share.', confirmButtonColor: '#0d9488' });
+    }
+};
+
+// ── VIEW MERCHANTS MODAL ──────────────────────────────────
+window.viewMerchants = async function(subPersonId, name) {
+    Swal.fire({
+        title: `<div style="text-align:left;font-weight:800;color:#0a1628;">${name}'s Merchants</div>`,
+        width: 700,
+        showConfirmButton: false,
+        showCloseButton: true,
+        html: `<div style="text-align:center;padding:30px;color:#94a3b8;"><div style="animation:spin 1s linear infinite;width:24px;height:24px;border:2px solid #e2e8f0;border-top-color:#0d9488;border-radius:50%;margin:0 auto 12px;"></div>Loading merchants...</div>`
+    });
+
+    const res = await fetch('/api/partners', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'get_sub_partner_merchants', token, sub_person_id: subPersonId })
+    });
+    const data = await res.json();
+
+    if (!data.success) {
+        Swal.update({ html: `<p style="color:#ef4444;text-align:center;">${data.message || 'Failed to load merchants.'}</p>` });
+        return;
+    }
+
+    const merchants = data.data || [];
+
+    let html = `<div style="text-align:left;">`;
+    if (!merchants.length) {
+        html += `<div style="text-align:center;padding:40px;color:#94a3b8;"><span class="material-icons" style="font-size:40px;opacity:0.3;display:block;margin-bottom:8px;">storefront</span>No merchants found.</div>`;
+    } else {
+        html += `<div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                <thead>
+                    <tr>
+                        <th style="background:#f8fafc;padding:10px 16px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;border-bottom:1px solid #e2e8f0;">DBA Name</th>
+                        <th style="background:#f8fafc;padding:10px 16px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;border-bottom:1px solid #e2e8f0;">Merchant ID</th>
+                        <th style="background:#f8fafc;padding:10px 16px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;border-bottom:1px solid #e2e8f0;">Status</th>
+                        <th style="background:#f8fafc;padding:10px 16px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;border-bottom:1px solid #e2e8f0;">30D Volume</th>
+                        <th style="background:#f8fafc;padding:10px 16px;text-align:left;font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;border-bottom:1px solid #e2e8f0;">Enrolled</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${merchants.map(m => {
+                        const st = (m.account_status || '').toLowerCase().replace(/[\s-]+/g, '-');
+                        const badgeStyle = m.account_status === 'Approved'
+                            ? 'background:#dcfce7;color:#166534'
+                            : m.account_status === 'Pending'
+                            ? 'background:#fef3c7;color:#92400e'
+                            : 'background:#f1f5f9;color:#475569';
+                        return `<tr style="border-bottom:1px solid #e2e8f0;">
+                            <td style="padding:10px 16px;font-weight:700;">${escHtml(m.dba_name || '—')}</td>
+                            <td style="padding:10px 16px;font-family:'DM Mono',monospace;font-size:11px;color:#0d9488;">${escHtml(m.merchant_id || '—')}</td>
+                            <td style="padding:10px 16px;"><span style="padding:3px 10px;border-radius:99px;font-size:10px;font-weight:700;${badgeStyle}">${m.account_status || '—'}</span></td>
+                            <td style="padding:10px 16px;font-family:'DM Mono',monospace;font-size:12px;">${fmt(m.volume_30_day)}</td>
+                            <td style="padding:10px 16px;font-size:12px;color:#64748b;">${m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : '—'}</td>
+                        </tr>`;
+                    }).join('')}
+                </tbody>
+            </table>
+        </div>`;
+    }
+    html += `</div>`;
+
+    Swal.update({ html });
+};
+
+// ── INVITE MODAL ──────────────────────────────────────────
+async function openInviteModal() {
+    if (!myIdentifiers || !myIdentifiers.length) {
+        Swal.fire({ icon: 'info', title: 'No Agent IDs', text: 'You need at least one Agent ID before you can invite a sub-partner.', confirmButtonColor: '#0d9488' });
+        return;
+    }
+
+    const identOptions = myIdentifiers.map(id =>
+        `<option value="${escHtml(id.id_string)}">${escHtml(id.id_string)}${id.rev_share ? ' (' + id.rev_share + '% rev)' : ''}</option>`
+    ).join('');
+
+    const { value: form } = await Swal.fire({
+        title: 'Invite Sub-Partner',
+        showCancelButton: true,
+        confirmButtonColor: '#0d9488',
+        confirmButtonText: 'Send Invite',
+        width: 520,
+        html: `
+            <div style="text-align:left;">
+                <div style="background:#e0f2fe;border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;color:#0369a1;">
+                    The sub-partner will receive an email invite to set up their portal account.
+                </div>
+
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Full Name *</label>
+                <input id="inv-name" class="swal2-input" placeholder="e.g. Jane Smith" style="margin:0 0 12px;">
+
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Email *</label>
+                <input id="inv-email" class="swal2-input" type="email" placeholder="jane@example.com" style="margin:0 0 12px;">
+
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Agent ID String *</label>
+                <input id="inv-agentid" class="swal2-input" placeholder="e.g. PPT-XYZ001" style="margin:0 0 12px;">
+
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Rev Share % *</label>
+                <input id="inv-revshare" class="swal2-input" type="number" min="0" max="100" step="0.1" placeholder="e.g. 25" style="margin:0 0 12px;">
+
+                <label style="display:block;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:4px;">Parent Identifier (your Agent ID) *</label>
+                <select id="inv-parentid" class="swal2-input" style="margin:0 0 4px;">
+                    <option value="">Select your Agent ID...</option>
+                    ${identOptions}
+                </select>
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:8px;">The sub-partner will be linked under this Agent ID.</div>
+            </div>`,
+        preConfirm: () => {
+            const name = document.getElementById('inv-name').value.trim();
+            const email = document.getElementById('inv-email').value.trim();
+            const agentIdStr = document.getElementById('inv-agentid').value.trim();
+            const revShare = document.getElementById('inv-revshare').value;
+            const parentIdString = document.getElementById('inv-parentid').value;
+
+            if (!name) { Swal.showValidationMessage('Full name is required.'); return false; }
+            if (!email || !email.includes('@')) { Swal.showValidationMessage('Valid email is required.'); return false; }
+            if (!agentIdStr) { Swal.showValidationMessage('Agent ID string is required.'); return false; }
+            if (!revShare && revShare !== '0') { Swal.showValidationMessage('Rev share is required.'); return false; }
+            if (!parentIdString) { Swal.showValidationMessage('Please select a parent identifier.'); return false; }
+
+            return { name, email, agentIdStr, revShare: parseFloat(revShare), parentIdString };
+        }
+    });
+
+    if (!form) return;
+
+    // We need the parent identifier UUID, not the id_string.
+    // Fetch from the identifiers we got from the auth endpoint — but those only have id_string.
+    // We need to do an API lookup. Let's POST to get the identifier UUID.
+    Swal.fire({ title: 'Sending invite...', didOpen: () => Swal.showLoading() });
+
+    // First resolve parent identifier UUID via a quick lookup
+    let parentIdentId = null;
+    try {
+        const lookupRes = await fetch('/api/partners', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'resolve_identifier_id', token, id_string: form.parentIdString })
+        });
+        const lookupData = await lookupRes.json();
+        parentIdentId = lookupData.identifier_id || null;
+    } catch (e) { /* ignore, will fail below */ }
+
+    if (!parentIdentId) {
+        // Fallback: We'll pass id_string and let the server resolve.
+        // We submit with parent_id_string and the server will resolve it.
+    }
+
+    const res = await fetch('/api/partners', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            action: 'invite_sub_partner',
+            token,
+            email: form.email,
+            full_name: form.name,
+            agent_id_string: form.agentIdStr,
+            rev_share: form.revShare,
+            parent_identifier_id: parentIdentId,
+            parent_id_string: form.parentIdString  // server fallback
+        })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+        Swal.fire({ icon: 'success', title: 'Invite Sent!', html: `<b>${escHtml(form.name)}</b> has been invited. They'll receive an email to set up their portal account.`, confirmButtonColor: '#0d9488' });
+        loadSubPartners();
+    } else {
+        Swal.fire({ icon: 'error', title: 'Failed', text: data.message || 'Could not send invite.', confirmButtonColor: '#0d9488' });
+    }
+}
+
+async function handleLogout() {
+    await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout', token }) });
+    localStorage.clear();
+    window.location.href = '/partner';
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+window.onload = init;
+</script>
+<script src="/js/site-config.js"></script>
+<script src="/js/partner-nav.js"></script>
+</body>
+</html>
