@@ -106,12 +106,17 @@ export async function getValidAccessToken(personId, provider) {
     return fresh.access_token;
 }
 
+// ── RFC 2047 encode a header value so non-ASCII (em dash, accents) survives ──
+function encodeHeader(str) {
+    return `=?UTF-8?B?${Buffer.from(str, 'utf8').toString('base64')}?=`;
+}
+
 // ── Send email via Gmail API ─────────────────────────────────────────────────
 export async function sendViaGoogle(accessToken, { to, subject, html, from }) {
     const mime = [
-        `From: ${from}`,
+        `From: ${encodeHeader(from)}`,
         `To: ${to}`,
-        `Subject: ${subject}`,
+        `Subject: ${encodeHeader(subject)}`,
         'MIME-Version: 1.0',
         'Content-Type: text/html; charset=UTF-8',
         '',
