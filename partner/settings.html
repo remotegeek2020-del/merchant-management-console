@@ -146,6 +146,61 @@
             </div>
         </div>
 
+        <!-- API USAGE DASHBOARD -->
+        <div class="settings-section" id="apiUsageSection">
+            <div class="section-title">API Usage</div>
+            <div class="section-sub">Your API call usage for the current billing period</div>
+
+            <div id="apiUsageContent" style="display:none;">
+                <!-- Tier badge -->
+                <div style="display:flex;align-items:center;gap:10px;margin-bottom:20px;">
+                    <span style="font-size:12px;font-weight:700;color:var(--secondary);">Current Tier:</span>
+                    <span id="tierBadge" style="padding:3px 12px;border-radius:99px;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:0.5px;"></span>
+                </div>
+
+                <!-- Today's usage -->
+                <div style="margin-bottom:16px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+                        <span style="font-size:12px;font-weight:700;color:var(--secondary);">Today's Calls</span>
+                        <span id="todayLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+                    </div>
+                    <div style="height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden;">
+                        <div id="todayBar" style="height:100%;border-radius:99px;transition:width 0.5s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- Monthly usage -->
+                <div style="margin-bottom:20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;">
+                        <span style="font-size:12px;font-weight:700;color:var(--secondary);">This Month</span>
+                        <span id="monthLabel" style="font-size:11px;color:var(--muted);font-family:'DM Mono',monospace;"></span>
+                    </div>
+                    <div style="height:8px;background:#f1f5f9;border-radius:99px;overflow:hidden;">
+                        <div id="monthBar" style="height:100%;border-radius:99px;transition:width 0.5s ease;"></div>
+                    </div>
+                </div>
+
+                <!-- 7-day sparkline -->
+                <div style="margin-bottom:20px;">
+                    <div style="font-size:12px;font-weight:700;color:var(--secondary);margin-bottom:10px;">7-Day Call Volume</div>
+                    <div id="sparklineContainer" style="display:flex;align-items:flex-end;gap:4px;height:56px;padding:0 2px;"></div>
+                    <div id="sparklineDates" style="display:flex;gap:4px;margin-top:4px;"></div>
+                </div>
+
+                <!-- Top endpoints table -->
+                <div id="topEndpointsWrap" style="display:none;">
+                    <div style="font-size:12px;font-weight:700;color:var(--secondary);margin-bottom:10px;">Top Endpoints (30 days)</div>
+                    <div id="topEndpointsTable"></div>
+                </div>
+            </div>
+
+            <div id="apiUsageLoading" style="text-align:center;padding:20px;color:var(--muted);font-size:13px;">Loading usage stats...</div>
+
+            <div style="margin-top:16px;padding:11px 14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;font-size:12px;color:#0f766e;">
+                Need higher limits? <strong>Contact support</strong> to upgrade your tier.
+            </div>
+        </div>
+
         <!-- WEBHOOKS -->
         <div class="settings-section">
             <div class="section-title">Webhooks</div>
@@ -507,10 +562,101 @@ async function deleteWebhook(id) {
     if (res.success) { Swal.fire({ icon: 'success', title: 'Deleted', timer: 1200, showConfirmButton: false }); loadWebhooks(); }
 }
 
+// ── API USAGE DASHBOARD ───────────────────────────────────────
+function usageBarColor(pct) {
+    if (pct >= 80) return '#ef4444';
+    if (pct >= 50) return '#f59e0b';
+    return '#10b981';
+}
+
+async function loadApiUsage() {
+    try {
+        const res = await api('partners', { action: 'get_api_usage', token });
+        document.getElementById('apiUsageLoading').style.display = 'none';
+
+        if (!res.success) {
+            document.getElementById('apiUsageLoading').style.display = 'block';
+            document.getElementById('apiUsageLoading').textContent = 'Could not load usage stats.';
+            return;
+        }
+
+        document.getElementById('apiUsageContent').style.display = 'block';
+
+        const d = res.data;
+        const tierColors = { free: '#0d9488', standard: '#2563eb', enterprise: '#7c3aed' };
+        const tierColor = tierColors[d.tier] || '#0d9488';
+
+        // Tier badge
+        const badge = document.getElementById('tierBadge');
+        badge.textContent = d.tier.charAt(0).toUpperCase() + d.tier.slice(1);
+        badge.style.background = tierColor + '1a';
+        badge.style.color = tierColor;
+        badge.style.border = '1.5px solid ' + tierColor + '44';
+
+        // Today bar
+        const todayPct = d.daily_limit > 0 ? Math.min(100, Math.round(d.calls_today / d.daily_limit * 100)) : 0;
+        document.getElementById('todayLabel').textContent = d.calls_today.toLocaleString() + ' / ' + d.daily_limit.toLocaleString() + ' (' + todayPct + '%)';
+        document.getElementById('todayBar').style.width = todayPct + '%';
+        document.getElementById('todayBar').style.background = usageBarColor(todayPct);
+
+        // Month bar
+        const monthPct = d.monthly_limit > 0 ? Math.min(100, Math.round(d.calls_this_month / d.monthly_limit * 100)) : 0;
+        document.getElementById('monthLabel').textContent = d.calls_this_month.toLocaleString() + ' / ' + d.monthly_limit.toLocaleString() + ' (' + monthPct + '%)';
+        document.getElementById('monthBar').style.width = monthPct + '%';
+        document.getElementById('monthBar').style.background = usageBarColor(monthPct);
+
+        // 7-day sparkline
+        const days = d.calls_by_day || [];
+        const maxCount = Math.max(...days.map(d => d.count), 1);
+        const sparkCont = document.getElementById('sparklineContainer');
+        const sparkDates = document.getElementById('sparklineDates');
+        sparkCont.innerHTML = '';
+        sparkDates.innerHTML = '';
+
+        days.forEach(day => {
+            const barH = Math.max(4, Math.round((day.count / maxCount) * 48));
+            const barColor = day.count === 0 ? '#e2e8f0' : tierColor;
+            const bar = document.createElement('div');
+            bar.title = day.label + ': ' + day.count + ' calls';
+            bar.style.cssText = `flex:1;height:${barH}px;background:${barColor};border-radius:3px 3px 0 0;cursor:default;transition:opacity 0.2s;`;
+            bar.onmouseenter = () => { bar.style.opacity = '0.75'; };
+            bar.onmouseleave = () => { bar.style.opacity = '1'; };
+            sparkCont.appendChild(bar);
+
+            const lbl = document.createElement('div');
+            lbl.textContent = new Date(day.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short' });
+            lbl.style.cssText = 'flex:1;font-size:9px;color:var(--muted);text-align:center;font-family:"DM Mono",monospace;';
+            sparkDates.appendChild(lbl);
+        });
+
+        // Top endpoints
+        if (d.top_endpoints && d.top_endpoints.length > 0) {
+            document.getElementById('topEndpointsWrap').style.display = 'block';
+            const maxEpCount = d.top_endpoints[0].count || 1;
+            document.getElementById('topEndpointsTable').innerHTML = d.top_endpoints.map(ep => {
+                const epPct = Math.round(ep.count / maxEpCount * 100);
+                return `<div style="margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:3px;">
+                        <code style="font-size:11px;color:var(--text);font-family:'DM Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:70%;" title="${ep.endpoint}">${ep.endpoint}</code>
+                        <span style="font-size:11px;color:var(--muted);flex-shrink:0;margin-left:8px;">${ep.count.toLocaleString()} calls</span>
+                    </div>
+                    <div style="height:5px;background:#f1f5f9;border-radius:99px;overflow:hidden;">
+                        <div style="height:100%;width:${epPct}%;background:${tierColor};border-radius:99px;"></div>
+                    </div>
+                </div>`;
+            }).join('');
+        }
+
+    } catch (e) {
+        document.getElementById('apiUsageLoading').textContent = 'Could not load usage stats.';
+    }
+}
+
 window.onload = async function() {
     await init();
     loadApiKeys();
     loadWebhooks();
+    loadApiUsage();
 };
 </script>
 <script src="/js/site-config.js"></script>
