@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Merchant Application — PayProTec</title>
+    <title>Add Merchant Application</title>
     <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32">
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
     <style>
@@ -282,7 +282,7 @@
     <!-- Header -->
     <div class="apply-header">
         <div class="apply-brand">PayProTec<span></span></div>
-        <div class="apply-subtitle">Merchant Account Application</div>
+        <div class="apply-subtitle">Add Merchant Application</div>
         <div id="referral-badge" class="apply-referral" style="display:none;"></div>
     </div>
 
@@ -291,8 +291,8 @@
 
         <!-- Form -->
         <div id="form-section">
-            <h2>Apply for a Merchant Account</h2>
-            <p class="card-desc">Fill in your business details below. A PayProTec representative will review your application and follow up within 1 business day.</p>
+            <h2>Add Merchant Application</h2>
+            <p class="card-desc">Fill in the merchant's business details below to create a new merchant record.</p>
 
             <form id="apply-form" novalidate>
 
@@ -410,7 +410,7 @@
                 <!-- Hidden partner agent_id -->
                 <input type="hidden" id="agent_id" name="agent_id" value="">
 
-                <button type="submit" class="submit-btn" id="submit-btn">Submit Application</button>
+                <button type="submit" class="submit-btn" id="submit-btn">Create Merchant</button>
 
                 <div class="error-banner" id="error-banner"></div>
 
@@ -431,9 +431,13 @@
 
     </div>
 
-    <div class="apply-footer">Powered by <strong>PayProTec</strong></div>
-
     <script>
+    (function() {
+        if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
+            window.location.href = 'index.html?reason=unauthorized';
+        }
+    })();
+
     (function () {
         // ── Partner lookup ───────────────────────────────────────────────────
         const params = new URLSearchParams(window.location.search);
@@ -523,7 +527,7 @@
             });
 
             submitBtn.disabled = true;
-            submitBtn.textContent = 'Submitting…';
+            submitBtn.textContent = 'Creating…';
 
             try {
                 const res = await fetch('/api/apply', {
@@ -550,7 +554,7 @@
 
                 } else {
                     submitBtn.disabled = false;
-                    submitBtn.textContent = 'Submit Application';
+                    submitBtn.textContent = 'Create Merchant';
 
                     if (data.missing && data.missing.length > 0) {
                         data.missing.forEach(markInvalid);
@@ -562,7 +566,7 @@
 
             } catch (err) {
                 submitBtn.disabled = false;
-                submitBtn.textContent = 'Submit Application';
+                submitBtn.textContent = 'Create Merchant';
                 showError('A network error occurred. Please check your connection and try again.');
             }
         });
