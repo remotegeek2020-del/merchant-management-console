@@ -10,15 +10,97 @@
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||!r.includes('super'))window.location.href='index.html?reason=denied';})();</script>
     <style>
-        .co-card { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px; transition:all 0.2s; }
+        .co-card { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px; transition:all 0.2s; cursor:pointer; }
         .co-card:hover { border-color:#004990; box-shadow:0 2px 8px rgba(0,73,144,0.08); }
         .co-name { font-weight:700; flex:1; }
         .co-count { font-size:11px; color:#94a3b8; }
         .co-count.used { color:#0369a1; font-weight:700; }
         @keyframes spin { to { transform:rotate(360deg); } }
+
+        /* ── Slide-out panel ────────────────────────────────── */
+        #detailOverlay {
+            position:fixed; inset:0; background:rgba(0,0,0,0.35);
+            z-index:900; opacity:0; pointer-events:none; transition:opacity 0.25s;
+        }
+        #detailOverlay.open { opacity:1; pointer-events:all; }
+
+        #detailPanel {
+            position:fixed; top:0; right:-480px; width:460px; max-width:100vw;
+            height:100vh; background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,0.12);
+            z-index:901; display:flex; flex-direction:column;
+            transition:right 0.28s cubic-bezier(.4,0,.2,1);
+            font-family:'DM Sans',sans-serif;
+        }
+        #detailPanel.open { right:0; }
+
+        .dp-header {
+            padding:18px 20px 14px;
+            border-bottom:1px solid #e2e8f0;
+            display:flex; align-items:center; gap:10px;
+        }
+        .dp-header-title { font-size:15px; font-weight:800; color:#0f172a; flex:1; }
+        .dp-close {
+            background:none; border:none; cursor:pointer; color:#94a3b8;
+            display:flex; align-items:center; padding:4px; border-radius:6px;
+        }
+        .dp-close:hover { background:#f1f5f9; color:#475569; }
+
+        .dp-body { flex:1; overflow-y:auto; padding:16px 20px; }
+
+        .dp-section-title {
+            font-size:10px; font-weight:800; color:#94a3b8;
+            text-transform:uppercase; letter-spacing:.06em;
+            margin:18px 0 8px;
+        }
+        .dp-section-title:first-child { margin-top:0; }
+
+        /* ── Merchant rows in panel ─────────────────────────── */
+        .m-row {
+            display:flex; align-items:center; gap:10px;
+            padding:9px 0; border-bottom:1px solid #f1f5f9;
+        }
+        .m-row:last-child { border-bottom:none; }
+        .m-mid { font-family:'DM Mono',monospace; font-size:11px; color:#64748b; min-width:90px; }
+        .m-dba { font-weight:600; font-size:13px; flex:1; }
+        .m-status {
+            font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px;
+            background:#dcfce7; color:#15803d;
+        }
+        .m-status.closed { background:#fee2e2; color:#991b1b; }
+        .m-status.pending { background:#fef9c3; color:#854d0e; }
+        .m-status.risk { background:#fce7f3; color:#9d174d; }
+
+        .dp-empty { text-align:center; padding:28px 0; color:#94a3b8; font-size:13px; }
+
+        /* ── Search results in link modal ───────────────────── */
+        .link-result {
+            display:flex; align-items:center; gap:10px;
+            padding:9px 12px; border:1px solid #e2e8f0; border-radius:8px;
+            cursor:pointer; transition:all 0.15s; margin-bottom:6px; background:#fff;
+        }
+        .link-result:hover { border-color:#004990; background:#f0f7ff; }
+        .link-result.selected { border-color:#004990; background:#eff6ff; }
+        .link-r-mid { font-family:'DM Mono',monospace; font-size:11px; color:#64748b; min-width:90px; }
+        .link-r-dba { font-weight:600; font-size:13px; flex:1; }
     </style>
 </head>
 <body>
+
+<!-- Slide-out overlay + panel -->
+<div id="detailOverlay" onclick="closeDetail()"></div>
+<div id="detailPanel">
+    <div class="dp-header">
+        <span class="material-icons" style="color:#004990;font-size:20px;">business</span>
+        <div class="dp-header-title" id="dpTitle">Company Detail</div>
+        <button class="dp-close" onclick="closeDetail()" title="Close">
+            <span class="material-icons" style="font-size:20px;">close</span>
+        </button>
+    </div>
+    <div class="dp-body" id="dpBody">
+        <!-- populated dynamically -->
+    </div>
+</div>
+
 <div class="pp-container">
     <div class="pp-header">
         <div class="pp-header-left">
@@ -69,6 +151,8 @@
 
 <script>
 var allCompanies = [];
+var currentCompany = null;
+var selectedLinkMerchant = null;
 
 function api(body) {
     return fetch('/api/partners', {
@@ -85,7 +169,6 @@ async function loadCompanies() {
 
     // Stats
     var unused = allCompanies.filter(function(c){ return c.agent_count === 0; });
-    // Find possible duplicates (similar names)
     var names = allCompanies.map(function(c){ return c.company_name.toLowerCase().trim(); });
     var dups = allCompanies.filter(function(c, i) {
         return names.indexOf(c.company_name.toLowerCase().trim()) !== i ||
@@ -118,7 +201,7 @@ function renderCompanies(data) {
 
         var icon = document.createElement('span');
         icon.className = 'material-icons';
-        icon.style.cssText = 'color:#94a3b8;font-size:20px;';
+        icon.style.cssText = 'color:#94a3b8;font-size:20px;flex-shrink:0;';
         icon.textContent = 'business';
 
         var nameDiv = document.createElement('div');
@@ -129,6 +212,13 @@ function renderCompanies(data) {
         countDiv.className = 'co-count' + (co.agent_count > 0 ? ' used' : '');
         countDiv.textContent = co.agent_count + ' agent' + (co.agent_count !== 1 ? 's' : '');
 
+        // Merchants chip (click to open panel)
+        var merchantChip = document.createElement('div');
+        merchantChip.style.cssText = 'font-size:11px;color:#0369a1;background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:2px 9px;cursor:pointer;white-space:nowrap;';
+        merchantChip.innerHTML = '<span class="material-icons" style="font-size:12px;vertical-align:-2px;margin-right:3px;">storefront</span>View Merchants';
+        merchantChip.title = 'View linked merchants';
+        merchantChip.onclick = (function(c){ return function(e){ e.stopPropagation(); openDetail(c); }; })(co);
+
         var btnWrap = document.createElement('div');
         btnWrap.style.cssText = 'display:flex;gap:6px;';
 
@@ -137,14 +227,14 @@ function renderCompanies(data) {
         renameBtn.style.cssText = 'padding:5px 10px;font-size:11px;';
         renameBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">edit</span>';
         renameBtn.title = 'Rename';
-        renameBtn.onclick = (function(c){ return function(){ renameCompany(c); }; })(co);
+        renameBtn.onclick = (function(c){ return function(e){ e.stopPropagation(); renameCompany(c); }; })(co);
 
         var mergeBtn = document.createElement('button');
         mergeBtn.className = 'pp-btn pp-btn-secondary';
         mergeBtn.style.cssText = 'padding:5px 10px;font-size:11px;background:#fef3c7;border-color:#fbbf24;color:#92400e;';
         mergeBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">merge</span>';
         mergeBtn.title = 'Merge into another company';
-        mergeBtn.onclick = (function(c){ return function(){ mergeCompany(c); }; })(co);
+        mergeBtn.onclick = (function(c){ return function(e){ e.stopPropagation(); mergeCompany(c); }; })(co);
 
         var deleteBtn = document.createElement('button');
         deleteBtn.className = 'pp-btn';
@@ -152,7 +242,7 @@ function renderCompanies(data) {
         deleteBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">delete</span>';
         deleteBtn.title = co.agent_count > 0 ? 'Cannot delete — has agents' : 'Delete';
         deleteBtn.disabled = co.agent_count > 0;
-        deleteBtn.onclick = (function(c){ return function(){ deleteCompany(c); }; })(co);
+        deleteBtn.onclick = (function(c){ return function(e){ e.stopPropagation(); deleteCompany(c); }; })(co);
 
         btnWrap.appendChild(renameBtn);
         btnWrap.appendChild(mergeBtn);
@@ -161,11 +251,195 @@ function renderCompanies(data) {
         card.appendChild(icon);
         card.appendChild(nameDiv);
         card.appendChild(countDiv);
+        card.appendChild(merchantChip);
         card.appendChild(btnWrap);
+
+        // Clicking the card body (not buttons) also opens the detail panel
+        card.onclick = (function(c){ return function(){ openDetail(c); }; })(co);
+
         grid.appendChild(card);
     });
 }
 
+/* ──────────────────────────────────────────────────
+   DETAIL PANEL
+────────────────────────────────────────────────── */
+function openDetail(co) {
+    currentCompany = co;
+    document.getElementById('dpTitle').textContent = co.company_name;
+    document.getElementById('dpBody').innerHTML =
+        '<div style="text-align:center;padding:32px;color:#94a3b8;">' +
+        '<div style="width:18px;height:18px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;"></div>' +
+        'Loading merchants…</div>';
+    document.getElementById('detailOverlay').classList.add('open');
+    document.getElementById('detailPanel').classList.add('open');
+    fetchCompanyMerchants(co);
+}
+
+function closeDetail() {
+    document.getElementById('detailOverlay').classList.remove('open');
+    document.getElementById('detailPanel').classList.remove('open');
+    currentCompany = null;
+}
+
+async function fetchCompanyMerchants(co) {
+    var result = await api({ action: 'get_company_merchants', company_id: co.id });
+    var merchants = result.success ? (result.data || []) : [];
+    renderDetailPanel(co, merchants);
+}
+
+function statusClass(s) {
+    if (!s) return '';
+    var l = s.toLowerCase();
+    if (l === 'approved') return '';
+    if (l.includes('closed') || l.includes('cancel')) return 'closed';
+    if (l.includes('pend')) return 'pending';
+    if (l.includes('risk')) return 'risk';
+    return '';
+}
+
+function renderDetailPanel(co, merchants) {
+    var body = document.getElementById('dpBody');
+
+    // Stats row
+    var approved = merchants.filter(function(m){ return (m.account_status||'').toLowerCase() === 'approved'; });
+    var vol = approved.reduce(function(s, m){ return s + (parseFloat(m.volume_30_day) || 0); }, 0);
+
+    var html = '<div style="display:flex;gap:8px;margin-bottom:4px;">' +
+        '<div style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:10px;padding:10px;text-align:center;">' +
+        '<div style="font-size:1.3rem;font-weight:800;color:#004990;">' + merchants.length + '</div>' +
+        '<div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Total</div></div>' +
+        '<div style="flex:1;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:10px;text-align:center;">' +
+        '<div style="font-size:1.3rem;font-weight:800;color:#15803d;">' + approved.length + '</div>' +
+        '<div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Approved</div></div>' +
+        '<div style="flex:1;background:#fefce8;border:1px solid #fde68a;border-radius:10px;padding:10px;text-align:center;">' +
+        '<div style="font-size:1rem;font-weight:800;color:#854d0e;">$' + (vol >= 1000000 ? (vol/1000000).toFixed(1)+'M' : vol >= 1000 ? (vol/1000).toFixed(0)+'K' : vol.toFixed(0)) + '</div>' +
+        '<div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">30d Vol</div></div>' +
+        '</div>';
+
+    // Link Merchant button
+    html += '<button class="pp-btn pp-btn-primary" onclick="openLinkModal()" style="width:100%;margin:12px 0 4px;font-size:13px;">' +
+        '<span class="material-icons" style="font-size:15px;">link</span> Link Merchant to this Company</button>';
+
+    // Merchant list
+    html += '<div class="dp-section-title">Linked Merchants</div>';
+
+    if (!merchants.length) {
+        html += '<div class="dp-empty"><span class="material-icons" style="font-size:32px;display:block;margin-bottom:6px;">storefront</span>No merchants linked yet</div>';
+    } else {
+        html += '<div>';
+        merchants.forEach(function(m) {
+            var sc = statusClass(m.account_status);
+            html += '<div class="m-row">' +
+                '<div class="m-mid">' + (m.merchant_id || '—') + '</div>' +
+                '<div class="m-dba">' + escapeHtml(m.dba_name || '—') + '</div>' +
+                '<div class="m-status ' + sc + '">' + (m.account_status || '—') + '</div>' +
+                '</div>';
+        });
+        html += '</div>';
+    }
+
+    body.innerHTML = html;
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+/* ──────────────────────────────────────────────────
+   LINK MERCHANT MODAL
+────────────────────────────────────────────────── */
+function openLinkModal() {
+    if (!currentCompany) return;
+    selectedLinkMerchant = null;
+
+    Swal.fire({
+        title: 'Link Merchant',
+        html:
+            '<p style="color:#475569;font-size:13px;margin-bottom:12px;">Search for a merchant by DBA name or MID and link it to <b>' + escapeHtml(currentCompany.company_name) + '</b>.</p>' +
+            '<div style="position:relative;margin-bottom:10px;">' +
+            '<span class="material-icons" style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:18px;">search</span>' +
+            '<input id="linkSearch" type="text" placeholder="Search DBA or MID…" ' +
+            'style="width:100%;box-sizing:border-box;padding:10px 10px 10px 36px;border:1.5px solid #e2e8f0;border-radius:8px;font-family:DM Sans,sans-serif;font-size:13px;outline:none;" ' +
+            'oninput="handleLinkSearch(this.value)">' +
+            '</div>' +
+            '<div id="linkResults" style="max-height:220px;overflow-y:auto;"></div>' +
+            '<div id="linkSelected" style="display:none;margin-top:8px;padding:9px 12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;color:#1e3a5f;"></div>',
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Link Merchant',
+        cancelButtonText: 'Cancel',
+        didOpen: function() {
+            document.getElementById('linkSearch').focus();
+        },
+        preConfirm: function() {
+            if (!selectedLinkMerchant) {
+                Swal.showValidationMessage('Please select a merchant from the search results.');
+                return false;
+            }
+            return selectedLinkMerchant;
+        }
+    }).then(async function(result) {
+        if (result.isConfirmed && result.value) {
+            var m = result.value;
+            var r = await api({ action: 'link_merchant', merchant_id: m.merchant_id, company_id: currentCompany.id });
+            if (r.success) {
+                await loadCompanies();
+                // Refresh the panel merchants
+                fetchCompanyMerchants(currentCompany);
+                Swal.fire({ icon: 'success', title: 'Merchant linked!', text: m.dba_name + ' is now linked to ' + currentCompany.company_name, timer: 2000, showConfirmButton: false });
+            } else {
+                Swal.fire({ icon: 'error', title: 'Link failed', text: r.message || 'An error occurred.', confirmButtonColor: '#004990' });
+            }
+        }
+    });
+}
+
+var linkSearchTimeout = null;
+function handleLinkSearch(val) {
+    clearTimeout(linkSearchTimeout);
+    var resultsEl = document.getElementById('linkResults');
+    if (!val || val.trim().length < 2) {
+        resultsEl.innerHTML = '';
+        return;
+    }
+    resultsEl.innerHTML = '<div style="text-align:center;padding:14px;color:#94a3b8;font-size:12px;">Searching…</div>';
+    linkSearchTimeout = setTimeout(async function() {
+        var r = await api({ action: 'search_merchants_for_link', query: val });
+        var items = r.success ? (r.data || []) : [];
+        if (!items.length) {
+            resultsEl.innerHTML = '<div style="text-align:center;padding:14px;color:#94a3b8;font-size:12px;">No merchants found</div>';
+            return;
+        }
+        var html = '';
+        items.forEach(function(m) {
+            html += '<div class="link-result" data-mid="' + escapeHtml(m.merchant_id) + '" onclick="selectLinkMerchant(' + JSON.stringify(m).replace(/"/g, '&quot;') + ')">' +
+                '<div class="link-r-mid">' + escapeHtml(m.merchant_id || '') + '</div>' +
+                '<div class="link-r-dba">' + escapeHtml(m.dba_name || '') + '</div>' +
+                '<div style="font-size:10px;color:#64748b;">' + (m.account_status || '') + '</div>' +
+                '</div>';
+        });
+        resultsEl.innerHTML = html;
+    }, 350);
+}
+
+function selectLinkMerchant(m) {
+    selectedLinkMerchant = m;
+    // Highlight selected
+    var all = document.querySelectorAll('.link-result');
+    all.forEach(function(el){ el.classList.remove('selected'); });
+    var el = document.querySelector('.link-result[data-mid="' + m.merchant_id + '"]');
+    if (el) el.classList.add('selected');
+    // Show summary
+    var sel = document.getElementById('linkSelected');
+    sel.style.display = 'block';
+    sel.innerHTML = '<span class="material-icons" style="font-size:14px;vertical-align:-2px;color:#004990;">check_circle</span> ' +
+        '<b>' + escapeHtml(m.dba_name) + '</b> (' + escapeHtml(m.merchant_id) + ') will be linked to <b>' + escapeHtml(currentCompany.company_name) + '</b>';
+}
+
+/* ──────────────────────────────────────────────────
+   EXISTING CRUD
+────────────────────────────────────────────────── */
 async function addCompany() {
     var result = await Swal.fire({
         title: 'Add New Company',
@@ -177,8 +451,6 @@ async function addCompany() {
         inputValidator: function(v){ if (!v.trim()) return 'Please enter a company name'; }
     });
     if (result.value) {
-        await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_companies', name: result.value.trim() }) });
-        // Actually insert via supabase directly through a dedicated action
         var r = await api({ action: 'rename_company', company_id: null, name: result.value.trim(), create: true });
         await loadCompanies();
         Swal.fire({ icon:'success', title:'Company added!', timer:1500, showConfirmButton:false });
@@ -198,6 +470,11 @@ async function renameCompany(co) {
     if (result.value && result.value.trim() !== co.company_name) {
         await api({ action: 'rename_company', company_id: co.id, name: result.value.trim() });
         await loadCompanies();
+        // If the renamed company is currently open in the panel, refresh title
+        if (currentCompany && currentCompany.id === co.id) {
+            currentCompany.company_name = result.value.trim();
+            document.getElementById('dpTitle').textContent = currentCompany.company_name;
+        }
         Swal.fire({ icon:'success', title:'Renamed!', timer:1200, showConfirmButton:false });
     }
 }
@@ -217,6 +494,7 @@ async function mergeCompany(co) {
     });
     if (result.isConfirmed) {
         await api({ action: 'merge_companies', keep_id: result.value, delete_id: co.id });
+        if (currentCompany && currentCompany.id === co.id) closeDetail();
         await loadCompanies();
         Swal.fire({ icon:'success', title:'Merged!', timer:1500, showConfirmButton:false });
     }
@@ -234,6 +512,7 @@ async function deleteCompany(co) {
     if (conf.isConfirmed) {
         var r = await api({ action: 'delete_company', company_id: co.id });
         if (r.success) {
+            if (currentCompany && currentCompany.id === co.id) closeDetail();
             await loadCompanies();
             Swal.fire({ icon:'success', title:'Deleted!', timer:1200, showConfirmButton:false });
         } else {
