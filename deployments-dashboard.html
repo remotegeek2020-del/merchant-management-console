@@ -215,6 +215,20 @@
                 <div id="mSuggestions" class="suggestions-list"></div>
             </div>
 
+            <!-- JARVIS Suggests panel — appears after merchant is selected -->
+            <div id="jarvisSuggestPanel" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px; margin-bottom:15px; max-height:120px; overflow:hidden;">
+                <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
+                    <span class="material-icons" style="font-size:15px; color:#2563eb;">auto_awesome</span>
+                    <span style="font-size:10px; font-weight:800; color:#1d4ed8; text-transform:uppercase; letter-spacing:0.6px;">JARVIS Suggests</span>
+                </div>
+                <div id="jarvisSuggestContent">
+                    <div style="display:flex; align-items:center; gap:8px; color:#6b7280; font-size:12px;">
+                        <span class="material-icons" style="font-size:16px; animation: spin 1.5s linear infinite; color:#3b82f6;">sync</span>
+                        Analyzing merchant profile…
+                    </div>
+                </div>
+            </div>
+
             <!-- SINGLE mode: existing serial + TID -->
             <div id="singleModeFields">
                 <div style="position:relative; margin-bottom: 15px;">
@@ -1176,6 +1190,7 @@ async function processReturn() {
         document.getElementById('selectedMerchantId').value = id;
         document.getElementById('mSearch').value = name;
         document.getElementById('mSuggestions').style.display = 'none';
+        triggerJarvisSuggestions(id);
     }
 
     async function handleEquipSearch(val) {
@@ -1506,6 +1521,160 @@ async function saveDeployment(event) {
 }
 
     function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
+
+    // ── JARVIS EQUIPMENT SUGGESTIONS ──────────────────────────────────────────
+    let _jarvisStockCache = null; // Cache stocked models so we don't re-fetch every time
+
+    async function getStockedModels() {
+        if (_jarvisStockCache) return _jarvisStockCache;
+        try {
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'list', filterStatus: 'stocked', filterLocation: 'Warsaw Office', limit: 200, page: 0 })
+            });
+            const result = await res.json();
+            if (!result.success || !result.data?.length) return [];
+            // Deduplicate terminal_types
+            const models = [...new Set(result.data.map(e => e.terminal_type).filter(Boolean))];
+            _jarvisStockCache = models;
+            return models;
+        } catch (e) {
+            console.error('[JARVIS] Failed to fetch stock:', e);
+            return [];
+        }
+    }
+
+    async function getMerchantProfile(merchantUuid) {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: document.getElementById('mSearch').value || '' })
+            });
+            // We already have the name from selectMerchant; use it alongside UUID to ask oracle-agent
+            // The merchant profile data is embedded in the suggestions we already got — we'll pull it from the lookup
+        } catch (e) { /* ignore */ }
+    }
+
+    async function triggerJarvisSuggestions(merchantUuid) {
+        const panel = document.getElementById('jarvisSuggestPanel');
+        const content = document.getElementById('jarvisSuggestContent');
+        if (!panel || !content) return;
+
+        // Show panel with spinner
+        panel.style.display = 'block';
+        content.innerHTML = `
+            <div style="display:flex; align-items:center; gap:8px; color:#6b7280; font-size:12px;">
+                <span class="material-icons" style="font-size:16px; animation: spin 1.5s linear infinite; color:#3b82f6;">sync</span>
+                Analyzing merchant profile…
+            </div>`;
+
+        try {
+            // 1. Get available stock models
+            const models = await getStockedModels();
+            if (!models.length) {
+                panel.style.display = 'none';
+                return;
+            }
+
+            // 2. Get merchant details from the deployments getLookups result (cached in suggestion items)
+            //    We reconstruct the prompt using dba_name from the mSearch input and uuid
+            const dbaName = document.getElementById('mSearch').value || 'Unknown';
+
+            // 3. Fetch merchant details directly for volume/business type
+            let businessType = 'retail';
+            let volume30 = null;
+            try {
+                const mRes = await fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'list', query: dbaName, filterBy: 'dba_name', limit: 1, page: 0 })
+                });
+                const mResult = await mRes.json();
+                if (mResult.success && mResult.data?.length) {
+                    const m = mResult.data[0];
+                    volume30 = m.volume_30_day ? parseFloat(m.volume_30_day) : null;
+                    businessType = m.sic_code_description || m.business_type || 'retail';
+                }
+            } catch (e) { /* use defaults */ }
+
+            // 4. Build the oracle-agent prompt
+            const volumeStr = volume30 ? `$${Math.round(volume30).toLocaleString()}` : 'unknown';
+            const modelsStr = models.slice(0, 10).join(', ');
+            const prompt = `Based on the merchant profile below, recommend the best POS terminal model from the available inventory. Merchant: ${dbaName}, Business type: ${businessType}, Monthly volume: ${volumeStr}. Available models: ${modelsStr}. Reply ONLY in JSON with no markdown formatting: { "recommendations": [{ "model": "string", "reason": "string" }] }. Provide 1 to 2 recommendations maximum.`;
+
+            const userId = localStorage.getItem('pp_userid') || 'system';
+            const userName = localStorage.getItem('pp_username') || 'Staff';
+
+            const agentRes = await fetch('/api/oracle-agent', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ query: prompt, userId, userName })
+            });
+            const agentResult = await agentRes.json();
+
+            // 5. Parse JSON from answer
+            let recs = null;
+            try {
+                const raw = agentResult.answer || '';
+                // Strip markdown code fences if present
+                const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+                const parsed = JSON.parse(cleaned);
+                recs = parsed.recommendations || parsed.Recommendations || null;
+            } catch (e) {
+                // Try regex extraction
+                try {
+                    const match = (agentResult.answer || '').match(/\{[\s\S]*\}/);
+                    if (match) {
+                        const parsed = JSON.parse(match[0]);
+                        recs = parsed.recommendations || parsed.Recommendations || null;
+                    }
+                } catch (e2) { /* fall through to fallback */ }
+            }
+
+            if (!recs || !recs.length) {
+                content.innerHTML = `<div style="font-size:11px; color:#64748b; font-style:italic;">Unable to generate suggestion — please select manually.</div>`;
+                return;
+            }
+
+            // 6. Render recommendations
+            content.innerHTML = recs.slice(0, 2).map(rec => {
+                const modelSafe = (rec.model || '').replace(/'/g, "\\'");
+                const reasonSafe = (rec.reason || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px;">
+                    <div style="flex:1; min-width:0;">
+                        <div style="font-size:12px; font-weight:700; color:#1e3a5f; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${rec.model || '—'}</div>
+                        <div style="font-size:10px; color:#6b7280; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${reasonSafe}</div>
+                    </div>
+                    <button type="button" onclick="jarvisUseModel('${modelSafe}')"
+                        style="flex-shrink:0; font-size:10px; font-weight:700; background:#2563eb; color:white; border:none; border-radius:6px; padding:4px 10px; cursor:pointer; white-space:nowrap;">
+                        Use This
+                    </button>
+                </div>`;
+            }).join('');
+
+        } catch (e) {
+            console.error('[JARVIS] Suggestion error:', e);
+            content.innerHTML = `<div style="font-size:11px; color:#64748b; font-style:italic;">Unable to generate suggestion — please select manually.</div>`;
+        }
+    }
+
+    async function jarvisUseModel(modelName) {
+        // Pre-fill the equipment search field with the suggested model type
+        // and trigger lookup so user can pick a specific serial
+        const eSearch = document.getElementById('eSearch');
+        const bulkESearch = document.getElementById('bulkESearch');
+        if (currentDepMode === 'single' && eSearch) {
+            eSearch.value = modelName;
+            await handleEquipSearch(modelName);
+        } else if (currentDepMode === 'bulk' && bulkESearch) {
+            bulkESearch.value = modelName;
+            await handleBulkEquipSearch(modelName);
+        }
+    }
+
     // --- BULK UPLOAD LOGIC ---
 
 async function handleBulkUpload(input) {
@@ -1620,6 +1789,10 @@ async function executeBulk(validData) {
     });
     document.getElementById('dateInput').value = fmtDateInput(new Date());
     renderBulkItems();
+    // Reset JARVIS panel
+    _jarvisStockCache = null;
+    const jarvisPanel = document.getElementById('jarvisSuggestPanel');
+    if (jarvisPanel) jarvisPanel.style.display = 'none';
 }
 
     window.onload = async () => {
