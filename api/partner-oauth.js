@@ -218,6 +218,6 @@ export default async function handler(req, res) {
         return redirect(`Connected: ${email}`);
     } catch (err) {
         console.error('[partner-oauth]', err);
-        return redirect('Connection failed. Please try again.');
+        return redirect('Error: ' + (err.message || 'Unknown error. Check Vercel logs.'));
     }
 }
