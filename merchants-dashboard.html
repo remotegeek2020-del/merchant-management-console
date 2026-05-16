@@ -96,6 +96,38 @@
 .prime-row {
     background-color: #fffdf5 !important; /* Very subtle gold tint for the whole row */
 }
+.health-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 10px;
+    border-radius: 99px;
+    white-space: nowrap;
+}
+.health-filter-bar {
+    display: flex;
+    gap: 6px;
+    padding: 12px 16px 0;
+    flex-wrap: wrap;
+}
+.health-chip {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 4px 12px;
+    border-radius: 99px;
+    border: 1.5px solid #e2e8f0;
+    background: white;
+    color: #475569;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.health-chip.active {
+    border-color: var(--pp-blue);
+    color: var(--pp-blue);
+    background: #eff6ff;
+}
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -170,6 +202,14 @@
     </div>
 
     <article class="main-card">
+        <div class="health-filter-bar" id="healthFilterBar">
+            <button class="health-chip active" onclick="setHealthFilter('All', this)">All</button>
+            <button class="health-chip" onclick="setHealthFilter('Healthy', this)" style="border-color:#166534; color:#166534;">Healthy</button>
+            <button class="health-chip" onclick="setHealthFilter('Good', this)" style="border-color:#1d4ed8; color:#1d4ed8;">Good</button>
+            <button class="health-chip" onclick="setHealthFilter('Fair', this)" style="border-color:#92400e; color:#92400e;">Fair</button>
+            <button class="health-chip" onclick="setHealthFilter('At Risk', this)" style="border-color:#9a3412; color:#9a3412;">At Risk</button>
+            <button class="health-chip" onclick="setHealthFilter('Critical', this)" style="border-color:#991b1b; color:#991b1b;">Critical</button>
+        </div>
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
@@ -179,6 +219,7 @@
                     <th class="hide-mobile">Company</th>
                     <th class="hide-mobile">Partner Name</th>
                     <th>Status</th>
+                    <th>Health</th>
                 </tr>
             </thead>
             <tbody id="merchantTableBody"></tbody>
@@ -198,6 +239,28 @@
 <script>
     let currentPage = 0;
     let currentRecords = [];
+    let activeHealthFilter = 'All';
+
+    function setHealthFilter(label, btn) {
+        activeHealthFilter = label;
+        // Update chip active state
+        document.querySelectorAll('.health-chip').forEach(c => c.classList.remove('active'));
+        if (btn) btn.classList.add('active');
+        applyHealthFilter();
+    }
+
+    function applyHealthFilter() {
+        const rows = document.querySelectorAll('#merchantTableBody tr');
+        rows.forEach(row => {
+            if (activeHealthFilter === 'All') {
+                row.style.display = '';
+                return;
+            }
+            const cell = row.querySelector('td[data-health-label]');
+            if (!cell) { row.style.display = ''; return; }
+            row.style.display = cell.dataset.healthLabel === activeHealthFilter ? '' : 'none';
+        });
+    }
 
     /**
  * STEP 1: INITIAL CSV PARSE
@@ -703,7 +766,7 @@ async function addTask(merchantUuid) {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
         
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:60px; color:#94a3b8;">
+        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;">
             <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
             Synchronizing Ledger...
         </td></tr>`;
@@ -743,6 +806,16 @@ async function addTask(merchantUuid) {
     // Add the badge next to the DBA name
     const primeBadge = m.is_prime49 ? `<span class="prime-badge">PRIME49</span>` : '';
 
+    const healthColors = {
+        'Healthy':  { bg: '#dcfce7', color: '#166534' },
+        'Good':     { bg: '#dbeafe', color: '#1d4ed8' },
+        'Fair':     { bg: '#fef9c3', color: '#92400e' },
+        'At Risk':  { bg: '#fed7aa', color: '#9a3412' },
+        'Critical': { bg: '#fee2e2', color: '#991b1b' }
+    };
+    const hc = healthColors[m.health_label] || { bg: '#f1f5f9', color: '#475569' };
+    const healthBadge = `<span class="health-badge" style="background:${hc.bg}; color:${hc.color};">${m.health_score} ${m.health_label}</span>`;
+
     row.innerHTML = `
         <td>
             <a onclick="openModal('${m.id}')" style="font-weight:700; color:var(--pp-blue); cursor:pointer;">
@@ -755,8 +828,10 @@ async function addTask(merchantUuid) {
         <td class="hide-mobile">${m.company_name || '---'}</td>
         <td class="hide-mobile">${m.partner_name || '---'}</td>
         <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
+        <td data-health-label="${m.health_label || ''}">${healthBadge}</td>
     `;
 });
+            applyHealthFilter();
             document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total Found: ${result.count.toLocaleString()})</span>`;
         } catch (err) { console.error(err); }
     }

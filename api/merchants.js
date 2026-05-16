@@ -5,6 +5,79 @@ import { dispatchEvent } from './v1/_deliver.js';
 // Increase body size limit to 50MB for large CSV bulk uploads
 export const config = { api: { bodyParser: { sizeLimit: '50mb' } } };
 
+/**
+ * Compute a 0–100 merchant health score.
+ * Components (when open ticket count is unavailable, scale 3 components to 100):
+ *   - Volume trend (40 pts raw / 44.4 scaled)
+ *   - Activity recency (30 pts raw / 33.3 scaled)
+ *   - Account standing (20 pts raw / 22.2 scaled)
+ *   - Support load (10 pts, only when open_ticket_count is present)
+ */
+function compute_health_score(merchant) {
+    const hasTickets = typeof merchant.open_ticket_count === 'number';
+
+    // 1. Volume trend (40 pts)
+    const v30 = parseFloat(merchant.volume_30_day) || 0;
+    const v90 = parseFloat(merchant.volume_90_day) || 0;
+    const baseline = v90 / 3;
+    let volumePts = 0;
+    if (v30 > 0 && baseline > 0) {
+        const ratio = v30 / baseline; // 1.0 = on pace
+        if (ratio >= 1.0) volumePts = 40;
+        else if (ratio >= 0.70) volumePts = 30; // 15–30% below → ratio 0.70–0.85
+        else if (ratio >= 0.50) volumePts = 20; // 30–50% below → ratio 0.50–0.70
+        else if (ratio >= 0.25) volumePts = 10; // 50–75% below → ratio 0.25–0.50
+        else volumePts = 0;                     // >75% below
+    }
+    // If v30 > 0 but no 90d baseline treat as meeting baseline
+    if (v30 > 0 && baseline === 0) volumePts = 40;
+
+    // 2. Activity recency (30 pts)
+    let recencyPts = 0;
+    if (merchant.last_batch_date) {
+        const daysSince = Math.floor((Date.now() - new Date(merchant.last_batch_date).getTime()) / 86400000);
+        if (daysSince <= 7) recencyPts = 30;
+        else if (daysSince <= 14) recencyPts = 20;
+        else if (daysSince <= 30) recencyPts = 10;
+        else recencyPts = 0;
+    }
+
+    // 3. Account standing (20 pts)
+    let standingPts = 0;
+    const status = (merchant.account_status || '').trim();
+    if (status === 'Approved') standingPts = 20;
+    else if (status === 'Pending') standingPts = 10;
+
+    // 4. Support load (10 pts) — only when available
+    let supportPts = 0;
+    if (hasTickets) {
+        const t = merchant.open_ticket_count;
+        if (t === 0) supportPts = 10;
+        else if (t === 1) supportPts = 6;
+        else if (t === 2) supportPts = 3;
+        else supportPts = 0;
+    }
+
+    let score;
+    if (hasTickets) {
+        score = volumePts + recencyPts + standingPts + supportPts;
+    } else {
+        // Scale 90-pt max to 100
+        score = Math.round((volumePts + recencyPts + standingPts) * (100 / 90));
+    }
+
+    score = Math.min(100, Math.max(0, score));
+
+    let label;
+    if (score >= 80) label = 'Healthy';
+    else if (score >= 60) label = 'Good';
+    else if (score >= 40) label = 'Fair';
+    else if (score >= 20) label = 'At Risk';
+    else label = 'Critical';
+
+    return { score, label };
+}
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
@@ -555,12 +628,17 @@ if (action === 'list') {
             : "0.00";
 
         // 4. Format Data for Frontend
-        const formattedData = (data || []).map(m => ({
-            ...m,
-            partner_name: m.partner_full_name || '---',
-            company_name: m.company_display_name || '---', 
-            is_prime49: m.is_prime49 || false
-        }));
+        const formattedData = (data || []).map(m => {
+            const { score, label } = compute_health_score(m);
+            return {
+                ...m,
+                partner_name: m.partner_full_name || '---',
+                company_name: m.company_display_name || '---',
+                is_prime49: m.is_prime49 || false,
+                health_score: score,
+                health_label: label
+            };
+        });
 
         return res.status(200).json({ 
             success: true, 
