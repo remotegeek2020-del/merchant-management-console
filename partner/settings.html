@@ -235,8 +235,9 @@
                 <button onclick="connectEmail('google')" id="btnGoogle" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1.5px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:700;color:#374151;cursor:pointer;">
                     <img src="https://www.google.com/favicon.ico" style="width:16px;height:16px;"> Connect Gmail
                 </button>
-                <button onclick="connectEmail('microsoft')" id="btnMicrosoft" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1.5px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:700;color:#374151;cursor:pointer;">
-                    <img src="https://outlook.com/favicon.ico" style="width:16px;height:16px;"> Connect Outlook
+                <button disabled style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1.5px dashed #e2e8f0;border-radius:10px;background:#f8fafc;font-size:13px;font-weight:700;color:#94a3b8;cursor:not-allowed;position:relative;">
+                    <img src="https://outlook.com/favicon.ico" style="width:16px;height:16px;opacity:0.4;"> Connect Outlook
+                    <span style="font-size:9px;font-weight:800;background:#e2e8f0;color:#64748b;padding:2px 6px;border-radius:99px;letter-spacing:0.5px;">COMING SOON</span>
                 </button>
             </div>
             <div id="oauthMsg" style="margin-top:12px;font-size:12px;font-weight:600;"></div>
