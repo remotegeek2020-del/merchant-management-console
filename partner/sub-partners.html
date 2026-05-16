@@ -234,7 +234,7 @@ async function loadSubPartners() {
     const tbody = document.getElementById('subPartnersTable');
     tbody.innerHTML = `<tr><td colspan="7"><div class="empty"><div style="animation:spin 1s linear infinite;width:24px;height:24px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;margin:0 auto;"></div></div></td></tr>`;
 
-    const res = await fetch('/api/partners', {
+    const res = await fetch('/api/partner-data', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_sub_partners', token })
     });
@@ -348,7 +348,7 @@ window.saveRevShare = async function(idx) {
         return;
     }
 
-    const res = await fetch('/api/partners', {
+    const res = await fetch('/api/partner-data', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'update_sub_partner_rev_share', token, identifier_id: identId, rev_share: newVal })
     });
@@ -372,7 +372,7 @@ window.viewMerchants = async function(subPersonId, name) {
         html: `<div style="text-align:center;padding:30px;color:#94a3b8;"><div style="animation:spin 1s linear infinite;width:24px;height:24px;border:2px solid #e2e8f0;border-top-color:#0d9488;border-radius:50%;margin:0 auto 12px;"></div>Loading merchants...</div>`
     });
 
-    const res = await fetch('/api/partners', {
+    const res = await fetch('/api/partner-data', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'get_sub_partner_merchants', token, sub_person_id: subPersonId })
     });
@@ -494,7 +494,7 @@ async function openInviteModal() {
     // First resolve parent identifier UUID via a quick lookup
     let parentIdentId = null;
     try {
-        const lookupRes = await fetch('/api/partners', {
+        const lookupRes = await fetch('/api/partner-data', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'resolve_identifier_id', token, id_string: form.parentIdString })
         });
@@ -507,7 +507,7 @@ async function openInviteModal() {
         // We submit with parent_id_string and the server will resolve it.
     }
 
-    const res = await fetch('/api/partners', {
+    const res = await fetch('/api/partner-data', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
             action: 'invite_sub_partner',

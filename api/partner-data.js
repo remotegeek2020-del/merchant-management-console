@@ -542,6 +542,181 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── SUB-PARTNER ACTIONS ───────────────────────────────────────────────
+
+        if (action === 'get_sub_partners') {
+            const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
+            if (!myAgents || !myAgents.length) return res.status(200).json({ success: true, data: [] });
+            const myAgentIds = myAgents.map(a => a.id);
+
+            const { data: myIdentifiers } = await supabase.from('agent_identifiers').select('id').in('agent_id', myAgentIds);
+            if (!myIdentifiers || !myIdentifiers.length) return res.status(200).json({ success: true, data: [] });
+            const myIdentifierIds = myIdentifiers.map(i => i.id);
+
+            const { data: subIdentifiers } = await supabase
+                .from('agent_identifiers').select('id, agent_id, id_string, rev_share')
+                .in('parent_config_id', myIdentifierIds);
+            if (!subIdentifiers || !subIdentifiers.length) return res.status(200).json({ success: true, data: [] });
+
+            const subAgentIds = [...new Set(subIdentifiers.map(i => i.agent_id))];
+            const { data: subAgents } = await supabase.from('agents').select('id, parent_agent_id').in('id', subAgentIds);
+            if (!subAgents || !subAgents.length) return res.status(200).json({ success: true, data: [] });
+            const subPersonIds = [...new Set(subAgents.filter(a => a.parent_agent_id).map(a => a.parent_agent_id))];
+
+            const { data: subPersons } = await supabase.from('persons')
+                .select('id, full_name, email, is_portal_active').in('id', subPersonIds);
+            if (!subPersons || !subPersons.length) return res.status(200).json({ success: true, data: [] });
+
+            const agentToPersonMap = {};
+            subAgents.forEach(a => { agentToPersonMap[a.id] = a.parent_agent_id; });
+
+            const personIdentMap = {};
+            subIdentifiers.forEach(si => {
+                const pid = agentToPersonMap[si.agent_id];
+                if (!pid) return;
+                if (!personIdentMap[pid]) personIdentMap[pid] = [];
+                personIdentMap[pid].push({ id: si.id, id_string: si.id_string, rev_share: si.rev_share });
+            });
+
+            const allSubIdStrings = subIdentifiers.map(i => i.id_string);
+            let merchantRows = [];
+            for (let i = 0; i < allSubIdStrings.length; i += 500) {
+                const chunk = allSubIdStrings.slice(i, i + 500);
+                const { data: mChunk } = await supabase.from('merchants').select('agent_id, volume_30_day').in('agent_id', chunk);
+                if (mChunk) merchantRows = merchantRows.concat(mChunk);
+            }
+
+            const idStringToPersonId = {};
+            subIdentifiers.forEach(si => { const pid = agentToPersonMap[si.agent_id]; if (pid) idStringToPersonId[si.id_string] = pid; });
+
+            const personMerchStats = {};
+            merchantRows.forEach(m => {
+                const pid = idStringToPersonId[m.agent_id];
+                if (!pid) return;
+                if (!personMerchStats[pid]) personMerchStats[pid] = { merchant_count: 0, volume_30_day: 0 };
+                personMerchStats[pid].merchant_count++;
+                personMerchStats[pid].volume_30_day += parseFloat(m.volume_30_day || 0);
+            });
+
+            return res.status(200).json({ success: true, data: subPersons.map(p => ({
+                person_id: p.id, full_name: p.full_name, email: p.email, is_portal_active: p.is_portal_active,
+                agent_ids: personIdentMap[p.id] || [],
+                merchant_count: personMerchStats[p.id]?.merchant_count || 0,
+                volume_30_day: personMerchStats[p.id]?.volume_30_day || 0
+            }))});
+        }
+
+        if (action === 'get_sub_partner_merchants') {
+            const { sub_person_id } = body;
+            if (!sub_person_id) return res.status(400).json({ success: false, message: 'sub_person_id required.' });
+
+            const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
+            const myAgentIds = (myAgents || []).map(a => a.id);
+            const { data: myIdentifiers } = await supabase.from('agent_identifiers').select('id').in('agent_id', myAgentIds.length ? myAgentIds : ['__none__']);
+            const myIdentifierIds = (myIdentifiers || []).map(i => i.id);
+
+            const { data: subAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', sub_person_id);
+            if (!subAgents || !subAgents.length) return res.status(200).json({ success: true, data: [] });
+            const { data: subIdentifiers } = await supabase.from('agent_identifiers')
+                .select('id, id_string, parent_config_id').in('agent_id', subAgents.map(a => a.id));
+            if (!subIdentifiers || !subIdentifiers.length) return res.status(200).json({ success: true, data: [] });
+
+            const isSubPartner = subIdentifiers.some(si => myIdentifierIds.includes(si.parent_config_id));
+            if (!isSubPartner) return res.status(403).json({ success: false, message: 'Access denied.' });
+
+            let allMerchants = [];
+            const subIdStrings = subIdentifiers.map(i => i.id_string);
+            for (let i = 0; i < subIdStrings.length; i += 500) {
+                const { data: mChunk } = await supabase.from('merchants')
+                    .select('merchant_id, dba_name, account_status, volume_30_day, enrollment_date')
+                    .in('agent_id', subIdStrings.slice(i, i + 500)).order('dba_name');
+                if (mChunk) allMerchants = allMerchants.concat(mChunk);
+            }
+            return res.status(200).json({ success: true, data: allMerchants });
+        }
+
+        if (action === 'resolve_identifier_id') {
+            const { id_string: lookupIdString } = body;
+            if (!lookupIdString) return res.status(400).json({ success: false, message: 'id_string required.' });
+            const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
+            const myAgentIds = (myAgents || []).map(a => a.id);
+            const { data: ident } = await supabase.from('agent_identifiers').select('id')
+                .eq('id_string', lookupIdString).in('agent_id', myAgentIds.length ? myAgentIds : ['__none__']).maybeSingle();
+            if (!ident) return res.status(403).json({ success: false, message: 'Identifier not found or does not belong to you.' });
+            return res.status(200).json({ success: true, identifier_id: ident.id });
+        }
+
+        if (action === 'invite_sub_partner') {
+            const { email, full_name, agent_id_string, rev_share, parent_identifier_id, parent_id_string } = body;
+            if (!email || !full_name || !agent_id_string || (!parent_identifier_id && !parent_id_string))
+                return res.status(400).json({ success: false, message: 'email, full_name, agent_id_string, and a parent identifier are required.' });
+
+            const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
+            const myAgentIds = (myAgents || []).map(a => a.id);
+
+            let resolvedParentIdentId = parent_identifier_id;
+            if (!resolvedParentIdentId && parent_id_string) {
+                const { data: foundIdent } = await supabase.from('agent_identifiers').select('id')
+                    .eq('id_string', parent_id_string).in('agent_id', myAgentIds.length ? myAgentIds : ['__none__']).maybeSingle();
+                if (!foundIdent) return res.status(403).json({ success: false, message: 'Parent identifier not found or does not belong to you.' });
+                resolvedParentIdentId = foundIdent.id;
+            }
+
+            const { data: parentIdent } = await supabase.from('agent_identifiers').select('id, agent_id').eq('id', resolvedParentIdentId).single();
+            if (!parentIdent || !myAgentIds.includes(parentIdent.agent_id))
+                return res.status(403).json({ success: false, message: 'Access denied: identifier does not belong to you.' });
+
+            const { data: existingPerson } = await supabase.from('persons').select('id').eq('email', email.toLowerCase().trim()).maybeSingle();
+            if (existingPerson) return res.status(400).json({ success: false, message: 'A partner with this email already exists.' });
+            const { data: existingIdent } = await supabase.from('agent_identifiers').select('id').eq('id_string', agent_id_string.trim()).maybeSingle();
+            if (existingIdent) return res.status(400).json({ success: false, message: 'This Agent ID string is already in use.' });
+
+            const properName = full_name.trim().toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ');
+            const { data: newPerson, error: personErr } = await supabase.from('persons')
+                .insert({ full_name: properName, email: email.toLowerCase().trim(), is_portal_active: true, enrolled_at: new Date().toISOString() })
+                .select().single();
+            if (personErr) return res.status(400).json({ success: false, message: 'Failed to create partner: ' + personErr.message });
+
+            const { data: newAgent, error: agentErr } = await supabase.from('agents')
+                .insert({ agent_name: properName, parent_agent_id: newPerson.id }).select().single();
+            if (agentErr) return res.status(400).json({ success: false, message: 'Failed to create agent: ' + agentErr.message });
+
+            const { error: identErr } = await supabase.from('agent_identifiers').insert({
+                agent_id: newAgent.id, id_string: agent_id_string.trim(),
+                rev_share: parseFloat(rev_share) || 0, parent_config_id: resolvedParentIdentId
+            });
+            if (identErr) return res.status(400).json({ success: false, message: 'Failed to create agent identifier: ' + identErr.message });
+
+            try {
+                await supabase.from('activity_logs').insert({
+                    action: 'Invite Sub-Partner', category: 'partners',
+                    email: 'system@portal', status: 'success',
+                    new_value: JSON.stringify({ invited: email, by_person: personId })
+                });
+            } catch (e) { /* non-critical */ }
+
+            return res.status(200).json({ success: true, person_id: newPerson.id });
+        }
+
+        if (action === 'update_sub_partner_rev_share') {
+            const { identifier_id, rev_share } = body;
+            if (!identifier_id || rev_share === undefined)
+                return res.status(400).json({ success: false, message: 'identifier_id and rev_share are required.' });
+
+            const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
+            const myAgentIds = (myAgents || []).map(a => a.id);
+            const { data: myIdentifiers } = await supabase.from('agent_identifiers').select('id').in('agent_id', myAgentIds.length ? myAgentIds : ['__none__']);
+            const myIdentifierIds = (myIdentifiers || []).map(i => i.id);
+
+            const { data: targetIdent } = await supabase.from('agent_identifiers').select('id, parent_config_id').eq('id', identifier_id).single();
+            if (!targetIdent || !myIdentifierIds.includes(targetIdent.parent_config_id))
+                return res.status(403).json({ success: false, message: 'Access denied.' });
+
+            const { error } = await supabase.from('agent_identifiers').update({ rev_share: parseFloat(rev_share) }).eq('id', identifier_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {
