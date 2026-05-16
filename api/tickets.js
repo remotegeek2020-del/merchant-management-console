@@ -850,6 +850,52 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        if (action === 'get_sla_stats') {
+            // SLA thresholds in milliseconds
+            const SLA_MS = { urgent: 2 * 3600 * 1000, high: 8 * 3600 * 1000, normal: 24 * 3600 * 1000, low: 72 * 3600 * 1000 };
+            const since = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString();
+
+            const { data: tickets, error } = await supabase
+                .from('support_tickets')
+                .select('id, priority, category, status, created_at, updated_at, resolved_at')
+                .gte('created_at', since);
+
+            if (error) throw error;
+
+            // Group by category × priority, calculate breach rate
+            const cells = {};
+            for (const t of (tickets || [])) {
+                const priority = t.priority || 'normal';
+                const category = t.category || 'Uncategorized';
+                const key = `${category}||${priority}`;
+                if (!cells[key]) cells[key] = { category, priority, total: 0, breached: 0 };
+                cells[key].total++;
+
+                const threshold = SLA_MS[priority] || SLA_MS.normal;
+                const created = new Date(t.created_at).getTime();
+                const isClosed = t.status === 'closed' || t.status === 'resolved';
+
+                let resolutionTime;
+                if (isClosed) {
+                    // Use resolved_at if available, else updated_at as close proxy
+                    const closedAt = t.resolved_at ? new Date(t.resolved_at).getTime() : new Date(t.updated_at).getTime();
+                    resolutionTime = closedAt - created;
+                } else {
+                    // Still open — compare age against threshold
+                    resolutionTime = Date.now() - created;
+                }
+
+                if (resolutionTime > threshold) cells[key].breached++;
+            }
+
+            const result = Object.values(cells).map(c => ({
+                ...c,
+                breach_rate: c.total > 0 ? c.breached / c.total : 0
+            }));
+
+            return res.status(200).json({ success: true, data: result });
+        }
+
         if (action === 'delete_ticket') {
             const { ticket_id } = req.body;
             if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });

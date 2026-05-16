@@ -108,6 +108,27 @@
         .btn-create-rma { background:#fef3c7; color:#92400e; }
         .btn-create-rma:hover { background:#fde68a; }
 
+        /* SLA Heatmap */
+        .sla-card { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); margin-bottom: var(--gap); overflow: hidden; }
+        .sla-card-header { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+        .sla-card-title { font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+        .sla-card-body { padding: 16px 20px; overflow-x: auto; }
+        .sla-grid-wrap { min-width: 480px; }
+        .sla-grid { border-collapse: collapse; width: 100%; font-family: 'DM Sans', sans-serif; font-size: 12px; }
+        .sla-grid th { padding: 7px 12px; text-align: center; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text-muted); border-bottom: 1px solid var(--border); white-space: nowrap; }
+        .sla-grid th.sla-row-label { text-align: left; }
+        .sla-grid td { padding: 0; border: 1px solid var(--border); }
+        .sla-grid td.sla-row-header { padding: 8px 12px; font-size: 11px; font-weight: 700; color: var(--text-primary); white-space: nowrap; background: #f8fafc; border-right: 2px solid var(--border); }
+        .sla-cell { padding: 10px 12px; cursor: pointer; text-align: center; transition: filter 0.12s, box-shadow 0.12s; display: block; }
+        .sla-cell:hover { filter: brightness(0.93); box-shadow: inset 0 0 0 2px rgba(0,0,0,0.12); }
+        .sla-cell-rate { font-size: 13px; font-weight: 700; }
+        .sla-cell-count { font-size: 10px; margin-top: 2px; opacity: 0.75; }
+        .sla-cell-empty { color: #94a3b8; font-size: 16px; }
+        .sla-legend { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 12px; font-size: 11px; color: var(--text-muted); }
+        .sla-legend-item { display: flex; align-items: center; gap: 5px; }
+        .sla-legend-swatch { width: 14px; height: 14px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.08); flex-shrink: 0; }
+        .sla-loading { padding: 32px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
         @media (max-width: 768px) {
             .modern-header { flex-direction: column; align-items: flex-start; gap: 12px; }
             .filter-bar { gap: 8px; }
@@ -168,6 +189,23 @@
         </div>
     </div>
 
+    <!-- SLA Heatmap -->
+    <div class="sla-card" id="sla-heatmap-card">
+        <div class="sla-card-header">
+            <div class="sla-card-title">
+                <span class="material-icons" style="color:#f59e0b; font-size:18px;">grid_on</span>
+                SLA Performance
+            </div>
+            <span style="font-size:11px; color:var(--text-muted); font-weight:600;">Last 90 days</span>
+        </div>
+        <div class="sla-card-body" id="sla-heatmap-body">
+            <div class="sla-loading">
+                <div class="skeleton" style="height:14px;width:220px;margin:0 auto 8px;"></div>
+                <div class="skeleton" style="height:14px;width:180px;margin:0 auto;"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Ticket List -->
     <div class="tickets-panel">
         <div class="panel-header">
@@ -176,6 +214,7 @@
                 Tickets
             </div>
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                <span id="sla-active-badge" style="display:none; align-items:center; gap:4px; font-size:10px; font-weight:700; background:#fef9c3; color:#713f12; border:1px solid #fde047; border-radius:99px; padding:3px 10px;"></span>
                 <span id="ticket-count" style="font-size:11px; color:var(--text-muted);"></span>
                 <div style="display:flex;align-items:center;gap:4px;">
                     <span style="font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.4px;">Show:</span>
@@ -251,6 +290,8 @@ let statusFilter = 'all';
 let typeFilter = 'all';
 let mineFilter = false;
 let searchQuery = '';
+let slaActiveCategory = null;
+let slaActivePriority = null;
 let currentStaffName = '';
 let currentUserRole = '';
 let currentTicketId = null;
@@ -274,6 +315,121 @@ async function tkApi(action, extra = {}) {
     return r.json();
 }
 
+// ─── SLA Heatmap ────────────────────────────────────────────────────────────
+const SLA_PRIORITIES = ['urgent', 'high', 'normal', 'low'];
+const SLA_PRIORITY_LABELS = { urgent: 'Critical', high: 'High', normal: 'Normal', low: 'Low' };
+
+function slaColor(rate, total) {
+    if (total === 0) return { bg: 'transparent', text: '#94a3b8', border: 'var(--border)' };
+    if (rate < 0.2)  return { bg: '#dcfce7', text: '#14532d', border: '#bbf7d0' };
+    if (rate < 0.5)  return { bg: '#fef9c3', text: '#713f12', border: '#fde047' };
+    if (rate < 0.8)  return { bg: '#fed7aa', text: '#7c2d12', border: '#fb923c' };
+    return             { bg: '#fee2e2', text: '#7f1d1d', border: '#fca5a5' };
+}
+
+function renderSlaHeatmap(rawData) {
+    // Collect all unique categories, sorted
+    const categories = [...new Set(rawData.map(d => d.category || 'Uncategorized'))].sort();
+
+    if (!categories.length) {
+        document.getElementById('sla-heatmap-body').innerHTML =
+            '<div class="sla-loading" style="color:var(--text-muted);">No ticket data in the last 90 days.</div>';
+        return;
+    }
+
+    // Build lookup: category+priority -> stats
+    const lookup = {};
+    for (const d of rawData) {
+        lookup[`${d.category || 'Uncategorized'}||${d.priority}`] = d;
+    }
+
+    // Header row
+    let html = '<div class="sla-grid-wrap"><table class="sla-grid"><thead><tr>';
+    html += '<th class="sla-row-label">Category</th>';
+    for (const p of SLA_PRIORITIES) {
+        html += `<th>${SLA_PRIORITY_LABELS[p]}</th>`;
+    }
+    html += '</tr></thead><tbody>';
+
+    for (const cat of categories) {
+        html += `<tr><td class="sla-row-header">${escapeHtml(cat)}</td>`;
+        for (const p of SLA_PRIORITIES) {
+            const cell = lookup[`${cat}||${p}`] || { total: 0, breached: 0, breach_rate: 0 };
+            const { bg, text, border } = slaColor(cell.breach_rate, cell.total);
+            const rateStr = cell.total > 0 ? Math.round(cell.breach_rate * 100) + '%' : '—';
+            const countStr = cell.total > 0 ? `${cell.total} ticket${cell.total !== 1 ? 's' : ''}` : '';
+            const isEmpty = cell.total === 0;
+            html += `<td style="border-color:${border};">
+                <div class="sla-cell" style="background:${bg};"
+                    onclick="slaFilterTo(${JSON.stringify(cat)}, ${JSON.stringify(p)})"
+                    title="${escapeHtml(cat)} · ${SLA_PRIORITY_LABELS[p]}${cell.total > 0 ? ': ' + rateStr + ' breach (' + cell.total + ' tickets)' : ': no data'}">
+                    ${isEmpty
+                        ? '<span class="sla-cell-empty">—</span>'
+                        : `<div class="sla-cell-rate" style="color:${text};">${rateStr}</div>
+                           <div class="sla-cell-count" style="color:${text};">${countStr}</div>`}
+                </div>
+            </td>`;
+        }
+        html += '</tr>';
+    }
+
+    html += `</tbody></table>
+    <div class="sla-legend">
+        <span style="font-weight:700;color:var(--text-primary);">Breach rate:</span>
+        <div class="sla-legend-item"><div class="sla-legend-swatch" style="background:#dcfce7;border-color:#bbf7d0;"></div>&lt;20% — On track</div>
+        <div class="sla-legend-item"><div class="sla-legend-swatch" style="background:#fef9c3;border-color:#fde047;"></div>20–50% — Watch</div>
+        <div class="sla-legend-item"><div class="sla-legend-swatch" style="background:#fed7aa;border-color:#fb923c;"></div>50–80% — At risk</div>
+        <div class="sla-legend-item"><div class="sla-legend-swatch" style="background:#fee2e2;border-color:#fca5a5;"></div>&gt;80% — Critical</div>
+    </div>
+    </div>`;
+
+    document.getElementById('sla-heatmap-body').innerHTML = html;
+}
+
+async function loadSlaHeatmap() {
+    const result = await tkApi('get_sla_stats');
+    if (result.success) {
+        renderSlaHeatmap(result.data || []);
+    } else {
+        document.getElementById('sla-heatmap-body').innerHTML =
+            '<div class="sla-loading" style="color:var(--red-text);">Could not load SLA data.</div>';
+    }
+}
+
+function slaFilterTo(category, priority) {
+    slaActiveCategory = category;
+    slaActivePriority = priority;
+    currentPage = 0;
+
+    // Reset status/type chips to "all" without clearing sla filter
+    document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
+    const allStatusBtn = document.querySelector('[data-status="all"]');
+    if (allStatusBtn) allStatusBtn.classList.add('active');
+    statusFilter = 'all';
+
+    document.querySelectorAll('[data-type]').forEach(b => b.classList.remove('active'));
+    const allTypeBtn = document.querySelector('[data-type="all"]');
+    if (allTypeBtn) allTypeBtn.classList.add('active');
+    typeFilter = 'all';
+
+    // Show active SLA filter badge in panel header
+    const badge = document.getElementById('sla-active-badge');
+    if (badge) {
+        const priorityLabel = { urgent: 'Critical', high: 'High', normal: 'Normal', low: 'Low' }[priority] || priority;
+        badge.innerHTML = `<span class="material-icons" style="font-size:12px;vertical-align:middle;">filter_list</span>
+            SLA: ${escapeHtml(category)} · ${escapeHtml(priorityLabel)}
+            <button onclick="clearSlaFilter();renderTickets();" title="Clear SLA filter"
+                style="background:none;border:none;cursor:pointer;padding:0 0 0 4px;color:inherit;display:inline-flex;align-items:center;">
+                <span class="material-icons" style="font-size:12px;">close</span>
+            </button>`;
+        badge.style.display = 'inline-flex';
+    }
+
+    renderTickets();
+    document.querySelector('.tickets-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+// ─── End SLA Heatmap ─────────────────────────────────────────────────────────
+
 async function init() {
     const staffRes = await fetch('/api/users', { method: 'GET', headers: tkHeaders() });
     const sr = await staffRes.json();
@@ -291,6 +447,7 @@ async function init() {
         currentStaffName = localStorage.getItem('pp_user_first_name') || 'Staff';
     }
     currentUserRole = localStorage.getItem('pp_role') || '';
+    loadSlaHeatmap();
     loadTickets().then(() => {
         const params = new URLSearchParams(window.location.search);
         const urlQ = params.get('q');
@@ -339,6 +496,8 @@ function renderTickets() {
     if (statusFilter !== 'all') filtered = filtered.filter(t => t.status === statusFilter);
     if (typeFilter !== 'all') filtered = filtered.filter(t => t.type === typeFilter);
     if (mineFilter && currentStaffName) filtered = filtered.filter(t => t.assigned_to === currentStaffName);
+    if (slaActiveCategory !== null) filtered = filtered.filter(t => (t.category || 'Uncategorized') === slaActiveCategory);
+    if (slaActivePriority !== null) filtered = filtered.filter(t => (t.priority || 'normal') === slaActivePriority);
     if (searchQuery) {
         const q = searchQuery.toLowerCase();
         filtered = filtered.filter(t =>
@@ -444,11 +603,19 @@ function goToPage(p) {
     document.querySelector('.tickets-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
+function clearSlaFilter() {
+    slaActiveCategory = null;
+    slaActivePriority = null;
+    const badge = document.getElementById('sla-active-badge');
+    if (badge) badge.style.display = 'none';
+}
+
 function setStatusFilter(btn, val) {
     document.querySelectorAll('[data-status]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     statusFilter = val;
     currentPage = 0;
+    clearSlaFilter();
     renderTickets();
 }
 
@@ -457,6 +624,7 @@ function setTypeFilter(btn, val) {
     btn.classList.add('active');
     typeFilter = val;
     currentPage = 0;
+    clearSlaFilter();
     renderTickets();
 }
 
