@@ -286,15 +286,52 @@ input[type=number] {
 </div>
     <!-- PARTNER LEADERBOARD CARD -->
     <div id="leaderboardCard" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
             <div>
                 <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">leaderboard</span> Partner Performance</div>
                 <div style="font-size:1.1rem;font-weight:800;color:#002d5a;">Partner Leaderboard</div>
             </div>
-            <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+            <div style="display:flex;gap:8px;align-items:center;">
+                <button onclick="toggleLeaderboardExplainer()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">help_outline</span> How it works</button>
+                <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+            </div>
         </div>
+
+        <!-- EXPLAINER PANEL (hidden by default) -->
+        <div id="leaderboardExplainer" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:14px;">
+            <div style="font-size:12px;font-weight:800;color:#002d5a;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:15px;color:#0369a1;">info</span> How the Leaderboard Works</div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;color:#475569;">
+                <div>
+                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">📊 Ranking</div>
+                    <div style="line-height:1.6;">Partners are ranked by their <strong>total 30-day processing volume</strong> across all their merchants. The partner with the highest volume in the last 30 days is ranked #1.</div>
+                </div>
+                <div>
+                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">📈 Growth %</div>
+                    <div style="line-height:1.6;">Compares a partner's <strong>last 30 days vs their monthly average from the last 90 days</strong>. Positive (green) = growing faster than their baseline. Negative (red) = slower than usual.</div>
+                </div>
+                <div>
+                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">🏅 Tier Badges</div>
+                    <div style="line-height:1.6;">
+                        <span style="background:#fef9c3;color:#92400e;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-right:4px;">🥇 Gold</span> Rank 1–3<br>
+                        <span style="background:#f1f5f9;color:#475569;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-right:4px;">🥈 Silver</span> Rank 4–10<br>
+                        <span style="background:#fef3ec;color:#9a3412;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-right:4px;">🥉 Bronze</span> Rank 11+
+                    </div>
+                </div>
+                <div>
+                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">⚡ Actionable</div>
+                    <div style="line-height:1.6;">Click <strong>View</strong> on any partner to open their profile. Use the <strong>Needs Attention</strong> section below to quickly identify partners with declining volume and take action.</div>
+                </div>
+            </div>
+        </div>
+
         <div id="leaderboardList" style="display:flex;flex-direction:column;gap:6px;">
             <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading leaderboard...</div>
+        </div>
+
+        <!-- NEEDS ATTENTION SECTION -->
+        <div id="needsAttentionSection" style="display:none;margin-top:14px;border-top:1px solid #f1f5f9;padding-top:14px;">
+            <div style="font-size:10px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">warning</span> Needs Attention — Declining Volume</div>
+            <div id="needsAttentionList" style="display:flex;flex-direction:column;gap:6px;"></div>
         </div>
     </div>
 
@@ -1989,6 +2026,7 @@ window.quickAddId = async function(personId, name) {
             const growthBg = p.growth_pct >= 0 ? '#dcfce7' : '#fee2e2';
             const growthSign = p.growth_pct > 0 ? '+' : '';
             const vol30Fmt = '$' + parseFloat(p.volume_30_day || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+            const personIdAttr = p.person_id ? `data-pid="${p.person_id}"` : '';
             return `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;border:1px solid #f1f5f9;background:#fafbfc;transition:0.2s;" onmouseover="this.style.background='#f0f9ff';this.style.borderColor='#bfdbfe';" onmouseout="this.style.background='#fafbfc';this.style.borderColor='#f1f5f9';">
                 <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;background:${rankStyle.bg};color:${rankStyle.color};flex-shrink:0;">#${p.rank}</div>
                 <div style="flex:1;min-width:0;">
@@ -1997,13 +2035,50 @@ window.quickAddId = async function(personId, name) {
                 </div>
                 <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:${tierStyle.bg};color:${tierStyle.color};">${tierStyle.label}</span>
                 <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:${growthBg};color:${growthColor};white-space:nowrap;">${growthSign}${p.growth_pct}%</span>
+                ${p.person_id ? `<button onclick="openPartnerByPersonId('${p.person_id}')" style="background:none;border:1px solid #e2e8f0;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;color:#475569;cursor:pointer;white-space:nowrap;" title="View partner profile">View</button>` : ''}
             </div>`;
         }).join('');
+
+        // Needs Attention: partners with negative growth_pct, show bottom 3
+        const declining = leaderboardData.filter(p => p.growth_pct < -10).sort((a, b) => a.growth_pct - b.growth_pct).slice(0, 3);
+        const naSection = document.getElementById('needsAttentionSection');
+        const naList = document.getElementById('needsAttentionList');
+        if (declining.length && naSection && naList) {
+            naSection.style.display = 'block';
+            naList.innerHTML = declining.map(p => {
+                const vol = '$' + parseFloat(p.volume_30_day || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+                return `<div style="display:flex;align-items:center;gap:12px;padding:9px 12px;border-radius:10px;border:1px solid #fee2e2;background:#fff5f5;">
+                    <span class="material-icons" style="color:#dc2626;font-size:18px;flex-shrink:0;">trending_down</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:700;font-size:13px;color:#002d5a;">${p.name}</div>
+                        <div style="font-size:10px;color:#94a3b8;">${p.merchant_count} merchant${p.merchant_count !== 1 ? 's' : ''} &bull; ${vol} 30d vol</div>
+                    </div>
+                    <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:#fee2e2;color:#991b1b;white-space:nowrap;">${p.growth_pct}% vs baseline</span>
+                    ${p.person_id ? `<button onclick="openPartnerByPersonId('${p.person_id}')" style="background:#dc2626;border:none;border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;color:white;cursor:pointer;white-space:nowrap;">Take Action</button>` : ''}
+                </div>`;
+            }).join('');
+        } else if (naSection) {
+            naSection.style.display = 'none';
+        }
     }
 
     window.toggleLeaderboardView = function() {
         leaderboardShowAll = !leaderboardShowAll;
         renderLeaderboard();
+    };
+
+    window.toggleLeaderboardExplainer = function() {
+        const el = document.getElementById('leaderboardExplainer');
+        if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    };
+
+    window.openPartnerByPersonId = function(personId) {
+        // Find the partner card/row and open their modal
+        const card = document.querySelector(`[data-person-id="${personId}"]`);
+        if (card) { card.scrollIntoView({ behavior: 'smooth', block: 'center' }); card.click(); return; }
+        // Fallback: search by person_id in allPartners and open modal
+        const p = (allPartners || []).find(x => x.person_id === personId || x.id === personId);
+        if (p && p.id) openModal(p.id);
     };
 
     // ── BACKGROUND STATS ─────────────────────────────────
