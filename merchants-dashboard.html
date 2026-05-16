@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Merchant Portfolio | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -59,6 +60,20 @@
         @keyframes spin {
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .modern-header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
+            .modern-header > div:last-child { display: flex; flex-wrap: wrap; gap: 8px; width: 100%; }
+            .modern-header > div:last-child select,
+            .modern-header > div:last-child input { width: 100% !important; }
+            .summary-bar { grid-template-columns: 1fr 1fr !important; gap: 10px; }
+            .main-card { overflow-x: auto; }
+            .main-card table { min-width: 500px; }
+        }
+        @media (max-width: 480px) {
+            .summary-bar { grid-template-columns: 1fr !important; }
         }
         .slds-button_neutral:hover {
             background-color: #f8fafc !important;

@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inventory Management | Secure Console</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -34,7 +35,17 @@
         .timeline-item { position:relative; padding-left:28px; margin-bottom:18px; border-left:2px solid var(--border); margin-left:10px; }
         .timeline-marker { position:absolute; left:-9px; top:0; width:16px; height:16px; border-radius:50%; background:white; border:3px solid var(--pp-accent); }
         @media (max-width: 900px) { .summary-bar { grid-template-columns: repeat(3, 1fr); } .modern-header { flex-direction: column; align-items: stretch; } }
-        @media (max-width: 600px) { .summary-bar { grid-template-columns: repeat(2, 1fr); } .main-card { overflow-x: auto; } }
+        @media (max-width: 768px) {
+            body { padding: 12px; }
+            .summary-bar { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+            .main-card { overflow-x: auto; }
+            .main-card table { min-width: 520px; }
+            .slds-table thead th.hide-mobile,
+            .slds-table tbody td.hide-mobile { display: none; }
+            .modern-header { flex-direction: column; align-items: stretch; gap: 12px; }
+            .modern-header > div:last-child { flex-wrap: wrap; }
+        }
+        @media (max-width: 480px) { .summary-bar { grid-template-columns: repeat(2, 1fr) !important; } .main-card { overflow-x: auto; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -116,8 +127,8 @@
                 <tr>
                     <th>Serial Number</th>
                     <th>Terminal Type</th>
-                    <th>Received Date</th>
-                    <th>Current Location</th>
+                    <th class="hide-mobile">Received Date</th>
+                    <th class="hide-mobile">Current Location</th>
                     <th>Current Holder (Merchant)</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -933,8 +944,8 @@ async function saveNote() {
                     ${isStaleRepair ? `<span class="material-icons" style="font-size:14px; color:#e11d48; vertical-align:middle; margin-left:4px;" title="Stale: ${diffDays} days in repair">warning</span>` : ''}
                 </td>
                 <td>${item.terminal_type || '---'}</td>
-                <td>${item.received_date ? fmtDate(item.received_date) : '---'}</td>
-                <td>
+                <td class="hide-mobile">${item.received_date ? fmtDate(item.received_date) : '---'}</td>
+                <td class="hide-mobile">
                     <span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span>
                     ${isStaleRepair ? `<div style="color:#e11d48; font-weight:700; font-size:10px; margin-top:2px;">STALE: ${diffDays} DAYS</div>` : ''}
                 </td>
