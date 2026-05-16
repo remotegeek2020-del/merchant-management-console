@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Merchant Application — PayProTec</title>
+    <link rel="icon" type="image/png" href="/images/favicon-32x32.png" sizes="32x32">
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'DM Sans', sans-serif;
+            background: #f0f4f8;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 16px 60px;
+            color: #1e293b;
+        }
+
+        /* ── Header ── */
+        .apply-header {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .apply-brand {
+            font-size: 26px;
+            font-weight: 800;
+            color: #004990;
+            letter-spacing: -0.5px;
+        }
+        .apply-brand span {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: #004990;
+            border-radius: 50%;
+            margin-left: 2px;
+            vertical-align: super;
+        }
+        .apply-subtitle {
+            font-size: 13px;
+            color: #64748b;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+        .apply-referral {
+            display: inline-block;
+            margin-top: 10px;
+            background: #e8f0fb;
+            color: #004990;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 5px 14px;
+            border-radius: 20px;
+            letter-spacing: 0.2px;
+        }
+
+        /* ── Card ── */
+        .apply-card {
+            background: #ffffff;
+            border-radius: 18px;
+            box-shadow: 0 4px 32px rgba(0, 73, 144, 0.09), 0 1px 4px rgba(0,0,0,0.06);
+            width: 100%;
+            max-width: 560px;
+            padding: 36px 36px 32px;
+        }
+
+        .apply-card h2 {
+            font-size: 18px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 4px;
+        }
+        .apply-card .card-desc {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 24px;
+            line-height: 1.5;
+        }
+
+        /* ── Divider ── */
+        .section-divider {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: #94a3b8;
+            margin: 20px 0 14px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: #e2e8f0;
+        }
+
+        /* ── Fields ── */
+        .field-row {
+            display: grid;
+            gap: 14px;
+            margin-bottom: 14px;
+        }
+        .field-row.cols-2 { grid-template-columns: 1fr 1fr; }
+        .field-row.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+
+        .field {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 11px;
+            font-weight: 700;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+        }
+        label .req {
+            color: #e53e3e;
+            margin-left: 2px;
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        select,
+        textarea {
+            font-family: 'DM Sans', sans-serif;
+            font-size: 14px;
+            font-weight: 500;
+            color: #0f172a;
+            background: #f8fafc;
+            border: 1.5px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 10px 13px;
+            width: 100%;
+            outline: none;
+            transition: border-color 0.18s, box-shadow 0.18s;
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2394a3b8'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 10px center;
+            background-size: 18px;
+            padding-right: 34px;
+            cursor: pointer;
+        }
+        input:focus, select:focus, textarea:focus {
+            border-color: #004990;
+            background: #fff;
+            box-shadow: 0 0 0 3px rgba(0, 73, 144, 0.1);
+        }
+        input.invalid, select.invalid {
+            border-color: #ef4444;
+            box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+        }
+        input::placeholder { color: #c0ccd8; }
+
+        /* ── Submit Button ── */
+        .submit-btn {
+            width: 100%;
+            background: #004990;
+            color: #fff;
+            font-family: 'DM Sans', sans-serif;
+            font-size: 15px;
+            font-weight: 800;
+            letter-spacing: 0.3px;
+            border: none;
+            border-radius: 10px;
+            padding: 13px 20px;
+            cursor: pointer;
+            margin-top: 24px;
+            transition: background 0.18s, transform 0.12s, box-shadow 0.18s;
+            box-shadow: 0 2px 12px rgba(0, 73, 144, 0.25);
+        }
+        .submit-btn:hover:not(:disabled) {
+            background: #003570;
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(0, 73, 144, 0.32);
+        }
+        .submit-btn:active:not(:disabled) {
+            transform: translateY(0);
+        }
+        .submit-btn:disabled {
+            opacity: 0.65;
+            cursor: not-allowed;
+        }
+
+        /* ── Error Message ── */
+        .error-banner {
+            display: none;
+            background: #fef2f2;
+            border: 1.5px solid #fca5a5;
+            border-radius: 8px;
+            padding: 12px 14px;
+            margin-top: 16px;
+            font-size: 13px;
+            color: #b91c1c;
+            font-weight: 500;
+            line-height: 1.5;
+        }
+
+        /* ── Success Screen ── */
+        .success-screen {
+            display: none;
+            text-align: center;
+            padding: 20px 0 10px;
+        }
+        .success-icon {
+            width: 64px;
+            height: 64px;
+            background: #dcfce7;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 18px;
+        }
+        .success-icon svg {
+            width: 32px;
+            height: 32px;
+            color: #16a34a;
+        }
+        .success-screen h3 {
+            font-size: 20px;
+            font-weight: 800;
+            color: #0f172a;
+            margin-bottom: 10px;
+        }
+        .success-screen p {
+            font-size: 14px;
+            color: #475569;
+            line-height: 1.6;
+            margin-bottom: 6px;
+        }
+        .success-reference {
+            display: inline-block;
+            background: #f0f4f8;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 8px 16px;
+            font-size: 13px;
+            font-weight: 700;
+            color: #004990;
+            margin-top: 10px;
+            font-family: monospace;
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Footer ── */
+        .apply-footer {
+            margin-top: 24px;
+            font-size: 11px;
+            color: #94a3b8;
+            font-weight: 500;
+            text-align: center;
+        }
+        .apply-footer strong { color: #64748b; }
+
+        /* ── Mobile ── */
+        @media (max-width: 520px) {
+            .apply-card { padding: 24px 20px 22px; }
+            .field-row.cols-2 { grid-template-columns: 1fr; }
+            .field-row.cols-3 { grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 360px) {
+            .field-row.cols-3 { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <div class="apply-header">
+        <div class="apply-brand">PayProTec<span></span></div>
+        <div class="apply-subtitle">Merchant Account Application</div>
+        <div id="referral-badge" class="apply-referral" style="display:none;"></div>
+    </div>
+
+    <!-- Card -->
+    <div class="apply-card">
+
+        <!-- Form -->
+        <div id="form-section">
+            <h2>Apply for a Merchant Account</h2>
+            <p class="card-desc">Fill in your business details below. A PayProTec representative will review your application and follow up within 1 business day.</p>
+
+            <form id="apply-form" novalidate>
+
+                <div class="section-divider">Business Information</div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="dba_name">Business Name (DBA) <span class="req">*</span></label>
+                        <input type="text" id="dba_name" name="dba_name" placeholder="The Corner Bakery" autocomplete="organization">
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="legal_name">Legal Business Name</label>
+                        <input type="text" id="legal_name" name="legal_name" placeholder="Corner Bakery LLC">
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="business_type">Business Type</label>
+                        <select id="business_type" name="business_type">
+                            <option value="">Select type…</option>
+                            <option value="Retail">Retail</option>
+                            <option value="Restaurant">Restaurant</option>
+                            <option value="Service">Service</option>
+                            <option value="E-Commerce">E-Commerce</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="section-divider">Owner &amp; Contact</div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="owner_name">Owner Full Name <span class="req">*</span></label>
+                        <input type="text" id="owner_name" name="owner_name" placeholder="Jane Smith" autocomplete="name">
+                    </div>
+                </div>
+
+                <div class="field-row cols-2">
+                    <div class="field">
+                        <label for="email">Email Address <span class="req">*</span></label>
+                        <input type="email" id="email" name="email" placeholder="jane@yourbusiness.com" autocomplete="email">
+                    </div>
+                    <div class="field">
+                        <label for="phone">Phone Number <span class="req">*</span></label>
+                        <input type="tel" id="phone" name="phone" placeholder="(555) 000-1234" autocomplete="tel">
+                    </div>
+                </div>
+
+                <div class="section-divider">Business Address</div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="address">Street Address <span class="req">*</span></label>
+                        <input type="text" id="address" name="address" placeholder="123 Main Street" autocomplete="street-address">
+                    </div>
+                </div>
+
+                <div class="field-row cols-3">
+                    <div class="field">
+                        <label for="city">City <span class="req">*</span></label>
+                        <input type="text" id="city" name="city" placeholder="Chicago" autocomplete="address-level2">
+                    </div>
+                    <div class="field">
+                        <label for="state">State <span class="req">*</span></label>
+                        <select id="state" name="state" autocomplete="address-level1">
+                            <option value="">—</option>
+                            <option>AL</option><option>AK</option><option>AZ</option><option>AR</option>
+                            <option>CA</option><option>CO</option><option>CT</option><option>DE</option>
+                            <option>FL</option><option>GA</option><option>HI</option><option>ID</option>
+                            <option>IL</option><option>IN</option><option>IA</option><option>KS</option>
+                            <option>KY</option><option>LA</option><option>ME</option><option>MD</option>
+                            <option>MA</option><option>MI</option><option>MN</option><option>MS</option>
+                            <option>MO</option><option>MT</option><option>NE</option><option>NV</option>
+                            <option>NH</option><option>NJ</option><option>NM</option><option>NY</option>
+                            <option>NC</option><option>ND</option><option>OH</option><option>OK</option>
+                            <option>OR</option><option>PA</option><option>RI</option><option>SC</option>
+                            <option>SD</option><option>TN</option><option>TX</option><option>UT</option>
+                            <option>VT</option><option>VA</option><option>WA</option><option>WV</option>
+                            <option>WI</option><option>WY</option><option>DC</option>
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="zip">ZIP Code <span class="req">*</span></label>
+                        <input type="text" id="zip" name="zip" placeholder="60601" maxlength="10" autocomplete="postal-code">
+                    </div>
+                </div>
+
+                <div class="section-divider">Additional Details</div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="monthly_volume">Estimated Monthly Volume</label>
+                        <select id="monthly_volume" name="monthly_volume">
+                            <option value="">Select range…</option>
+                            <option value="Under $10,000">Under $10,000</option>
+                            <option value="$10,000–$50,000">$10,000–$50,000</option>
+                            <option value="$50,000–$100,000">$50,000–$100,000</option>
+                            <option value="Over $100,000">Over $100,000</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="field-row">
+                    <div class="field">
+                        <label for="referral_source">How did you hear about us? <em style="font-weight:400;text-transform:none;font-size:10px;">(optional)</em></label>
+                        <input type="text" id="referral_source" name="referral_source" placeholder="Referral, social media, search…">
+                    </div>
+                </div>
+
+                <!-- Hidden partner agent_id -->
+                <input type="hidden" id="agent_id" name="agent_id" value="">
+
+                <button type="submit" class="submit-btn" id="submit-btn">Submit Application</button>
+
+                <div class="error-banner" id="error-banner"></div>
+
+            </form>
+        </div>
+
+        <!-- Success Screen -->
+        <div class="success-screen" id="success-screen">
+            <div class="success-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </div>
+            <h3 id="success-heading">Application Received!</h3>
+            <p id="success-message">A PayProTec representative will contact you within 1 business day.</p>
+            <div class="success-reference" id="success-reference"></div>
+        </div>
+
+    </div>
+
+    <div class="apply-footer">Powered by <strong>PayProTec</strong></div>
+
+    <script>
+    (function () {
+        // ── Partner lookup ───────────────────────────────────────────────────
+        const params = new URLSearchParams(window.location.search);
+        const partnerId = params.get('partner') || '';
+
+        if (partnerId) {
+            document.getElementById('agent_id').value = partnerId;
+
+            fetch('/api/apply?lookup=' + encodeURIComponent(partnerId))
+                .then(r => r.json())
+                .then(data => {
+                    if (data.success && data.partner_name) {
+                        const badge = document.getElementById('referral-badge');
+                        badge.textContent = 'Referred by: ' + data.partner_name;
+                        badge.style.display = 'inline-block';
+                    }
+                })
+                .catch(() => {}); // silent — partner badge is cosmetic
+        }
+
+        // ── Form submission ──────────────────────────────────────────────────
+        const form      = document.getElementById('apply-form');
+        const submitBtn = document.getElementById('submit-btn');
+        const errBanner = document.getElementById('error-banner');
+
+        const REQUIRED = ['dba_name', 'owner_name', 'email', 'phone', 'address', 'city', 'state', 'zip'];
+
+        function showError(msg) {
+            errBanner.textContent = msg;
+            errBanner.style.display = 'block';
+            errBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+
+        function clearError() {
+            errBanner.textContent = '';
+            errBanner.style.display = 'none';
+        }
+
+        function markInvalid(id) {
+            const el = document.getElementById(id);
+            if (el) el.classList.add('invalid');
+        }
+
+        function clearInvalid() {
+            form.querySelectorAll('.invalid').forEach(el => el.classList.remove('invalid'));
+        }
+
+        // Remove invalid styling on input
+        form.addEventListener('input', e => {
+            if (e.target.classList.contains('invalid')) {
+                e.target.classList.remove('invalid');
+            }
+            clearError();
+        });
+        form.addEventListener('change', e => {
+            if (e.target.classList.contains('invalid')) {
+                e.target.classList.remove('invalid');
+            }
+        });
+
+        form.addEventListener('submit', async function (e) {
+            e.preventDefault();
+            clearError();
+            clearInvalid();
+
+            // Client-side required field check
+            const missing = REQUIRED.filter(f => {
+                const el = document.getElementById(f);
+                return !el || !el.value.trim();
+            });
+
+            if (missing.length > 0) {
+                missing.forEach(markInvalid);
+                showError('Please fill in all required fields marked with *.');
+                document.getElementById(missing[0]).focus();
+                return;
+            }
+
+            // Build payload
+            const payload = {};
+            const fields = ['dba_name', 'legal_name', 'business_type', 'owner_name', 'email',
+                            'phone', 'address', 'city', 'state', 'zip',
+                            'monthly_volume', 'referral_source', 'agent_id'];
+            fields.forEach(f => {
+                const el = document.getElementById(f);
+                if (el) payload[f] = el.value.trim();
+            });
+
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Submitting…';
+
+            try {
+                const res = await fetch('/api/apply', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const data = await res.json();
+
+                if (data.success) {
+                    // Show success screen
+                    const ownerName = payload.owner_name || 'there';
+                    document.getElementById('success-heading').textContent =
+                        'Thank you, ' + ownerName + '!';
+                    document.getElementById('success-message').textContent =
+                        'Your application has been received. A PayProTec representative will contact you within 1 business day.';
+                    document.getElementById('success-reference').textContent =
+                        'Reference: ' + data.reference;
+
+                    document.getElementById('form-section').style.display = 'none';
+                    document.getElementById('success-screen').style.display = 'block';
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+                } else {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = 'Submit Application';
+
+                    if (data.missing && data.missing.length > 0) {
+                        data.missing.forEach(markInvalid);
+                        showError('Please fill in all required fields: ' + data.missing.join(', ') + '.');
+                    } else {
+                        showError(data.message || 'Submission failed. Please try again.');
+                    }
+                }
+
+            } catch (err) {
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Submit Application';
+                showError('A network error occurred. Please check your connection and try again.');
+            }
+        });
+    })();
+    </script>
+</body>
+</html>
