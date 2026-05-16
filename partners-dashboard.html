@@ -291,7 +291,9 @@ input[type=number] {
                 <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">leaderboard</span> Partner Performance</div>
                 <div style="font-size:1.1rem;font-weight:800;color:#002d5a;">Partner Leaderboard</div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;">
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                <span id="leaderboardUpdatedAt" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
+                <button onclick="refreshLeaderboard()" id="leaderboardRefreshBtn" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">refresh</span> Refresh</button>
                 <button onclick="toggleLeaderboardExplainer()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">help_outline</span> How it works</button>
                 <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
             </div>
@@ -1982,11 +1984,31 @@ window.quickAddId = async function(personId, name) {
             if (!d.success) return;
             leaderboardData = d.data || [];
             renderLeaderboard();
+            const el = document.getElementById('leaderboardUpdatedAt');
+            if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         } catch (e) {
             console.warn('Leaderboard load failed:', e.message);
             document.getElementById('leaderboardList').innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:12px;text-align:center;">Leaderboard unavailable</div>';
         }
     }
+
+    window.refreshLeaderboard = async function() {
+        const btn = document.getElementById('leaderboardRefreshBtn');
+        const el = document.getElementById('leaderboardUpdatedAt');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:14px;animation:spin 1s linear infinite;">refresh</span> Refreshing…'; }
+        try {
+            await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('staffToken') || '') },
+                body: JSON.stringify({ action: 'refresh_leaderboard' })
+            });
+            await loadLeaderboard();
+        } catch(e) {
+            console.warn('Refresh failed:', e.message);
+        } finally {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">refresh</span> Refresh'; }
+        }
+    };
 
     function getTierStyle(tier) {
         if (tier === 'Gold') return { bg: '#fef9c3', color: '#92400e', label: '🥇 Gold' };
