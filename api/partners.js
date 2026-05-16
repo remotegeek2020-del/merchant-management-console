@@ -894,6 +894,125 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, data: ranked.slice(0, 20), total });
         }
 
+        // --- ACTION: GET API USAGE ---
+        if (action === 'get_api_usage') {
+            const { token: partnerToken } = body;
+            if (!partnerToken) return res.status(401).json({ success: false, message: 'Token required.' });
+
+            // Resolve partner token → person_id
+            const { data: sessionData } = await supabase
+                .from('partner_sessions')
+                .select('person_id, expires_at')
+                .eq('session_token', partnerToken)
+                .single();
+
+            if (!sessionData || new Date(sessionData.expires_at) < new Date()) {
+                return res.status(401).json({ success: false, message: 'Invalid or expired session.' });
+            }
+
+            const personId = sessionData.person_id;
+
+            // Fetch all api_keys owned by this partner
+            const { data: keys } = await supabase
+                .from('api_keys')
+                .select('id, tier')
+                .eq('owner_id', personId);
+
+            if (!keys || keys.length === 0) {
+                return res.status(200).json({
+                    success: true,
+                    data: {
+                        tier: 'free',
+                        daily_limit: 500,
+                        monthly_limit: 15000,
+                        calls_today: 0,
+                        calls_this_month: 0,
+                        top_endpoints: [],
+                        calls_by_day: []
+                    }
+                });
+            }
+
+            const keyIds = keys.map(k => k.id);
+            // Use the highest tier among all keys
+            const TIER_RANK = { free: 0, standard: 1, enterprise: 2 };
+            const TIER_LIMITS = {
+                free:       { daily_limit: 500,   monthly_limit: 15000  },
+                standard:   { daily_limit: 5000,  monthly_limit: 150000 },
+                enterprise: { daily_limit: 50000, monthly_limit: 1500000 }
+            };
+            const topTier = keys.reduce((best, k) => {
+                const tier = k.tier || 'free';
+                return (TIER_RANK[tier] || 0) > (TIER_RANK[best] || 0) ? tier : best;
+            }, 'free');
+            const limits = TIER_LIMITS[topTier] || TIER_LIMITS.free;
+
+            // Date ranges
+            const now = new Date();
+            const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+            const thirtyDaysAgo = new Date(now - 30 * 24 * 60 * 60 * 1000);
+            const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
+
+            // Fetch usage logs (last 30 days) — graceful if table absent
+            let logs = [];
+            try {
+                const { data: rawLogs, error: logsErr } = await supabase
+                    .from('api_usage_log')
+                    .select('api_key_id, endpoint, created_at')
+                    .in('api_key_id', keyIds)
+                    .gte('created_at', thirtyDaysAgo.toISOString())
+                    .order('created_at', { ascending: false })
+                    .limit(10000);
+                if (!logsErr) logs = rawLogs || [];
+            } catch (e) {
+                // Table may not exist — return zeros gracefully
+            }
+
+            const calls_today = logs.filter(l => new Date(l.created_at) >= startOfDay).length;
+            const calls_this_month = logs.filter(l => new Date(l.created_at) >= startOfMonth).length;
+
+            // Top 5 endpoints
+            const endpointCounts = {};
+            logs.forEach(l => {
+                const ep = (l.endpoint || '/unknown').split('?')[0];
+                endpointCounts[ep] = (endpointCounts[ep] || 0) + 1;
+            });
+            const top_endpoints = Object.entries(endpointCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([endpoint, count]) => ({ endpoint, count }));
+
+            // Calls by day — last 7 days
+            const calls_by_day = [];
+            for (let i = 6; i >= 0; i--) {
+                const dayStart = new Date(now);
+                dayStart.setDate(dayStart.getDate() - i);
+                dayStart.setHours(0, 0, 0, 0);
+                const dayEnd = new Date(dayStart);
+                dayEnd.setDate(dayEnd.getDate() + 1);
+                const count = logs.filter(l => {
+                    const t = new Date(l.created_at);
+                    return t >= dayStart && t < dayEnd;
+                }).length;
+                const label = dayStart.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                calls_by_day.push({ date: dayStart.toISOString().slice(0, 10), label, count });
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: {
+                    tier: topTier,
+                    daily_limit: limits.daily_limit,
+                    monthly_limit: limits.monthly_limit,
+                    calls_today,
+                    calls_this_month,
+                    top_endpoints,
+                    calls_by_day
+                }
+            });
+        }
+
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
