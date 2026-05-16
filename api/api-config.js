@@ -33,8 +33,9 @@ function decrypt(encrypted_value, iv, auth_tag) {
 }
 
 function mask(value) {
-    if (!value || value.length < 8) return '••••••••';
-    return value.slice(0, 4) + '••••••••••••' + value.slice(-4);
+    if (!value || value.length === 0) return 'Not configured';
+    if (value.length < 5) return '****';
+    return '****' + value.slice(-4);
 }
 
 export async function getConfigValue(key) {

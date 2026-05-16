@@ -46,6 +46,12 @@
         .preset-card:hover { border-color: #6366f1; background: #1e293b; }
         .preset-name { font-family: 'DM Mono', monospace; font-size: 12px; color: #38bdf8; margin-bottom: 4px; }
         .preset-desc { font-size: 11px; color: #64748b; }
+        .preset-status { font-size: 10px; margin-top: 6px; font-family: 'DM Mono', monospace; }
+        .preset-status.configured { color: #22c55e; }
+        .preset-status.not-configured { color: #475569; }
+        .save-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #22c55e; font-weight: 700; margin-left: 8px; opacity: 0; transition: opacity 0.3s; }
+        .save-badge.show { opacity: 1; }
+        .key-masked-val { font-family: 'DM Mono', monospace; font-size: 12px; color: #94a3b8; flex: 1; }
     </style>
 </head>
 <body>
@@ -84,18 +90,21 @@
             </div>
         </div>
         <div class="panel-body">
-            <div class="preset-grid">
-                <div class="preset-card" onclick="openAddKey('GHL_API_KEY')">
+            <div class="preset-grid" id="preset-grid">
+                <div class="preset-card" id="preset-GHL_API_KEY" onclick="openAddKey('GHL_API_KEY')">
                     <div class="preset-name">GHL_API_KEY</div>
                     <div class="preset-desc">HighLevel / LeadConnector API key for partner search</div>
+                    <div class="preset-status not-configured" id="preset-status-GHL_API_KEY">● Not configured</div>
                 </div>
-                <div class="preset-card" onclick="openAddKey('GHL_LOCATION_ID')">
+                <div class="preset-card" id="preset-GHL_LOCATION_ID" onclick="openAddKey('GHL_LOCATION_ID')">
                     <div class="preset-name">GHL_LOCATION_ID</div>
                     <div class="preset-desc">HighLevel location/sub-account ID</div>
+                    <div class="preset-status not-configured" id="preset-status-GHL_LOCATION_ID">● Not configured</div>
                 </div>
-                <div class="preset-card" onclick="openAddKey('POSTMARK_SERVER_TOKEN')">
+                <div class="preset-card" id="preset-POSTMARK_SERVER_TOKEN" onclick="openAddKey('POSTMARK_SERVER_TOKEN')">
                     <div class="preset-name">POSTMARK_SERVER_TOKEN</div>
                     <div class="preset-desc">Postmark email delivery server token</div>
+                    <div class="preset-status not-configured" id="preset-status-POSTMARK_SERVER_TOKEN">● Not configured</div>
                 </div>
             </div>
         </div>
@@ -126,19 +135,43 @@
 const userId   = localStorage.getItem('pp_userid') || 'unknown';
 const userName = localStorage.getItem('pp_name') || userId;
 
+// Known preset keys — used to update preset card statuses
+const PRESET_KEYS = ['GHL_API_KEY', 'GHL_LOCATION_ID', 'POSTMARK_SERVER_TOKEN'];
+
 async function api(action, extra = {}) {
+    const token = localStorage.getItem('pp_session_token') || '';
     const r = await fetch('/api/api-config', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token
+        },
         body: JSON.stringify({ action, userid: userId, ...extra })
     });
     return r.json();
+}
+
+function updatePresetStatuses(configs) {
+    const configuredKeys = new Set((configs || []).map(c => c.key));
+    PRESET_KEYS.forEach(k => {
+        const el = document.getElementById('preset-status-' + k);
+        if (!el) return;
+        if (configuredKeys.has(k)) {
+            el.textContent = '● Configured';
+            el.className = 'preset-status configured';
+        } else {
+            el.textContent = '● Not configured';
+            el.className = 'preset-status not-configured';
+        }
+    });
 }
 
 async function loadKeys() {
     const r = await api('list_status');
     const el = document.getElementById('keys-list');
     const configs = r.configs || [];
+
+    updatePresetStatuses(configs);
 
     if (!configs.length) {
         el.innerHTML = `<div class="empty-state">
@@ -149,12 +182,15 @@ async function loadKeys() {
     }
 
     el.innerHTML = configs.map(c => `
-        <div class="key-row">
+        <div class="key-row" id="row-${escHtml(c.key)}">
             <span class="material-icons" style="color:#22c55e; font-size:18px; flex-shrink:0;">check_circle</span>
             <div class="key-name">${escHtml(c.key)}</div>
-            <div class="key-masked">${escHtml(c.masked)}</div>
+            <div class="key-masked-val" id="masked-${escHtml(c.key)}">${escHtml(c.masked || 'Not configured')}</div>
             <div class="key-meta">Updated ${formatDate(c.updated_at)}<br>by ${escHtml(c.updated_by)}</div>
             <div class="key-actions">
+                <span class="save-badge" id="badge-${escHtml(c.key)}">
+                    <span class="material-icons" style="font-size:14px;">check_circle</span> Saved
+                </span>
                 <button class="icon-btn" onclick="openAddKey('${escHtml(c.key)}')">
                     <span class="material-icons" style="font-size:14px;">edit</span> Update
                 </button>
@@ -204,8 +240,35 @@ async function openAddKey(prefillKey = '') {
     const r = await api('set', { key: formValues.key, value: formValues.value, updated_by: userName });
 
     if (r.success) {
+        // Compute masked display: **** + last 4 chars
+        const rawVal = formValues.value;
+        const maskedDisplay = rawVal.length >= 5
+            ? '****' + rawVal.slice(-4)
+            : '****';
+
         await loadKeys();
-        Swal.fire({ icon: 'success', title: 'Key Saved', text: `${formValues.key} has been encrypted and stored.`, background: '#1e293b', color: '#e2e8f0', confirmButtonColor: '#6366f1', timer: 2500, showConfirmButton: false });
+
+        // Update the masked value inline and flash the Saved badge
+        const maskedEl = document.getElementById('masked-' + formValues.key);
+        if (maskedEl) maskedEl.textContent = maskedDisplay;
+
+        const badge = document.getElementById('badge-' + formValues.key);
+        if (badge) {
+            badge.classList.add('show');
+            setTimeout(() => badge.classList.remove('show'), 3000);
+        }
+
+        Swal.fire({
+            icon: 'success',
+            title: 'Key Saved',
+            html: `<div style="font-family:monospace; font-size:13px; color:#94a3b8; margin-top:8px;">${escHtml(formValues.key)}</div>
+                   <div style="font-family:monospace; font-size:15px; color:#22c55e; margin-top:4px;">${escHtml(maskedDisplay)}</div>`,
+            background: '#1e293b',
+            color: '#e2e8f0',
+            confirmButtonColor: '#6366f1',
+            timer: 2500,
+            showConfirmButton: false
+        });
     } else {
         Swal.fire({ icon: 'error', title: 'Error', text: r.message, background: '#1e293b', color: '#e2e8f0' });
     }
