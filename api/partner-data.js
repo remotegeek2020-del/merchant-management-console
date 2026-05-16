@@ -779,7 +779,7 @@ export default async function handler(req, res) {
                     client_id:     process.env.GOOGLE_CLIENT_ID,
                     redirect_uri:  REDIRECT_URI,
                     response_type: 'code',
-                    scope:         'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
+                    scope:         'https://www.googleapis.com/auth/gmail.send openid email',
                     access_type:   'offline',
                     prompt:        'consent',
                     state

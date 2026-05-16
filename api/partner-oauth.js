@@ -186,11 +186,9 @@ export default async function handler(req, res) {
             });
             tokenRes = await r.json();
             if (!tokenRes.access_token) return redirect('Google auth failed: ' + (tokenRes.error_description || tokenRes.error));
-            // Get email
-            const profile = await (await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
-                headers: { Authorization: `Bearer ${tokenRes.access_token}` }
-            })).json();
-            email = profile.email;
+            // Extract email from id_token JWT (openid email scope — no extra API call needed)
+            const idPayload = JSON.parse(Buffer.from(tokenRes.id_token.split('.')[1], 'base64url').toString());
+            email = idPayload.email;
         }
 
         if (provider === 'microsoft') {
