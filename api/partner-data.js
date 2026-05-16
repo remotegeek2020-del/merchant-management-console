@@ -607,7 +607,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'get_sub_partner_merchants') {
-            const { sub_person_id } = body;
+            const { sub_person_id } = req.body;
             if (!sub_person_id) return res.status(400).json({ success: false, message: 'sub_person_id required.' });
 
             const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
@@ -636,7 +636,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'resolve_identifier_id') {
-            const { id_string: lookupIdString } = body;
+            const { id_string: lookupIdString } = req.body;
             if (!lookupIdString) return res.status(400).json({ success: false, message: 'id_string required.' });
             const { data: myAgents } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
             const myAgentIds = (myAgents || []).map(a => a.id);
@@ -647,7 +647,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'invite_sub_partner') {
-            const { email, full_name, agent_id_string, rev_share, parent_identifier_id, parent_id_string } = body;
+            const { email, full_name, agent_id_string, rev_share, parent_identifier_id, parent_id_string } = req.body;
             if (!email || !full_name || !agent_id_string || (!parent_identifier_id && !parent_id_string))
                 return res.status(400).json({ success: false, message: 'email, full_name, agent_id_string, and a parent identifier are required.' });
 
@@ -699,7 +699,7 @@ export default async function handler(req, res) {
         }
 
         if (action === 'update_sub_partner_rev_share') {
-            const { identifier_id, rev_share } = body;
+            const { identifier_id, rev_share } = req.body;
             if (!identifier_id || rev_share === undefined)
                 return res.status(400).json({ success: false, message: 'identifier_id and rev_share are required.' });
 
