@@ -183,6 +183,10 @@
                 <option value="partner_name">Partner Name</option>
             </select>
             <input type="text" id="searchInput" placeholder="Search..." class="slds-input" style="width:200px; border-radius:10px;">
+            <button onclick="openAddMerchantModal()" class="slds-button slds-button_brand" style="border-radius:10px; background:#004990; font-weight:700; font-size:12px; padding:8px 16px;">
+                <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">add</span>
+                Add Merchant
+            </button>
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="resetAndFetch()">Search</button>
             <button class="slds-button slds-button_neutral" 
         style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #166534; color: #166534;" 
@@ -761,6 +765,341 @@ async function addTask(merchantUuid) {
     }
 }
     
+
+    async function lookupAgentId(agentIdValue) {
+        const token = localStorage.getItem('pp_session_token') || '';
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'lookup_agent', agent_id: agentIdValue })
+            });
+            return await res.json();
+        } catch (e) {
+            return { found: false };
+        }
+    }
+
+    async function openAddMerchantModal() {
+        Swal.fire({
+            title: 'Add New Merchant',
+            width: 900,
+            showCancelButton: true,
+            confirmButtonText: 'Create Merchant',
+            confirmButtonColor: '#004990',
+            cancelButtonText: 'Cancel',
+            html: `
+<div style="text-align:left; max-height:620px; overflow-y:auto; padding-right:10px;">
+
+  <!-- SECTION 1: Identity -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Identity</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="edit-label">Merchant ID (MID) <span style="color:#e53e3e;">*</span></label>
+      <input id="add-merchant_id" class="modern-input" placeholder="e.g. 123456789" style="font-family:monospace;">
+    </div>
+    <div>
+      <label class="edit-label">DBA Name <span style="color:#e53e3e;">*</span></label>
+      <input id="add-dba_name" class="modern-input" placeholder="Business Name">
+    </div>
+    <div>
+      <label class="edit-label">Account Status</label>
+      <select id="add-account_status" class="modern-input">
+        <option value="Pending">Pending</option>
+        <option value="Approved">Approved</option>
+        <option value="Risk">Risk</option>
+        <option value="Closed">Closed</option>
+        <option value="Hold">Hold</option>
+      </select>
+    </div>
+    <div>
+      <label class="edit-label">Source</label>
+      <input id="add-source" class="modern-input" value="manual">
+    </div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
+
+  <!-- SECTION 2: Partner -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Partner</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="edit-label">Partner ID (Agent ID)</label>
+      <div style="display:flex; align-items:center; gap:8px;">
+        <input id="add-agent_id" class="modern-input" placeholder="e.g. AGT001" style="margin-bottom:0; flex:1;"
+          onblur="(async function(el){
+            const v = el.value.trim();
+            const badge = document.getElementById('add-agent-lookup-badge');
+            if (!v) { badge.innerHTML = ''; return; }
+            badge.innerHTML = '<span style=\'color:#64748b; font-size:11px;\'>Looking up...</span>';
+            const data = await lookupAgentId(v);
+            if (data.found) {
+              badge.innerHTML = '<span style=\'color:#166534; font-size:11px; font-weight:700;\'>✓ Found: ' + data.agent_name + '</span>';
+              const nameEl = document.getElementById('add-agent_name');
+              if (nameEl && !nameEl.value) nameEl.value = data.agent_name;
+            } else {
+              badge.innerHTML = '<span style=\'color:#92400e; font-size:11px; font-weight:700;\'>+ Will create new partner</span>';
+            }
+          })(this)">
+        <span id="add-agent-lookup-badge" style="white-space:nowrap;"></span>
+      </div>
+    </div>
+    <div>
+      <label class="edit-label">Agent / Partner Name</label>
+      <input id="add-agent_name" class="modern-input" placeholder="Partner name (auto-filled or enter new)">
+    </div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
+
+  <!-- SECTION 3: Contact -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Contact</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="edit-label">Email</label>
+      <input id="add-email" class="modern-input" placeholder="merchant@example.com">
+    </div>
+    <div>
+      <label class="edit-label">Phone</label>
+      <input id="add-merchant_phone" class="modern-input" placeholder="(555) 000-1234">
+    </div>
+    <div>
+      <label class="edit-label">Primary Contact</label>
+      <input id="add-merchant_primary_contact" class="modern-input" placeholder="Contact name">
+    </div>
+    <div>
+      <label class="edit-label">Websites</label>
+      <input id="add-merchant_websites" class="modern-input" placeholder="https://example.com">
+    </div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
+
+  <!-- SECTION 4: Address -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Address</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div style="grid-column:span 2;">
+      <label class="edit-label">Street Address</label>
+      <input id="add-merchant_address" class="modern-input" placeholder="123 Main St">
+    </div>
+    <div>
+      <label class="edit-label">City</label>
+      <input id="add-merchant_city" class="modern-input" placeholder="Chicago">
+    </div>
+    <div>
+      <label class="edit-label">State</label>
+      <input id="add-merchant_state" class="modern-input" placeholder="IL">
+    </div>
+    <div>
+      <label class="edit-label">Zip</label>
+      <input id="add-merchant_zip" class="modern-input" placeholder="60601">
+    </div>
+    <div>
+      <label class="edit-label">Country</label>
+      <input id="add-merchant_country" class="modern-input" value="USA">
+    </div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
+
+  <!-- SECTION 5: Processing -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Processing</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="edit-label">Processor</label>
+      <input id="add-processor" class="modern-input" placeholder="e.g. Fiserv">
+    </div>
+    <div>
+      <label class="edit-label">Platform</label>
+      <input id="add-processor_platform" class="modern-input" placeholder="e.g. Omaha">
+    </div>
+    <div>
+      <label class="edit-label">Gateway ID</label>
+      <input id="add-gateway_account_id" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">ACH Properties</label>
+      <input id="add-ach_properties" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">Buy Rate Tier</label>
+      <input id="add-fresno_buy_rate_tier" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">Commission Code</label>
+      <input id="add-isv_commission_code" class="modern-input" placeholder="">
+    </div>
+  </div>
+  <div style="display:flex; gap:20px; flex-wrap:wrap; margin-top:8px;">
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer;">
+      <input type="checkbox" id="add-is_edge_enabled"> Edge Enabled
+    </label>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer;">
+      <input type="checkbox" id="add-is_pci_compliant"> PCI Compliant
+    </label>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer;">
+      <input type="checkbox" id="add-is_mobile"> Mobile
+    </label>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer;">
+      <input type="checkbox" id="add-is_activated"> Activated
+    </label>
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:600; cursor:pointer;">
+      <input type="checkbox" id="add-is_device_hub_link_enabled"> Device Hub
+    </label>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
+
+  <!-- SECTION 6: Dates & Volume -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Dates &amp; Volume</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="edit-label">Enrollment Date</label>
+      <input type="date" id="add-enrollment_date" class="modern-input">
+    </div>
+    <div>
+      <label class="edit-label">Approved Date</label>
+      <input type="date" id="add-approved_date" class="modern-input">
+    </div>
+    <div>
+      <label class="edit-label">Last Batch Date</label>
+      <input type="date" id="add-last_batch_date" class="modern-input">
+    </div>
+    <div></div>
+    <div>
+      <label class="edit-label">Vol MTD</label>
+      <input type="number" id="add-volume_mtd" class="modern-input" placeholder="0.00">
+    </div>
+    <div>
+      <label class="edit-label">Vol 30D</label>
+      <input type="number" id="add-volume_30_day" class="modern-input" placeholder="0.00">
+    </div>
+    <div>
+      <label class="edit-label">Vol 90D</label>
+      <input type="number" id="add-volume_90_day" class="modern-input" placeholder="0.00">
+    </div>
+    <div>
+      <label class="edit-label">Total Volume</label>
+      <input type="number" id="add-volume" class="modern-input" placeholder="0.00">
+    </div>
+  </div>
+
+  <hr style="border:none;border-top:1px solid #e2e8f0;margin:12px 0;">
+
+  <!-- SECTION 7: Other -->
+  <div style="font-size:10px; font-weight:800; color:#004990; text-transform:uppercase; margin-bottom:6px;">Other</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+    <div>
+      <label class="edit-label">Status ID</label>
+      <input id="add-status_id" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">Account Code</label>
+      <input id="add-account_code" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">Major Merchant</label>
+      <input id="add-major_merchant" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">Shipping Status</label>
+      <input id="add-shipping_status" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">IRS TIN Status</label>
+      <input id="add-irs_tin_status" class="modern-input" placeholder="">
+    </div>
+    <div>
+      <label class="edit-label">NDF</label>
+      <input id="add-ndf" class="modern-input" placeholder="">
+    </div>
+  </div>
+
+</div>`,
+            preConfirm: async () => {
+                const g = id => document.getElementById(id);
+                const merchant_id = g('add-merchant_id').value.trim();
+                const dba_name = g('add-dba_name').value.trim();
+                if (!merchant_id || !dba_name) {
+                    Swal.showValidationMessage('Merchant ID and DBA Name are required.');
+                    return false;
+                }
+
+                const token = localStorage.getItem('pp_session_token') || '';
+
+                const payload = {
+                    action: 'create',
+                    merchant_id,
+                    dba_name,
+                    agent_id: g('add-agent_id').value.trim() || null,
+                    agent_name: g('add-agent_name').value.trim() || null,
+                    account_status: g('add-account_status').value || null,
+                    source: g('add-source').value.trim() || 'manual',
+                    email: g('add-email').value.trim() || null,
+                    merchant_phone: g('add-merchant_phone').value.trim() || null,
+                    merchant_primary_contact: g('add-merchant_primary_contact').value.trim() || null,
+                    merchant_websites: g('add-merchant_websites').value.trim() || null,
+                    merchant_address: g('add-merchant_address').value.trim() || null,
+                    merchant_city: g('add-merchant_city').value.trim() || null,
+                    merchant_state: g('add-merchant_state').value.trim() || null,
+                    merchant_zip: g('add-merchant_zip').value.trim() || null,
+                    merchant_country: g('add-merchant_country').value.trim() || 'USA',
+                    processor: g('add-processor').value.trim() || null,
+                    processor_platform: g('add-processor_platform').value.trim() || null,
+                    gateway_account_id: g('add-gateway_account_id').value.trim() || null,
+                    ach_properties: g('add-ach_properties').value.trim() || null,
+                    fresno_buy_rate_tier: g('add-fresno_buy_rate_tier').value.trim() || null,
+                    isv_commission_code: g('add-isv_commission_code').value.trim() || null,
+                    is_edge_enabled: g('add-is_edge_enabled').checked ? true : null,
+                    is_pci_compliant: g('add-is_pci_compliant').checked ? true : null,
+                    is_mobile: g('add-is_mobile').checked ? true : null,
+                    is_activated: g('add-is_activated').checked ? true : null,
+                    is_device_hub_link_enabled: g('add-is_device_hub_link_enabled').checked ? true : null,
+                    enrollment_date: g('add-enrollment_date').value || null,
+                    approved_date: g('add-approved_date').value || null,
+                    last_batch_date: g('add-last_batch_date').value || null,
+                    volume_mtd: g('add-volume_mtd').value || null,
+                    volume_30_day: g('add-volume_30_day').value || null,
+                    volume_90_day: g('add-volume_90_day').value || null,
+                    volume: g('add-volume').value || null,
+                    status_id: g('add-status_id').value.trim() || null,
+                    account_code: g('add-account_code').value.trim() || null,
+                    major_merchant: g('add-major_merchant').value.trim() || null,
+                    shipping_status: g('add-shipping_status').value.trim() || null,
+                    irs_tin_status: g('add-irs_tin_status').value.trim() || null,
+                    ndf: g('add-ndf').value.trim() || null
+                };
+
+                try {
+                    const res = await fetch('/api/merchants', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                        body: JSON.stringify(payload)
+                    });
+                    const data = await res.json();
+                    if (!data.success) {
+                        Swal.showValidationMessage(data.message || 'Failed to create merchant.');
+                        return false;
+                    }
+                    return data;
+                } catch (err) {
+                    Swal.showValidationMessage('Network error: ' + err.message);
+                    return false;
+                }
+            }
+        }).then(result => {
+            if (result.isConfirmed && result.value) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Merchant Created',
+                    text: 'Merchant ' + result.value.merchant_id + ' has been created.',
+                    timer: 2000,
+                    showConfirmButton: false
+                });
+                fetchMerchants();
+            }
+        });
+    }
 
     async function fetchMerchants() {
         const tbody = document.getElementById('merchantTableBody');

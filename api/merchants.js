@@ -773,6 +773,162 @@ if (action === 'get_notes') {
     return res.status(200).json({ success: true });
 }
 
+        // --- ACTION: lookup_agent ---
+        if (action === 'lookup_agent') {
+            const { agent_id: agentIdStr } = req.body;
+            if (!agentIdStr) return res.status(200).json({ found: false });
+
+            const { data: identifier } = await supabase
+                .from('agent_identifiers')
+                .select('id_string, agents!agent_identifiers_agent_id_fkey(agent_name)')
+                .eq('id_string', String(agentIdStr).trim())
+                .maybeSingle();
+
+            if (identifier) {
+                return res.status(200).json({
+                    found: true,
+                    agent_name: identifier.agents?.agent_name || agentIdStr
+                });
+            }
+            return res.status(200).json({ found: false });
+        }
+
+        // --- ACTION: create ---
+        if (action === 'create') {
+            const {
+                merchant_id, dba_name, agent_id, agent_name, account_status, email,
+                merchant_phone, merchant_primary_contact, merchant_address, merchant_city,
+                merchant_state, merchant_zip, merchant_country, merchant_websites,
+                status_id, account_code, major_merchant, ach_properties, processor,
+                processor_platform, gateway_account_id, is_edge_enabled, is_pci_compliant,
+                is_mobile, source, is_activated, is_device_hub_link_enabled,
+                volume_mtd, volume_30_day, volume_90_day, volume,
+                fresno_buy_rate_tier, isv_commission_code, enrollment_date, approved_date,
+                last_batch_date, account_status_change_date, shipping_status, irs_tin_status, ndf
+            } = req.body;
+
+            // Validate required fields
+            if (!merchant_id || !dba_name) {
+                return res.status(400).json({ success: false, message: 'Merchant ID and DBA Name are required.' });
+            }
+
+            // Check for duplicate merchant_id
+            const { data: existing } = await supabase
+                .from('merchants')
+                .select('merchant_id')
+                .eq('merchant_id', String(merchant_id).trim())
+                .maybeSingle();
+
+            if (existing) {
+                return res.status(400).json({ success: false, message: 'Merchant ID already exists.' });
+            }
+
+            // Partner ID lookup/create — same pattern as bulk_upsert
+            if (agent_id && String(agent_id).trim()) {
+                const agentIdStr = String(agent_id).trim();
+
+                const { data: existingIdent } = await supabase
+                    .from('agent_identifiers')
+                    .select('id_string')
+                    .eq('id_string', agentIdStr)
+                    .maybeSingle();
+
+                if (!existingIdent) {
+                    // Create a new agent record
+                    const agentDisplayName = (agent_name && String(agent_name).trim())
+                        ? String(agent_name).trim()
+                        : `Agent ${agentIdStr}`;
+
+                    const { data: newAgent, error: agentError } = await supabase
+                        .from('agents')
+                        .insert({ agent_name: agentDisplayName, is_active: true })
+                        .select('id')
+                        .single();
+
+                    if (!agentError && newAgent) {
+                        await supabase
+                            .from('agent_identifiers')
+                            .insert({ agent_id: newAgent.id, id_string: agentIdStr, status: 'Active' });
+                    }
+                }
+            }
+
+            // Build merchant record — omit null/empty optional fields
+            const merchantRecord = { merchant_id: String(merchant_id).trim(), dba_name };
+            const optionalFields = {
+                agent_id: agent_id || null,
+                account_status: account_status || null,
+                email: email || null,
+                merchant_phone: merchant_phone || null,
+                merchant_primary_contact: merchant_primary_contact || null,
+                merchant_address: merchant_address || null,
+                merchant_city: merchant_city || null,
+                merchant_state: merchant_state || null,
+                merchant_zip: merchant_zip || null,
+                merchant_country: merchant_country || null,
+                merchant_websites: merchant_websites || null,
+                status_id: status_id || null,
+                account_code: account_code || null,
+                major_merchant: major_merchant || null,
+                ach_properties: ach_properties || null,
+                processor: processor || null,
+                processor_platform: processor_platform || null,
+                gateway_account_id: gateway_account_id || null,
+                is_edge_enabled: is_edge_enabled != null ? is_edge_enabled : null,
+                is_pci_compliant: is_pci_compliant != null ? is_pci_compliant : null,
+                is_mobile: is_mobile != null ? is_mobile : null,
+                source: source || 'manual',
+                is_activated: is_activated != null ? is_activated : null,
+                is_device_hub_link_enabled: is_device_hub_link_enabled != null ? is_device_hub_link_enabled : null,
+                volume_mtd: volume_mtd || null,
+                volume_30_day: volume_30_day || null,
+                volume_90_day: volume_90_day || null,
+                volume: volume || null,
+                fresno_buy_rate_tier: fresno_buy_rate_tier || null,
+                isv_commission_code: isv_commission_code || null,
+                enrollment_date: enrollment_date || null,
+                approved_date: approved_date || null,
+                last_batch_date: last_batch_date || null,
+                account_status_change_date: account_status_change_date || null,
+                shipping_status: shipping_status || null,
+                irs_tin_status: irs_tin_status || null,
+                ndf: ndf || null
+            };
+
+            // Only include non-null values
+            for (const [k, v] of Object.entries(optionalFields)) {
+                if (v !== null && v !== undefined && v !== '') merchantRecord[k] = v;
+            }
+            // Always set source
+            merchantRecord.source = source || 'manual';
+
+            const { error: insertError } = await supabase
+                .from('merchants')
+                .insert(merchantRecord);
+
+            if (insertError) {
+                return res.status(500).json({ success: false, message: insertError.message });
+            }
+
+            // Write activity_log entry
+            try {
+                const actingUser = session?.userid || session?.email || 'Admin';
+                await supabase.from('activity_logs').insert({
+                    email: actingUser,
+                    action: 'Create Merchant',
+                    status: 'success',
+                    category: 'merchants',
+                    target_id: String(merchant_id).trim(),
+                    target_type: 'merchant',
+                    severity: 'info'
+                });
+            } catch (logErr) {
+                console.warn('Activity log failed:', logErr.message);
+            }
+
+            return res.status(200).json({ success: true, merchant_id: String(merchant_id).trim() });
+        }
+
         return res.status(400).json({ success: false, message: "Unknown action" });
 
     } catch (err) {
