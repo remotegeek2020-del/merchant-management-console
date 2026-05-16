@@ -30,6 +30,8 @@
         .stat-val{font-size:1.8rem;font-weight:800;font-family:'DM Mono',monospace;line-height:1;}
         .stat-label{font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;margin-top:3px;}
         @keyframes spin{to{transform:rotate(360deg);}}
+        @keyframes row-highlight{0%{background:#fef9c3;}60%{background:#fef9c3;}100%{background:''}}
+        .highlight-flash{animation:row-highlight 2s ease-out forwards;}
     </style>
 </head>
 <body>
@@ -136,6 +138,16 @@ function api(body) {
     return fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, userid: myId, staff_name: myName }) }).then(r=>r.json());
 }
 
+// Scroll to and flash-highlight the task row matching the given id
+function highlightTaskRow(id) {
+    if (!id) return;
+    const row = document.querySelector(`.task-row[data-id="${id}"]`);
+    if (!row) return;
+    row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    row.classList.add('highlight-flash');
+    setTimeout(() => row.classList.remove('highlight-flash'), 2200);
+}
+
 async function init() {
     if (isAdmin) {
         document.getElementById('allTab').style.display = 'inline-block';
@@ -150,7 +162,11 @@ async function init() {
 
     // Load stats
     loadStats();
-    loadTasks();
+    await loadTasks();
+
+    // Deep-link: highlight a specific task row if ?highlight=ID is in the URL
+    const highlightId = new URLSearchParams(window.location.search).get('highlight');
+    if (highlightId) highlightTaskRow(highlightId);
 }
 
 async function loadStats() {
@@ -189,7 +205,7 @@ async function loadTasks() {
             const statusBadge = t.status === 'Completed'
                 ? '<span class="pp-badge approved">Completed</span>'
                 : '<span class="pp-badge pending">Pending</span>';
-            return `<tr class="task-row ${isOverdue?'overdue-row':''}" onclick="openTaskDetail('${t.id}')">
+            return `<tr class="task-row ${isOverdue?'overdue-row':''}" data-id="${t.id}" onclick="openTaskDetail('${t.id}')">
                 <td>
                     <div style="font-weight:700;color:var(--pp-blue);">${t.title}</div>
                     ${t.body?`<div style="font-size:11px;color:#94a3b8;margin-top:2px;">${t.body.substring(0,60)}${t.body.length>60?'...':''}</div>`:''}

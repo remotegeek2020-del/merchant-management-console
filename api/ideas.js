@@ -251,7 +251,7 @@ export default async function handler(req, res) {
             if (!userid) return res.status(400).json({ success: false, message: 'userid required.' });
             const { data } = await supabase
                 .from('notifications')
-                .select('id, type, title, body, actor_name, is_read, created_at')
+                .select('id, type, title, body, actor_name, is_read, created_at, reference_id, link')
                 .eq('recipient_id', userid)
                 .in('type', ['idea_status', 'idea_mention'])
                 .order('created_at', { ascending: false })
@@ -262,12 +262,17 @@ export default async function handler(req, res) {
 
         // ── MARK NOTIFICATION READ ────────────────────────────────────────────
         if (action === 'mark_notifications_read') {
-            const { userid } = req.body;
+            const { userid, notif_id } = req.body;
             if (!userid) return res.status(400).json({ success: false });
-            await supabase.from('notifications')
+            let q = supabase.from('notifications')
                 .update({ is_read: true })
-                .eq('recipient_id', userid)
-                .in('type', ['idea_status', 'idea_mention']);
+                .eq('recipient_id', userid);
+            if (notif_id) {
+                q = q.eq('id', notif_id);
+            } else {
+                q = q.in('type', ['idea_status', 'idea_mention']);
+            }
+            await q;
             return res.status(200).json({ success: true });
         }
 
