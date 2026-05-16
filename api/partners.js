@@ -196,6 +196,102 @@ if (action === 'complete_onboarding') {
             return res.status(200).json({ success: true, data: data || [] });
         }
 
+        // --- ACTION: GET COMPANY MERCHANTS ---
+        if (action === 'get_company_merchants') {
+            const { company_id } = body;
+            if (!company_id) return res.status(400).json({ success: false, message: 'company_id required' });
+
+            // Get all agents for this company
+            const { data: agents, error: agentsErr } = await supabase
+                .from('agents')
+                .select('id')
+                .eq('company_id', company_id);
+            if (agentsErr) throw agentsErr;
+
+            if (!agents || agents.length === 0) {
+                return res.status(200).json({ success: true, data: [] });
+            }
+
+            const agentIds = agents.map(a => a.id);
+
+            // Get all agent_identifier id_strings for those agents
+            const { data: identifiers, error: identErr } = await supabase
+                .from('agent_identifiers')
+                .select('id_string')
+                .in('agent_id', agentIds);
+            if (identErr) throw identErr;
+
+            if (!identifiers || identifiers.length === 0) {
+                return res.status(200).json({ success: true, data: [] });
+            }
+
+            const idStrings = identifiers.map(i => i.id_string);
+
+            // Get merchants using those identifier strings
+            let allMerchants = [];
+            const CHUNK = 500;
+            for (let i = 0; i < idStrings.length; i += CHUNK) {
+                const chunk = idStrings.slice(i, i + CHUNK);
+                const { data: mChunk, error: mErr } = await supabase
+                    .from('merchants')
+                    .select('id, merchant_id, dba_name, account_status, volume_30_day, agent_id')
+                    .in('agent_id', chunk)
+                    .order('dba_name');
+                if (mErr) throw mErr;
+                if (mChunk) allMerchants = allMerchants.concat(mChunk);
+            }
+
+            return res.status(200).json({ success: true, data: allMerchants });
+        }
+
+        // --- ACTION: SEARCH MERCHANTS (for link modal) ---
+        if (action === 'search_merchants_for_link') {
+            const { query: q } = body;
+            if (!q || q.trim().length < 2) return res.status(400).json({ success: false, message: 'Query too short' });
+            const like = `%${q.trim()}%`;
+            const [byDba, byMid] = await Promise.all([
+                supabase.from('merchants').select('id, merchant_id, dba_name, account_status, agent_id').ilike('dba_name', like).limit(10),
+                supabase.from('merchants').select('id, merchant_id, dba_name, account_status, agent_id').ilike('merchant_id', like).limit(10)
+            ]);
+            const seen = new Set();
+            const results = [];
+            for (const m of [...(byDba.data || []), ...(byMid.data || [])]) {
+                if (!seen.has(m.merchant_id)) { seen.add(m.merchant_id); results.push(m); }
+            }
+            return res.status(200).json({ success: true, data: results.slice(0, 15) });
+        }
+
+        // --- ACTION: LINK MERCHANT TO COMPANY ---
+        if (action === 'link_merchant') {
+            const { merchant_id, company_id } = body; // merchant_id is the MID string
+            if (!merchant_id || !company_id) return res.status(400).json({ success: false, message: 'merchant_id and company_id required' });
+
+            // Find the merchant record to get its agent_id (identifier string)
+            const { data: merchant, error: mErr } = await supabase
+                .from('merchants')
+                .select('agent_id')
+                .eq('merchant_id', merchant_id)
+                .single();
+            if (mErr || !merchant) return res.status(404).json({ success: false, message: 'Merchant not found' });
+
+            // Resolve identifier string → agent record
+            const { data: ident, error: identErr } = await supabase
+                .from('agent_identifiers')
+                .select('agent_id')
+                .eq('id_string', merchant.agent_id)
+                .single();
+            if (identErr || !ident) return res.status(404).json({ success: false, message: 'Agent identifier not found for this merchant' });
+
+            // Update the agent's company_id
+            const { error: updateErr } = await supabase
+                .from('agents')
+                .update({ company_id })
+                .eq('id', ident.agent_id);
+            if (updateErr) throw updateErr;
+
+            return res.status(200).json({ success: true });
+        }
+
         // --- ACTION: GET PARTNER NOTES ---
         if (action === 'get_notes') {
             const { person_id } = body;
