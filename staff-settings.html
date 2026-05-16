@@ -25,6 +25,14 @@
         .strength-bar { height:4px; border-radius:99px; background:#f1f5f9; margin-bottom:14px; overflow:hidden; }
         .strength-fill { height:100%; border-radius:99px; transition:all 0.3s; }
         @keyframes spin { to { transform:rotate(360deg); } }
+        .pass-wrap { position:relative; margin-bottom:14px; }
+        .pass-wrap .field-input { margin-bottom:0; padding-right:42px; }
+        .pass-wrap.has-bar { margin-bottom:0; }
+        .pass-toggle { position:absolute; right:12px; top:50%; transform:translateY(-50%); background:none; border:none; cursor:pointer; color:var(--text-muted); padding:4px; display:flex; align-items:center; }
+        .pass-toggle:hover { color:var(--text-primary); }
+        .pass-toggle .material-icons { font-size:18px; }
+        .pass-mismatch { font-size:11px; color:#ef4444; margin-top:-10px; margin-bottom:10px; display:none; }
+        .pass-mismatch.visible { display:block; }
     </style>
 </head>
 <body>
@@ -49,7 +57,7 @@
         <div class="avatar-section">
             <div class="avatar-big" id="avatarPreview">?</div>
             <div>
-                <button class="pp-btn pp-btn-primary" onclick="document.getElementById('photoInput').click()">
+                <button class="pp-btn pp-btn-primary" id="uploadPhotoBtn" onclick="document.getElementById('photoInput').click()">
                     <span class="material-icons" style="font-size:16px;">upload</span> Upload Photo
                 </button>
                 <button class="pp-btn pp-btn-secondary" style="margin-left:8px;" onclick="removePhoto()">Remove</button>
@@ -81,12 +89,28 @@
         <div class="settings-title">Change Password</div>
         <div class="settings-sub">Update your staff portal login password</div>
         <label class="field-label">Current Password</label>
-        <input type="password" class="field-input" id="currentPass" placeholder="••••••••">
+        <div class="pass-wrap">
+            <input type="password" class="field-input" id="currentPass" placeholder="••••••••">
+            <button type="button" class="pass-toggle" onclick="togglePass('currentPass',this)" tabindex="-1" aria-label="Show/hide password">
+                <span class="material-icons">visibility</span>
+            </button>
+        </div>
         <label class="field-label">New Password</label>
-        <input type="password" class="field-input" id="newPass" placeholder="At least 8 characters" oninput="checkStrength(this.value)" style="margin-bottom:6px;">
-        <div class="strength-bar"><div class="strength-fill" id="strengthFill" style="width:0%;background:#ef4444;"></div></div>
-        <label class="field-label">Confirm New Password</label>
-        <input type="password" class="field-input" id="confirmPass" placeholder="Repeat new password">
+        <div class="pass-wrap has-bar">
+            <input type="password" class="field-input" id="newPass" placeholder="At least 8 characters" oninput="checkStrength(this.value); checkMatch()">
+            <button type="button" class="pass-toggle" onclick="togglePass('newPass',this)" tabindex="-1" aria-label="Show/hide password">
+                <span class="material-icons">visibility</span>
+            </button>
+        </div>
+        <div class="strength-bar" style="margin-top:6px;"><div class="strength-fill" id="strengthFill" style="width:0%;background:#ef4444;"></div></div>
+        <label class="field-label" style="margin-top:8px;">Confirm New Password</label>
+        <div class="pass-wrap">
+            <input type="password" class="field-input" id="confirmPass" placeholder="Repeat new password" oninput="checkMatch()">
+            <button type="button" class="pass-toggle" onclick="togglePass('confirmPass',this)" tabindex="-1" aria-label="Show/hide password">
+                <span class="material-icons">visibility</span>
+            </button>
+        </div>
+        <div class="pass-mismatch" id="passMismatch">Passwords do not match</div>
         <button class="pp-btn pp-btn-primary" onclick="changePassword()">
             <span class="material-icons" style="font-size:16px;">lock_reset</span> Update Password
         </button>
@@ -406,17 +430,65 @@ async function init() {
 
 async function handlePhoto(input) {
     const file = input.files[0];
+    // Reset input so re-selecting same file triggers onchange again
+    input.value = '';
     if (!file) return;
-    if (file.size > 5242880) { Swal.fire({ icon: 'warning', title: 'Too large', text: 'Max 5MB.', confirmButtonColor: '#004990' }); return; }
-    Swal.fire({ title: 'Uploading...', didOpen: () => Swal.showLoading() });
-    const r = new FileReader();
-    r.onload = e => document.getElementById('avatarPreview').innerHTML = `<img src="${e.target.result}">`;
-    r.readAsDataURL(file);
-    const urlRes = await communityApi({ action: 'get_avatar_upload_url', file_type: file.type });
-    if (!urlRes.success) { Swal.fire({ icon: 'error', title: 'Upload failed', confirmButtonColor: '#004990' }); return; }
-    await fetch(urlRes.upload_url, { method: 'PUT', body: file, headers: { 'Content-Type': file.type } });
-    await communityApi({ action: 'update_profile', avatar_url: urlRes.public_url });
-    Swal.fire({ icon: 'success', title: 'Photo updated!', timer: 1500, showConfirmButton: false });
+    if (file.size > 5242880) {
+        Swal.fire({ icon: 'warning', title: 'File too large', text: 'Maximum file size is 5MB.', confirmButtonColor: '#004990' });
+        return;
+    }
+
+    // Show a local preview immediately so the user sees feedback right away
+    const previewDataUrl = await new Promise((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = e => resolve(e.target.result);
+        r.onerror = reject;
+        r.readAsDataURL(file);
+    });
+    const avatarEl = document.getElementById('avatarPreview');
+    const prevContent = avatarEl.innerHTML;
+    avatarEl.innerHTML = `<img src="${previewDataUrl}" style="opacity:0.6;">`;
+
+    // Disable the upload button while in progress
+    const uploadBtn = document.getElementById('uploadPhotoBtn');
+    if (uploadBtn) uploadBtn.disabled = true;
+
+    Swal.fire({ title: 'Uploading photo…', didOpen: () => Swal.showLoading() });
+
+    try {
+        // Step 1: Get a signed upload URL from Supabase storage
+        const urlRes = await communityApi({ action: 'get_avatar_upload_url', file_type: file.type });
+        if (!urlRes.success) {
+            throw new Error(urlRes.message || 'Could not get upload URL.');
+        }
+
+        // Step 2: Upload the file directly to Supabase storage
+        const uploadResp = await fetch(urlRes.upload_url, {
+            method: 'PUT',
+            body: file,
+            headers: { 'Content-Type': file.type }
+        });
+        if (!uploadResp.ok) {
+            throw new Error(`Storage upload failed (HTTP ${uploadResp.status}).`);
+        }
+
+        // Step 3: Save the public URL to the user profile
+        const saveRes = await communityApi({ action: 'update_profile', avatar_url: urlRes.public_url });
+        if (!saveRes.success) {
+            throw new Error(saveRes.message || 'Could not save photo URL.');
+        }
+
+        // Show final crisp preview (no opacity)
+        avatarEl.innerHTML = `<img src="${urlRes.public_url}">`;
+        Swal.fire({ icon: 'success', title: 'Photo updated!', timer: 1500, showConfirmButton: false });
+
+    } catch (err) {
+        // Restore the previous avatar on failure
+        avatarEl.innerHTML = prevContent;
+        Swal.fire({ icon: 'error', title: 'Upload failed', text: err.message, confirmButtonColor: '#004990' });
+    } finally {
+        if (uploadBtn) uploadBtn.disabled = false;
+    }
 }
 
 async function removePhoto() {
@@ -440,6 +512,35 @@ async function saveProfile() {
     else Swal.fire({ icon: 'error', title: 'Failed', text: res.message, confirmButtonColor: '#004990' });
 }
 
+// ── PASSWORD SHOW/HIDE TOGGLE ─────────────────────────────────────────────────
+function togglePass(fieldId, btn) {
+    const input = document.getElementById(fieldId);
+    if (!input) return;
+    const icon = btn.querySelector('.material-icons');
+    if (input.type === 'password') {
+        input.type = 'text';
+        if (icon) icon.textContent = 'visibility_off';
+        btn.setAttribute('aria-label', 'Hide password');
+    } else {
+        input.type = 'password';
+        if (icon) icon.textContent = 'visibility';
+        btn.setAttribute('aria-label', 'Show password');
+    }
+}
+
+// ── PASSWORD MATCH CHECK ──────────────────────────────────────────────────────
+function checkMatch() {
+    const newPass = document.getElementById('newPass').value;
+    const confirm = document.getElementById('confirmPass').value;
+    const msg = document.getElementById('passMismatch');
+    if (!msg) return;
+    if (confirm && newPass !== confirm) {
+        msg.classList.add('visible');
+    } else {
+        msg.classList.remove('visible');
+    }
+}
+
 function checkStrength(val) {
     const len = val.length >= 8, upper = /[A-Z]/.test(val), num = /[0-9]/.test(val);
     const score = [len, upper, num].filter(Boolean).length;
@@ -452,27 +553,46 @@ async function changePassword() {
     const current = document.getElementById('currentPass').value;
     const newPass = document.getElementById('newPass').value;
     const confirm = document.getElementById('confirmPass').value;
-    if (!current || !newPass) return Swal.fire({ icon: 'warning', title: 'Fill all fields', confirmButtonColor: '#004990' });
-    if (newPass.length < 8) return Swal.fire({ icon: 'warning', title: 'Too short', text: 'Minimum 8 characters.', confirmButtonColor: '#004990' });
-    if (newPass !== confirm) return Swal.fire({ icon: 'warning', title: 'Passwords don\'t match', confirmButtonColor: '#004990' });
 
-    Swal.fire({ title: 'Updating...', didOpen: () => Swal.showLoading() });
+    if (!current || !newPass || !confirm) {
+        return Swal.fire({ icon: 'warning', title: 'Fill all fields', text: 'Please fill in your current password, new password and confirmation.', confirmButtonColor: '#004990' });
+    }
+    if (newPass.length < 8) {
+        return Swal.fire({ icon: 'warning', title: 'Password too short', text: 'New password must be at least 8 characters.', confirmButtonColor: '#004990' });
+    }
+    if (newPass !== confirm) {
+        document.getElementById('passMismatch').classList.add('visible');
+        return Swal.fire({ icon: 'warning', title: 'Passwords don\'t match', text: 'New password and confirmation must be identical.', confirmButtonColor: '#004990' });
+    }
 
-    // Staff password change goes through users API
-    const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'change_password', userid: staffId, current_password: current, new_password: newPass })
-    }).then(r => r.json());
+    Swal.fire({ title: 'Updating password…', didOpen: () => Swal.showLoading() });
 
-    if (res.success) {
-        document.getElementById('currentPass').value = '';
-        document.getElementById('newPass').value = '';
-        document.getElementById('confirmPass').value = '';
-        document.getElementById('strengthFill').style.width = '0%';
-        Swal.fire({ icon: 'success', title: 'Password updated!', timer: 1500, showConfirmButton: false });
-    } else {
-        Swal.fire({ icon: 'error', title: 'Failed', text: res.message || 'Could not update password.', confirmButtonColor: '#004990' });
+    try {
+        // Staff password change goes through users API
+        const res = await fetch('/api/users', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'change_password', userid: staffId, current_password: current, new_password: newPass })
+        }).then(r => r.json());
+
+        if (res.success) {
+            document.getElementById('currentPass').value = '';
+            document.getElementById('newPass').value = '';
+            document.getElementById('confirmPass').value = '';
+            document.getElementById('strengthFill').style.width = '0%';
+            document.getElementById('passMismatch').classList.remove('visible');
+            // Reset any show-password toggles back to hidden
+            ['currentPass', 'newPass', 'confirmPass'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.type = 'password';
+            });
+            document.querySelectorAll('.pass-toggle .material-icons').forEach(ic => ic.textContent = 'visibility');
+            Swal.fire({ icon: 'success', title: 'Password updated!', text: 'Your new password is active.', timer: 2000, showConfirmButton: false });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Update failed', text: res.message || 'Could not update password. Please try again.', confirmButtonColor: '#004990' });
+        }
+    } catch (err) {
+        Swal.fire({ icon: 'error', title: 'Error', text: err.message, confirmButtonColor: '#004990' });
     }
 }
 
