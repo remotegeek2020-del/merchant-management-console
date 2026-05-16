@@ -284,6 +284,20 @@ input[type=number] {
         CLEAR FILTER
     </button>
 </div>
+    <!-- PARTNER LEADERBOARD CARD -->
+    <div id="leaderboardCard" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">leaderboard</span> Partner Performance</div>
+                <div style="font-size:1.1rem;font-weight:800;color:#002d5a;">Partner Leaderboard</div>
+            </div>
+            <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+        </div>
+        <div id="leaderboardList" style="display:flex;flex-direction:column;gap:6px;">
+            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading leaderboard...</div>
+        </div>
+    </div>
+
     <div id="partnerGrid" class="partner-grid"></div>
    <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px;">
     <button id="btnPrev" onclick="changePage(-1)" class="pagination-btn">Previous</button>
@@ -1895,6 +1909,7 @@ window.quickAddId = async function(personId, name) {
             currentPage = 1;
             renderGrid();
             loadStatsBackground();
+            loadLeaderboard();
 
         } catch (err) {
             console.error("Failed to load partners:", err);
@@ -1906,6 +1921,82 @@ window.quickAddId = async function(personId, name) {
         }
     }
 
+
+    // ── LEADERBOARD ───────────────────────────────────────
+    let leaderboardData = [];
+    let leaderboardShowAll = false;
+
+    async function loadLeaderboard() {
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_leaderboard' })
+            });
+            const d = await res.json();
+            if (!d.success) return;
+            leaderboardData = d.data || [];
+            renderLeaderboard();
+        } catch (e) {
+            console.warn('Leaderboard load failed:', e.message);
+            document.getElementById('leaderboardList').innerHTML = '<div style="color:#94a3b8;font-size:12px;padding:12px;text-align:center;">Leaderboard unavailable</div>';
+        }
+    }
+
+    function getTierStyle(tier) {
+        if (tier === 'Gold') return { bg: '#fef9c3', color: '#92400e', label: '🥇 Gold' };
+        if (tier === 'Silver') return { bg: '#f1f5f9', color: '#475569', label: '🥈 Silver' };
+        return { bg: '#fef3ec', color: '#9a3412', label: '🥉 Bronze' };
+    }
+
+    function getRankCircleColor(rank) {
+        if (rank === 1) return { bg: '#fef9c3', color: '#92400e' };
+        if (rank === 2) return { bg: '#f1f5f9', color: '#475569' };
+        if (rank === 3) return { bg: '#fef3ec', color: '#9a3412' };
+        return { bg: '#f8fafc', color: '#64748b' };
+    }
+
+    function renderLeaderboard() {
+        const list = document.getElementById('leaderboardList');
+        const btn = document.getElementById('leaderboardToggleBtn');
+        const shown = leaderboardShowAll ? 10 : 5;
+        const items = leaderboardData.slice(0, shown);
+        const total10 = Math.min(leaderboardData.length, 10);
+
+        if (!items.length) {
+            list.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:16px;text-align:center;">No partner data available yet.</div>';
+            if (btn) btn.style.display = 'none';
+            return;
+        }
+
+        if (btn) {
+            btn.style.display = total10 > 5 ? 'block' : 'none';
+            btn.textContent = leaderboardShowAll ? 'Show Top 5' : `Show All ${total10}`;
+        }
+
+        list.innerHTML = items.map(p => {
+            const tierStyle = getTierStyle(p.tier);
+            const rankStyle = getRankCircleColor(p.rank);
+            const growthColor = p.growth_pct >= 0 ? '#166534' : '#991b1b';
+            const growthBg = p.growth_pct >= 0 ? '#dcfce7' : '#fee2e2';
+            const growthSign = p.growth_pct > 0 ? '+' : '';
+            const vol30Fmt = '$' + parseFloat(p.volume_30_day || 0).toLocaleString(undefined, { maximumFractionDigits: 0 });
+            return `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;border:1px solid #f1f5f9;background:#fafbfc;transition:0.2s;" onmouseover="this.style.background='#f0f9ff';this.style.borderColor='#bfdbfe';" onmouseout="this.style.background='#fafbfc';this.style.borderColor='#f1f5f9';">
+                <div style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:12px;background:${rankStyle.bg};color:${rankStyle.color};flex-shrink:0;">#${p.rank}</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:800;font-size:13px;color:#002d5a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</div>
+                    <div style="font-size:10px;color:#94a3b8;font-weight:600;">${p.merchant_count} merchant${p.merchant_count !== 1 ? 's' : ''} &bull; ${vol30Fmt} 30d vol</div>
+                </div>
+                <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:${tierStyle.bg};color:${tierStyle.color};">${tierStyle.label}</span>
+                <span style="font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;background:${growthBg};color:${growthColor};white-space:nowrap;">${growthSign}${p.growth_pct}%</span>
+            </div>`;
+        }).join('');
+    }
+
+    window.toggleLeaderboardView = function() {
+        leaderboardShowAll = !leaderboardShowAll;
+        renderLeaderboard();
+    };
 
     // ── BACKGROUND STATS ─────────────────────────────────
     async function loadStatsBackground() {

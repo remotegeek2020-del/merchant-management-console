@@ -805,6 +805,95 @@ if (action === 'get_merchant_data_raw') {
     return res.status(200).json({ success: true, emailed: !!person.email, portal: !!(person.is_portal_active && person.portal_password_set) });
 }
 
+        // --- ACTION: GET LEADERBOARD ---
+        if (action === 'get_leaderboard') {
+            // 1. Get all agents with their parent persons
+            const { data: agents, error: agentsErr } = await supabase
+                .from('agents')
+                .select('id, agent_name, parent_agent_id, persons:parent_agent_id(id, full_name)');
+            if (agentsErr) throw agentsErr;
+
+            // 2. Get all agent_identifiers
+            const { data: identifiers, error: identErr } = await supabase
+                .from('agent_identifiers')
+                .select('id_string, agent_id');
+            if (identErr) throw identErr;
+
+            // Build a map from id_string to agent_id
+            const idStringToAgentId = {};
+            (identifiers || []).forEach(i => { idStringToAgentId[i.id_string] = i.agent_id; });
+
+            // Get all id_strings
+            const allIdStrings = (identifiers || []).map(i => i.id_string);
+
+            if (!allIdStrings.length) {
+                return res.status(200).json({ success: true, data: [], total: 0 });
+            }
+
+            // 3. Get approved merchant counts and volume aggregates per agent_id (merchant.agent_id = id_string)
+            // Use merchants table grouped by agent_id
+            let allMerchants = [];
+            const CHUNK = 500;
+            for (let i = 0; i < allIdStrings.length; i += CHUNK) {
+                const chunk = allIdStrings.slice(i, i + CHUNK);
+                const { data: mChunk } = await supabase
+                    .from('merchants')
+                    .select('agent_id, account_status, volume_30_day, volume_90_day')
+                    .in('agent_id', chunk)
+                    .eq('account_status', 'Approved');
+                if (mChunk) allMerchants = allMerchants.concat(mChunk);
+            }
+
+            // 4. Aggregate per agent_identifier id_string → then roll up to agents → then to persons
+            const idStringAgg = {};
+            allMerchants.forEach(m => {
+                const key = m.agent_id;
+                if (!idStringAgg[key]) idStringAgg[key] = { merchant_count: 0, volume_30_day: 0, volume_90_day: 0 };
+                idStringAgg[key].merchant_count++;
+                idStringAgg[key].volume_30_day += parseFloat(m.volume_30_day || 0);
+                idStringAgg[key].volume_90_day += parseFloat(m.volume_90_day || 0);
+            });
+
+            // 5. Roll up id_strings to agent records, then to persons
+            const personAgg = {};
+            (identifiers || []).forEach(ident => {
+                const agg = idStringAgg[ident.id_string];
+                if (!agg) return;
+                const agent = (agents || []).find(a => a.id === ident.agent_id);
+                if (!agent || !agent.parent_agent_id) return;
+                const personId = agent.parent_agent_id;
+                const personName = agent.persons?.full_name || agent.agent_name || 'Unknown';
+                if (!personAgg[personId]) {
+                    personAgg[personId] = { person_id: personId, name: personName, agent_id: agent.id, merchant_count: 0, volume_30_day: 0, volume_90_day: 0 };
+                }
+                personAgg[personId].merchant_count += agg.merchant_count;
+                personAgg[personId].volume_30_day += agg.volume_30_day;
+                personAgg[personId].volume_90_day += agg.volume_90_day;
+            });
+
+            // 6. Only partners with at least 1 approved merchant, sort by volume_30_day desc
+            let ranked = Object.values(personAgg)
+                .filter(p => p.merchant_count >= 1)
+                .sort((a, b) => b.volume_30_day - a.volume_30_day);
+
+            // 7. Assign rank, tier, growth_pct
+            ranked = ranked.map((p, i) => {
+                const rank = i + 1;
+                const tier = rank <= 3 ? 'Gold' : rank <= 10 ? 'Silver' : 'Bronze';
+                const baseline = p.volume_90_day / 3;
+                let growth_pct = 0;
+                if (baseline > 0) {
+                    growth_pct = ((p.volume_30_day - baseline) / baseline) * 100;
+                    if (growth_pct > 999) growth_pct = 999;
+                    growth_pct = Math.round(growth_pct * 10) / 10;
+                }
+                return { ...p, rank, tier, growth_pct };
+            });
+
+            const total = ranked.length;
+            return res.status(200).json({ success: true, data: ranked.slice(0, 20), total });
+        }
+
         // --- ACTION: GET HIERARCHY ---
         if (action === 'get_hierarchy') {
             const { data: masters } = await supabase.from('agents').select('id').eq('parent_agent_id', person_id);
