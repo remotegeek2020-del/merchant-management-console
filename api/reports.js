@@ -270,6 +270,61 @@ export default async function handler(req, res) {
             return res.status(400).json({ success: false, message: `Unknown report type: ${reportType}` });
         }
 
+        if (action === 'get_cohort_retention') {
+            // Fetch all merchants with an enrollment_date
+            const { data: merchants, error: mErr } = await supabase
+                .from('merchants')
+                .select('merchant_id, enrollment_date, account_status, last_batch_date')
+                .not('enrollment_date', 'is', null);
+
+            if (mErr) throw mErr;
+
+            const now = new Date();
+
+            // Helper: months difference between two dates (floor)
+            function monthsDiff(from, to) {
+                return (to.getFullYear() - from.getFullYear()) * 12 + (to.getMonth() - from.getMonth());
+            }
+
+            // Group merchants by cohort month (YYYY-MM of enrollment_date)
+            const cohortMap = {};
+            for (const m of (merchants || [])) {
+                const enrolled = new Date(m.enrollment_date);
+                if (isNaN(enrolled.getTime())) continue;
+                const cohortKey = `${enrolled.getFullYear()}-${String(enrolled.getMonth() + 1).padStart(2, '0')}`;
+                if (!cohortMap[cohortKey]) cohortMap[cohortKey] = [];
+                cohortMap[cohortKey].push({ ...m, enrolledDate: enrolled });
+            }
+
+            // Build sorted list of cohort keys, limit to last 24
+            const allCohorts = Object.keys(cohortMap).sort();
+            const last24 = allCohorts.slice(-24);
+
+            const result = last24.map(cohort => {
+                const members = cohortMap[cohort];
+                const size = members.length;
+                const cohortDate = new Date(cohort + '-01');
+                const ageMonths = monthsDiff(cohortDate, now);
+
+                function retentionPct(minAge) {
+                    if (ageMonths < minAge) return null; // cohort not old enough
+                    const retained = members.filter(m => m.account_status === 'Approved').length;
+                    return size > 0 ? Math.round((retained / size) * 100) : 0;
+                }
+
+                return {
+                    cohort,
+                    size,
+                    ret_1:  retentionPct(1),
+                    ret_3:  retentionPct(3),
+                    ret_6:  retentionPct(6),
+                    ret_12: retentionPct(12),
+                };
+            });
+
+            return res.status(200).json({ success: true, data: result });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action' });
 
     } catch (err) {
