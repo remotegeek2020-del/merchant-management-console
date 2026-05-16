@@ -70,7 +70,9 @@
             .modern-header > div:last-child input { width: 100% !important; }
             .summary-bar { grid-template-columns: 1fr 1fr !important; gap: 10px; }
             .main-card { overflow-x: auto; }
-            .main-card table { min-width: 500px; }
+            .main-card table { min-width: 400px; }
+            .slds-table thead th.hide-mobile,
+            .slds-table tbody td.hide-mobile { display: none; }
         }
         @media (max-width: 480px) {
             .summary-bar { grid-template-columns: 1fr !important; }
@@ -173,9 +175,9 @@
                 <tr>
                     <th>DBA Name</th>
                     <th>Merchant ID</th>
-                    <th>Partner ID</th>
-                    <th>Company</th>
-                    <th>Partner Name</th>
+                    <th class="hide-mobile">Partner ID</th>
+                    <th class="hide-mobile">Company</th>
+                    <th class="hide-mobile">Partner Name</th>
                     <th>Status</th>
                 </tr>
             </thead>
@@ -483,9 +485,9 @@ async function executeFinalUpsert(payload) {
                 ${m.is_prime49 ? '<span class="prime-badge">PRIME49</span>' : ''}
             </td>
             <td><code>${m.merchant_id || '---'}</code></td>
-            <td>${m.agent_id || '---'}</td>
-            <td>${m.company_name || '---'}</td> 
-            <td>${m.partner_name || '---'}</td>
+            <td class="hide-mobile">${m.agent_id || '---'}</td>
+            <td class="hide-mobile">${m.company_name || '---'}</td>
+            <td class="hide-mobile">${m.partner_name || '---'}</td>
             <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
         `;
     });
@@ -749,9 +751,9 @@ async function addTask(merchantUuid) {
             ${primeBadge}
         </td>
         <td><code>${m.merchant_id || '---'}</code></td>
-        <td>${m.agent_id || '---'}</td>
-        <td>${m.company_name || '---'}</td>
-        <td>${m.partner_name || '---'}</td>
+        <td class="hide-mobile">${m.agent_id || '---'}</td>
+        <td class="hide-mobile">${m.company_name || '---'}</td>
+        <td class="hide-mobile">${m.partner_name || '---'}</td>
         <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
     `;
 });
