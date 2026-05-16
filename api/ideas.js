@@ -10,7 +10,7 @@ async function isSuperAdmin(supabase, userid) {
 async function isAdminOrDev(supabase, userid) {
     if (!userid) return false;
     const { data } = await supabase.from('app_users').select('role, is_active').eq('userid', userid).single();
-    return data?.is_active === true && ['super_admin', 'developer'].includes(data?.role);
+    return data?.is_active === true && ['super_admin', 'admin', 'developer'].includes(data?.role);
 }
 
 // Send in-app notification and trigger realtime pulse
@@ -129,7 +129,7 @@ export default async function handler(req, res) {
             const safeCat = allowedCats.includes(category) ? category : 'general';
             const { data, error } = await supabase
                 .from('feature_ideas')
-                .insert({ title: title.trim(), body: body.trim(), requested_by_userid, requested_by_name, category: safeCat })
+                .insert({ title: title.trim(), body: body.trim(), requested_by_userid, requested_by_name, category: safeCat, status: 'open' })
                 .select().single();
             if (error) throw error;
 
@@ -164,9 +164,10 @@ export default async function handler(req, res) {
 
         if (action === 'update_status') {
             const { id, status, actor_userid, actor_name } = req.body;
-            const allowed = ['pending', 'in_progress', 'done', 'rejected'];
+            const allowed = ['open', 'in_review', 'planned', 'done', 'rejected', 'pending', 'in_progress'];
             if (!id) return res.status(400).json({ success: false, message: 'ID is required.' });
             if (!allowed.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status.' });
+            if (!(await isAdminOrDev(supabase, actor_userid))) return res.status(403).json({ success: false, message: 'Access denied.' });
 
             // Fetch the idea before updating (to get creator info)
             const { data: idea } = await supabase
@@ -179,12 +180,14 @@ export default async function handler(req, res) {
             if (error) throw error;
 
             // Notify creator on all meaningful status changes (only if someone else made the change)
-            const notifyStatuses = ['done', 'rejected', 'in_progress'];
+            const notifyStatuses = ['done', 'rejected', 'in_progress', 'in_review', 'planned'];
             if (idea && notifyStatuses.includes(status) && idea.requested_by_userid && idea.requested_by_userid !== actor_userid) {
                 const statusMeta = {
                     done:        { label: 'implemented ✅', notifTitle: 'Your idea was implemented!',    color: '#0d9488', heading: 'Great news!',    emoji: '✅' },
                     rejected:    { label: 'declined ❌',    notifTitle: 'Your idea was declined',         color: '#dc2626', heading: 'Status Update', emoji: '❌' },
-                    in_progress: { label: 'in progress 🔧', notifTitle: 'Your idea is being worked on!', color: '#d97706', heading: 'In Progress!',   emoji: '🔧' }
+                    in_progress: { label: 'in progress 🔧', notifTitle: 'Your idea is being worked on!', color: '#d97706', heading: 'In Progress!',   emoji: '🔧' },
+                    in_review:   { label: 'in review 🔍',   notifTitle: 'Your idea is under review!',    color: '#6366f1', heading: 'Under Review!',  emoji: '🔍' },
+                    planned:     { label: 'planned 📋',     notifTitle: 'Your idea has been planned!',   color: '#0ea5e9', heading: 'Planned!',       emoji: '📋' }
                 };
                 const meta = statusMeta[status];
 

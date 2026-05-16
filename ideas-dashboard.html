@@ -42,7 +42,10 @@
         .chip.active { color: white; border-color: transparent; }
         .chip-all.active        { background: #334155; }
         .chip-pending.active    { background: #6366f1; }
+        .chip-open.active       { background: #64748b; }
         .chip-in_progress.active { background: #f59e0b; }
+        .chip-in_review.active  { background: #7c3aed; }
+        .chip-planned.active    { background: #0ea5e9; }
         .chip-done.active       { background: #22c55e; }
         .chip-rejected.active   { background: #ef4444; }
         .chip-cat.active        { background: #0d9488; }
@@ -77,6 +80,23 @@
         .badge-in_progress { background: #fef3c7; color: #92400e; }
         .badge-done       { background: #dcfce7; color: #166534; }
         .badge-rejected   { background: #fee2e2; color: #991b1b; }
+        .badge-open       { background: #f1f5f9; color: #475569; }
+        .badge-in_review  { background: #ede9fe; color: #5b21b6; }
+        .badge-planned    { background: #e0f2fe; color: #0369a1; }
+
+        /* Status workflow progression strip */
+        .status-workflow { display: flex; align-items: center; gap: 0; margin-top: 10px; }
+        .workflow-step { display: flex; align-items: center; gap: 5px; padding: 5px 12px; font-size: 11px; font-weight: 700; border: 1.5px solid #e2e8f0; background: #f8fafc; color: #94a3b8; white-space: nowrap; transition: all 0.15s; position: relative; }
+        .workflow-step:first-child { border-radius: 8px 0 0 8px; }
+        .workflow-step:last-child  { border-radius: 0 8px 8px 0; }
+        .workflow-step + .workflow-step { border-left: none; }
+        .workflow-step.active-open     { background: #f1f5f9; color: #475569; border-color: #94a3b8; z-index:1; }
+        .workflow-step.active-in_review { background: #ede9fe; color: #5b21b6; border-color: #8b5cf6; z-index:1; }
+        .workflow-step.active-planned  { background: #e0f2fe; color: #0369a1; border-color: #38bdf8; z-index:1; }
+        .workflow-step.active-done     { background: #dcfce7; color: #166534; border-color: #22c55e; z-index:1; }
+        .workflow-step.past { background: #f0fdfa; color: #0d9488; border-color: #99f6e4; }
+        .workflow-step.admin-clickable { cursor: pointer; }
+        .workflow-step.admin-clickable:hover:not(.active-open):not(.active-in_review):not(.active-planned):not(.active-done) { background: #f0fdf4; color: #166534; border-color: #86efac; }
 
         .cat-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 99px; font-size: 10px; font-weight: 700; background: #f1f5f9; color: #64748b; text-transform: uppercase; letter-spacing: 0.4px; }
 
@@ -182,10 +202,13 @@
             <div class="filter-row" style="margin-bottom:8px;">
                 <span class="filter-label">Status:</span>
                 <div class="chip chip-all active" onclick="setStatusFilter('all')">All</div>
-                <div class="chip chip-pending" onclick="setStatusFilter('pending')">Pending</div>
-                <div class="chip chip-in_progress" onclick="setStatusFilter('in_progress')">In Progress</div>
+                <div class="chip chip-open" onclick="setStatusFilter('open')">Open</div>
+                <div class="chip chip-in_review" onclick="setStatusFilter('in_review')">In Review</div>
+                <div class="chip chip-planned" onclick="setStatusFilter('planned')">Planned</div>
                 <div class="chip chip-done" onclick="setStatusFilter('done')">Done</div>
                 <div class="chip chip-rejected" onclick="setStatusFilter('rejected')">Rejected</div>
+                <div class="chip chip-pending" onclick="setStatusFilter('pending')" title="Legacy status">Pending</div>
+                <div class="chip chip-in_progress" onclick="setStatusFilter('in_progress')" title="Legacy status">In Progress</div>
                 <div class="sort-toggle">
                     <button class="sort-btn active" id="sort-votes" onclick="setSort('votes')">
                         <span class="material-icons" style="font-size:14px;">thumb_up</span> Top
@@ -229,7 +252,7 @@ const firstName = localStorage.getItem('pp_user_first_name') || '';
 const lastName  = localStorage.getItem('pp_user_last_name')  || '';
 const userName  = [firstName, lastName].filter(Boolean).join(' ') || 'Staff';
 const isSuperAdmin = userRole === 'super_admin';
-const isAdmin      = isSuperAdmin || userRole === 'developer';
+const isAdmin      = isSuperAdmin || userRole === 'admin' || userRole === 'developer';
 
 let allIdeas      = [];
 let allActivities = [];
@@ -297,9 +320,52 @@ function setSort(mode) {
 
 const catLabels = { general: 'General', ui_ux: 'UI / UX', api: 'API', reporting: 'Reporting', performance: 'Performance', security: 'Security', other: 'Other' };
 
+const statusLabels = {
+    open: 'Open', in_review: 'In Review', planned: 'Planned', done: 'Done',
+    rejected: 'Rejected',
+    // legacy
+    pending: 'Pending', in_progress: 'In Progress'
+};
+const statusIcons = {
+    open: 'radio_button_unchecked', in_review: 'search', planned: 'calendar_today', done: 'check_circle',
+    rejected: 'cancel', pending: 'hourglass_empty', in_progress: 'pending'
+};
+
+// Ordered workflow steps (used for progression strip)
+const WORKFLOW_STEPS = ['open', 'in_review', 'planned', 'done'];
+
 function statusBadge(status) {
-    const labels = { pending: 'Pending', in_progress: 'In Progress', done: 'Done', rejected: 'Rejected' };
-    return `<span class="status-badge badge-${status}">${labels[status] || status}</span>`;
+    const label = statusLabels[status] || status;
+    const icon  = statusIcons[status] || 'radio_button_unchecked';
+    return `<span class="status-badge badge-${status}"><span class="material-icons" style="font-size:12px;">${icon}</span>${label}</span>`;
+}
+
+function buildWorkflowStrip(idea) {
+    const currentStatus = idea.status;
+    const currentIdx = WORKFLOW_STEPS.indexOf(currentStatus);
+    // Only show workflow strip for the 4-step workflow statuses (not rejected/legacy pending/in_progress)
+    if (currentStatus === 'rejected' || currentIdx === -1) return '';
+
+    return `<div class="status-workflow">` +
+        WORKFLOW_STEPS.map((step, idx) => {
+            let cls = 'workflow-step';
+            if (step === currentStatus) {
+                cls += ` active-${step}`;
+            } else if (currentIdx !== -1 && idx < currentIdx) {
+                cls += ' past';
+            }
+            if (isAdmin && step !== currentStatus) {
+                cls += ' admin-clickable';
+            }
+            const icon = statusIcons[step];
+            const label = statusLabels[step];
+            const clickAttr = (isAdmin && step !== currentStatus)
+                ? `onclick="updateStatus('${idea.id}','${step}')" title="Move to ${label}"`
+                : '';
+            return `<div class="${cls}" ${clickAttr}>` +
+                `<span class="material-icons" style="font-size:12px;">${icon}</span>${label}</div>`;
+        }).join('') +
+    `</div>`;
 }
 
 function renderIdeas() {
@@ -325,9 +391,10 @@ function renderIdeas() {
     el.innerHTML = list.map(idea => {
         const controls = isAdmin ? buildAdminControls(idea) : '';
         const commentCount = idea.comment_count || 0;
+        const workflowStrip = buildWorkflowStrip(idea);
         return `<div class="idea-card" id="idea-${idea.id}">
             <button class="vote-btn ${idea.voted_by_me ? 'voted' : ''}" onclick="toggleVote('${idea.id}')" title="${idea.voted_by_me ? 'Remove vote' : 'Upvote this idea'}">
-                <span class="material-icons">arrow_upward</span>
+                <span class="material-icons">thumb_up</span>
                 <span class="vote-count" id="votes-${idea.id}">${idea.votes || 0}</span>
                 <span class="vote-label">votes</span>
             </button>
@@ -346,6 +413,7 @@ function renderIdeas() {
                         <span id="cc-${idea.id}">${commentCount}</span>
                     </button>
                 </div>
+                ${workflowStrip}
             </div>
             ${controls}
         </div>`;
@@ -378,10 +446,14 @@ async function toggleVote(id) {
 
 function buildAdminControls(idea) {
     const btns = [];
-    if (idea.status !== 'in_progress') btns.push(`<button class="status-btn status-btn-progress" onclick="updateStatus('${idea.id}','in_progress')">In Progress</button>`);
-    if (idea.status !== 'done')        btns.push(`<button class="status-btn status-btn-done" onclick="updateStatus('${idea.id}','done')">Mark Done</button>`);
-    if (idea.status !== 'pending')     btns.push(`<button class="status-btn status-btn-pending" onclick="updateStatus('${idea.id}','pending')">Reset</button>`);
-    if (idea.status !== 'rejected')    btns.push(`<button class="status-btn status-btn-reject" onclick="updateStatus('${idea.id}','rejected')">Reject</button>`);
+    const s = idea.status;
+
+    // New workflow statuses
+    if (s !== 'open')      btns.push(`<button class="status-btn" style="color:#475569;border-color:#94a3b8;" onclick="updateStatus('${idea.id}','open')">Open</button>`);
+    if (s !== 'in_review') btns.push(`<button class="status-btn" style="color:#5b21b6;border-color:#8b5cf6;" onclick="updateStatus('${idea.id}','in_review')">In Review</button>`);
+    if (s !== 'planned')   btns.push(`<button class="status-btn" style="color:#0369a1;border-color:#38bdf8;" onclick="updateStatus('${idea.id}','planned')">Planned</button>`);
+    if (s !== 'done')      btns.push(`<button class="status-btn status-btn-done" onclick="updateStatus('${idea.id}','done')">Done</button>`);
+    if (s !== 'rejected')  btns.push(`<button class="status-btn status-btn-reject" onclick="updateStatus('${idea.id}','rejected')">Reject</button>`);
     btns.push(`<button class="status-btn status-btn-delete" onclick="deleteIdea('${idea.id}')">Delete</button>`);
     return `<div class="status-actions">${btns.join('')}</div>`;
 }
