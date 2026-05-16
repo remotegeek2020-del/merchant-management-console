@@ -349,6 +349,7 @@ async function openMerchantDetail(merchantId, name) {
             <div style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin-bottom:16px;">
                 <button onclick="mdTab('overview')" id="mdtab-overview" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#0d9488;box-shadow:0 1px 3px rgba(0,0,0,.08);">Overview</button>
                 <button onclick="mdTab('analysis')" id="mdtab-analysis" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Analysis</button>
+                <button onclick="mdTab('contact')" id="mdtab-contact" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Contact</button>
                 <button onclick="mdTab('tickets')" id="mdtab-tickets" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Tickets</button>
             </div>
 
@@ -385,6 +386,32 @@ async function openMerchantDetail(merchantId, name) {
                 ${analysisHtml}
             </div>
 
+            <!-- CONTACT PANEL -->
+            <div id="mdpanel-contact" style="display:none;">
+                <div style="display:flex;gap:8px;margin-bottom:18px;flex-wrap:wrap;">
+                    <button onclick="sendMerchantEmail('${m.merchant_id}','report','${m.dba_name.replace(/'/g,"\\'")}','${(m.email||'').replace(/'/g,"\\'")}',${JSON.stringify(m.volume_30_day||0)},${JSON.stringify(m.volume_90_day||0)})" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:1.5px solid #99f6e4;border-radius:10px;background:#f0fdfa;color:#0d9488;font-size:12px;font-weight:700;cursor:pointer;">
+                        <span class="material-icons" style="font-size:16px;">summarize</span> Send Portfolio Report
+                    </button>
+                    <button onclick="sendMerchantEmail('${m.merchant_id}','atrisk','${m.dba_name.replace(/'/g,"\\'")}','${(m.email||'').replace(/'/g,"\\'")}',${JSON.stringify(m.volume_30_day||0)},${JSON.stringify(m.volume_90_day||0)})" style="flex:1;display:flex;align-items:center;justify-content:center;gap:6px;padding:10px;border:1.5px solid #fca5a5;border-radius:10px;background:#fff5f5;color:#dc2626;font-size:12px;font-weight:700;cursor:pointer;">
+                        <span class="material-icons" style="font-size:16px;">warning</span> Send At-Risk Notice
+                    </button>
+                </div>
+                <div style="font-size:11px;color:#94a3b8;margin-bottom:16px;text-align:center;">Emails sent from your connected email account · <a href="/partner/settings" style="color:#0d9488;">Manage in Settings</a></div>
+                <div style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Edit Contact Details</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+                    <div><label style="font-size:11px;font-weight:600;color:#94a3b8;">Primary Contact</label><input id="md-contact-name" value="${(m.merchant_primary_contact||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#94a3b8;">Phone</label><input id="md-contact-phone" value="${(m.merchant_phone||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div>
+                    <div style="grid-column:1/-1;"><label style="font-size:11px;font-weight:600;color:#94a3b8;">Email</label><input id="md-contact-email" type="email" value="${(m.email||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div>
+                    <div style="grid-column:1/-1;"><label style="font-size:11px;font-weight:600;color:#94a3b8;">Address</label><input id="md-contact-addr" value="${(m.merchant_address||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div>
+                    <div><label style="font-size:11px;font-weight:600;color:#94a3b8;">City</label><input id="md-contact-city" value="${(m.merchant_city||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div>
+                    <div style="display:flex;gap:8px;"><div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#94a3b8;">State</label><input id="md-contact-state" value="${(m.merchant_state||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div><div style="flex:1;"><label style="font-size:11px;font-weight:600;color:#94a3b8;">ZIP</label><input id="md-contact-zip" value="${(m.merchant_zip||'').replace(/"/g,'&quot;')}" style="width:100%;padding:8px 10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;margin-top:4px;box-sizing:border-box;font-family:'DM Sans',sans-serif;"></div></div>
+                </div>
+                <div style="margin-top:14px;display:flex;gap:8px;align-items:center;">
+                    <button onclick="saveMerchantContact('${m.merchant_id}')" style="background:#0d9488;color:white;border:none;padding:9px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;">Save Changes</button>
+                    <span id="md-contact-msg" style="font-size:12px;font-weight:600;"></span>
+                </div>
+            </div>
+
             <!-- TICKETS PANEL -->
             <div id="mdpanel-tickets" style="display:none;">
                 <div id="md-tickets-list"><div style="text-align:center;color:#94a3b8;padding:20px;">Loading tickets...</div></div>
@@ -395,7 +422,7 @@ async function openMerchantDetail(merchantId, name) {
 }
 
 window.mdTab = function(tab) {
-    ['overview','analysis','tickets'].forEach(function(t) {
+    ['overview','analysis','contact','tickets'].forEach(function(t) {
         var btn = document.getElementById('mdtab-' + t);
         var panel = document.getElementById('mdpanel-' + t);
         if (btn) {
@@ -699,6 +726,64 @@ async function loadWeekEnrollments() {
 }
 
 window.onload = init;
+
+window.saveMerchantContact = async function(merchantId) {
+    const msg = document.getElementById('md-contact-msg');
+    msg.textContent = 'Saving…'; msg.style.color = '#94a3b8';
+    const body = {
+        action: 'update_merchant_contact', token,
+        merchant_id: merchantId,
+        merchant_primary_contact: document.getElementById('md-contact-name')?.value,
+        merchant_phone:           document.getElementById('md-contact-phone')?.value,
+        email:                    document.getElementById('md-contact-email')?.value,
+        merchant_address:         document.getElementById('md-contact-addr')?.value,
+        merchant_city:            document.getElementById('md-contact-city')?.value,
+        merchant_state:           document.getElementById('md-contact-state')?.value,
+        merchant_zip:             document.getElementById('md-contact-zip')?.value
+    };
+    try {
+        const res = await fetch('/api/partner-data', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+        const d = await res.json();
+        msg.textContent = d.success ? '✓ Saved' : (d.message || 'Failed');
+        msg.style.color = d.success ? '#059669' : '#dc2626';
+    } catch(e) {
+        msg.textContent = 'Error saving'; msg.style.color = '#dc2626';
+    }
+};
+
+window.sendMerchantEmail = async function(merchantId, emailType, dbaName, merchantEmail, vol30, vol90) {
+    if (!merchantEmail) {
+        Swal.fire({ icon:'warning', title:'No email on file', text:'This merchant has no email address. Update it in the Contact tab first.', confirmButtonColor:'#0d9488' });
+        return;
+    }
+    const typeLabel  = emailType === 'report' ? 'Portfolio Report' : 'At-Risk Notice';
+    const typeColor  = emailType === 'report' ? '#0d9488' : '#dc2626';
+    const confirmed  = await Swal.fire({
+        icon: 'question',
+        title: `Send ${typeLabel}?`,
+        html: `<p style="color:#475569;font-size:13px;">An email will be sent to <strong>${merchantEmail}</strong> on behalf of your connected email account.</p>`,
+        showCancelButton: true,
+        confirmButtonColor: typeColor,
+        confirmButtonText: `Send ${typeLabel}`
+    });
+    if (!confirmed.isConfirmed) return;
+    Swal.fire({ title: 'Sending…', didOpen: () => Swal.showLoading() });
+    try {
+        const res = await fetch('/api/partner-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'send_merchant_email', token, merchant_id: merchantId, email_type: emailType })
+        });
+        const d = await res.json();
+        if (d.success) {
+            Swal.fire({ icon:'success', title:'Email Sent!', text: d.message, confirmButtonColor:'#0d9488' });
+        } else {
+            Swal.fire({ icon:'error', title:'Send Failed', html: `<p>${d.message}</p>${d.message?.includes('Settings') ? '<p><a href="/partner/settings" style="color:#0d9488;">Go to Settings →</a></p>' : ''}`, confirmButtonColor:'#0d9488' });
+        }
+    } catch(e) {
+        Swal.fire({ icon:'error', title:'Error', text: e.message, confirmButtonColor:'#0d9488' });
+    }
+};
 </script>
 <script src="/js/site-config.js"></script>
 <script src="/js/partner-nav.js"></script>

@@ -727,6 +727,168 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // ── MERCHANT EDIT (limited fields) ─────────────────
+        if (action === 'update_merchant_contact') {
+            const { merchant_id, merchant_primary_contact, merchant_phone, email, merchant_address, merchant_city, merchant_state, merchant_zip } = req.body;
+            if (!merchant_id) return res.status(400).json({ success: false, message: 'merchant_id required.' });
+
+            // Security: confirm merchant belongs to this partner
+            const { data: m } = await supabase.from('merchants').select('id, agent_id').eq('merchant_id', merchant_id).single();
+            if (!m) return res.status(404).json({ success: false, message: 'Merchant not found.' });
+            if (!idStrings.includes(m.agent_id)) return res.status(403).json({ success: false, message: 'Access denied.' });
+
+            const updates = {};
+            if (merchant_primary_contact !== undefined) updates.merchant_primary_contact = merchant_primary_contact;
+            if (merchant_phone !== undefined)           updates.merchant_phone = merchant_phone;
+            if (email !== undefined)                   updates.email = email;
+            if (merchant_address !== undefined)         updates.merchant_address = merchant_address;
+            if (merchant_city !== undefined)            updates.merchant_city = merchant_city;
+            if (merchant_state !== undefined)           updates.merchant_state = merchant_state;
+            if (merchant_zip !== undefined)             updates.merchant_zip = merchant_zip;
+
+            const { error } = await supabase.from('merchants').update(updates).eq('merchant_id', merchant_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // ── EMAIL CONNECTION STATUS ─────────────────────────
+        if (action === 'get_email_connections') {
+            const { data: conns } = await supabase
+                .from('partner_email_connections')
+                .select('provider, email, token_expiry, updated_at')
+                .eq('person_id', personId);
+            return res.status(200).json({ success: true, connections: conns || [] });
+        }
+
+        // ── OAUTH CONNECT URL ───────────────────────────────
+        if (action === 'get_oauth_url') {
+            const { provider } = req.body;
+            const PORTAL_URL   = process.env.SITE_URL || 'https://portal.mypayprotec.com';
+            const REDIRECT_URI = `${PORTAL_URL}/api/partner-oauth`;
+            const { createHmac } = await import('crypto');
+            const STATE_SECRET = process.env.TOKEN_ENCRYPTION_KEY || 'fallback-secret';
+            const payload = { personId, provider, ts: Date.now() };
+            const b64  = Buffer.from(JSON.stringify(payload)).toString('base64url');
+            const sig  = createHmac('sha256', STATE_SECRET).update(b64).digest('hex').slice(0, 16);
+            const state = `${b64}.${sig}`;
+
+            let url;
+            if (provider === 'google') {
+                if (!process.env.GOOGLE_CLIENT_ID) return res.status(200).json({ success: false, message: 'Google OAuth not configured yet.' });
+                url = 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+                    client_id:     process.env.GOOGLE_CLIENT_ID,
+                    redirect_uri:  REDIRECT_URI,
+                    response_type: 'code',
+                    scope:         'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/userinfo.email',
+                    access_type:   'offline',
+                    prompt:        'consent',
+                    state
+                });
+            } else if (provider === 'microsoft') {
+                if (!process.env.MICROSOFT_CLIENT_ID) return res.status(200).json({ success: false, message: 'Microsoft OAuth not configured yet.' });
+                const tenant = process.env.MICROSOFT_TENANT_ID || 'common';
+                url = `https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize?` + new URLSearchParams({
+                    client_id:     process.env.MICROSOFT_CLIENT_ID,
+                    redirect_uri:  REDIRECT_URI,
+                    response_type: 'code',
+                    scope:         'https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access',
+                    prompt:        'select_account',
+                    state
+                });
+            } else {
+                return res.status(400).json({ success: false, message: 'Unknown provider.' });
+            }
+            return res.status(200).json({ success: true, url });
+        }
+
+        // ── OAUTH DISCONNECT ────────────────────────────────
+        if (action === 'disconnect_email') {
+            const { provider } = req.body;
+            await supabase.from('partner_email_connections').delete().eq('person_id', personId).eq('provider', provider);
+            return res.status(200).json({ success: true });
+        }
+
+        // ── SEND MERCHANT REPORT EMAIL ──────────────────────
+        if (action === 'send_merchant_email') {
+            const { merchant_id, email_type } = req.body; // email_type: 'report' | 'atrisk'
+            if (!merchant_id || !email_type) return res.status(400).json({ success: false, message: 'merchant_id and email_type required.' });
+
+            // Security check
+            const { data: merchant } = await supabase.from('merchants').select('*').eq('merchant_id', merchant_id).single();
+            if (!merchant) return res.status(404).json({ success: false, message: 'Merchant not found.' });
+            if (!idStrings.includes(merchant.agent_id)) return res.status(403).json({ success: false, message: 'Access denied.' });
+            if (!merchant.email) return res.status(400).json({ success: false, message: 'This merchant has no email on file.' });
+
+            // Get partner's connected email
+            const { data: conns } = await supabase.from('partner_email_connections').select('*').eq('person_id', personId);
+            if (!conns || !conns.length) return res.status(400).json({ success: false, message: 'No email connected. Please connect an email in Settings first.' });
+            const conn = conns[0];
+
+            // Get partner name
+            const { data: partnerPerson } = await supabase.from('persons').select('full_name, email').eq('id', personId).single();
+            const partnerName = partnerPerson?.full_name || 'Your Partner Representative';
+            const partnerEmail = conn.email;
+
+            const { getValidAccessToken, sendViaGoogle, sendViaMicrosoft } = await import('./partner-oauth.js');
+            const accessToken = await getValidAccessToken(personId, conn.provider);
+            if (!accessToken) return res.status(401).json({ success: false, message: 'Email session expired. Please reconnect your email in Settings.' });
+
+            const vol30  = parseFloat(merchant.volume_30_day  || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+            const vol90  = parseFloat(merchant.volume_90_day  || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+            const volMTD = parseFloat(merchant.volume_mtd     || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+
+            let subject, html;
+
+            if (email_type === 'report') {
+                subject = `Your Account Update — ${merchant.dba_name}`;
+                html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;border:1px solid #e2e8f0;border-radius:16px;">
+                    <h2 style="color:#002d5a;margin-bottom:4px;">Account Summary</h2>
+                    <p style="color:#64748b;font-size:13px;margin-top:0;">Hello ${merchant.merchant_primary_contact || merchant.dba_name},</p>
+                    <p style="color:#475569;line-height:1.6;">I wanted to reach out with a quick update on your PayProTec merchant account. Here's a snapshot of your recent processing activity:</p>
+                    <div style="background:#f8fafc;border-radius:12px;padding:20px;margin:20px 0;">
+                        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                            <tr><td style="padding:6px 0;color:#64748b;">Business Name</td><td style="text-align:right;font-weight:700;color:#002d5a;">${merchant.dba_name}</td></tr>
+                            <tr><td style="padding:6px 0;color:#64748b;">Account Status</td><td style="text-align:right;font-weight:700;color:#059669;">${merchant.account_status}</td></tr>
+                            <tr style="border-top:1px solid #e2e8f0;"><td style="padding:10px 0 6px;color:#64748b;">MTD Volume</td><td style="text-align:right;font-weight:700;color:#002d5a;">${volMTD}</td></tr>
+                            <tr><td style="padding:6px 0;color:#64748b;">30-Day Volume</td><td style="text-align:right;font-weight:700;color:#002d5a;">${vol30}</td></tr>
+                            <tr><td style="padding:6px 0;color:#64748b;">90-Day Volume</td><td style="text-align:right;font-weight:700;color:#002d5a;">${vol90}</td></tr>
+                        </table>
+                    </div>
+                    <p style="color:#475569;line-height:1.6;">If you have any questions about your account or would like to discuss ways to grow your processing volume, I'm always here to help.</p>
+                    <p style="color:#475569;line-height:1.6;margin-bottom:4px;">Best regards,</p>
+                    <p style="color:#002d5a;font-weight:700;margin-top:0;">${partnerName}</p>
+                    <p style="color:#64748b;font-size:12px;margin-top:4px;">${partnerEmail}</p>
+                    <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
+                    <p style="font-size:11px;color:#94a3b8;text-align:center;">This message was sent on behalf of your PayProTec partner representative.</p>
+                </div>`;
+            } else {
+                subject = `A Quick Note About Your Account — ${merchant.dba_name}`;
+                html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;border:1px solid #e2e8f0;border-radius:16px;">
+                    <h2 style="color:#002d5a;margin-bottom:4px;">Checking In</h2>
+                    <p style="color:#64748b;font-size:13px;margin-top:0;">Hello ${merchant.merchant_primary_contact || merchant.dba_name},</p>
+                    <p style="color:#475569;line-height:1.6;">I hope everything is going well with your business! I wanted to reach out personally because I noticed some changes in your recent processing activity that I'd love to chat with you about.</p>
+                    <p style="color:#475569;line-height:1.6;">Your recent volume has shifted a bit compared to your typical pattern, and I want to make sure everything is running smoothly on your end — whether that's equipment, support, or anything else we can help with.</p>
+                    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:16px 20px;margin:20px 0;">
+                        <p style="color:#92400e;font-weight:700;margin:0 0 6px;">📊 Recent Activity</p>
+                        <p style="color:#9a3412;font-size:13px;margin:0;">30-Day Volume: <strong>${vol30}</strong> &nbsp;|&nbsp; 90-Day Volume: <strong>${vol90}</strong></p>
+                    </div>
+                    <p style="color:#475569;line-height:1.6;">There's no cause for alarm — I just want to make sure you have everything you need to keep things moving. I'm happy to schedule a quick call or answer any questions by email.</p>
+                    <p style="color:#475569;line-height:1.6;margin-bottom:4px;">Warm regards,</p>
+                    <p style="color:#002d5a;font-weight:700;margin-top:0;">${partnerName}</p>
+                    <p style="color:#64748b;font-size:12px;margin-top:4px;">${partnerEmail}</p>
+                    <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
+                    <p style="font-size:11px;color:#94a3b8;text-align:center;">This message was sent on behalf of your PayProTec partner representative.</p>
+                </div>`;
+            }
+
+            const result = conn.provider === 'google'
+                ? await sendViaGoogle(accessToken, { to: merchant.email, subject, html, from: `${partnerName} <${partnerEmail}>` })
+                : await sendViaMicrosoft(accessToken, { to: merchant.email, subject, html });
+
+            if (result.error) return res.status(500).json({ success: false, message: result.error.message || 'Send failed.' });
+            return res.status(200).json({ success: true, message: `Email sent to ${merchant.email}` });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action.' });
 
     } catch (err) {

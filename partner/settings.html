@@ -226,6 +226,22 @@
         </div>
 
         <!-- DANGER ZONE -->
+        <!-- EMAIL CONNECTION -->
+        <div class="settings-section" id="emailConnectionSection">
+            <div class="section-title" style="display:flex;align-items:center;gap:8px;"><span class="material-icons" style="font-size:18px;color:#0d9488;">mail</span> Connected Email</div>
+            <div class="section-sub">Connect your Gmail or Outlook to send 1-click merchant reports directly from your email address.</div>
+            <div id="emailConnStatus" style="margin-bottom:16px;"></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;">
+                <button onclick="connectEmail('google')" id="btnGoogle" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1.5px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:700;color:#374151;cursor:pointer;">
+                    <img src="https://www.google.com/favicon.ico" style="width:16px;height:16px;"> Connect Gmail
+                </button>
+                <button onclick="connectEmail('microsoft')" id="btnMicrosoft" style="display:flex;align-items:center;gap:8px;padding:10px 16px;border:1.5px solid #e2e8f0;border-radius:10px;background:white;font-size:13px;font-weight:700;color:#374151;cursor:pointer;">
+                    <img src="https://outlook.com/favicon.ico" style="width:16px;height:16px;"> Connect Outlook
+                </button>
+            </div>
+            <div id="oauthMsg" style="margin-top:12px;font-size:12px;font-weight:600;"></div>
+        </div>
+
         <div class="settings-section" style="border-color:#fecaca;">
             <div class="section-title" style="color:#991b1b;">Session</div>
             <div class="section-sub">Sign out of your partner portal account</div>
@@ -653,11 +669,59 @@ async function loadApiUsage() {
     }
 }
 
+async function loadEmailConnections() {
+    const res = await api('partner-data', { action: 'get_email_connections', token });
+    const el  = document.getElementById('emailConnStatus');
+    if (!res.success || !res.connections.length) {
+        el.innerHTML = '<span style="font-size:12px;color:#94a3b8;">No email connected yet.</span>';
+        return;
+    }
+    el.innerHTML = res.connections.map(c => `
+        <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border:1px solid #d1fae5;border-radius:10px;background:#f0fdf4;margin-bottom:8px;">
+            <img src="${c.provider === 'google' ? 'https://www.google.com/favicon.ico' : 'https://outlook.com/favicon.ico'}" style="width:16px;height:16px;">
+            <div style="flex:1;">
+                <div style="font-size:13px;font-weight:700;color:#065f46;">${c.email}</div>
+                <div style="font-size:11px;color:#6ee7b7;text-transform:capitalize;">${c.provider} · Connected</div>
+            </div>
+            <button onclick="disconnectEmail('${c.provider}')" style="background:none;border:1px solid #fca5a5;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:#dc2626;cursor:pointer;">Disconnect</button>
+        </div>`).join('');
+}
+
+async function connectEmail(provider) {
+    const btn = document.getElementById(provider === 'google' ? 'btnGoogle' : 'btnMicrosoft');
+    btn.disabled = true; btn.style.opacity = '0.6';
+    const res = await api('partner-data', { action: 'get_oauth_url', token, provider });
+    btn.disabled = false; btn.style.opacity = '1';
+    if (!res.success) {
+        document.getElementById('oauthMsg').innerHTML = `<span style="color:#dc2626;">${res.message}</span>`;
+        return;
+    }
+    window.location.href = res.url;
+}
+
+async function disconnectEmail(provider) {
+    if (!confirm(`Disconnect your ${provider === 'google' ? 'Gmail' : 'Outlook'} account?`)) return;
+    await api('partner-data', { action: 'disconnect_email', token, provider });
+    loadEmailConnections();
+}
+
+// Handle OAuth return message
+(function() {
+    const p = new URLSearchParams(window.location.search);
+    const msg = p.get('oauth_msg');
+    if (msg) {
+        const el = document.getElementById('oauthMsg');
+        if (el) el.innerHTML = `<span style="color:${msg.startsWith('Connected') ? '#059669' : '#dc2626'};">${msg}</span>`;
+        history.replaceState({}, '', '/partner/settings');
+    }
+})();
+
 window.onload = async function() {
     await init();
     loadApiKeys();
     loadWebhooks();
     loadApiUsage();
+    loadEmailConnections();
 };
 </script>
 <script src="/js/site-config.js"></script>
