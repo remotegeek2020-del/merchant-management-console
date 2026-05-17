@@ -2248,7 +2248,8 @@ window.quickAddId = async function(personId, name) {
             partnerRankMap = {};
             (d.ranks || []).forEach(r => { partnerRankMap[r.person_id] = r; });
             renderLeaderboard();
-            if (allPartners.length) renderGrid();
+            const activeTerm = document.getElementById('partnerSearchInput')?.value?.trim();
+            if (allPartners.length && !activeTerm) renderGrid();
             const el = document.getElementById('leaderboardUpdatedAt');
             if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         } catch (e) {
@@ -2384,6 +2385,18 @@ window.quickAddId = async function(personId, name) {
             if (d.success && d.data.length) {
                 statsRaw = d.data;
                 allPartners = processPartnerData({persons:personsRaw,agents:agentsRaw,identifiers:identifiersRaw,companies:_companiesRaw,stats:statsRaw});
+                const activeTerm = document.getElementById('partnerSearchInput')?.value?.trim();
+                if (activeTerm) {
+                    const term = activeTerm.toLowerCase();
+                    const filtered = allPartners.filter(p =>
+                        p.name.toLowerCase().includes(term) ||
+                        p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term))) ||
+                        p.companies.some(co => co.name.toLowerCase().includes(term))
+                    );
+                    renderGrid(filtered.length ? filtered : allPartners);
+                } else {
+                    renderGrid();
+                }
             }
         } catch(e) { console.warn('Stats load failed:', e.message); }
     }
