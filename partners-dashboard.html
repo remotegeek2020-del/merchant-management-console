@@ -1207,7 +1207,7 @@ async function submitOnboarding() {
         const _pSetup = p.portal_setup;
         const _rankInfo = partnerRankMap[p.id];
         const _rankBadge = _rankInfo ? getRankBadgeHtml(_rankInfo.rank, _rankInfo.tier) : '';
-        const _brandedBadge = p.is_branded ? `<div style="position:absolute;top:8px;right:8px;background:linear-gradient(135deg,#004990,#0369a1);color:white;font-size:9px;font-weight:800;padding:3px 8px;border-radius:99px;letter-spacing:0.5px;display:flex;align-items:center;gap:3px;"><span style="font-size:11px;">🏷️</span> BRANDED</div>` : '';
+        const _brandedBadge = p.is_branded ? `<span style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#004990,#0369a1);color:white;font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;letter-spacing:0.5px;margin-bottom:10px;">🏷️ BRANDED</span>` : '';
         // Portal invite button: invite / resend if not fully active; otherwise just show status
         const _inviteBtn = (!_pActive || !_pSetup)
             ? `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${_safeName}','${_safeEmail}')" style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">${_pActive?'mark_email_read':'send'}</span> ${_pActive?'Resend Invite':'Invite to Portal'}</button>`
@@ -1219,10 +1219,12 @@ async function submitOnboarding() {
         return `
             <div class="partner-card" data-pid="${p.id}" style="position:relative;" onclick="_bulkMode?toggleCardSelect('${p.id}',event):openPartnerDetails('${p.id}')">
                 ${_rankBadge}
-                ${_brandedBadge}
                 <input type="checkbox" class="card-checkbox" onclick="toggleCardSelect('${p.id}',event)">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <h2 style="font-weight:800; color:#002d5a; margin-bottom:15px; flex:1;">${p.name}</h2>
+                    <div style="flex:1;">
+                        <h2 style="font-weight:800; color:#002d5a; margin-bottom:6px;">${p.name}</h2>
+                        ${_brandedBadge}
+                    </div>
                     <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
                             style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
                         <span class="material-icons" style="font-size:14px;">add</span> ID
