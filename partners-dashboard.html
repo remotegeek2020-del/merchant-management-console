@@ -2318,6 +2318,17 @@ window.quickAddId = async function(personId, name) {
             leaderboardData = d.data || [];
             partnerRankMap = {};
             (d.ranks || []).forEach(r => { partnerRankMap[r.person_id] = r; });
+
+            // Assign Bronze ranks to partners not in the materialized view
+            // (they exist but have no volume data yet)
+            const nextRank = (d.ranks || []).length + 1;
+            let offset = 0;
+            (allPartners || []).forEach(p => {
+                if (!partnerRankMap[p.id]) {
+                    partnerRankMap[p.id] = { rank: nextRank + offset, tier: 'Bronze' };
+                    offset++;
+                }
+            });
             renderLeaderboard();
             const activeTerm = document.getElementById('partnerSearchInput')?.value?.trim();
             if (allPartners.length && !activeTerm) renderGrid();
@@ -2456,6 +2467,10 @@ window.quickAddId = async function(personId, name) {
             if (d.success && d.data.length) {
                 statsRaw = d.data;
                 allPartners = processPartnerData({persons:personsRaw,agents:agentsRaw,identifiers:identifiersRaw,companies:_companiesRaw,stats:statsRaw});
+                // Re-fill Bronze ranks for any partners not in the leaderboard MV
+                const _nextRank = Object.keys(partnerRankMap).length > 0 ? Math.max(...Object.values(partnerRankMap).map(r => r.rank)) + 1 : 1;
+                let _offset = 0;
+                allPartners.forEach(p => { if (!partnerRankMap[p.id]) { partnerRankMap[p.id] = { rank: _nextRank + _offset, tier: 'Bronze' }; _offset++; } });
                 const activeTerm = document.getElementById('partnerSearchInput')?.value?.trim();
                 if (activeTerm) {
                     const term = activeTerm.toLowerCase();
