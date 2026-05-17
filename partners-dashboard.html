@@ -2060,6 +2060,9 @@ window.quickAddId = async function(personId, name) {
         }
     }
 
+    // Merchant data stored per partner for lazy rendering
+    var _enrollMerchants = {};
+
     function renderEnrollWidget(d) {
         const totalLabel = document.getElementById('enrollTotalLabel');
         const periodLabel = document.getElementById('enrollPeriodLabel');
@@ -2077,37 +2080,49 @@ window.quickAddId = async function(personId, name) {
             return;
         }
 
+        // Store merchant arrays for lazy rendering — don't dump them all into the DOM upfront
+        _enrollMerchants = {};
         const partners = Object.entries(d.by_partner).sort((a,b) => b[1].count - a[1].count);
-        list.innerHTML = partners.map(([pid, info]) => {
-            const rows = info.merchants.map(m => {
+        partners.forEach(([pid, info]) => { _enrollMerchants[pid] = info.merchants || []; });
+
+        list.innerHTML = partners.map(([pid, info]) => `
+            <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;cursor:pointer;" onclick="filterToPartner('${pid}')">
+                    <span style="font-size:12px;font-weight:800;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;">${info.name}</span>
+                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
+                        <span style="background:#0d9488;color:white;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:800;">${info.count} new</span>
+                        <button onclick="event.stopPropagation();toggleEnrollExpand('${pid}')" style="background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" id="enroll-icon-${pid}" style="font-size:16px;">expand_more</span></button>
+                    </div>
+                </div>
+                <div id="enroll-detail-${pid}" style="display:none;padding:0 12px 8px;max-height:220px;overflow-y:auto;"></div>
+            </div>`
+        ).join('');
+    }
+
+    window.toggleEnrollExpand = function(pid) {
+        const el = document.getElementById('enroll-detail-' + pid);
+        const icon = document.getElementById('enroll-icon-' + pid);
+        if (!el) return;
+        const opening = el.style.display === 'none';
+        el.style.display = opening ? 'block' : 'none';
+        if (icon) icon.textContent = opening ? 'expand_less' : 'expand_more';
+        // Lazy-render merchant rows only on first open
+        if (opening && !el.dataset.rendered) {
+            const merchants = _enrollMerchants[pid] || [];
+            el.innerHTML = merchants.map(m => {
                 const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
-                const statusColor = m.account_status === 'Active' ? '#16a34a' : '#64748b';
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:11px;">
-                    <span style="color:#0a1628;font-weight:600;">${m.dba_name}</span>
-                    <span style="display:flex;gap:8px;align-items:center;">
+                const statusColor = m.account_status === 'Approved' ? '#16a34a' : '#64748b';
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:11px;">
+                    <span style="color:#0a1628;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;">${m.dba_name}</span>
+                    <span style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
                         <span style="color:${statusColor};font-weight:700;">${m.account_status||'—'}</span>
                         <span style="color:#94a3b8;">${dt}</span>
                     </span>
                 </div>`;
-            }).join('');
-            return `<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;cursor:pointer;" onclick="filterToPartner('${pid}')">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;">
-                    <span style="font-size:13px;font-weight:800;color:#0a1628;">${info.name}</span>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="background:#0d9488;color:white;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:800;">${info.count} new</span>
-                        <button onclick="event.stopPropagation();toggleEnrollExpand('enroll-detail-${pid}')" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" style="font-size:16px;">expand_more</span></button>
-                    </div>
-                </div>
-                <div id="enroll-detail-${pid}" style="display:none;padding:0 14px 8px;">${rows}</div>
-            </div>`;
-        }).join('');
-    }
-
-    function toggleEnrollExpand(id) {
-        const el = document.getElementById(id);
-        if (!el) return;
-        el.style.display = el.style.display === 'none' ? 'block' : 'none';
-    }
+            }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">No merchants</div>';
+            el.dataset.rendered = '1';
+        }
+    };
 
     function filterToPartner(personId) {
         const p = allPartners.find(x => x.id === personId);
