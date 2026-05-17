@@ -106,6 +106,25 @@
         .spinner{width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:var(--teal);border-radius:50%;animation:spin 0.8s linear infinite;margin:24px auto;}
         .empty-state{text-align:center;padding:40px;color:var(--muted);font-size:14px;}
         .load-more{text-align:center;padding:10px;color:var(--teal);font-weight:700;cursor:pointer;font-size:13px;}
+
+        /* EMOJI REACTION PICKER */
+        .reaction-wrap{position:relative;display:inline-block;}
+        .emoji-tray{position:absolute;bottom:calc(100% + 6px);left:0;background:white;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px 8px;display:flex;gap:2px;z-index:100;opacity:0;pointer-events:none;transition:opacity 0.15s,transform 0.15s;transform:translateY(4px);}
+        .emoji-tray.open{opacity:1;pointer-events:all;transform:translateY(0);}
+        .emoji-opt{font-size:20px;cursor:pointer;padding:4px 5px;border-radius:6px;border:none;background:none;line-height:1;transition:transform 0.1s,background 0.1s;}
+        .emoji-opt:hover{background:#f1f5f9;transform:scale(1.25);}
+        /* FEED SEARCH */
+        .feed-search{position:relative;margin-bottom:12px;}
+        .feed-search input{width:100%;padding:9px 38px 9px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;background:white;transition:border-color 0.2s;color:var(--text);}
+        .feed-search input:focus{border-color:var(--teal);}
+        .feed-search .si{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:20px;pointer-events:none;}
+        /* CHAR COUNTER */
+        .char-counter{font-size:10px;color:var(--muted);text-align:right;margin-top:3px;min-height:14px;}
+        .char-counter.warn{color:#d97706;}
+        .char-counter.limit{color:#ef4444;font-weight:700;}
+        /* PINNED BANNER */
+        .pin-banner{background:linear-gradient(90deg,var(--teal-bg),white);padding:5px 14px;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--teal);border-bottom:1px solid #ccfbf1;}
+        .pin-banner .material-icons{font-size:13px;}
     </style>
 </head>
 <body>
@@ -144,8 +163,9 @@
             <div class="composer">
                 <div class="composer-row">
                     <div class="composer-avatar" id="composerAvatar">S</div>
-                    <textarea class="composer-input" id="postText" placeholder="Share something with the partner network..."></textarea>
+                    <textarea class="composer-input" id="postText" placeholder="Share something with the partner network..." oninput="updateCharCount()" maxlength="1500"></textarea>
                 </div>
+                <div class="char-counter" id="charCounter"></div>
                 <div id="mediaPreview" class="media-preview"></div>
                 <div class="composer-footer">
                     <button class="media-btn photo" onclick="document.getElementById('photoInput').click()">
@@ -159,6 +179,10 @@
                 <input type="file" id="photoInput" accept="image/*" style="display:none" onchange="handlePhoto(this)">
             </div>
 
+            <div class="feed-search">
+                <input type="text" id="feedSearch" placeholder="Search posts…" oninput="filterFeed(this.value)">
+                <span class="material-icons si">search</span>
+            </div>
             <div id="feedContainer"><div class="spinner"></div></div>
             <div id="loadMore" class="load-more" style="display:none" onclick="loadFeed(true)">Load more</div>
         </div>
@@ -330,8 +354,8 @@ function buildPostCard(p) {
 
     if (p.is_pinned) {
         var pinLabel = document.createElement('div');
-        pinLabel.className = 'pin-label';
-        pinLabel.innerHTML = '<span class="material-icons" style="font-size:14px;">push_pin</span> Pinned Post';
+        pinLabel.className = 'pin-banner';
+        pinLabel.innerHTML = '<span class="material-icons">push_pin</span> Pinned';
         card.appendChild(pinLabel);
     }
 
@@ -372,15 +396,23 @@ function buildPostCard(p) {
     }
 
     var actions = document.createElement('div'); actions.className='post-actions';
+    var reactWrap = document.createElement('div'); reactWrap.className='reaction-wrap';
     var reactBtn = document.createElement('button');
     reactBtn.className='action-btn' + (p.user_reacted ? ' reacted' : '');
     reactBtn.id='react-btn-'+p.id;
-    reactBtn.innerHTML='<span class="material-icons">'+(p.user_reacted?'favorite':'favorite_border')+'</span><span id="rc-'+p.id+'">'+(p.reaction_count||0)+'</span>';
-    reactBtn.onclick=(function(id){return function(){reactToPost(id);};})(p.id);
+    reactBtn.innerHTML=(p.user_reacted?'❤️':'<span class="material-icons">add_reaction</span>')+' <span id="rc-'+p.id+'">'+(p.reaction_count||0)+'</span>';
+    reactBtn.onclick=(function(id){return function(e){toggleEmojiTray(id,e);};})(p.id);
+    var emojiTray = document.createElement('div'); emojiTray.className='emoji-tray'; emojiTray.id='etray-'+p.id;
+    ['❤️','👍','😂','🔥','👏','😮'].forEach(function(em){
+        var opt=document.createElement('button'); opt.className='emoji-opt'; opt.textContent=em;
+        opt.onclick=(function(pid,emoji){return function(e){sendReaction(pid,emoji,e);};})(p.id,em);
+        emojiTray.appendChild(opt);
+    });
+    reactWrap.appendChild(reactBtn); reactWrap.appendChild(emojiTray);
     var commentBtn = document.createElement('button'); commentBtn.className='action-btn';
     commentBtn.innerHTML='<span class="material-icons">chat_bubble_outline</span><span id="cc-'+p.id+'">'+(p.comment_count||0)+'</span>';
     commentBtn.onclick=(function(id){return function(){toggleComments(id);};})(p.id);
-    actions.appendChild(reactBtn); actions.appendChild(commentBtn);
+    actions.appendChild(reactWrap); actions.appendChild(commentBtn);
     card.appendChild(actions);
 
     // Comments section
@@ -401,14 +433,29 @@ function buildPostCard(p) {
 }
 
 // ── ACTIONS ──────────────────────────────────────────────
-async function reactToPost(postId) {
-    var result = await api({ action: 'react', post_id: postId });
+function toggleEmojiTray(postId, event) {
+    event.stopPropagation();
+    document.querySelectorAll('.emoji-tray.open').forEach(function(t){ if(t.id!=='etray-'+postId) t.classList.remove('open'); });
+    var tray = document.getElementById('etray-'+postId);
+    if (tray) tray.classList.toggle('open');
+}
+
+async function sendReaction(postId, emoji, event) {
+    if (event) event.stopPropagation();
+    var tray = document.getElementById('etray-'+postId);
+    if (tray) tray.classList.remove('open');
+    var result = await api({ action: 'react', post_id: postId, emoji: emoji });
     if (result.success) {
         var btn = document.getElementById('react-btn-'+postId);
         var cnt = document.getElementById('rc-'+postId);
-        btn.classList.toggle('reacted', result.reacted);
-        btn.querySelector('.material-icons').textContent = result.reacted ? 'favorite' : 'favorite_border';
-        if(cnt) cnt.textContent = result.count;
+        var cur = parseInt((cnt ? cnt.textContent : '0') || '0');
+        if (result.reacted) {
+            btn.classList.add('reacted');
+            btn.innerHTML = emoji + ' <span id="rc-'+postId+'">' + (cur+1) + '</span>';
+        } else {
+            btn.classList.remove('reacted');
+            btn.innerHTML = '<span class="material-icons">add_reaction</span> <span id="rc-'+postId+'">' + Math.max(0,cur-1) + '</span>';
+        }
     }
 }
 
@@ -437,12 +484,25 @@ async function submitComment(postId) {
     var input = document.getElementById('ci-'+postId);
     var body = input ? input.value.trim() : ''; if (!body) return;
     input.value = '';
-    var result = await api({ action: 'add_comment', post_id: postId, body: body });
-    if (result.success) {
-        loadComments(postId);
-        var cnt = document.getElementById('cc-'+postId);
-        if(cnt) cnt.textContent = parseInt(cnt.textContent||0)+1;
+    input.disabled = true;
+
+    // Optimistic render
+    var cl = document.getElementById('cl-'+postId);
+    if (cl) {
+        var empty = cl.querySelector('div[style*="color:var(--muted)"]');
+        if (empty) empty.remove();
+        var row = document.createElement('div'); row.className = 'comment-item';
+        var cav = avatarEl(null, 28); cav.className = 'c-avatar'; cav.textContent = initials(staffName);
+        var bub = document.createElement('div'); bub.className = 'c-bubble';
+        bub.innerHTML = '<div class="c-author">' + escHtml(staffName) + '</div><div class="c-body">' + escHtml(body) + '</div>';
+        row.appendChild(cav); row.appendChild(bub); cl.appendChild(row);
     }
+    var cnt = document.getElementById('cc-'+postId);
+    if (cnt) cnt.textContent = parseInt(cnt.textContent||'0') + 1;
+
+    var result = await api({ action: 'add_comment', post_id: postId, body: body });
+    input.disabled = false;
+    if (!result.success) { Swal.fire('Error', result.message || 'Could not post comment', 'error'); }
 }
 
 async function togglePinPost(postId) {
@@ -553,6 +613,34 @@ async function loadMembers() {
     });
     if (!users.length) el.innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0;">No members yet.</div>';
 }
+
+// ── SEARCH ────────────────────────────────────────────────
+function filterFeed(query) {
+    var q = (query || '').toLowerCase().trim();
+    document.querySelectorAll('#feedContainer .post-card').forEach(function(card) {
+        var body = (card.querySelector('.post-body') ? card.querySelector('.post-body').textContent : '').toLowerCase();
+        var author = (card.querySelector('.post-author') ? card.querySelector('.post-author').textContent : '').toLowerCase();
+        card.style.display = (!q || body.includes(q) || author.includes(q)) ? '' : 'none';
+    });
+}
+
+// ── CHAR COUNTER ──────────────────────────────────────────
+function updateCharCount() {
+    var len = document.getElementById('postText').value.length;
+    var max = 1500;
+    var el = document.getElementById('charCounter');
+    if (!el) return;
+    if (!len) { el.textContent = ''; el.className = 'char-counter'; return; }
+    el.textContent = len + ' / ' + max;
+    el.className = 'char-counter' + (len >= max ? ' limit' : len >= max * 0.85 ? ' warn' : '');
+}
+
+// ── CLOSE EMOJI TRAY ON OUTSIDE CLICK ─────────────────────
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.emoji-tray') && !e.target.closest('[id^="react-btn-"]')) {
+        document.querySelectorAll('.emoji-tray.open').forEach(function(t){ t.classList.remove('open'); });
+    }
+});
 
 window.onload = init;
 </script>
