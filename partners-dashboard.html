@@ -337,6 +337,29 @@ input[type=number] {
         </div>
     </div>
 
+    <!-- NEW ENROLLMENTS WIDGET -->
+    <div id="enrollWidget" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
+            <div>
+                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">person_add</span> New Enrollments</div>
+                <div style="font-size:20px;font-weight:800;color:#0a1628;" id="enrollTotalLabel">—</div>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                <div style="display:flex;background:#f1f5f9;border-radius:10px;padding:3px;gap:2px;">
+                    <button id="enrollBtn-week" onclick="setEnrollPeriod('week')" style="background:#0d9488;color:white;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;">This Week</button>
+                    <button id="enrollBtn-month" onclick="setEnrollPeriod('month')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">This Month</button>
+                    <button id="enrollBtn-30" onclick="setEnrollPeriod('30')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Last 30d</button>
+                    <button id="enrollBtn-90" onclick="setEnrollPeriod('90')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Last 90d</button>
+                </div>
+                <button onclick="loadNewEnrollments(currentEnrollPeriod)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">refresh</span></button>
+            </div>
+        </div>
+        <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;" id="enrollPeriodLabel"></div>
+        <div id="enrollList" style="display:flex;flex-direction:column;gap:6px;">
+            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading enrollments...</div>
+        </div>
+    </div>
+
     <div id="partnerGrid" class="partner-grid"></div>
    <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px; flex-wrap:wrap;">
     <button id="btnPrev" onclick="changePage(-1)" class="pagination-btn">Previous</button>
@@ -1202,6 +1225,7 @@ async function submitOnboarding() {
                         <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                     </div>
                 `).join('')}
+                <div id="enroll-strip-${p.id}"></div>
                 <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
                     <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">person</span> View Detail</button>
                     ${_inviteBtn}
@@ -1211,7 +1235,9 @@ async function submitOnboarding() {
     }).join('');
 
     if (indicator) indicator.innerText = `Page ${currentPage} of ${totalPages}`;
-    
+
+    if (enrollData) renderEnrollBadges(enrollData);
+
     // Button styling updates
     if (prevBtn) { 
         prevBtn.disabled = (currentPage === 1); 
@@ -1953,6 +1979,7 @@ window.quickAddId = async function(personId, name) {
             renderGrid();
             loadStatsBackground();
             loadLeaderboard();
+            loadNewEnrollments(currentEnrollPeriod);
 
         } catch (err) {
             console.error("Failed to load partners:", err);
@@ -1964,6 +1991,142 @@ window.quickAddId = async function(personId, name) {
         }
     }
 
+
+    // ── NEW ENROLLMENTS ───────────────────────────────────
+    let currentEnrollPeriod = 'week';
+    let enrollData = null;
+
+    function setEnrollPeriod(period) {
+        currentEnrollPeriod = period;
+        ['week','month','30','90'].forEach(p => {
+            const btn = document.getElementById(`enrollBtn-${p}`);
+            if (!btn) return;
+            btn.style.background = (p === period) ? '#0d9488' : 'none';
+            btn.style.color = (p === period) ? 'white' : '#64748b';
+        });
+        loadNewEnrollments(period);
+    }
+
+    async function loadNewEnrollments(period) {
+        currentEnrollPeriod = period || 'week';
+        const el = document.getElementById('enrollList');
+        if (el) el.innerHTML = '<div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>';
+
+        const now = new Date();
+        let start_date;
+        if (period === 'week') {
+            const daysToMonday = (now.getDay() + 6) % 7;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() - daysToMonday);
+            monday.setHours(0, 0, 0, 0);
+            start_date = monday.toISOString();
+        } else if (period === 'month') {
+            start_date = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+        } else {
+            const days = parseInt(period);
+            const d = new Date(now);
+            d.setDate(d.getDate() - days);
+            d.setHours(0, 0, 0, 0);
+            start_date = d.toISOString();
+        }
+
+        try {
+            const resp = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('staffToken') || '') },
+                body: JSON.stringify({ action: 'get_new_enrollments_by_partner', start_date, end_date: now.toISOString() })
+            });
+            const d = await resp.json();
+            if (!d.success) throw new Error(d.message || 'Failed');
+            enrollData = d;
+            renderEnrollWidget(d);
+            renderEnrollBadges(d);
+        } catch (err) {
+            if (el) el.innerHTML = `<div style="color:#ef4444;font-size:12px;padding:12px;text-align:center;">Failed to load enrollments: ${err.message}</div>`;
+        }
+    }
+
+    function renderEnrollWidget(d) {
+        const totalLabel = document.getElementById('enrollTotalLabel');
+        const periodLabel = document.getElementById('enrollPeriodLabel');
+        const list = document.getElementById('enrollList');
+        if (!list) return;
+
+        const from = new Date(d.period.from);
+        const to = new Date(d.period.to);
+        const fmt = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        if (totalLabel) totalLabel.textContent = `${d.total} new merchant${d.total !== 1 ? 's' : ''}`;
+        if (periodLabel) periodLabel.textContent = `${fmt(from)} – ${fmt(to)}`;
+
+        if (!d.total) {
+            list.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;">No new enrollments in this period.</div>';
+            return;
+        }
+
+        const partners = Object.entries(d.by_partner).sort((a,b) => b[1].count - a[1].count);
+        list.innerHTML = partners.map(([pid, info]) => {
+            const rows = info.merchants.map(m => {
+                const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+                const statusColor = m.account_status === 'Active' ? '#16a34a' : '#64748b';
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:11px;">
+                    <span style="color:#0a1628;font-weight:600;">${m.dba_name}</span>
+                    <span style="display:flex;gap:8px;align-items:center;">
+                        <span style="color:${statusColor};font-weight:700;">${m.account_status||'—'}</span>
+                        <span style="color:#94a3b8;">${dt}</span>
+                    </span>
+                </div>`;
+            }).join('');
+            return `<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;cursor:pointer;" onclick="filterToPartner('${pid}')">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;">
+                    <span style="font-size:13px;font-weight:800;color:#0a1628;">${info.name}</span>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="background:#0d9488;color:white;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:800;">${info.count} new</span>
+                        <button onclick="event.stopPropagation();toggleEnrollExpand('enroll-detail-${pid}')" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" style="font-size:16px;">expand_more</span></button>
+                    </div>
+                </div>
+                <div id="enroll-detail-${pid}" style="display:none;padding:0 14px 8px;">${rows}</div>
+            </div>`;
+        }).join('');
+    }
+
+    function toggleEnrollExpand(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function filterToPartner(personId) {
+        const p = allPartners.find(x => x.id === personId);
+        if (!p) return;
+        const input = document.getElementById('partnerSearchInput');
+        if (input) { input.value = p.name; input.dispatchEvent(new Event('input')); }
+        document.getElementById('partnerGrid')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function renderEnrollBadges(d) {
+        if (!d?.by_partner) return;
+        Object.entries(d.by_partner).forEach(([pid, info]) => {
+            const strip = document.getElementById(`enroll-strip-${pid}`);
+            if (!strip) return;
+            const label = currentEnrollPeriod === 'week' ? 'this week' : currentEnrollPeriod === 'month' ? 'this month' : `last ${currentEnrollPeriod}d`;
+            strip.innerHTML = `<div style="margin-top:8px;padding:7px 10px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;" onclick="event.stopPropagation();toggleEnrollCardExpand('enroll-card-detail-${pid}')">
+                <span style="font-size:11px;font-weight:800;color:#0d9488;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">person_add</span> ${info.count} new ${info.count===1?'merchant':'merchants'} ${label}</span>
+                <span class="material-icons" style="font-size:14px;color:#0d9488;">expand_more</span>
+            </div>
+            <div id="enroll-card-detail-${pid}" style="display:none;background:#f0fdfa;border:1px solid #99f6e4;border-top:none;border-radius:0 0 8px 8px;padding:0 10px 8px;">
+                ${info.merchants.map(m => {
+                    const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+                    return `<div style="font-size:11px;color:#0a1628;padding:4px 0;border-bottom:1px solid #ccfbf1;display:flex;justify-content:space-between;"><span>${m.dba_name}</span><span style="color:#94a3b8;">${dt}</span></div>`;
+                }).join('')}
+            </div>`;
+        });
+    }
+
+    function toggleEnrollCardExpand(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
 
     // ── LEADERBOARD ───────────────────────────────────────
     let leaderboardData = [];

@@ -1375,6 +1375,59 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, data: result });
         }
 
+        if (action === 'get_new_enrollments_by_partner') {
+            const { start_date, end_date } = body;
+            const now = new Date();
+            const daysToMonday = (now.getDay() + 6) % 7;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() - daysToMonday);
+            monday.setHours(0, 0, 0, 0);
+            const from = start_date || monday.toISOString();
+            const to = end_date || now.toISOString();
+
+            const { data: newMerchants } = await supabase.from('merchants')
+                .select('merchant_id, dba_name, enrollment_date, agent_id, account_status')
+                .gte('enrollment_date', from).lte('enrollment_date', to)
+                .order('enrollment_date', { ascending: false });
+
+            if (!newMerchants?.length) return res.status(200).json({ success: true, total: 0, by_partner: {}, period: { from, to } });
+
+            const agentIdStrings = [...new Set(newMerchants.map(m => m.agent_id).filter(Boolean))];
+            const { data: identRows } = await supabase.from('agent_identifiers')
+                .select('id_string, agent_id').in('id_string', agentIdStrings);
+
+            if (!identRows?.length) return res.status(200).json({ success: true, total: newMerchants.length, by_partner: {}, period: { from, to } });
+
+            const idStringToAgentUuid = {};
+            identRows.forEach(i => { idStringToAgentUuid[i.id_string] = i.agent_id; });
+            const agentUuids = [...new Set(Object.values(idStringToAgentUuid))];
+
+            const { data: agentRows } = await supabase.from('agents')
+                .select('id, parent_agent_id').in('id', agentUuids);
+
+            const agentUuidToPersonId = {};
+            (agentRows || []).forEach(a => { if (a.parent_agent_id) agentUuidToPersonId[a.id] = a.parent_agent_id; });
+            const personIds = [...new Set(Object.values(agentUuidToPersonId))];
+
+            const { data: personRows } = await supabase.from('persons')
+                .select('id, full_name').in('id', personIds);
+            const personNameMap = {};
+            (personRows || []).forEach(p => { personNameMap[p.id] = p.full_name; });
+
+            const byPartner = {};
+            newMerchants.forEach(m => {
+                const agentUuid = idStringToAgentUuid[m.agent_id];
+                if (!agentUuid) return;
+                const personId = agentUuidToPersonId[agentUuid];
+                if (!personId) return;
+                if (!byPartner[personId]) byPartner[personId] = { name: personNameMap[personId] || 'Unknown', count: 0, merchants: [] };
+                byPartner[personId].count++;
+                byPartner[personId].merchants.push({ merchant_id: m.merchant_id, dba_name: m.dba_name, enrollment_date: m.enrollment_date, account_status: m.account_status });
+            });
+
+            return res.status(200).json({ success: true, total: newMerchants.length, by_partner: byPartner, period: { from, to } });
+        }
+
     } catch (err) {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
