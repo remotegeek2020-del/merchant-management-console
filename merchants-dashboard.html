@@ -128,6 +128,11 @@
     color: var(--pp-blue);
     background: #eff6ff;
 }
+.th-sortable { cursor:pointer; user-select:none; }
+.th-sortable:hover { background:#f0f4f8 !important; }
+.sort-icon { color:#cbd5e1; font-size:11px; margin-left:2px; }
+.staff-flag-btn { background:none; border:1px solid #e2e8f0; border-radius:6px; padding:3px 7px; cursor:pointer; font-size:12px; color:#94a3b8; transition:0.15s; }
+.staff-flag-btn.flagged { color:#d97706; border-color:#fde68a; background:#fef9c3; }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.3.2/papaparse.min.js"></script>
@@ -187,6 +192,9 @@
                 <span class="material-icons" style="font-size:16px; vertical-align:middle; margin-right:4px;">add</span>
                 Add Merchant
             </button>
+            <button class="slds-button slds-button_neutral" style="border-radius:10px; display:flex; align-items:center; gap:5px;" onclick="exportFilteredCSV()">
+                <span class="material-icons" style="font-size:18px;">download</span> Export CSV
+            </button>
             <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="resetAndFetch()">Search</button>
             <button class="slds-button slds-button_neutral" 
         style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #166534; color: #166534;" 
@@ -205,6 +213,29 @@
         <div class="kpi-card" style="background:var(--pp-blue); color:white; border:none;"><div><span class="kpi-label" style="color:rgba(255,255,255,0.7);">Share</span><span class="kpi-val" id="share-val" style="color:white;">0.00%</span></div></div>
     </div>
 
+    <!-- ANALYTICS PANEL -->
+    <div id="staffChartsPanel" style="background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 20px rgba(0,0,0,0.05);margin-bottom:20px;">
+        <div style="padding:14px 20px;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;">
+            <div style="display:flex;align-items:center;gap:16px;">
+                <span style="font-size:13px;font-weight:800;color:#002d5a;">Portfolio Analytics</span>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;" id="healthCountChips"></div>
+            </div>
+            <button onclick="toggleStaffCharts()" id="staffChartsToggleBtn" class="slds-button slds-button_neutral" style="border-radius:8px;font-size:11px;padding:5px 12px;">Hide Charts</button>
+        </div>
+        <div id="staffChartsBody" style="padding:20px;display:grid;grid-template-columns:220px 1fr;gap:24px;align-items:center;">
+            <div>
+                <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;text-align:center;">Health Distribution</div>
+                <canvas id="staffDonutChart" height="180"></canvas>
+                <div id="staffDonutLegend" style="margin-top:12px;display:flex;flex-direction:column;gap:5px;font-size:11px;"></div>
+            </div>
+            <div>
+                <div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;">Top 10 Merchants — 30-Day Volume</div>
+                <div id="staffBarWrap"><canvas id="staffBarChart"></canvas></div>
+                <div id="staffBarEmpty" style="display:none;color:#94a3b8;font-size:12px;padding:24px;text-align:center;">No volume data available</div>
+            </div>
+        </div>
+    </div>
+
     <article class="main-card">
         <div class="health-filter-bar" id="healthFilterBar">
             <button class="health-chip active" onclick="setHealthFilter('All', this)">All</button>
@@ -217,13 +248,14 @@
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
-                    <th>DBA Name</th>
+                    <th class="th-sortable" onclick="setStaffSort('dba_name')">DBA Name <span class="sort-icon" id="ssort-dba_name">↕</span></th>
                     <th>Merchant ID</th>
                     <th class="hide-mobile">Partner ID</th>
                     <th class="hide-mobile">Company</th>
                     <th class="hide-mobile">Partner Name</th>
-                    <th>Status</th>
+                    <th class="th-sortable" onclick="setStaffSort('account_status')">Status <span class="sort-icon" id="ssort-account_status">↕</span></th>
                     <th>Health</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody id="merchantTableBody"></tbody>
@@ -240,6 +272,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
     let currentPage = 0;
     let currentRecords = [];
@@ -1130,7 +1163,7 @@ async function addTask(merchantUuid) {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
         
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:60px; color:#94a3b8;">
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:60px; color:#94a3b8;">
             <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
             Synchronizing Ledger...
         </td></tr>`;
@@ -1139,7 +1172,7 @@ async function addTask(merchantUuid) {
             const res = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value })
+                body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value, sort_by: staffSortField, sort_dir: staffSortDir })
             });
             const result = await res.json();
             currentRecords = result.data;
@@ -1193,9 +1226,16 @@ async function addTask(merchantUuid) {
         <td class="hide-mobile">${m.partner_name || '---'}</td>
         <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
         <td data-health-label="${m.health_label || ''}">${healthBadge}</td>
+        <td onclick="event.stopPropagation()" style="white-space:nowrap;">
+            <div style="display:flex;gap:4px;align-items:center;">
+                ${m.merchant_phone ? `<a href="tel:${(m.merchant_phone||'').replace(/[^0-9+]/g,'')}" title="Call ${m.merchant_phone}" style="display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;border:1px solid #e2e8f0;border-radius:6px;color:#475569;text-decoration:none;" onmouseover="this.style.borderColor='#004990';this.style.color='#004990'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#475569'"><span class="material-icons" style="font-size:14px;">call</span></a>` : ''}
+                <button class="staff-flag-btn ${staffFlaggedSet.has(m.merchant_id) ? 'flagged' : ''}" onclick="toggleStaffFlag('${m.merchant_id}',this)" title="${staffFlaggedSet.has(m.merchant_id) ? 'Remove flag' : 'Flag for follow-up'}"><span class="material-icons" style="font-size:14px;">${staffFlaggedSet.has(m.merchant_id) ? 'star' : 'star_border'}</span></button>
+            </div>
+        </td>
     `;
 });
             applyHealthFilter();
+            loadStaffStats();
             document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total Found: ${result.count.toLocaleString()})</span>`;
         } catch (err) { console.error(err); }
     }
@@ -1804,7 +1844,189 @@ window.saveMerchant = async (uuid) => {
 
     function changePage(dir) { currentPage += dir; fetchMerchants(); }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
-    
+
+    // ── STAFF SORT ──────────────────────────────────────
+    let staffSortField = 'created_at';
+    let staffSortDir = 'desc';
+
+    function setStaffSort(field) {
+        if (staffSortField === field) {
+            staffSortDir = staffSortDir === 'asc' ? 'desc' : 'asc';
+        } else {
+            staffSortField = field;
+            staffSortDir = (field === 'volume_30_day' || field === 'volume_mtd') ? 'desc' : 'asc';
+        }
+        updateStaffSortIcons();
+        currentPage = 0;
+        fetchMerchants();
+    }
+
+    function updateStaffSortIcons() {
+        ['dba_name', 'account_status', 'volume_30_day', 'volume_mtd'].forEach(f => {
+            const el = document.getElementById(`ssort-${f}`);
+            if (!el) return;
+            if (f === staffSortField) {
+                el.textContent = staffSortDir === 'asc' ? ' ↑' : ' ↓';
+                el.style.color = '#004990';
+            } else {
+                el.textContent = ' ↕';
+                el.style.color = '#cbd5e1';
+            }
+        });
+    }
+
+    // ── STAFF FLAG ──────────────────────────────────────
+    const STAFF_FLAG_KEY = 'pp_staff_merchant_flags';
+    let staffFlaggedSet = new Set(JSON.parse(localStorage.getItem(STAFF_FLAG_KEY) || '[]'));
+
+    function toggleStaffFlag(merchantId, btn) {
+        if (staffFlaggedSet.has(merchantId)) {
+            staffFlaggedSet.delete(merchantId);
+            btn.classList.remove('flagged');
+            btn.title = 'Flag for follow-up';
+            btn.querySelector('.material-icons').textContent = 'star_border';
+        } else {
+            staffFlaggedSet.add(merchantId);
+            btn.classList.add('flagged');
+            btn.title = 'Remove flag';
+            btn.querySelector('.material-icons').textContent = 'star';
+        }
+        localStorage.setItem(STAFF_FLAG_KEY, JSON.stringify([...staffFlaggedSet]));
+    }
+
+    // ── STAFF CHARTS ────────────────────────────────────
+    let staffDonutChart = null;
+    let staffBarChart = null;
+    let staffChartsVisible = true;
+
+    function toggleStaffCharts() {
+        const body = document.getElementById('staffChartsBody');
+        const btn = document.getElementById('staffChartsToggleBtn');
+        staffChartsVisible = !staffChartsVisible;
+        body.style.display = staffChartsVisible ? 'grid' : 'none';
+        btn.textContent = staffChartsVisible ? 'Hide Charts' : 'Show Charts';
+    }
+
+    async function loadStaffStats() {
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'get_stats_for_filter',
+                    statusFilter: document.getElementById('statusFilter').value,
+                    query: document.getElementById('searchInput').value,
+                    filterBy: document.getElementById('filterBy').value
+                })
+            });
+            const d = await res.json();
+            if (!d.success) return;
+
+            // Health count chips in panel header
+            const chips = document.getElementById('healthCountChips');
+            if (chips) {
+                const chipColors = { Healthy:'#166534', Good:'#1d4ed8', Fair:'#92400e', 'At Risk':'#9a3412', Critical:'#991b1b' };
+                const chipBgs   = { Healthy:'#dcfce7', Good:'#dbeafe', Fair:'#fef9c3', 'At Risk':'#fed7aa', Critical:'#fee2e2' };
+                chips.innerHTML = Object.entries(d.health).map(([label, count]) =>
+                    `<span style="background:${chipBgs[label]};color:${chipColors[label]};border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700;">${label}: ${count.toLocaleString()}</span>`
+                ).join('');
+            }
+
+            initStaffDonut(d.health);
+            if (d.top10.length) {
+                document.getElementById('staffBarWrap').style.display = 'block';
+                document.getElementById('staffBarEmpty').style.display = 'none';
+                initStaffBar(d.top10);
+            } else {
+                document.getElementById('staffBarWrap').style.display = 'none';
+                document.getElementById('staffBarEmpty').style.display = 'block';
+            }
+        } catch(e) { console.error('Staff stats:', e); }
+    }
+
+    function initStaffDonut(health) {
+        const ctx = document.getElementById('staffDonutChart').getContext('2d');
+        if (staffDonutChart) staffDonutChart.destroy();
+        const labels = ['Healthy', 'Good', 'Fair', 'At Risk', 'Critical'];
+        const data   = labels.map(l => health[l] || 0);
+        const colors = ['#16a34a', '#1d4ed8', '#d97706', '#ea580c', '#dc2626'];
+        staffDonutChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: '#fff' }] },
+            options: {
+                responsive: true,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` ${c.label}: ${c.raw.toLocaleString()}` } } },
+                cutout: '65%'
+            }
+        });
+        document.getElementById('staffDonutLegend').innerHTML = labels.map((l, i) =>
+            `<div style="display:flex;align-items:center;gap:6px;"><div style="width:10px;height:10px;border-radius:50%;background:${colors[i]};flex-shrink:0;"></div><span style="color:#475569;">${l}: <strong>${data[i].toLocaleString()}</strong></span></div>`
+        ).join('');
+    }
+
+    function initStaffBar(top10) {
+        const ctx = document.getElementById('staffBarChart').getContext('2d');
+        if (staffBarChart) staffBarChart.destroy();
+        const hColors = { Healthy:'#16a34a', Good:'#1d4ed8', Fair:'#d97706', 'At Risk':'#ea580c', Critical:'#dc2626' };
+        const labels = top10.map(m => m.dba_name.length > 26 ? m.dba_name.slice(0, 26) + '…' : m.dba_name);
+        const data   = top10.map(m => m.vol30);
+        const colors = top10.map(m => hColors[m.health_label] || '#64748b');
+        staffBarChart = new Chart(ctx, {
+            type: 'bar',
+            data: { labels, datasets: [{ data, backgroundColor: colors, borderRadius: 4, borderSkipped: false }] },
+            options: {
+                indexAxis: 'y',
+                responsive: true,
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ' $' + c.raw.toLocaleString() } } },
+                scales: {
+                    x: { ticks: { callback: v => '$' + (v >= 1000 ? (v/1000).toFixed(0)+'k' : v), font:{size:10} }, grid:{color:'#f8fafc'} },
+                    y: { ticks: { font:{size:10} } }
+                }
+            }
+        });
+    }
+
+    // ── EXPORT FILTERED CSV ─────────────────────────────
+    async function exportFilteredCSV() {
+        Swal.fire({ title:'Exporting...', didOpen:()=>Swal.showLoading() });
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'list',
+                    page: 0, limit: 5000,
+                    query: document.getElementById('searchInput').value,
+                    filterBy: document.getElementById('filterBy').value,
+                    statusFilter: document.getElementById('statusFilter').value
+                })
+            });
+            const d = await res.json();
+            if (!d.success || !d.data.length) { Swal.fire('No Data', 'Nothing to export with current filters.', 'info'); return; }
+            const headers = ['Merchant ID', 'DBA Name', 'Status', 'Partner ID', 'Company', 'Partner Name', 'MTD Volume', '30D Volume', '90D Volume', 'Health Score', 'Health Label'];
+            const rows = d.data.map(m => [
+                m.merchant_id,
+                `"${(m.dba_name||'').replace(/"/g,'""')}"`,
+                m.account_status,
+                m.agent_id || '',
+                `"${(m.company_name||'').replace(/"/g,'""')}"`,
+                `"${(m.partner_name||'').replace(/"/g,'""')}"`,
+                m.volume_mtd || 0,
+                m.volume_30_day || 0,
+                m.volume_90_day || 0,
+                m.health_score || '',
+                m.health_label || ''
+            ]);
+            const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+            const blob = new Blob([csv], { type: 'text/csv' });
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = `merchants_${new Date().toISOString().slice(0,10)}.csv`;
+            a.click();
+            Swal.fire({ icon:'success', title:'Exported!', text:`${d.data.length} merchants downloaded.`, timer:1500, showConfirmButton:false });
+        } catch(e) { Swal.fire('Error', e.message, 'error'); }
+    }
+
     window.onload = () => {
         Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         const params = new URLSearchParams(window.location.search);
