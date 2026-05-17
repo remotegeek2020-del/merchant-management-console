@@ -2063,6 +2063,10 @@ window.quickAddId = async function(personId, name) {
     // Merchant data stored per partner for lazy rendering
     var _enrollMerchants = {};
 
+    function escHtml(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
     function renderEnrollWidget(d) {
         const totalLabel = document.getElementById('enrollTotalLabel');
         const periodLabel = document.getElementById('enrollPeriodLabel');
@@ -2085,18 +2089,53 @@ window.quickAddId = async function(personId, name) {
         const partners = Object.entries(d.by_partner).sort((a,b) => b[1].count - a[1].count);
         partners.forEach(([pid, info]) => { _enrollMerchants[pid] = info.merchants || []; });
 
-        list.innerHTML = partners.map(([pid, info]) => `
-            <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:white;">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#f8fafc;cursor:pointer;min-height:44px;" onclick="filterToPartner('${pid}')">
-                    <span style="font-size:13px;font-weight:800;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58%;">${info.name}</span>
-                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
-                        <span style="background:#0d9488;color:white;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:800;">${info.count} new</span>
-                        <button onclick="event.stopPropagation();toggleEnrollExpand('${pid}')" style="background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" id="enroll-icon-${pid}" style="font-size:18px;">expand_more</span></button>
-                    </div>
-                </div>
-                <div id="enroll-detail-${pid}" style="display:none;padding:0 14px 10px;max-height:260px;overflow-y:auto;background:white;"></div>
-            </div>`
-        ).join('');
+        // Use a document fragment to build rows as real DOM nodes (avoids HTML injection / flex compression)
+        const frag = document.createDocumentFragment();
+        partners.forEach(([pid, info]) => {
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:white;flex-shrink:0;';
+
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#f8fafc;cursor:pointer;min-height:44px;box-sizing:border-box;';
+            header.addEventListener('click', () => filterToPartner(pid));
+
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText = 'font-size:13px;font-weight:800;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58%;';
+            nameSpan.textContent = info.name || 'Unknown';
+
+            const right = document.createElement('div');
+            right.style.cssText = 'display:flex;align-items:center;gap:8px;flex-shrink:0;';
+
+            const badge = document.createElement('span');
+            badge.style.cssText = 'background:#0d9488;color:white;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:800;';
+            badge.textContent = `${info.count} new`;
+
+            const btn = document.createElement('button');
+            btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;color:#94a3b8;';
+            btn.addEventListener('click', (e) => { e.stopPropagation(); toggleEnrollExpand(pid); });
+            const icon = document.createElement('span');
+            icon.className = 'material-icons';
+            icon.id = 'enroll-icon-' + pid;
+            icon.style.fontSize = '18px';
+            icon.textContent = 'expand_more';
+            btn.appendChild(icon);
+
+            right.appendChild(badge);
+            right.appendChild(btn);
+            header.appendChild(nameSpan);
+            header.appendChild(right);
+
+            const detail = document.createElement('div');
+            detail.id = 'enroll-detail-' + pid;
+            detail.style.cssText = 'display:none;padding:0 14px 10px;max-height:260px;overflow-y:auto;background:white;';
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(detail);
+            frag.appendChild(wrapper);
+        });
+
+        list.innerHTML = '';
+        list.appendChild(frag);
     }
 
     window.toggleEnrollExpand = function(pid) {
@@ -2109,17 +2148,38 @@ window.quickAddId = async function(personId, name) {
         // Lazy-render merchant rows only on first open
         if (opening && !el.dataset.rendered) {
             const merchants = _enrollMerchants[pid] || [];
-            el.innerHTML = merchants.map(m => {
-                const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
-                const statusColor = m.account_status === 'Approved' ? '#16a34a' : '#64748b';
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;min-height:32px;">
-                    <span style="color:#0a1628;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;">${m.dba_name}</span>
-                    <span style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
-                        <span style="color:${statusColor};font-weight:700;font-size:11px;">${m.account_status||'—'}</span>
-                        <span style="color:#94a3b8;font-size:11px;">${dt}</span>
-                    </span>
-                </div>`;
-            }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">No merchants</div>';
+            el.innerHTML = '';
+            if (!merchants.length) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color:#94a3b8;font-size:12px;padding:8px 0;';
+                empty.textContent = 'No merchants';
+                el.appendChild(empty);
+            } else {
+                const mFrag = document.createDocumentFragment();
+                merchants.forEach(m => {
+                    const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+                    const statusColor = m.account_status === 'Approved' ? '#16a34a' : '#64748b';
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;min-height:32px;';
+                    const nameEl = document.createElement('span');
+                    nameEl.style.cssText = 'color:#0a1628;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;';
+                    nameEl.textContent = m.dba_name || '—';
+                    const meta = document.createElement('span');
+                    meta.style.cssText = 'display:flex;gap:8px;align-items:center;flex-shrink:0;';
+                    const statusEl = document.createElement('span');
+                    statusEl.style.cssText = `color:${statusColor};font-weight:700;font-size:11px;`;
+                    statusEl.textContent = m.account_status || '—';
+                    const dateEl = document.createElement('span');
+                    dateEl.style.cssText = 'color:#94a3b8;font-size:11px;';
+                    dateEl.textContent = dt;
+                    meta.appendChild(statusEl);
+                    meta.appendChild(dateEl);
+                    row.appendChild(nameEl);
+                    row.appendChild(meta);
+                    mFrag.appendChild(row);
+                });
+                el.appendChild(mFrag);
+            }
             el.dataset.rendered = '1';
         }
     };
