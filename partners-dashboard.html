@@ -11,11 +11,11 @@
     <script src="js/tz.js"></script>
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
-        body { background: #f1f5f9; padding: 25px; font-family: 'DM Sans', sans-serif; }
+        body { background: #f1f5f9; padding: 14px; font-family: 'DM Sans', sans-serif; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
-        .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; }
+        .modern-header { background: white; border-radius: 14px; padding: 12px 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 8px; }
+        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+        .partner-card { background: white; border-radius: 12px; padding: 14px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; }
         .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
         .partner-card.selected { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.18); transform: none; }
         .card-checkbox { position: absolute; top: 14px; left: 14px; width: 18px; height: 18px; cursor: pointer; display: none; accent-color: #0d9488; z-index: 10; }
@@ -218,6 +218,7 @@ input[type=number] {
     .modern-header { flex-direction: column; align-items: flex-start; gap: 12px; padding: 16px; }
     .partner-grid { grid-template-columns: 1fr !important; }
     #bulk-bar { min-width: unset; width: calc(100% - 24px); flex-wrap: wrap; left: 12px; transform: none; }
+    .side-by-side-panels { grid-template-columns: 1fr !important; }
 }
     </style>
     <script>
@@ -262,112 +263,89 @@ input[type=number] {
         <a href="merchants-dashboard.html" style="display:inline-flex;align-items:center;gap:4px;padding:4px 11px;background:#eff6ff;color:#004990;border:1px solid #bfdbfe;border-radius:20px;font-size:11px;font-weight:700;text-decoration:none;margin-left:2px;" onmouseover="this.style.background='#004990';this.style.color='white';" onmouseout="this.style.background='#eff6ff';this.style.color='#004990';"><span class="material-icons" style="font-size:13px;">storefront</span>Merchants</a>
     </div>
 
-    <div class="search-area">
-        <div class="search-wrapper">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="search-wrapper" style="flex:1;min-width:220px;">
             <span class="material-icons">search</span>
             <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or MID...">
         </div>
-        <div id="searchStats">Showing all partners</div>
+        <div id="searchStats" style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Showing all</div>
+        <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+            <button onclick="filterByTrend('growth')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f0fdf4;color:#166534;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_up</span></button>
+            <button onclick="filterByTrend('stable')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f8fafc;color:#475569;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_flat</span></button>
+            <button onclick="filterByTrend('risk')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#fef2f2;color:#991b1b;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_down</span></button>
+            <button onclick="filterByTrend('all')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:white;color:#64748b;border-radius:6px;">ALL</button>
+        </div>
     </div>
 </div>
-   <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
-    <button onclick="filterByTrend('growth')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f0fdf4; color: #166534;">
-        <span class="material-icons" style="font-size: 16px;">trending_up</span> GROWTH
-    </button>
-    <button onclick="filterByTrend('stable')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f8fafc; color: #475569;">
-        <span class="material-icons" style="font-size: 16px;">trending_flat</span> STABLE
-    </button>
-    <button onclick="filterByTrend('risk')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #fef2f2; color: #991b1b;">
-        <span class="material-icons" style="font-size: 16px;">trending_down</span> AT RISK
-    </button>
-    <button onclick="filterByTrend('all')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: white; color: var(--pp-blue);">
-        CLEAR FILTER
-    </button>
-</div>
-    <!-- PARTNER LEADERBOARD CARD -->
-    <div id="leaderboardCard" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
-            <div>
-                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">leaderboard</span> Partner Performance</div>
-                <div style="font-size:1.1rem;font-weight:800;color:#002d5a;">Partner Leaderboard</div>
+    <!-- LEADERBOARD + ENROLLMENTS SIDE BY SIDE -->
+    <div class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+
+        <!-- LEFT: PARTNER LEADERBOARD -->
+        <div id="leaderboardCard" style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);display:flex;flex-direction:column;min-height:0;">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="material-icons" style="font-size:16px;color:#64748b;">leaderboard</span>
+                    <span style="font-size:13px;font-weight:800;color:#002d5a;">Partner Leaderboard</span>
+                    <span id="leaderboardUpdatedAt" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
+                </div>
+                <div style="display:flex;gap:5px;align-items:center;">
+                    <button onclick="refreshLeaderboard()" id="leaderboardRefreshBtn" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:5px 8px;font-size:11px;font-weight:700;color:#166634;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
+                    <button onclick="toggleLeaderboardExplainer()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:5px 8px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">help_outline</span></button>
+                    <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+                </div>
             </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-                <span id="leaderboardUpdatedAt" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
-                <button onclick="refreshLeaderboard()" id="leaderboardRefreshBtn" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">refresh</span> Refresh</button>
-                <button onclick="toggleLeaderboardExplainer()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">help_outline</span> How it works</button>
-                <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+
+            <!-- EXPLAINER PANEL (hidden by default) -->
+            <div id="leaderboardExplainer" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:10px;font-size:12px;color:#475569;line-height:1.6;">
+                Partners ranked by <strong>30-day volume</strong>. Growth % compares last 30d vs 90d monthly average.
+                <span style="display:inline-flex;align-items:center;gap:4px;margin-left:6px;"><span style="background:#fef9c3;color:#92400e;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;">🥇 Gold</span> 1–3 &nbsp;<span style="background:#f1f5f9;color:#475569;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;">🥈 Silver</span> 4–10 &nbsp;<span style="background:#fef3ec;color:#9a3412;font-size:10px;font-weight:800;padding:1px 6px;border-radius:99px;">🥉 Bronze</span> 11+</span>
+            </div>
+
+            <div id="leaderboardList" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:340px;">
+                <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>
+            </div>
+
+            <!-- NEEDS ATTENTION SECTION -->
+            <div id="needsAttentionSection" style="display:none;margin-top:10px;border-top:1px solid #f1f5f9;padding-top:10px;">
+                <div style="font-size:10px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:13px;">warning</span> Needs Attention</div>
+                <div id="needsAttentionList" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:160px;"></div>
             </div>
         </div>
 
-        <!-- EXPLAINER PANEL (hidden by default) -->
-        <div id="leaderboardExplainer" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:14px;">
-            <div style="font-size:12px;font-weight:800;color:#002d5a;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:15px;color:#0369a1;">info</span> How the Leaderboard Works</div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;color:#475569;">
-                <div>
-                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">📊 Ranking</div>
-                    <div style="line-height:1.6;">Partners are ranked by their <strong>total 30-day processing volume</strong> across all their merchants. The partner with the highest volume in the last 30 days is ranked #1.</div>
+        <!-- RIGHT: NEW ENROLLMENTS -->
+        <div id="enrollWidget" style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);display:flex;flex-direction:column;min-height:0;">
+            <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="material-icons" style="font-size:16px;color:#64748b;">person_add</span>
+                    <span style="font-size:13px;font-weight:800;color:#002d5a;">New Enrollments</span>
+                    <span style="font-size:16px;font-weight:800;color:#0d9488;" id="enrollTotalLabel">—</span>
+                    <span style="font-size:10px;color:#94a3b8;" id="enrollPeriodLabel"></span>
                 </div>
-                <div>
-                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">📈 Growth %</div>
-                    <div style="line-height:1.6;">Compares a partner's <strong>last 30 days vs their monthly average from the last 90 days</strong>. Positive (green) = growing faster than their baseline. Negative (red) = slower than usual.</div>
-                </div>
-                <div>
-                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">🏅 Tier Badges</div>
-                    <div style="line-height:1.6;">
-                        <span style="background:#fef9c3;color:#92400e;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-right:4px;">🥇 Gold</span> Rank 1–3<br>
-                        <span style="background:#f1f5f9;color:#475569;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-right:4px;">🥈 Silver</span> Rank 4–10<br>
-                        <span style="background:#fef3ec;color:#9a3412;font-size:10px;font-weight:800;padding:1px 7px;border-radius:99px;margin-right:4px;">🥉 Bronze</span> Rank 11+
+                <div style="display:flex;gap:5px;align-items:center;">
+                    <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+                        <button id="enrollBtn-week" onclick="setEnrollPeriod('week')" style="background:#0d9488;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer;">Week</button>
+                        <button id="enrollBtn-month" onclick="setEnrollPeriod('month')" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Month</button>
+                        <button id="enrollBtn-30" onclick="setEnrollPeriod('30')" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">30d</button>
+                        <button id="enrollBtn-90" onclick="setEnrollPeriod('90')" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">90d</button>
                     </div>
+                    <button onclick="loadNewEnrollments(currentEnrollPeriod)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:5px 8px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
                 </div>
-                <div>
-                    <div style="font-weight:700;color:#002d5a;margin-bottom:4px;">⚡ Actionable</div>
-                    <div style="line-height:1.6;">Click <strong>View</strong> on any partner to open their profile. Use the <strong>Needs Attention</strong> section below to quickly identify partners with declining volume and take action.</div>
-                </div>
+            </div>
+            <div id="enrollList" style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:520px;padding-right:2px;">
+                <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>
             </div>
         </div>
 
-        <div id="leaderboardList" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading leaderboard...</div>
-        </div>
-
-        <!-- NEEDS ATTENTION SECTION -->
-        <div id="needsAttentionSection" style="display:none;margin-top:14px;border-top:1px solid #f1f5f9;padding-top:14px;">
-            <div style="font-size:10px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">warning</span> Needs Attention — Declining Volume</div>
-            <div id="needsAttentionList" style="display:flex;flex-direction:column;gap:6px;"></div>
-        </div>
-    </div>
-
-    <!-- NEW ENROLLMENTS WIDGET -->
-    <div id="enrollWidget" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-            <div>
-                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">person_add</span> New Enrollments</div>
-                <div style="font-size:20px;font-weight:800;color:#0a1628;" id="enrollTotalLabel">—</div>
-            </div>
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                <div style="display:flex;background:#f1f5f9;border-radius:10px;padding:3px;gap:2px;">
-                    <button id="enrollBtn-week" onclick="setEnrollPeriod('week')" style="background:#0d9488;color:white;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;">This Week</button>
-                    <button id="enrollBtn-month" onclick="setEnrollPeriod('month')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">This Month</button>
-                    <button id="enrollBtn-30" onclick="setEnrollPeriod('30')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Last 30d</button>
-                    <button id="enrollBtn-90" onclick="setEnrollPeriod('90')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Last 90d</button>
-                </div>
-                <button onclick="loadNewEnrollments(currentEnrollPeriod)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">refresh</span></button>
-            </div>
-        </div>
-        <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;" id="enrollPeriodLabel"></div>
-        <div id="enrollList" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading enrollments...</div>
-        </div>
-    </div>
+    </div><!-- /side-by-side -->
 
     <div id="partnerGrid" class="partner-grid"></div>
-   <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px; flex-wrap:wrap;">
+    <div id="paginationControls" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px;padding-bottom:30px;flex-wrap:wrap;">
     <button id="btnPrev" onclick="changePage(-1)" class="pagination-btn">Previous</button>
-    <span id="pageIndicator" style="font-weight:700; color:#64748b; font-size:14px;">Page 1 of 1</span>
+    <span id="pageIndicator" style="font-weight:700;color:#64748b;font-size:13px;">Page 1 of 1</span>
     <button id="btnNext" onclick="changePage(1)" class="pagination-btn">Next</button>
-    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid #e2e8f0;padding-left:14px;">
-        <span style="font-size:12px;font-weight:600;color:#94a3b8;">Per page</span>
-        <select id="perPageSelect" onchange="changePerPage(this.value)" style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:#475569;background:white;cursor:pointer;">
+    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid #e2e8f0;padding-left:12px;">
+        <span style="font-size:11px;font-weight:600;color:#94a3b8;">Per page</span>
+        <select id="perPageSelect" onchange="changePerPage(this.value)" style="border:1px solid #e2e8f0;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;color:#475569;background:white;cursor:pointer;">
             <option value="12">12</option>
             <option value="24">24</option>
             <option value="48">48</option>
@@ -393,7 +371,7 @@ input[type=number] {
         <label class="search-label">HighLevel Contact Lookup</label>
         <div class="search-wrapper">
             <span class="material-icons">search</span>
-            <input type="text" id="ghlSearch" class="wizard-input" placeholder="Search by name or email..." style="padding-left: 45px;">
+            <input type="text" id="ghlSearch" class="wizard-input" placeholder="Search by name, email, or contact ID..." style="padding-left: 45px;">
         </div>
         <div id="ghlResults" style="max-height: 250px; overflow-y: auto; border: 1px solid #f1f5f9; border-radius: 8px; margin-top:10px;"></div>
         <div id="selectedContactDisplay" style="padding: 15px; background: #f0fdf4; border-radius: 8px; border: 1px solid #bcf0da; display: none; margin-top: 10px;"></div>
@@ -403,14 +381,21 @@ input[type=number] {
  <div class="step-container" id="step2">
     <label class="search-label">Company / Firm Association</label>
     <div style="margin-bottom:14px;"><label class="search-label">Partner Activation Date</label><input type="date" id="partnerActivationDate" class="wizard-input" style="font-family:sans-serif;"><div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div></div>
-    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput();">
-        <option value="none">Independent (Individual Partner)</option>
-        <option value="new">+ Create New Company...</option>
-        </select>
-    
-    <div id="newCompanyFields" style="margin-top: 10px; display: none;">
-        <label class="search-label">New Company Name</label>
-        <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter company name...">
+
+    <div style="position:relative;" id="companyPickerWrap">
+        <input type="text" id="companySearchInput" class="wizard-input" placeholder="Search company or type to create new..." autocomplete="off"
+            oninput="filterCompanySuggestions()"
+            onfocus="showCompanySuggestions()"
+            onblur="hideCompanySuggestions()">
+        <div id="companySuggestionsBox" style="display:none;position:absolute;left:0;right:0;top:100%;background:white;border:1.5px solid #e2e8f0;border-radius:10px;z-index:9999;max-height:220px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.12);margin-top:3px;"></div>
+    </div>
+    <!-- hidden fields kept for submit compatibility -->
+    <input type="hidden" id="companySelect" value="none">
+    <input type="hidden" id="newCompanyName" value="">
+
+    <div id="selectedCompanyDisplay" style="display:none;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+        <span id="selectedCompanyLabel" style="display:flex;align-items:center;gap:6px;"></span>
+        <button type="button" onclick="clearCompanySelection()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:20px;line-height:1;padding:0 2px;">×</button>
     </div>
 
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:14px;padding:10px 14px;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;font-size:13px;font-weight:700;color:#004990;">
@@ -552,12 +537,14 @@ async function logAuditAction(action, details) {
     identifiers.forEach(id => {
         const myAgent  = agentById.get(id.agent_id);
         const myPerson = myAgent ? personById.get(myAgent.parent_agent_id) : null;
+        const _idStat = statsByIdString.get(id.id_string);
         idMap[id.id] = {
-            db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
+            db_id: id.id, string: id.id_string, rev: (id.rev_share != null) ? id.rev_share + '%' : '0%',
             isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
             owner_name: myPerson ? myPerson.full_name : 'Unknown',
             parent_config_id: id.parent_config_id,
-            upline_name: null, upline_string: null
+            upline_name: null, upline_string: null,
+            merchantCount: _idStat ? (_idStat.merchant_count || 0) : 0
         };
     });
 
@@ -709,27 +696,98 @@ window.filterByTrend = function(trend) {
     // 3. WIZARD STEP 2: BUSINESS (COMPANY)
     // ==========================================
 
-    function toggleCompanyInput() {
-        const select = document.getElementById('companySelect');
-        const newFields = document.getElementById('newCompanyFields');
-        if (!select || !newFields) return;
-        newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+    // ── COMPANY SEARCHABLE PICKER ─────────────────────────────────────────────
+    var _coSuggList = [];
+
+    function buildCoSuggestions() {
+        const seen = new Set();
+        _coSuggList = (_companiesRaw || []).filter(c => {
+            const key = (c.company_name || '').trim().toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).sort((a, b) => a.company_name.localeCompare(b.company_name));
     }
 
-    async function loadWizardCompanies() {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_partners_list' })
+    function renderCoSuggestions(term) {
+        const box = document.getElementById('companySuggestionsBox');
+        if (!box) return;
+        const t = (term || '').trim().toLowerCase();
+        const matches = t ? _coSuggList.filter(c => c.company_name.toLowerCase().includes(t)) : _coSuggList;
+        const exactMatch = matches.some(c => c.company_name.toLowerCase() === t);
+
+        let html = `<div onmousedown="selectCompany('none','')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;display:flex;align-items:center;gap:8px;">
+            <span class="material-icons" style="font-size:15px;">person_outline</span>Independent (Individual Partner)
+        </div>`;
+        matches.forEach(c => {
+            const safe = c.company_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            html += `<div onmousedown="selectCompany('${c.id}','${c.company_name.replace(/'/g,'&#39;').replace(/\\/g,'\\\\')}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:600;color:#0a1628;display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:15px;color:#8b5cf6;">business</span>${safe}
+            </div>`;
         });
-        const result = await res.json();
-        const select = document.getElementById('companySelect');
-        select.innerHTML = `
-            <option value="none">Independent (Individual Partner)</option>
-            <option value="new">+ Create New Company</option>
-        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
-        toggleCompanyInput();
+        if (t && !exactMatch) {
+            const safeT = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const rawT = document.getElementById('companySearchInput')?.value || t;
+            html += `<div onmousedown="selectCompany('new','${rawT.replace(/'/g,'&#39;').replace(/\\/g,'\\\\')}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#0d9488;display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:15px;">add_circle_outline</span>Create "${safeT}"
+            </div>`;
+        }
+        box.innerHTML = html;
+        box.style.display = 'block';
     }
+
+    window.filterCompanySuggestions = function() {
+        const val = document.getElementById('companySearchInput')?.value || '';
+        renderCoSuggestions(val);
+        // clear any prior selection while typing
+        document.getElementById('companySelect').value = 'none';
+        document.getElementById('newCompanyName').value = '';
+        document.getElementById('selectedCompanyDisplay').style.display = 'none';
+    };
+
+    window.showCompanySuggestions = function() {
+        if (!_coSuggList.length) buildCoSuggestions();
+        renderCoSuggestions(document.getElementById('companySearchInput')?.value || '');
+    };
+
+    window.hideCompanySuggestions = function() {
+        setTimeout(() => {
+            const box = document.getElementById('companySuggestionsBox');
+            if (box) box.style.display = 'none';
+        }, 180);
+    };
+
+    window.selectCompany = function(id, name) {
+        document.getElementById('companySuggestionsBox').style.display = 'none';
+        document.getElementById('companySearchInput').value = '';
+        document.getElementById('companySelect').value = id === 'none' ? 'none' : (id === 'new' ? 'new' : id);
+        document.getElementById('newCompanyName').value = id === 'new' ? name : '';
+
+        const display = document.getElementById('selectedCompanyDisplay');
+        const label = document.getElementById('selectedCompanyLabel');
+        if (id === 'none') {
+            display.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;';
+            label.innerHTML = '<span class="material-icons" style="font-size:15px;">person_outline</span>Independent (Individual Partner)';
+        } else if (id === 'new') {
+            display.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;';
+            const safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            label.innerHTML = `<span class="material-icons" style="font-size:15px;">add_circle_outline</span>New company: <b>${safeName}</b>`;
+        } else {
+            display.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;';
+            const safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            label.innerHTML = `<span class="material-icons" style="font-size:15px;color:#8b5cf6;">business</span>${safeName}`;
+        }
+    };
+
+    window.clearCompanySelection = function() {
+        document.getElementById('companySelect').value = 'none';
+        document.getElementById('newCompanyName').value = '';
+        document.getElementById('companySearchInput').value = '';
+        document.getElementById('selectedCompanyDisplay').style.display = 'none';
+    };
+
+    // Called after loadPartners to refresh the suggestion list
+    function refreshCoSuggestions() { _coSuggList = []; buildCoSuggestions(); }
 
     // ==========================================
     // 4. WIZARD STEP 3: ACCESS (IDENTIFIERS)
@@ -1066,9 +1124,11 @@ async function submitOnboarding() {
         
         if (result.success) {
             await logAuditAction('Partner Created', `Onboarded new partner: ${selectedGHLContact.name}`);
+            // Refresh materialized view so new partner gets a rank badge immediately
+            fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh_leaderboard' }) }).catch(() => {});
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
             closeWizard();
-            loadPartners(); 
+            loadPartners();
         } else {
             // This will show exactly WHY the backend failed (e.g., duplicate email)
             throw new Error(result.message || 'Database error');
@@ -1093,7 +1153,8 @@ async function submitOnboarding() {
     if (_df && !_df.value) _df.value = fmtDateInput(new Date());
     document.getElementById('onboardingWizard').classList.add('active');
     renderIdList();
-    loadWizardCompanies();
+    clearCompanySelection();
+    refreshCoSuggestions();
     goToStep(1);
 }
 
@@ -1136,7 +1197,7 @@ async function submitOnboarding() {
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
                     <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
-                    <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span><button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
+                    <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span>${id.merchantCount > 0 ? `<span style="font-size:10px; background:#e0f2fe; color:#0369a1; border-radius:10px; padding:1px 6px; white-space:nowrap;">${id.merchantCount} merchant${id.merchantCount !== 1 ? 's' : ''}</span>` : ''}<button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
                 </div>
                 ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
             </div>`;
@@ -1221,24 +1282,24 @@ async function submitOnboarding() {
                 ${_rankBadge}
                 <input type="checkbox" class="card-checkbox" onclick="toggleCardSelect('${p.id}',event)">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div style="flex:1;">
-                        <h2 style="font-weight:800; color:#002d5a; margin-bottom:6px;">${p.name}</h2>
+                    <div style="flex:1;min-width:0;">
+                        <h2 style="font-weight:800;color:#002d5a;margin:0 0 3px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</h2>
                         ${_brandedBadge}
                     </div>
                     <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
-                            style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
-                        <span class="material-icons" style="font-size:14px;">add</span> ID
+                            style="background:none;border:1px solid #e2e8f0;border-radius:6px;color:var(--pp-blue);cursor:pointer;display:flex;align-items:center;gap:3px;padding:3px 7px;font-size:10px;font-weight:800;flex-shrink:0;">
+                        <span class="material-icons" style="font-size:13px;">add</span> ID
                     </button>
                 </div>
                 ${p.companies.map(co => `
-                    <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                        <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                    <div style="margin-top:7px;border-top:1px solid #f1f5f9;padding-top:6px;">
+                        <b style="font-size:10px;color:#94a3b8;">${co.name.toUpperCase()}</b>
+                        <div style="margin-top:4px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                     </div>
                 `).join('')}
                 <div id="enroll-strip-${p.id}"></div>
-                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
-                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">person</span> View Detail</button>
+                <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;display:flex;gap:5px;">
+                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:7px;padding:5px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;"><span class="material-icons" style="font-size:13px;">person</span> View</button>
                     ${_inviteBtn}
                     ${_toggleBtn}
                 </div>
@@ -1969,7 +2030,7 @@ window.quickAddId = async function(personId, name) {
 
 
     // --- LOAD PARTNERS WITH STATS ---
-    async function loadPartners() {
+    async function loadPartners(initialQuery) {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.style.display = 'flex';
         try {
@@ -1990,17 +2051,7 @@ window.quickAddId = async function(personId, name) {
             const companiesRaw = _companiesRaw;
             statsRaw = [];
 
-            // Populate company dropdown in wizard
-            const companySelect = document.getElementById('companySelect');
-            if (companySelect) {
-                const existingOptions = companySelect.innerHTML;
-                companiesRaw.forEach(co => {
-                    const opt = document.createElement('option');
-                    opt.value = co.id;
-                    opt.textContent = co.company_name;
-                    companySelect.appendChild(opt);
-                });
-            }
+            refreshCoSuggestions();
 
             // Process with stats for trend calculation
             allPartners = processPartnerData({
@@ -2012,7 +2063,19 @@ window.quickAddId = async function(personId, name) {
             });
 
             currentPage = 1;
-            renderGrid();
+            if (initialQuery) {
+                const el = document.getElementById('partnerSearchInput');
+                if (el) { el.value = initialQuery; }
+                const term = initialQuery.toLowerCase().trim();
+                const filtered = allPartners.filter(p =>
+                    p.name.toLowerCase().includes(term) ||
+                    p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term))) ||
+                    p.companies.some(co => co.name.toLowerCase().includes(term))
+                );
+                renderGrid(filtered.length ? filtered : allPartners);
+            } else {
+                renderGrid();
+            }
             loadStatsBackground();
             loadLeaderboard();
             loadNewEnrollments(currentEnrollPeriod);
@@ -2082,6 +2145,13 @@ window.quickAddId = async function(personId, name) {
         }
     }
 
+    // Merchant data stored per partner for lazy rendering
+    var _enrollMerchants = {};
+
+    function escHtml(s) {
+        return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
     function renderEnrollWidget(d) {
         const totalLabel = document.getElementById('enrollTotalLabel');
         const periodLabel = document.getElementById('enrollPeriodLabel');
@@ -2099,37 +2169,105 @@ window.quickAddId = async function(personId, name) {
             return;
         }
 
+        // Store merchant arrays for lazy rendering — don't dump them all into the DOM upfront
+        _enrollMerchants = {};
         const partners = Object.entries(d.by_partner).sort((a,b) => b[1].count - a[1].count);
-        list.innerHTML = partners.map(([pid, info]) => {
-            const rows = info.merchants.map(m => {
-                const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
-                const statusColor = m.account_status === 'Active' ? '#16a34a' : '#64748b';
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:11px;">
-                    <span style="color:#0a1628;font-weight:600;">${m.dba_name}</span>
-                    <span style="display:flex;gap:8px;align-items:center;">
-                        <span style="color:${statusColor};font-weight:700;">${m.account_status||'—'}</span>
-                        <span style="color:#94a3b8;">${dt}</span>
-                    </span>
-                </div>`;
-            }).join('');
-            return `<div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;cursor:pointer;" onclick="filterToPartner('${pid}')">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 14px;background:#f8fafc;">
-                    <span style="font-size:13px;font-weight:800;color:#0a1628;">${info.name}</span>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="background:#0d9488;color:white;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:800;">${info.count} new</span>
-                        <button onclick="event.stopPropagation();toggleEnrollExpand('enroll-detail-${pid}')" style="background:none;border:none;cursor:pointer;padding:0;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" style="font-size:16px;">expand_more</span></button>
-                    </div>
-                </div>
-                <div id="enroll-detail-${pid}" style="display:none;padding:0 14px 8px;">${rows}</div>
-            </div>`;
-        }).join('');
+        partners.forEach(([pid, info]) => { _enrollMerchants[pid] = info.merchants || []; });
+
+        // Use a document fragment to build rows as real DOM nodes (avoids HTML injection / flex compression)
+        const frag = document.createDocumentFragment();
+        partners.forEach(([pid, info]) => {
+            const wrapper = document.createElement('div');
+            wrapper.style.cssText = 'border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:white;flex-shrink:0;';
+
+            const header = document.createElement('div');
+            header.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#f8fafc;cursor:pointer;min-height:44px;box-sizing:border-box;';
+            header.addEventListener('click', () => filterToPartner(pid));
+
+            const nameSpan = document.createElement('span');
+            nameSpan.style.cssText = 'font-size:13px;font-weight:800;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58%;';
+            nameSpan.textContent = info.name || 'Unknown';
+
+            const right = document.createElement('div');
+            right.style.cssText = 'display:flex;align-items:center;gap:8px;flex-shrink:0;';
+
+            const badge = document.createElement('span');
+            badge.style.cssText = 'background:#0d9488;color:white;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:800;';
+            badge.textContent = `${info.count} new`;
+
+            const btn = document.createElement('button');
+            btn.style.cssText = 'background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;color:#94a3b8;';
+            btn.addEventListener('click', (e) => { e.stopPropagation(); toggleEnrollExpand(pid); });
+            const icon = document.createElement('span');
+            icon.className = 'material-icons';
+            icon.id = 'enroll-icon-' + pid;
+            icon.style.fontSize = '18px';
+            icon.textContent = 'expand_more';
+            btn.appendChild(icon);
+
+            right.appendChild(badge);
+            right.appendChild(btn);
+            header.appendChild(nameSpan);
+            header.appendChild(right);
+
+            const detail = document.createElement('div');
+            detail.id = 'enroll-detail-' + pid;
+            detail.style.cssText = 'display:none;padding:0 14px 10px;max-height:260px;overflow-y:auto;background:white;';
+
+            wrapper.appendChild(header);
+            wrapper.appendChild(detail);
+            frag.appendChild(wrapper);
+        });
+
+        list.innerHTML = '';
+        list.appendChild(frag);
     }
 
-    function toggleEnrollExpand(id) {
-        const el = document.getElementById(id);
+    window.toggleEnrollExpand = function(pid) {
+        const el = document.getElementById('enroll-detail-' + pid);
+        const icon = document.getElementById('enroll-icon-' + pid);
         if (!el) return;
-        el.style.display = el.style.display === 'none' ? 'block' : 'none';
-    }
+        const opening = el.style.display === 'none';
+        el.style.display = opening ? 'block' : 'none';
+        if (icon) icon.textContent = opening ? 'expand_less' : 'expand_more';
+        // Lazy-render merchant rows only on first open
+        if (opening && !el.dataset.rendered) {
+            const merchants = _enrollMerchants[pid] || [];
+            el.innerHTML = '';
+            if (!merchants.length) {
+                const empty = document.createElement('div');
+                empty.style.cssText = 'color:#94a3b8;font-size:12px;padding:8px 0;';
+                empty.textContent = 'No merchants';
+                el.appendChild(empty);
+            } else {
+                const mFrag = document.createDocumentFragment();
+                merchants.forEach(m => {
+                    const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+                    const statusColor = m.account_status === 'Approved' ? '#16a34a' : '#64748b';
+                    const row = document.createElement('div');
+                    row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;min-height:32px;';
+                    const nameEl = document.createElement('span');
+                    nameEl.style.cssText = 'color:#0a1628;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;';
+                    nameEl.textContent = m.dba_name || '—';
+                    const meta = document.createElement('span');
+                    meta.style.cssText = 'display:flex;gap:8px;align-items:center;flex-shrink:0;';
+                    const statusEl = document.createElement('span');
+                    statusEl.style.cssText = `color:${statusColor};font-weight:700;font-size:11px;`;
+                    statusEl.textContent = m.account_status || '—';
+                    const dateEl = document.createElement('span');
+                    dateEl.style.cssText = 'color:#94a3b8;font-size:11px;';
+                    dateEl.textContent = dt;
+                    meta.appendChild(statusEl);
+                    meta.appendChild(dateEl);
+                    row.appendChild(nameEl);
+                    row.appendChild(meta);
+                    mFrag.appendChild(row);
+                });
+                el.appendChild(mFrag);
+            }
+            el.dataset.rendered = '1';
+        }
+    };
 
     function filterToPartner(personId) {
         const p = allPartners.find(x => x.id === personId);
@@ -2182,8 +2320,20 @@ window.quickAddId = async function(personId, name) {
             leaderboardData = d.data || [];
             partnerRankMap = {};
             (d.ranks || []).forEach(r => { partnerRankMap[r.person_id] = r; });
+
+            // Assign Bronze ranks to partners not in the materialized view
+            // (they exist but have no volume data yet)
+            const nextRank = (d.ranks || []).length + 1;
+            let offset = 0;
+            (allPartners || []).forEach(p => {
+                if (!partnerRankMap[p.id]) {
+                    partnerRankMap[p.id] = { rank: nextRank + offset, tier: 'Bronze' };
+                    offset++;
+                }
+            });
             renderLeaderboard();
-            if (allPartners.length) renderGrid();
+            const activeTerm = document.getElementById('partnerSearchInput')?.value?.trim();
+            if (allPartners.length && !activeTerm) renderGrid();
             const el = document.getElementById('leaderboardUpdatedAt');
             if (el) el.textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         } catch (e) {
@@ -2301,6 +2451,7 @@ window.quickAddId = async function(personId, name) {
         if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
     };
 
+
     window.openPartnerByPersonId = function(personId) {
         // Find the partner card/row and open their modal
         const card = document.querySelector(`[data-person-id="${personId}"]`);
@@ -2318,6 +2469,22 @@ window.quickAddId = async function(personId, name) {
             if (d.success && d.data.length) {
                 statsRaw = d.data;
                 allPartners = processPartnerData({persons:personsRaw,agents:agentsRaw,identifiers:identifiersRaw,companies:_companiesRaw,stats:statsRaw});
+                // Re-fill Bronze ranks for any partners not in the leaderboard MV
+                const _nextRank = Object.keys(partnerRankMap).length > 0 ? Math.max(...Object.values(partnerRankMap).map(r => r.rank)) + 1 : 1;
+                let _offset = 0;
+                allPartners.forEach(p => { if (!partnerRankMap[p.id]) { partnerRankMap[p.id] = { rank: _nextRank + _offset, tier: 'Bronze' }; _offset++; } });
+                const activeTerm = document.getElementById('partnerSearchInput')?.value?.trim();
+                if (activeTerm) {
+                    const term = activeTerm.toLowerCase();
+                    const filtered = allPartners.filter(p =>
+                        p.name.toLowerCase().includes(term) ||
+                        p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term))) ||
+                        p.companies.some(co => co.name.toLowerCase().includes(term))
+                    );
+                    renderGrid(filtered.length ? filtered : allPartners);
+                } else {
+                    renderGrid();
+                }
             }
         } catch(e) { console.warn('Stats load failed:', e.message); }
     }
@@ -2345,13 +2512,8 @@ window.quickAddId = async function(personId, name) {
     };
 
     window.addEventListener('load', () => {
-        loadPartners().then(() => {
-            const urlQ = new URLSearchParams(window.location.search).get('q');
-            if (urlQ) {
-                const el = document.getElementById('partnerSearchInput');
-                if (el) { el.value = urlQ; el.dispatchEvent(new Event('input')); }
-            }
-        });
+        const urlQ = new URLSearchParams(window.location.search).get('q');
+        loadPartners(urlQ || null);
     });
 </script>
     
