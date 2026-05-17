@@ -260,12 +260,21 @@
             </thead>
             <tbody id="merchantTableBody"></tbody>
         </table>
-        <div style="padding: 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
-            <select id="pageLimit" onchange="resetAndFetch()"><option value="20">20</option><option value="50">50</option></select>
-            <div id="pageInfo" style="font-weight:700; font-size: 12px; color: var(--pp-blue);">Page 1</div>
-            <div>
-                <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)">Prev</button>
-                <button class="slds-button slds-button_neutral" id="nextBtn" onclick="changePage(1)">Next</button>
+        <div style="padding: 14px 20px; display: flex; justify-content: space-between; align-items: center; background: #f8fafc; border-top: 1px solid #e2e8f0; gap: 12px; flex-wrap: wrap;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:12px; color:#64748b; white-space:nowrap;">
+                Rows per page:
+                <select id="pageLimit" onchange="resetAndFetch()" style="border:1px solid #e2e8f0; border-radius:6px; padding:4px 8px; font-size:12px; color:#334155; background:#fff;">
+                    <option value="20">20</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                </select>
+            </label>
+            <div id="pageInfo" style="font-size:12px; color:#64748b; text-align:center; flex:1;">—</div>
+            <div style="display:flex; align-items:center; gap:6px;">
+                <button class="slds-button slds-button_neutral" id="prevBtn" onclick="changePage(-1)" style="border-radius:6px; padding:5px 14px; font-size:12px;" disabled>‹ Prev</button>
+                <span id="pageNumBadge" style="font-size:12px; font-weight:700; color:var(--pp-blue); padding:4px 10px; background:#eff6ff; border-radius:6px;">1</span>
+                <button class="slds-button slds-button_neutral" id="nextBtn" onclick="changePage(1)" style="border-radius:6px; padding:5px 14px; font-size:12px;">Next ›</button>
             </div>
         </div>
     </article>
@@ -275,6 +284,7 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
     let currentPage = 0;
+    let totalCount = 0;
     let currentRecords = [];
     let activeHealthFilter = 'All';
 
@@ -591,7 +601,17 @@ async function executeFinalUpsert(payload) {
             <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
         `;
     });
-    document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span>(Total: ${result.count.toLocaleString()})</span>`;
+    const lim2 = parseInt(document.getElementById('pageLimit').value);
+    const cnt = result.count || 0;
+    const from2 = cnt === 0 ? 0 : currentPage * lim2 + 1;
+    const to2 = Math.min(currentPage * lim2 + lim2, cnt);
+    const totalPages2 = Math.max(1, Math.ceil(cnt / lim2));
+    document.getElementById('pageInfo').textContent = cnt > 0
+        ? `Showing ${from2.toLocaleString()}–${to2.toLocaleString()} of ${cnt.toLocaleString()} results`
+        : 'No results found';
+    document.getElementById('pageNumBadge').textContent = `${currentPage + 1} / ${totalPages2}`;
+    document.getElementById('prevBtn').disabled = currentPage === 0;
+    document.getElementById('nextBtn').disabled = to2 >= cnt;
 }
 
     /**
@@ -1236,7 +1256,17 @@ async function addTask(merchantUuid) {
 });
             applyHealthFilter();
             loadStaffStats();
-            document.getElementById('pageInfo').innerHTML = `Page ${currentPage + 1} <span style="font-weight:400; color:#94a3b8; margin-left:10px;">(Total Found: ${result.count.toLocaleString()})</span>`;
+            totalCount = result.count || 0;
+            const lim = parseInt(document.getElementById('pageLimit').value);
+            const from = totalCount === 0 ? 0 : currentPage * lim + 1;
+            const to = Math.min(currentPage * lim + lim, totalCount);
+            const totalPages = Math.max(1, Math.ceil(totalCount / lim));
+            document.getElementById('pageInfo').textContent = totalCount > 0
+                ? `Showing ${from.toLocaleString()}–${to.toLocaleString()} of ${totalCount.toLocaleString()} results`
+                : 'No results found';
+            document.getElementById('pageNumBadge').textContent = `${currentPage + 1} / ${totalPages}`;
+            document.getElementById('prevBtn').disabled = currentPage === 0;
+            document.getElementById('nextBtn').disabled = to >= totalCount;
         } catch (err) { console.error(err); }
     }
 
@@ -1842,7 +1872,12 @@ window.saveMerchant = async (uuid) => {
         }
     };
 
-    function changePage(dir) { currentPage += dir; fetchMerchants(); }
+    function changePage(dir) {
+        const lim = parseInt(document.getElementById('pageLimit').value);
+        const maxPage = Math.max(0, Math.ceil(totalCount / lim) - 1);
+        currentPage = Math.max(0, Math.min(currentPage + dir, maxPage));
+        fetchMerchants();
+    }
     function resetAndFetch() { currentPage = 0; fetchMerchants(); }
 
     // ── STAFF SORT ──────────────────────────────────────
