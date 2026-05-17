@@ -1389,7 +1389,8 @@ if (action === 'get_merchant_data_raw') {
             const { data: newMerchants } = await supabase.from('merchants')
                 .select('merchant_id, dba_name, enrollment_date, agent_id, account_status')
                 .gte('enrollment_date', from).lte('enrollment_date', to)
-                .order('enrollment_date', { ascending: false });
+                .order('enrollment_date', { ascending: false })
+                .limit(10000);
 
             if (!newMerchants?.length) return res.status(200).json({ success: true, total: 0, by_partner: {}, period: { from, to } });
 
