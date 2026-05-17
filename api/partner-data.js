@@ -270,13 +270,18 @@ export default async function handler(req, res) {
 
             // New enrollments this week
             const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay()); weekStart.setHours(0,0,0,0);
-            const { data: newEnrolls, count: enrollCount } = await supabase
-                .from('merchants')
-                .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date', { count:'exact' })
-                .in('agent_id', idStrings)
-                .gte('enrollment_date', weekStart.toISOString())
-                .order('enrollment_date', { ascending: false })
-                .limit(5000);
+            let newEnrolls = [], neOffset = 0, neDone = false;
+            while (!neDone) {
+                const { data: neBatch } = await supabase
+                    .from('merchants')
+                    .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date')
+                    .in('agent_id', idStrings)
+                    .gte('enrollment_date', weekStart.toISOString())
+                    .order('enrollment_date', { ascending: false })
+                    .range(neOffset, neOffset + 999);
+                if (!neBatch || neBatch.length === 0) { neDone = true; }
+                else { newEnrolls = newEnrolls.concat(neBatch); neOffset += 1000; if (neBatch.length < 1000) neDone = true; }
+            }
 
             return res.status(200).json({
                 success: true,
@@ -285,7 +290,7 @@ export default async function handler(req, res) {
                 trends: trendsData,
                 identifiers,
                 companies: companiesMap,
-                new_enrollments: { data: newEnrolls||[], count: enrollCount||0 }
+                new_enrollments: { data: newEnrolls, count: newEnrolls.length }
             });
         }
 
@@ -371,23 +376,27 @@ export default async function handler(req, res) {
             const fromDate = start_date || weekStart.toISOString();
             const toDate = end_date || now.toISOString();
 
-            const { data, count, error } = await supabase
-                .from('merchants')
-                .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_mtd, volume_30_day', { count: 'exact' })
-                .in('agent_id', idStrings)
-                .gte('enrollment_date', fromDate)
-                .lte('enrollment_date', toDate)
-                .order('enrollment_date', { ascending: false })
-                .limit(5000);
+            let allData = [], offset = 0, done = false;
+            while (!done) {
+                const { data: batch, error } = await supabase
+                    .from('merchants')
+                    .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_mtd, volume_30_day')
+                    .in('agent_id', idStrings)
+                    .gte('enrollment_date', fromDate)
+                    .lte('enrollment_date', toDate)
+                    .order('enrollment_date', { ascending: false })
+                    .range(offset, offset + 999);
+                if (error) throw error;
+                if (!batch || batch.length === 0) { done = true; }
+                else { allData = allData.concat(batch); offset += 1000; if (batch.length < 1000) done = true; }
+            }
 
-            if (error) throw error;
-
-            const enriched = (data || []).map(m => {
+            const enriched = allData.map(m => {
                 const id = identifiers.find(i => i.id_string === m.agent_id);
                 return { ...m, rev_share: id?.rev_share || null };
             });
 
-            return res.status(200).json({ success: true, data: enriched, count: count || 0 });
+            return res.status(200).json({ success: true, data: enriched, count: enriched.length });
         }
 
         // ── GET ACTIVE DEPLOYMENTS FOR MERCHANT ───────────

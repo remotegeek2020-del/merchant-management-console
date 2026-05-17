@@ -1386,13 +1386,19 @@ if (action === 'get_merchant_data_raw') {
             const from = start_date || monday.toISOString();
             const to = end_date || now.toISOString();
 
-            const { data: newMerchants } = await supabase.from('merchants')
-                .select('merchant_id, dba_name, enrollment_date, agent_id, account_status')
-                .gte('enrollment_date', from).lte('enrollment_date', to)
-                .order('enrollment_date', { ascending: false })
-                .limit(10000);
+            let newMerchants = [];
+            let offset = 0, done = false;
+            while (!done) {
+                const { data: batch, error } = await supabase.from('merchants')
+                    .select('merchant_id, dba_name, enrollment_date, agent_id, account_status')
+                    .gte('enrollment_date', from).lte('enrollment_date', to)
+                    .order('enrollment_date', { ascending: false })
+                    .range(offset, offset + 999);
+                if (error || !batch || batch.length === 0) { done = true; }
+                else { newMerchants = newMerchants.concat(batch); offset += 1000; if (batch.length < 1000) done = true; }
+            }
 
-            if (!newMerchants?.length) return res.status(200).json({ success: true, total: 0, by_partner: {}, period: { from, to } });
+            if (!newMerchants.length) return res.status(200).json({ success: true, total: 0, by_partner: {}, period: { from, to } });
 
             const agentIdStrings = [...new Set(newMerchants.map(m => m.agent_id).filter(Boolean))];
             const { data: identRows } = await supabase.from('agent_identifiers')
