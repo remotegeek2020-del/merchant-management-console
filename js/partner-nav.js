@@ -145,9 +145,21 @@
         } catch (e) {}
     }
 
+    function injectBrandedBadge() {
+        if (localStorage.getItem('pp_is_branded') !== '1') return;
+        var tag = document.querySelector('.sidebar-tag');
+        if (!tag || document.getElementById('pnav-branded-badge')) return;
+        var badge = document.createElement('div');
+        badge.id = 'pnav-branded-badge';
+        badge.style.cssText = 'display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#004990,#0369a1);color:white;font-size:8px;font-weight:800;padding:2px 7px;border-radius:99px;letter-spacing:0.5px;margin-top:4px;';
+        badge.innerHTML = '&#127991;&#65039; BRANDED';
+        tag.parentNode.insertBefore(badge, tag.nextSibling);
+    }
+
     function init() {
         injectBadges();
         injectNotificationBell();
+        injectBrandedBadge();
         pollNav();
         setInterval(function () { pollNav(); }, 30000);
     }

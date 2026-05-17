@@ -330,6 +330,7 @@ async function init() {
         const { partner, identifiers } = auth;
         localStorage.setItem('pp_partner_name', partner.name);
         localStorage.setItem('pp_partner_id', partner.id);
+        localStorage.setItem('pp_is_branded', partner.is_branded ? '1' : '0');
 
         const initials = partner.name.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
         document.getElementById('sidebarAvatar').innerText = initials;

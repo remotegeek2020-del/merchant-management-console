@@ -244,7 +244,8 @@ async function init() {
         const initials = auth.partner.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
         document.getElementById('sidebarAvatar').innerText = initials;
         document.getElementById('sidebarName').innerText = auth.partner.name;
-        
+        localStorage.setItem('pp_is_branded', auth.partner.is_branded ? '1' : '0');
+
         // Load data ONLY after auth confirmed — prevents premature redirects
         setEnrollWeek();       // sets dates + triggers loadWeekEnrollments
         loadMerchants();       // loads merchant table

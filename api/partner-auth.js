@@ -80,10 +80,10 @@ export default async function handler(req, res) {
             const { token } = req.body;
             const personId = await validateSession(token);
             if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
-            const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active').eq('id', personId).single();
+            const { data: person } = await supabase.from('persons').select('id, full_name, email, is_portal_active, is_branded').eq('id', personId).single();
             if (!person || !person.is_portal_active) return res.status(401).json({ success: false });
             const identifiers = await getPartnerAgentIds(personId);
-            return res.status(200).json({ success: true, partner: { id: person.id, name: person.full_name, email: person.email }, identifiers });
+            return res.status(200).json({ success: true, partner: { id: person.id, name: person.full_name, email: person.email, is_branded: !!person.is_branded }, identifiers });
         }
 
         if (action === 'logout') {
