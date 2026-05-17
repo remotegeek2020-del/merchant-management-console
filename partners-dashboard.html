@@ -11,11 +11,11 @@
     <script src="js/tz.js"></script>
     <style>
         :root { --pp-blue: #004990; --pp-accent: #00a1e0; }
-        body { background: #f1f5f9; padding: 25px; font-family: 'DM Sans', sans-serif; }
+        body { background: #f1f5f9; padding: 14px; font-family: 'DM Sans', sans-serif; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
-        .modern-header { background: white; border-radius: 16px; padding: 25px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 4px 20px rgba(0,0,0,0.05); }
-        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(350px, 1fr)); gap: 20px; }
-        .partner-card { background: white; border-radius: 16px; padding: 20px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; }
+        .modern-header { background: white; border-radius: 14px; padding: 12px 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 8px; }
+        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
+        .partner-card { background: white; border-radius: 12px; padding: 14px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; }
         .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
         .partner-card.selected { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.18); transform: none; }
         .card-checkbox { position: absolute; top: 14px; left: 14px; width: 18px; height: 18px; cursor: pointer; display: none; accent-color: #0d9488; z-index: 10; }
@@ -262,45 +262,39 @@ input[type=number] {
         <a href="merchants-dashboard.html" style="display:inline-flex;align-items:center;gap:4px;padding:4px 11px;background:#eff6ff;color:#004990;border:1px solid #bfdbfe;border-radius:20px;font-size:11px;font-weight:700;text-decoration:none;margin-left:2px;" onmouseover="this.style.background='#004990';this.style.color='white';" onmouseout="this.style.background='#eff6ff';this.style.color='#004990';"><span class="material-icons" style="font-size:13px;">storefront</span>Merchants</a>
     </div>
 
-    <div class="search-area">
-        <div class="search-wrapper">
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div class="search-wrapper" style="flex:1;min-width:220px;">
             <span class="material-icons">search</span>
             <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or MID...">
         </div>
-        <div id="searchStats">Showing all partners</div>
+        <div id="searchStats" style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Showing all</div>
+        <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+            <button onclick="filterByTrend('growth')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f0fdf4;color:#166534;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_up</span></button>
+            <button onclick="filterByTrend('stable')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f8fafc;color:#475569;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_flat</span></button>
+            <button onclick="filterByTrend('risk')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#fef2f2;color:#991b1b;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_down</span></button>
+            <button onclick="filterByTrend('all')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:white;color:#64748b;border-radius:6px;">ALL</button>
+        </div>
     </div>
 </div>
-   <div style="display: flex; gap: 15px; margin-bottom: 20px; padding: 10px; background: white; border-radius: 12px; border: 1px solid #e2e8f0; width: fit-content;">
-    <button onclick="filterByTrend('growth')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f0fdf4; color: #166534;">
-        <span class="material-icons" style="font-size: 16px;">trending_up</span> GROWTH
-    </button>
-    <button onclick="filterByTrend('stable')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #f8fafc; color: #475569;">
-        <span class="material-icons" style="font-size: 16px;">trending_flat</span> STABLE
-    </button>
-    <button onclick="filterByTrend('risk')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: #fef2f2; color: #991b1b;">
-        <span class="material-icons" style="font-size: 16px;">trending_down</span> AT RISK
-    </button>
-    <button onclick="filterByTrend('all')" class="pagination-btn" style="display: flex; align-items: center; gap: 6px; font-size: 11px; border: none; background: white; color: var(--pp-blue);">
-        CLEAR FILTER
-    </button>
-</div>
     <!-- PARTNER LEADERBOARD CARD -->
-    <div id="leaderboardCard" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
-            <div>
-                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">leaderboard</span> Partner Performance</div>
-                <div style="font-size:1.1rem;font-weight:800;color:#002d5a;">Partner Leaderboard</div>
-            </div>
-            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <div id="leaderboardCard" style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:16px;color:#64748b;">leaderboard</span>
+                <span style="font-size:13px;font-weight:800;color:#002d5a;">Partner Leaderboard</span>
                 <span id="leaderboardUpdatedAt" style="font-size:10px;color:#94a3b8;font-weight:600;"></span>
-                <button onclick="refreshLeaderboard()" id="leaderboardRefreshBtn" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">refresh</span> Refresh</button>
-                <button onclick="toggleLeaderboardExplainer()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">help_outline</span> How it works</button>
-                <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:7px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;">
+                <button onclick="refreshLeaderboard()" id="leaderboardRefreshBtn" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;color:#166634;cursor:pointer;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
+                <button onclick="toggleLeaderboardExplainer()" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:700;color:#1d4ed8;cursor:pointer;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">help_outline</span></button>
+                <button id="leaderboardToggleBtn" onclick="toggleLeaderboardView()" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:5px 12px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Show All 10</button>
+                <button onclick="toggleLeaderboardCollapse()" id="leaderboardCollapseBtn" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:5px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-icons" id="leaderboardCollapseIcon" style="font-size:14px;">expand_more</span></button>
             </div>
         </div>
+        <div id="leaderboardBody">
 
         <!-- EXPLAINER PANEL (hidden by default) -->
-        <div id="leaderboardExplainer" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-bottom:14px;">
+        <div id="leaderboardExplainer" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:16px 18px;margin-top:10px;margin-bottom:10px;">
             <div style="font-size:12px;font-weight:800;color:#002d5a;margin-bottom:10px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:15px;color:#0369a1;">info</span> How the Leaderboard Works</div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px;color:#475569;">
                 <div>
@@ -326,8 +320,8 @@ input[type=number] {
             </div>
         </div>
 
-        <div id="leaderboardList" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading leaderboard...</div>
+        <div id="leaderboardList" style="display:flex;flex-direction:column;gap:5px;margin-top:10px;">
+            <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading leaderboard...</div>
         </div>
 
         <!-- NEEDS ATTENTION SECTION -->
@@ -335,39 +329,45 @@ input[type=number] {
             <div style="font-size:10px;font-weight:800;color:#dc2626;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">warning</span> Needs Attention — Declining Volume</div>
             <div id="needsAttentionList" style="display:flex;flex-direction:column;gap:6px;"></div>
         </div>
+
+        </div><!-- /leaderboardBody -->
     </div>
 
     <!-- NEW ENROLLMENTS WIDGET -->
-    <div id="enrollWidget" style="background:white;border-radius:16px;border:1px solid #e2e8f0;padding:20px 24px 16px;margin-bottom:20px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px;">
-            <div>
-                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;display:flex;align-items:center;gap:6px;"><span class="material-icons" style="font-size:14px;">person_add</span> New Enrollments</div>
-                <div style="font-size:20px;font-weight:800;color:#0a1628;" id="enrollTotalLabel">—</div>
+    <div id="enrollWidget" style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;margin-bottom:10px;box-shadow:0 2px 8px rgba(0,0,0,0.04);">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:16px;color:#64748b;">person_add</span>
+                <span style="font-size:13px;font-weight:800;color:#002d5a;">New Enrollments</span>
+                <span style="font-size:16px;font-weight:800;color:#0d9488;" id="enrollTotalLabel">—</span>
+                <span style="font-size:10px;color:#94a3b8;" id="enrollPeriodLabel"></span>
             </div>
-            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
-                <div style="display:flex;background:#f1f5f9;border-radius:10px;padding:3px;gap:2px;">
-                    <button id="enrollBtn-week" onclick="setEnrollPeriod('week')" style="background:#0d9488;color:white;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;cursor:pointer;">This Week</button>
-                    <button id="enrollBtn-month" onclick="setEnrollPeriod('month')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">This Month</button>
-                    <button id="enrollBtn-30" onclick="setEnrollPeriod('30')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Last 30d</button>
-                    <button id="enrollBtn-90" onclick="setEnrollPeriod('90')" style="background:none;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Last 90d</button>
+            <div style="display:flex;gap:5px;align-items:center;">
+                <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+                    <button id="enrollBtn-week" onclick="setEnrollPeriod('week')" style="background:#0d9488;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer;">Week</button>
+                    <button id="enrollBtn-month" onclick="setEnrollPeriod('month')" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">Month</button>
+                    <button id="enrollBtn-30" onclick="setEnrollPeriod('30')" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">30d</button>
+                    <button id="enrollBtn-90" onclick="setEnrollPeriod('90')" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">90d</button>
                 </div>
-                <button onclick="loadNewEnrollments(currentEnrollPeriod)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:7px 12px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;gap:5px;"><span class="material-icons" style="font-size:14px;">refresh</span></button>
+                <button onclick="loadNewEnrollments(currentEnrollPeriod)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:5px 8px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
+                <button onclick="toggleEnrollCollapse()" id="enrollCollapseBtn" style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:5px 8px;font-size:11px;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" id="enrollCollapseIcon" style="font-size:14px;">expand_more</span></button>
             </div>
         </div>
-        <div style="font-size:11px;color:#94a3b8;margin-bottom:12px;" id="enrollPeriodLabel"></div>
-        <div id="enrollList" style="display:flex;flex-direction:column;gap:6px;">
-            <div style="padding:20px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading enrollments...</div>
+        <div id="enrollListWrap" style="display:none;margin-top:10px;">
+            <div id="enrollList" style="display:flex;flex-direction:column;gap:5px;">
+                <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading enrollments...</div>
+            </div>
         </div>
     </div>
 
     <div id="partnerGrid" class="partner-grid"></div>
-   <div id="paginationControls" style="display:flex; justify-content:center; align-items:center; gap:15px; margin-top:30px; padding-bottom:50px; flex-wrap:wrap;">
+    <div id="paginationControls" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px;padding-bottom:30px;flex-wrap:wrap;">
     <button id="btnPrev" onclick="changePage(-1)" class="pagination-btn">Previous</button>
-    <span id="pageIndicator" style="font-weight:700; color:#64748b; font-size:14px;">Page 1 of 1</span>
+    <span id="pageIndicator" style="font-weight:700;color:#64748b;font-size:13px;">Page 1 of 1</span>
     <button id="btnNext" onclick="changePage(1)" class="pagination-btn">Next</button>
-    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid #e2e8f0;padding-left:14px;">
-        <span style="font-size:12px;font-weight:600;color:#94a3b8;">Per page</span>
-        <select id="perPageSelect" onchange="changePerPage(this.value)" style="border:1px solid #e2e8f0;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:700;color:#475569;background:white;cursor:pointer;">
+    <div style="display:flex;align-items:center;gap:6px;margin-left:8px;border-left:1px solid #e2e8f0;padding-left:12px;">
+        <span style="font-size:11px;font-weight:600;color:#94a3b8;">Per page</span>
+        <select id="perPageSelect" onchange="changePerPage(this.value)" style="border:1px solid #e2e8f0;border-radius:8px;padding:4px 8px;font-size:12px;font-weight:700;color:#475569;background:white;cursor:pointer;">
             <option value="12">12</option>
             <option value="24">24</option>
             <option value="48">48</option>
@@ -1221,24 +1221,24 @@ async function submitOnboarding() {
                 ${_rankBadge}
                 <input type="checkbox" class="card-checkbox" onclick="toggleCardSelect('${p.id}',event)">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div style="flex:1;">
-                        <h2 style="font-weight:800; color:#002d5a; margin-bottom:6px;">${p.name}</h2>
+                    <div style="flex:1;min-width:0;">
+                        <h2 style="font-weight:800;color:#002d5a;margin:0 0 3px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</h2>
                         ${_brandedBadge}
                     </div>
                     <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
-                            style="background:none; border:1px solid #e2e8f0; border-radius:6px; color:var(--pp-blue); cursor:pointer; display:flex; align-items:center; gap:4px; padding:4px 8px; font-size:10px; font-weight:800;">
-                        <span class="material-icons" style="font-size:14px;">add</span> ID
+                            style="background:none;border:1px solid #e2e8f0;border-radius:6px;color:var(--pp-blue);cursor:pointer;display:flex;align-items:center;gap:3px;padding:3px 7px;font-size:10px;font-weight:800;flex-shrink:0;">
+                        <span class="material-icons" style="font-size:13px;">add</span> ID
                     </button>
                 </div>
                 ${p.companies.map(co => `
-                    <div style="margin-top:10px; border-top:1px solid #f1f5f9; padding-top:8px;">
-                        <b style="font-size:12px; color:#64748b;">${co.name.toUpperCase()}</b>
-                        <div style="margin-top:5px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
+                    <div style="margin-top:7px;border-top:1px solid #f1f5f9;padding-top:6px;">
+                        <b style="font-size:10px;color:#94a3b8;">${co.name.toUpperCase()}</b>
+                        <div style="margin-top:4px;">${co.ids.map(id => renderBadge(id, true)).join('')}</div>
                     </div>
                 `).join('')}
                 <div id="enroll-strip-${p.id}"></div>
-                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #f1f5f9;display:flex;gap:6px;">
-                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">person</span> View Detail</button>
+                <div style="margin-top:8px;padding-top:8px;border-top:1px solid #f1f5f9;display:flex;gap:5px;">
+                    <button onclick="event.stopPropagation();openPartnerDetails('${p.id}')" style="flex:1;background:#f0f7ff;border:1px solid #bfdbfe;color:#004990;border-radius:7px;padding:5px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:3px;"><span class="material-icons" style="font-size:13px;">person</span> View</button>
                     ${_inviteBtn}
                     ${_toggleBtn}
                 </div>
@@ -2299,6 +2299,24 @@ window.quickAddId = async function(personId, name) {
     window.toggleLeaderboardExplainer = function() {
         const el = document.getElementById('leaderboardExplainer');
         if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    };
+
+    var _leaderboardCollapsed = false;
+    window.toggleLeaderboardCollapse = function() {
+        _leaderboardCollapsed = !_leaderboardCollapsed;
+        const body = document.getElementById('leaderboardBody');
+        const icon = document.getElementById('leaderboardCollapseIcon');
+        if (body) body.style.display = _leaderboardCollapsed ? 'none' : 'block';
+        if (icon) icon.textContent = _leaderboardCollapsed ? 'expand_more' : 'expand_less';
+    };
+
+    var _enrollCollapsed = true;
+    window.toggleEnrollCollapse = function() {
+        _enrollCollapsed = !_enrollCollapsed;
+        const wrap = document.getElementById('enrollListWrap');
+        const icon = document.getElementById('enrollCollapseIcon');
+        if (wrap) wrap.style.display = _enrollCollapsed ? 'none' : 'block';
+        if (icon) icon.textContent = _enrollCollapsed ? 'expand_more' : 'expand_less';
     };
 
     window.openPartnerByPersonId = function(personId) {
