@@ -1947,7 +1947,7 @@ window.quickAddId = async function(personId, name) {
 
 
     // --- LOAD PARTNERS WITH STATS ---
-    async function loadPartners() {
+    async function loadPartners(initialQuery) {
         const loader = document.getElementById('loadingOverlay');
         if (loader) loader.style.display = 'flex';
         try {
@@ -1990,7 +1990,19 @@ window.quickAddId = async function(personId, name) {
             });
 
             currentPage = 1;
-            renderGrid();
+            if (initialQuery) {
+                const el = document.getElementById('partnerSearchInput');
+                if (el) { el.value = initialQuery; }
+                const term = initialQuery.toLowerCase().trim();
+                const filtered = allPartners.filter(p =>
+                    p.name.toLowerCase().includes(term) ||
+                    p.companies.some(co => co.ids.some(id => id.string.toLowerCase().includes(term))) ||
+                    p.companies.some(co => co.name.toLowerCase().includes(term))
+                );
+                renderGrid(filtered.length ? filtered : allPartners);
+            } else {
+                renderGrid();
+            }
             loadStatsBackground();
             loadLeaderboard();
             loadNewEnrollments(currentEnrollPeriod);
@@ -2399,13 +2411,8 @@ window.quickAddId = async function(personId, name) {
     };
 
     window.addEventListener('load', () => {
-        loadPartners().then(() => {
-            const urlQ = new URLSearchParams(window.location.search).get('q');
-            if (urlQ) {
-                const el = document.getElementById('partnerSearchInput');
-                if (el) { el.value = urlQ; el.dispatchEvent(new Event('input')); }
-            }
-        });
+        const urlQ = new URLSearchParams(window.location.search).get('q');
+        loadPartners(urlQ || null);
     });
 </script>
     
