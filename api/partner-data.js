@@ -85,7 +85,10 @@ export default async function handler(req, res) {
             if (status_filter) query = query.eq('account_status', status_filter);
             if (search) query = query.ilike('dba_name', `%${search}%`);
 
-            const { data, count, error } = await query.range(page * limit, (page + 1) * limit - 1).order('dba_name');
+            const VALID_SORT = ['dba_name', 'volume_30_day', 'volume_mtd', 'enrollment_date', 'account_status'];
+            const sortField = VALID_SORT.includes(req.body.sort_by) ? req.body.sort_by : 'dba_name';
+            const sortAsc = req.body.sort_dir !== 'desc';
+            const { data, count, error } = await query.range(page * limit, (page + 1) * limit - 1).order(sortField, { ascending: sortAsc, nullsFirst: false });
             if (error) throw error;
 
             // Get identifier details for each merchant
@@ -412,6 +415,98 @@ export default async function handler(req, res) {
                 merchant: { id: merchant_uuid, dba_name: merchant.dba_name, merchant_id: merchant.merchant_id },
                 deployments: deployments || []
             });
+        }
+
+        // ── PORTFOLIO STATS ────────────────────────────────
+        if (action === 'get_portfolio_stats') {
+            if (!idStrings.length) return res.status(200).json({ success: true, trends: { growth:0, stable:0, at_risk:0, no_data:0 }, statuses: {}, top10: [] });
+
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, account_status, volume_30_day, volume_90_day, volume_mtd')
+                .in('agent_id', idStrings);
+
+            let growth = 0, stable = 0, at_risk = 0, no_data = 0;
+            const statuses = {};
+            const approvedWithVol = [];
+
+            (merchants || []).forEach(m => {
+                const st = m.account_status || 'Unknown';
+                statuses[st] = (statuses[st] || 0) + 1;
+                if (m.account_status !== 'Approved') return;
+                const mtd = parseFloat(m.volume_30_day || 0);
+                const baseline = parseFloat(m.volume_90_day || 0) / 3;
+                let trend;
+                if (mtd === 0 && baseline === 0) { no_data++; trend = 'no_data'; }
+                else if (baseline === 0 || mtd > baseline * 1.05) { growth++; trend = 'growth'; }
+                else if (mtd < baseline * 0.95) { at_risk++; trend = 'at_risk'; }
+                else { stable++; trend = 'stable'; }
+                approvedWithVol.push({ merchant_id: m.merchant_id, dba_name: m.dba_name, vol30: parseFloat(m.volume_30_day || 0), trend });
+            });
+
+            const top10 = approvedWithVol.filter(m => m.vol30 > 0).sort((a, b) => b.vol30 - a.vol30).slice(0, 10);
+            return res.status(200).json({ success: true, trends: { growth, stable, at_risk, no_data }, statuses, top10 });
+        }
+
+        // ── BULK EMAIL AT-RISK ─────────────────────────────
+        if (action === 'bulk_email_atrisk') {
+            if (!idStrings.length) return res.status(200).json({ success: true, sent: 0, skipped: 0 });
+
+            const { data: merchants } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, email, volume_30_day, volume_90_day, volume_mtd, account_status')
+                .in('agent_id', idStrings)
+                .eq('account_status', 'Approved');
+
+            const atRisk = (merchants || []).filter(m => {
+                const mtd = parseFloat(m.volume_30_day || 0);
+                const baseline = parseFloat(m.volume_90_day || 0) / 3;
+                return !(mtd === 0 && baseline === 0) && mtd < baseline * 0.95;
+            });
+
+            if (!atRisk.length) return res.status(200).json({ success: true, sent: 0, skipped: 0, total_at_risk: 0 });
+
+            const { data: conns } = await supabase.from('partner_email_connections').select('*').eq('person_id', personId);
+            if (!conns || !conns.length) return res.status(400).json({ success: false, message: 'No email connected. Please connect an email in Settings first.' });
+            const conn = conns[0];
+
+            const { data: partnerPerson } = await supabase.from('persons').select('full_name, email').eq('id', personId).single();
+            const partnerName = partnerPerson?.full_name || 'Your Partner Representative';
+            const partnerEmail = conn.email;
+
+            const { getValidAccessToken, sendViaGoogle, sendViaMicrosoft } = await import('./partner-oauth.js');
+            const accessToken = await getValidAccessToken(personId, conn.provider);
+            if (!accessToken) return res.status(401).json({ success: false, message: 'Your email connection expired. Please reconnect in Settings.' });
+
+            let sent = 0, skipped = 0, failed = 0;
+            for (const merchant of atRisk) {
+                if (!merchant.email) { skipped++; continue; }
+                const vol30 = parseFloat(merchant.volume_30_day || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+                const vol90 = parseFloat(merchant.volume_90_day || 0).toLocaleString('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 });
+                const subject = `A Quick Note About Your Account — ${merchant.dba_name}`;
+                const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:0 auto;padding:32px 24px;border:1px solid #e2e8f0;border-radius:16px;">
+                    <h2 style="color:#002d5a;margin-bottom:4px;">Checking In</h2>
+                    <p style="color:#64748b;font-size:13px;margin-top:0;">Hello ${merchant.dba_name},</p>
+                    <p style="color:#475569;line-height:1.6;">I hope everything is going well! I noticed some changes in your recent processing activity and wanted to reach out personally.</p>
+                    <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:16px 20px;margin:20px 0;">
+                        <p style="color:#92400e;font-weight:700;margin:0 0 6px;">Recent Activity</p>
+                        <p style="color:#9a3412;font-size:13px;margin:0;">30-Day Volume: <strong>${vol30}</strong> &nbsp;|&nbsp; 90-Day Volume: <strong>${vol90}</strong></p>
+                    </div>
+                    <p style="color:#475569;line-height:1.6;">I want to make sure you have everything you need. I'm happy to schedule a quick call or answer any questions.</p>
+                    <p style="color:#475569;line-height:1.6;margin-bottom:4px;">Warm regards,</p>
+                    <p style="color:#002d5a;font-weight:700;margin-top:0;">${partnerName}</p>
+                    <p style="color:#64748b;font-size:12px;margin-top:4px;">${partnerEmail}</p>
+                    <hr style="border:0;border-top:1px solid #f1f5f9;margin:24px 0;">
+                    <p style="font-size:11px;color:#94a3b8;text-align:center;">This message was sent on behalf of your PayProTec partner representative.</p>
+                </div>`;
+                try {
+                    const result = conn.provider === 'google'
+                        ? await sendViaGoogle(accessToken, { to: merchant.email, subject, html, from: `${partnerName} <${partnerEmail}>` })
+                        : await sendViaMicrosoft(accessToken, { to: merchant.email, subject, html });
+                    if (result.error) failed++; else sent++;
+                } catch(e) { failed++; }
+            }
+            return res.status(200).json({ success: true, sent, skipped, failed, total_at_risk: atRisk.length });
         }
 
         // ── EXPORT CSV ─────────────────────────────────────
