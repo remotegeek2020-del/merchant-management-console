@@ -54,6 +54,23 @@ if (action === 'get_orphan_ids') {
         .limit(10);
     return res.status(200).json({ data });
 }
+        if (action === 'check_existing_partners') {
+            const { hl_ids, emails } = body;
+            const [hlRes, emailRes] = await Promise.all([
+                hl_ids?.length
+                    ? supabase.from('persons').select('hl_contact_id').in('hl_contact_id', hl_ids)
+                    : Promise.resolve({ data: [] }),
+                emails?.length
+                    ? supabase.from('persons').select('email').in('email', emails)
+                    : Promise.resolve({ data: [] })
+            ]);
+            return res.status(200).json({
+                success: true,
+                existing_hl_ids: (hlRes.data || []).map(r => r.hl_contact_id).filter(Boolean),
+                existing_emails:  (emailRes.data || []).map(r => r.email).filter(Boolean)
+            });
+        }
+
         if (action === 'search_ghl') {
     const { query } = body;
     const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
@@ -161,22 +178,42 @@ if (action === 'complete_onboarding') {
 
         if (pErr || !pData) return res.status(400).json({ success: false, message: "Person failed: " + (pErr?.message || 'unknown error') });
 
-        // 2. Handle Company
+        // 2. Handle Company — find existing by name before creating
         let targetCoId = company.id;
         if (!targetCoId && !company.isIndependent && company.name) {
-            const { data: coData } = await supabase.from('companies').insert({ company_name: company.name }).select().single();
-            targetCoId = coData ? coData.id : null;
+            const { data: existingCo } = await supabase
+                .from('companies')
+                .select('id')
+                .ilike('company_name', company.name.trim())
+                .maybeSingle();
+            if (existingCo) {
+                targetCoId = existingCo.id;
+            } else {
+                const { data: coData } = await supabase
+                    .from('companies').insert({ company_name: company.name.trim() }).select().single();
+                targetCoId = coData ? coData.id : null;
+            }
         }
 
-        // 3. Create Agent
-        const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
-            company_id: targetCoId,
-            agent_name: properName,
-            parent_agent_id: pData.id
-        }).select().single();
+        // 3. Find or create Agent — avoid duplicate person+company combos
+        const { data: existingAgent } = await supabase
+            .from('agents')
+            .select('id')
+            .eq('parent_agent_id', pData.id)
+            .eq('company_id', targetCoId ?? null)
+            .maybeSingle();
 
-        if (agentErr) return res.status(400).json({ success: false, message: "Agent creation failed: " + agentErr.message });
-        finalAgentId = agentData.id;
+        if (existingAgent) {
+            finalAgentId = existingAgent.id;
+        } else {
+            const { data: agentData, error: agentErr } = await supabase.from('agents').insert({
+                company_id: targetCoId,
+                agent_name: properName,
+                parent_agent_id: pData.id
+            }).select().single();
+            if (agentErr) return res.status(400).json({ success: false, message: "Agent creation failed: " + agentErr.message });
+            finalAgentId = agentData.id;
+        }
         // --- END NEW PARTNER LOGIC ---
     }
 
