@@ -331,7 +331,7 @@ input[type=number] {
                     <button onclick="loadNewEnrollments(currentEnrollPeriod)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:5px 8px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
                 </div>
             </div>
-            <div id="enrollList" style="display:flex;flex-direction:column;gap:5px;overflow-y:auto;max-height:480px;">
+            <div id="enrollList" style="display:flex;flex-direction:column;gap:6px;overflow-y:auto;max-height:520px;padding-right:2px;">
                 <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>
             </div>
         </div>
@@ -2086,15 +2086,15 @@ window.quickAddId = async function(personId, name) {
         partners.forEach(([pid, info]) => { _enrollMerchants[pid] = info.merchants || []; });
 
         list.innerHTML = partners.map(([pid, info]) => `
-            <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
-                <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;background:#f8fafc;cursor:pointer;" onclick="filterToPartner('${pid}')">
-                    <span style="font-size:12px;font-weight:800;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%;">${info.name}</span>
-                    <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;">
-                        <span style="background:#0d9488;color:white;border-radius:99px;padding:2px 8px;font-size:11px;font-weight:800;">${info.count} new</span>
-                        <button onclick="event.stopPropagation();toggleEnrollExpand('${pid}')" style="background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" id="enroll-icon-${pid}" style="font-size:16px;">expand_more</span></button>
+            <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;background:white;">
+                <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;background:#f8fafc;cursor:pointer;min-height:44px;" onclick="filterToPartner('${pid}')">
+                    <span style="font-size:13px;font-weight:800;color:#0a1628;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:58%;">${info.name}</span>
+                    <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                        <span style="background:#0d9488;color:white;border-radius:99px;padding:3px 10px;font-size:12px;font-weight:800;">${info.count} new</span>
+                        <button onclick="event.stopPropagation();toggleEnrollExpand('${pid}')" style="background:none;border:none;cursor:pointer;padding:2px;display:flex;align-items:center;color:#94a3b8;"><span class="material-icons" id="enroll-icon-${pid}" style="font-size:18px;">expand_more</span></button>
                     </div>
                 </div>
-                <div id="enroll-detail-${pid}" style="display:none;padding:0 12px 8px;max-height:220px;overflow-y:auto;"></div>
+                <div id="enroll-detail-${pid}" style="display:none;padding:0 14px 10px;max-height:260px;overflow-y:auto;background:white;"></div>
             </div>`
         ).join('');
     }
@@ -2112,11 +2112,11 @@ window.quickAddId = async function(personId, name) {
             el.innerHTML = merchants.map(m => {
                 const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
                 const statusColor = m.account_status === 'Approved' ? '#16a34a' : '#64748b';
-                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #f1f5f9;font-size:11px;">
+                return `<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;min-height:32px;">
                     <span style="color:#0a1628;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:55%;">${m.dba_name}</span>
-                    <span style="display:flex;gap:6px;align-items:center;flex-shrink:0;">
-                        <span style="color:${statusColor};font-weight:700;">${m.account_status||'—'}</span>
-                        <span style="color:#94a3b8;">${dt}</span>
+                    <span style="display:flex;gap:8px;align-items:center;flex-shrink:0;">
+                        <span style="color:${statusColor};font-weight:700;font-size:11px;">${m.account_status||'—'}</span>
+                        <span style="color:#94a3b8;font-size:11px;">${dt}</span>
                     </span>
                 </div>`;
             }).join('') || '<div style="color:#94a3b8;font-size:12px;padding:8px 0;">No merchants</div>';
