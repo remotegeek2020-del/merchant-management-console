@@ -135,6 +135,38 @@
 
         @media(max-width:900px){.community-layout{grid-template-columns:1fr;}.right-sidebar{display:none;}}
         @media(max-width:640px){.sidebar{transform:translateX(-100%);}.main{margin-left:0;}.community-layout{padding:12px;}}
+
+        /* EMOJI REACTION PICKER */
+        .reaction-wrap{position:relative;display:inline-block;}
+        .emoji-tray{position:absolute;bottom:calc(100% + 6px);left:0;background:white;border:1px solid var(--border);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.12);padding:6px 8px;display:flex;gap:2px;z-index:100;opacity:0;pointer-events:none;transition:opacity 0.15s,transform 0.15s;transform:translateY(4px);}
+        .emoji-tray.open{opacity:1;pointer-events:all;transform:translateY(0);}
+        .emoji-opt{font-size:20px;cursor:pointer;padding:4px 5px;border-radius:6px;border:none;background:none;line-height:1;transition:transform 0.1s,background 0.1s;}
+        .emoji-opt:hover{background:#f1f5f9;transform:scale(1.25);}
+
+        /* IMAGE LIGHTBOX */
+        .lightbox-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out;}
+        .lightbox-overlay.open{display:flex;}
+        .lightbox-overlay img{max-width:90vw;max-height:90vh;border-radius:6px;object-fit:contain;}
+        .lightbox-close{position:fixed;top:20px;right:20px;background:rgba(255,255,255,0.15);border:none;color:white;width:36px;height:36px;border-radius:50%;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background 0.15s;}
+        .lightbox-close:hover{background:rgba(255,255,255,0.3);}
+        .post-image{cursor:zoom-in;}
+
+        /* SEARCH BAR */
+        .feed-search{position:relative;}
+        .feed-search input{width:100%;padding:9px 38px 9px 14px;border:1.5px solid var(--border);border-radius:10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;background:white;transition:border-color 0.2s;color:var(--text);}
+        .feed-search input:focus{border-color:var(--teal);}
+        .feed-search .si{position:absolute;right:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:20px;pointer-events:none;}
+        .feed-search .clear-search{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:none;background:none;cursor:pointer;color:var(--muted);font-size:18px;display:none;padding:0;}
+        .feed-search .clear-search:hover{color:var(--text);}
+
+        /* CHAR COUNTER */
+        .char-counter{font-size:10px;color:var(--muted);text-align:right;margin-top:3px;min-height:14px;}
+        .char-counter.warn{color:#d97706;}
+        .char-counter.limit{color:#ef4444;font-weight:700;}
+
+        /* PINNED BANNER */
+        .pin-banner{background:linear-gradient(90deg,var(--teal-bg),white);padding:5px 16px;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--teal-dark);border-bottom:1px solid var(--teal-light);}
+        .pin-banner .material-icons{font-size:13px;}
     
         /* NOTIFICATION BELL */
         .notif-bell{position:relative;cursor:pointer;background:none;border:none;padding:6px;border-radius:8px;color:#475569;display:flex;align-items:center;}
@@ -218,8 +250,9 @@
             <div class="composer" id="composer">
                 <div class="composer-top">
                     <div class="composer-avatar" id="composerAvatar">?</div>
-                    <textarea class="composer-input" id="postInput" placeholder="Share an update, ask a question, or celebrate a win..." rows="3"></textarea>
+                    <textarea class="composer-input" id="postInput" placeholder="Share an update, ask a question, or celebrate a win..." rows="3" oninput="updateCharCount()" maxlength="1500"></textarea>
                 </div>
+                <div class="char-counter" id="charCounter"></div>
                 <div class="composer-footer">
                     <select class="channel-select" id="postChannel">
                         <option value="">📡 All Channels</option>
@@ -234,6 +267,12 @@
                     <img id="previewImg" style="width:100%;border-radius:8px;max-height:200px;object-fit:cover;">
                     <button onclick="clearImage()" style="position:absolute;top:6px;right:6px;background:rgba(0,0,0,0.6);border:none;border-radius:50%;width:24px;height:24px;color:white;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;">✕</button>
                 </div>
+            </div>
+
+            <!-- SEARCH -->
+            <div class="feed-search">
+                <input type="text" id="feedSearch" placeholder="Search posts…" oninput="filterFeed(this.value)">
+                <span class="material-icons si">search</span>
             </div>
 
             <!-- POSTS -->
@@ -271,6 +310,12 @@
         <input class="dm-input" id="dmInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendDM()">
         <button class="btn btn-teal btn-sm" onclick="sendDM()"><span class="material-icons" style="font-size:14px;">send</span></button>
     </div>
+</div>
+
+<!-- LIGHTBOX -->
+<div class="lightbox-overlay" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+    <img id="lightboxImg" src="" alt="">
 </div>
 
 <script>
@@ -405,10 +450,14 @@ function renderPost(post) {
     const avatarHtml = author.avatar_url ? `<img src="${author.avatar_url}">` : `<span>${initials}</span>`;
     const staffBadge = author.user_type === 'staff' ? `<span style="background:#004990;color:white;padding:1px 6px;border-radius:99px;font-size:9px;font-weight:800;margin-left:5px;">STAFF</span>` : '';
     const channelTag = post.community_channels ? `<span class="post-channel"><span class="material-icons" style="font-size:10px;">${post.community_channels.icon}</span>${post.community_channels.name}</span>` : '';
-    const pinTag = post.is_pinned ? `<span class="material-icons post-pin" title="Pinned">push_pin</span>` : '';
+    const pinnedBanner = post.is_pinned ? `<div class="pin-banner"><span class="material-icons">push_pin</span> Pinned</div>` : '';
     const timeAgo = getTimeAgo(post.created_at);
+    const fullDate = new Date(post.created_at).toLocaleString();
+    const EMOJIS = ['❤️','👍','😂','🔥','👏','😮'];
+    const reactIcon = post.user_reacted ? '❤️' : '<span class="material-icons" style="font-size:16px;line-height:1;">add_reaction</span>';
 
     return `<div class="post-card" id="post-${post.id}">
+        ${pinnedBanner}
         <div class="post-header">
             <div class="post-avatar" onclick="openProfile('${post.author_id}')">${avatarHtml}</div>
             <div class="post-meta">
@@ -416,25 +465,29 @@ function renderPost(post) {
                     <span class="post-author" onclick="openProfile('${post.author_id}')">${author.display_name||'Unknown'}</span>
                     ${staffBadge}${channelTag}
                 </div>
-                <div class="post-time">${timeAgo}</div>
+                <div class="post-time" title="${fullDate}">${timeAgo}</div>
             </div>
-            ${pinTag}
-            ${post.author_id === currentUser?.id ? `<button onclick="deletePost('${post.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;"><span class="material-icons" style="font-size:16px;">more_horiz</span></button>` : ''}
+            ${post.author_id === currentUser?.id ? `<button onclick="deletePost('${post.id}')" style="background:none;border:none;color:var(--muted);cursor:pointer;padding:4px;border-radius:6px;" title="Delete post"><span class="material-icons" style="font-size:16px;">delete_outline</span></button>` : ''}
         </div>
         <div class="post-body">${escHtml(post.body)}</div>
-        ${post.image_url ? `<img src="${post.image_url}" class="post-image" alt="Post image">` : ''}
+        ${post.image_url ? `<img src="${post.image_url}" class="post-image" alt="Post image" onclick="openLightbox('${post.image_url}')">` : ''}
         <div class="post-footer">
-            <button class="reaction-btn ${post.user_reacted?'reacted':''}" onclick="toggleReact('${post.id}', this)">
-                <span class="material-icons">${post.user_reacted?'favorite':'favorite_border'}</span>
-                <span class="react-count">${post.reaction_count||0}</span>
-            </button>
+            <div class="reaction-wrap">
+                <button class="reaction-btn ${post.user_reacted?'reacted':''}" id="react-btn-${post.id}" onclick="toggleEmojiTray('${post.id}',event)">
+                    ${reactIcon}
+                    <span class="react-count" id="rcount-${post.id}">${post.reaction_count||0}</span>
+                </button>
+                <div class="emoji-tray" id="etray-${post.id}">
+                    ${EMOJIS.map(e=>`<button class="emoji-opt" onclick="sendReaction('${post.id}','${e}',event)">${e}</button>`).join('')}
+                </div>
+            </div>
             <button class="reaction-btn" onclick="toggleComments('${post.id}')">
                 <span class="material-icons">chat_bubble_outline</span>
-                <span>${post.comment_count||0}</span>
+                <span id="ccount-${post.id}">${post.comment_count||0}</span>
             </button>
-            <button class="reaction-btn" onclick="openDM('${post.author_id}','${(author.display_name||'').replace(/'/g,"\\'")}','${author.user_type||'partner'}')">
+            ${post.author_id !== currentUser?.id ? `<button class="reaction-btn" onclick="openDM('${post.author_id}','${(author.display_name||'').replace(/'/g,"\\'")}','${author.user_type||'partner'}')">
                 <span class="material-icons">send</span> Message
-            </button>
+            </button>` : ''}
         </div>
         <div class="comment-section" id="comments-${post.id}" style="display:none;"></div>
     </div>`;
@@ -452,18 +505,34 @@ async function submitPost() {
     await api('community', { action:'create_post', token, body, channel_id: channelId, image_url: pendingImageUrl });
     
     document.getElementById('postInput').value = '';
+    updateCharCount();
+    document.getElementById('feedSearch').value = '';
+    filterFeed('');
     clearImage();
     btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span> Post';
     feedPage = 0; loadFeed();
 }
 
-async function toggleReact(postId, btn) {
-    const res = await api('community', { action:'react', token, post_id: postId });
-    if (res.success) {
-        const count = btn.querySelector('.react-count');
-        const icon = btn.querySelector('.material-icons');
-        if (res.action === 'added') { btn.classList.add('reacted'); icon.innerText='favorite'; count.innerText = parseInt(count.innerText)+1; }
-        else { btn.classList.remove('reacted'); icon.innerText='favorite_border'; count.innerText = Math.max(0, parseInt(count.innerText)-1); }
+function toggleEmojiTray(postId, event) {
+    event.stopPropagation();
+    document.querySelectorAll('.emoji-tray.open').forEach(t => { if (t.id !== `etray-${postId}`) t.classList.remove('open'); });
+    document.getElementById(`etray-${postId}`)?.classList.toggle('open');
+}
+
+async function sendReaction(postId, emoji, event) {
+    event?.stopPropagation();
+    document.getElementById(`etray-${postId}`)?.classList.remove('open');
+    const res = await api('community', { action:'react', token, post_id: postId, emoji });
+    if (!res.success) return;
+    const btn = document.getElementById(`react-btn-${postId}`);
+    const countEl = document.getElementById(`rcount-${postId}`);
+    const cur = parseInt(countEl?.textContent||'0');
+    if (res.action === 'added') {
+        btn?.classList.add('reacted');
+        if (btn) btn.innerHTML = `${emoji} <span class="react-count" id="rcount-${postId}">${cur+1}</span>`;
+    } else {
+        btn?.classList.remove('reacted');
+        if (btn) btn.innerHTML = `<span class="material-icons" style="font-size:16px;line-height:1;">add_reaction</span> <span class="react-count" id="rcount-${postId}">${Math.max(0,cur-1)}</span>`;
     }
 }
 
@@ -501,10 +570,28 @@ async function addComment(postId) {
     const input = document.getElementById(`comment-input-${postId}`);
     const body = input.value.trim();
     if (!body) return;
-    await api('community', { action:'add_comment', token, post_id: postId, body });
     input.value = '';
-    toggleComments(postId);
-    setTimeout(() => toggleComments(postId), 100);
+    input.disabled = true;
+
+    // Optimistic render — add comment inline immediately
+    const section = document.getElementById(`comments-${postId}`);
+    const inputRow = section.querySelector('.comment-input-row');
+    const avHtml = currentProfile?.avatar_url ? `<img src="${currentProfile.avatar_url}">` : (currentUser?.name||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+    inputRow.insertAdjacentHTML('beforebegin', `<div class="comment-item">
+        <div class="comment-avatar">${avHtml}</div>
+        <div class="comment-bubble">
+            <div class="comment-author">${currentUser?.name||'You'}</div>
+            <div class="comment-body">${escHtml(body)}</div>
+            <div class="comment-time">just now</div>
+        </div>
+    </div>`);
+
+    const cc = document.getElementById(`ccount-${postId}`);
+    if (cc) cc.textContent = parseInt(cc.textContent||'0') + 1;
+
+    await api('community', { action:'add_comment', token, post_id: postId, body });
+    input.disabled = false;
+    input.focus();
 }
 
 async function deletePost(postId) {
@@ -755,6 +842,45 @@ async function markAllNotifsRead() {
     loadNotifications();
     pollUnreadCounts();
 }
+
+// ── LIGHTBOX ──────────────────────────────────────────────
+function openLightbox(src) {
+    document.getElementById('lightboxImg').src = src;
+    document.getElementById('lightbox').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+function closeLightbox() {
+    document.getElementById('lightbox').classList.remove('open');
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLightbox(); });
+
+// ── SEARCH ────────────────────────────────────────────────
+function filterFeed(query) {
+    const q = (query||'').toLowerCase().trim();
+    document.querySelectorAll('#feedContainer .post-card').forEach(card => {
+        const body = card.querySelector('.post-body')?.textContent?.toLowerCase() || '';
+        const author = card.querySelector('.post-author')?.textContent?.toLowerCase() || '';
+        card.style.display = (!q || body.includes(q) || author.includes(q)) ? '' : 'none';
+    });
+}
+
+// ── CHAR COUNTER ──────────────────────────────────────────
+function updateCharCount() {
+    const len = document.getElementById('postInput').value.length;
+    const max = 1500;
+    const el = document.getElementById('charCounter');
+    if (!len) { el.textContent = ''; el.className = 'char-counter'; return; }
+    el.textContent = `${len} / ${max}`;
+    el.className = 'char-counter' + (len >= max ? ' limit' : len >= max * 0.85 ? ' warn' : '');
+}
+
+// ── CLOSE EMOJI TRAY ON OUTSIDE CLICK ─────────────────────
+document.addEventListener('click', e => {
+    if (!e.target.closest('.emoji-tray') && !e.target.closest('[id^="react-btn-"]')) {
+        document.querySelectorAll('.emoji-tray.open').forEach(t => t.classList.remove('open'));
+    }
+});
 
 // ── UTILS ─────────────────────────────────────────────────
 function escHtml(str) {
