@@ -1520,7 +1520,15 @@ async function saveDeployment(event) {
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
 }
 
-    function closeModal(e, id) { if (e.target.id === id) document.getElementById(id).style.display = 'none'; }
+    let _backdropMdId = null;
+    document.addEventListener('mousedown', e => {
+        _backdropMdId = e.target.classList.contains('modal-backdrop') ? e.target.id : null;
+    }, true);
+    function closeModal(e, id) {
+        if (e.target.id === id && _backdropMdId === id) {
+            document.getElementById(id).style.display = 'none';
+        }
+    }
 
     // ── JARVIS EQUIPMENT SUGGESTIONS ──────────────────────────────────────────
     let _jarvisStockCache = null; // Cache stocked models so we don't re-fetch every time

@@ -436,6 +436,7 @@ async function deleteReturn(returnUuid, returnId, dbaName) {
             <p style="margin-top:12px;">Type <b>DELETE</b> to confirm:</p>
         </div>`,
         input: 'text',
+        allowOutsideClick: false,
         showCancelButton: true,
         confirmButtonColor: '#b91c1c',
         confirmButtonText: 'Delete Permanently',
@@ -467,6 +468,7 @@ async function finalizeRMA(id, equipment_id) {
     const { value: receivedDate } = await Swal.fire({
         title: 'Confirm Receipt Date',
         html: `<input type="date" id="swal-receive-date" class="slds-input" value="${fmtDateInput(new Date())}" style="margin-top:10px;">`,
+        allowOutsideClick: false,
         showCancelButton: true,
         confirmButtonColor: '#004990',
         confirmButtonText: 'Next',

@@ -147,7 +147,7 @@
 
 <div id="debugConsole"><div>SYSTEM MONITOR: STANDBY...</div></div>
 
-<div id="backdrop" class="custom-modal-backdrop" onclick="closeModal()"></div>
+<div id="backdrop" class="custom-modal-backdrop" onmousedown="this._md=true" onmouseup="if(this._md)closeModal();this._md=false"></div>
 <div id="lookupModal" class="custom-modal">
     <div class="slds-modal__header slds-p-around_large" style="background: var(--pp-blue); color: white; border:none;">
         <h2 style="font-weight: 800; font-size: 1.1rem;">Search Database</h2>
