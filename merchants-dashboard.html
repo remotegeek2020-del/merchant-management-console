@@ -233,7 +233,7 @@
             <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                 <div>
                     <div style="font-size:13px;font-weight:800;color:#002d5a;">Overall Portfolio Health</div>
-                    <div style="font-size:10px;color:#94a3b8;margin-top:1px;">All merchants · Loaded on page open</div>
+                    <div class="analytics-subtitle" style="font-size:10px;color:#94a3b8;margin-top:1px;">Loading…</div>
                 </div>
                 <div style="display:flex;gap:6px;flex-wrap:wrap;" id="healthCountChips"></div>
             </div>
@@ -1972,6 +1972,10 @@ window.saveMerchant = async (uuid) => {
             });
             const d = await res.json();
             if (!d.success) return;
+
+            // Update subtitle with real total
+            const sub = document.querySelector('#staffChartsPanel .analytics-subtitle');
+            if (sub && d.total) sub.textContent = `${parseInt(d.total).toLocaleString()} merchants · All statuses`;
 
             // Health count chips in panel header
             const chips = document.getElementById('healthCountChips');

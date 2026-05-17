@@ -579,27 +579,15 @@ if (action === 'get_merchant_equipment') {
 
 if (action === 'get_stats_for_filter') {
     try {
-        const { statusFilter, query, filterBy } = req.body;
-        let q = supabase.from('merchant_portfolio_view')
-            .select('volume_30_day, volume_90_day, last_batch_date, account_status, dba_name, merchant_id');
-        if (statusFilter) q = q.eq('account_status', statusFilter);
-        if (query && filterBy) {
-            const colMap = { dba_name:'dba_name', merchant_id:'merchant_id', agent_id:'agent_id', company_name:'company_display_name', partner_name:'partner_full_name' };
-            if (colMap[filterBy]) q = q.ilike(colMap[filterBy], `%${query}%`);
-        }
-        const { data } = await q;
-        const healthCounts = { Healthy:0, Good:0, Fair:0, 'At Risk':0, Critical:0 };
-        const statusCounts = {};
-        const scoredAll = [];
-        (data || []).forEach(m => {
-            const { score, label } = compute_health_score(m);
-            if (healthCounts[label] !== undefined) healthCounts[label]++;
-            const st = m.account_status || 'Unknown';
-            statusCounts[st] = (statusCounts[st] || 0) + 1;
-            scoredAll.push({ merchant_id: m.merchant_id, dba_name: m.dba_name, vol30: parseFloat(m.volume_30_day || 0), health_label: label });
+        const { data, error } = await supabase.rpc('get_portfolio_health_summary');
+        if (error) throw error;
+        const summary = typeof data === 'string' ? JSON.parse(data) : data;
+        return res.status(200).json({
+            success: true,
+            health: summary.health,
+            top10:  summary.top10 || [],
+            total:  summary.total
         });
-        const top10 = scoredAll.filter(m => m.vol30 > 0).sort((a, b) => b.vol30 - a.vol30).slice(0, 10);
-        return res.status(200).json({ success: true, health: healthCounts, statuses: statusCounts, top10 });
     } catch (err) {
         console.error("get_stats_for_filter error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
