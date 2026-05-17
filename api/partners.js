@@ -56,18 +56,26 @@ if (action === 'get_orphan_ids') {
 }
         if (action === 'search_ghl') {
     const { query } = body;
-    // Prefer DB-stored key (managed via Secret Dungeon), fall back to env var
     const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
     const ghlApiKey    = (await getConfigValue('GHL_API_KEY'))     || process.env.GHL_API_KEY;
     if (!ghlLocationId || !ghlApiKey) {
         return res.status(500).json({ success: false, message: 'GHL integration not configured. Set API keys in Secret Dungeon → API Key Manager.' });
     }
-    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=${ghlLocationId}&query=${encodeURIComponent(query)}`, {
-        headers: {
-            'Authorization': `Bearer ${ghlApiKey}`,
-            'Version': '2021-07-28'
+    const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
+
+    // If query looks like a GHL contact ID (alphanumeric, no spaces, 15-30 chars), try direct lookup first
+    const looksLikeId = /^[a-zA-Z0-9]{15,30}$/.test(query.trim());
+    if (looksLikeId) {
+        const directRes = await fetch(`https://services.leadconnectorhq.com/contacts/${query.trim()}`, { headers: ghlHeaders });
+        if (directRes.ok) {
+            const directData = await directRes.json();
+            const c = directData.contact;
+            if (c) return res.status(200).json({ success: true, contacts: [c] });
         }
-    });
+    }
+
+    // Fall back to name/email search
+    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/?locationId=${ghlLocationId}&query=${encodeURIComponent(query)}`, { headers: ghlHeaders });
     const data = await ghlRes.json();
     return res.status(200).json({ success: true, contacts: data.contacts || [] });
 }
