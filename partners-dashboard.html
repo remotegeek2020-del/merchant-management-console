@@ -1122,9 +1122,11 @@ async function submitOnboarding() {
         
         if (result.success) {
             await logAuditAction('Partner Created', `Onboarded new partner: ${selectedGHLContact.name}`);
+            // Refresh materialized view so new partner gets a rank badge immediately
+            fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh_leaderboard' }) }).catch(() => {});
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
             closeWizard();
-            loadPartners(); 
+            loadPartners();
         } else {
             // This will show exactly WHY the backend failed (e.g., duplicate email)
             throw new Error(result.message || 'Database error');
