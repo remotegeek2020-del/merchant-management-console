@@ -173,12 +173,9 @@ if (action === 'complete_onboarding') {
         }
 
         // 3. Find or create Agent — avoid duplicate person+company combos
-        const { data: existingAgent } = await supabase
-            .from('agents')
-            .select('id')
-            .eq('parent_agent_id', pData.id)
-            .eq('company_id', targetCoId ?? null)
-            .maybeSingle();
+        let agentQuery = supabase.from('agents').select('id').eq('parent_agent_id', pData.id);
+        agentQuery = targetCoId ? agentQuery.eq('company_id', targetCoId) : agentQuery.is('company_id', null);
+        const { data: existingAgent } = await agentQuery.maybeSingle();
 
         if (existingAgent) {
             finalAgentId = existingAgent.id;

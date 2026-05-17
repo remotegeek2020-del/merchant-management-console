@@ -538,7 +538,7 @@ async function logAuditAction(action, details) {
         const myAgent  = agentById.get(id.agent_id);
         const myPerson = myAgent ? personById.get(myAgent.parent_agent_id) : null;
         idMap[id.id] = {
-            db_id: id.id, string: id.id_string, rev: id.rev_share || '0%',
+            db_id: id.id, string: id.id_string, rev: (id.rev_share != null) ? id.rev_share + '%' : '0%',
             isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
             owner_name: myPerson ? myPerson.full_name : 'Unknown',
             parent_config_id: id.parent_config_id,
