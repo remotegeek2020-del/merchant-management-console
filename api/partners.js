@@ -110,12 +110,13 @@ if (action === 'complete_onboarding') {
         // 1. Upsert Person
         const { data: pData, error: pErr } = await supabase
             .from('persons')
-            .upsert({ 
-                full_name: properName, 
-                email: person.email, 
-                phone_number: person.phone, 
+            .upsert({
+                full_name: properName,
+                email: person.email,
+                phone_number: person.phone,
                 hl_contact_id: person.hl_id,
-                enrolled_at: person.enrolled_at || new Date().toISOString()
+                enrolled_at: person.enrolled_at || new Date().toISOString(),
+                is_branded: !!person.is_branded
             }, { onConflict: 'email' })
             .select().single();
 
@@ -668,7 +669,7 @@ if (action === 'get_all_stats') {
 
             const [persons, agents, identifiers, companies] = await Promise.all([
                 // UPDATED SELECT STRING BELOW
-                fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, is_portal_active, portal_password_set, last_portal_login'),
+                fetchAll('persons', 'id, full_name, email, phone_number, hl_contact_id, enrolled_at, is_portal_active, portal_password_set, last_portal_login, is_branded'),
                 fetchAll('agents', 'id, company_id, parent_agent_id'),
                 fetchAll('agent_identifiers', 'id, agent_id, id_string, rev_share, prime49, parent_config_id'),
                 fetchAll('companies', 'id, company_name')
