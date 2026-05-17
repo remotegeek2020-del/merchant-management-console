@@ -110,25 +110,49 @@ if (action === 'complete_onboarding') {
 
     } else if (!isQuickAdd) {
         // --- START NEW PARTNER LOGIC ---
-        // Verify we have person data
-        if (!person || !person.email) return res.status(400).json({ success: false, message: "Missing person data for new partner" });
+        if (!person || !person.name) return res.status(400).json({ success: false, message: "Missing person data for new partner" });
 
         const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
 
-        // 1. Upsert Person
-        const { data: pData, error: pErr } = await supabase
-            .from('persons')
-            .upsert({
-                full_name: properName,
-                email: person.email,
-                phone_number: person.phone,
-                hl_contact_id: person.hl_id,
-                enrolled_at: person.enrolled_at || new Date().toISOString(),
-                is_branded: !!person.is_branded
-            }, { onConflict: 'email' })
-            .select().single();
+        // 1. Upsert Person — check hl_contact_id first, fall back to email
+        let pData, pErr;
 
-        if (pErr) return res.status(400).json({ success: false, message: "Person failed: " + pErr.message });
+        if (person.hl_id) {
+            const { data: existing } = await supabase
+                .from('persons').select('id').eq('hl_contact_id', person.hl_id).maybeSingle();
+            if (existing) {
+                const { data: updated, error: updErr } = await supabase
+                    .from('persons')
+                    .update({
+                        full_name: properName,
+                        email: person.email,
+                        phone_number: person.phone,
+                        enrolled_at: person.enrolled_at || new Date().toISOString(),
+                        is_branded: !!person.is_branded
+                    })
+                    .eq('id', existing.id)
+                    .select().single();
+                pData = updated; pErr = updErr;
+            }
+        }
+
+        if (!pData && !pErr) {
+            if (!person.email) return res.status(400).json({ success: false, message: "Missing email for new partner" });
+            const { data: upserted, error: upsertErr } = await supabase
+                .from('persons')
+                .upsert({
+                    full_name: properName,
+                    email: person.email,
+                    phone_number: person.phone,
+                    hl_contact_id: person.hl_id,
+                    enrolled_at: person.enrolled_at || new Date().toISOString(),
+                    is_branded: !!person.is_branded
+                }, { onConflict: 'email' })
+                .select().single();
+            pData = upserted; pErr = upsertErr;
+        }
+
+        if (pErr || !pData) return res.status(400).json({ success: false, message: "Person failed: " + (pErr?.message || 'unknown error') });
 
         // 2. Handle Company
         let targetCoId = company.id;
