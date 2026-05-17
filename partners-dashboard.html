@@ -381,14 +381,21 @@ input[type=number] {
  <div class="step-container" id="step2">
     <label class="search-label">Company / Firm Association</label>
     <div style="margin-bottom:14px;"><label class="search-label">Partner Activation Date</label><input type="date" id="partnerActivationDate" class="wizard-input" style="font-family:sans-serif;"><div style="font-size:11px;color:#94a3b8;margin-top:4px;">When was this partner activated? Defaults to today.</div></div>
-    <select id="companySelect" class="wizard-input" onchange="toggleCompanyInput();">
-        <option value="none">Independent (Individual Partner)</option>
-        <option value="new">+ Create New Company...</option>
-        </select>
-    
-    <div id="newCompanyFields" style="margin-top: 10px; display: none;">
-        <label class="search-label">New Company Name</label>
-        <input type="text" id="newCompanyName" class="wizard-input" placeholder="Enter company name...">
+
+    <div style="position:relative;" id="companyPickerWrap">
+        <input type="text" id="companySearchInput" class="wizard-input" placeholder="Search company or type to create new..." autocomplete="off"
+            oninput="filterCompanySuggestions()"
+            onfocus="showCompanySuggestions()"
+            onblur="hideCompanySuggestions()">
+        <div id="companySuggestionsBox" style="display:none;position:absolute;left:0;right:0;top:100%;background:white;border:1.5px solid #e2e8f0;border-radius:10px;z-index:9999;max-height:220px;overflow-y:auto;box-shadow:0 4px 20px rgba(0,0,0,0.12);margin-top:3px;"></div>
+    </div>
+    <!-- hidden fields kept for submit compatibility -->
+    <input type="hidden" id="companySelect" value="none">
+    <input type="hidden" id="newCompanyName" value="">
+
+    <div id="selectedCompanyDisplay" style="display:none;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:space-between;">
+        <span id="selectedCompanyLabel" style="display:flex;align-items:center;gap:6px;"></span>
+        <button type="button" onclick="clearCompanySelection()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:20px;line-height:1;padding:0 2px;">×</button>
     </div>
 
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;margin-top:14px;padding:10px 14px;background:#f0f7ff;border:1px solid #bfdbfe;border-radius:8px;font-size:13px;font-weight:700;color:#004990;">
@@ -687,27 +694,98 @@ window.filterByTrend = function(trend) {
     // 3. WIZARD STEP 2: BUSINESS (COMPANY)
     // ==========================================
 
-    function toggleCompanyInput() {
-        const select = document.getElementById('companySelect');
-        const newFields = document.getElementById('newCompanyFields');
-        if (!select || !newFields) return;
-        newFields.style.display = (select.value === 'new') ? 'block' : 'none';
+    // ── COMPANY SEARCHABLE PICKER ─────────────────────────────────────────────
+    var _coSuggList = [];
+
+    function buildCoSuggestions() {
+        const seen = new Set();
+        _coSuggList = (_companiesRaw || []).filter(c => {
+            const key = (c.company_name || '').trim().toLowerCase();
+            if (!key || seen.has(key)) return false;
+            seen.add(key);
+            return true;
+        }).sort((a, b) => a.company_name.localeCompare(b.company_name));
     }
 
-    async function loadWizardCompanies() {
-        const res = await fetch('/api/partners', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'get_partners_list' })
+    function renderCoSuggestions(term) {
+        const box = document.getElementById('companySuggestionsBox');
+        if (!box) return;
+        const t = (term || '').trim().toLowerCase();
+        const matches = t ? _coSuggList.filter(c => c.company_name.toLowerCase().includes(t)) : _coSuggList;
+        const exactMatch = matches.some(c => c.company_name.toLowerCase() === t);
+
+        let html = `<div onmousedown="selectCompany('none','')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;color:#64748b;font-size:13px;display:flex;align-items:center;gap:8px;">
+            <span class="material-icons" style="font-size:15px;">person_outline</span>Independent (Individual Partner)
+        </div>`;
+        matches.forEach(c => {
+            const safe = c.company_name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            html += `<div onmousedown="selectCompany('${c.id}','${c.company_name.replace(/'/g,'&#39;').replace(/\\/g,'\\\\')}')" style="padding:10px 14px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-weight:600;color:#0a1628;display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:15px;color:#8b5cf6;">business</span>${safe}
+            </div>`;
         });
-        const result = await res.json();
-        const select = document.getElementById('companySelect');
-        select.innerHTML = `
-            <option value="none">Independent (Individual Partner)</option>
-            <option value="new">+ Create New Company</option>
-        ` + (result.data.companies || []).map(c => `<option value="${c.id}">${c.company_name}</option>`).join('');
-        toggleCompanyInput();
+        if (t && !exactMatch) {
+            const safeT = t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const rawT = document.getElementById('companySearchInput')?.value || t;
+            html += `<div onmousedown="selectCompany('new','${rawT.replace(/'/g,'&#39;').replace(/\\/g,'\\\\')}')" style="padding:10px 14px;cursor:pointer;font-size:13px;font-weight:700;color:#0d9488;display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:15px;">add_circle_outline</span>Create "${safeT}"
+            </div>`;
+        }
+        box.innerHTML = html;
+        box.style.display = 'block';
     }
+
+    window.filterCompanySuggestions = function() {
+        const val = document.getElementById('companySearchInput')?.value || '';
+        renderCoSuggestions(val);
+        // clear any prior selection while typing
+        document.getElementById('companySelect').value = 'none';
+        document.getElementById('newCompanyName').value = '';
+        document.getElementById('selectedCompanyDisplay').style.display = 'none';
+    };
+
+    window.showCompanySuggestions = function() {
+        if (!_coSuggList.length) buildCoSuggestions();
+        renderCoSuggestions(document.getElementById('companySearchInput')?.value || '');
+    };
+
+    window.hideCompanySuggestions = function() {
+        setTimeout(() => {
+            const box = document.getElementById('companySuggestionsBox');
+            if (box) box.style.display = 'none';
+        }, 180);
+    };
+
+    window.selectCompany = function(id, name) {
+        document.getElementById('companySuggestionsBox').style.display = 'none';
+        document.getElementById('companySearchInput').value = '';
+        document.getElementById('companySelect').value = id === 'none' ? 'none' : (id === 'new' ? 'new' : id);
+        document.getElementById('newCompanyName').value = id === 'new' ? name : '';
+
+        const display = document.getElementById('selectedCompanyDisplay');
+        const label = document.getElementById('selectedCompanyLabel');
+        if (id === 'none') {
+            display.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;background:#f0f9ff;border:1px solid #bae6fd;color:#0369a1;';
+            label.innerHTML = '<span class="material-icons" style="font-size:15px;">person_outline</span>Independent (Individual Partner)';
+        } else if (id === 'new') {
+            display.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;';
+            const safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            label.innerHTML = `<span class="material-icons" style="font-size:15px;">add_circle_outline</span>New company: <b>${safeName}</b>`;
+        } else {
+            display.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-top:8px;padding:9px 13px;border-radius:8px;font-size:13px;font-weight:700;background:#f5f3ff;border:1px solid #ddd6fe;color:#5b21b6;';
+            const safeName = name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            label.innerHTML = `<span class="material-icons" style="font-size:15px;color:#8b5cf6;">business</span>${safeName}`;
+        }
+    };
+
+    window.clearCompanySelection = function() {
+        document.getElementById('companySelect').value = 'none';
+        document.getElementById('newCompanyName').value = '';
+        document.getElementById('companySearchInput').value = '';
+        document.getElementById('selectedCompanyDisplay').style.display = 'none';
+    };
+
+    // Called after loadPartners to refresh the suggestion list
+    function refreshCoSuggestions() { _coSuggList = []; buildCoSuggestions(); }
 
     // ==========================================
     // 4. WIZARD STEP 3: ACCESS (IDENTIFIERS)
@@ -1071,7 +1149,8 @@ async function submitOnboarding() {
     if (_df && !_df.value) _df.value = fmtDateInput(new Date());
     document.getElementById('onboardingWizard').classList.add('active');
     renderIdList();
-    loadWizardCompanies();
+    clearCompanySelection();
+    refreshCoSuggestions();
     goToStep(1);
 }
 
@@ -1968,17 +2047,7 @@ window.quickAddId = async function(personId, name) {
             const companiesRaw = _companiesRaw;
             statsRaw = [];
 
-            // Populate company dropdown in wizard
-            const companySelect = document.getElementById('companySelect');
-            if (companySelect) {
-                const existingOptions = companySelect.innerHTML;
-                companiesRaw.forEach(co => {
-                    const opt = document.createElement('option');
-                    opt.value = co.id;
-                    opt.textContent = co.company_name;
-                    companySelect.appendChild(opt);
-                });
-            }
+            refreshCoSuggestions();
 
             // Process with stats for trend calculation
             allPartners = processPartnerData({
