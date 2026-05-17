@@ -55,19 +55,12 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ data });
 }
         if (action === 'check_existing_partners') {
-            const { hl_ids, emails } = body;
-            const [hlRes, emailRes] = await Promise.all([
-                hl_ids?.length
-                    ? supabase.from('persons').select('hl_contact_id').in('hl_contact_id', hl_ids)
-                    : Promise.resolve({ data: [] }),
-                emails?.length
-                    ? supabase.from('persons').select('email').in('email', emails)
-                    : Promise.resolve({ data: [] })
-            ]);
+            const { hl_ids } = body;
+            if (!hl_ids?.length) return res.status(200).json({ success: true, existing_hl_ids: [] });
+            const { data } = await supabase.from('persons').select('hl_contact_id').in('hl_contact_id', hl_ids);
             return res.status(200).json({
                 success: true,
-                existing_hl_ids: (hlRes.data || []).map(r => r.hl_contact_id).filter(Boolean),
-                existing_emails:  (emailRes.data || []).map(r => r.email).filter(Boolean)
+                existing_hl_ids: (data || []).map(r => r.hl_contact_id).filter(Boolean)
             });
         }
 
@@ -131,48 +124,32 @@ if (action === 'complete_onboarding') {
 
         const properName = person.name.toLowerCase().split(' ').map(s => s.charAt(0).toUpperCase() + s.substring(1)).join(' ');
 
-        // 1. Upsert Person — check hl_contact_id first, fall back to email
+        // 1. Upsert Person — hl_contact_id is the single dedup key
         let pData, pErr;
 
         if (person.hl_id) {
             const { data: existing } = await supabase
                 .from('persons').select('id').eq('hl_contact_id', person.hl_id).maybeSingle();
             if (existing) {
+                // Already exists — update in place
+                const updateRecord = { full_name: properName, phone_number: person.phone, enrolled_at: person.enrolled_at || new Date().toISOString(), is_branded: !!person.is_branded };
+                if (person.email) updateRecord.email = person.email;
                 const { data: updated, error: updErr } = await supabase
-                    .from('persons')
-                    .update({
-                        full_name: properName,
-                        email: person.email,
-                        phone_number: person.phone,
-                        enrolled_at: person.enrolled_at || new Date().toISOString(),
-                        is_branded: !!person.is_branded
-                    })
-                    .eq('id', existing.id)
-                    .select().single();
+                    .from('persons').update(updateRecord).eq('id', existing.id).select().single();
                 pData = updated; pErr = updErr;
-            }
-        }
-
-        if (!pData && !pErr) {
-            if (!person.email && !allowNoEmail) return res.status(400).json({ success: false, message: "Missing email for new partner" });
-            const personRecord = {
-                full_name: properName,
-                phone_number: person.phone,
-                hl_contact_id: person.hl_id,
-                enrolled_at: person.enrolled_at || new Date().toISOString(),
-                is_branded: !!person.is_branded
-            };
-            if (person.email) personRecord.email = person.email;
-
-            let upserted, upsertErr;
-            if (person.email) {
-                ({ data: upserted, error: upsertErr } = await supabase
-                    .from('persons').upsert(personRecord, { onConflict: 'email' }).select().single());
             } else {
-                // allowNoEmail bypass — insert directly without email
-                ({ data: upserted, error: upsertErr } = await supabase
-                    .from('persons').insert(personRecord).select().single());
+                // New contact — insert
+                if (!person.email && !allowNoEmail) return res.status(400).json({ success: false, message: "Missing email for new partner" });
+                const personRecord = { full_name: properName, phone_number: person.phone, hl_contact_id: person.hl_id, enrolled_at: person.enrolled_at || new Date().toISOString(), is_branded: !!person.is_branded };
+                if (person.email) personRecord.email = person.email;
+                const { data: inserted, error: insErr } = await supabase.from('persons').insert(personRecord).select().single();
+                pData = inserted; pErr = insErr;
             }
+        } else {
+            // No hl_id — fall back to email upsert (manual Add Partner wizard only)
+            if (!person.email) return res.status(400).json({ success: false, message: "Missing email for new partner" });
+            const personRecord = { full_name: properName, email: person.email, phone_number: person.phone, enrolled_at: person.enrolled_at || new Date().toISOString(), is_branded: !!person.is_branded };
+            const { data: upserted, error: upsertErr } = await supabase.from('persons').upsert(personRecord, { onConflict: 'email' }).select().single();
             pData = upserted; pErr = upsertErr;
         }
 
