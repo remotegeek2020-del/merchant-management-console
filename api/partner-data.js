@@ -275,7 +275,8 @@ export default async function handler(req, res) {
                 .select('id, merchant_id, dba_name, account_status, agent_id, enrollment_date', { count:'exact' })
                 .in('agent_id', idStrings)
                 .gte('enrollment_date', weekStart.toISOString())
-                .order('enrollment_date', { ascending: false });
+                .order('enrollment_date', { ascending: false })
+                .limit(5000);
 
             return res.status(200).json({
                 success: true,
@@ -376,7 +377,8 @@ export default async function handler(req, res) {
                 .in('agent_id', idStrings)
                 .gte('enrollment_date', fromDate)
                 .lte('enrollment_date', toDate)
-                .order('enrollment_date', { ascending: false });
+                .order('enrollment_date', { ascending: false })
+                .limit(5000);
 
             if (error) throw error;
 
