@@ -80,7 +80,7 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ success: true, contacts: data.contacts || [] });
 }
 if (action === 'complete_onboarding') {
-    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId, personName } = body;
+    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId, personName, allowNoEmail } = body;
     let finalAgentId = existingAgentId;
 
     // Quick add to a NEW company for an existing person
@@ -137,7 +137,7 @@ if (action === 'complete_onboarding') {
         }
 
         if (!pData && !pErr) {
-            if (!person.email && !person.hl_id) return res.status(400).json({ success: false, message: "Missing email for new partner" });
+            if (!person.email && !allowNoEmail) return res.status(400).json({ success: false, message: "Missing email for new partner" });
             const personRecord = {
                 full_name: properName,
                 phone_number: person.phone,
@@ -149,11 +149,10 @@ if (action === 'complete_onboarding') {
 
             let upserted, upsertErr;
             if (person.email) {
-                // Safe to upsert on email
                 ({ data: upserted, error: upsertErr } = await supabase
                     .from('persons').upsert(personRecord, { onConflict: 'email' }).select().single());
             } else {
-                // No email — insert directly (hl_id already checked above, no match found)
+                // allowNoEmail bypass — insert directly without email
                 ({ data: upserted, error: upsertErr } = await supabase
                     .from('persons').insert(personRecord).select().single());
             }
