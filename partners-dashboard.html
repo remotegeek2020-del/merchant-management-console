@@ -1269,6 +1269,8 @@ async function submitOnboarding() {
         const _rankInfo = partnerRankMap[p.id];
         const _rankBadge = _rankInfo ? getRankBadgeHtml(_rankInfo.rank, _rankInfo.tier) : '';
         const _brandedBadge = p.is_branded ? `<span style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#004990,#0369a1);color:white;font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;letter-spacing:0.5px;margin-bottom:10px;">🏷️ BRANDED</span>` : '';
+        const _totalMerchants = p.companies.reduce((sum, co) => sum + co.ids.reduce((s, id) => s + (id.merchantCount || 0), 0), 0);
+        const _totalMerchantChip = _totalMerchants > 0 ? `<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:10px;padding:2px 8px;font-weight:800;white-space:nowrap;flex-shrink:0;">${_totalMerchants} merchant${_totalMerchants !== 1 ? 's' : ''}</span>` : '';
         // Portal invite button: invite / resend if not fully active; otherwise just show status
         const _inviteBtn = (!_pActive || !_pSetup)
             ? `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${_safeName}','${_safeEmail}')" style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">${_pActive?'mark_email_read':'send'}</span> ${_pActive?'Resend Invite':'Invite to Portal'}</button>`
@@ -1283,7 +1285,10 @@ async function submitOnboarding() {
                 <input type="checkbox" class="card-checkbox" onclick="toggleCardSelect('${p.id}',event)">
                 <div style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div style="flex:1;min-width:0;">
-                        <h2 style="font-weight:800;color:#002d5a;margin:0 0 3px;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</h2>
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+                            <h2 style="font-weight:800;color:#002d5a;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</h2>
+                            ${_totalMerchantChip}
+                        </div>
                         ${_brandedBadge}
                     </div>
                     <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
