@@ -666,6 +666,10 @@
         const userid = localStorage.getItem('pp_userid');
         if (!userid) { closeResults(); return; }
 
+        fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: userid, action: `Global Search: "${q}"`, status: 'success', category: 'general', target_type: 'search', new_value: { query: q, context: 'Global' }, severity: 'info' })
+        }).catch(() => {});
+
         let data;
         try {
             const r = await fetch('/api/search', {

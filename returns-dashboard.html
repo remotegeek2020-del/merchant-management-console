@@ -169,7 +169,22 @@ let retPageSize = 20;
 let retCurrentPage = 0;
 let retTotalCount = 0;
 let retSearchTimeout = null;
-function debounceRetSearch() { clearTimeout(retSearchTimeout); retSearchTimeout = setTimeout(() => { retCurrentPage = 0; fetchReturns(); }, 350); }
+let _lastRetSearchLogged = '';
+function _logSearch(context, query, category) {
+    if (!query || query.length < 2) return;
+    const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
+    fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
+    }).catch(() => {});
+}
+function debounceRetSearch() {
+    clearTimeout(retSearchTimeout);
+    retSearchTimeout = setTimeout(() => {
+        const q = document.getElementById('retSearch')?.value || '';
+        if (q && q !== _lastRetSearchLogged) { _lastRetSearchLogged = q; _logSearch('Returns', q, 'returns'); }
+        retCurrentPage = 0; fetchReturns();
+    }, 350);
+}
 
 function clearFilters() {
     document.getElementById('retSearch').value = '';
