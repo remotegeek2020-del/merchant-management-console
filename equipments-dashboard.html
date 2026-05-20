@@ -291,6 +291,15 @@
     let currentPage = 0;
     let totalItems = 0;
     let selectedId = null;
+    let _lastInvSearchLogged = '';
+
+    function _logSearch(context, query, category) {
+        if (!query || query.length < 2) return;
+        const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
+        fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
+        }).catch(() => {});
+    }
 
     function equipHeaders() {
         const token = localStorage.getItem('pp_session_token') || '';
@@ -860,16 +869,18 @@ async function saveNote() {
    async function fetchInventory() {
     const tbody = document.getElementById('inventoryTableBody');
     const limit = parseInt(document.getElementById('pageSize').value) || 50;
-    
+    const _invQ = document.getElementById('invSearch')?.value || '';
+    if (_invQ && _invQ !== _lastInvSearchLogged) { _lastInvSearchLogged = _invQ; _logSearch('Inventory', _invQ, 'equipments'); }
+
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
 
     try {
         const res = await fetch('/api/equipments', {
             method: 'POST',
             headers: equipHeaders(),
-            body: JSON.stringify({ 
-                action: 'list', 
-                query: document.getElementById('invSearch').value, 
+            body: JSON.stringify({
+                action: 'list',
+                query: _invQ, 
                 page: currentPage, 
                 limit: limit,
                 filterLocation: currentFilter === 'deployed' ? null : currentFilter,

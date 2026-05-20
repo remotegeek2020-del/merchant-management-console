@@ -1212,10 +1212,20 @@ async function addTask(merchantUuid) {
         });
     }
 
+    let _lastMerchantSearchLogged = '';
+    function _logSearch(context, query, category) {
+        if (!query || query.length < 2) return;
+        const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
+        fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
+        }).catch(() => {});
+    }
     async function fetchMerchants() {
         const tbody = document.getElementById('merchantTableBody');
         const limit = document.getElementById('pageLimit').value;
-        
+        const _mq = document.getElementById('searchInput')?.value || '';
+        if (_mq && _mq !== _lastMerchantSearchLogged) { _lastMerchantSearchLogged = _mq; _logSearch('Merchants', _mq, 'merchants'); }
+
         tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:60px; color:#94a3b8;">
             <div style="margin-bottom:10px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></div>
             Synchronizing Ledger...

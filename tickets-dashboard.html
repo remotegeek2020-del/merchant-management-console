@@ -296,6 +296,15 @@ let statusFilter = 'all';
 let typeFilter = 'all';
 let mineFilter = false;
 let searchQuery = '';
+let _lastTicketSearchLogged = '';
+
+function _logSearch(context, query, category) {
+    if (!query || query.length < 2) return;
+    const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
+    fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
+    }).catch(() => {});
+}
 let slaActiveCategory = null;
 let slaActivePriority = null;
 let currentStaffName = '';
@@ -646,6 +655,7 @@ function setSearchQuery(val) {
     currentPage = 0;
     const clearBtn = document.getElementById('search-clear');
     if (clearBtn) clearBtn.style.display = searchQuery ? 'block' : 'none';
+    if (searchQuery && searchQuery !== _lastTicketSearchLogged) { _lastTicketSearchLogged = searchQuery; _logSearch('Tickets', searchQuery, 'tickets'); }
     renderTickets();
 }
 

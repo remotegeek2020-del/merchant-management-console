@@ -443,6 +443,15 @@
     let searchTimeout;
     let currentPage = 1;
     let _editingDepSnapshot = null; // captures old values when edit modal opens
+    let _lastDepSearchLogged = '';
+
+    function _logSearch(context, query, category) {
+        if (!query || query.length < 2) return;
+        const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
+        fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
+        }).catch(() => {});
+    }
 
     function clearFilters() {
         document.getElementById('depSearch').value = '';
@@ -609,6 +618,7 @@ async function logAuditAction(action, details, opts = {}) {
         searchTimeout = setTimeout(async () => {
             try {
                 const queryValue = document.getElementById('depSearch')?.value || '';
+                if (queryValue && queryValue !== _lastDepSearchLogged) { _lastDepSearchLogged = queryValue; _logSearch('Deployments', queryValue, 'deployments'); }
                 const dateFrom = document.getElementById('dateFrom')?.value || '';
                 const dateTo = document.getElementById('dateTo')?.value || '';
                 const statusFilter = document.getElementById('filterStatus')?.value || '';

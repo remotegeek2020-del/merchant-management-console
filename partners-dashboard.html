@@ -1343,6 +1343,14 @@ async function submitOnboarding() {
 }
 
     // --- SEARCH LISTENER (Reacts as you type) ---
+    let _lastPartnerSearchLogged = '';
+    function _logSearch(context, query, category) {
+        if (!query || query.length < 2) return;
+        const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
+        fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
+        }).catch(() => {});
+    }
     document.getElementById('partnerSearchInput').addEventListener('input', (e) => {
         const term = e.target.value.toLowerCase().trim();
         clearTimeout(searchTimeout);
@@ -1353,6 +1361,7 @@ async function submitOnboarding() {
                 renderGrid(allPartners);
                 return;
             }
+            if (term !== _lastPartnerSearchLogged) { _lastPartnerSearchLogged = term; _logSearch('Partners', term, 'partners'); }
 
             // Filter logic: Checks Name, Agent ID, and Company Name
             let filtered = allPartners.filter(p => {
