@@ -1466,7 +1466,7 @@ async function submitOnboarding() {
             },
             preConfirm: () => {
                 return { 
-                    rev_share: document.getElementById('swal-rev').value, 
+                    rev_share: (() => { const v = document.getElementById('swal-rev').value.replace(/%+$/, '').trim(); return v ? v + '%' : '0%'; })(),
                     prime49: document.getElementById('swal-prime').checked, 
                     new_parent_id: selectedParentId 
                 }
@@ -1975,7 +1975,7 @@ window.quickAddId = async function(personId, name) {
             var revRaw = document.getElementById('qa-rev').value.trim();
             return {
                 id_string: idStr,
-                rev_share: revRaw ? revRaw + '%' : '0%',
+                rev_share: revRaw ? revRaw.replace(/%+$/, '') + '%' : '0%',
                 prime49: document.getElementById('qa-prime').checked,
                 parent_id_string: document.getElementById('qa-parent-val').value || null
             };
