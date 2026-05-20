@@ -226,6 +226,14 @@ if (action === 'complete_return') {
     if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
     await supabase.from('returns').update(returnUpdate).eq('id', rmaId);
 
+    supabase.from('activity_logs').insert({
+        email: session?.email || session?.userid || 'unknown',
+        action: `RMA Completed — ${rmaId} (${condition})`,
+        status: 'success', category: 'returns', target_id: rmaId, target_type: 'return', severity: 'info',
+        old_value: { status: 'In Transit', rma_id: rmaId },
+        new_value: { status: 'Closed', condition, destination, equipment_received_date: equipment_received_date || null, is_bulk: isBulk }
+    }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
+
     // Auto-close linked support ticket
     if (rmaData?.ticket_id) {
         await supabase.from('support_tickets')

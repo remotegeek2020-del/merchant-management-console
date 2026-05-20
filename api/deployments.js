@@ -189,6 +189,14 @@ if (action === 'update') {
         }]);
     }
 
+    supabase.from('activity_logs').insert({
+        email: session?.email || session?.userid || 'unknown',
+        action: `Deployment Updated — ${oldDep.merchants?.dba_name || deployment_id} (${oldDep.status} → ${status})`,
+        status: 'success', category: 'deployments', target_id: deployment_id, target_type: 'deployment', severity: 'info',
+        old_value: { status: oldDep.status, tracking_id: oldDep.tracking_id },
+        new_value: { status, tracking_id: tracking_id || null, purchase_type: purchase_type || null, target_date: target_date || null, merchant_received_date: merchant_received_date || null, notes: notes || null }
+    }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
+
     return res.status(200).json({ success: true });
 }
 
@@ -483,6 +491,25 @@ if (action === 'create') {
             }))
         );
 
+        // Fetch serials for the log
+        const { data: itemEquips } = await supabase.from('equipments')
+            .select('id, serial_number, terminal_type').in('id', items.map(i => i.equipment_id));
+        const equipMap = Object.fromEntries((itemEquips || []).map(e => [e.id, e]));
+
+        supabase.from('activity_logs').insert({
+            email: session?.email || session?.userid || 'unknown',
+            action: `Deployment Created — Bulk (${items.length} units) for ${dbaName}`,
+            status: 'success', category: 'deployments', target_id: dep.id, target_type: 'deployment', severity: 'info',
+            new_value: {
+                deployment_id: dep.id,
+                merchant_id, merchant_name: dbaName,
+                mode: 'bulk', unit_count: items.length,
+                units: items.map(i => ({ serial_number: equipMap[i.equipment_id]?.serial_number, terminal_type: equipMap[i.equipment_id]?.terminal_type, tid: i.tid || null })),
+                tracking_id: tracking_id || null, purchase_type: purchase_type || null,
+                target_date: target_date || null, notes: notes || null
+            }
+        }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
+
         return res.status(200).json({ success: true, data: [dep] });
     }
 
@@ -545,6 +572,21 @@ if (action === 'create') {
         to_location: dbaName,
         notes: `Deployment Created. Type: ${purchase_type || 'N/A'}`
     }]);
+
+    supabase.from('activity_logs').insert({
+        email: session?.email || session?.userid || 'unknown',
+        action: `Deployment Created — ${dbaName} (${checkEquip.serial_number})`,
+        status: 'success', category: 'deployments', target_id: newDep[0]?.id, target_type: 'deployment', severity: 'info',
+        new_value: {
+            deployment_id: newDep[0]?.id,
+            merchant_id, merchant_name: dbaName,
+            mode: 'single',
+            serial_number: checkEquip.serial_number,
+            equipment_id, tid: tid || null,
+            tracking_id: tracking_id || null, purchase_type: purchase_type || null,
+            target_date: target_date || null, notes: notes || null
+        }
+    }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
     return res.status(200).json({ success: true, data: newDep });
 }

@@ -98,12 +98,17 @@ if (action === 'getMonthlyReport') {
 }
 
         if (action === 'delete') {
-            const { data, error } = await supabase
-                .from('equipments')
-                .delete()
-                .eq('id', id);
-                
+            const { data: equipToDelete } = await supabase.from('equipments').select('serial_number, terminal_type, status, current_location').eq('id', id).single();
+            const { data, error } = await supabase.from('equipments').delete().eq('id', id);
             if (error) throw error;
+            supabase.from('activity_logs').insert([{
+                email: actorEmail,
+                action: `Inventory Deleted — ${equipToDelete?.serial_number || id}`,
+                status: 'success', category: 'inventory', target_id: equipToDelete?.serial_number || id, target_type: 'equipment', severity: 'critical',
+                old_value: equipToDelete ? { serial_number: equipToDelete.serial_number, terminal_type: equipToDelete.terminal_type, status: equipToDelete.status, current_location: equipToDelete.current_location } : null,
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || 'internal'
+            }]).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true, data });
         }
         
@@ -196,28 +201,41 @@ if (action === 'getMonthlyReport') {
         if (action === 'create') {
             const { data, error } = await supabase
                 .from('equipments')
-                .insert([payload]); 
-                
+                .insert([payload])
+                .select()
+                .single();
+
             if (error) throw error;
+            supabase.from('activity_logs').insert([{
+                email: actorEmail,
+                action: `Inventory Created — ${payload.serial_number} (${payload.terminal_type})`,
+                status: 'success', category: 'inventory', target_id: payload.serial_number, target_type: 'equipment', severity: 'info',
+                new_value: { serial_number: payload.serial_number, terminal_type: payload.terminal_type, status: payload.status, current_location: payload.current_location, received_date: payload.received_date },
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || 'internal'
+            }]).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true, data });
         }
 
         if (action === 'update') {
+            const { data: oldEquip } = await supabase.from('equipments').select('serial_number, terminal_type, status, current_location').eq('id', id).single();
             const { data: updatedData, error: updateError } = await supabase
                 .from('equipments')
                 .update(payload)
                 .eq('id', id)
-                .select(); 
+                .select();
 
             if (updateError) throw updateError;
 
-            await supabase.from('activity_logs').insert([{
+            supabase.from('activity_logs').insert([{
                 email: actorEmail,
-                action: 'Update Equipment',
-                status: `Serial ${payload.serial_number} set to ${payload.status}`,
+                action: `Inventory Updated — ${payload.serial_number || oldEquip?.serial_number}`,
+                status: 'success', category: 'inventory', target_id: payload.serial_number || oldEquip?.serial_number, target_type: 'equipment', severity: 'info',
+                old_value: oldEquip ? { status: oldEquip.status, current_location: oldEquip.current_location } : null,
+                new_value: { serial_number: payload.serial_number, terminal_type: payload.terminal_type, status: payload.status, current_location: payload.current_location, received_date: payload.received_date },
                 user_agent: req.headers['user-agent'],
                 ip_address: req.headers['x-forwarded-for'] || 'internal'
-            }]);
+            }]).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true, data: updatedData });
         }
@@ -249,8 +267,9 @@ if (action === 'getMonthlyReport') {
             }]);
             await supabase.from('activity_logs').insert([{
                 email: actorEmail,
-                action: 'Repair Update',
-                status: `Equipment #${equipment_id} stage set to ${repair_stage}`,
+                action: `Repair Updated — Stage: ${repair_stage}`,
+                status: 'success', category: 'inventory', target_id: String(equipment_id), target_type: 'equipment', severity: 'info',
+                new_value: { equipment_id, repair_stage, repair_notes: repair_notes || null, technician: actorName },
                 user_agent: req.headers['user-agent'],
                 ip_address: req.headers['x-forwarded-for'] || 'internal'
             }]);
@@ -275,8 +294,10 @@ if (action === 'getMonthlyReport') {
             }]);
             await supabase.from('activity_logs').insert([{
                 email: actorEmail,
-                action: 'Repair Closed',
-                status: `Equipment #${equipment_id} — ${isScrap ? 'scrapped' : 'returned to stock'} by ${actorName}`,
+                action: `Repair Closed — ${isScrap ? 'Scrapped' : 'Returned to Stock'}`,
+                status: 'success', category: 'inventory', target_id: String(equipment_id), target_type: 'equipment', severity: isScrap ? 'warning' : 'info',
+                old_value: { status: 'repairing', current_location: 'Warsaw Repairs' },
+                new_value: { status: newStatus, current_location: newLocation, outcome, closed_by: actorName },
                 user_agent: req.headers['user-agent'],
                 ip_address: req.headers['x-forwarded-for'] || 'internal'
             }]);
