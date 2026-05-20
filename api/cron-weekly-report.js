@@ -11,9 +11,10 @@ export default async function handler(req, res) {
     }
 
     try {
-        const results = await sendScheduledReports('weekly', 'cron');
-        const summary = results.map(r => `${r.report_type}: ${r.sent}/${r.total}`).join(', ');
-        console.log(`[CRON] Weekly reports: ${summary}`);
+        const currentHour = new Date().getUTCHours();
+        const results = await sendScheduledReports('weekly', 'cron', currentHour);
+        const summary = results.map(r => `${r.report_type}: ${r.sent ?? 'skipped'}`).join(', ');
+        console.log(`[CRON] Weekly reports (hour ${currentHour}): ${summary}`);
         return res.status(200).json({ success: true, results });
     } catch (err) {
         console.error('[CRON] Weekly report error:', err.message);

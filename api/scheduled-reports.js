@@ -382,15 +382,21 @@ export async function sendDailyReport(trigger = 'cron') {
     return sendReport('partners_merchants', trigger);
 }
 
-export async function sendScheduledReports(schedule, trigger = 'cron') {
+export async function sendScheduledReports(schedule, trigger = 'cron', currentHour = null) {
     const { data: settings } = await supabase
         .from('report_schedule_settings')
-        .select('report_type, enabled')
+        .select('report_type, enabled, preferred_hour')
         .eq('schedule', schedule)
         .eq('enabled', true);
 
     if (!settings || settings.length === 0) return [];
-    return Promise.all(settings.map(s => sendReport(s.report_type, trigger)));
+
+    const due = currentHour === null
+        ? settings
+        : settings.filter(s => (s.preferred_hour ?? 9) === currentHour);
+
+    if (due.length === 0) return [{ skipped: true, reason: `not the scheduled hour (${currentHour})` }];
+    return Promise.all(due.map(s => sendReport(s.report_type, trigger)));
 }
 
 // ── HTTP HANDLER ─────────────────────────────────────────────────────────────
@@ -453,6 +459,22 @@ export default async function handler(req, res) {
                 .upsert({ report_type, schedule, updated_at: new Date().toISOString() }, { onConflict: 'report_type' });
             if (error) throw error;
             return res.status(200).json({ success: true });
+        }
+
+        if (action === 'set_time') {
+            const hour = parseInt(req.body.preferred_hour, 10);
+            if (isNaN(hour) || hour < 0 || hour > 23) {
+                return res.status(400).json({ success: false, message: 'preferred_hour must be 0–23' });
+            }
+            const { error } = await supabase.from('report_schedule_settings')
+                .upsert({ report_type, preferred_hour: hour, updated_at: new Date().toISOString() }, { onConflict: 'report_type' });
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'send_manual') {
+            const result = await sendReport(report_type, 'manual');
+            return res.status(200).json({ success: true, ...result });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });
