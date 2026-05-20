@@ -155,7 +155,8 @@ export default async function handler(req, res) {
 
             // Fire webhooks (fire-and-forget)
             const { data: person } = await supabase.from('persons').select('full_name, email').eq('id', personId).single();
-            logActivity({ email: person?.email || `partner:${personId}`, action: `Ticket created: "${subject}" [${ticket.ticket_number}]`, target_id: ticket.id });
+            logActivity({ email: person?.email || `partner:${personId}`, action: `Ticket created: "${subject}" [${ticket.ticket_number}]`, target_id: ticket.id,
+                new_value: { ticket_number: ticket.ticket_number, subject, type, category, priority: priority || 'normal', merchant_id: merchant_id || null } });
             dispatchEvent(personId, 'ticket.created', {
                 ticket_number: ticket.ticket_number,
                 subject,
@@ -322,7 +323,9 @@ export default async function handler(req, res) {
             }
 
             if (changes.length > 0) {
-                logActivity({ email: staffSession?.email || staff_name || 'Staff', action: `Ticket ${oldTicket?.ticket_number}: ${changes.join(' · ')}`, target_id: ticket_id, old_value: oldTicket?.status, new_value: updates.status || oldTicket?.status });
+                logActivity({ email: staffSession?.email || staff_name || 'Staff', action: `Ticket ${oldTicket?.ticket_number}: ${changes.join(' · ')}`, target_id: ticket_id,
+                    old_value: { status: oldTicket?.status, priority: oldTicket?.priority, assigned_to: oldTicket?.assigned_to },
+                    new_value: { status: updates.status || oldTicket?.status, priority: updates.priority || oldTicket?.priority, assigned_to: updates.assigned_to !== undefined ? updates.assigned_to : oldTicket?.assigned_to } });
             }
             // Fire webhook event for status/priority changes
             if (changes.length > 0 && oldTicket?.person_id) {
@@ -439,7 +442,8 @@ export default async function handler(req, res) {
             const { data: ticketForEvent } = await supabase.from('support_tickets')
                 .select('person_id, ticket_number, subject').eq('id', ticket_id).single();
             const commentLabel = token ? 'Partner comment' : (is_internal ? 'Internal note' : 'Staff comment');
-            logActivity({ email: token ? `partner:${authorName}` : (staffSession?.email || authorName || 'Staff'), action: `${commentLabel} added on ticket ${ticketForEvent?.ticket_number || ticket_id} by ${authorName}`, target_id: ticket_id });
+            logActivity({ email: token ? `partner:${authorName}` : (staffSession?.email || authorName || 'Staff'), action: `${commentLabel} added on ticket ${ticketForEvent?.ticket_number || ticket_id} by ${authorName}`, target_id: ticket_id,
+                new_value: { comment_type: commentLabel, author: authorName, body: body.trim().slice(0, 500), is_internal: token ? false : is_internal } });
             if (ticketForEvent?.person_id) {
                 dispatchEvent(ticketForEvent.person_id, 'ticket.comment_added', {
                     ticket_number: ticketForEvent.ticket_number,
@@ -588,7 +592,8 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
-                    logActivity({ email: staffSession?.email || author, action: `Bulk deployment ${deploymentId} created from ticket ${ticket_id} (${bulk_items.length} unit(s))`, target_id: ticket_id });
+                    logActivity({ email: staffSession?.email || author, action: `Bulk deployment ${deploymentId} created from ticket ${ticket_id} (${bulk_items.length} unit(s))`, target_id: ticket_id,
+                        new_value: { deployment_id: deploymentId, unit_count: bulk_items.length, serials: bulk_items.map(i => i.serial_number) } });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
 
                 } else {
@@ -633,7 +638,8 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
-                    logActivity({ email: staffSession?.email || author, action: `Deployment ${deploymentId} created from ticket ${ticket_id}`, target_id: ticket_id });
+                    logActivity({ email: staffSession?.email || author, action: `Deployment ${deploymentId} created from ticket ${ticket_id}`, target_id: ticket_id,
+                        new_value: { deployment_id: deploymentId } });
                     return res.status(200).json({ success: true, deployment_id: deploymentId });
                 }
 
@@ -695,7 +701,8 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
-                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id}`, target_id: ticket_id });
+                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id}`, target_id: ticket_id,
+                        new_value: { return_id: finalReturnId, return_reason, unit_count: 1 } });
                     return res.status(200).json({ success: true, return_id: finalReturnId, unit_count: 1 });
 
                 } else {
@@ -740,7 +747,8 @@ export default async function handler(req, res) {
                         is_internal: false
                     });
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
-                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id} (${equipIds.length} unit(s))`, target_id: ticket_id });
+                    logActivity({ email: staffSession?.email || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id} (${equipIds.length} unit(s))`, target_id: ticket_id,
+                        new_value: { return_id: finalReturnId, return_reason, unit_count: equipIds.length } });
                     return res.status(200).json({ success: true, return_id: finalReturnId, unit_count: equipIds.length });
                 }
             }
@@ -846,7 +854,8 @@ export default async function handler(req, res) {
                 });
             }
 
-            logActivity({ email: `partner:${personId}`, action: `Deployment ${deployment_id} marked as delivered by partner; ticket closed`, target_id: finalTicketId || ticket_id });
+            logActivity({ email: `partner:${personId}`, action: `Deployment ${deployment_id} marked as delivered by partner; ticket closed`, target_id: finalTicketId || ticket_id,
+                new_value: { deployment_id, status: 'delivered' } });
             return res.status(200).json({ success: true });
         }
 
@@ -905,7 +914,8 @@ export default async function handler(req, res) {
             await supabase.from('ticket_comments').delete().eq('ticket_id', ticket_id);
             const { error } = await supabase.from('support_tickets').delete().eq('id', ticket_id);
             if (error) throw error;
-            logActivity({ email: staffSession?.email || 'Staff', action: `Ticket deleted: "${deletedTicket?.subject || ''}" [${deletedTicket?.ticket_number || ticket_id}]`, target_id: ticket_id, severity: 'warning' });
+            logActivity({ email: staffSession?.email || 'Staff', action: `Ticket deleted: "${deletedTicket?.subject || ''}" [${deletedTicket?.ticket_number || ticket_id}]`, target_id: ticket_id, severity: 'warning',
+                old_value: { ticket_number: deletedTicket?.ticket_number, subject: deletedTicket?.subject } });
             return res.status(200).json({ success: true });
         }
 

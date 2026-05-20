@@ -84,7 +84,8 @@ export default async function handler(req, res) {
             await supabase.from('activity_logs').insert({
                 email: staff_name || userid, action: `Created task: ${title}`,
                 status: 'success', category: 'tasks',
-                target_id: data.id, target_type: 'task'
+                target_id: data.id, target_type: 'task',
+                new_value: { title, body, merchant_id, assigned_to, due_date, priority }
             });
 
             return res.status(200).json({ success: true, data });
@@ -93,13 +94,16 @@ export default async function handler(req, res) {
         // ── UPDATE TASK ───────────────────────────────────
         if (action === 'update_task') {
             const { task_id, payload } = req.body;
+            const { data: oldTask } = await supabase.from('merchant_tasks').select('title, status, assigned_to, priority, due_date').eq('id', task_id).single();
             const { error } = await supabase.from('merchant_tasks').update(payload).eq('id', task_id);
             if (error) throw error;
 
             await supabase.from('activity_logs').insert({
-                email: staff_name || userid, action: `Updated task`,
+                email: staff_name || userid, action: `Updated task: ${oldTask?.title || task_id}`,
                 status: 'success', category: 'tasks',
-                target_id: task_id, target_type: 'task'
+                target_id: task_id, target_type: 'task',
+                old_value: oldTask ? { status: oldTask.status, assigned_to: oldTask.assigned_to, priority: oldTask.priority, due_date: oldTask.due_date } : null,
+                new_value: payload
             });
 
             return res.status(200).json({ success: true });

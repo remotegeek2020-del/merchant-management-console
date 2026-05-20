@@ -537,30 +537,35 @@ if (action === 'get_merchant_equipment') {
         // --- ACTION: ADD ATTACHMENT RECORD ---
         if (action === 'add_attachment') {
             const { merchant_id, file_name, file_path, file_type, file_size, uploaded_by } = req.body;
-            
+
             const { data, error } = await supabase
                 .from('merchant_attachments')
-                .insert([{
-                    merchant_id,
-                    file_name,
-                    file_path,
-                    file_type,
-                    file_size,
-                    uploaded_by
-                }]);
+                .insert([{ merchant_id, file_name, file_path, file_type, file_size, uploaded_by }]);
 
             if (error) throw error;
+            supabase.from('activity_logs').insert({
+                email: session?.email || uploaded_by || 'Staff', action: `File uploaded: ${file_name}`,
+                status: 'success', category: 'merchants', target_id: merchant_id, target_type: 'merchant', severity: 'info',
+                new_value: { file_name, file_type, file_size }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
-        
+
         if (action === 'update_note') {
             const { note_id, title, body } = req.body;
+            const { data: oldNote } = await supabase.from('merchant_notes').select('title, body, merchant_id').eq('id', note_id).single();
             const { error } = await supabase
                 .from('merchant_notes')
                 .update({ title, body, updated_at: new Date().toISOString() })
                 .eq('id', note_id);
 
             if (error) throw error;
+            supabase.from('activity_logs').insert({
+                email: session?.email || 'Staff', action: `Merchant note updated`,
+                status: 'success', category: 'merchants', target_id: oldNote?.merchant_id || note_id, target_type: 'merchant', severity: 'info',
+                old_value: { title: oldNote?.title, body: oldNote?.body?.slice(0, 500) },
+                new_value: { title, body: body?.slice(0, 500) }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 
@@ -794,17 +799,16 @@ if (action === 'get_notes') {
 }
     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by } = req.body;
-    // We save the UUID (pp_userid) directly into the created_by column
     const { error } = await supabase
         .from('merchant_notes')
-        .insert([{ 
-            merchant_id: merchant_uuid, 
-            title: title, 
-            body: body, 
-            created_by: created_by // This is the UUID from localStorage
-        }]);
+        .insert([{ merchant_id: merchant_uuid, title, body, created_by }]);
 
     if (error) throw error;
+    supabase.from('activity_logs').insert({
+        email: session?.email || created_by || 'Staff', action: `Merchant note added: ${title || 'Untitled'}`,
+        status: 'success', category: 'merchants', target_id: merchant_uuid, target_type: 'merchant', severity: 'info',
+        new_value: { title, body: body?.slice(0, 500) }
+    }).then(() => {}).catch(() => {});
     return res.status(200).json({ success: true });
 }
 
