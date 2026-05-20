@@ -406,11 +406,25 @@ if (action === 'bulk_upsert') {
             return res.status(500).json({ success: false, message: errors[0] });
         }
 
-        return res.status(200).json({ 
-            success: true, 
+        try {
+            await supabase.from('activity_logs').insert({
+                email: session?.email || session?.userid || 'unknown',
+                action: `Bulk Upload Merchants — ${totalProcessed} records synced`,
+                status: errors.length > 0 ? 'partial' : 'success',
+                category: 'merchants',
+                target_type: 'merchant',
+                severity: 'info',
+                new_value: { count: totalProcessed, errors: errors.length > 0 ? errors : undefined }
+            });
+        } catch (logErr) {
+            console.warn('Activity log failed:', logErr.message);
+        }
+
+        return res.status(200).json({
+            success: true,
             count: totalProcessed,
             errors: errors.length > 0 ? errors : undefined,
-            message: errors.length > 0 
+            message: errors.length > 0
                 ? `Processed ${totalProcessed} records with ${errors.length} chunk error(s).`
                 : `Successfully synced ${totalProcessed} records.`
         });

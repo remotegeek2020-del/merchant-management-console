@@ -825,6 +825,20 @@ if (action === 'bulk_create') {
         totalCreated += group.items.length;
     }
 
+    try {
+        await supabase.from('activity_logs').insert({
+            email: session?.email || session?.userid || 'unknown',
+            action: `Bulk Upload Deployments — ${totalCreated} units deployed`,
+            status: 'success',
+            category: 'deployments',
+            target_type: 'deployment',
+            severity: 'info',
+            new_value: { count: totalCreated, merchant_groups: Object.keys(groups).length }
+        });
+    } catch (logErr) {
+        console.warn('Activity log failed:', logErr.message);
+    }
+
     return res.status(200).json({ success: true, count: totalCreated });
 }
 
