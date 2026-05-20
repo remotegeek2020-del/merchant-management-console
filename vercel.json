@@ -9,6 +9,7 @@
     "api/security-check.js": { "maxDuration": 60 },
     "api/cron-security-check.js": { "maxDuration": 60 },
     "api/scheduled-reports.js": { "maxDuration": 60 },
+    "api/email-log.js": { "maxDuration": 30 },
     "api/cron-daily-report.js": { "maxDuration": 60 },
     "api/cron-weekly-report.js": { "maxDuration": 60 }
   },
