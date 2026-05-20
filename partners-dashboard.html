@@ -543,7 +543,7 @@ async function logAuditAction(action, details) {
         const myPerson = myAgent ? personById.get(myAgent.parent_agent_id) : null;
         const _idStat = statsByIdString.get(id.id_string);
         idMap[id.id] = {
-            db_id: id.id, string: id.id_string, rev: (id.rev_share != null) ? id.rev_share + '%' : '0%',
+            db_id: id.id, string: id.id_string, rev: (id.rev_share != null) ? String(id.rev_share).replace(/%+$/, '') + '%' : '0%',
             isPrime: !!id.prime49, sub_ids: [], agent_id: id.agent_id,
             owner_name: myPerson ? myPerson.full_name : 'Unknown',
             parent_config_id: id.parent_config_id,
@@ -1028,7 +1028,7 @@ window.exportTrendToCSV = function(agentId, data) {
     
     // Auto-formatting Rev Share: Add % if it's missing
     // If they leave it blank, we default to "0%"
-    const formattedRev = revNum ? `${revNum}%` : "0%";
+    const formattedRev = revNum ? `${revNum.replace(/%+$/, '')}%` : "0%";
 
     if (pendingIds.some(item => item.string === idStr)) {
         return Swal.fire('Duplicate', 'This ID is already in your list.', 'warning');
