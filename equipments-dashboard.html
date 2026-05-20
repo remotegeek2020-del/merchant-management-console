@@ -369,12 +369,21 @@ function renderAgentReview(items) {
     chat.scrollTop = chat.scrollHeight;
 }
 
-    async function logAuditAction(action, details) {
+    async function logAuditAction(action, details, opts = {}) {
     try {
         await fetch('/api/logs', {
             method: 'POST',
             headers: equipHeaders(),
-            body: JSON.stringify({ action, status: details })
+            body: JSON.stringify({
+                action,
+                status: opts.status || details,
+                category: opts.category || 'inventory',
+                target_id: opts.target_id || null,
+                target_type: opts.target_type || null,
+                old_value: opts.old_value || null,
+                new_value: opts.new_value || null,
+                severity: opts.severity || 'info'
+            })
         });
     } catch (err) {
         console.error("Failed to log audit trail:", err);
@@ -630,7 +639,11 @@ async function processFinalImport(itemsToCreate) {
             });
             const result = await res.json();
             if (result.success) {
-                await logAuditAction('Inventory Retired', `Unit ${serial} decommissioned.`); // ADD THIS
+                await logAuditAction('Inventory Retired', 'success', {
+                    target_id: serial, target_type: 'equipment', severity: 'warning',
+                    old_value: { serial_number: serial, status: 'active' },
+                    new_value: { serial_number: serial, status: 'decommissioned', current_location: 'Retired' }
+                });
                 Swal.fire('Retired', 'Unit has been decommissioned.', 'success');
                 fetchInventory();
             }
@@ -661,7 +674,10 @@ async function processFinalImport(itemsToCreate) {
             const result = await res.json();
 
             if (result.success) {
-                await logAuditAction('Inventory Deleted', `Unit ${serial} permanently removed.`); // ADD THIS
+                await logAuditAction('Inventory Deleted', 'success', {
+                    target_id: serial, target_type: 'equipment', severity: 'critical',
+                    old_value: { serial_number: serial, db_id: id }
+                });
                 Swal.fire('Deleted!', 'The unit has been removed.', 'success');
                 fetchInventory();
             } else {
@@ -763,7 +779,10 @@ async function processFinalImport(itemsToCreate) {
 
             if (result.success) {
                 const logMsg = `Serial ${payload.serial_number} ${selectedId ? 'updated' : 'created'}.`;
-                await logAuditAction(selectedId ? 'Inventory Updated' : 'Inventory Created', logMsg);
+                await logAuditAction(selectedId ? 'Inventory Updated' : 'Inventory Created', 'success', {
+                    target_id: payload.serial_number, target_type: 'equipment',
+                    new_value: payload
+                });
                 closeModal();
                 fetchInventory(); 
                 Swal.fire({ 

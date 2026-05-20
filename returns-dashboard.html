@@ -229,13 +229,23 @@ async function closeLinkedTicket(ticketId, btnEl) {
     }
 }
 
-async function logAuditAction(action, details) {
+async function logAuditAction(action, details, opts = {}) {
     const userEmail = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
     try {
         await fetch('/api/logs', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: userEmail || 'Unknown', action, status: details })
+            body: JSON.stringify({
+                email: userEmail || 'Unknown',
+                action,
+                status: opts.status || details,
+                category: opts.category || 'returns',
+                target_id: opts.target_id || null,
+                target_type: opts.target_type || null,
+                old_value: opts.old_value || null,
+                new_value: opts.new_value || null,
+                severity: opts.severity || 'info'
+            })
         });
     } catch (err) { console.error("Audit log failed:", err); }
 }
@@ -515,7 +525,11 @@ async function finalizeRMA(id, equipment_id) {
         });
         const r = await res.json();
         if (r.success) {
-            await logAuditAction('RMA Completed', `Equipment received ${receivedDate}. Restocked to ${finalDestination}. Condition: ${finalCondition}`);
+            await logAuditAction('RMA Completed', 'success', {
+                target_id: id, target_type: 'return',
+                old_value: { status: 'In Transit', equipment_id },
+                new_value: { status: 'Closed', condition: finalCondition, destination: finalDestination, received_date: receivedDate }
+            });
             Swal.fire({ icon: 'success', title: 'RMA Closed!', html: `Unit moved to <b>${finalDestination}</b> as <b>${finalCondition}</b>.`, timer: 2500, showConfirmButton: false }).then(() => fetchReturns());
         } else { throw new Error(r.message); }
     } catch (err) { Swal.fire('Error', err.message, 'error'); }

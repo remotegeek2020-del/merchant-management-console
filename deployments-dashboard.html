@@ -442,6 +442,7 @@
     let currentDeployments = [];
     let searchTimeout;
     let currentPage = 1;
+    let _editingDepSnapshot = null; // captures old values when edit modal opens
 
     function clearFilters() {
         document.getElementById('depSearch').value = '';
@@ -461,7 +462,7 @@
  * AUDIT LOGGER 
  * Sends activity to the central activity_logs table
  */
-async function logAuditAction(action, details) {
+async function logAuditAction(action, details, opts = {}) {
     const userEmail = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
     try {
         await fetch('/api/logs', {
@@ -470,7 +471,13 @@ async function logAuditAction(action, details) {
             body: JSON.stringify({
                 email: userEmail || 'Unknown Admin',
                 action: action,
-                status: details
+                status: opts.status || details,
+                category: opts.category || 'deployments',
+                target_id: opts.target_id || null,
+                target_type: opts.target_type || null,
+                old_value: opts.old_value || null,
+                new_value: opts.new_value || null,
+                severity: opts.severity || 'info'
             })
         });
     } catch (err) {
@@ -751,7 +758,11 @@ if (document.getElementById('kpi-total')) {
         const result = await res.json();
         
         if (result.success) { 
-            await logAuditAction('Deployment Updated', `Ticket ${payload.deployment_id} updated to status: ${payload.status}`);
+            await logAuditAction('Deployment Updated', 'success', {
+                target_id: payload.deployment_id, target_type: 'deployment',
+                old_value: _editingDepSnapshot || null,
+                new_value: { status: payload.status, tracking_id: payload.tracking_id, purchase_type: payload.purchase_type, target_deployment_date: payload.target_date, merchant_received_date: payload.merchant_received_date }
+            });
             Swal.fire({ icon: 'success', title: 'Ticket Updated', timer: 1500, showConfirmButton: false });
             document.getElementById('editDepModal').style.display = 'none';
             await fetchDeployments(currentPage); 
@@ -933,7 +944,10 @@ async function processReturn() {
             const result = await res.json();
             
             if (result.success) {
-                await logAuditAction('Deployment Deleted', `Ticket for ${dba} (Serial ${sn}) permanently removed.`);
+                await logAuditAction('Deployment Deleted', 'success', {
+                    target_id: id, target_type: 'deployment', severity: 'warning',
+                    old_value: { deployment_id: id, merchant: dba, serial_number: sn, equipment_id: equipId }
+                });
                 Swal.fire('Deleted!', 'Ticket removed and hardware reset.', 'success')
                     .then(() => fetchDeployments(currentPage));
             } else { 
@@ -1243,6 +1257,7 @@ async function openEditModal(index) {
     document.getElementById('editId').value = d.id || '';
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
+    _editingDepSnapshot = { status: d.status, tracking_id: d.tracking_id, purchase_type: d.purchase_type, target_deployment_date: d.target_deployment_date, merchant_received_date: d.merchant_received_date };
 
     // Hide TID field for bulk (per-item TIDs are shown in the items section below)
     const editTidWrap = document.getElementById('editTidWrap');
@@ -1513,9 +1528,12 @@ async function saveDeployment(event) {
         });
         const result = await res.json();
         if (result.success) {
-            await logAuditAction('Deployment Created', currentDepMode === 'bulk'
-                ? `Bulk ticket created: ${bulkItems.length} units for Merchant ${merchantId}`
-                : `Ticket created for Merchant ID: ${merchantId}`);
+            await logAuditAction('Deployment Created', 'success', {
+                target_type: 'deployment',
+                new_value: currentDepMode === 'bulk'
+                    ? { merchant_id: merchantId, mode: 'bulk', unit_count: bulkItems.length, serials: bulkItems.map(i=>i.serial_number), tracking_id: payload.tracking_id, purchase_type: payload.purchase_type, target_date: payload.target_date }
+                    : { merchant_id: merchantId, mode: 'single', equipment_id: payload.equipment_id, tracking_id: payload.tracking_id, purchase_type: payload.purchase_type, target_date: payload.target_date }
+            });
             Swal.fire({ icon: 'success', title: 'Created', timer: 1500, showConfirmButton: false });
             document.getElementById('newDepModal').style.display = 'none';
             await fetchDeployments();
@@ -1778,7 +1796,10 @@ async function executeBulk(validData) {
         const result = await res.json();
         
         if (result.success) {
-            await logAuditAction('Bulk Deployment', `Mass deployed ${result.count} units via CSV upload.`);
+            await logAuditAction('Bulk Deployment', 'success', {
+                target_type: 'deployment',
+                new_value: { count: result.count, source: 'csv_upload', merchants: [...new Set(validData.map(r=>r.merchant_id))].length }
+            });
             document.getElementById('bulkPreviewModal').style.display = 'none';
             Swal.fire('Success', `Successfully deployed ${result.count} units.`, 'success');
             fetchDeployments(); // Refresh main table

@@ -467,7 +467,7 @@ let activeTrendFilter = 'all';
  * AUDIT LOGGER 
  * Sends activity to the central activity_logs table
  */
-async function logAuditAction(action, details) {
+async function logAuditAction(action, details, opts = {}) {
     const firstName = localStorage.getItem('pp_user_first_name') || '';
     const lastName  = localStorage.getItem('pp_user_last_name')  || '';
     const email     = localStorage.getItem('pp_user_email')       || '';
@@ -479,7 +479,13 @@ async function logAuditAction(action, details) {
             body: JSON.stringify({
                 email: displayName,
                 action: action,
-                status: details
+                status: opts.status || details,
+                category: opts.category || 'partners',
+                target_id: opts.target_id || null,
+                target_type: opts.target_type || null,
+                old_value: opts.old_value || null,
+                new_value: opts.new_value || null,
+                severity: opts.severity || 'info'
             })
         });
     } catch (err) {
@@ -1090,7 +1096,10 @@ async function submitOnboarding() {
     if (isQuickAdd) {
         // Mode A: Just adding IDs to existing partner
         const logMsg = isQuickAdd ? `Added IDs to existing partner: ${selectedGHLContact.name}` : `Onboarded new partner: ${selectedGHLContact.name}`;
-    await logAuditAction('Partner ID Assignment', logMsg);
+    await logAuditAction('Partner ID Assignment', 'success', {
+            target_id: selectedGHLContact.name, target_type: 'agent',
+            new_value: { ids_added: pendingIds.map(i => i.id_string), partner: selectedGHLContact.name }
+        });
         payload.existingAgentId = selectedGHLContact.existingAgentId;
     } else {
         // Mode B: Full Onboarding (Step 1 & 2 must be valid)
@@ -1127,7 +1136,10 @@ async function submitOnboarding() {
         const result = await res.json();
         
         if (result.success) {
-            await logAuditAction('Partner Created', `Onboarded new partner: ${selectedGHLContact.name}`);
+            await logAuditAction('Partner Created', 'success', {
+                target_id: selectedGHLContact.name, target_type: 'person',
+                new_value: { name: selectedGHLContact.name, ids: pendingIds.map(i => i.id_string) }
+            });
             // Refresh materialized view so new partner gets a rank badge immediately
             fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'refresh_leaderboard' }) }).catch(() => {});
             Swal.fire({ icon: 'success', title: 'Done!', text: 'Partner data updated successfully.' });
@@ -1500,7 +1512,11 @@ async function submitOnboarding() {
                 const result = await res.json();
 
                 if (result.success) {
-                    await logAuditAction('Partner ID Updated', `Modified settings for Agent ID: ${name}`);
+                    await logAuditAction('Partner ID Updated', 'success', {
+                        target_id: name, target_type: 'agent_identifier',
+                        old_value: { rev_share: currentIdData?.rev_share, prime49: currentIdData?.prime49, parent_config_id: currentIdData?.parent_config_id },
+                        new_value: { rev_share: formValues.rev_share, prime49: formValues.prime49, parent_config_id: formValues.new_parent_id }
+                    });
                     await loadPartners(); // Refresh the whole dashboard
                     Swal.fire({ icon: 'success', title: 'Updated!', showConfirmButton: false, timer: 1500 });
                 } else {
@@ -1626,7 +1642,11 @@ async function submitOnboarding() {
             });
             const result = await res.json();
             if (result.success) {
-                await logAuditAction('Agent ID Moved', `Moved Agent ID ${idName} to partner: ${selectedName}`);
+                await logAuditAction('Agent ID Moved', 'success', {
+                    target_id: idName, target_type: 'agent_identifier',
+                    old_value: { identifier: idName },
+                    new_value: { moved_to: selectedName, target_agent_id: selectedAgentId }
+                });
                 await loadPartners();
                 Swal.fire({ icon: 'success', title: 'Moved!', text: `Agent ID ${idName} has been moved to ${selectedName}.`, showConfirmButton: false, timer: 2000 });
             } else {
@@ -1856,7 +1876,11 @@ window.editPersonField = async function(personId, field, currentVal) {
             });
             const result = await res.json();
             if (result.success) {
-                await logAuditAction('Partner Contact Update', `Changed ${field} for partner ID ${personId}`);
+                await logAuditAction('Partner Contact Update', 'success', {
+                    target_id: personId, target_type: 'person',
+                    old_value: { [field]: currentVal },
+                    new_value: { [field]: (field === 'full_name') ? toTitleCase(newVal) : newVal }
+                });
                 await loadPartners(); // Refresh grid
                 Swal.close();
                 // Re-open details to show changes
@@ -2155,7 +2179,10 @@ window.quickAddId = async function(personId, name) {
     var result = await res.json();
 
     if (result.success) {
-        await logAuditAction('ID Added', 'Added ID ' + idForm.id_string + ' to ' + name);
+        await logAuditAction('ID Added', 'success', {
+            target_id: idForm.id_string, target_type: 'agent_identifier',
+            new_value: { id_string: idForm.id_string, rev_share: idForm.rev_share, prime49: idForm.prime49, partner: name }
+        });
         await loadPartners();
         Swal.fire({ icon:'success', title:'ID Added!', text:idForm.id_string + ' added to ' + name, timer:2000, showConfirmButton:false });
     } else {
