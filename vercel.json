@@ -7,12 +7,18 @@
     "api/merchants.js": { "maxDuration": 30 },
     "api/ai-import.js": { "maxDuration": 60 },
     "api/security-check.js": { "maxDuration": 60 },
-    "api/cron-security-check.js": { "maxDuration": 60 }
+    "api/cron-security-check.js": { "maxDuration": 60 },
+    "api/scheduled-reports.js": { "maxDuration": 60 },
+    "api/cron-daily-report.js": { "maxDuration": 60 }
   },
   "crons": [
     {
       "path": "/api/cron-security-check",
       "schedule": "0 8 * * *"
+    },
+    {
+      "path": "/api/cron-daily-report",
+      "schedule": "0 9 * * *"
     }
   ],
   "routes": [
