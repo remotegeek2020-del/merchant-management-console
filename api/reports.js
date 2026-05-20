@@ -182,18 +182,28 @@ export default async function handler(req, res) {
 
             // ── PRIME49 ───────────────────────────────────
             if (reportType === 'prime49') {
-                // Get all Prime49 agent identifiers
-                const { data: primeIds } = await supabase
+                // Step 1: find agent UUIDs that have at least one prime49 identifier
+                const { data: primeAgents } = await supabase
                     .from('agent_identifiers')
-                    .select('id_string, rev_share, agents:agent_id(agent_name, persons:parent_agent_id(full_name, email))')
+                    .select('agent_id')
                     .eq('prime49', true);
 
-                const idStrings = (primeIds||[]).map(p => p.id_string);
-                if (!idStrings.length) return res.status(200).json({ success: true, rawData: [], totalCount: 0 });
+                const primeAgentUuids = [...new Set((primeAgents||[]).map(p => p.agent_id))];
+                if (!primeAgentUuids.length) return res.status(200).json({ success: true, rawData: [], totalCount: 0 });
 
+                // Step 2: fetch ALL identifiers for those agents (prime49 and non-prime49)
+                const { data: allIds } = await supabase
+                    .from('agent_identifiers')
+                    .select('id_string, rev_share, prime49, agents:agent_id(agent_name, persons:parent_agent_id(full_name, email))')
+                    .in('agent_id', primeAgentUuids);
+
+                const allIdStrings = (allIds||[]).map(p => p.id_string);
+                if (!allIdStrings.length) return res.status(200).json({ success: true, rawData: [], totalCount: 0 });
+
+                // Step 3: find merchants under ANY of those id_strings
                 let query = supabase.from('merchants')
                     .select(`merchant_id, dba_name, account_status, agent_id, enrollment_date, volume_mtd, volume_30_day, volume_90_day`, { count: 'exact' })
-                    .in('agent_id', idStrings);
+                    .in('agent_id', allIdStrings);
 
                 if (startDate) query = query.gte('enrollment_date', startDate);
                 if (endDate) query = query.lte('enrollment_date', endDate);
@@ -204,8 +214,9 @@ export default async function handler(req, res) {
 
                 if (error) throw error;
 
+                // Build lookup by id_string → identifier info
                 const idMap = {};
-                (primeIds||[]).forEach(p => { idMap[p.id_string] = p; });
+                (allIds||[]).forEach(p => { idMap[p.id_string] = p; });
 
                 const rawData = (data||[]).map(d => {
                     const pid = idMap[d.agent_id];
@@ -214,6 +225,7 @@ export default async function handler(req, res) {
                         'DBA Name': d.dba_name || '—',
                         'Status': d.account_status || '—',
                         'Agent ID': d.agent_id || '—',
+                        'Prime49 ID': pid?.prime49 ? '✓' : '—',
                         'Partner Name': pid?.agents?.persons?.full_name || '—',
                         'Partner Email': pid?.agents?.persons?.email || '—',
                         'Rev Share': pid?.rev_share || '—',
