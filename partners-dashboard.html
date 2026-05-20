@@ -1422,15 +1422,15 @@ async function submitOnboarding() {
             html: `<div style="text-align:left; padding: 10px;">
                 <label style="font-size:11px; font-weight:700; color:#64748b;">REVENUE SHARE (%)</label>
                 <input id="swal-rev" class="swal2-input" value="${rev}" style="width:100%; margin: 8px 0 20px 0; border-radius:8px;" type="text">
-                
+
                 <label style="display:flex; align-items:center; gap:12px; cursor:pointer; font-weight:700; margin-bottom:25px;">
                     <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''}> Prime49 Gold Badge
                 </label>
-                
+
                 <label style="font-size:11px; font-weight:700; color:#64748b;">MOVE TO PARENT PARTNER</label>
                 <div style="position:relative; margin-top:8px;">
-                    <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..." 
-                           value="${validParents.find(p => p.id === selectedParentId)?.label || ''}" 
+                    <input id="swal-parent-search" class="swal2-input" placeholder="Search ID or Partner Name..."
+                           value="${validParents.find(p => p.id === selectedParentId)?.label || ''}"
                            style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
                     <div id="search-results-box" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
                 </div>
@@ -1438,6 +1438,9 @@ async function submitOnboarding() {
             showCancelButton: true,
             confirmButtonColor: '#002d5a',
             confirmButtonText: 'SAVE CHANGES',
+            footer: `<button onclick="window._pendingMoveId='${db_id}';window._pendingMoveName='${name}';Swal.close();" style="background:none;border:none;color:#dc2626;font-size:13px;font-weight:700;cursor:pointer;padding:0;">
+                        ⇄ Move to Another Company
+                     </button>`,
             didOpen: () => {
                 const searchInput = document.getElementById('swal-parent-search');
                 const resultsBox = document.getElementById('search-results-box');
@@ -1475,38 +1478,162 @@ async function submitOnboarding() {
 
         // 3. If user clicked Save, send to Backend
         if (formValues) {
-            Swal.fire({ 
-                title: 'Saving Changes...', 
+            Swal.fire({
+                title: 'Saving Changes...',
                 allowOutsideClick: false,
-                didOpen: () => Swal.showLoading() 
+                didOpen: () => Swal.showLoading()
             });
 
             try {
                 const res = await fetch('/api/partners', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        action: 'update_identifier_all', 
-                        id: db_id, 
-                        rev_share: formValues.rev_share, 
-                        prime49: formValues.prime49, 
-                        new_parent_id: formValues.new_parent_id 
+                    body: JSON.stringify({
+                        action: 'update_identifier_all',
+                        id: db_id,
+                        rev_share: formValues.rev_share,
+                        prime49: formValues.prime49,
+                        new_parent_id: formValues.new_parent_id
                     })
                 });
-                
+
                 const result = await res.json();
-                
+
                 if (result.success) {
                     await logAuditAction('Partner ID Updated', `Modified settings for Agent ID: ${name}`);
                     await loadPartners(); // Refresh the whole dashboard
                     Swal.fire({ icon: 'success', title: 'Updated!', showConfirmButton: false, timer: 1500 });
-                } else { 
-                    throw new Error(result.message || 'Update failed'); 
+                } else {
+                    throw new Error(result.message || 'Update failed');
                 }
-            } catch (err) { 
+            } catch (err) {
                 console.error("Update Error:", err);
-                Swal.fire('Error', err.message, 'error'); 
+                Swal.fire('Error', err.message, 'error');
             }
+        }
+
+        // 4. If footer "Move to Another Company" was clicked, open the move modal
+        if (!formValues && window._pendingMoveId === db_id) {
+            window._pendingMoveId = null;
+            window._pendingMoveName = null;
+            moveIdentifierToCompany(db_id, name);
+        }
+    }
+
+    window.moveIdentifierToCompany = async function(db_id, idName) {
+        // Build list of all partners with their agent UUIDs
+        const partnerOptions = personsRaw
+            .filter(p => {
+                const ag = agentsRaw.find(a => a.parent_agent_id === p.id);
+                return ag != null;
+            })
+            .map(p => {
+                const ag = agentsRaw.find(a => a.parent_agent_id === p.id);
+                const co = (_companiesRaw || []).find(c => c.id === ag?.company_id);
+                return {
+                    person_id: p.id,
+                    agent_id: ag.id,
+                    name: p.full_name || 'Unknown',
+                    email: p.email || '',
+                    company: co?.company_name || ''
+                };
+            })
+            .sort((a, b) => a.name.localeCompare(b.name));
+
+        let selectedAgentId = null;
+        let selectedName = '';
+
+        const { value: confirmed } = await Swal.fire({
+            title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Move Agent ID: ${idName}</div>`,
+            html: `
+                <div style="text-align:left; padding:10px;">
+                    <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px;">
+                        <b>⚠ Warning:</b> This will move <b>${idName}</b> to a completely different partner. All associated merchant data will remain but will now appear under the new partner.
+                    </div>
+                    <label style="font-size:11px; font-weight:700; color:#64748b;">SEARCH DESTINATION PARTNER</label>
+                    <div style="position:relative; margin-top:8px;">
+                        <input id="swal-company-search" class="swal2-input" placeholder="Search by name, email, or company..."
+                               style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
+                        <div id="swal-company-results" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                    </div>
+                    <div id="swal-company-selected" style="display:none; margin-top:12px; padding:10px 14px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:13px;">
+                        <span style="color:#0369a1; font-weight:700;">Selected: </span><span id="swal-company-selected-name"></span>
+                    </div>
+                </div>`,
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            confirmButtonText: 'CONFIRM MOVE',
+            cancelButtonText: 'Cancel',
+            didOpen: () => {
+                const input = document.getElementById('swal-company-search');
+                const results = document.getElementById('swal-company-results');
+                const selectedBox = document.getElementById('swal-company-selected');
+                const selectedNameEl = document.getElementById('swal-company-selected-name');
+
+                input.addEventListener('input', (e) => {
+                    const val = e.target.value.toLowerCase().trim();
+                    if (!val) { results.style.display = 'none'; return; }
+                    const matches = partnerOptions.filter(p =>
+                        p.name.toLowerCase().includes(val) ||
+                        p.email.toLowerCase().includes(val) ||
+                        p.company.toLowerCase().includes(val)
+                    ).slice(0, 30);
+                    if (matches.length > 0) {
+                        results.innerHTML = matches.map(m => `
+                            <div class="swal-company-item" data-agent-id="${m.agent_id}" data-label="${m.name}${m.company ? ' — ' + m.company : ''}"
+                                 style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;">
+                                <b>${m.name}</b>
+                                ${m.company ? `<span style="color:#64748b; margin-left:6px;">${m.company}</span>` : ''}
+                                ${m.email ? `<div style="color:#94a3b8; font-size:11px;">${m.email}</div>` : ''}
+                            </div>`).join('');
+                        results.style.display = 'block';
+                    } else {
+                        results.innerHTML = '<div style="padding:10px 14px; color:#94a3b8; font-size:13px;">No partners found</div>';
+                        results.style.display = 'block';
+                    }
+                });
+
+                results.addEventListener('click', (e) => {
+                    const item = e.target.closest('.swal-company-item');
+                    if (item) {
+                        selectedAgentId = item.dataset.agentId;
+                        selectedName = item.dataset.label;
+                        input.value = selectedName;
+                        results.style.display = 'none';
+                        selectedBox.style.display = 'block';
+                        selectedNameEl.textContent = selectedName;
+                    }
+                });
+            },
+            preConfirm: () => {
+                if (!selectedAgentId) {
+                    Swal.showValidationMessage('Please select a destination partner.');
+                    return false;
+                }
+                return true;
+            }
+        });
+
+        if (!confirmed) return;
+
+        Swal.fire({ title: 'Moving Agent ID...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: selectedAgentId })
+            });
+            const result = await res.json();
+            if (result.success) {
+                await logAuditAction('Agent ID Moved', `Moved Agent ID ${idName} to partner: ${selectedName}`);
+                await loadPartners();
+                Swal.fire({ icon: 'success', title: 'Moved!', text: `Agent ID ${idName} has been moved to ${selectedName}.`, showConfirmButton: false, timer: 2000 });
+            } else {
+                throw new Error(result.message || 'Move failed');
+            }
+        } catch (err) {
+            Swal.fire('Error', err.message, 'error');
         }
     }
 

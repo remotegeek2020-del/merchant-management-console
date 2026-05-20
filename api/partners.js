@@ -675,14 +675,28 @@ if (action === 'get_merchant_data') {
     const { id, rev_share, prime49, new_parent_id } = body;
     const { error } = await supabase
         .from('agent_identifiers')
-        .update({ 
-            rev_share, 
-            prime49, 
-            parent_config_id: new_parent_id 
+        .update({
+            rev_share,
+            prime49,
+            parent_config_id: new_parent_id
         })
         .eq('id', id);
     return res.status(200).json({ success: !error, message: error?.message });
 }
+
+        // --- ACTION: MOVE IDENTIFIER TO ANOTHER COMPANY ---
+        if (action === 'move_identifier_to_company') {
+            const { identifier_id, target_agent_id } = body;
+            if (!identifier_id || !target_agent_id) {
+                return res.status(400).json({ success: false, message: 'Missing identifier_id or target_agent_id' });
+            }
+            const { error } = await supabase
+                .from('agent_identifiers')
+                .update({ agent_id: target_agent_id, parent_config_id: null })
+                .eq('id', identifier_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
 
         // --- ACTION: GET ALL STATS (for page-level trend calculation) ---
 if (action === 'get_all_stats') {
