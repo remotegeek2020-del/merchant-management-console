@@ -1504,7 +1504,7 @@ async function addTask(merchantUuid) {
                 ${noteDate}
             </span>
         </div>
-        <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; height:auto; width:100%; resize:none;">${n.body}</textarea>
+        <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; min-height:80px; width:100%; resize:vertical;">${n.body}</textarea>
         <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
             <small style="color:#64748b;">By: <b>${n.display_name}</b></small>
             <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer; font-size:11px;">UPDATE NOTE</button>
