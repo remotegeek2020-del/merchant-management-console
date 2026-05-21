@@ -204,6 +204,67 @@ if (action === 'complete_onboarding') {
 
     return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
+        // --- ACTION: GET ALL AGENTS FOR DIRECT TRANSFER (includes limbo agents) ---
+        if (action === 'get_all_agents_for_transfer') {
+            const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+            const { data: agents, error: ae } = await supabase
+                .from('agents').select('id, parent_agent_id, company_id').neq('id', PLACEHOLDER);
+            if (ae) throw ae;
+            const personIds = [...new Set((agents||[]).map(a => a.parent_agent_id).filter(Boolean))];
+            const companyIds = [...new Set((agents||[]).map(a => a.company_id).filter(Boolean))];
+            const agentIds = (agents||[]).map(a => a.id);
+            const [{ data: persons }, { data: companies }, { data: identCounts }] = await Promise.all([
+                personIds.length ? supabase.from('persons').select('id, full_name, email').in('id', personIds) : { data: [] },
+                companyIds.length ? supabase.from('companies').select('id, company_name').in('id', companyIds) : { data: [] },
+                agentIds.length ? supabase.from('agent_identifiers').select('agent_id').in('agent_id', agentIds) : { data: [] }
+            ]);
+            const personMap = {};
+            (persons||[]).forEach(p => { personMap[p.id] = p; });
+            const companyMap = {};
+            (companies||[]).forEach(c => { companyMap[c.id] = c; });
+            const idCountMap = {};
+            (identCounts||[]).forEach(i => { idCountMap[i.agent_id] = (idCountMap[i.agent_id]||0)+1; });
+            const result = (agents||[]).map(a => {
+                const person = a.parent_agent_id ? personMap[a.parent_agent_id] : null;
+                const company = a.company_id ? companyMap[a.company_id] : null;
+                const count = idCountMap[a.id] || 0;
+                const isLimbo = (!a.company_id && count > 0) || (a.company_id && count === 0);
+                return {
+                    agent_id: a.id,
+                    person_name: person ? person.full_name : null,
+                    person_email: person ? person.email : null,
+                    company_name: company ? company.company_name : null,
+                    identifier_count: count,
+                    is_limbo: isLimbo,
+                    no_company: !a.company_id,
+                    no_ids: count === 0
+                };
+            });
+            return res.status(200).json({ success: true, data: result });
+        }
+
+        // --- ACTION: TRANSFER IDENTIFIER DIRECTLY TO A SPECIFIC AGENT ---
+        if (action === 'transfer_identifier_to_agent') {
+            const { identifier_id, target_agent_id } = body;
+            if (!identifier_id || !target_agent_id) return res.status(400).json({ success: false, message: 'Missing identifier_id or target_agent_id' });
+            const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+            const { data: identRow, error: ie } = await supabase
+                .from('agent_identifiers').select('agent_id').eq('id', identifier_id).single();
+            if (ie) throw ie;
+            const sourceAgentId = identRow.agent_id;
+            const { error } = await supabase.from('agent_identifiers')
+                .update({ agent_id: target_agent_id, parent_config_id: null }).eq('id', identifier_id);
+            if (error) throw error;
+            // Clean up source agent if empty and not placeholder
+            if (sourceAgentId !== PLACEHOLDER && sourceAgentId !== target_agent_id) {
+                const { data: remaining } = await supabase.from('agent_identifiers').select('id').eq('agent_id', sourceAgentId).limit(1);
+                if (remaining && remaining.length === 0) {
+                    await supabase.from('agents').delete().eq('id', sourceAgentId);
+                }
+            }
+            return res.status(200).json({ success: true });
+        }
+
         // --- ACTION: GET AGENTS FOR A COMPANY ---
         if (action === 'get_company_agents') {
             const { company_id } = body;

@@ -1546,42 +1546,57 @@ async function submitOnboarding() {
     }
 
     window.moveIdentifierToCompany = async function(db_id, idName) {
-        // Company options — the ID stays with the same person, just moves to a different company
         const companyOptions = (_companiesRaw || [])
             .slice().sort((a, b) => a.company_name.localeCompare(b.company_name));
 
         let selectedCompanyId = null;
+        let selectedDirectAgentId = null;
         let selectedName = '';
         let moveMode = 'company';
+        let allAgentsForTransfer = null; // lazy-loaded
+
+        const ACTIVE_STYLE   = 'flex:1;padding:7px 4px;border:2px solid #dc2626;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
+        const INACTIVE_STYLE = 'flex:1;padding:7px 4px;border:2px solid #e2e8f0;border-radius:8px;font-size:11px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
 
         const { value: confirmed } = await Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Move Agent ID: ${idName}</div>`,
             html: `
                 <div style="text-align:left; padding:10px;">
-                    <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px;">
-                        <b>⚠ Note:</b> This moves <b>${idName}</b> to a different company. The ID stays with the same person — only the company association changes.
+                    <div style="display:flex; gap:5px; margin-bottom:14px;">
+                        <button type="button" id="mode-company" style="${ACTIVE_STYLE}">🏢 Move to Company</button>
+                        <button type="button" id="mode-agent" style="${INACTIVE_STYLE}">🔀 Transfer to Agent</button>
+                        <button type="button" id="mode-independent" style="${INACTIVE_STYLE}">🏠 Independent</button>
                     </div>
-                    <div style="display:flex; gap:6px; margin-bottom:16px;">
-                        <button type="button" id="mode-company" style="flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;">
-                            🏢 Move to Company
-                        </button>
-                        <button type="button" id="mode-independent" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;">
-                            🏠 Make Independent
-                        </button>
-                    </div>
+
                     <div id="company-search-section">
-                        <label style="font-size:11px; font-weight:700; color:#64748b;">SEARCH DESTINATION COMPANY</label>
-                        <div style="position:relative; margin-top:8px;">
-                            <input id="swal-company-search" class="swal2-input" placeholder="Search by company name..."
+                        <p style="font-size:12px;color:#64748b;margin:0 0 10px;">The ID stays with the same person — only the company changes.</p>
+                        <label style="font-size:11px; font-weight:700; color:#64748b;">DESTINATION COMPANY</label>
+                        <div style="position:relative; margin-top:6px;">
+                            <input id="swal-co-input" class="swal2-input" placeholder="Search company name…"
                                    style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
-                            <div id="swal-company-results" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                            <div id="swal-co-results" style="display:none; position:absolute; top:50px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
                         </div>
-                        <div id="swal-company-selected" style="display:none; margin-top:12px; padding:10px 14px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:13px;">
-                            <span style="color:#0369a1; font-weight:700;">Selected: </span><span id="swal-company-selected-name"></span>
+                        <div id="swal-co-selected" style="display:none; margin-top:10px; padding:9px 12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:13px;">
+                            <span style="color:#0369a1; font-weight:700;">Selected: </span><span id="swal-co-selected-name"></span>
                         </div>
                     </div>
-                    <div id="independent-section" style="display:none; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center;">
-                        <span class="material-icons" style="font-size:32px; color:#64748b; display:block; margin-bottom:8px;">person_outline</span>
+
+                    <div id="agent-search-section" style="display:none;">
+                        <p style="font-size:12px;color:#64748b;margin:0 0 10px;">Transfer directly to any agent, including limbo agents (no company or no IDs).</p>
+                        <label style="font-size:11px; font-weight:700; color:#64748b;">DESTINATION AGENT</label>
+                        <div style="position:relative; margin-top:6px;">
+                            <input id="swal-ag-input" class="swal2-input" placeholder="Search by name, email, or company…"
+                                   style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
+                            <div id="swal-ag-results" style="display:none; position:absolute; top:50px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                        </div>
+                        <div id="swal-ag-selected" style="display:none; margin-top:10px; padding:9px 12px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:13px;">
+                            <span style="color:#0369a1; font-weight:700;">Selected: </span><span id="swal-ag-selected-name"></span>
+                        </div>
+                        <div id="swal-ag-loading" style="display:none; padding:12px; text-align:center; color:#94a3b8; font-size:12px;">Loading agents…</div>
+                    </div>
+
+                    <div id="independent-section" style="display:none; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center; margin-top:4px;">
+                        <span class="material-icons" style="font-size:28px; color:#64748b; display:block; margin-bottom:6px;">person_outline</span>
                         <div style="font-weight:700; color:#475569; font-size:13px;">This ID will become independent</div>
                         <div style="color:#94a3b8; font-size:12px; margin-top:4px;">It will no longer be tied to any company.</div>
                     </div>
@@ -1592,68 +1607,128 @@ async function submitOnboarding() {
             cancelButtonText: 'Cancel',
             didOpen: () => {
                 const btnCompany = document.getElementById('mode-company');
-                const btnIndep = document.getElementById('mode-independent');
-                const companySection = document.getElementById('company-search-section');
+                const btnAgent   = document.getElementById('mode-agent');
+                const btnIndep   = document.getElementById('mode-independent');
+                const coSection  = document.getElementById('company-search-section');
+                const agSection  = document.getElementById('agent-search-section');
                 const indepSection = document.getElementById('independent-section');
-                const input = document.getElementById('swal-company-search');
-                const results = document.getElementById('swal-company-results');
-                const selectedBox = document.getElementById('swal-company-selected');
-                const selectedNameEl = document.getElementById('swal-company-selected-name');
 
                 const setMode = (m) => {
                     moveMode = m;
-                    if (m === 'company') {
-                        btnCompany.style.cssText = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
-                        btnIndep.style.cssText   = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
-                        companySection.style.display = 'block';
-                        indepSection.style.display   = 'none';
-                    } else {
-                        btnIndep.style.cssText   = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
-                        btnCompany.style.cssText = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
-                        companySection.style.display = 'none';
-                        indepSection.style.display   = 'block';
-                    }
+                    btnCompany.style.cssText = m === 'company'     ? ACTIVE_STYLE : INACTIVE_STYLE;
+                    btnAgent.style.cssText   = m === 'agent'       ? ACTIVE_STYLE : INACTIVE_STYLE;
+                    btnIndep.style.cssText   = m === 'independent' ? ACTIVE_STYLE : INACTIVE_STYLE;
+                    coSection.style.display    = m === 'company'     ? 'block' : 'none';
+                    agSection.style.display    = m === 'agent'       ? 'block' : 'none';
+                    indepSection.style.display = m === 'independent' ? 'block' : 'none';
+                    if (m === 'agent' && !allAgentsForTransfer) loadAgentsForTransfer();
                 };
 
                 btnCompany.addEventListener('click', () => setMode('company'));
-                btnIndep.addEventListener('click', () => setMode('independent'));
+                btnAgent.addEventListener('click',   () => setMode('agent'));
+                btnIndep.addEventListener('click',   () => setMode('independent'));
 
-                input.addEventListener('input', (e) => {
+                // ── Company search ──
+                const coInput   = document.getElementById('swal-co-input');
+                const coResults = document.getElementById('swal-co-results');
+                const coSelBox  = document.getElementById('swal-co-selected');
+                const coSelName = document.getElementById('swal-co-selected-name');
+
+                coInput.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase().trim();
-                    if (!val) { results.style.display = 'none'; return; }
-                    const matches = companyOptions.filter(c =>
-                        c.company_name.toLowerCase().includes(val)
-                    ).slice(0, 30);
-                    if (matches.length > 0) {
-                        results.innerHTML = matches.map(c => `
-                            <div class="swal-company-item" data-company-id="${c.id}" data-label="${c.company_name}"
-                                 style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;">
-                                <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#64748b;margin-right:6px;">business</span>
-                                <b>${c.company_name}</b>
-                            </div>`).join('');
-                        results.style.display = 'block';
-                    } else {
-                        results.innerHTML = '<div style="padding:10px 14px; color:#94a3b8; font-size:13px;">No companies found</div>';
-                        results.style.display = 'block';
-                    }
+                    if (!val) { coResults.style.display = 'none'; return; }
+                    const matches = companyOptions.filter(c => c.company_name.toLowerCase().includes(val)).slice(0, 30);
+                    coResults.innerHTML = matches.length
+                        ? matches.map(c => `<div class="swal-co-item" data-id="${c.id}" data-label="${c.company_name}"
+                              style="padding:9px 13px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                              <span class="material-icons" style="font-size:13px;vertical-align:middle;color:#64748b;margin-right:5px;">business</span><b>${c.company_name}</b></div>`).join('')
+                        : '<div style="padding:9px 13px;color:#94a3b8;font-size:13px;">No companies found</div>';
+                    coResults.style.display = 'block';
+                });
+                coResults.addEventListener('click', (e) => {
+                    const item = e.target.closest('.swal-co-item');
+                    if (!item) return;
+                    selectedCompanyId = item.dataset.id;
+                    selectedName = item.dataset.label;
+                    coInput.value = selectedName;
+                    coResults.style.display = 'none';
+                    coSelBox.style.display = 'block';
+                    coSelName.textContent = selectedName;
                 });
 
-                results.addEventListener('click', (e) => {
-                    const item = e.target.closest('.swal-company-item');
-                    if (item) {
-                        selectedCompanyId = item.dataset.companyId;
-                        selectedName = item.dataset.label;
-                        input.value = selectedName;
-                        results.style.display = 'none';
-                        selectedBox.style.display = 'block';
-                        selectedNameEl.textContent = selectedName;
+                // ── Agent search ──
+                const agInput   = document.getElementById('swal-ag-input');
+                const agResults = document.getElementById('swal-ag-results');
+                const agSelBox  = document.getElementById('swal-ag-selected');
+                const agSelName = document.getElementById('swal-ag-selected-name');
+                const agLoading = document.getElementById('swal-ag-loading');
+
+                async function loadAgentsForTransfer() {
+                    agLoading.style.display = 'block';
+                    agInput.style.display = 'none';
+                    try {
+                        const r = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'},
+                            body: JSON.stringify({ action: 'get_all_agents_for_transfer' }) });
+                        const data = await r.json();
+                        allAgentsForTransfer = data.success ? (data.data || []) : [];
+                    } catch(e) { allAgentsForTransfer = []; }
+                    agLoading.style.display = 'none';
+                    agInput.style.display = 'block';
+                    agInput.focus();
+                }
+
+                agInput.addEventListener('input', (e) => {
+                    if (!allAgentsForTransfer) return;
+                    const val = e.target.value.toLowerCase().trim();
+                    if (!val) { agResults.style.display = 'none'; return; }
+                    const matches = allAgentsForTransfer.filter(a =>
+                        (a.person_name||'').toLowerCase().includes(val) ||
+                        (a.person_email||'').toLowerCase().includes(val) ||
+                        (a.company_name||'').toLowerCase().includes(val)
+                    ).slice(0, 40);
+                    if (!matches.length) {
+                        agResults.innerHTML = '<div style="padding:9px 13px;color:#94a3b8;font-size:13px;">No agents found</div>';
+                        agResults.style.display = 'block';
+                        return;
                     }
+                    agResults.innerHTML = matches.map(a => {
+                        const limboTag = a.no_company
+                            ? '<span style="font-size:10px;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:700;">No Company</span>'
+                            : a.no_ids
+                            ? '<span style="font-size:10px;background:#fce7f3;color:#9d174d;padding:1px 6px;border-radius:99px;margin-left:5px;font-weight:700;">No IDs</span>'
+                            : '';
+                        const idBadge = `<span style="font-size:10px;background:#f1f5f9;color:#64748b;padding:1px 6px;border-radius:99px;margin-left:4px;">${a.identifier_count} ID${a.identifier_count!==1?'s':''}</span>`;
+                        const label = (a.person_name||'Unknown') + (a.company_name ? ' — ' + a.company_name : '');
+                        return `<div class="swal-ag-item" data-agent-id="${a.agent_id}" data-label="${label}"
+                            style="padding:9px 13px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;">
+                            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:2px;">
+                                <b>${a.person_name||'<span style="color:#94a3b8;">Unknown</span>'}</b>
+                                ${limboTag}${idBadge}
+                            </div>
+                            ${a.company_name ? `<div style="color:#64748b;font-size:11px;margin-top:1px;">${a.company_name}</div>` : ''}
+                            ${a.person_email ? `<div style="color:#94a3b8;font-size:11px;">${a.person_email}</div>` : ''}
+                        </div>`;
+                    }).join('');
+                    agResults.style.display = 'block';
+                });
+
+                agResults.addEventListener('click', (e) => {
+                    const item = e.target.closest('.swal-ag-item');
+                    if (!item) return;
+                    selectedDirectAgentId = item.dataset.agentId;
+                    selectedName = item.dataset.label;
+                    agInput.value = selectedName;
+                    agResults.style.display = 'none';
+                    agSelBox.style.display = 'block';
+                    agSelName.textContent = selectedName;
                 });
             },
             preConfirm: () => {
                 if (moveMode === 'company' && !selectedCompanyId) {
-                    Swal.showValidationMessage('Please select a destination company.');
-                    return false;
+                    Swal.showValidationMessage('Please select a destination company.'); return false;
+                }
+                if (moveMode === 'agent' && !selectedDirectAgentId) {
+                    Swal.showValidationMessage('Please select a destination agent.'); return false;
                 }
                 return true;
             }
@@ -1665,24 +1740,28 @@ async function submitOnboarding() {
 
         try {
             const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
-            const payload = moveMode === 'independent'
-                ? { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: PLACEHOLDER }
-                : { action: 'move_identifier_to_company', identifier_id: db_id, target_company_id: selectedCompanyId };
+            let payload, destination;
+            if (moveMode === 'independent') {
+                payload = { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: PLACEHOLDER };
+                destination = 'Independent';
+            } else if (moveMode === 'agent') {
+                payload = { action: 'transfer_identifier_to_agent', identifier_id: db_id, target_agent_id: selectedDirectAgentId };
+                destination = selectedName;
+            } else {
+                payload = { action: 'move_identifier_to_company', identifier_id: db_id, target_company_id: selectedCompanyId };
+                destination = selectedName;
+            }
 
             const res = await fetch('/api/partners', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload)
             });
             const result = await res.json();
             if (result.success) {
-                const destination = moveMode === 'independent' ? 'Independent' : selectedName;
                 await logAuditAction('Agent ID Moved', 'success', {
                     target_id: idName, target_type: 'agent_identifier',
                     old_value: { identifier: idName },
-                    new_value: moveMode === 'independent'
-                        ? { moved_to: 'Independent' }
-                        : { moved_to: selectedName, target_company_id: selectedCompanyId }
+                    new_value: { moved_to: destination, mode: moveMode }
                 });
                 await loadPartners();
                 Swal.fire({ icon: 'success', title: 'Moved!', text: `Agent ID ${idName} has been moved to ${destination}.`, showConfirmButton: false, timer: 2000 });
