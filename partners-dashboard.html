@@ -1677,7 +1677,9 @@ async function submitOnboarding() {
                     agLoading.style.display = 'block';
                     agInput.disabled = true;
                     try {
-                        const r = await fetch('/api/partners', { method:'POST', headers:{'Content-Type':'application/json'},
+                        const token = localStorage.getItem('staffToken') || '';
+                        const r = await fetch('/api/partners', { method:'POST',
+                            headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + token},
                             body: JSON.stringify({ action: 'get_all_agents_for_transfer' }) });
                         const d = await r.json();
                         allAgentsForTransfer = d.success ? (d.data || []) : [];
