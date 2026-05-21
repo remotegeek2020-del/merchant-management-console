@@ -1567,22 +1567,50 @@ async function submitOnboarding() {
 
         let selectedAgentId = null;
         let selectedName = '';
+        let moveMode = 'partner'; // 'partner' | 'independent'
 
         const { value: confirmed } = await Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Move Agent ID: ${idName}</div>`,
             html: `
                 <div style="text-align:left; padding:10px;">
                     <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px;">
-                        <b>⚠ Warning:</b> This will move <b>${idName}</b> to a completely different partner. All associated merchant data will remain but will now appear under the new partner.
+                        <b>⚠ Warning:</b> This will move <b>${idName}</b>. All associated merchant data will remain but will appear under the new assignment.
                     </div>
-                    <label style="font-size:11px; font-weight:700; color:#64748b;">SEARCH DESTINATION PARTNER</label>
-                    <div style="position:relative; margin-top:8px;">
-                        <input id="swal-company-search" class="swal2-input" placeholder="Search by name, email, or company..."
-                               style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
-                        <div id="swal-company-results" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                    <div style="display:flex; gap:6px; margin-bottom:16px;">
+                        <button type="button" id="mode-partner" onclick="
+                            document.getElementById('mode-partner').style.cssText='flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
+                            document.getElementById('mode-independent').style.cssText='flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
+                            document.getElementById('partner-search-section').style.display='block';
+                            document.getElementById('independent-section').style.display='none';
+                            window._moveSwalMode='partner';
+                        " style="flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;">
+                            👤 Move to Partner
+                        </button>
+                        <button type="button" id="mode-independent" onclick="
+                            document.getElementById('mode-independent').style.cssText='flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
+                            document.getElementById('mode-partner').style.cssText='flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
+                            document.getElementById('partner-search-section').style.display='none';
+                            document.getElementById('independent-section').style.display='block';
+                            window._moveSwalMode='independent';
+                        " style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;">
+                            🏠 Make Independent
+                        </button>
                     </div>
-                    <div id="swal-company-selected" style="display:none; margin-top:12px; padding:10px 14px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:13px;">
-                        <span style="color:#0369a1; font-weight:700;">Selected: </span><span id="swal-company-selected-name"></span>
+                    <div id="partner-search-section">
+                        <label style="font-size:11px; font-weight:700; color:#64748b;">SEARCH DESTINATION PARTNER</label>
+                        <div style="position:relative; margin-top:8px;">
+                            <input id="swal-company-search" class="swal2-input" placeholder="Search by name, email, or company..."
+                                   style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
+                            <div id="swal-company-results" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
+                        </div>
+                        <div id="swal-company-selected" style="display:none; margin-top:12px; padding:10px 14px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:8px; font-size:13px;">
+                            <span style="color:#0369a1; font-weight:700;">Selected: </span><span id="swal-company-selected-name"></span>
+                        </div>
+                    </div>
+                    <div id="independent-section" style="display:none; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center;">
+                        <span class="material-icons" style="font-size:32px; color:#64748b; display:block; margin-bottom:8px;">person_outline</span>
+                        <div style="font-weight:700; color:#475569; font-size:13px;">This ID will become independent</div>
+                        <div style="color:#94a3b8; font-size:12px; margin-top:4px;">It will no longer be tied to any partner or company.</div>
                     </div>
                 </div>`,
             showCancelButton: true,
@@ -1590,6 +1618,7 @@ async function submitOnboarding() {
             confirmButtonText: 'CONFIRM MOVE',
             cancelButtonText: 'Cancel',
             didOpen: () => {
+                window._moveSwalMode = 'partner';
                 const input = document.getElementById('swal-company-search');
                 const results = document.getElementById('swal-company-results');
                 const selectedBox = document.getElementById('swal-company-selected');
@@ -1631,7 +1660,8 @@ async function submitOnboarding() {
                 });
             },
             preConfirm: () => {
-                if (!selectedAgentId) {
+                moveMode = window._moveSwalMode || 'partner';
+                if (moveMode === 'partner' && !selectedAgentId) {
                     Swal.showValidationMessage('Please select a destination partner.');
                     return false;
                 }
@@ -1644,20 +1674,27 @@ async function submitOnboarding() {
         Swal.fire({ title: 'Moving Agent ID...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         try {
+            const payload = moveMode === 'independent'
+                ? { action: 'move_identifier_to_company', identifier_id: db_id, is_independent: true }
+                : { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: selectedAgentId };
+
             const res = await fetch('/api/partners', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: selectedAgentId })
+                body: JSON.stringify(payload)
             });
             const result = await res.json();
             if (result.success) {
+                const destination = moveMode === 'independent' ? 'Independent' : selectedName;
                 await logAuditAction('Agent ID Moved', 'success', {
                     target_id: idName, target_type: 'agent_identifier',
                     old_value: { identifier: idName },
-                    new_value: { moved_to: selectedName, target_agent_id: selectedAgentId }
+                    new_value: moveMode === 'independent'
+                        ? { moved_to: 'Independent' }
+                        : { moved_to: selectedName, target_agent_id: selectedAgentId }
                 });
                 await loadPartners();
-                Swal.fire({ icon: 'success', title: 'Moved!', text: `Agent ID ${idName} has been moved to ${selectedName}.`, showConfirmButton: false, timer: 2000 });
+                Swal.fire({ icon: 'success', title: 'Moved!', text: `Agent ID ${idName} has been moved to ${destination}.`, showConfirmButton: false, timer: 2000 });
             } else {
                 throw new Error(result.message || 'Move failed');
             }
