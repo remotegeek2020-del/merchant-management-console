@@ -364,15 +364,16 @@ if (action === 'complete_onboarding') {
                 if (existing) {
                     destAgentId = existing.id;
                 } else {
+                    const { data: personRow } = await supabase.from('persons').select('full_name').eq('id', effectivePersonId).single();
                     const { data: newAgent, error: ne } = await supabase.from('agents')
-                        .insert({ parent_agent_id: effectivePersonId, company_id: target_company_id }).select('id').single();
+                        .insert({ parent_agent_id: effectivePersonId, company_id: target_company_id, agent_name: personRow?.full_name || '' }).select('id').single();
                     if (ne) throw ne;
                     destAgentId = newAgent.id;
                 }
             } else {
                 // No person — create an orphan agent under the company
                 const { data: newAgent, error: ne } = await supabase.from('agents')
-                    .insert({ company_id: target_company_id, parent_agent_id: null }).select('id').single();
+                    .insert({ company_id: target_company_id, parent_agent_id: null, agent_name: '' }).select('id').single();
                 if (ne) throw ne;
                 destAgentId = newAgent.id;
             }
@@ -916,8 +917,9 @@ if (action === 'get_merchant_data') {
                     destAgentId = existNull ? existNull.id : INDEPENDENT_PLACEHOLDER;
                     if (!existNull) {
                         // Create a dedicated null-company agent for this person
+                        const { data: personRow } = await supabase.from('persons').select('full_name').eq('id', personId).single();
                         const { data: na } = await supabase.from('agents')
-                            .insert({ parent_agent_id: personId, company_id: null }).select('id').single();
+                            .insert({ parent_agent_id: personId, company_id: null, agent_name: personRow?.full_name || '' }).select('id').single();
                         if (na) destAgentId = na.id;
                     }
                 } else {
@@ -940,9 +942,10 @@ if (action === 'get_merchant_data') {
                 if (existing) {
                     destAgentId = existing.id;
                 } else {
+                    const { data: personRow } = await supabase.from('persons').select('full_name').eq('id', srcAgent.parent_agent_id).single();
                     const { data: newAgent, error: e4 } = await supabase
                         .from('agents')
-                        .insert({ parent_agent_id: srcAgent.parent_agent_id, company_id: destCompanyId })
+                        .insert({ parent_agent_id: srcAgent.parent_agent_id, company_id: destCompanyId, agent_name: personRow?.full_name || '' })
                         .select('id').single();
                     if (e4) throw e4;
                     destAgentId = newAgent.id;
