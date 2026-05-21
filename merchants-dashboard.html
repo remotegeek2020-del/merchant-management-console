@@ -1560,12 +1560,15 @@ async function addTask(merchantUuid) {
                                     <span class="material-icons" style="color:var(--pp-blue);">description</span>
                                     <div>
                                         <div style="font-weight:700; font-size:12px;">${f.file_name}</div>
-                                        <div style="font-size:10px; color:#64748b;">${fmtDate(f.created_at)}</div>
+                                        <div style="font-size:10px; color:#64748b;">${fmtDate(f.created_at)} &bull; ${f.uploaded_by || 'Unknown'}</div>
                                     </div>
                                 </div>
-                                <div style="display:flex; gap:10px;">
-                                    <button onclick="window.open('https://zuzwljjrppyrzngmhdru.supabase.co/storage/v1/object/public/merchant-files/${f.file_path}')" style="background:none; border:none; color:var(--pp-blue); cursor:pointer;">
-                                        <span class="material-icons">download</span>
+                                <div style="display:flex; gap:8px; align-items:center;">
+                                    <button onclick="window.open('https://zuzwljjrppyrzngmhdru.supabase.co/storage/v1/object/public/merchant-files/${f.file_path}')" style="background:#eff6ff; border:1px solid #bfdbfe; color:var(--pp-blue); border-radius:7px; padding:5px 10px; cursor:pointer; font-size:11px; font-weight:700; display:flex; align-items:center; gap:4px;">
+                                        <span class="material-icons" style="font-size:14px;">download</span> Download
+                                    </button>
+                                    <button onclick="deleteAttachment('${f.id}', '${f.file_path}', '${m.id}')" style="background:#fef2f2; border:1px solid #fecaca; color:#dc2626; border-radius:7px; padding:5px 10px; cursor:pointer; font-size:11px; font-weight:700; display:flex; align-items:center; gap:4px;">
+                                        <span class="material-icons" style="font-size:14px;">delete</span> Delete
                                     </button>
                                 </div>
                             </div>
@@ -1926,6 +1929,32 @@ window.saveMerchant = async (uuid) => {
             Swal.fire('Upload Failed', err.message, 'error');
         }
     };
+
+    async function deleteAttachment(fileId, filePath, merchantId) {
+        const confirm = await Swal.fire({
+            title: 'Delete this file?',
+            text: 'This cannot be undone.',
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#dc2626',
+            confirmButtonText: 'Delete',
+            cancelButtonText: 'Cancel'
+        });
+        if (!confirm.isConfirmed) return;
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'delete_attachment', file_id: fileId, file_path: filePath })
+            });
+            const result = await res.json();
+            if (!result.success) throw new Error(result.message);
+            Swal.fire({ icon: 'success', title: 'Deleted', timer: 1200, showConfirmButton: false });
+            openModal(merchantId);
+        } catch (err) {
+            Swal.fire('Error', err.message, 'error');
+        }
+    }
 
     function changePage(dir) {
         const lim = parseInt(document.getElementById('pageLimit').value);
