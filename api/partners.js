@@ -708,11 +708,68 @@ if (action === 'get_merchant_data') {
             if (!identifier_id || !target_agent_id) {
                 return res.status(400).json({ success: false, message: 'Missing identifier_id or target_agent_id' });
             }
-            const { error } = await supabase
+
+            const INDEPENDENT_PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+
+            // Get the identifier's current agent
+            const { data: identRow, error: e1 } = await supabase
+                .from('agent_identifiers').select('agent_id').eq('id', identifier_id).single();
+            if (e1) throw e1;
+            const sourceAgentId = identRow.agent_id;
+
+            let destAgentId;
+
+            if (target_agent_id === INDEPENDENT_PLACEHOLDER) {
+                // Independent mode: move directly to the orphan placeholder
+                destAgentId = INDEPENDENT_PLACEHOLDER;
+            } else {
+                // Get the source agent's person (parent_agent_id references persons.id)
+                const { data: srcAgent, error: e2 } = await supabase
+                    .from('agents').select('parent_agent_id').eq('id', sourceAgentId).single();
+                if (e2) throw e2;
+
+                // Get the target company from the selected destination agent
+                const { data: tgtAgent, error: e3 } = await supabase
+                    .from('agents').select('company_id').eq('id', target_agent_id).single();
+                if (e3) throw e3;
+
+                // Find an existing agent for the source person under the target company,
+                // or create one so the identifier stays with the same person
+                const { data: existing } = await supabase
+                    .from('agents')
+                    .select('id')
+                    .eq('parent_agent_id', srcAgent.parent_agent_id)
+                    .eq('company_id', tgtAgent.company_id)
+                    .maybeSingle();
+
+                if (existing) {
+                    destAgentId = existing.id;
+                } else {
+                    const { data: newAgent, error: e4 } = await supabase
+                        .from('agents')
+                        .insert({ parent_agent_id: srcAgent.parent_agent_id, company_id: tgtAgent.company_id })
+                        .select('id').single();
+                    if (e4) throw e4;
+                    destAgentId = newAgent.id;
+                }
+            }
+
+            // Move the identifier to the destination agent
+            const { error: e5 } = await supabase
                 .from('agent_identifiers')
-                .update({ agent_id: target_agent_id, parent_config_id: null })
+                .update({ agent_id: destAgentId, parent_config_id: null })
                 .eq('id', identifier_id);
-            if (error) throw error;
+            if (e5) throw e5;
+
+            // Clean up the source agent if it now has no identifiers left
+            if (sourceAgentId !== INDEPENDENT_PLACEHOLDER && sourceAgentId !== destAgentId) {
+                const { data: remaining } = await supabase
+                    .from('agent_identifiers').select('id').eq('agent_id', sourceAgentId).limit(1);
+                if (remaining && remaining.length === 0) {
+                    await supabase.from('agents').delete().eq('id', sourceAgentId);
+                }
+            }
+
             return res.status(200).json({ success: true });
         }
 
