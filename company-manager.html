@@ -589,24 +589,36 @@ function renderIndependent(items) {
         icon.style.cssText = 'color:#94a3b8;font-size:20px;flex-shrink:0;';
         icon.textContent = 'badge';
 
+        var infoDiv = document.createElement('div');
+        infoDiv.style.cssText = 'display:flex;flex-direction:column;gap:2px;flex:1;min-width:0;';
+
         var idDiv = document.createElement('div');
         idDiv.className = 'indep-id';
+        idDiv.style.cssText = 'font-weight:700;font-size:13px;';
         idDiv.textContent = item.id_string;
+
+        if (item.person_name) {
+            var personChip = document.createElement('div');
+            personChip.style.cssText = 'font-size:11px;color:#475569;display:flex;align-items:center;gap:3px;';
+            personChip.innerHTML = '<span class="material-icons" style="font-size:12px;color:#94a3b8;">person</span>' + escapeHtml(item.person_name) + (item.person_email ? ' <span style="color:#94a3b8;">· ' + escapeHtml(item.person_email) + '</span>' : '');
+            infoDiv.appendChild(idDiv);
+            infoDiv.appendChild(personChip);
+        } else {
+            infoDiv.appendChild(idDiv);
+        }
 
         var revDiv = document.createElement('div');
         revDiv.className = 'indep-rev';
         revDiv.textContent = item.rev_share || '';
 
+        card.appendChild(icon);
+        card.appendChild(infoDiv);
+
         if (item.prime49) {
             var primeBadge = document.createElement('span');
-            primeBadge.style.cssText = 'font-size:10px;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:99px;font-weight:700;margin-right:6px;';
+            primeBadge.style.cssText = 'font-size:10px;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:99px;font-weight:700;white-space:nowrap;';
             primeBadge.textContent = '⭐ Prime49';
-            card.appendChild(icon);
-            card.appendChild(idDiv);
             card.appendChild(primeBadge);
-        } else {
-            card.appendChild(icon);
-            card.appendChild(idDiv);
         }
         card.appendChild(revDiv);
 
@@ -632,18 +644,29 @@ async function assignToCompany(item) {
         return '<option value="' + c.id + '">' + escapeHtml(c.company_name) + '</option>';
     }).join('');
 
-    var personOpts = '<option value="">— No partner (orphan agent) —</option>' +
-        allPersons.slice().sort(function(a,b){ return (a.full_name||'').localeCompare(b.full_name||''); }).map(function(p){
-            return '<option value="' + p.id + '">' + escapeHtml(p.full_name || 'Unknown') + '</option>';
-        }).join('');
+    var personSectionHtml;
+    if (item.person_id) {
+        // Person already known — show read-only chip, no picker needed
+        personSectionHtml = '<label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">PARTNER</label>' +
+            '<div style="padding:10px 12px;background:#f8fafc;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;color:#1e293b;display:flex;align-items:center;gap:6px;">' +
+            '<span class="material-icons" style="font-size:14px;color:#64748b;">person</span>' +
+            escapeHtml(item.person_name || 'Unknown') +
+            '</div>';
+    } else {
+        var personOpts = '<option value="">— No partner (orphan agent) —</option>' +
+            allPersons.slice().sort(function(a,b){ return (a.full_name||'').localeCompare(b.full_name||''); }).map(function(p){
+                return '<option value="' + p.id + '">' + escapeHtml(p.full_name || 'Unknown') + '</option>';
+            }).join('');
+        personSectionHtml = '<label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">PARTNER (optional)</label>' +
+            '<select id="assign-person" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">' + personOpts + '</select>';
+    }
 
     var result = await Swal.fire({
         title: '<div style="text-align:left;font-size:15px;font-weight:800;">Assign ID: ' + escapeHtml(item.id_string) + '</div>',
         html: '<div style="text-align:left;">' +
             '<label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">COMPANY</label>' +
             '<select id="assign-co" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:14px;">' + coOpts + '</select>' +
-            '<label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">PARTNER (optional)</label>' +
-            '<select id="assign-person" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">' + personOpts + '</select>' +
+            personSectionHtml +
             '</div>',
         showCancelButton: true,
         confirmButtonColor: '#004990',
@@ -651,7 +674,8 @@ async function assignToCompany(item) {
         preConfirm: function() {
             var co = document.getElementById('assign-co').value;
             if (!co) { Swal.showValidationMessage('Select a company'); return false; }
-            return { company_id: co, person_id: document.getElementById('assign-person').value || null };
+            var personEl = document.getElementById('assign-person');
+            return { company_id: co, person_id: item.person_id || (personEl ? personEl.value || null : null) };
         }
     });
 
