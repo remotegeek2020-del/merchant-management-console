@@ -615,6 +615,7 @@ async function processFinalImport(itemsToCreate) {
                         setTimeout(() => { window.close(); }, 500);
                     }
                 <\/script>
+<script src="/bug-report.js"></script>
 </body>
             </html>
         `);
@@ -1141,5 +1142,6 @@ async function fetchCombinedLogs() {
 </div>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'inventory'})});})();</script>
 <script src="/js/site-config.js"></script>
+<script src="/bug-report.js"></script>
 </body>
 </html>
