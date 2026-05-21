@@ -1784,6 +1784,30 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, total: newMerchants.length, by_partner: byPartner, period: { from, to } });
         }
 
+        if (action === 'get_partner_by_agent') {
+            const { agent_id: idString } = body;
+            if (!idString) return res.status(400).json({ success: false, message: 'agent_id required' });
+            const { data: identRow } = await supabase.from('agent_identifiers').select('agent_id, id_string, rev_share').eq('id_string', idString).maybeSingle();
+            if (!identRow) return res.status(200).json({ success: true, data: null });
+            const { data: agentRow } = await supabase.from('agents').select('id, parent_agent_id, company_id').eq('id', identRow.agent_id).maybeSingle();
+            if (!agentRow) return res.status(200).json({ success: true, data: null });
+            const [personRes, companyRes] = await Promise.all([
+                agentRow.parent_agent_id ? supabase.from('persons').select('id, full_name, email, phone_number, enrolled_at, is_portal_active').eq('id', agentRow.parent_agent_id).maybeSingle() : { data: null },
+                agentRow.company_id ? supabase.from('companies').select('id, company_name').eq('id', agentRow.company_id).maybeSingle() : { data: null }
+            ]);
+            return res.status(200).json({ success: true, data: {
+                person_id: personRes.data?.id || null,
+                full_name: personRes.data?.full_name || null,
+                email: personRes.data?.email || null,
+                phone: personRes.data?.phone_number || null,
+                enrolled_at: personRes.data?.enrolled_at || null,
+                is_portal_active: personRes.data?.is_portal_active || false,
+                company_name: companyRes.data?.company_name || null,
+                agent_id: idString,
+                rev_share: identRow.rev_share || null
+            }});
+        }
+
         if (action === 'get_new_partners_this_week') {
             const now = new Date();
             const daysToMonday = (now.getDay() + 6) % 7;

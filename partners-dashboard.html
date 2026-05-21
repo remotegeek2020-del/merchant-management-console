@@ -2450,6 +2450,20 @@ window.quickAddId = async function(personId, name) {
             loadNewPartnersWidget();
             loadFirstProdWidget(currentFpDays);
 
+            // Handle ?agent=<id_string> URL param — find and open matching partner
+            const urlParams = new URLSearchParams(window.location.search);
+            const agentParam = urlParams.get('agent');
+            if (agentParam) {
+                const matchedId = (identifiersRaw || []).find(i => i.id_string === agentParam)?.agent_id;
+                if (matchedId) {
+                    const matchedAgent = (agentsRaw || []).find(a => a.id === matchedId);
+                    const personId = matchedAgent?.parent_agent_id;
+                    if (personId) {
+                        openPartnerDetails(personId);
+                    }
+                }
+            }
+
         } catch (err) {
             console.error("Failed to load partners:", err);
             document.getElementById('partnerGrid').innerHTML = 

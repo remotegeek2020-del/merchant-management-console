@@ -620,8 +620,8 @@ async function executeFinalUpsert(payload) {
             </td>
             <td><code>${m.merchant_id || '---'}</code></td>
             <td class="hide-mobile">${m.agent_id || '---'}</td>
-            <td class="hide-mobile">${m.company_name || '---'}</td>
-            <td class="hide-mobile">${m.partner_name || '---'}</td>
+            <td class="hide-mobile">${m.agent_id ? `<a href="/partners-dashboard?agent=${encodeURIComponent(m.agent_id)}" style="color:#0369a1;font-weight:700;cursor:pointer;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.company_name || '---'}</a>` : (m.company_name || '---')}</td>
+            <td class="hide-mobile">${m.agent_id ? `<a href="/partners-dashboard?agent=${encodeURIComponent(m.agent_id)}" style="color:#0369a1;font-weight:700;cursor:pointer;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.partner_name || '---'}</a>` : (m.partner_name || '---')}</td>
             <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
         `;
     });
@@ -1285,8 +1285,8 @@ async function addTask(merchantUuid) {
         </td>
         <td><code>${m.merchant_id || '---'}</code></td>
         <td class="hide-mobile">${m.agent_id || '---'}</td>
-        <td class="hide-mobile">${m.company_name || '---'}</td>
-        <td class="hide-mobile">${m.partner_name || '---'}</td>
+        <td class="hide-mobile">${m.agent_id ? `<a href="/partners-dashboard?agent=${encodeURIComponent(m.agent_id)}" style="color:#0369a1;font-weight:700;cursor:pointer;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.company_name || '---'}</a>` : (m.company_name || '---')}</td>
+        <td class="hide-mobile">${m.agent_id ? `<a href="/partners-dashboard?agent=${encodeURIComponent(m.agent_id)}" style="color:#0369a1;font-weight:700;cursor:pointer;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.partner_name || '---'}</a>` : (m.partner_name || '---')}</td>
         <td><span class="badge ${statusClass}">${m.account_status || '---'}</span></td>
         <td data-health-label="${m.health_label || ''}">${healthBadge}</td>
         <td onclick="event.stopPropagation()" style="white-space:nowrap;">
@@ -1360,6 +1360,7 @@ async function addTask(merchantUuid) {
                     <button onclick="switchTab('attachments')" id="tab-attachments" class="modal-tab-btn">ATTACHMENTS</button>
                     <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                     <button onclick="switchTab('tickets')" id="tab-tickets" class="modal-tab-btn">TICKETS</button>
+                    <button onclick="switchTab('partner')" id="tab-partner" class="modal-tab-btn">PARTNER INFO</button>
                 </div>
 
                 <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
@@ -1585,6 +1586,10 @@ async function addTask(merchantUuid) {
                 <div id="content-tickets" class="tab-content" style="display:none; text-align:left;">
                     <div id="merchant-tickets-list"><p style="padding:20px; text-align:center; color:#94a3b8;">Loading tickets...</p></div>
                 </div>
+
+                <div id="content-partner" class="tab-content" style="display:none; text-align:left;">
+                    <div id="partner-info-panel"><p style="padding:20px; text-align:center; color:#94a3b8;">Click the tab to load partner info.</p></div>
+                </div>
             `,
             showConfirmButton: false, showCloseButton: true
         });
@@ -1601,7 +1606,59 @@ async function addTask(merchantUuid) {
         if (tab === 'lifecycle') fetchMerchantLifecycle();
         if (tab === 'tasks') fetchMerchantTasks();
         if (tab === 'tickets') fetchMerchantTickets();
+        if (tab === 'partner') fetchPartnerInfo();
     };
+
+    async function fetchPartnerInfo() {
+        const panel = document.getElementById('partner-info-panel');
+        if (!panel || panel.dataset.loaded) return;
+        panel.dataset.loaded = '1';
+        panel.innerHTML = '<p style="padding:20px; text-align:center; color:#94a3b8;">Loading partner info...</p>';
+        // Grab agent_id from save button's onclick attribute
+        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+        if (!saveBtn) { panel.innerHTML = '<p style="padding:20px; color:#dc2626;">Cannot determine merchant.</p>'; return; }
+        const merchantUuid = saveBtn.getAttribute('onclick').match(/'([^']+)'/)[1];
+        // Get agent_id from the currently open merchant record
+        const m = currentRecords.find(r => r.id === merchantUuid);
+        const agentIdStr = m?.agent_id;
+        if (!agentIdStr) { panel.innerHTML = '<p style="padding:20px; color:#94a3b8;">No agent ID linked to this merchant.</p>'; return; }
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_partner_by_agent', agent_id: agentIdStr })
+            });
+            const result = await res.json();
+            const p = result.data;
+            if (!p) { panel.innerHTML = '<p style="padding:20px; color:#94a3b8;">No partner found for agent ID <strong>' + agentIdStr + '</strong>.</p>'; return; }
+            const enrolledStr = p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—';
+            const portalBadge = p.is_portal_active
+                ? '<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;">PORTAL ACTIVE</span>'
+                : '<span style="background:#f1f5f9;color:#94a3b8;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;">PORTAL INACTIVE</span>';
+            panel.innerHTML = `
+                <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:12px;padding:20px;">
+                    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;">
+                        <div>
+                            <div style="font-size:20px;font-weight:900;color:#002d5a;">${p.full_name || '—'}</div>
+                            ${p.company_name ? `<div style="font-size:13px;color:#64748b;margin-top:2px;">${p.company_name}</div>` : ''}
+                        </div>
+                        ${portalBadge}
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+                        <div><div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">Email</div><div style="font-size:13px;color:#1e293b;">${p.email || '—'}</div></div>
+                        <div><div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">Phone</div><div style="font-size:13px;color:#1e293b;">${p.phone || '—'}</div></div>
+                        <div><div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">Agent ID</div><div style="font-size:13px;color:#0369a1;font-weight:700;font-family:monospace;">${p.agent_id || '—'}</div></div>
+                        <div><div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">Rev Share</div><div style="font-size:13px;color:#1e293b;">${p.rev_share != null ? p.rev_share + '%' : '—'}</div></div>
+                        <div><div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;">Enrolled</div><div style="font-size:13px;color:#1e293b;">${enrolledStr}</div></div>
+                    </div>
+                    <a href="/partners-dashboard?agent=${encodeURIComponent(agentIdStr)}" target="_blank" style="display:inline-flex;align-items:center;gap:6px;background:#004990;color:white;padding:9px 18px;border-radius:8px;font-weight:800;font-size:12px;text-decoration:none;">
+                        <span class="material-icons" style="font-size:14px;">open_in_new</span> View in Partners Dashboard
+                    </a>
+                </div>`;
+        } catch(e) {
+            panel.innerHTML = '<p style="padding:20px;color:#dc2626;">Failed to load: ' + e.message + '</p>';
+        }
+    }
 
     // SURGICAL ADD: fetchMerchantLifecycle function
    async function fetchMerchantLifecycle() {
