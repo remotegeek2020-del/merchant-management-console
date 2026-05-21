@@ -1847,14 +1847,20 @@ if (action === 'get_merchant_data_raw') {
             const cutoff = days <= 7 ? monday : new Date(now.getTime() - days * 86400000);
             const from = cutoff.toISOString();
 
-            // Step 1: Approved merchants created this period
-            const { data: recentMerchants } = await supabase
-                .from('merchants')
-                .select('agent_id, dba_name, merchant_id, enrollment_date, created_at, account_status')
-                .gte('created_at', from)
-                .eq('account_status', 'Approved')
-                .order('created_at', { ascending: false });
-            if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
+            // Step 1: Approved merchants created this period — paginated, no row limit
+            let recentMerchants = [], rmOffset = 0, rmDone = false;
+            while (!rmDone) {
+                const { data: batch } = await supabase
+                    .from('merchants')
+                    .select('agent_id, dba_name, merchant_id, enrollment_date, created_at, account_status')
+                    .gte('created_at', from)
+                    .eq('account_status', 'Approved')
+                    .order('created_at', { ascending: false })
+                    .range(rmOffset, rmOffset + 999);
+                if (!batch || batch.length === 0) { rmDone = true; }
+                else { recentMerchants = recentMerchants.concat(batch); rmOffset += 1000; if (batch.length < 1000) rmDone = true; }
+            }
+            if (!recentMerchants.length) return res.status(200).json({ success: true, data: [] });
 
             const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
 
@@ -1862,11 +1868,22 @@ if (action === 'get_merchant_data_raw') {
             const thisWeekCount = {};
             recentMerchants.forEach(m => { if (m.agent_id) thisWeekCount[m.agent_id] = (thisWeekCount[m.agent_id] || 0) + 1; });
 
-            // Step 2: ALL-TIME total merchant count per agent_id (any status)
-            const { data: allTimeRows } = await supabase
-                .from('merchants')
-                .select('agent_id')
-                .in('agent_id', recentAgentIds);
+            // Step 2: ALL-TIME total merchant count per agent_id — paginated, chunked IN clause
+            let allTimeRows = [];
+            const CHUNK = 500;
+            for (let i = 0; i < recentAgentIds.length; i += CHUNK) {
+                const chunk = recentAgentIds.slice(i, i + CHUNK);
+                let atOffset = 0, atDone = false;
+                while (!atDone) {
+                    const { data: batch } = await supabase
+                        .from('merchants')
+                        .select('agent_id')
+                        .in('agent_id', chunk)
+                        .range(atOffset, atOffset + 999);
+                    if (!batch || batch.length === 0) { atDone = true; }
+                    else { allTimeRows = allTimeRows.concat(batch); atOffset += 1000; if (batch.length < 1000) atDone = true; }
+                }
+            }
 
             const allTimeCount = {};
             (allTimeRows || []).forEach(m => { if (m.agent_id) allTimeCount[m.agent_id] = (allTimeCount[m.agent_id] || 0) + 1; });
