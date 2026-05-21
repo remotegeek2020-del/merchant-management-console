@@ -1315,7 +1315,7 @@ async function addTask(merchantUuid) {
     }
 
   async function openModal(id) {
-    const m = currentRecords.find(r => r.id === id);
+    let m = currentRecords.find(r => r.id === id);
     if (!m) return;
 
     // Badge for the header
