@@ -1541,13 +1541,17 @@ async function submitOnboarding() {
         if (!formValues && window._pendingMoveId === db_id) {
             window._pendingMoveId = null;
             window._pendingMoveName = null;
-            moveIdentifierToCompany(db_id, name);
+            moveIdentifierToCompany(db_id, name, currentIdData?.parent_config_id || null);
         }
     }
 
-    window.moveIdentifierToCompany = async function(db_id, idName) {
+    window.moveIdentifierToCompany = async function(db_id, idName, parentConfigId) {
         const companyOptions = (_companiesRaw || [])
             .slice().sort((a, b) => a.company_name.localeCompare(b.company_name));
+
+        // Resolve parent ID string for display
+        const parentIdRecord = parentConfigId ? identifiersRaw.find(i => i.id === parentConfigId) : null;
+        const parentIdString = parentIdRecord ? parentIdRecord.id_string : null;
 
         let selectedCompanyId = null;
         let selectedDirectAgentId = null;
@@ -1595,10 +1599,19 @@ async function submitOnboarding() {
                         <div id="swal-ag-loading" style="display:none; padding:12px; text-align:center; color:#94a3b8; font-size:12px;">Loading agents…</div>
                     </div>
 
-                    <div id="independent-section" style="display:none; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center; margin-top:4px;">
+                    <div id="independent-section" style="display:none; padding:14px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center; margin-top:4px;">
                         <span class="material-icons" style="font-size:28px; color:#64748b; display:block; margin-bottom:6px;">person_outline</span>
                         <div style="font-weight:700; color:#475569; font-size:13px;">This ID will become independent</div>
                         <div style="color:#94a3b8; font-size:12px; margin-top:4px;">It will no longer be tied to any company.</div>
+                        ${parentIdString ? `
+                        <div style="margin-top:12px; padding:10px 12px; background:#fef3c7; border:1px solid #fcd34d; border-radius:8px; text-align:left;">
+                            <div style="font-size:12px; font-weight:700; color:#92400e; margin-bottom:6px;">⚠ This ID is a sub-ID of <b>${parentIdString}</b></div>
+                            <label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:12px; color:#78350f;">
+                                <input type="checkbox" id="clear-parent-check" style="width:14px;height:14px;">
+                                Also remove the parent ID relationship
+                            </label>
+                            <div style="font-size:11px; color:#92400e; margin-top:5px;">Leave unchecked to keep the sub-ID link intact.</div>
+                        </div>` : ''}
                     </div>
                 </div>`,
             showCancelButton: true,
@@ -1742,7 +1755,8 @@ async function submitOnboarding() {
             const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
             let payload, destination;
             if (moveMode === 'independent') {
-                payload = { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: PLACEHOLDER };
+                const clearParent = document.getElementById('clear-parent-check')?.checked || false;
+                payload = { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: PLACEHOLDER, clear_parent: clearParent };
                 destination = 'Independent';
             } else if (moveMode === 'agent') {
                 payload = { action: 'transfer_identifier_to_agent', identifier_id: db_id, target_agent_id: selectedDirectAgentId };

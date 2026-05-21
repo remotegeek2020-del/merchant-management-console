@@ -253,7 +253,7 @@ if (action === 'complete_onboarding') {
             if (ie) throw ie;
             const sourceAgentId = identRow.agent_id;
             const { error } = await supabase.from('agent_identifiers')
-                .update({ agent_id: target_agent_id, parent_config_id: null }).eq('id', identifier_id);
+                .update({ agent_id: target_agent_id }).eq('id', identifier_id);
             if (error) throw error;
             // Clean up source agent if empty and not placeholder
             if (sourceAgentId !== PLACEHOLDER && sourceAgentId !== target_agent_id) {
@@ -378,7 +378,7 @@ if (action === 'complete_onboarding') {
                 destAgentId = newAgent.id;
             }
             const { error } = await supabase.from('agent_identifiers')
-                .update({ agent_id: destAgentId, parent_config_id: null }).eq('id', identifier_id);
+                .update({ agent_id: destAgentId }).eq('id', identifier_id);
             if (error) throw error;
             // Clean up null-company agent if it has no more identifiers
             if (currentAgentId !== PLACEHOLDER && currentAgentId !== destAgentId) {
@@ -890,7 +890,7 @@ if (action === 'get_merchant_data') {
 
         // --- ACTION: MOVE IDENTIFIER TO ANOTHER COMPANY ---
         if (action === 'move_identifier_to_company') {
-            const { identifier_id, target_agent_id, target_company_id } = body;
+            const { identifier_id, target_agent_id, target_company_id, clear_parent } = body;
             if (!identifier_id || (!target_agent_id && !target_company_id)) {
                 return res.status(400).json({ success: false, message: 'Missing identifier_id or target_company_id' });
             }
@@ -953,9 +953,12 @@ if (action === 'get_merchant_data') {
             }
 
             // Move the identifier to the destination agent
+            // Only clear parent_config_id if explicitly requested (independent mode + user opted in)
+            const updatePayload = { agent_id: destAgentId };
+            if (clear_parent) updatePayload.parent_config_id = null;
             const { error: e5 } = await supabase
                 .from('agent_identifiers')
-                .update({ agent_id: destAgentId, parent_config_id: null })
+                .update(updatePayload)
                 .eq('id', identifier_id);
             if (e5) throw e5;
 
