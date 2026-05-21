@@ -1650,13 +1650,15 @@ if (action === 'get_merchant_data_raw') {
             if (!myAgents || !myAgents.length) return res.status(200).json({ success: true, data: [] });
             const myAgentIds = myAgents.map(a => a.id);
 
-            const { data: myIdentifiers } = await supabase.from('agent_identifiers').select('id').in('agent_id', myAgentIds);
+            const { data: myIdentifiers } = await supabase.from('agent_identifiers').select('id, id_string').in('agent_id', myAgentIds);
             if (!myIdentifiers || !myIdentifiers.length) return res.status(200).json({ success: true, data: [] });
             const myIdentifierIds = myIdentifiers.map(i => i.id);
+            const parentIdentMap = {}; // parent identifier id → parent id_string
+            myIdentifiers.forEach(i => { parentIdentMap[i.id] = i.id_string; });
 
             const { data: subIdentifiers } = await supabase
                 .from('agent_identifiers')
-                .select('id, agent_id, id_string, rev_share')
+                .select('id, agent_id, id_string, rev_share, parent_config_id')
                 .in('parent_config_id', myIdentifierIds);
             if (!subIdentifiers || !subIdentifiers.length) return res.status(200).json({ success: true, data: [] });
 
@@ -1672,11 +1674,16 @@ if (action === 'get_merchant_data_raw') {
             subAgents.forEach(a => { agentToPersonMap[a.id] = a.parent_agent_id; });
 
             const personIdentMap = {};
+            const personParentAgentIds = {}; // sub-person id → Set of parent id_strings they're linked under
             subIdentifiers.forEach(si => {
                 const pid = agentToPersonMap[si.agent_id];
                 if (!pid) return;
                 if (!personIdentMap[pid]) personIdentMap[pid] = [];
                 personIdentMap[pid].push({ id_string: si.id_string, rev_share: si.rev_share });
+                if (si.parent_config_id && parentIdentMap[si.parent_config_id]) {
+                    if (!personParentAgentIds[pid]) personParentAgentIds[pid] = new Set();
+                    personParentAgentIds[pid].add(parentIdentMap[si.parent_config_id]);
+                }
             });
 
             const allSubIdStrings = subIdentifiers.map(i => i.id_string);
@@ -1709,6 +1716,7 @@ if (action === 'get_merchant_data_raw') {
                 email: p.email,
                 is_portal_active: p.is_portal_active,
                 agent_ids: personIdentMap[p.id] || [],
+                parent_agent_ids: personParentAgentIds[p.id] ? [...personParentAgentIds[p.id]] : [],
                 merchant_count: personMerchStats[p.id]?.merchant_count || 0,
                 volume_30_day: personMerchStats[p.id]?.volume_30_day || 0
             }));
