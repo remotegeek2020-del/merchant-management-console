@@ -1836,17 +1836,17 @@ if (action === 'get_merchant_data_raw') {
         }
 
         if (action === 'get_first_production') {
-            // Partners who added at least one Approved merchant this week (any partner, not just first-timers)
+            // Partners who had zero merchants before this week and just got their first Approved one
             const now = new Date();
             const daysToMonday = (now.getDay() + 6) % 7;
             const monday = new Date(now);
             monday.setDate(now.getDate() - daysToMonday);
             monday.setHours(0, 0, 0, 0);
             const { days = 7 } = body;
-            // If days <= 7 use current week (since Monday), otherwise use rolling window
             const cutoff = days <= 7 ? monday : new Date(now.getTime() - days * 86400000);
             const from = cutoff.toISOString();
 
+            // Step 1: Approved merchants enrolled this period
             const { data: recentMerchants } = await supabase
                 .from('merchants')
                 .select('agent_id, dba_name, merchant_id, enrollment_date, account_status')
@@ -1855,10 +1855,26 @@ if (action === 'get_merchant_data_raw') {
                 .order('enrollment_date', { ascending: false });
             if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
 
-            const activeAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
+            const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
+
+            // Step 2: For each of those agent_ids, find their absolute earliest merchant (any status)
+            const { data: earliestRows } = await supabase
+                .from('merchants')
+                .select('agent_id, enrollment_date')
+                .in('agent_id', recentAgentIds)
+                .order('enrollment_date', { ascending: true });
+
+            const earliestByAgent = {};
+            (earliestRows || []).forEach(m => {
+                if (!earliestByAgent[m.agent_id]) earliestByAgent[m.agent_id] = m.enrollment_date;
+            });
+
+            // Step 3: Keep only agent_ids where their first-ever merchant falls within the cutoff
+            const firstTimers = recentAgentIds.filter(aid => earliestByAgent[aid] && earliestByAgent[aid] >= from);
+            if (!firstTimers.length) return res.status(200).json({ success: true, data: [] });
 
             // Resolve agent id_string → agent uuid → person
-            const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', activeAgentIds);
+            const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', firstTimers);
             const idToAgentUuid = {};
             (identRows || []).forEach(i => { idToAgentUuid[i.id_string] = i.agent_id; });
             const agentUuids = [...new Set(Object.values(idToAgentUuid))];
@@ -1872,7 +1888,7 @@ if (action === 'get_merchant_data_raw') {
 
             // Group by person
             const byPerson = {};
-            activeAgentIds.forEach(agentIdStr => {
+            firstTimers.forEach(agentIdStr => {
                 const agentUuid = idToAgentUuid[agentIdStr];
                 if (!agentUuid) return;
                 const personId = agentToPersonId[agentUuid];
