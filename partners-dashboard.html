@@ -1683,7 +1683,7 @@ async function submitOnboarding() {
 
         try {
             const payload = moveMode === 'independent'
-                ? { action: 'move_identifier_to_company', identifier_id: db_id, is_independent: true }
+                ? { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' }
                 : { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: selectedAgentId };
 
             const res = await fetch('/api/partners', {
