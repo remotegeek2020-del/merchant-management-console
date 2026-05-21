@@ -1784,6 +1784,125 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, total: newMerchants.length, by_partner: byPartner, period: { from, to } });
         }
 
+        if (action === 'get_new_partners_this_week') {
+            const now = new Date();
+            const daysToMonday = (now.getDay() + 6) % 7;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() - daysToMonday);
+            monday.setHours(0, 0, 0, 0);
+            const from = monday.toISOString();
+
+            const { data: newPersons, error: personErr } = await supabase
+                .from('persons')
+                .select('id, full_name, email, created_at')
+                .gte('created_at', from)
+                .order('created_at', { ascending: false });
+            if (personErr) throw personErr;
+            if (!newPersons?.length) return res.status(200).json({ success: true, data: [], week_start: from });
+
+            const personIds = newPersons.map(p => p.id);
+            const { data: agentRows } = await supabase.from('agents').select('id, parent_agent_id, company_id').in('parent_agent_id', personIds);
+            const agentUuids = (agentRows || []).map(a => a.id);
+            const { data: identRows } = agentUuids.length
+                ? await supabase.from('agent_identifiers').select('agent_id, id_string').in('agent_id', agentUuids)
+                : { data: [] };
+
+            const companyIds = [...new Set((agentRows || []).map(a => a.company_id).filter(Boolean))];
+            const { data: companyRows } = companyIds.length
+                ? await supabase.from('companies').select('id, company_name').in('id', companyIds)
+                : { data: [] };
+            const companyMap = {};
+            (companyRows || []).forEach(c => { companyMap[c.id] = c.company_name; });
+
+            const personAgentMap = {};
+            (agentRows || []).forEach(a => {
+                if (!personAgentMap[a.parent_agent_id]) personAgentMap[a.parent_agent_id] = { agents: [], company_name: null };
+                personAgentMap[a.parent_agent_id].agents.push(a.id);
+                if (a.company_id && !personAgentMap[a.parent_agent_id].company_name)
+                    personAgentMap[a.parent_agent_id].company_name = companyMap[a.company_id] || null;
+            });
+            const agentIdentMap = {};
+            (identRows || []).forEach(i => {
+                if (!agentIdentMap[i.agent_id]) agentIdentMap[i.agent_id] = [];
+                agentIdentMap[i.agent_id].push(i.id_string);
+            });
+
+            const result = newPersons.map(p => {
+                const agentInfo = personAgentMap[p.id] || { agents: [], company_name: null };
+                const idStrings = agentInfo.agents.flatMap(aid => agentIdentMap[aid] || []);
+                return { person_id: p.id, full_name: p.full_name, email: p.email, created_at: p.created_at, company_name: agentInfo.company_name, agent_ids: idStrings };
+            });
+            return res.status(200).json({ success: true, data: result, week_start: from });
+        }
+
+        if (action === 'get_first_production') {
+            // Partners whose very first-ever merchant was enrolled within the last N days
+            const { days = 7 } = body;
+            const cutoff = new Date();
+            cutoff.setDate(cutoff.getDate() - days);
+            cutoff.setHours(0, 0, 0, 0);
+            const from = cutoff.toISOString();
+
+            // Get all agent_ids that enrolled a merchant recently
+            const { data: recentMerchants } = await supabase
+                .from('merchants')
+                .select('agent_id, dba_name, merchant_id, enrollment_date')
+                .gte('enrollment_date', from)
+                .order('enrollment_date', { ascending: false });
+            if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
+
+            const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
+
+            // For each of those agent_ids, get their absolute earliest merchant
+            const { data: earliestRows } = await supabase
+                .from('merchants')
+                .select('agent_id, enrollment_date')
+                .in('agent_id', recentAgentIds)
+                .order('enrollment_date', { ascending: true });
+
+            // Find agent_ids whose earliest enrollment is within the cutoff (first-ever production)
+            const earliestByAgent = {};
+            (earliestRows || []).forEach(m => {
+                if (!earliestByAgent[m.agent_id]) earliestByAgent[m.agent_id] = m.enrollment_date;
+            });
+            const firstTimers = recentAgentIds.filter(aid => earliestByAgent[aid] && earliestByAgent[aid] >= from);
+            if (!firstTimers.length) return res.status(200).json({ success: true, data: [] });
+
+            // Resolve agent id_string → agent uuid → person
+            const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', firstTimers);
+            const idToAgentUuid = {};
+            (identRows || []).forEach(i => { idToAgentUuid[i.id_string] = i.agent_id; });
+            const agentUuids = [...new Set(Object.values(idToAgentUuid))];
+            const { data: agentRows } = await supabase.from('agents').select('id, parent_agent_id').in('id', agentUuids);
+            const agentToPersonId = {};
+            (agentRows || []).forEach(a => { if (a.parent_agent_id) agentToPersonId[a.id] = a.parent_agent_id; });
+            const personIds = [...new Set(Object.values(agentToPersonId))];
+            const { data: personRows } = await supabase.from('persons').select('id, full_name, email').in('id', personIds);
+            const personMap = {};
+            (personRows || []).forEach(p => { personMap[p.id] = p; });
+
+            // Build result grouped by person
+            const byPerson = {};
+            firstTimers.forEach(agentIdStr => {
+                const agentUuid = idToAgentUuid[agentIdStr];
+                if (!agentUuid) return;
+                const personId = agentToPersonId[agentUuid];
+                if (!personId) return;
+                const person = personMap[personId];
+                if (!person) return;
+                if (!byPerson[personId]) byPerson[personId] = {
+                    person_id: personId, full_name: person.full_name, email: person.email,
+                    agent_ids: [], merchants: []
+                };
+                byPerson[personId].agent_ids.push(agentIdStr);
+                const myMerchants = recentMerchants.filter(m => m.agent_id === agentIdStr);
+                myMerchants.forEach(m => byPerson[personId].merchants.push(m));
+            });
+
+            const result = Object.values(byPerson).sort((a, b) => b.merchants.length - a.merchants.length);
+            return res.status(200).json({ success: true, data: result });
+        }
+
     } catch (err) {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });

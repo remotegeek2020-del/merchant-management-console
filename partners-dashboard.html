@@ -346,6 +346,48 @@ input[type=number] {
 
     </div><!-- /side-by-side -->
 
+    <!-- NEW PARTNERS THIS WEEK + FIRST PRODUCTION -->
+    <div class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+
+        <!-- NEW PARTNERS THIS WEEK -->
+        <div style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);display:flex;flex-direction:column;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="material-icons" style="font-size:16px;color:#7c3aed;">group_add</span>
+                    <span style="font-size:13px;font-weight:800;color:#002d5a;">New Partners This Week</span>
+                    <span id="newPartnersBadge" style="font-size:15px;font-weight:800;color:#7c3aed;">—</span>
+                </div>
+                <button onclick="loadNewPartnersWidget()" style="background:#f5f3ff;border:1px solid #ddd6fe;border-radius:7px;padding:5px 8px;font-size:11px;color:#7c3aed;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
+            </div>
+            <div id="newPartnersList" style="overflow-y:auto;max-height:320px;display:flex;flex-direction:column;gap:5px;">
+                <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>
+            </div>
+        </div>
+
+        <!-- FIRST PRODUCTION -->
+        <div style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);display:flex;flex-direction:column;">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="material-icons" style="font-size:16px;color:#059669;">rocket_launch</span>
+                    <span style="font-size:13px;font-weight:800;color:#002d5a;">First Production</span>
+                    <span id="firstProdBadge" style="font-size:15px;font-weight:800;color:#059669;">—</span>
+                </div>
+                <div style="display:flex;gap:5px;align-items:center;">
+                    <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+                        <button id="fpBtn-7" onclick="setFirstProdPeriod(7)" style="background:#059669;color:white;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;cursor:pointer;">7d</button>
+                        <button id="fpBtn-14" onclick="setFirstProdPeriod(14)" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">14d</button>
+                        <button id="fpBtn-30" onclick="setFirstProdPeriod(30)" style="background:none;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:800;color:#64748b;cursor:pointer;">30d</button>
+                    </div>
+                    <button onclick="loadFirstProdWidget(currentFpDays)" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:7px;padding:5px 8px;font-size:11px;color:#166534;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:13px;">refresh</span></button>
+                </div>
+            </div>
+            <div id="firstProdList" style="overflow-y:auto;max-height:320px;display:flex;flex-direction:column;gap:5px;">
+                <div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>
+            </div>
+        </div>
+
+    </div><!-- /new row -->
+
     <div id="partnerGrid" class="partner-grid"></div>
     <div id="paginationControls" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px;padding-bottom:30px;flex-wrap:wrap;">
     <button id="btnPrev" onclick="changePage(-1)" class="pagination-btn">Previous</button>
@@ -2405,6 +2447,8 @@ window.quickAddId = async function(personId, name) {
             loadStatsBackground();
             loadLeaderboard();
             loadNewEnrollments(currentEnrollPeriod);
+            loadNewPartnersWidget();
+            loadFirstProdWidget(currentFpDays);
 
         } catch (err) {
             console.error("Failed to load partners:", err);
@@ -2626,6 +2670,89 @@ window.quickAddId = async function(personId, name) {
         const el = document.getElementById(id);
         if (!el) return;
         el.style.display = el.style.display === 'none' ? 'block' : 'none';
+    }
+
+    // ── NEW PARTNERS THIS WEEK ────────────────────────────
+    async function loadNewPartnersWidget() {
+        const el = document.getElementById('newPartnersList');
+        const badge = document.getElementById('newPartnersBadge');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>';
+        try {
+            const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_new_partners_this_week' }) });
+            const data = await res.json();
+            const partners = data.data || [];
+            if (badge) badge.textContent = partners.length;
+            if (!partners.length) {
+                el.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">group_add</span><div style="font-size:12px;">No new partners this week yet.</div></div>';
+                return;
+            }
+            const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+            el.innerHTML = partners.map(p => `
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:9px 10px;background:#faf5ff;border-radius:9px;border:1px solid #ede9fe;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-weight:700;font-size:12px;color:#2d1a6e;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.full_name || '—'}</div>
+                        <div style="font-size:10px;color:#94a3b8;margin-top:1px;">${p.email || ''}</div>
+                        ${p.company_name ? `<div style="font-size:10px;color:#7c3aed;margin-top:2px;font-weight:600;">${p.company_name}</div>` : ''}
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;margin-left:10px;">
+                        <div style="font-size:10px;color:#94a3b8;">${fmtDate(p.created_at)}</div>
+                        <div style="margin-top:3px;">${p.agent_ids.map(id => `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:#ede9fe;color:#6d28d9;font-family:monospace;display:inline-block;margin:1px;">${id}</span>`).join('') || '<span style="font-size:10px;color:#94a3b8;">No IDs yet</span>'}</div>
+                    </div>
+                </div>`).join('');
+        } catch(e) {
+            el.innerHTML = '<p style="text-align:center;color:#ef4444;font-size:12px;padding:20px;">Failed to load.</p>';
+        }
+    }
+
+    // ── FIRST PRODUCTION ──────────────────────────────────
+    let currentFpDays = 7;
+
+    function setFirstProdPeriod(days) {
+        currentFpDays = days;
+        [7,14,30].forEach(d => {
+            const btn = document.getElementById(`fpBtn-${d}`);
+            if (btn) { btn.style.background = d === days ? '#059669' : 'none'; btn.style.color = d === days ? 'white' : '#64748b'; }
+        });
+        loadFirstProdWidget(days);
+    }
+
+    async function loadFirstProdWidget(days) {
+        const el = document.getElementById('firstProdList');
+        const badge = document.getElementById('firstProdBadge');
+        if (!el) return;
+        el.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>';
+        try {
+            const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_first_production', days }) });
+            const data = await res.json();
+            const partners = data.data || [];
+            if (badge) badge.textContent = partners.length;
+            if (!partners.length) {
+                el.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">rocket_launch</span><div style="font-size:12px;">No first-time production in the last ${days} days.</div></div>`;
+                return;
+            }
+            el.innerHTML = partners.map(p => `
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:9px 10px;background:#f0fdf4;border-radius:9px;border:1px solid #bbf7d0;">
+                    <div style="flex:1;min-width:0;">
+                        <div style="display:flex;align-items:center;gap:6px;">
+                            <span class="material-icons" style="font-size:14px;color:#059669;">rocket_launch</span>
+                            <span style="font-weight:700;font-size:12px;color:#064e3b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.full_name || '—'}</span>
+                        </div>
+                        <div style="font-size:10px;color:#94a3b8;margin-top:1px;">${p.email || ''}</div>
+                        <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:3px;">
+                            ${p.merchants.slice(0,4).map(m => `<span style="font-size:10px;background:#dcfce7;color:#166534;padding:2px 7px;border-radius:99px;font-weight:600;">${m.dba_name || m.merchant_id}</span>`).join('')}
+                            ${p.merchants.length > 4 ? `<span style="font-size:10px;color:#94a3b8;padding:2px 5px;">+${p.merchants.length - 4} more</span>` : ''}
+                        </div>
+                    </div>
+                    <div style="text-align:right;flex-shrink:0;margin-left:10px;">
+                        <span style="font-size:18px;font-weight:800;color:#059669;">${p.merchants.length}</span>
+                        <div style="font-size:9px;color:#94a3b8;font-weight:600;">merchant${p.merchants.length !== 1 ? 's' : ''}</div>
+                        <div style="margin-top:3px;">${p.agent_ids.map(id => `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:#d1fae5;color:#065f46;font-family:monospace;display:inline-block;margin:1px;">${id}</span>`).join('')}</div>
+                    </div>
+                </div>`).join('');
+        } catch(e) {
+            el.innerHTML = '<p style="text-align:center;color:#ef4444;font-size:12px;padding:20px;">Failed to load.</p>';
+        }
     }
 
     // ── LEADERBOARD ───────────────────────────────────────
