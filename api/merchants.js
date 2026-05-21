@@ -432,6 +432,18 @@ if (action === 'bulk_upsert') {
         return res.status(500).json({ success: false, message: err.message });
     }
 }
+if (action === 'get_full_merchant') {
+    const { merchant_uuid } = req.body;
+    if (!merchant_uuid) return res.status(400).json({ success: false, message: 'merchant_uuid required' });
+    const { data, error } = await supabase
+        .from('merchants')
+        .select('*')
+        .eq('id', merchant_uuid)
+        .single();
+    if (error) return res.status(500).json({ success: false, message: error.message });
+    return res.status(200).json({ success: true, data });
+}
+
         // --- ACTION: getMerchantHistory in merchants.js ---
 if (action === 'get_merchant_history') {
     const { merchant_id } = req.body;

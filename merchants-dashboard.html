@@ -1326,14 +1326,22 @@ async function addTask(merchantUuid) {
     Swal.fire({ title: 'Loading...', didOpen: () => { Swal.showLoading(); } });
 
     try {
-        // 1. Fetch all data including the new Staff list from app_users
-        const [nRes, lRes, aRes, sRes] = await Promise.all([
+        // 1. Fetch full merchant record + supporting data in parallel
+        const [fRes, nRes, lRes, aRes, sRes] = await Promise.all([
+            fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_full_merchant', merchant_uuid: m.id }) }),
             fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'manual' }) }),
             fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_notes', merchant_uuid: m.id, type: 'system' }) }),
             fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_attachments', merchant_uuid: m.id }) }),
             fetch('/api/merchants', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_staff' }) })
         ]);
-        
+
+        const fullMerchant = (await fRes.json()).data || {};
+        // Merge: full merchant row overrides view data so all columns (esp. dates) are present
+        m = { ...m, ...fullMerchant };
+        // Normalize date fields to YYYY-MM-DD for <input type="date">
+        const dateFields = ['enrollment_date', 'approved_date', 'last_batch_date', 'account_status_change_date'];
+        dateFields.forEach(f => { if (m[f]) m[f] = m[f].slice(0, 10); });
+
         const notes = (await nRes.json()).data || [];
         const logs = (await lRes.json()).data || [];
         const files = (await aRes.json()).data || [];
