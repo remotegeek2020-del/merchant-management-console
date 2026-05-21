@@ -2728,7 +2728,7 @@ window.quickAddId = async function(personId, name) {
             const partners = data.data || [];
             if (badge) badge.textContent = partners.length;
             if (!partners.length) {
-                el.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">rocket_launch</span><div style="font-size:12px;">No first-time production in the last ${days} days.</div></div>`;
+                el.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">rocket_launch</span><div style="font-size:12px;">No approved merchants added in this period.</div></div>`;
                 return;
             }
             el.innerHTML = partners.map(p => `

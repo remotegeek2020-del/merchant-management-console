@@ -1836,40 +1836,29 @@ if (action === 'get_merchant_data_raw') {
         }
 
         if (action === 'get_first_production') {
-            // Partners whose very first-ever merchant was enrolled within the last N days
+            // Partners who added at least one Approved merchant this week (any partner, not just first-timers)
+            const now = new Date();
+            const daysToMonday = (now.getDay() + 6) % 7;
+            const monday = new Date(now);
+            monday.setDate(now.getDate() - daysToMonday);
+            monday.setHours(0, 0, 0, 0);
             const { days = 7 } = body;
-            const cutoff = new Date();
-            cutoff.setDate(cutoff.getDate() - days);
-            cutoff.setHours(0, 0, 0, 0);
+            // If days <= 7 use current week (since Monday), otherwise use rolling window
+            const cutoff = days <= 7 ? monday : new Date(now.getTime() - days * 86400000);
             const from = cutoff.toISOString();
 
-            // Get all agent_ids that enrolled a merchant recently
             const { data: recentMerchants } = await supabase
                 .from('merchants')
-                .select('agent_id, dba_name, merchant_id, enrollment_date')
+                .select('agent_id, dba_name, merchant_id, enrollment_date, account_status')
                 .gte('enrollment_date', from)
+                .eq('account_status', 'Approved')
                 .order('enrollment_date', { ascending: false });
             if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
 
-            const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
-
-            // For each of those agent_ids, get their absolute earliest merchant
-            const { data: earliestRows } = await supabase
-                .from('merchants')
-                .select('agent_id, enrollment_date')
-                .in('agent_id', recentAgentIds)
-                .order('enrollment_date', { ascending: true });
-
-            // Find agent_ids whose earliest enrollment is within the cutoff (first-ever production)
-            const earliestByAgent = {};
-            (earliestRows || []).forEach(m => {
-                if (!earliestByAgent[m.agent_id]) earliestByAgent[m.agent_id] = m.enrollment_date;
-            });
-            const firstTimers = recentAgentIds.filter(aid => earliestByAgent[aid] && earliestByAgent[aid] >= from);
-            if (!firstTimers.length) return res.status(200).json({ success: true, data: [] });
+            const activeAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
 
             // Resolve agent id_string → agent uuid → person
-            const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', firstTimers);
+            const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', activeAgentIds);
             const idToAgentUuid = {};
             (identRows || []).forEach(i => { idToAgentUuid[i.id_string] = i.agent_id; });
             const agentUuids = [...new Set(Object.values(idToAgentUuid))];
@@ -1881,9 +1870,9 @@ if (action === 'get_merchant_data_raw') {
             const personMap = {};
             (personRows || []).forEach(p => { personMap[p.id] = p; });
 
-            // Build result grouped by person
+            // Group by person
             const byPerson = {};
-            firstTimers.forEach(agentIdStr => {
+            activeAgentIds.forEach(agentIdStr => {
                 const agentUuid = idToAgentUuid[agentIdStr];
                 if (!agentUuid) return;
                 const personId = agentToPersonId[agentUuid];
@@ -1894,9 +1883,10 @@ if (action === 'get_merchant_data_raw') {
                     person_id: personId, full_name: person.full_name, email: person.email,
                     agent_ids: [], merchants: []
                 };
-                byPerson[personId].agent_ids.push(agentIdStr);
-                const myMerchants = recentMerchants.filter(m => m.agent_id === agentIdStr);
-                myMerchants.forEach(m => byPerson[personId].merchants.push(m));
+                if (!byPerson[personId].agent_ids.includes(agentIdStr))
+                    byPerson[personId].agent_ids.push(agentIdStr);
+                recentMerchants.filter(m => m.agent_id === agentIdStr)
+                    .forEach(m => byPerson[personId].merchants.push(m));
             });
 
             const result = Object.values(byPerson).sort((a, b) => b.merchants.length - a.merchants.length);
