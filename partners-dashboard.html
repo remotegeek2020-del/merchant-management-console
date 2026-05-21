@@ -1546,48 +1546,33 @@ async function submitOnboarding() {
     }
 
     window.moveIdentifierToCompany = async function(db_id, idName) {
-        // Build list of all partners with their agent UUIDs
-        const partnerOptions = personsRaw
-            .filter(p => {
-                const ag = agentsRaw.find(a => a.parent_agent_id === p.id);
-                return ag != null;
-            })
-            .map(p => {
-                const ag = agentsRaw.find(a => a.parent_agent_id === p.id);
-                const co = (_companiesRaw || []).find(c => c.id === ag?.company_id);
-                return {
-                    person_id: p.id,
-                    agent_id: ag.id,
-                    name: p.full_name || 'Unknown',
-                    email: p.email || '',
-                    company: co?.company_name || ''
-                };
-            })
-            .sort((a, b) => a.name.localeCompare(b.name));
+        // Company options — the ID stays with the same person, just moves to a different company
+        const companyOptions = (_companiesRaw || [])
+            .slice().sort((a, b) => a.company_name.localeCompare(b.company_name));
 
-        let selectedAgentId = null;
+        let selectedCompanyId = null;
         let selectedName = '';
-        let moveMode = 'partner'; // updated via didOpen listeners, not inline onclick
+        let moveMode = 'company';
 
         const { value: confirmed } = await Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Move Agent ID: ${idName}</div>`,
             html: `
                 <div style="text-align:left; padding:10px;">
                     <div style="background:#fff3cd; border:1px solid #ffc107; border-radius:8px; padding:12px; margin-bottom:16px; font-size:13px;">
-                        <b>⚠ Warning:</b> This will move <b>${idName}</b>. All associated merchant data will remain but will appear under the new assignment.
+                        <b>⚠ Note:</b> This moves <b>${idName}</b> to a different company. The ID stays with the same person — only the company association changes.
                     </div>
                     <div style="display:flex; gap:6px; margin-bottom:16px;">
-                        <button type="button" id="mode-partner" style="flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;">
-                            👤 Move to Partner
+                        <button type="button" id="mode-company" style="flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;">
+                            🏢 Move to Company
                         </button>
                         <button type="button" id="mode-independent" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;">
                             🏠 Make Independent
                         </button>
                     </div>
-                    <div id="partner-search-section">
-                        <label style="font-size:11px; font-weight:700; color:#64748b;">SEARCH DESTINATION PARTNER</label>
+                    <div id="company-search-section">
+                        <label style="font-size:11px; font-weight:700; color:#64748b;">SEARCH DESTINATION COMPANY</label>
                         <div style="position:relative; margin-top:8px;">
-                            <input id="swal-company-search" class="swal2-input" placeholder="Search by name, email, or company..."
+                            <input id="swal-company-search" class="swal2-input" placeholder="Search by company name..."
                                    style="width:100%; margin:0; border-radius:8px;" autoComplete="off">
                             <div id="swal-company-results" style="display:none; position:absolute; top:55px; left:0; right:0; background:white; border:1px solid #e2e8f0; border-radius:8px; max-height:220px; overflow-y:auto; z-index:10000; box-shadow:0 10px 15px -3px rgba(0,0,0,0.1);"></div>
                         </div>
@@ -1598,7 +1583,7 @@ async function submitOnboarding() {
                     <div id="independent-section" style="display:none; padding:16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; text-align:center;">
                         <span class="material-icons" style="font-size:32px; color:#64748b; display:block; margin-bottom:8px;">person_outline</span>
                         <div style="font-weight:700; color:#475569; font-size:13px;">This ID will become independent</div>
-                        <div style="color:#94a3b8; font-size:12px; margin-top:4px;">It will no longer be tied to any partner or company.</div>
+                        <div style="color:#94a3b8; font-size:12px; margin-top:4px;">It will no longer be tied to any company.</div>
                     </div>
                 </div>`,
             showCancelButton: true,
@@ -1606,9 +1591,9 @@ async function submitOnboarding() {
             confirmButtonText: 'CONFIRM MOVE',
             cancelButtonText: 'Cancel',
             didOpen: () => {
-                const btnPartner = document.getElementById('mode-partner');
+                const btnCompany = document.getElementById('mode-company');
                 const btnIndep = document.getElementById('mode-independent');
-                const partnerSection = document.getElementById('partner-search-section');
+                const companySection = document.getElementById('company-search-section');
                 const indepSection = document.getElementById('independent-section');
                 const input = document.getElementById('swal-company-search');
                 const results = document.getElementById('swal-company-results');
@@ -1617,41 +1602,38 @@ async function submitOnboarding() {
 
                 const setMode = (m) => {
                     moveMode = m;
-                    if (m === 'partner') {
-                        btnPartner.style.cssText = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
+                    if (m === 'company') {
+                        btnCompany.style.cssText = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
                         btnIndep.style.cssText   = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
-                        partnerSection.style.display = 'block';
+                        companySection.style.display = 'block';
                         indepSection.style.display   = 'none';
                     } else {
                         btnIndep.style.cssText   = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
-                        btnPartner.style.cssText = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
-                        partnerSection.style.display = 'none';
+                        btnCompany.style.cssText = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
+                        companySection.style.display = 'none';
                         indepSection.style.display   = 'block';
                     }
                 };
 
-                btnPartner.addEventListener('click', () => setMode('partner'));
+                btnCompany.addEventListener('click', () => setMode('company'));
                 btnIndep.addEventListener('click', () => setMode('independent'));
 
                 input.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase().trim();
                     if (!val) { results.style.display = 'none'; return; }
-                    const matches = partnerOptions.filter(p =>
-                        p.name.toLowerCase().includes(val) ||
-                        p.email.toLowerCase().includes(val) ||
-                        p.company.toLowerCase().includes(val)
+                    const matches = companyOptions.filter(c =>
+                        c.company_name.toLowerCase().includes(val)
                     ).slice(0, 30);
                     if (matches.length > 0) {
-                        results.innerHTML = matches.map(m => `
-                            <div class="swal-company-item" data-agent-id="${m.agent_id}" data-label="${m.name}${m.company ? ' — ' + m.company : ''}"
+                        results.innerHTML = matches.map(c => `
+                            <div class="swal-company-item" data-company-id="${c.id}" data-label="${c.company_name}"
                                  style="padding:10px 14px; cursor:pointer; border-bottom:1px solid #f1f5f9; font-size:13px;">
-                                <b>${m.name}</b>
-                                ${m.company ? `<span style="color:#64748b; margin-left:6px;">${m.company}</span>` : ''}
-                                ${m.email ? `<div style="color:#94a3b8; font-size:11px;">${m.email}</div>` : ''}
+                                <span class="material-icons" style="font-size:14px;vertical-align:middle;color:#64748b;margin-right:6px;">business</span>
+                                <b>${c.company_name}</b>
                             </div>`).join('');
                         results.style.display = 'block';
                     } else {
-                        results.innerHTML = '<div style="padding:10px 14px; color:#94a3b8; font-size:13px;">No partners found</div>';
+                        results.innerHTML = '<div style="padding:10px 14px; color:#94a3b8; font-size:13px;">No companies found</div>';
                         results.style.display = 'block';
                     }
                 });
@@ -1659,7 +1641,7 @@ async function submitOnboarding() {
                 results.addEventListener('click', (e) => {
                     const item = e.target.closest('.swal-company-item');
                     if (item) {
-                        selectedAgentId = item.dataset.agentId;
+                        selectedCompanyId = item.dataset.companyId;
                         selectedName = item.dataset.label;
                         input.value = selectedName;
                         results.style.display = 'none';
@@ -1669,8 +1651,8 @@ async function submitOnboarding() {
                 });
             },
             preConfirm: () => {
-                if (moveMode === 'partner' && !selectedAgentId) {
-                    Swal.showValidationMessage('Please select a destination partner.');
+                if (moveMode === 'company' && !selectedCompanyId) {
+                    Swal.showValidationMessage('Please select a destination company.');
                     return false;
                 }
                 return true;
@@ -1682,9 +1664,10 @@ async function submitOnboarding() {
         Swal.fire({ title: 'Moving Agent ID...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
         try {
+            const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
             const payload = moveMode === 'independent'
-                ? { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be' }
-                : { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: selectedAgentId };
+                ? { action: 'move_identifier_to_company', identifier_id: db_id, target_agent_id: PLACEHOLDER }
+                : { action: 'move_identifier_to_company', identifier_id: db_id, target_company_id: selectedCompanyId };
 
             const res = await fetch('/api/partners', {
                 method: 'POST',
@@ -1699,7 +1682,7 @@ async function submitOnboarding() {
                     old_value: { identifier: idName },
                     new_value: moveMode === 'independent'
                         ? { moved_to: 'Independent' }
-                        : { moved_to: selectedName, target_agent_id: selectedAgentId }
+                        : { moved_to: selectedName, target_company_id: selectedCompanyId }
                 });
                 await loadPartners();
                 Swal.fire({ icon: 'success', title: 'Moved!', text: `Agent ID ${idName} has been moved to ${destination}.`, showConfirmButton: false, timer: 2000 });

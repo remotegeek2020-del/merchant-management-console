@@ -828,9 +828,9 @@ if (action === 'get_merchant_data') {
 
         // --- ACTION: MOVE IDENTIFIER TO ANOTHER COMPANY ---
         if (action === 'move_identifier_to_company') {
-            const { identifier_id, target_agent_id } = body;
-            if (!identifier_id || !target_agent_id) {
-                return res.status(400).json({ success: false, message: 'Missing identifier_id or target_agent_id' });
+            const { identifier_id, target_agent_id, target_company_id } = body;
+            if (!identifier_id || (!target_agent_id && !target_company_id)) {
+                return res.status(400).json({ success: false, message: 'Missing identifier_id or target_company_id' });
             }
 
             const INDEPENDENT_PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
@@ -844,26 +844,36 @@ if (action === 'get_merchant_data') {
             let destAgentId;
 
             if (target_agent_id === INDEPENDENT_PLACEHOLDER) {
-                // Independent mode: move directly to the orphan placeholder
-                destAgentId = INDEPENDENT_PLACEHOLDER;
+                // Make independent: move to null-company agent for the same person
+                const { data: srcAgentI } = await supabase
+                    .from('agents').select('parent_agent_id').eq('id', sourceAgentId).single();
+                const personId = srcAgentI ? srcAgentI.parent_agent_id : null;
+                if (personId) {
+                    // Check if this person already has a null-company agent
+                    const { data: existNull } = await supabase.from('agents').select('id')
+                        .eq('parent_agent_id', personId).is('company_id', null).neq('id', INDEPENDENT_PLACEHOLDER).maybeSingle();
+                    destAgentId = existNull ? existNull.id : INDEPENDENT_PLACEHOLDER;
+                    if (!existNull) {
+                        // Create a dedicated null-company agent for this person
+                        const { data: na } = await supabase.from('agents')
+                            .insert({ parent_agent_id: personId, company_id: null }).select('id').single();
+                        if (na) destAgentId = na.id;
+                    }
+                } else {
+                    destAgentId = INDEPENDENT_PLACEHOLDER;
+                }
             } else {
-                // Get the source agent's person (parent_agent_id references persons.id)
+                // Move to a specific company — ID stays with the same person
+                const destCompanyId = target_company_id;
+
                 const { data: srcAgent, error: e2 } = await supabase
                     .from('agents').select('parent_agent_id').eq('id', sourceAgentId).single();
                 if (e2) throw e2;
 
-                // Get the target company from the selected destination agent
-                const { data: tgtAgent, error: e3 } = await supabase
-                    .from('agents').select('company_id').eq('id', target_agent_id).single();
-                if (e3) throw e3;
-
-                // Find an existing agent for the source person under the target company,
-                // or create one so the identifier stays with the same person
                 const { data: existing } = await supabase
-                    .from('agents')
-                    .select('id')
+                    .from('agents').select('id')
                     .eq('parent_agent_id', srcAgent.parent_agent_id)
-                    .eq('company_id', tgtAgent.company_id)
+                    .eq('company_id', destCompanyId)
                     .maybeSingle();
 
                 if (existing) {
@@ -871,7 +881,7 @@ if (action === 'get_merchant_data') {
                 } else {
                     const { data: newAgent, error: e4 } = await supabase
                         .from('agents')
-                        .insert({ parent_agent_id: srcAgent.parent_agent_id, company_id: tgtAgent.company_id })
+                        .insert({ parent_agent_id: srcAgent.parent_agent_id, company_id: destCompanyId })
                         .select('id').single();
                     if (e4) throw e4;
                     destAgentId = newAgent.id;
