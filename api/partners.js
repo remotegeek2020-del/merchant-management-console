@@ -1848,18 +1848,17 @@ if (action === 'get_merchant_data_raw') {
             const from = cutoff.toISOString();
 
             // Step 1: Approved merchants CREATED (inserted) this period
-            const { data: recentMerchants } = await supabase
+            const { data: recentMerchants, error: rmErr } = await supabase
                 .from('merchants')
                 .select('agent_id, dba_name, merchant_id, enrollment_date, created_at, account_status')
                 .gte('created_at', from)
                 .eq('account_status', 'Approved')
                 .order('created_at', { ascending: false });
-            if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
+            if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [], _debug: { step: 1, msg: 'No Approved merchants found with created_at >= ' + from, error: rmErr?.message } });
 
             const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
 
             // Step 2: For each agent_id, count ANY merchants created BEFORE the cutoff
-            // If count = 0 → this is their first-ever merchant
             const { data: priorRows } = await supabase
                 .from('merchants')
                 .select('agent_id')
@@ -1870,16 +1869,20 @@ if (action === 'get_merchant_data_raw') {
 
             // Step 3: Only agent_ids with NO prior merchants
             const firstTimers = recentAgentIds.filter(aid => !agentsWithPrior.has(aid));
-            if (!firstTimers.length) return res.status(200).json({ success: true, data: [] });
+            if (!firstTimers.length) return res.status(200).json({ success: true, data: [], _debug: { step: 3, msg: 'All recent agent_ids had prior merchants', recentAgentIds, agentsWithPrior: [...agentsWithPrior] } });
 
             // Resolve agent id_string → agent uuid → person
             const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', firstTimers);
             const idToAgentUuid = {};
             (identRows || []).forEach(i => { idToAgentUuid[i.id_string] = i.agent_id; });
+            if (!Object.keys(idToAgentUuid).length) return res.status(200).json({ success: true, data: [], _debug: { step: 4, msg: 'No agent_identifiers matched', firstTimers } });
+
             const agentUuids = [...new Set(Object.values(idToAgentUuid))];
             const { data: agentRows } = await supabase.from('agents').select('id, parent_agent_id').in('id', agentUuids);
             const agentToPersonId = {};
             (agentRows || []).forEach(a => { if (a.parent_agent_id) agentToPersonId[a.id] = a.parent_agent_id; });
+            if (!Object.keys(agentToPersonId).length) return res.status(200).json({ success: true, data: [], _debug: { step: 5, msg: 'No agents with parent_agent_id found', agentUuids } });
+
             const personIds = [...new Set(Object.values(agentToPersonId))];
             const { data: personRows } = await supabase.from('persons').select('id, full_name, email').in('id', personIds);
             const personMap = {};
