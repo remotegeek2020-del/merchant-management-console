@@ -1901,7 +1901,7 @@ if (action === 'get_merchant_data_raw') {
             const agentToPersonId = {};
             (agentRows || []).forEach(a => { if (a.parent_agent_id) agentToPersonId[a.id] = a.parent_agent_id; });
             const personIds = [...new Set(Object.values(agentToPersonId))];
-            const { data: personRows } = await supabase.from('persons').select('id, full_name, email').in('id', personIds);
+            const { data: personRows } = await supabase.from('persons').select('id, full_name, email, enrolled_at').in('id', personIds);
             const personMap = {};
             (personRows || []).forEach(p => { personMap[p.id] = p; });
 
@@ -1916,6 +1916,7 @@ if (action === 'get_merchant_data_raw') {
                 if (!person) return;
                 if (!byPerson[personId]) byPerson[personId] = {
                     person_id: personId, full_name: person.full_name, email: person.email,
+                    enrolled_at: person.enrolled_at || null,
                     agent_ids: [], merchants: []
                 };
                 if (!byPerson[personId].agent_ids.includes(agentIdStr))
