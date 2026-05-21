@@ -1519,7 +1519,7 @@ async function submitOnboarding() {
 
                     <div id="ag-section" style="display:none;">
                         <p style="font-size:12px;color:#64748b;margin:0 0 8px;">Transfer directly to any agent, including limbo agents.</p>
-                        <div id="ag-loading" style="display:none;text-align:center;color:#94a3b8;font-size:12px;padding:12px;">Loading agents…</div>
+                        <div id="ag-loading" style="display:none;"></div>
                         <div style="position:relative;">
                             <input id="swal-ag-input" class="swal2-input" placeholder="Search by name, email, company…" style="width:100%;margin:0;border-radius:8px;" autoComplete="off">
                             <div id="swal-ag-results" style="display:none;position:absolute;top:48px;left:0;right:0;background:white;border:1px solid #e2e8f0;border-radius:8px;max-height:200px;overflow-y:auto;z-index:10000;box-shadow:0 10px 15px -3px rgba(0,0,0,.1);"></div>
@@ -1673,24 +1673,36 @@ async function submitOnboarding() {
                 const agSelName = document.getElementById('swal-ag-selected-name');
                 const agLoading = document.getElementById('ag-loading');
 
-                async function loadAgents() {
-                    agLoading.style.display = 'block';
-                    agInput.disabled = true;
-                    try {
-                        const token = localStorage.getItem('staffToken') || '';
-                        const r = await fetch('/api/partners', { method:'POST',
-                            headers:{'Content-Type':'application/json', 'Authorization':'Bearer ' + token},
-                            body: JSON.stringify({ action: 'get_all_agents_for_transfer' }) });
-                        const d = await r.json();
-                        allAgentsForTransfer = d.success ? (d.data || []) : [];
-                    } catch(e) { allAgentsForTransfer = []; }
-                    agLoading.style.display = 'none';
-                    agInput.disabled = false;
+                // Build agent list from already-loaded page data — no API call needed
+                function loadAgents() {
+                    const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+                    const idCountMap = {};
+                    (identifiersRaw || []).forEach(i => { idCountMap[i.agent_id] = (idCountMap[i.agent_id] || 0) + 1; });
+                    const personMap = {};
+                    (personsRaw || []).forEach(p => { personMap[p.id] = p; });
+                    const companyMap = {};
+                    (_companiesRaw || []).forEach(c => { companyMap[c.id] = c; });
+                    allAgentsForTransfer = (agentsRaw || [])
+                        .filter(a => a.id !== PLACEHOLDER)
+                        .map(a => {
+                            const person  = a.parent_agent_id ? personMap[a.parent_agent_id] : null;
+                            const company = a.company_id      ? companyMap[a.company_id]      : null;
+                            const count   = idCountMap[a.id]  || 0;
+                            return {
+                                agent_id:    a.id,
+                                person_name: person  ? person.full_name    : null,
+                                person_email: person ? person.email        : null,
+                                company_name: company ? company.company_name : null,
+                                identifier_count: count,
+                                is_limbo: (!a.company_id && count > 0) || (a.company_id && count === 0),
+                                no_company: !a.company_id,
+                                no_ids: count === 0
+                            };
+                        });
                     agInput.focus();
                 }
 
                 agInput.addEventListener('input', (e) => {
-                    if (!allAgentsForTransfer) return;
                     const val = e.target.value.toLowerCase().trim();
                     if (!val) { agResults.style.display = 'none'; return; }
                     const matches = allAgentsForTransfer.filter(a =>
