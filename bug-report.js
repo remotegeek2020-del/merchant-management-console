@@ -3,7 +3,7 @@
     const style = document.createElement('style');
     style.textContent = `
         #bug-report-fab {
-            position: fixed; bottom: 16px; left: 16px; z-index: 99998;
+            position: fixed; bottom: 48px; left: 20px; z-index: 99998;
             background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50px;
             padding: 5px 11px 5px 8px; font-size: 10px; font-weight: 600; cursor: pointer;
             display: flex; align-items: center; gap: 4px;
