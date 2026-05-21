@@ -667,6 +667,7 @@ if (document.getElementById('kpi-total')) {
                         const merchantMid = d.merchants?.merchant_id || '';
                         const safeDba = merchantName.replace(/'/g, "\\'");
                         const safeMid = merchantMid.replace(/'/g, "\\'");
+                        const safeSerial = (d.equipments?.serial_number || '').replace(/'/g, "\\'");
                         const isBulk = d.is_bulk;
                         const itemCount = d.items?.length || 0;
 
