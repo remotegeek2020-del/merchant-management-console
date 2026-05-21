@@ -15,8 +15,8 @@
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 14px; padding: 12px 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 8px; }
         .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
-        .partner-card { background: white; border-radius: 12px; padding: 14px; border: 1px solid #e2e8f0; transition: 0.3s; cursor: pointer; position: relative; }
-        .partner-card:hover { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(0,0,0,0.1); border-color: var(--pp-blue); }
+        .partner-card { background: white; border-radius: 14px; padding: 14px; border: 1px solid #e2e8f0; transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease; cursor: pointer; position: relative; }
+        .partner-card:hover { transform: translateY(-4px); box-shadow: 0 12px 28px rgba(0,0,0,0.09); border-color: var(--pp-blue); }
         .partner-card.selected { border-color: #0d9488; box-shadow: 0 0 0 3px rgba(13,148,136,.18); transform: none; }
         .card-checkbox { position: absolute; top: 14px; left: 14px; width: 18px; height: 18px; cursor: pointer; display: none; accent-color: #0d9488; z-index: 10; }
         body.bulk-mode .card-checkbox { display: block; }
@@ -1330,9 +1330,14 @@ async function submitOnboarding() {
         const _pSetup = p.portal_setup;
         const _rankInfo = partnerRankMap[p.id];
         const _rankBadge = _rankInfo ? getRankBadgeHtml(_rankInfo.rank, _rankInfo.tier) : '';
-        const _brandedBadge = p.is_branded ? `<span style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#004990,#0369a1);color:white;font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;letter-spacing:0.5px;margin-bottom:10px;">🏷️ BRANDED</span>` : '';
+        const _brandedBadge = p.is_branded ? `<span style="display:inline-flex;align-items:center;gap:3px;background:linear-gradient(135deg,#004990,#0369a1);color:white;font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;letter-spacing:0.5px;">🏷️ BRANDED</span>` : '';
         const _totalMerchants = p.companies.reduce((sum, co) => sum + co.ids.reduce((s, id) => s + (id.merchantCount || 0), 0), 0);
         const _totalMerchantChip = _totalMerchants > 0 ? `<span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:10px;padding:2px 8px;font-weight:800;white-space:nowrap;flex-shrink:0;">${_totalMerchants} merchant${_totalMerchants !== 1 ? 's' : ''}</span>` : '';
+        const _avatarBg = _pActive ? 'linear-gradient(135deg,#10b981,#059669)' : 'linear-gradient(135deg,#475569,#334155)';
+        const _initials = p.name.split(' ').map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase();
+        const _portalChip = _pActive
+            ? `<span style="font-size:9px;background:#dcfce7;color:#15803d;font-weight:800;padding:1px 7px;border-radius:99px;letter-spacing:0.3px;">● PORTAL ON</span>`
+            : `<span style="font-size:9px;background:#f1f5f9;color:#94a3b8;font-weight:800;padding:1px 7px;border-radius:99px;letter-spacing:0.3px;">○ PORTAL OFF</span>`;
         // Portal invite button: invite / resend if not fully active; otherwise just show status
         const _inviteBtn = (!_pActive || !_pSetup)
             ? `<button onclick="event.stopPropagation();sendPortalInvite('${p.id}','${_safeName}','${_safeEmail}')" style="flex:1;background:#f0fdfa;border:1px solid #99f6e4;color:#0d9488;border-radius:8px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:4px;"><span class="material-icons" style="font-size:14px;">${_pActive?'mark_email_read':'send'}</span> ${_pActive?'Resend Invite':'Invite to Portal'}</button>`
@@ -1345,19 +1350,27 @@ async function submitOnboarding() {
             <div class="partner-card" data-pid="${p.id}" style="position:relative;" onclick="_bulkMode?toggleCardSelect('${p.id}',event):openPartnerDetails('${p.id}')">
                 ${_rankBadge}
                 <input type="checkbox" class="card-checkbox" onclick="toggleCardSelect('${p.id}',event)">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+
+                <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                    <div style="width:40px;height:40px;border-radius:10px;background:${_avatarBg};color:white;font-size:14px;font-weight:900;display:flex;align-items:center;justify-content:center;flex-shrink:0;letter-spacing:-0.5px;box-shadow:0 2px 6px rgba(0,0,0,0.15);">
+                        ${_initials}
+                    </div>
                     <div style="flex:1;min-width:0;">
-                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:3px;">
+                        <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px;">
                             <h2 style="font-weight:800;color:#002d5a;margin:0;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.name}</h2>
                             ${_totalMerchantChip}
                         </div>
-                        ${_brandedBadge}
+                        <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;">
+                            ${_portalChip}
+                            ${_brandedBadge}
+                        </div>
                     </div>
                     <button onclick="event.stopPropagation(); quickAddId('${p.id}', '${p.name}')"
                             style="background:none;border:1px solid #e2e8f0;border-radius:6px;color:var(--pp-blue);cursor:pointer;display:flex;align-items:center;gap:3px;padding:3px 7px;font-size:10px;font-weight:800;flex-shrink:0;">
                         <span class="material-icons" style="font-size:13px;">add</span> ID
                     </button>
                 </div>
+
                 ${p.companies.map(co => `
                     <div style="margin-top:7px;border-top:1px solid #f1f5f9;padding-top:6px;">
                         <b style="font-size:10px;color:#94a3b8;">${co.name.toUpperCase()}</b>
