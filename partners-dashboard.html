@@ -2728,8 +2728,7 @@ window.quickAddId = async function(personId, name) {
             const partners = data.data || [];
             if (badge) badge.textContent = partners.length;
             if (!partners.length) {
-                const dbg = data._debug ? `<div style="font-size:10px;color:#94a3b8;margin-top:8px;font-family:monospace;text-align:left;padding:0 10px;">Debug: step ${data._debug.step} — ${data._debug.msg}<br>${JSON.stringify(data._debug).slice(0,300)}</div>` : '';
-                el.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">rocket_launch</span><div style="font-size:12px;">No approved merchants added in this period.</div>${dbg}</div>`;
+                el.innerHTML = `<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">rocket_launch</span><div style="font-size:12px;">No first-time production this period.</div></div>`;
                 return;
             }
             el.innerHTML = partners.map(p => `

@@ -1836,8 +1836,8 @@ if (action === 'get_merchant_data_raw') {
         }
 
         if (action === 'get_first_production') {
-            // Agent IDs that went from no merchants → first Approved merchant added this week
-            // Uses created_at (record insert time) not enrollment_date (manually entered, can be any date)
+            // Agent IDs whose ALL-TIME total merchant count equals their this-week count
+            // = they had zero merchants before this week → true first production
             const now = new Date();
             const daysToMonday = (now.getDay() + 6) % 7;
             const monday = new Date(now);
@@ -1847,48 +1847,48 @@ if (action === 'get_merchant_data_raw') {
             const cutoff = days <= 7 ? monday : new Date(now.getTime() - days * 86400000);
             const from = cutoff.toISOString();
 
-            // Step 1: Approved merchants CREATED (inserted) this period
-            const { data: recentMerchants, error: rmErr } = await supabase
+            // Step 1: Approved merchants created this period
+            const { data: recentMerchants } = await supabase
                 .from('merchants')
                 .select('agent_id, dba_name, merchant_id, enrollment_date, created_at, account_status')
                 .gte('created_at', from)
                 .eq('account_status', 'Approved')
                 .order('created_at', { ascending: false });
-            if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [], _debug: { step: 1, msg: 'No Approved merchants found with created_at >= ' + from, error: rmErr?.message } });
+            if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
 
             const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
 
-            // Step 2: For each agent_id, count ANY merchants created BEFORE the cutoff
-            const { data: priorRows } = await supabase
+            // This-week count per agent_id
+            const thisWeekCount = {};
+            recentMerchants.forEach(m => { if (m.agent_id) thisWeekCount[m.agent_id] = (thisWeekCount[m.agent_id] || 0) + 1; });
+
+            // Step 2: ALL-TIME total merchant count per agent_id (any status)
+            const { data: allTimeRows } = await supabase
                 .from('merchants')
                 .select('agent_id')
-                .in('agent_id', recentAgentIds)
-                .lt('created_at', from);
+                .in('agent_id', recentAgentIds);
 
-            const agentsWithPrior = new Set((priorRows || []).map(m => m.agent_id));
+            const allTimeCount = {};
+            (allTimeRows || []).forEach(m => { if (m.agent_id) allTimeCount[m.agent_id] = (allTimeCount[m.agent_id] || 0) + 1; });
 
-            // Step 3: Only agent_ids with NO prior merchants
-            const firstTimers = recentAgentIds.filter(aid => !agentsWithPrior.has(aid));
-            if (!firstTimers.length) return res.status(200).json({ success: true, data: [], _debug: { step: 3, msg: 'All recent agent_ids had prior merchants', recentAgentIds, agentsWithPrior: [...agentsWithPrior] } });
+            // Step 3: First-timers = agent_ids where all-time count == this-week count (no merchants before)
+            const firstTimers = recentAgentIds.filter(aid => allTimeCount[aid] === thisWeekCount[aid]);
+            if (!firstTimers.length) return res.status(200).json({ success: true, data: [] });
 
             // Resolve agent id_string → agent uuid → person
             const { data: identRows } = await supabase.from('agent_identifiers').select('id_string, agent_id').in('id_string', firstTimers);
             const idToAgentUuid = {};
             (identRows || []).forEach(i => { idToAgentUuid[i.id_string] = i.agent_id; });
-            if (!Object.keys(idToAgentUuid).length) return res.status(200).json({ success: true, data: [], _debug: { step: 4, msg: 'No agent_identifiers matched', firstTimers } });
-
             const agentUuids = [...new Set(Object.values(idToAgentUuid))];
             const { data: agentRows } = await supabase.from('agents').select('id, parent_agent_id').in('id', agentUuids);
             const agentToPersonId = {};
             (agentRows || []).forEach(a => { if (a.parent_agent_id) agentToPersonId[a.id] = a.parent_agent_id; });
-            if (!Object.keys(agentToPersonId).length) return res.status(200).json({ success: true, data: [], _debug: { step: 5, msg: 'No agents with parent_agent_id found', agentUuids } });
-
             const personIds = [...new Set(Object.values(agentToPersonId))];
             const { data: personRows } = await supabase.from('persons').select('id, full_name, email').in('id', personIds);
             const personMap = {};
             (personRows || []).forEach(p => { personMap[p.id] = p; });
 
-            // Group by person
+            // Group by person — show the specific agent ID that went live
             const byPerson = {};
             firstTimers.forEach(agentIdStr => {
                 const agentUuid = idToAgentUuid[agentIdStr];
