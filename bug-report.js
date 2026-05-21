@@ -3,15 +3,16 @@
     const style = document.createElement('style');
     style.textContent = `
         #bug-report-fab {
-            position: fixed; bottom: 24px; right: 24px; z-index: 99998;
-            background: #dc2626; color: white; border: none; border-radius: 50px;
-            padding: 10px 18px; font-size: 12px; font-weight: 800; cursor: pointer;
-            display: flex; align-items: center; gap: 6px;
-            box-shadow: 0 4px 14px rgba(220,38,38,0.35);
-            transition: transform 0.15s, box-shadow 0.15s;
+            position: fixed; bottom: 16px; right: 16px; z-index: 99998;
+            background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50px;
+            padding: 5px 11px 5px 8px; font-size: 10px; font-weight: 600; cursor: pointer;
+            display: flex; align-items: center; gap: 4px;
+            box-shadow: 0 2px 8px rgba(220,38,38,0.25);
+            transition: opacity 0.15s, transform 0.15s;
             font-family: 'Inter', Arial, sans-serif;
+            opacity: 0.6; letter-spacing: 0.2px;
         }
-        #bug-report-fab:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(220,38,38,0.45); }
+        #bug-report-fab:hover { opacity: 1; transform: translateY(-1px); }
         #bug-report-overlay {
             display: none; position: fixed; inset: 0; z-index: 99999;
             background: rgba(0,0,0,0.5); align-items: center; justify-content: center;
@@ -33,7 +34,7 @@
     // FAB button
     const fab = document.createElement('button');
     fab.id = 'bug-report-fab';
-    fab.innerHTML = '<span style="font-size:16px;">🐛</span> Report a Bug';
+    fab.innerHTML = '<span style="font-size:11px;">🐛</span> Report a Bug';
     document.body.appendChild(fab);
 
     // Overlay + Modal
