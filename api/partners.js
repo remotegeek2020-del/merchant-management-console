@@ -1836,7 +1836,8 @@ if (action === 'get_merchant_data_raw') {
         }
 
         if (action === 'get_first_production') {
-            // Partners who had zero merchants before this week and just got their first Approved one
+            // Agent IDs that went from no merchants → first Approved merchant added this week
+            // Uses created_at (record insert time) not enrollment_date (manually entered, can be any date)
             const now = new Date();
             const daysToMonday = (now.getDay() + 6) % 7;
             const monday = new Date(now);
@@ -1846,31 +1847,29 @@ if (action === 'get_merchant_data_raw') {
             const cutoff = days <= 7 ? monday : new Date(now.getTime() - days * 86400000);
             const from = cutoff.toISOString();
 
-            // Step 1: Approved merchants enrolled this period
+            // Step 1: Approved merchants CREATED (inserted) this period
             const { data: recentMerchants } = await supabase
                 .from('merchants')
-                .select('agent_id, dba_name, merchant_id, enrollment_date, account_status')
-                .gte('enrollment_date', from)
+                .select('agent_id, dba_name, merchant_id, enrollment_date, created_at, account_status')
+                .gte('created_at', from)
                 .eq('account_status', 'Approved')
-                .order('enrollment_date', { ascending: false });
+                .order('created_at', { ascending: false });
             if (!recentMerchants?.length) return res.status(200).json({ success: true, data: [] });
 
             const recentAgentIds = [...new Set(recentMerchants.map(m => m.agent_id).filter(Boolean))];
 
-            // Step 2: For each of those agent_ids, find their absolute earliest merchant (any status)
-            const { data: earliestRows } = await supabase
+            // Step 2: For each agent_id, count ANY merchants created BEFORE the cutoff
+            // If count = 0 → this is their first-ever merchant
+            const { data: priorRows } = await supabase
                 .from('merchants')
-                .select('agent_id, enrollment_date')
+                .select('agent_id')
                 .in('agent_id', recentAgentIds)
-                .order('enrollment_date', { ascending: true });
+                .lt('created_at', from);
 
-            const earliestByAgent = {};
-            (earliestRows || []).forEach(m => {
-                if (!earliestByAgent[m.agent_id]) earliestByAgent[m.agent_id] = m.enrollment_date;
-            });
+            const agentsWithPrior = new Set((priorRows || []).map(m => m.agent_id));
 
-            // Step 3: Keep only agent_ids where their first-ever merchant falls within the cutoff
-            const firstTimers = recentAgentIds.filter(aid => earliestByAgent[aid] && earliestByAgent[aid] >= from);
+            // Step 3: Only agent_ids with NO prior merchants
+            const firstTimers = recentAgentIds.filter(aid => !agentsWithPrior.has(aid));
             if (!firstTimers.length) return res.status(200).json({ success: true, data: [] });
 
             // Resolve agent id_string → agent uuid → person
