@@ -25,7 +25,7 @@
         #detailOverlay.open { opacity:1; pointer-events:all; }
 
         #detailPanel {
-            position:fixed; top:0; right:-480px; width:460px; max-width:100vw;
+            position:fixed; top:0; right:-520px; width:500px; max-width:100vw;
             height:100vh; background:#fff; box-shadow:-4px 0 24px rgba(0,0,0,0.12);
             z-index:901; display:flex; flex-direction:column;
             transition:right 0.28s cubic-bezier(.4,0,.2,1);
@@ -34,16 +34,24 @@
         #detailPanel.open { right:0; }
 
         .dp-header {
-            padding:18px 20px 14px;
+            padding:18px 20px 0;
             border-bottom:1px solid #e2e8f0;
-            display:flex; align-items:center; gap:10px;
         }
+        .dp-header-row { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
         .dp-header-title { font-size:15px; font-weight:800; color:#0f172a; flex:1; }
         .dp-close {
             background:none; border:none; cursor:pointer; color:#94a3b8;
             display:flex; align-items:center; padding:4px; border-radius:6px;
         }
         .dp-close:hover { background:#f1f5f9; color:#475569; }
+
+        .dp-tabs { display:flex; gap:2px; }
+        .dp-tab {
+            padding:7px 16px; border:none; background:transparent; border-radius:8px 8px 0 0;
+            font-size:12px; font-weight:700; cursor:pointer; color:#64748b;
+            border-bottom:2px solid transparent; transition:all 0.15s;
+        }
+        .dp-tab.active { color:#004990; border-bottom-color:#004990; background:#f0f7ff; }
 
         .dp-body { flex:1; overflow-y:auto; padding:16px 20px; }
 
@@ -54,7 +62,7 @@
         }
         .dp-section-title:first-child { margin-top:0; }
 
-        /* ── Merchant rows in panel ─────────────────────────── */
+        /* ── Merchant rows ─────────────────────────────────── */
         .m-row {
             display:flex; align-items:center; gap:10px;
             padding:9px 0; border-bottom:1px solid #f1f5f9;
@@ -62,13 +70,25 @@
         .m-row:last-child { border-bottom:none; }
         .m-mid { font-family:'DM Mono',monospace; font-size:11px; color:#64748b; min-width:90px; }
         .m-dba { font-weight:600; font-size:13px; flex:1; }
-        .m-status {
-            font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px;
-            background:#dcfce7; color:#15803d;
-        }
+        .m-status { font-size:10px; font-weight:700; padding:2px 7px; border-radius:20px; background:#dcfce7; color:#15803d; }
         .m-status.closed { background:#fee2e2; color:#991b1b; }
         .m-status.pending { background:#fef9c3; color:#854d0e; }
         .m-status.risk { background:#fce7f3; color:#9d174d; }
+
+        /* ── Agent rows ────────────────────────────────────── */
+        .ag-row {
+            background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px;
+            padding:11px 14px; margin-bottom:8px;
+        }
+        .ag-row:last-child { margin-bottom:0; }
+        .ag-person { font-weight:700; font-size:13px; color:#0f172a; }
+        .ag-email { font-size:11px; color:#94a3b8; }
+        .ag-ids { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+        .ag-id-chip {
+            font-family:'DM Mono',monospace; font-size:11px; font-weight:700;
+            background:#e0f2fe; color:#0369a1; padding:2px 8px; border-radius:99px;
+        }
+        .ag-actions { display:flex; gap:6px; margin-top:10px; }
 
         .dp-empty { text-align:center; padding:28px 0; color:#94a3b8; font-size:13px; }
 
@@ -82,6 +102,22 @@
         .link-result.selected { border-color:#004990; background:#eff6ff; }
         .link-r-mid { font-family:'DM Mono',monospace; font-size:11px; color:#64748b; min-width:90px; }
         .link-r-dba { font-weight:600; font-size:13px; flex:1; }
+
+        /* ── Independent tab ───────────────────────────────── */
+        .indep-card {
+            background:white; border:1px solid #e2e8f0; border-radius:10px;
+            padding:12px 16px; display:flex; align-items:center; gap:12px;
+        }
+        .indep-id { font-family:'DM Mono',monospace; font-weight:700; font-size:14px; color:#004990; flex:1; }
+        .indep-rev { font-size:11px; color:#64748b; white-space:nowrap; }
+
+        /* ── Page-level tabs ───────────────────────────────── */
+        .page-tabs { display:flex; gap:4px; background:#f1f5f9; border-radius:12px; padding:4px; margin-bottom:16px; }
+        .page-tab {
+            flex:1; padding:9px; border:none; border-radius:9px; font-size:13px;
+            font-weight:700; cursor:pointer; background:transparent; color:#64748b; transition:all 0.15s;
+        }
+        .page-tab.active { background:white; color:#004990; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
     </style>
 </head>
 <body>
@@ -90,15 +126,23 @@
 <div id="detailOverlay" onclick="closeDetail()"></div>
 <div id="detailPanel">
     <div class="dp-header">
-        <span class="material-icons" style="color:#004990;font-size:20px;">business</span>
-        <div class="dp-header-title" id="dpTitle">Company Detail</div>
-        <button class="dp-close" onclick="closeDetail()" title="Close">
-            <span class="material-icons" style="font-size:20px;">close</span>
-        </button>
+        <div class="dp-header-row">
+            <span class="material-icons" style="color:#004990;font-size:20px;">business</span>
+            <div class="dp-header-title" id="dpTitle">Company Detail</div>
+            <button class="dp-close" onclick="closeDetail()" title="Close">
+                <span class="material-icons" style="font-size:20px;">close</span>
+            </button>
+        </div>
+        <div class="dp-tabs">
+            <button class="dp-tab active" id="dpTabMerchants" onclick="switchDetailTab('merchants')">
+                <span class="material-icons" style="font-size:13px;vertical-align:-2px;">storefront</span> Merchants
+            </button>
+            <button class="dp-tab" id="dpTabAgents" onclick="switchDetailTab('agents')">
+                <span class="material-icons" style="font-size:13px;vertical-align:-2px;">people</span> Agents
+            </button>
+        </div>
     </div>
-    <div class="dp-body" id="dpBody">
-        <!-- populated dynamically -->
-    </div>
+    <div class="dp-body" id="dpBody"><!-- populated dynamically --></div>
 </div>
 
 <div class="pp-container">
@@ -108,11 +152,11 @@
             <h1 class="pp-header-title">Company Manager</h1>
         </div>
         <div style="display:flex;gap:8px;align-items:center;">
-            <div class="pp-search" style="width:240px;">
+            <div class="pp-search" style="width:240px;" id="searchWrap">
                 <span class="material-icons pp-search-icon">search</span>
                 <input type="text" id="searchInput" placeholder="Search companies..." oninput="filterCompanies()">
             </div>
-            <button class="pp-btn pp-btn-primary" onclick="addCompany()">
+            <button class="pp-btn pp-btn-primary" id="addCompanyBtn" onclick="addCompany()">
                 <span class="material-icons" style="font-size:16px;">add</span> Add Company
             </button>
         </div>
@@ -126,25 +170,54 @@
         </div>
     </div>
 
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
-            <div style="font-size:1.4rem;font-weight:800;color:#004990;" id="totalCount">—</div>
-            <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Total Companies</div>
+    <!-- Page-level tabs -->
+    <div class="page-tabs">
+        <button class="page-tab active" id="pageTabCompanies" onclick="switchPageTab('companies')">
+            <span class="material-icons" style="font-size:14px;vertical-align:-3px;">business</span> Companies
+        </button>
+        <button class="page-tab" id="pageTabIndependent" onclick="switchPageTab('independent')">
+            <span class="material-icons" style="font-size:14px;vertical-align:-3px;">person_outline</span> Independent IDs
+        </button>
+    </div>
+
+    <!-- COMPANIES SECTION -->
+    <div id="sectionCompanies">
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+            <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+                <div style="font-size:1.4rem;font-weight:800;color:#004990;" id="totalCount">—</div>
+                <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Total Companies</div>
+            </div>
+            <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+                <div style="font-size:1.4rem;font-weight:800;color:#ef4444;" id="unusedCount">—</div>
+                <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Unused (0 agents)</div>
+            </div>
+            <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+                <div style="font-size:1.4rem;font-weight:800;color:#f59e0b;" id="dupCount">—</div>
+                <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Possible Duplicates</div>
+            </div>
         </div>
-        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
-            <div style="font-size:1.4rem;font-weight:800;color:#ef4444;" id="unusedCount">—</div>
-            <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Unused (0 agents)</div>
-        </div>
-        <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
-            <div style="font-size:1.4rem;font-weight:800;color:#f59e0b;" id="dupCount">—</div>
-            <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Possible Duplicates</div>
+        <div id="companyGrid" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="text-align:center;padding:40px;color:#94a3b8;">
+                <div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
+                Loading companies...
+            </div>
         </div>
     </div>
 
-    <div id="companyGrid" style="display:flex;flex-direction:column;gap:8px;">
-        <div style="text-align:center;padding:40px;color:#94a3b8;">
-            <div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
-            Loading companies...
+    <!-- INDEPENDENT SECTION -->
+    <div id="sectionIndependent" style="display:none;">
+        <div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:12px;padding:12px 16px;margin-bottom:14px;display:flex;gap:10px;align-items:flex-start;">
+            <span class="material-icons" style="color:#0369a1;font-size:18px;">info</span>
+            <div style="font-size:12px;color:#0c4a6e;">
+                These agent IDs are not linked to any company or partner. Use <b>Assign to Company</b> to move them into a company.
+            </div>
+        </div>
+        <div id="independentCount" style="font-size:11px;color:#94a3b8;font-weight:700;text-transform:uppercase;margin-bottom:10px;"></div>
+        <div id="independentGrid" style="display:flex;flex-direction:column;gap:8px;">
+            <div style="text-align:center;padding:40px;color:#94a3b8;">
+                <div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>
+                Loading...
+            </div>
         </div>
     </div>
 </div>
@@ -152,7 +225,9 @@
 <script>
 var allCompanies = [];
 var currentCompany = null;
+var currentDetailTab = 'merchants';
 var selectedLinkMerchant = null;
+var allPersons = []; // cached for partner picker
 
 function api(body) {
     return fetch('/api/partners', {
@@ -162,12 +237,27 @@ function api(body) {
     }).then(function(r) { return r.json(); });
 }
 
+/* ──────────────────────────────────────────────────
+   PAGE TABS
+────────────────────────────────────────────────── */
+function switchPageTab(tab) {
+    document.getElementById('pageTabCompanies').classList.toggle('active', tab === 'companies');
+    document.getElementById('pageTabIndependent').classList.toggle('active', tab === 'independent');
+    document.getElementById('sectionCompanies').style.display = tab === 'companies' ? '' : 'none';
+    document.getElementById('sectionIndependent').style.display = tab === 'independent' ? '' : 'none';
+    document.getElementById('searchWrap').style.display = tab === 'companies' ? '' : 'none';
+    document.getElementById('addCompanyBtn').style.display = tab === 'companies' ? '' : 'none';
+    if (tab === 'independent') loadIndependent();
+}
+
+/* ──────────────────────────────────────────────────
+   COMPANIES
+────────────────────────────────────────────────── */
 async function loadCompanies() {
     var result = await api({ action: 'get_companies_full' });
     if (!result.success) return;
     allCompanies = result.data || [];
 
-    // Stats
     var unused = allCompanies.filter(function(c){ return c.agent_count === 0; });
     var names = allCompanies.map(function(c){ return c.company_name.toLowerCase().trim(); });
     var dups = allCompanies.filter(function(c, i) {
@@ -212,12 +302,17 @@ function renderCompanies(data) {
         countDiv.className = 'co-count' + (co.agent_count > 0 ? ' used' : '');
         countDiv.textContent = co.agent_count + ' agent' + (co.agent_count !== 1 ? 's' : '');
 
-        // Merchants chip (click to open panel)
         var merchantChip = document.createElement('div');
         merchantChip.style.cssText = 'font-size:11px;color:#0369a1;background:#eff6ff;border:1px solid #bfdbfe;border-radius:20px;padding:2px 9px;cursor:pointer;white-space:nowrap;';
-        merchantChip.innerHTML = '<span class="material-icons" style="font-size:12px;vertical-align:-2px;margin-right:3px;">storefront</span>View Merchants';
-        merchantChip.title = 'View linked merchants';
-        merchantChip.onclick = (function(c){ return function(e){ e.stopPropagation(); openDetail(c); }; })(co);
+        merchantChip.innerHTML = '<span class="material-icons" style="font-size:12px;vertical-align:-2px;margin-right:3px;">storefront</span>View';
+        merchantChip.title = 'View merchants & agents';
+        merchantChip.onclick = (function(c){ return function(e){ e.stopPropagation(); openDetail(c, 'merchants'); }; })(co);
+
+        var agentsChip = document.createElement('div');
+        agentsChip.style.cssText = 'font-size:11px;color:#0d9488;background:#f0fdfa;border:1px solid #99f6e4;border-radius:20px;padding:2px 9px;cursor:pointer;white-space:nowrap;';
+        agentsChip.innerHTML = '<span class="material-icons" style="font-size:12px;vertical-align:-2px;margin-right:3px;">people</span>Agents';
+        agentsChip.title = 'Manage agents';
+        agentsChip.onclick = (function(c){ return function(e){ e.stopPropagation(); openDetail(c, 'agents'); }; })(co);
 
         var btnWrap = document.createElement('div');
         btnWrap.style.cssText = 'display:flex;gap:6px;';
@@ -252,10 +347,10 @@ function renderCompanies(data) {
         card.appendChild(nameDiv);
         card.appendChild(countDiv);
         card.appendChild(merchantChip);
+        card.appendChild(agentsChip);
         card.appendChild(btnWrap);
 
-        // Clicking the card body (not buttons) also opens the detail panel
-        card.onclick = (function(c){ return function(){ openDetail(c); }; })(co);
+        card.onclick = (function(c){ return function(){ openDetail(c, 'merchants'); }; })(co);
 
         grid.appendChild(card);
     });
@@ -264,16 +359,12 @@ function renderCompanies(data) {
 /* ──────────────────────────────────────────────────
    DETAIL PANEL
 ────────────────────────────────────────────────── */
-function openDetail(co) {
+function openDetail(co, tab) {
     currentCompany = co;
     document.getElementById('dpTitle').textContent = co.company_name;
-    document.getElementById('dpBody').innerHTML =
-        '<div style="text-align:center;padding:32px;color:#94a3b8;">' +
-        '<div style="width:18px;height:18px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;"></div>' +
-        'Loading merchants…</div>';
     document.getElementById('detailOverlay').classList.add('open');
     document.getElementById('detailPanel').classList.add('open');
-    fetchCompanyMerchants(co);
+    switchDetailTab(tab || 'merchants');
 }
 
 function closeDetail() {
@@ -282,10 +373,31 @@ function closeDetail() {
     currentCompany = null;
 }
 
+function switchDetailTab(tab) {
+    currentDetailTab = tab;
+    document.getElementById('dpTabMerchants').classList.toggle('active', tab === 'merchants');
+    document.getElementById('dpTabAgents').classList.toggle('active', tab === 'agents');
+    if (tab === 'merchants') {
+        loadingBody('Loading merchants…');
+        fetchCompanyMerchants(currentCompany);
+    } else {
+        loadingBody('Loading agents…');
+        fetchCompanyAgents(currentCompany);
+    }
+}
+
+function loadingBody(msg) {
+    document.getElementById('dpBody').innerHTML =
+        '<div style="text-align:center;padding:32px;color:#94a3b8;">' +
+        '<div style="width:18px;height:18px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 10px;"></div>' +
+        msg + '</div>';
+}
+
+/* ── Merchants tab ─────────────────────────────── */
 async function fetchCompanyMerchants(co) {
     var result = await api({ action: 'get_company_merchants', company_id: co.id });
     var merchants = result.success ? (result.data || []) : [];
-    renderDetailPanel(co, merchants);
+    renderMerchantsTab(co, merchants);
 }
 
 function statusClass(s) {
@@ -298,10 +410,8 @@ function statusClass(s) {
     return '';
 }
 
-function renderDetailPanel(co, merchants) {
+function renderMerchantsTab(co, merchants) {
     var body = document.getElementById('dpBody');
-
-    // Stats row
     var approved = merchants.filter(function(m){ return (m.account_status||'').toLowerCase() === 'approved'; });
     var vol = approved.reduce(function(s, m){ return s + (parseFloat(m.volume_30_day) || 0); }, 0);
 
@@ -317,11 +427,9 @@ function renderDetailPanel(co, merchants) {
         '<div style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">30d Vol</div></div>' +
         '</div>';
 
-    // Link Merchant button
     html += '<button class="pp-btn pp-btn-primary" onclick="openLinkModal()" style="width:100%;margin:12px 0 4px;font-size:13px;">' +
         '<span class="material-icons" style="font-size:15px;">link</span> Link Merchant to this Company</button>';
 
-    // Merchant list
     html += '<div class="dp-section-title">Linked Merchants</div>';
 
     if (!merchants.length) {
@@ -338,12 +446,231 @@ function renderDetailPanel(co, merchants) {
         });
         html += '</div>';
     }
+    body.innerHTML = html;
+}
+
+/* ── Agents tab ────────────────────────────────── */
+async function fetchCompanyAgents(co) {
+    var result = await api({ action: 'get_company_agents', company_id: co.id });
+    var agents = result.success ? (result.data || []) : [];
+    renderAgentsTab(co, agents);
+}
+
+function renderAgentsTab(co, agents) {
+    var body = document.getElementById('dpBody');
+
+    var html = '<div class="dp-section-title">Enrolled Agents (' + agents.length + ')</div>';
+
+    if (!agents.length) {
+        html += '<div class="dp-empty"><span class="material-icons" style="font-size:32px;display:block;margin-bottom:6px;">people_outline</span>No agents enrolled in this company</div>';
+        body.innerHTML = html;
+        return;
+    }
+
+    html += '<div id="agentsList">';
+    agents.forEach(function(ag) {
+        var ids = ag.identifiers.map(function(i){
+            return '<span class="ag-id-chip">' + escapeHtml(i.id_string) + (i.rev_share ? ' <span style="color:#64748b;font-weight:400;">'+i.rev_share+'</span>' : '') + '</span>';
+        }).join('');
+
+        html += '<div class="ag-row" id="agrow-' + ag.agent_id + '">' +
+            '<div style="display:flex;align-items:flex-start;justify-content:space-between;">' +
+                '<div>' +
+                    '<div class="ag-person">' + escapeHtml(ag.person_name) + '</div>' +
+                    (ag.person_email ? '<div class="ag-email">' + escapeHtml(ag.person_email) + '</div>' : '') +
+                '</div>' +
+            '</div>' +
+            (ids ? '<div class="ag-ids">' + ids + '</div>' : '<div style="font-size:11px;color:#94a3b8;margin-top:6px;">No IDs</div>') +
+            '<div class="ag-actions">' +
+                '<button class="pp-btn pp-btn-secondary" style="font-size:11px;padding:5px 12px;" onclick="transferAgent(\'' + ag.agent_id + '\',\'' + escapeHtml(ag.person_name).replace(/'/g,"\\'") + '\')">' +
+                    '<span class="material-icons" style="font-size:13px;">swap_horiz</span> Transfer to Company' +
+                '</button>' +
+                '<button class="pp-btn" style="font-size:11px;padding:5px 12px;background:#fef2f2;color:#dc2626;border-color:#fecaca;" onclick="removeAgentToIndependent(\'' + ag.agent_id + '\',\'' + escapeHtml(ag.person_name).replace(/'/g,"\\'") + '\')">' +
+                    '<span class="material-icons" style="font-size:13px;">person_remove</span> Make Independent' +
+                '</button>' +
+            '</div>' +
+        '</div>';
+    });
+    html += '</div>';
 
     body.innerHTML = html;
 }
 
-function escapeHtml(s) {
-    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+async function transferAgent(agentId, personName) {
+    var others = allCompanies.filter(function(c){ return c.id !== (currentCompany && currentCompany.id); });
+    if (!others.length) { Swal.fire('No other companies', 'Add another company first.', 'info'); return; }
+
+    var opts = others.map(function(c){
+        return '<option value="' + c.id + '">' + escapeHtml(c.company_name) + ' (' + c.agent_count + ' agents)</option>';
+    }).join('');
+
+    var result = await Swal.fire({
+        title: '<div style="text-align:left;font-size:15px;font-weight:800;">Transfer Agent</div>',
+        html: '<p style="color:#475569;font-size:13px;margin-bottom:12px;">Move <b>' + escapeHtml(personName) + '</b> and all their IDs under this company to another company.</p>' +
+            '<select id="transfer-target" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">' + opts + '</select>',
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Transfer',
+        preConfirm: function() {
+            var v = document.getElementById('transfer-target').value;
+            if (!v) { Swal.showValidationMessage('Select a target company'); return false; }
+            return v;
+        }
+    });
+
+    if (!result.isConfirmed) return;
+
+    Swal.fire({ title: 'Transferring…', didOpen: function(){ Swal.showLoading(); }, allowOutsideClick: false });
+    var r = await api({ action: 'transfer_agent_to_company', agent_id: agentId, target_company_id: result.value });
+    if (r.success) {
+        await loadCompanies();
+        if (currentCompany) fetchCompanyAgents(currentCompany);
+        Swal.fire({ icon:'success', title:'Transferred!', timer:1500, showConfirmButton:false });
+    } else {
+        Swal.fire({ icon:'error', title:'Failed', text: r.message || 'Transfer failed', confirmButtonColor:'#004990' });
+    }
+}
+
+async function removeAgentToIndependent(agentId, personName) {
+    var conf = await Swal.fire({
+        title: 'Make Independent?',
+        html: '<p style="color:#475569;font-size:13px;">All IDs belonging to <b>' + escapeHtml(personName) + '</b> under this company will become independent (unassigned).</p>',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#dc2626',
+        confirmButtonText: 'Make Independent'
+    });
+    if (!conf.isConfirmed) return;
+
+    Swal.fire({ title: 'Processing…', didOpen: function(){ Swal.showLoading(); }, allowOutsideClick: false });
+    var r = await api({ action: 'remove_agent_to_independent', agent_id: agentId });
+    if (r.success) {
+        await loadCompanies();
+        if (currentCompany) fetchCompanyAgents(currentCompany);
+        Swal.fire({ icon:'success', title:'Done!', text:'Agent IDs are now independent.', timer:1800, showConfirmButton:false });
+    } else {
+        Swal.fire({ icon:'error', title:'Failed', text: r.message || 'Operation failed', confirmButtonColor:'#004990' });
+    }
+}
+
+/* ──────────────────────────────────────────────────
+   INDEPENDENT TAB
+────────────────────────────────────────────────── */
+async function loadIndependent() {
+    document.getElementById('independentGrid').innerHTML =
+        '<div style="text-align:center;padding:40px;color:#94a3b8;">' +
+        '<div style="width:20px;height:20px;border:2px solid #e2e8f0;border-top-color:#004990;border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 12px;"></div>' +
+        'Loading...</div>';
+
+    var result = await api({ action: 'get_independent_identifiers' });
+    var items = result.success ? (result.data || []) : [];
+    renderIndependent(items);
+}
+
+function renderIndependent(items) {
+    var grid = document.getElementById('independentGrid');
+    var countEl = document.getElementById('independentCount');
+    countEl.textContent = items.length + ' independent ID' + (items.length !== 1 ? 's' : '');
+
+    if (!items.length) {
+        grid.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">' +
+            '<span class="material-icons" style="font-size:40px;display:block;margin-bottom:8px;opacity:0.3;">person_outline</span>' +
+            'No independent IDs found</div>';
+        return;
+    }
+
+    grid.innerHTML = '';
+    items.forEach(function(item) {
+        var card = document.createElement('div');
+        card.className = 'indep-card';
+
+        var icon = document.createElement('span');
+        icon.className = 'material-icons';
+        icon.style.cssText = 'color:#94a3b8;font-size:20px;flex-shrink:0;';
+        icon.textContent = 'badge';
+
+        var idDiv = document.createElement('div');
+        idDiv.className = 'indep-id';
+        idDiv.textContent = item.id_string;
+
+        var revDiv = document.createElement('div');
+        revDiv.className = 'indep-rev';
+        revDiv.textContent = item.rev_share || '';
+
+        if (item.prime49) {
+            var primeBadge = document.createElement('span');
+            primeBadge.style.cssText = 'font-size:10px;background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:99px;font-weight:700;margin-right:6px;';
+            primeBadge.textContent = '⭐ Prime49';
+            card.appendChild(icon);
+            card.appendChild(idDiv);
+            card.appendChild(primeBadge);
+        } else {
+            card.appendChild(icon);
+            card.appendChild(idDiv);
+        }
+        card.appendChild(revDiv);
+
+        var assignBtn = document.createElement('button');
+        assignBtn.className = 'pp-btn pp-btn-primary';
+        assignBtn.style.cssText = 'font-size:11px;padding:5px 12px;white-space:nowrap;flex-shrink:0;';
+        assignBtn.innerHTML = '<span class="material-icons" style="font-size:13px;">business</span> Assign to Company';
+        assignBtn.onclick = (function(i){ return function(){ assignToCompany(i); }; })(item);
+
+        card.appendChild(assignBtn);
+        grid.appendChild(card);
+    });
+}
+
+async function assignToCompany(item) {
+    // Load persons for partner picker
+    if (!allPersons.length) {
+        var pr = await api({ action: 'get_partners_list' });
+        allPersons = pr.success ? (pr.data.persons || []) : [];
+    }
+
+    var coOpts = allCompanies.map(function(c){
+        return '<option value="' + c.id + '">' + escapeHtml(c.company_name) + '</option>';
+    }).join('');
+
+    var personOpts = '<option value="">— No partner (orphan agent) —</option>' +
+        allPersons.slice().sort(function(a,b){ return (a.full_name||'').localeCompare(b.full_name||''); }).map(function(p){
+            return '<option value="' + p.id + '">' + escapeHtml(p.full_name || 'Unknown') + '</option>';
+        }).join('');
+
+    var result = await Swal.fire({
+        title: '<div style="text-align:left;font-size:15px;font-weight:800;">Assign ID: ' + escapeHtml(item.id_string) + '</div>',
+        html: '<div style="text-align:left;">' +
+            '<label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">COMPANY</label>' +
+            '<select id="assign-co" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:14px;">' + coOpts + '</select>' +
+            '<label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">PARTNER (optional)</label>' +
+            '<select id="assign-person" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">' + personOpts + '</select>' +
+            '</div>',
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Assign',
+        preConfirm: function() {
+            var co = document.getElementById('assign-co').value;
+            if (!co) { Swal.showValidationMessage('Select a company'); return false; }
+            return { company_id: co, person_id: document.getElementById('assign-person').value || null };
+        }
+    });
+
+    if (!result.isConfirmed) return;
+
+    Swal.fire({ title: 'Assigning…', didOpen: function(){ Swal.showLoading(); }, allowOutsideClick: false });
+    var r = await api({
+        action: 'assign_independent_to_company',
+        identifier_id: item.id,
+        target_company_id: result.value.company_id,
+        target_person_id: result.value.person_id
+    });
+    if (r.success) {
+        await loadCompanies();
+        loadIndependent();
+        Swal.fire({ icon:'success', title:'Assigned!', timer:1500, showConfirmButton:false });
+    } else {
+        Swal.fire({ icon:'error', title:'Failed', text: r.message || 'Assignment failed', confirmButtonColor:'#004990' });
+    }
 }
 
 /* ──────────────────────────────────────────────────
@@ -369,9 +696,7 @@ function openLinkModal() {
         confirmButtonColor: '#004990',
         confirmButtonText: 'Link Merchant',
         cancelButtonText: 'Cancel',
-        didOpen: function() {
-            document.getElementById('linkSearch').focus();
-        },
+        didOpen: function() { document.getElementById('linkSearch').focus(); },
         preConfirm: function() {
             if (!selectedLinkMerchant) {
                 Swal.showValidationMessage('Please select a merchant from the search results.');
@@ -385,7 +710,6 @@ function openLinkModal() {
             var r = await api({ action: 'link_merchant', merchant_id: m.merchant_id, company_id: currentCompany.id });
             if (r.success) {
                 await loadCompanies();
-                // Refresh the panel merchants
                 fetchCompanyMerchants(currentCompany);
                 Swal.fire({ icon: 'success', title: 'Merchant linked!', text: m.dba_name + ' is now linked to ' + currentCompany.company_name, timer: 2000, showConfirmButton: false });
             } else {
@@ -399,10 +723,7 @@ var linkSearchTimeout = null;
 function handleLinkSearch(val) {
     clearTimeout(linkSearchTimeout);
     var resultsEl = document.getElementById('linkResults');
-    if (!val || val.trim().length < 2) {
-        resultsEl.innerHTML = '';
-        return;
-    }
+    if (!val || val.trim().length < 2) { resultsEl.innerHTML = ''; return; }
     resultsEl.innerHTML = '<div style="text-align:center;padding:14px;color:#94a3b8;font-size:12px;">Searching…</div>';
     linkSearchTimeout = setTimeout(async function() {
         var r = await api({ action: 'search_merchants_for_link', query: val });
@@ -425,12 +746,9 @@ function handleLinkSearch(val) {
 
 function selectLinkMerchant(m) {
     selectedLinkMerchant = m;
-    // Highlight selected
-    var all = document.querySelectorAll('.link-result');
-    all.forEach(function(el){ el.classList.remove('selected'); });
+    document.querySelectorAll('.link-result').forEach(function(el){ el.classList.remove('selected'); });
     var el = document.querySelector('.link-result[data-mid="' + m.merchant_id + '"]');
     if (el) el.classList.add('selected');
-    // Show summary
     var sel = document.getElementById('linkSelected');
     sel.style.display = 'block';
     sel.innerHTML = '<span class="material-icons" style="font-size:14px;vertical-align:-2px;color:#004990;">check_circle</span> ' +
@@ -438,20 +756,16 @@ function selectLinkMerchant(m) {
 }
 
 /* ──────────────────────────────────────────────────
-   EXISTING CRUD
+   CRUD
 ────────────────────────────────────────────────── */
 async function addCompany() {
     var result = await Swal.fire({
-        title: 'Add New Company',
-        input: 'text',
-        inputPlaceholder: 'Company name...',
-        showCancelButton: true,
-        confirmButtonColor: '#004990',
-        confirmButtonText: 'Add',
+        title: 'Add New Company', input: 'text', inputPlaceholder: 'Company name...',
+        showCancelButton: true, confirmButtonColor: '#004990', confirmButtonText: 'Add',
         inputValidator: function(v){ if (!v.trim()) return 'Please enter a company name'; }
     });
     if (result.value) {
-        var r = await api({ action: 'rename_company', company_id: null, name: result.value.trim(), create: true });
+        await api({ action: 'rename_company', company_id: null, name: result.value.trim(), create: true });
         await loadCompanies();
         Swal.fire({ icon:'success', title:'Company added!', timer:1500, showConfirmButton:false });
     }
@@ -459,18 +773,13 @@ async function addCompany() {
 
 async function renameCompany(co) {
     var result = await Swal.fire({
-        title: 'Rename Company',
-        input: 'text',
-        inputValue: co.company_name,
-        showCancelButton: true,
-        confirmButtonColor: '#004990',
-        confirmButtonText: 'Save',
+        title: 'Rename Company', input: 'text', inputValue: co.company_name,
+        showCancelButton: true, confirmButtonColor: '#004990', confirmButtonText: 'Save',
         inputValidator: function(v){ if (!v.trim()) return 'Please enter a name'; }
     });
     if (result.value && result.value.trim() !== co.company_name) {
         await api({ action: 'rename_company', company_id: co.id, name: result.value.trim() });
         await loadCompanies();
-        // If the renamed company is currently open in the panel, refresh title
         if (currentCompany && currentCompany.id === co.id) {
             currentCompany.company_name = result.value.trim();
             document.getElementById('dpTitle').textContent = currentCompany.company_name;
@@ -482,14 +791,11 @@ async function renameCompany(co) {
 async function mergeCompany(co) {
     var others = allCompanies.filter(function(c){ return c.id !== co.id; });
     var opts = others.map(function(c){ return '<option value="' + c.id + '">' + c.company_name + ' (' + c.agent_count + ' agents)</option>'; }).join('');
-
     var result = await Swal.fire({
         title: 'Merge: ' + co.company_name,
-        html: '<p style="color:#475569;font-size:13px;">All ' + co.agent_count + ' agent(s) from <b>' + co.company_name + '</b> will be moved into the selected company. The duplicate will be deleted.</p>'
-            + '<select id="merge-target" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-top:8px;">' + opts + '</select>',
-        showCancelButton: true,
-        confirmButtonColor: '#f59e0b',
-        confirmButtonText: 'Merge',
+        html: '<p style="color:#475569;font-size:13px;">All ' + co.agent_count + ' agent(s) from <b>' + co.company_name + '</b> will be moved into the selected company. The duplicate will be deleted.</p>' +
+            '<select id="merge-target" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-top:8px;">' + opts + '</select>',
+        showCancelButton: true, confirmButtonColor: '#f59e0b', confirmButtonText: 'Merge',
         preConfirm: function() { return document.getElementById('merge-target').value; }
     });
     if (result.isConfirmed) {
@@ -502,12 +808,8 @@ async function mergeCompany(co) {
 
 async function deleteCompany(co) {
     var conf = await Swal.fire({
-        title: 'Delete ' + co.company_name + '?',
-        text: 'This cannot be undone.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonColor: '#ef4444',
-        confirmButtonText: 'Delete'
+        title: 'Delete ' + co.company_name + '?', text: 'This cannot be undone.',
+        icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444', confirmButtonText: 'Delete'
     });
     if (conf.isConfirmed) {
         var r = await api({ action: 'delete_company', company_id: co.id });
@@ -519,6 +821,10 @@ async function deleteCompany(co) {
             Swal.fire({ icon:'error', title:'Cannot delete', text: r.message, confirmButtonColor:'#004990' });
         }
     }
+}
+
+function escapeHtml(s) {
+    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
 window.onload = loadCompanies;

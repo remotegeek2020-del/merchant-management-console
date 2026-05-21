@@ -204,6 +204,92 @@ if (action === 'complete_onboarding') {
 
     return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
+        // --- ACTION: GET AGENTS FOR A COMPANY ---
+        if (action === 'get_company_agents') {
+            const { company_id } = body;
+            if (!company_id) return res.status(400).json({ success: false, message: 'Missing company_id' });
+            const { data: agents, error: ae } = await supabase
+                .from('agents').select('id, parent_agent_id').eq('company_id', company_id);
+            if (ae) throw ae;
+            if (!agents || agents.length === 0) return res.status(200).json({ success: true, data: [] });
+            const agentIds = agents.map(a => a.id);
+            const personIds = [...new Set(agents.map(a => a.parent_agent_id).filter(Boolean))];
+            const [{ data: persons }, { data: identifiers }] = await Promise.all([
+                personIds.length ? supabase.from('persons').select('id, full_name, email').in('id', personIds) : { data: [] },
+                supabase.from('agent_identifiers').select('id, agent_id, id_string, rev_share').in('agent_id', agentIds)
+            ]);
+            const personMap = Object.fromEntries((persons||[]).map(p => [p.id, p]));
+            const result = agents.map(a => ({
+                agent_id: a.id,
+                person_id: a.parent_agent_id || null,
+                person_name: personMap[a.parent_agent_id]?.full_name || '(No partner)',
+                person_email: personMap[a.parent_agent_id]?.email || '',
+                identifiers: (identifiers||[]).filter(i => i.agent_id === a.id).map(i => ({ id: i.id, id_string: i.id_string, rev_share: i.rev_share }))
+            }));
+            return res.status(200).json({ success: true, data: result });
+        }
+
+        // --- ACTION: GET INDEPENDENT IDENTIFIERS ---
+        if (action === 'get_independent_identifiers') {
+            const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+            const { data: identifiers, error: ie } = await supabase
+                .from('agent_identifiers').select('id, id_string, rev_share, prime49').eq('agent_id', PLACEHOLDER);
+            if (ie) throw ie;
+            return res.status(200).json({ success: true, data: identifiers || [] });
+        }
+
+        // --- ACTION: MAKE AGENT INDEPENDENT (move all its identifiers to placeholder, delete agent) ---
+        if (action === 'remove_agent_to_independent') {
+            const { agent_id } = body;
+            if (!agent_id) return res.status(400).json({ success: false, message: 'Missing agent_id' });
+            const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+            const { error: e1 } = await supabase.from('agent_identifiers')
+                .update({ agent_id: PLACEHOLDER, parent_config_id: null }).eq('agent_id', agent_id);
+            if (e1) throw e1;
+            const { error: e2 } = await supabase.from('agents').delete().eq('id', agent_id);
+            if (e2) throw e2;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: TRANSFER AGENT TO ANOTHER COMPANY ---
+        if (action === 'transfer_agent_to_company') {
+            const { agent_id, target_company_id } = body;
+            if (!agent_id || !target_company_id) return res.status(400).json({ success: false, message: 'Missing agent_id or target_company_id' });
+            const { error } = await supabase.from('agents').update({ company_id: target_company_id }).eq('id', agent_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: ASSIGN INDEPENDENT IDENTIFIER TO COMPANY ---
+        if (action === 'assign_independent_to_company') {
+            const { identifier_id, target_company_id, target_person_id } = body;
+            if (!identifier_id || !target_company_id) return res.status(400).json({ success: false, message: 'Missing identifier_id or target_company_id' });
+            const PLACEHOLDER = 'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be';
+            let destAgentId;
+            if (target_person_id) {
+                const { data: existing } = await supabase.from('agents').select('id')
+                    .eq('parent_agent_id', target_person_id).eq('company_id', target_company_id).maybeSingle();
+                if (existing) {
+                    destAgentId = existing.id;
+                } else {
+                    const { data: newAgent, error: ne } = await supabase.from('agents')
+                        .insert({ parent_agent_id: target_person_id, company_id: target_company_id }).select('id').single();
+                    if (ne) throw ne;
+                    destAgentId = newAgent.id;
+                }
+            } else {
+                // No partner selected — create an agent under the company with no person
+                const { data: newAgent, error: ne } = await supabase.from('agents')
+                    .insert({ company_id: target_company_id, parent_agent_id: null }).select('id').single();
+                if (ne) throw ne;
+                destAgentId = newAgent.id;
+            }
+            const { error } = await supabase.from('agent_identifiers')
+                .update({ agent_id: destAgentId, parent_config_id: null }).eq('id', identifier_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
         // --- ACTION: GET COMPANIES WITH USAGE ---
         if (action === 'get_companies_full') {
             const { data: companies } = await supabase.from('companies').select('id, company_name').order('company_name');
