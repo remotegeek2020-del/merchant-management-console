@@ -904,7 +904,9 @@ if (action === 'getLookups') {
 }
 
         if (action === 'getHistory') {
-            const { data, error } = await supabase.from('equipment_logs').select('*').eq('equipment_id', body.equipment_id).order('created_at', { ascending: false });
+            const ids = body.equipment_ids || (body.equipment_id ? [body.equipment_id] : []);
+            if (!ids.length) return res.status(400).json({ success: false, message: 'No equipment_id provided' });
+            const { data, error } = await supabase.from('equipment_logs').select('*').in('equipment_id', ids).order('created_at', { ascending: false });
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });
         }

@@ -681,10 +681,11 @@ if (document.getElementById('kpi-total')) {
                                 : `<span style="color:#94a3b8;font-size:11px;">—</span>`)
                             : (d.tid || '---');
 
-                        // For history & delete: use first item's equipment_id for bulk, or the deployment's equipment_id for single
-                        const histEquipId = isBulk ? (d.items?.[0]?.equipment_id || '') : (d.equipment_id || '');
-                        const histSerial = isBulk ? (d.items?.[0]?.serial_number || 'bulk') : (d.equipments?.serial_number || '---');
-                        const safeSerial = histSerial.replace(/'/g, "\\'");
+                        // For history: pass all items for bulk, single equipment_id for standard
+                        const histItems = isBulk
+                            ? (d.items || []).map(i => ({ id: i.equipment_id, sn: i.serial_number }))
+                            : [{ id: d.equipment_id || '', sn: d.equipments?.serial_number || '---' }];
+                        const histItemsJson = JSON.stringify(histItems).replace(/"/g, '&quot;');
 
                         row.innerHTML = `
                             <td style="font-weight:700; color:var(--pp-blue);">
@@ -706,7 +707,7 @@ if (document.getElementById('kpi-total')) {
                             <td style="display:flex; gap:5px;">
                                 ${!isBulk ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateDeploymentPDF(${index})" title="Print Packing Slip"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>` : `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="generateBulkPackingSlip(${index})" title="Print Bulk Packing Slip"><span class="material-icons" style="font-size:18px; color:#004990;">print</span></button>`}
                                 <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="openEditModal(${index})"><span class="material-icons" style="font-size:18px;">edit</span></button>
-                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${histEquipId}', '${safeSerial}')"><span class="material-icons" style="font-size:18px;">history</span></button>
+                                <button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="viewHistory('${histItemsJson}')"><span class="material-icons" style="font-size:18px;">history</span></button>
                                 ${canDeleteTickets ? `<button class="slds-button slds-button_icon slds-button_icon-border-filled" onclick="confirmDelete('${d.id}', '${safeDba}', '${safeSerial}', '${d.equipment_id || ''}', '${d.merchant_id}')" title="Delete Ticket"><span class="material-icons" style="font-size:18px; color:#e11d48;">delete_forever</span></button>` : ''}
                             </td>
                         `;
@@ -969,27 +970,61 @@ async function processReturn() {
         }
     }
 }
-    async function viewHistory(id, sn) {
+    async function viewHistory(itemsJson) {
+        const items = typeof itemsJson === 'string' ? JSON.parse(itemsJson) : itemsJson;
         const modal = document.getElementById('historyModal');
-        const list = document.getElementById('timeline');
-        document.getElementById('histSubtitle').innerText = `Full history for SN: ${sn}`;
+        const list  = document.getElementById('timeline');
+        const subtitle = document.getElementById('histSubtitle');
+        const ids = items.map(i => i.id).filter(Boolean);
+        subtitle.innerText = items.length === 1
+            ? `Full history for SN: ${items[0].sn}`
+            : `Equipment history for ${items.length} units`;
         modal.style.display = 'flex';
+        list.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:12px 0;">Loading…</div>';
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'getHistory', equipment_id: id })
+                body: JSON.stringify({ action: 'getHistory', equipment_ids: ids })
             });
             const result = await res.json();
-            list.innerHTML = (result.data || []).map(log => `
-                <div class="timeline-item">
-                    <div class="timeline-dot"></div>
-                    <div style="font-size:0.75rem; color:#94a3b8; font-weight:700;">${fmtDateTime(log.created_at)}</div>
-                    <div style="font-weight:800; color:#002d5a;">${log.action.toUpperCase()}</div>
-                    <div style="font-size:0.85rem; color:#64748b;">${log.from_location} → ${log.to_location}</div>
-                </div>
-            `).join('');
-        } catch (e) { list.innerHTML = 'Error loading history'; }
+            const logs = result.data || [];
+            if (!logs.length) { list.innerHTML = '<div style="color:#94a3b8;font-size:13px;padding:12px 0;">No history found.</div>'; return; }
+
+            if (items.length === 1) {
+                // Single unit — plain timeline
+                list.innerHTML = logs.map(log => `
+                    <div class="timeline-item">
+                        <div class="timeline-dot"></div>
+                        <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;">${fmtDateTime(log.created_at)}</div>
+                        <div style="font-weight:800;color:#002d5a;">${log.action.toUpperCase()}</div>
+                        <div style="font-size:0.85rem;color:#64748b;">${log.from_location} → ${log.to_location}</div>
+                    </div>`).join('');
+            } else {
+                // Multiple units — group by equipment_id with serial number header
+                const snMap = {};
+                items.forEach(i => { snMap[i.id] = i.sn; });
+                const grouped = {};
+                logs.forEach(log => {
+                    if (!grouped[log.equipment_id]) grouped[log.equipment_id] = [];
+                    grouped[log.equipment_id].push(log);
+                });
+                list.innerHTML = Object.entries(grouped).map(([equipId, equipLogs]) => `
+                    <div style="margin-bottom:18px;">
+                        <div style="font-size:11px;font-weight:800;color:#004990;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:5px 10px;margin-bottom:8px;display:inline-block;">
+                            <span class="material-icons" style="font-size:12px;vertical-align:middle;">memory</span>
+                            SN: ${snMap[equipId] || equipId}
+                        </div>
+                        ${equipLogs.map(log => `
+                        <div class="timeline-item" style="margin-left:8px;">
+                            <div class="timeline-dot"></div>
+                            <div style="font-size:0.75rem;color:#94a3b8;font-weight:700;">${fmtDateTime(log.created_at)}</div>
+                            <div style="font-weight:800;color:#002d5a;">${log.action.toUpperCase()}</div>
+                            <div style="font-size:0.85rem;color:#64748b;">${log.from_location} → ${log.to_location}</div>
+                        </div>`).join('')}
+                    </div>`).join('');
+            }
+        } catch (e) { list.innerHTML = '<div style="color:#ef4444;font-size:13px;">Error loading history.</div>'; }
     }
 
     // --- 4. LOOKUPS, MODALS & UTILS ---
