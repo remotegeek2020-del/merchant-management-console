@@ -1567,7 +1567,7 @@ async function submitOnboarding() {
 
         let selectedAgentId = null;
         let selectedName = '';
-        let moveMode = 'partner'; // 'partner' | 'independent'
+        let moveMode = 'partner'; // updated via didOpen listeners, not inline onclick
 
         const { value: confirmed } = await Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">Move Agent ID: ${idName}</div>`,
@@ -1577,22 +1577,10 @@ async function submitOnboarding() {
                         <b>⚠ Warning:</b> This will move <b>${idName}</b>. All associated merchant data will remain but will appear under the new assignment.
                     </div>
                     <div style="display:flex; gap:6px; margin-bottom:16px;">
-                        <button type="button" id="mode-partner" onclick="
-                            document.getElementById('mode-partner').style.cssText='flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
-                            document.getElementById('mode-independent').style.cssText='flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
-                            document.getElementById('partner-search-section').style.display='block';
-                            document.getElementById('independent-section').style.display='none';
-                            window._moveSwalMode='partner';
-                        " style="flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;">
+                        <button type="button" id="mode-partner" style="flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;">
                             👤 Move to Partner
                         </button>
-                        <button type="button" id="mode-independent" onclick="
-                            document.getElementById('mode-independent').style.cssText='flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
-                            document.getElementById('mode-partner').style.cssText='flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
-                            document.getElementById('partner-search-section').style.display='none';
-                            document.getElementById('independent-section').style.display='block';
-                            window._moveSwalMode='independent';
-                        " style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;">
+                        <button type="button" id="mode-independent" style="flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;">
                             🏠 Make Independent
                         </button>
                     </div>
@@ -1618,11 +1606,32 @@ async function submitOnboarding() {
             confirmButtonText: 'CONFIRM MOVE',
             cancelButtonText: 'Cancel',
             didOpen: () => {
-                window._moveSwalMode = 'partner';
+                const btnPartner = document.getElementById('mode-partner');
+                const btnIndep = document.getElementById('mode-independent');
+                const partnerSection = document.getElementById('partner-search-section');
+                const indepSection = document.getElementById('independent-section');
                 const input = document.getElementById('swal-company-search');
                 const results = document.getElementById('swal-company-results');
                 const selectedBox = document.getElementById('swal-company-selected');
                 const selectedNameEl = document.getElementById('swal-company-selected-name');
+
+                const setMode = (m) => {
+                    moveMode = m;
+                    if (m === 'partner') {
+                        btnPartner.style.cssText = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
+                        btnIndep.style.cssText   = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
+                        partnerSection.style.display = 'block';
+                        indepSection.style.display   = 'none';
+                    } else {
+                        btnIndep.style.cssText   = 'flex:1;padding:8px;border:2px solid #dc2626;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:#fef2f2;color:#dc2626;';
+                        btnPartner.style.cssText = 'flex:1;padding:8px;border:2px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:800;cursor:pointer;background:white;color:#64748b;';
+                        partnerSection.style.display = 'none';
+                        indepSection.style.display   = 'block';
+                    }
+                };
+
+                btnPartner.addEventListener('click', () => setMode('partner'));
+                btnIndep.addEventListener('click', () => setMode('independent'));
 
                 input.addEventListener('input', (e) => {
                     const val = e.target.value.toLowerCase().trim();
@@ -1660,7 +1669,6 @@ async function submitOnboarding() {
                 });
             },
             preConfirm: () => {
-                moveMode = window._moveSwalMode || 'partner';
                 if (moveMode === 'partner' && !selectedAgentId) {
                     Swal.showValidationMessage('Please select a destination partner.');
                     return false;
