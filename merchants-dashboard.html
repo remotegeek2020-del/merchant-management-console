@@ -1915,8 +1915,8 @@ window.saveMerchant = async (uuid) => {
     // ── @MENTION SYSTEM ───────────────────────────────────────────────────────
     let _staffUsers = [];       // [{userid, display_name, email}]
     let _mentionedIds = [];     // UUIDs of tagged users
-    let _mentionQuery = '';     // text after the last @
     let _mentionActive = false; // dropdown open?
+    let _mentionAtPos  = -1;   // absolute index of the triggering @ in textarea.value
 
     async function loadStaffUsers() {
         if (_staffUsers.length) return;
@@ -1931,10 +1931,9 @@ window.saveMerchant = async (uuid) => {
         } catch (e) { console.error('[Mention] Failed to load staff', e); }
     }
 
-    window.handleNoteBodyInput = function(textarea, event) {
+    window.handleNoteBodyInput = function(textarea) {
         const val = textarea.value;
         const pos = textarea.selectionStart;
-        // Find the last @ before caret
         const before = val.slice(0, pos);
         const atIdx = before.lastIndexOf('@');
         const dropdown = document.getElementById('mention-dropdown');
@@ -1942,16 +1941,17 @@ window.saveMerchant = async (uuid) => {
 
         if (atIdx !== -1) {
             const query = before.slice(atIdx + 1);
-            // Only activate if no space in query (still typing the handle)
-            if (!query.includes(' ') || query.length === 0) {
-                _mentionQuery = query.toLowerCase();
+            // Active while no space has been typed after the @
+            if (!query.includes(' ')) {
+                _mentionAtPos  = atIdx;  // store position so selectMention can use it after blur
                 _mentionActive = true;
+                const q = query.toLowerCase();
                 const filtered = _staffUsers.filter(u =>
-                    u.display_name.toLowerCase().includes(_mentionQuery)
+                    u.display_name.toLowerCase().includes(q)
                 ).slice(0, 8);
                 if (filtered.length) {
                     dropdown.innerHTML = filtered.map(u => `
-                        <div onclick="selectMention('${u.userid}', '${u.display_name.replace(/'/g, "\\'")}')"
+                        <div onmousedown="selectMention('${u.userid}', '${u.display_name.replace(/'/g, "\\'")}')"
                             style="padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f1f5f9;font-size:13px;"
                             onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
                             <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
@@ -1965,32 +1965,34 @@ window.saveMerchant = async (uuid) => {
             }
         }
         _mentionActive = false;
+        _mentionAtPos  = -1;
         dropdown.style.display = 'none';
     };
 
     window.selectMention = function(userId, displayName) {
         const textarea = document.getElementById('new-note-body');
         const dropdown = document.getElementById('mention-dropdown');
-        if (!textarea) return;
+        if (!textarea || _mentionAtPos === -1) return;
 
-        // Replace the @query with @DisplayName in the textarea
+        // Use the stored @ position — safe even after textarea loses focus
         const val = textarea.value;
-        const pos = textarea.selectionStart;
-        const before = val.slice(0, pos);
-        const atIdx = before.lastIndexOf('@');
-        const after = val.slice(pos);
-        textarea.value = before.slice(0, atIdx) + '@' + displayName + ' ' + after;
+        const afterAt = val.slice(_mentionAtPos + 1);
+        // Query ends at the first whitespace after @, or end of string
+        const spaceIdx = afterAt.search(/\s/);
+        const queryEnd = _mentionAtPos + 1 + (spaceIdx === -1 ? afterAt.length : spaceIdx);
+
+        textarea.value = val.slice(0, _mentionAtPos) + '@' + displayName + ' ' + val.slice(queryEnd);
         textarea.focus();
-        const newCaret = atIdx + displayName.length + 2;
+        const newCaret = _mentionAtPos + displayName.length + 2;
         textarea.setSelectionRange(newCaret, newCaret);
 
-        // Track mention
         if (!_mentionedIds.includes(userId)) {
             _mentionedIds.push(userId);
             renderMentionChips();
         }
         if (dropdown) dropdown.style.display = 'none';
         _mentionActive = false;
+        _mentionAtPos  = -1;
     };
 
     function renderMentionChips() {
