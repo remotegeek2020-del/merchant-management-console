@@ -305,43 +305,58 @@ if (action === 'getMonthlyReport') {
         }
 
         if (action === 'get_roi_stats') {
-            // Fetch all equipment with relevant fields for ROI/utilization analysis
-            const { data: allEquipment, error: allError } = await supabase
-                .from('equipments')
-                .select('id, serial_number, terminal_type, status, current_location, received_date, created_at');
+            const IDLE_THRESHOLD_DAYS = parseInt(req.body.idle_threshold_days) || 90;
 
-            if (allError) throw allError;
+            // Paginate through all equipment (Supabase default cap is 1000 rows)
+            let allEquipment = [];
+            let from = 0;
+            const PAGE = 1000;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('equipments')
+                    .select('id, serial_number, terminal_type, status, current_location, received_date, created_at')
+                    .range(from, from + PAGE - 1);
+                if (error) throw error;
+                if (!data || data.length === 0) break;
+                allEquipment = allEquipment.concat(data);
+                if (data.length < PAGE) break;
+                from += PAGE;
+            }
 
             const now = new Date();
-            const IDLE_THRESHOLD_DAYS = 90;
 
-            // Group by terminal_type
+            // Group by terminal_type and build location map simultaneously
             const modelMap = {};
+            const locationMap = {};
+
             for (const unit of allEquipment) {
                 const model = unit.terminal_type || 'Unknown';
+                const status = (unit.status || '').toLowerCase();
+                const loc = unit.current_location || 'Unknown';
+
                 if (!modelMap[model]) {
                     modelMap[model] = {
                         model,
-                        total_units: 0,
-                        deployed_units: 0,
-                        stocked_units: 0,
-                        repair_units: 0,
-                        scrapped_units: 0,
-                        stocked_days_sum: 0,
-                        stocked_days_count: 0,
-                        idle_units: 0,
-                        idle_serials: []
+                        total_units: 0, deployed_units: 0, stocked_units: 0,
+                        repair_units: 0, scrapped_units: 0,
+                        stocked_days_sum: 0, stocked_days_count: 0,
+                        idle_units: 0, idle_serials: [],
+                        age_buckets: { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, d180_plus: 0 }
                     };
                 }
-                const m = modelMap[model];
-                m.total_units++;
+                if (!locationMap[loc]) {
+                    locationMap[loc] = { location: loc, total: 0, deployed: 0, stocked: 0, repair: 0, scrapped: 0 };
+                }
 
-                const status = (unit.status || '').toLowerCase();
+                const m = modelMap[model];
+                const l = locationMap[loc];
+                m.total_units++;
+                l.total++;
+
                 if (status === 'deployed') {
-                    m.deployed_units++;
+                    m.deployed_units++; l.deployed++;
                 } else if (status === 'stocked') {
-                    m.stocked_units++;
-                    // Calculate days in stock from received_date or created_at
+                    m.stocked_units++; l.stocked++;
                     const stockDate = unit.received_date || unit.created_at;
                     if (stockDate) {
                         const d = new Date(stockDate);
@@ -349,11 +364,18 @@ if (action === 'getMonthlyReport') {
                             const days = Math.floor((now - d) / (1000 * 60 * 60 * 24));
                             m.stocked_days_sum += days;
                             m.stocked_days_count++;
+                            // Age buckets
+                            if (days <= 30) m.age_buckets.d0_30++;
+                            else if (days <= 60) m.age_buckets.d31_60++;
+                            else if (days <= 90) m.age_buckets.d61_90++;
+                            else if (days <= 180) m.age_buckets.d91_180++;
+                            else m.age_buckets.d180_plus++;
+
                             if (days > IDLE_THRESHOLD_DAYS) {
                                 m.idle_units++;
                                 m.idle_serials.push({
                                     serial_number: unit.serial_number,
-                                    model: model,
+                                    model,
                                     location: unit.current_location,
                                     days_idle: days,
                                     stock_date: stockDate
@@ -362,9 +384,9 @@ if (action === 'getMonthlyReport') {
                         }
                     }
                 } else if (status === 'repair' || status === 'repairing') {
-                    m.repair_units++;
+                    m.repair_units++; l.repair++;
                 } else if (status === 'decommissioned' || status === 'scrapped') {
-                    m.scrapped_units++;
+                    m.scrapped_units++; l.scrapped++;
                 }
             }
 
@@ -383,6 +405,7 @@ if (action === 'getMonthlyReport') {
                     utilization_rate,
                     avg_days_stocked,
                     idle_units: m.idle_units,
+                    age_buckets: m.age_buckets,
                     idle_serials: m.idle_serials.sort((a, b) => b.days_idle - a.days_idle)
                 };
             }).sort((a, b) => b.total_units - a.total_units);
@@ -403,19 +426,39 @@ if (action === 'getMonthlyReport') {
             // Strip idle_serials from per-model list (they come from allIdleSerials)
             const modelStatsClean = modelStats.map(({ idle_serials, ...rest }) => rest);
 
+            const totalStocked = modelStats.reduce((s, m) => s + m.stocked_units, 0);
+            const totalRepair  = modelStats.reduce((s, m) => s + m.repair_units, 0);
+
+            // Aggregate stocked age buckets across all models
+            const stockedAgeBuckets = modelStats.reduce((acc, m) => {
+                acc.d0_30     += m.age_buckets.d0_30;
+                acc.d31_60    += m.age_buckets.d31_60;
+                acc.d61_90    += m.age_buckets.d61_90;
+                acc.d91_180   += m.age_buckets.d91_180;
+                acc.d180_plus += m.age_buckets.d180_plus;
+                return acc;
+            }, { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, d180_plus: 0 });
+
+            // Location breakdown sorted by total desc
+            const locationBreakdown = Object.values(locationMap)
+                .sort((a, b) => b.total - a.total);
+
             return res.status(200).json({
                 success: true,
+                idle_threshold_days: IDLE_THRESHOLD_DAYS,
                 summary: {
                     total_fleet: totalFleet,
                     overall_utilization: overallUtilization,
                     total_idle: totalIdle,
                     total_deployed: totalDeployed,
-                    total_stocked: modelStats.reduce((s, m) => s + m.stocked_units, 0),
-                    total_repair: modelStats.reduce((s, m) => s + m.repair_units, 0),
-                    total_scrapped: totalScrapped
+                    total_stocked: totalStocked,
+                    total_repair: totalRepair,
+                    total_scrapped: totalScrapped,
+                    stocked_age_buckets: stockedAgeBuckets
                 },
                 model_stats: modelStatsClean,
-                idle_serials: allIdleSerials
+                idle_serials: allIdleSerials,
+                location_breakdown: locationBreakdown
             });
         }
 
