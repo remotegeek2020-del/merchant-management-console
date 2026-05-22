@@ -1660,7 +1660,7 @@ async function addTask(merchantUuid) {
         if (tab === 'tasks') fetchMerchantTasks();
         if (tab === 'tickets') fetchMerchantTickets();
         if (tab === 'partner') fetchPartnerInfo();
-        if (tab === 'notes') { renderMentionChips(); loadStaffUsers(); }
+        if (tab === 'notes') { _activeMentions = {}; renderMentionChips(); loadStaffUsers(); }
     };
 
     async function fetchPartnerInfo() {
@@ -1913,8 +1913,9 @@ window.saveMerchant = async (uuid) => {
 };
 
     // ── @MENTION SYSTEM ───────────────────────────────────────────────────────
-    let _staffUsers   = [];  // [{userid, display_name, email}]
-    let _mentionAtPos = -1;  // absolute index of the triggering @ in textarea.value
+    let _staffUsers    = [];  // [{userid, display_name}]
+    let _mentionAtPos  = -1;  // index of triggering @ in textarea.value
+    let _activeMentions = {}; // { userid: displayName } — added on select, removed when @name deleted
 
     async function loadStaffUsers() {
         if (_staffUsers.length) return;
@@ -1929,32 +1930,28 @@ window.saveMerchant = async (uuid) => {
         } catch (e) { console.error('[Mention] Failed to load staff', e); }
     }
 
-    // Parse @mentions by scanning textarea text against known staff names
-    // This is the single source of truth — no separate tracking array
-    function parseMentionsFromText(text) {
-        const found = [];
-        for (const u of _staffUsers) {
-            if (text.includes('@' + u.display_name) && !found.find(f => f.userid === u.userid)) {
-                found.push(u);
+    function syncMentionChips(textareaValue) {
+        // Remove from _activeMentions if user deleted the @name from the text
+        for (const [uid, name] of Object.entries(_activeMentions)) {
+            if (!textareaValue.includes('@' + name)) {
+                delete _activeMentions[uid];
             }
         }
-        return found;
+        renderMentionChips();
     }
 
     function renderMentionChips() {
         const chips = document.getElementById('mention-chips');
-        const bodyEl = document.getElementById('new-note-body');
         if (!chips) return;
-        const mentioned = parseMentionsFromText(bodyEl ? bodyEl.value : '');
-        chips.innerHTML = mentioned.map(u => `
+        const entries = Object.entries(_activeMentions);
+        chips.innerHTML = entries.map(([uid, name]) => `
             <span style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;">
-                <span class="material-icons" style="font-size:12px;">alternate_email</span>${u.display_name}
+                <span class="material-icons" style="font-size:12px;">alternate_email</span>${name}
             </span>`).join('');
     }
 
     window.handleNoteBodyInput = function(textarea) {
-        // Always refresh chips to reflect current @mentions in text
-        renderMentionChips();
+        syncMentionChips(textarea.value); // prune deleted @mentions, re-render chips
 
         const val = textarea.value;
         const pos = textarea.selectionStart;
@@ -1993,6 +1990,7 @@ window.saveMerchant = async (uuid) => {
         const dropdown = document.getElementById('mention-dropdown');
         if (!textarea || _mentionAtPos === -1) return;
 
+        // Insert @DisplayName at the stored @ position
         const val = textarea.value;
         const afterAt = val.slice(_mentionAtPos + 1);
         const spaceIdx = afterAt.search(/\s/);
@@ -2002,7 +2000,10 @@ window.saveMerchant = async (uuid) => {
         const newCaret = _mentionAtPos + displayName.length + 2;
         textarea.setSelectionRange(newCaret, newCaret);
 
-        renderMentionChips(); // re-parse text to update chips
+        // Track the mention — keyed by userid so duplicates are naturally prevented
+        _activeMentions[userId] = displayName;
+        renderMentionChips();
+
         if (dropdown) dropdown.style.display = 'none';
         _mentionAtPos = -1;
     };
@@ -2039,7 +2040,7 @@ window.saveMerchant = async (uuid) => {
                 title: title,
                 body: body,
                 created_by: userId,
-                mentions: parseMentionsFromText(body).map(u => u.userid)
+                mentions: Object.keys(_activeMentions)
             })
         });
 
@@ -2048,6 +2049,7 @@ window.saveMerchant = async (uuid) => {
         if (result.success) {
             if (titleEl) titleEl.value = '';
             if (bodyEl) bodyEl.value = '';
+            _activeMentions = {};
             renderMentionChips();
             const dd = document.getElementById('mention-dropdown');
             if (dd) dd.style.display = 'none';
