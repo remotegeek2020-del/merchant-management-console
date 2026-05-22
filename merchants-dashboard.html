@@ -1997,6 +1997,10 @@ window.saveMerchant = async (uuid) => {
         return Swal.fire('Required', 'Subject and Body are required.', 'warning');
     }
 
+    // Capture BEFORE Swal.fire() — opening a new Swal destroys the merchant modal DOM
+    // (including mention-chips), so getMentionedUserIds() would return [] if called after.
+    const mentions = getMentionedUserIds();
+
     Swal.fire({ title: 'Saving Note...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
@@ -2009,7 +2013,7 @@ window.saveMerchant = async (uuid) => {
                 title: title,
                 body: body,
                 created_by: userId,
-                mentions: getMentionedUserIds()
+                mentions
             })
         });
 
