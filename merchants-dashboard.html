@@ -1944,6 +1944,12 @@ window.saveMerchant = async (uuid) => {
         return Array.from(chips.querySelectorAll('[data-uid]')).map(c => c.dataset.uid);
     }
 
+    function getMentionedUserNames() {
+        const chips = document.getElementById('mention-chips');
+        if (!chips) return [];
+        return Array.from(chips.querySelectorAll('[data-uid]')).map(c => c.dataset.name).filter(Boolean);
+    }
+
     // Tag picker — inline panel inside SweetAlert's own DOM (no cross-context issues)
     window.openTagPicker = async function() {
         await loadStaffUsers();
@@ -1976,7 +1982,7 @@ window.saveMerchant = async (uuid) => {
         // Build all chip HTML at once — single innerHTML set, no loop/append timing issues
         const checked = Array.from(list.querySelectorAll('input[type=checkbox]:checked'));
         chips.innerHTML = checked.map(cb =>
-            `<span data-uid="${cb.value}" style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;">
+            `<span data-uid="${cb.value}" data-name="${cb.dataset.name.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;">
                 <span class="material-icons" style="font-size:12px;">alternate_email</span>${cb.dataset.name}
                 <span onclick="this.parentElement.remove()" style="cursor:pointer;font-size:14px;line-height:1;margin-left:3px;opacity:0.7;">×</span>
             </span>`
@@ -1998,8 +2004,13 @@ window.saveMerchant = async (uuid) => {
     }
 
     // Capture BEFORE Swal.fire() — opening a new Swal destroys the merchant modal DOM
-    // (including mention-chips), so getMentionedUserIds() would return [] if called after.
-    const mentions = getMentionedUserIds();
+    const mentions  = getMentionedUserIds();
+    const taggedNames = getMentionedUserNames();
+
+    // Append tagged people to the note body so they're visible on the saved note
+    const fullBody = taggedNames.length
+        ? body + '\n\nTagged: ' + taggedNames.map(n => '@' + n).join(', ')
+        : body;
 
     Swal.fire({ title: 'Saving Note...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
@@ -2011,7 +2022,7 @@ window.saveMerchant = async (uuid) => {
                 action: 'add_note',
                 merchant_uuid: uuid,
                 title: title,
-                body: body,
+                body: fullBody,
                 created_by: userId,
                 mentions
             })
