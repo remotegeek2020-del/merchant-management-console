@@ -170,6 +170,24 @@
             <h1 style="font-size:1.5rem; font-weight:800; color:#002d5a; margin:0;">Merchant Portfolio</h1>
         </div>
         <div style="display:flex; align-items:center; gap:8px;">
+            <!-- Notification Bell -->
+            <div style="position:relative;" id="notif-bell-wrap">
+                <button id="notif-bell-btn" onclick="toggleNotifPanel()" title="Notifications"
+                    style="position:relative;display:flex;align-items:center;justify-content:center;width:38px;height:38px;border-radius:10px;border:1px solid #e2e8f0;background:white;cursor:pointer;color:#64748b;transition:0.15s;"
+                    onmouseover="this.style.borderColor='#004990';this.style.color='#004990'" onmouseout="this.style.borderColor='#e2e8f0';this.style.color='#64748b'">
+                    <span class="material-icons" style="font-size:20px;">notifications</span>
+                    <span id="notif-badge" style="display:none;position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:#e11d48;border:2px solid white;"></span>
+                </button>
+                <!-- Notification Panel -->
+                <div id="notif-panel" style="display:none;position:absolute;top:calc(100% + 8px);right:0;width:340px;background:white;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,0.12);z-index:9999;overflow:hidden;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #f1f5f9;">
+                        <span style="font-size:13px;font-weight:800;color:#0f172a;">Notifications</span>
+                        <button onclick="markAllNotifRead()" style="font-size:11px;font-weight:700;color:#004990;background:none;border:none;cursor:pointer;padding:0;">Mark all read</button>
+                    </div>
+                    <div id="notif-list" style="max-height:380px;overflow-y:auto;"></div>
+                </div>
+            </div>
+
             <button onclick="openAddMerchantModal()" style="display:flex;align-items:center;gap:6px;background:#004990;color:white;border:none;border-radius:10px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;" onmouseover="this.style.background='#003570'" onmouseout="this.style.background='#004990'">
                 <span class="material-icons" style="font-size:16px;">add</span> Add Merchant
             </button>
@@ -752,7 +770,7 @@ const safeBody = (t.body || '').replace(/'/g, "\\'");
 const safeDue = t.due_date || '';
 
                 return `
-                <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
+                <div id="task-${t.id}" style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;">
                     <div style="flex-grow: 1;">
                         <div style="font-weight:800; color:#002d5a; font-size:13px;">${t.title}</div>
                         <div style="font-size:11px; color:#64748b; margin-bottom:5px;">${t.body || ''}</div>
@@ -2374,7 +2392,147 @@ window.saveMerchant = async (uuid) => {
         }
         fetchMerchants().then(() => { Swal.close(); });
         loadStaffStats();
+        loadNotifications();
+        setInterval(loadNotifications, 60000); // refresh every 60s
     };
+
+    // ── NOTIFICATION BELL ─────────────────────────────────────────────────────
+    let _allNotifs = [];
+    const _currentUserId = localStorage.getItem('pp_userid');
+
+    async function loadNotifications() {
+        if (!_currentUserId) return;
+        try {
+            const res = await fetch('/api/merchants', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_my_notifications', user_id: _currentUserId })
+            });
+            const result = await res.json();
+            if (!result.success) return;
+            _allNotifs = result.data || [];
+            renderNotifBadge();
+        } catch (e) { /* silent */ }
+    }
+
+    function renderNotifBadge() {
+        const badge = document.getElementById('notif-badge');
+        const unread = _allNotifs.filter(n => !n.is_read).length;
+        if (badge) badge.style.display = unread > 0 ? 'block' : 'none';
+    }
+
+    function toggleNotifPanel() {
+        const panel = document.getElementById('notif-panel');
+        if (!panel) return;
+        const open = panel.style.display !== 'none';
+        panel.style.display = open ? 'none' : 'block';
+        if (!open) renderNotifList();
+    }
+
+    function renderNotifList() {
+        const list = document.getElementById('notif-list');
+        if (!list) return;
+        if (!_allNotifs.length) {
+            list.innerHTML = `<div style="text-align:center;padding:30px 20px;color:#94a3b8;">
+                <span class="material-icons" style="font-size:36px;display:block;margin-bottom:6px;">notifications_none</span>
+                <span style="font-size:13px;">No notifications yet</span>
+            </div>`;
+            return;
+        }
+        list.innerHTML = _allNotifs.map(n => {
+            const isNote = n.type === 'mention';
+            const icon   = isNote ? 'alternate_email' : 'task_alt';
+            const color  = isNote ? '#7c3aed' : '#0369a1';
+            const bg     = isNote ? '#fdf4ff' : '#f0f9ff';
+            const unread = !n.is_read;
+            const time   = n.created_at ? fmtDateTime(n.created_at) : '';
+            return `
+            <div onclick="handleNotifClick('${n.id}','${n.merchant_id || ''}','${n.type}','${n.note_id || ''}','${n.task_id || ''}')"
+                style="display:flex;gap:10px;padding:12px 16px;cursor:pointer;border-bottom:1px solid #f8fafc;background:${unread ? '#fafafa' : 'white'};transition:background 0.1s;"
+                onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background='${unread ? '#fafafa' : 'white'}'">
+                <div style="flex-shrink:0;width:34px;height:34px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;">
+                    <span class="material-icons" style="font-size:17px;color:${color};">${icon}</span>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:2px;">
+                        <span style="font-size:12px;font-weight:${unread ? '700' : '600'};color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${n.title || ''}</span>
+                        ${unread ? '<span style="flex-shrink:0;width:7px;height:7px;border-radius:50%;background:#e11d48;display:inline-block;"></span>' : ''}
+                    </div>
+                    <div style="font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${n.merchant_name || ''}</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${time}</div>
+                </div>
+            </div>`;
+        }).join('');
+    }
+
+    async function handleNotifClick(notifId, merchantId, type, noteId, taskId) {
+        // Mark as read
+        try {
+            await fetch('/api/merchants', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'mark_notification_read', notification_id: notifId })
+            });
+            const n = _allNotifs.find(x => x.id === notifId);
+            if (n) n.is_read = true;
+            renderNotifBadge();
+            renderNotifList();
+        } catch (e) { /* silent */ }
+
+        // Close panel
+        const panel = document.getElementById('notif-panel');
+        if (panel) panel.style.display = 'none';
+
+        // Open the merchant modal on the right tab
+        if (!merchantId) return;
+        await openModal(merchantId);
+        if (type === 'mention' && noteId) {
+            switchTab('notes');
+            // Highlight the note card after a short render delay
+            setTimeout(() => {
+                const card = document.getElementById('note-card-' + noteId);
+                if (card) {
+                    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    card.style.outline = '2px solid #7c3aed';
+                    card.style.outlineOffset = '2px';
+                    setTimeout(() => { card.style.outline = ''; card.style.outlineOffset = ''; }, 3000);
+                }
+            }, 400);
+        } else if (type === 'task') {
+            switchTab('tasks');
+            if (taskId) {
+                setTimeout(() => {
+                    const taskEl = document.getElementById('task-' + taskId);
+                    if (taskEl) {
+                        taskEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        taskEl.style.outline = '2px solid #0369a1';
+                        taskEl.style.outlineOffset = '2px';
+                        setTimeout(() => { taskEl.style.outline = ''; taskEl.style.outlineOffset = ''; }, 3000);
+                    }
+                }, 400);
+            }
+        }
+    }
+
+    async function markAllNotifRead() {
+        if (!_currentUserId) return;
+        try {
+            await fetch('/api/merchants', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'mark_notification_read', user_id: _currentUserId, mark_all: true })
+            });
+            _allNotifs.forEach(n => n.is_read = true);
+            renderNotifBadge();
+            renderNotifList();
+        } catch (e) { /* silent */ }
+    }
+
+    // Close notification panel when clicking outside
+    document.addEventListener('click', e => {
+        const wrap = document.getElementById('notif-bell-wrap');
+        if (wrap && !wrap.contains(e.target)) {
+            const panel = document.getElementById('notif-panel');
+            if (panel) panel.style.display = 'none';
+        }
+    });
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'merchants'})});})();</script>
 <script src="/js/site-config.js"></script>

@@ -223,13 +223,36 @@ if (action === 'add_task') {
 
     if (error) {
         console.error("DB Error:", error.message);
-        // Returning 400 or 500 is better for failures so the frontend 'catch' block triggers
         return res.status(400).json({ success: false, message: error.message });
+    }
+
+    // In-app notification for the assignee
+    if (assigned_to && assigned_to !== validCreator) {
+        try {
+            const { data: creatorUser } = await supabase
+                .from('app_users').select('first_name, last_name').eq('userid', validCreator).maybeSingle();
+            const fromName = creatorUser ? `${creatorUser.first_name} ${creatorUser.last_name || ''}`.trim() : 'Someone';
+            const { data: merchantRow } = await supabase
+                .from('merchants').select('dba_name').eq('id', merchant_uuid).maybeSingle();
+            const dbaName = merchantRow?.dba_name || 'a merchant';
+            await supabase.from('user_notifications').insert([{
+                user_id: assigned_to,
+                type: 'task',
+                title: `${fromName} assigned you a task`,
+                body: title || '',
+                merchant_id: merchant_uuid,
+                merchant_name: dbaName,
+                task_id: data?.[0]?.id || null,
+                from_name: fromName
+            }]);
+        } catch (e) {
+            console.error('[Task Notify Error]', e.message);
+        }
     }
 
     return res.status(200).json({ success: true, data });
 }
-    
+
         // --- ACTION: update_task_status ---
 if (action === 'update_task_status') {
     const { task_id } = req.body;
@@ -823,9 +846,11 @@ if (action === 'get_notes') {
 }
     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by, mentions } = req.body;
-    const { error } = await supabase
+    const { data: noteRow, error } = await supabase
         .from('merchant_notes')
-        .insert([{ merchant_id: merchant_uuid, title, body, created_by }]);
+        .insert([{ merchant_id: merchant_uuid, title, body, created_by }])
+        .select('id')
+        .single();
 
     if (error) throw error;
     supabase.from('activity_logs').insert({
@@ -834,7 +859,7 @@ if (action === 'get_notes') {
         new_value: { title, body: body?.slice(0, 500) }
     }).then(() => {}).catch(() => {});
 
-    // Send @mention email notifications
+    // Send @mention email notifications + in-app notifications
     if (mentions?.length) {
         try {
             const { data: mentionedUsers } = await supabase
@@ -856,29 +881,46 @@ if (action === 'get_notes') {
                 .maybeSingle();
             const dbaName = merchantRow?.dba_name || 'a merchant';
 
-            if (mentionedUsers?.length && process.env.POSTMARK_SERVER_TOKEN) {
-                const { ServerClient } = await import('postmark');
-                const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
-                await Promise.all(mentionedUsers.map(u => {
-                    if (!u.email) return;
-                    const firstName = u.first_name || 'there';
-                    return client.sendEmail({
-                        From: process.env.EMAIL_FROM,
-                        To: u.email,
-                        Subject: `${taggerName} mentioned you in a note`,
-                        HtmlBody: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+            if (mentionedUsers?.length) {
+                // In-app notifications
+                await supabase.from('user_notifications').insert(
+                    mentionedUsers.map(u => ({
+                        user_id: u.userid,
+                        type: 'mention',
+                        title: `${taggerName} mentioned you`,
+                        body: (body || '').slice(0, 200),
+                        merchant_id: merchant_uuid,
+                        merchant_name: dbaName,
+                        note_id: noteRow?.id || null,
+                        from_name: taggerName
+                    }))
+                );
+
+                // Email notifications
+                if (process.env.POSTMARK_SERVER_TOKEN) {
+                    const { ServerClient } = await import('postmark');
+                    const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                    await Promise.all(mentionedUsers.map(u => {
+                        if (!u.email) return;
+                        const firstName = u.first_name || 'there';
+                        return client.sendEmail({
+                            From: process.env.EMAIL_FROM,
+                            To: u.email,
+                            Subject: `${taggerName} mentioned you in a note`,
+                            HtmlBody: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
 <p style="margin:0 0 8px;">Hi ${firstName},</p>
 <p style="margin:0 0 16px;"><strong>${taggerName}</strong> mentioned you in a note for <strong>${dbaName}</strong>:</p>
 <blockquote style="margin:0 0 20px;padding:12px 16px;background:#f8fafc;border-left:4px solid #004990;border-radius:4px;font-size:14px;color:#334155;">${(body || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</blockquote>
 <p style="margin:0;font-size:12px;color:#94a3b8;">You received this because you were @mentioned in the merchant management console.</p>
 </div>`,
-                        TextBody: `Hi ${firstName},\n\n${taggerName} mentioned you in a note for ${dbaName}:\n\n"${body}"\n\nYou received this because you were @mentioned in the merchant management console.`,
-                        MessageStream: 'outbound'
-                    });
-                }));
+                            TextBody: `Hi ${firstName},\n\n${taggerName} mentioned you in a note for ${dbaName}:\n\n"${body}"\n\nYou received this because you were @mentioned in the merchant management console.`,
+                            MessageStream: 'outbound'
+                        });
+                    }));
+                }
             }
         } catch (e) {
-            console.error('[Mention Email Error]', e.message);
+            console.error('[Mention Error]', e.message);
         }
     }
 
@@ -1039,6 +1081,31 @@ if (action === 'get_notes') {
             }
 
             return res.status(200).json({ success: true, merchant_id: String(merchant_id).trim() });
+        }
+
+        // --- ACTION: get_my_notifications ---
+        if (action === 'get_my_notifications') {
+            const { user_id } = req.body;
+            if (!user_id) return res.status(400).json({ success: false, message: 'user_id required' });
+            const { data: notifs, error: nErr } = await supabase
+                .from('user_notifications')
+                .select('*')
+                .eq('user_id', user_id)
+                .order('created_at', { ascending: false })
+                .limit(50);
+            if (nErr) throw nErr;
+            return res.status(200).json({ success: true, data: notifs || [] });
+        }
+
+        // --- ACTION: mark_notification_read ---
+        if (action === 'mark_notification_read') {
+            const { notification_id, user_id, mark_all } = req.body;
+            if (mark_all && user_id) {
+                await supabase.from('user_notifications').update({ is_read: true }).eq('user_id', user_id).eq('is_read', false);
+            } else if (notification_id) {
+                await supabase.from('user_notifications').update({ is_read: true }).eq('id', notification_id);
+            }
+            return res.status(200).json({ success: true });
         }
 
         return res.status(400).json({ success: false, message: "Unknown action" });
