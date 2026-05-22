@@ -1983,7 +1983,7 @@ window.saveMerchant = async (uuid) => {
                 ).slice(0, 8);
                 if (filtered.length) {
                     dropdown.innerHTML = filtered.map(u => `
-                        <div onmousedown="event.preventDefault(); selectMention('${u.userid}', '${u.display_name.replace(/'/g, "\\'")}')"
+                        <div data-uid="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}"
                             style="padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f1f5f9;font-size:13px;"
                             onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
                             <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
@@ -2020,7 +2020,19 @@ window.saveMerchant = async (uuid) => {
         _mentionCursorEnd = -1;
     };
 
-    // Close dropdown when clicking outside
+    // Capture-phase mousedown on dropdown items — runs BEFORE SweetAlert's handlers
+    // so Swal cannot swallow the event. Uses data-uid/data-name on each item.
+    document.addEventListener('mousedown', function(e) {
+        const dd = document.getElementById('mention-dropdown');
+        if (!dd || dd.style.display === 'none') return;
+        const item = e.target.closest('[data-uid]');
+        if (!item || !dd.contains(item)) return;
+        e.preventDefault();
+        e.stopPropagation(); // prevent Swal from handling this mousedown
+        selectMention(item.dataset.uid, item.dataset.name);
+    }, true); // true = capture phase
+
+    // Close dropdown on click outside
     document.addEventListener('click', e => {
         const dd = document.getElementById('mention-dropdown');
         if (dd && !dd.contains(e.target) && e.target.id !== 'new-note-body') {
@@ -2028,42 +2040,53 @@ window.saveMerchant = async (uuid) => {
         }
     });
 
-    window.openTagPicker = async function(merchantId) {
+    // Custom tag picker overlay — does NOT use Swal.fire() so it doesn't close the merchant modal
+    window.openTagPicker = async function() {
         await loadStaffUsers();
-        if (!_staffUsers.length) return Swal.fire('No Staff', 'No staff users found.', 'info');
+        if (!_staffUsers.length) return;
+
+        // Remove any existing picker
+        document.getElementById('tag-picker-overlay')?.remove();
 
         const alreadyTagged = new Set(getMentionedUserIds());
 
-        const { value: selected } = await Swal.fire({
-            title: 'Tag Staff Members',
-            html: `<div style="text-align:left;max-height:300px;overflow-y:auto;">` +
-                _staffUsers.map(u => `
-                    <label style="display:flex;align-items:center;gap:10px;padding:8px 4px;cursor:pointer;border-bottom:1px solid #f1f5f9;">
-                        <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}" ${alreadyTagged.has(u.userid) ? 'checked' : ''} style="width:16px;height:16px;accent-color:#5b21b6;">
-                        <span style="width:32px;height:32px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
-                        <span style="font-weight:600;color:#002d5a;">${u.display_name}</span>
-                    </label>`).join('') +
-                `</div>`,
-            showCancelButton: true,
-            confirmButtonText: 'Tag Selected',
-            confirmButtonColor: '#004990',
-            preConfirm: () => {
-                const checked = Swal.getPopup().querySelectorAll('input[type=checkbox]:checked');
-                return Array.from(checked).map(cb => ({ userid: cb.value, display_name: cb.dataset.name }));
-            }
-        });
+        const overlay = document.createElement('div');
+        overlay.id = 'tag-picker-overlay';
+        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:999999;display:flex;align-items:center;justify-content:center;';
+        overlay.innerHTML = `
+            <div style="background:white;border-radius:16px;padding:24px;width:380px;max-height:520px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+                <div style="font-size:15px;font-weight:800;color:#002d5a;margin-bottom:4px;">Tag Staff Members</div>
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Select people to notify — chips will be added below the note.</div>
+                <div style="overflow-y:auto;flex:1;border:1px solid #e2e8f0;border-radius:10px;">
+                    ${_staffUsers.map(u => `
+                        <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;">
+                            <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}" ${alreadyTagged.has(u.userid) ? 'checked' : ''} style="width:15px;height:15px;accent-color:#5b21b6;flex-shrink:0;cursor:pointer;">
+                            <span style="width:30px;height:30px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
+                            <span style="font-weight:600;color:#002d5a;font-size:13px;">${u.display_name}</span>
+                        </label>`).join('')}
+                </div>
+                <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
+                    <button id="tp-cancel" style="padding:9px 18px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-weight:600;font-size:13px;color:#64748b;">Cancel</button>
+                    <button id="tp-confirm" style="padding:9px 20px;border-radius:8px;border:none;background:#004990;color:white;cursor:pointer;font-weight:700;font-size:13px;">Tag Selected</button>
+                </div>
+            </div>`;
+        document.body.appendChild(overlay);
 
-        if (!selected || !selected.length) return;
+        const close = () => overlay.remove();
+        overlay.querySelector('#tp-cancel').addEventListener('click', close);
+        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
 
-        const textarea = document.getElementById('new-note-body');
-        selected.forEach(u => {
-            addMentionChip(u.userid, u.display_name);
-            // Append @name to textarea if not already there
-            if (textarea && !textarea.value.includes('@' + u.display_name)) {
-                textarea.value = (textarea.value.trimEnd() ? textarea.value.trimEnd() + ' ' : '') + '@' + u.display_name + ' ';
-            }
+        overlay.querySelector('#tp-confirm').addEventListener('click', () => {
+            const textarea = document.getElementById('new-note-body');
+            overlay.querySelectorAll('input[type=checkbox]:checked').forEach(cb => {
+                addMentionChip(cb.value, cb.dataset.name);
+                if (textarea && !textarea.value.includes('@' + cb.dataset.name)) {
+                    textarea.value = (textarea.value.trimEnd() ? textarea.value.trimEnd() + ' ' : '') + '@' + cb.dataset.name + ' ';
+                }
+            });
+            close();
+            if (textarea) textarea.focus();
         });
-        if (textarea) textarea.focus();
     };
 
  window.addNote = async function(uuid) {
