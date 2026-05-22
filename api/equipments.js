@@ -198,6 +198,58 @@ if (action === 'getMonthlyReport') {
         
 
 
+        if (action === 'bulk_create') {
+            const { serials, terminal_type, received_date, status, current_location } = req.body;
+            if (!Array.isArray(serials) || !serials.length) {
+                return res.status(400).json({ success: false, message: 'No serial numbers provided.' });
+            }
+            // Deduplicate and trim
+            const unique = [...new Set(serials.map(s => String(s).trim()).filter(Boolean))];
+
+            // Check which ones already exist
+            const { data: existing } = await supabase
+                .from('equipments')
+                .select('serial_number')
+                .in('serial_number', unique);
+            const existingSet = new Set((existing || []).map(e => e.serial_number));
+            const newSerials  = unique.filter(s => !existingSet.has(s));
+            const skipped     = unique.filter(s =>  existingSet.has(s));
+
+            let inserted = [];
+            if (newSerials.length) {
+                const rows = newSerials.map(serial_number => ({
+                    serial_number,
+                    terminal_type: terminal_type || 'Unknown',
+                    received_date: received_date || null,
+                    status: status || 'stocked',
+                    current_location: current_location || 'Warsaw Office'
+                }));
+                const { data: insertedData, error: insertError } = await supabase
+                    .from('equipments')
+                    .insert(rows)
+                    .select();
+                if (insertError) throw insertError;
+                inserted = insertedData || [];
+
+                // Log one activity entry for the bulk operation
+                supabase.from('activity_logs').insert([{
+                    email: actorEmail,
+                    action: `Bulk Inventory Added — ${inserted.length} ${terminal_type} unit${inserted.length !== 1 ? 's' : ''}`,
+                    status: 'success', category: 'inventory', target_type: 'equipment', severity: 'info',
+                    new_value: { count: inserted.length, terminal_type, serial_numbers: newSerials, skipped },
+                    user_agent: req.headers['user-agent'],
+                    ip_address: req.headers['x-forwarded-for'] || 'internal'
+                }]).then(() => {}).catch(() => {});
+            }
+
+            return res.status(200).json({
+                success: true,
+                inserted: inserted.length,
+                skipped_duplicates: skipped,
+                data: inserted
+            });
+        }
+
         if (action === 'create') {
             const { data, error } = await supabase
                 .from('equipments')
