@@ -1926,7 +1926,7 @@ window.saveMerchant = async (uuid) => {
             const res = await fetch('/api/users');
             const result = await res.json();
             _staffUsers = (result.data || []).map(u => ({
-                userid: String(u.id),
+                userid: String(u.userid),
                 display_name: [u.first_name, u.last_name].filter(Boolean).join(' '),
                 email: u.email || ''
             })).filter(u => u.display_name);
