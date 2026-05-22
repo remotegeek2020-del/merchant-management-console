@@ -1477,37 +1477,76 @@ async function addTask(merchantUuid) {
                 </div>
 
                 <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
-                    <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
-                        <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
-                        <div style="position:relative;">
-                            <textarea id="new-note-body" placeholder="Internal commentary… type @ to tag a staff member" class="modern-input" style="height:60px;" oninput="handleNoteBodyInput(this, event)"></textarea>
-                            <div id="mention-dropdown" style="display:none;position:absolute;z-index:9999;background:white;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);width:220px;max-height:180px;overflow-y:auto;left:0;top:100%;margin-top:2px;"></div>
-                        </div>
-                        <div id="mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;"></div>
-                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer; margin-top:8px;">ADD NEW NOTE</button>
-                    </div>
-<div id="notes-list">${notes.map(n => {
-    // Look for n.created_at (the actual DB column name)
-    const rawDate = n.created_at; 
-    
-    const noteDate = rawDate ? fmtDateTime(rawDate) : 'Just now';
 
-    return `
-    <div style="background:white; border:1px solid #e2e8f0; border-radius:12px; padding:15px; margin-bottom:10px;">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-            <input id="note-title-${n.id}" class="modern-input" value="${n.title}" style="border:none; background:transparent; font-weight:700; padding:0; flex-grow:1;">
-            <span style="font-size:10px; color:#94a3b8; display:flex; align-items:center; gap:4px;">
-                <span class="material-icons" style="font-size:12px;">schedule</span>
-                ${noteDate}
-            </span>
-        </div>
-        <textarea id="note-body-${n.id}" class="modern-input" style="border:none; background:transparent; padding:5px 0; font-size:13px; min-height:80px; width:100%; resize:vertical;">${n.body}</textarea>
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-top:10px; border-top:1px solid #eee; padding-top:10px;">
-            <small style="color:#64748b;">By: <b>${n.display_name}</b></small>
-            <button onclick="updateNote('${n.id}', '${m.id}')" style="color:var(--pp-accent); font-weight:700; background:none; border:none; cursor:pointer; font-size:11px;">UPDATE NOTE</button>
-        </div>
-    </div>`;
-}).join('')}</div>
+                    <!-- Tip banner -->
+                    <div style="display:flex;align-items:center;gap:8px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;">
+                        <span class="material-icons" style="font-size:16px;color:#0284c7;flex-shrink:0;">tips_and_updates</span>
+                        <span style="font-size:12px;color:#0369a1;">Type <strong>@name</strong> in the note body to tag a staff member — they'll receive an email notification.</span>
+                    </div>
+
+                    <!-- Composer -->
+                    <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
+                        <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;display:flex;align-items:center;gap:5px;">
+                            <span class="material-icons" style="font-size:13px;">edit_note</span> New Note
+                        </div>
+                        <input id="new-note-title" placeholder="Subject / Title" class="modern-input" style="margin-bottom:8px;font-weight:600;">
+                        <div style="position:relative;">
+                            <textarea id="new-note-body" placeholder="Write your note here… use @ to tag a teammate" class="modern-input" style="height:72px;resize:vertical;" oninput="handleNoteBodyInput(this, event)"></textarea>
+                            <div id="mention-dropdown" style="display:none;position:absolute;z-index:9999;background:white;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.12);width:230px;max-height:200px;overflow-y:auto;left:0;top:100%;margin-top:3px;"></div>
+                        </div>
+                        <div id="mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;min-height:0;"></div>
+                        <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                            <button onclick="addNote('${m.id}')" style="background:var(--pp-blue);color:white;padding:9px 22px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;">
+                                <span class="material-icons" style="font-size:16px;">send</span> Post Note
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Existing notes -->
+                    <div id="notes-list">
+                    ${notes.length === 0 ? `<div style="text-align:center;padding:40px 20px;color:#94a3b8;">
+                        <span class="material-icons" style="font-size:40px;display:block;margin-bottom:8px;">sticky_note_2</span>
+                        No notes yet. Add the first one above.
+                    </div>` : notes.map(n => {
+                        const noteDate = n.created_at ? fmtDateTime(n.created_at) : 'Just now';
+                        const safeTitle = (n.title || '').replace(/`/g,'&#96;').replace(/\$/g,'&#36;');
+                        const safeBody  = (n.body  || '').replace(/`/g,'&#96;').replace(/\$/g,'&#36;');
+                        const safeBodyDisplay = (n.body || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                        return `
+                    <div id="note-card-${n.id}" style="background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:10px;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+                        <!-- READ VIEW -->
+                        <div id="note-read-${n.id}">
+                            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:10px;">
+                                <span style="font-size:14px;font-weight:700;color:#0f172a;">${n.title || 'Untitled'}</span>
+                                <button onclick="enterNoteEdit('${n.id}')"
+                                    style="flex-shrink:0;display:flex;align-items:center;gap:4px;background:#f1f5f9;border:1px solid #e2e8f0;border-radius:7px;padding:4px 10px;cursor:pointer;font-size:11px;font-weight:700;color:#475569;">
+                                    <span class="material-icons" style="font-size:13px;">edit</span> Edit
+                                </button>
+                            </div>
+                            <div style="font-size:13px;color:#374151;line-height:1.6;white-space:pre-wrap;">${safeBodyDisplay}</div>
+                            <div style="display:flex;align-items:center;gap:6px;margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;">
+                                <span style="width:22px;height:22px;border-radius:50%;background:#004990;color:white;font-size:10px;font-weight:700;display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">${(n.display_name||'?').charAt(0).toUpperCase()}</span>
+                                <span style="font-size:11px;color:#64748b;"><b>${n.display_name || 'Staff'}</b></span>
+                                <span style="font-size:11px;color:#cbd5e1;">·</span>
+                                <span style="font-size:11px;color:#94a3b8;">${noteDate}</span>
+                            </div>
+                        </div>
+                        <!-- EDIT VIEW (hidden by default) -->
+                        <div id="note-edit-${n.id}" style="display:none;">
+                            <input id="note-title-${n.id}" class="modern-input" value="${safeTitle}" style="font-weight:600;margin-bottom:8px;">
+                            <textarea id="note-body-${n.id}" class="modern-input" style="height:90px;resize:vertical;">${safeBody}</textarea>
+                            <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:10px;">
+                                <button onclick="cancelNoteEdit('${n.id}')"
+                                    style="padding:7px 16px;border-radius:8px;border:1px solid #e2e8f0;background:white;color:#64748b;font-size:12px;font-weight:700;cursor:pointer;">Cancel</button>
+                                <button onclick="updateNote('${n.id}', '${m.id}')"
+                                    style="padding:7px 16px;border-radius:8px;border:none;background:var(--pp-blue);color:white;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">
+                                    <span class="material-icons" style="font-size:14px;">save</span> Save Changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>`;
+                    }).join('')}
+                    </div>
                 </div>
 
                 <div id="content-tasks" class="tab-content" style="display:none; text-align:left;">
@@ -2010,20 +2049,46 @@ window.saveMerchant = async (uuid) => {
         Swal.fire('Error', 'Failed to save note: ' + err.message, 'error');
     }
 };
+    window.enterNoteEdit = function(noteId) {
+        document.getElementById('note-read-' + noteId).style.display = 'none';
+        document.getElementById('note-edit-' + noteId).style.display = 'block';
+        document.getElementById('note-card-' + noteId).style.borderColor = '#93c5fd';
+        document.getElementById('note-card-' + noteId).style.background = '#f0f7ff';
+    };
+
+    window.cancelNoteEdit = function(noteId) {
+        document.getElementById('note-read-' + noteId).style.display = 'block';
+        document.getElementById('note-edit-' + noteId).style.display = 'none';
+        document.getElementById('note-card-' + noteId).style.borderColor = '#e2e8f0';
+        document.getElementById('note-card-' + noteId).style.background = 'white';
+    };
+
     window.updateNote = async function(noteId, merchantId) {
-        const title = document.getElementById(`note-title-${noteId}`).value;
-        const body = document.getElementById(`note-body-${noteId}`).value;
+        const titleEl = document.getElementById(`note-title-${noteId}`);
+        const bodyEl  = document.getElementById(`note-body-${noteId}`);
+        const title = titleEl?.value || '';
+        const body  = bodyEl?.value  || '';
         try {
-            const res = await fetch('/api/merchants', { 
-                method: 'POST', 
-                headers: { 'Content-Type': 'application/json' }, 
-                body: JSON.stringify({ action: 'update_note', note_id: noteId, title: title, body: body }) 
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'update_note', note_id: noteId, title, body })
             });
             const result = await res.json();
-            if(result.success) {
+            if (result.success) {
+                // Update read view in-place without reloading the whole modal
+                const readEl = document.getElementById('note-read-' + noteId);
+                if (readEl) {
+                    readEl.querySelector('span[style*="font-size:14px"]').textContent = title || 'Untitled';
+                    const bodyDisplay = body.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+                    readEl.querySelector('div[style*="white-space:pre-wrap"]').innerHTML = bodyDisplay;
+                }
+                cancelNoteEdit(noteId);
                 const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true });
-                Toast.fire({ icon: 'success', title: 'Note updated successfully' });
-            } else { Swal.fire('Error', 'Could not save note: ' + result.message, 'error'); }
+                Toast.fire({ icon: 'success', title: 'Note updated' });
+            } else {
+                Swal.fire('Error', 'Could not save note: ' + result.message, 'error');
+            }
         } catch (err) { Swal.fire('Error', 'Network error while saving note', 'error'); }
     };
 
