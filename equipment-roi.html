@@ -130,8 +130,6 @@
                     <p style="font-size:11px; color:var(--text-muted); margin:0; font-weight:500;">Fleet performance, idle stock analysis, and terminal utilization rates</p>
                 </div>
             </div>
-            <span style="color:#cbd5e1; font-size:18px;">|</span>
-            <a href="equipments-dashboard.html" style="display:inline-flex;align-items:center;gap:4px;padding:4px 11px;background:#eff6ff;color:#004990;border:1px solid #bfdbfe;border-radius:20px;font-size:11px;font-weight:700;text-decoration:none;" onmouseover="this.style.background='#004990';this.style.color='white';" onmouseout="this.style.background='#eff6ff';this.style.color='#004990';"><span class="material-icons" style="font-size:13px;">inventory_2</span> Inventory</a>
         </div>
         <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap;">
             <span id="last-updated" style="font-size:11px; color:var(--text-muted); font-weight:600;"></span>
@@ -603,6 +601,8 @@
         loadROI();
     }
 </script>
+<script>window.NAV_SHORTCUT_PAGE = 'roi';</script>
+<script src="/js/nav-shortcuts.js"></script>
 <script src="/bug-report.js"></script>
 </body>
 </html>
