@@ -203,6 +203,18 @@ if (action === 'getMonthlyReport') {
             if (!Array.isArray(serials) || !serials.length) {
                 return res.status(400).json({ success: false, message: 'No serial numbers provided.' });
             }
+
+            // Auto-register unknown terminal type
+            if (terminal_type) {
+                const { data: existingType } = await supabase
+                    .from('terminal_types').select('id').eq('name', terminal_type).maybeSingle();
+                if (!existingType) {
+                    const { data: maxRow } = await supabase
+                        .from('terminal_types').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
+                    await supabase.from('terminal_types')
+                        .insert({ name: terminal_type, sort_order: ((maxRow?.sort_order || 0) + 10) });
+                }
+            }
             // Deduplicate and trim
             const unique = [...new Set(serials.map(s => String(s).trim()).filter(Boolean))];
 
@@ -251,6 +263,18 @@ if (action === 'getMonthlyReport') {
         }
 
         if (action === 'create') {
+            // Auto-register unknown terminal type
+            if (payload?.terminal_type) {
+                const { data: existing } = await supabase
+                    .from('terminal_types').select('id').eq('name', payload.terminal_type).maybeSingle();
+                if (!existing) {
+                    const { data: maxRow } = await supabase
+                        .from('terminal_types').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
+                    await supabase.from('terminal_types')
+                        .insert({ name: payload.terminal_type, sort_order: ((maxRow?.sort_order || 0) + 10) });
+                }
+            }
+
             const { data, error } = await supabase
                 .from('equipments')
                 .insert([payload])
