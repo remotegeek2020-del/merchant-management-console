@@ -1660,7 +1660,7 @@ async function addTask(merchantUuid) {
         if (tab === 'tasks') fetchMerchantTasks();
         if (tab === 'tickets') fetchMerchantTickets();
         if (tab === 'partner') fetchPartnerInfo();
-        if (tab === 'notes') { _mentionedUsers = []; renderMentionChips(); loadStaffUsers(); }
+        if (tab === 'notes') { renderMentionChips(); loadStaffUsers(); }
     };
 
     async function fetchPartnerInfo() {
@@ -1913,9 +1913,8 @@ window.saveMerchant = async (uuid) => {
 };
 
     // ── @MENTION SYSTEM ───────────────────────────────────────────────────────
-    let _staffUsers    = [];  // [{userid, display_name, email}]
-    let _mentionedUsers = []; // full user objects selected — avoids reverse-lookup bugs
-    let _mentionAtPos  = -1; // absolute index of the triggering @ in textarea.value
+    let _staffUsers   = [];  // [{userid, display_name, email}]
+    let _mentionAtPos = -1;  // absolute index of the triggering @ in textarea.value
 
     async function loadStaffUsers() {
         if (_staffUsers.length) return;
@@ -1930,7 +1929,33 @@ window.saveMerchant = async (uuid) => {
         } catch (e) { console.error('[Mention] Failed to load staff', e); }
     }
 
+    // Parse @mentions by scanning textarea text against known staff names
+    // This is the single source of truth — no separate tracking array
+    function parseMentionsFromText(text) {
+        const found = [];
+        for (const u of _staffUsers) {
+            if (text.includes('@' + u.display_name) && !found.find(f => f.userid === u.userid)) {
+                found.push(u);
+            }
+        }
+        return found;
+    }
+
+    function renderMentionChips() {
+        const chips = document.getElementById('mention-chips');
+        const bodyEl = document.getElementById('new-note-body');
+        if (!chips) return;
+        const mentioned = parseMentionsFromText(bodyEl ? bodyEl.value : '');
+        chips.innerHTML = mentioned.map(u => `
+            <span style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;">
+                <span class="material-icons" style="font-size:12px;">alternate_email</span>${u.display_name}
+            </span>`).join('');
+    }
+
     window.handleNoteBodyInput = function(textarea) {
+        // Always refresh chips to reflect current @mentions in text
+        renderMentionChips();
+
         const val = textarea.value;
         const pos = textarea.selectionStart;
         const before = val.slice(0, pos);
@@ -1955,10 +1980,8 @@ window.saveMerchant = async (uuid) => {
                             <span style="font-weight:600;color:#002d5a;">${u.display_name}</span>
                         </div>`).join('');
                     dropdown.style.display = 'block';
-                } else {
-                    dropdown.style.display = 'none';
+                    return;
                 }
-                return;
             }
         }
         _mentionAtPos = -1;
@@ -1970,7 +1993,6 @@ window.saveMerchant = async (uuid) => {
         const dropdown = document.getElementById('mention-dropdown');
         if (!textarea || _mentionAtPos === -1) return;
 
-        // Replace @query with @DisplayName using stored position
         const val = textarea.value;
         const afterAt = val.slice(_mentionAtPos + 1);
         const spaceIdx = afterAt.search(/\s/);
@@ -1980,30 +2002,9 @@ window.saveMerchant = async (uuid) => {
         const newCaret = _mentionAtPos + displayName.length + 2;
         textarea.setSelectionRange(newCaret, newCaret);
 
-        // Store the full user object — no reverse-lookup needed later
-        if (!_mentionedUsers.find(u => u.userid === userId)) {
-            _mentionedUsers.push({ userid: userId, display_name: displayName });
-        }
-        renderMentionChips();
-
+        renderMentionChips(); // re-parse text to update chips
         if (dropdown) dropdown.style.display = 'none';
         _mentionAtPos = -1;
-    };
-
-    function renderMentionChips() {
-        const chips = document.getElementById('mention-chips');
-        if (!chips) return;
-        // Render directly from _mentionedUsers — no _staffUsers lookup needed
-        chips.innerHTML = _mentionedUsers.map(u => `
-            <span style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;">
-                <span class="material-icons" style="font-size:12px;">alternate_email</span>${u.display_name}
-                <span onmousedown="event.preventDefault(); removeMention('${u.userid}')" style="cursor:pointer;color:#7c3aed;margin-left:2px;line-height:1;">×</span>
-            </span>`).join('');
-    }
-
-    window.removeMention = function(userId) {
-        _mentionedUsers = _mentionedUsers.filter(u => u.userid !== userId);
-        renderMentionChips();
     };
 
     // Close dropdown when clicking outside
@@ -2011,7 +2012,6 @@ window.saveMerchant = async (uuid) => {
         const dd = document.getElementById('mention-dropdown');
         if (dd && !dd.contains(e.target) && e.target.id !== 'new-note-body') {
             dd.style.display = 'none';
-            _mentionActive = false;
         }
     });
 
@@ -2039,7 +2039,7 @@ window.saveMerchant = async (uuid) => {
                 title: title,
                 body: body,
                 created_by: userId,
-                mentions: _mentionedUsers.length ? _mentionedUsers.map(u => u.userid) : undefined
+                mentions: parseMentionsFromText(body).map(u => u.userid)
             })
         });
 
@@ -2048,9 +2048,9 @@ window.saveMerchant = async (uuid) => {
         if (result.success) {
             if (titleEl) titleEl.value = '';
             if (bodyEl) bodyEl.value = '';
-            _mentionedUsers = [];
             renderMentionChips();
-            document.getElementById('mention-dropdown').style.display = 'none';
+            const dd = document.getElementById('mention-dropdown');
+            if (dd) dd.style.display = 'none';
 
             await Swal.fire({ icon: 'success', title: 'Note Saved', timer: 1500, showConfirmButton: false });
             openModal(uuid);
