@@ -1496,25 +1496,16 @@ async function addTask(merchantUuid) {
 
                 <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
 
-                    <!-- Tip banner -->
-                    <div style="display:flex;align-items:center;gap:8px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;padding:10px 14px;margin-bottom:14px;">
-                        <span class="material-icons" style="font-size:16px;color:#0284c7;flex-shrink:0;">tips_and_updates</span>
-                        <span style="font-size:12px;color:#0369a1;">Type <strong>@name</strong> in the note body to tag a staff member — they'll receive an email notification.</span>
-                    </div>
-
                     <!-- Composer -->
                     <div style="background:white;border:1px solid #e2e8f0;border-radius:14px;padding:16px;margin-bottom:18px;box-shadow:0 1px 4px rgba(0,0,0,0.04);">
                         <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;display:flex;align-items:center;gap:5px;">
                             <span class="material-icons" style="font-size:13px;">edit_note</span> New Note
                         </div>
                         <input id="new-note-title" placeholder="Subject / Title" class="modern-input" style="margin-bottom:8px;font-weight:600;">
-                        <div style="position:relative;">
-                            <textarea id="new-note-body" placeholder="Write your note here… use @ to tag a teammate" class="modern-input" style="height:72px;resize:vertical;" oninput="handleNoteBodyInput(this, event)"></textarea>
-                            <div id="mention-dropdown" style="display:none;position:absolute;z-index:9999;background:white;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.12);width:230px;max-height:200px;overflow-y:auto;left:0;top:100%;margin-top:3px;"></div>
-                        </div>
+                        <textarea id="new-note-body" placeholder="Write your note here…" class="modern-input" style="height:80px;resize:vertical;"></textarea>
                         <div id="mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;min-height:0;"></div>
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
-                            <button onclick="openTagPicker('${m.id}')" style="background:#f5f3ff;color:#5b21b6;padding:8px 14px;border-radius:8px;border:1px solid #ddd6fe;cursor:pointer;font-weight:600;font-size:12px;display:flex;align-items:center;gap:5px;">
+                            <button onclick="openTagPicker()" style="background:#f5f3ff;color:#5b21b6;padding:8px 14px;border-radius:8px;border:1px solid #ddd6fe;cursor:pointer;font-weight:600;font-size:12px;display:flex;align-items:center;gap:5px;">
                                 <span class="material-icons" style="font-size:15px;">alternate_email</span> Tag People
                             </button>
                             <button onclick="addNote('${m.id}')" style="background:var(--pp-blue);color:white;padding:9px 22px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;">
@@ -1915,10 +1906,8 @@ window.saveMerchant = async (uuid) => {
     }
 };
 
-    // ── @MENTION SYSTEM ───────────────────────────────────────────────────────
-    let _staffUsers      = [];
-    let _mentionAtPos    = -1;  // index of @ in textarea when dropdown opened
-    let _mentionCursorEnd = -1; // cursor position when dropdown was last rendered
+    // ── TAGGING SYSTEM ────────────────────────────────────────────────────────
+    let _staffUsers = [];
 
     async function loadStaffUsers() {
         if (_staffUsers.length) return;
@@ -1930,28 +1919,25 @@ window.saveMerchant = async (uuid) => {
                 display_name: [u.first_name, u.last_name].filter(Boolean).join(' '),
                 email: u.email || ''
             })).filter(u => u.display_name);
-        } catch (e) { console.error('[Mention] Failed to load staff', e); }
+        } catch (e) { console.error('Failed to load staff', e); }
     }
 
     function addMentionChip(userId, displayName) {
         const chips = document.getElementById('mention-chips');
         if (!chips) return;
-        // Don't add duplicate
-        if (chips.querySelector(`[data-uid="${userId}"]`)) return;
+        if (chips.querySelector(`[data-uid="${userId}"]`)) return; // no duplicates
         const chip = document.createElement('span');
         chip.dataset.uid = userId;
         chip.dataset.name = displayName;
-        chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;';
-        chip.innerHTML = `<span class="material-icons" style="font-size:12px;">alternate_email</span>${displayName}<span onmousedown="event.preventDefault();removeMentionChip('${userId}')" style="cursor:pointer;font-size:13px;line-height:1;margin-left:2px;">×</span>`;
+        chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;';
+        chip.innerHTML = `<span class="material-icons" style="font-size:12px;">alternate_email</span>${displayName}`;
+        const x = document.createElement('span');
+        x.textContent = '×';
+        x.style.cssText = 'cursor:pointer;font-size:14px;line-height:1;margin-left:3px;opacity:0.7;';
+        x.addEventListener('click', () => chip.remove());
+        chip.appendChild(x);
         chips.appendChild(chip);
     }
-
-    window.removeMentionChip = function(userId) {
-        const chips = document.getElementById('mention-chips');
-        if (!chips) return;
-        const chip = chips.querySelector(`[data-uid="${userId}"]`);
-        if (chip) chip.remove();
-    };
 
     function clearMentionChips() {
         const chips = document.getElementById('mention-chips');
@@ -1964,90 +1950,12 @@ window.saveMerchant = async (uuid) => {
         return Array.from(chips.querySelectorAll('[data-uid]')).map(c => c.dataset.uid);
     }
 
-    window.handleNoteBodyInput = function(textarea) {
-        const val = textarea.value;
-        const pos = textarea.selectionStart;
-        const before = val.slice(0, pos);
-        const atIdx = before.lastIndexOf('@');
-        const dropdown = document.getElementById('mention-dropdown');
-        if (!dropdown) return;
-
-        if (atIdx !== -1) {
-            const query = before.slice(atIdx + 1);
-            if (query.split(' ').length <= 3) {
-                _mentionAtPos = atIdx;
-                _mentionCursorEnd = pos; // snapshot cursor — used by selectMention
-                const q = query.toLowerCase().trim();
-                const filtered = _staffUsers.filter(u =>
-                    u.display_name.toLowerCase().includes(q)
-                ).slice(0, 8);
-                if (filtered.length) {
-                    dropdown.innerHTML = filtered.map(u => `
-                        <div data-uid="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}"
-                            style="padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f1f5f9;font-size:13px;"
-                            onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
-                            <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
-                            <span style="font-weight:600;color:#002d5a;">${u.display_name}</span>
-                        </div>`).join('');
-                    dropdown.style.display = 'block';
-                    return;
-                }
-            }
-        }
-        _mentionAtPos = -1;
-        _mentionCursorEnd = -1;
-        dropdown.style.display = 'none';
-    };
-
-    window.selectMention = function(userId, displayName) {
-        const textarea = document.getElementById('new-note-body');
-        const dropdown = document.getElementById('mention-dropdown');
-        if (!textarea || _mentionAtPos === -1) return;
-
-        // Use _mentionCursorEnd (snapshotted when dropdown rendered) — avoids
-        // selectionStart unreliability during mousedown in some browsers
-        const val = textarea.value;
-        const end = _mentionCursorEnd !== -1 ? _mentionCursorEnd : textarea.selectionStart;
-        textarea.value = val.slice(0, _mentionAtPos) + '@' + displayName + ' ' + val.slice(end);
-        const newCaret = _mentionAtPos + displayName.length + 2;
-        textarea.focus();
-        textarea.setSelectionRange(newCaret, newCaret);
-
-        addMentionChip(userId, displayName);
-
-        if (dropdown) dropdown.style.display = 'none';
-        _mentionAtPos = -1;
-        _mentionCursorEnd = -1;
-    };
-
-    // Capture-phase mousedown on dropdown items — runs BEFORE SweetAlert's handlers
-    // so Swal cannot swallow the event. Uses data-uid/data-name on each item.
-    document.addEventListener('mousedown', function(e) {
-        const dd = document.getElementById('mention-dropdown');
-        if (!dd || dd.style.display === 'none') return;
-        const item = e.target.closest('[data-uid]');
-        if (!item || !dd.contains(item)) return;
-        e.preventDefault();
-        e.stopPropagation(); // prevent Swal from handling this mousedown
-        selectMention(item.dataset.uid, item.dataset.name);
-    }, true); // true = capture phase
-
-    // Close dropdown on click outside
-    document.addEventListener('click', e => {
-        const dd = document.getElementById('mention-dropdown');
-        if (dd && !dd.contains(e.target) && e.target.id !== 'new-note-body') {
-            dd.style.display = 'none';
-        }
-    });
-
-    // Custom tag picker overlay — does NOT use Swal.fire() so it doesn't close the merchant modal
+    // Tag picker — custom overlay so it doesn't destroy the open merchant modal
     window.openTagPicker = async function() {
         await loadStaffUsers();
         if (!_staffUsers.length) return;
 
-        // Remove any existing picker
         document.getElementById('tag-picker-overlay')?.remove();
-
         const alreadyTagged = new Set(getMentionedUserIds());
 
         const overlay = document.createElement('div');
@@ -2056,7 +1964,7 @@ window.saveMerchant = async (uuid) => {
         overlay.innerHTML = `
             <div style="background:white;border-radius:16px;padding:24px;width:380px;max-height:520px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
                 <div style="font-size:15px;font-weight:800;color:#002d5a;margin-bottom:4px;">Tag Staff Members</div>
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Select people to notify — chips will be added below the note.</div>
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Checked people will be notified when the note is posted.</div>
                 <div style="overflow-y:auto;flex:1;border:1px solid #e2e8f0;border-radius:10px;">
                     ${_staffUsers.map(u => `
                         <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;">
@@ -2067,7 +1975,7 @@ window.saveMerchant = async (uuid) => {
                 </div>
                 <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
                     <button id="tp-cancel" style="padding:9px 18px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-weight:600;font-size:13px;color:#64748b;">Cancel</button>
-                    <button id="tp-confirm" style="padding:9px 20px;border-radius:8px;border:none;background:#004990;color:white;cursor:pointer;font-weight:700;font-size:13px;">Tag Selected</button>
+                    <button id="tp-confirm" style="padding:9px 20px;border-radius:8px;border:none;background:#004990;color:white;cursor:pointer;font-weight:700;font-size:13px;">Done</button>
                 </div>
             </div>`;
         document.body.appendChild(overlay);
@@ -2075,17 +1983,12 @@ window.saveMerchant = async (uuid) => {
         const close = () => overlay.remove();
         overlay.querySelector('#tp-cancel').addEventListener('click', close);
         overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-
         overlay.querySelector('#tp-confirm').addEventListener('click', () => {
-            const textarea = document.getElementById('new-note-body');
+            clearMentionChips();
             overlay.querySelectorAll('input[type=checkbox]:checked').forEach(cb => {
                 addMentionChip(cb.value, cb.dataset.name);
-                if (textarea && !textarea.value.includes('@' + cb.dataset.name)) {
-                    textarea.value = (textarea.value.trimEnd() ? textarea.value.trimEnd() + ' ' : '') + '@' + cb.dataset.name + ' ';
-                }
             });
             close();
-            if (textarea) textarea.focus();
         });
     };
 
@@ -2123,8 +2026,6 @@ window.saveMerchant = async (uuid) => {
             if (titleEl) titleEl.value = '';
             if (bodyEl) bodyEl.value = '';
             clearMentionChips();
-            const dd = document.getElementById('mention-dropdown');
-            if (dd) dd.style.display = 'none';
 
             await Swal.fire({ icon: 'success', title: 'Note Saved', timer: 1500, showConfirmButton: false });
             openModal(uuid);
