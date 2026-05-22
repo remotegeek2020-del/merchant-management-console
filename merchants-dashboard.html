@@ -1501,6 +1501,17 @@ async function addTask(merchantUuid) {
                         <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px;display:flex;align-items:center;gap:5px;">
                             <span class="material-icons" style="font-size:13px;">edit_note</span> New Note
                         </div>
+
+                        <!-- Tag picker panel — lives inside Swal DOM, shown/hidden inline -->
+                        <div id="tag-picker-panel" style="display:none;border:1px solid #ddd6fe;border-radius:10px;padding:12px;margin-bottom:10px;background:#faf5ff;">
+                            <div style="font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:8px;">Select people to notify:</div>
+                            <div id="tag-picker-list" style="max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;background:white;"></div>
+                            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                                <button onclick="closeTagPanel()" style="padding:7px 14px;border-radius:7px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-weight:600;font-size:12px;color:#64748b;">Cancel</button>
+                                <button onclick="confirmTagPanel()" style="padding:7px 14px;border-radius:7px;border:none;background:#5b21b6;color:white;cursor:pointer;font-weight:700;font-size:12px;">Done</button>
+                            </div>
+                        </div>
+
                         <input id="new-note-title" placeholder="Subject / Title" class="modern-input" style="margin-bottom:8px;font-weight:600;">
                         <textarea id="new-note-body" placeholder="Write your note here…" class="modern-input" style="height:80px;resize:vertical;"></textarea>
                         <div id="mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;min-height:0;"></div>
@@ -1922,23 +1933,6 @@ window.saveMerchant = async (uuid) => {
         } catch (e) { console.error('Failed to load staff', e); }
     }
 
-    function addMentionChip(userId, displayName) {
-        const chips = document.getElementById('mention-chips');
-        if (!chips) return;
-        if (chips.querySelector(`[data-uid="${userId}"]`)) return; // no duplicates
-        const chip = document.createElement('span');
-        chip.dataset.uid = userId;
-        chip.dataset.name = displayName;
-        chip.style.cssText = 'display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;';
-        chip.innerHTML = `<span class="material-icons" style="font-size:12px;">alternate_email</span>${displayName}`;
-        const x = document.createElement('span');
-        x.textContent = '×';
-        x.style.cssText = 'cursor:pointer;font-size:14px;line-height:1;margin-left:3px;opacity:0.7;';
-        x.addEventListener('click', () => chip.remove());
-        chip.appendChild(x);
-        chips.appendChild(chip);
-    }
-
     function clearMentionChips() {
         const chips = document.getElementById('mention-chips');
         if (chips) chips.innerHTML = '';
@@ -1950,46 +1944,45 @@ window.saveMerchant = async (uuid) => {
         return Array.from(chips.querySelectorAll('[data-uid]')).map(c => c.dataset.uid);
     }
 
-    // Tag picker — custom overlay so it doesn't destroy the open merchant modal
+    // Tag picker — inline panel inside SweetAlert's own DOM (no cross-context issues)
     window.openTagPicker = async function() {
         await loadStaffUsers();
-        if (!_staffUsers.length) return;
+        const panel = document.getElementById('tag-picker-panel');
+        const list  = document.getElementById('tag-picker-list');
+        if (!panel || !list) return;
 
-        document.getElementById('tag-picker-overlay')?.remove();
         const alreadyTagged = new Set(getMentionedUserIds());
+        list.innerHTML = _staffUsers.map(u => `
+            <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;">
+                <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}"
+                    ${alreadyTagged.has(u.userid) ? 'checked' : ''}
+                    style="width:15px;height:15px;accent-color:#5b21b6;flex-shrink:0;cursor:pointer;">
+                <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
+                <span style="font-weight:600;color:#002d5a;font-size:13px;">${u.display_name}</span>
+            </label>`).join('');
+        panel.style.display = 'block';
+    };
 
-        const overlay = document.createElement('div');
-        overlay.id = 'tag-picker-overlay';
-        overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.45);z-index:999999;display:flex;align-items:center;justify-content:center;';
-        overlay.innerHTML = `
-            <div style="background:white;border-radius:16px;padding:24px;width:380px;max-height:520px;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
-                <div style="font-size:15px;font-weight:800;color:#002d5a;margin-bottom:4px;">Tag Staff Members</div>
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:14px;">Checked people will be notified when the note is posted.</div>
-                <div style="overflow-y:auto;flex:1;border:1px solid #e2e8f0;border-radius:10px;">
-                    ${_staffUsers.map(u => `
-                        <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;">
-                            <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}" ${alreadyTagged.has(u.userid) ? 'checked' : ''} style="width:15px;height:15px;accent-color:#5b21b6;flex-shrink:0;cursor:pointer;">
-                            <span style="width:30px;height:30px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
-                            <span style="font-weight:600;color:#002d5a;font-size:13px;">${u.display_name}</span>
-                        </label>`).join('')}
-                </div>
-                <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end;">
-                    <button id="tp-cancel" style="padding:9px 18px;border-radius:8px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-weight:600;font-size:13px;color:#64748b;">Cancel</button>
-                    <button id="tp-confirm" style="padding:9px 20px;border-radius:8px;border:none;background:#004990;color:white;cursor:pointer;font-weight:700;font-size:13px;">Done</button>
-                </div>
-            </div>`;
-        document.body.appendChild(overlay);
+    window.closeTagPanel = function() {
+        const panel = document.getElementById('tag-picker-panel');
+        if (panel) panel.style.display = 'none';
+    };
 
-        const close = () => overlay.remove();
-        overlay.querySelector('#tp-cancel').addEventListener('click', close);
-        overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
-        overlay.querySelector('#tp-confirm').addEventListener('click', () => {
-            clearMentionChips();
-            overlay.querySelectorAll('input[type=checkbox]:checked').forEach(cb => {
-                addMentionChip(cb.value, cb.dataset.name);
-            });
-            close();
-        });
+    window.confirmTagPanel = function() {
+        const list  = document.getElementById('tag-picker-list');
+        const chips = document.getElementById('mention-chips');
+        if (!list || !chips) { closeTagPanel(); return; }
+
+        // Build all chip HTML at once — single innerHTML set, no loop/append timing issues
+        const checked = Array.from(list.querySelectorAll('input[type=checkbox]:checked'));
+        chips.innerHTML = checked.map(cb =>
+            `<span data-uid="${cb.value}" style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;">
+                <span class="material-icons" style="font-size:12px;">alternate_email</span>${cb.dataset.name}
+                <span onclick="this.parentElement.remove()" style="cursor:pointer;font-size:14px;line-height:1;margin-left:3px;opacity:0.7;">×</span>
+            </span>`
+        ).join('');
+
+        closeTagPanel();
     };
 
  window.addNote = async function(uuid) {
