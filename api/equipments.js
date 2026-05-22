@@ -243,13 +243,61 @@ if (action === 'getMonthlyReport') {
         // --- REPAIR QUEUE ACTIONS ---
 
         if (action === 'list_repair_queue') {
-            const { data, error } = await supabase
-                .from('equipments')
-                .select('id, serial_number, terminal_type, current_location, condition, received_date, repair_notes, repair_stage')
-                .eq('current_location', 'Warsaw Repairs')
-                .order('received_date', { ascending: false });
-            if (error) throw error;
-            return res.status(200).json({ success: true, data: data || [] });
+            // Paginate — bypass Supabase 1000-row cap
+            let allRepair = [];
+            let from = 0;
+            const PAGE = 1000;
+            while (true) {
+                const { data, error } = await supabase
+                    .from('equipments')
+                    .select('id, serial_number, terminal_type, status, current_location, condition, received_date, repair_notes, repair_stage')
+                    .eq('current_location', 'Warsaw Repairs')
+                    .order('received_date', { ascending: true })
+                    .range(from, from + PAGE - 1);
+                if (error) throw error;
+                if (!data || data.length === 0) break;
+                allRepair = allRepair.concat(data);
+                if (data.length < PAGE) break;
+                from += PAGE;
+            }
+
+            const now = new Date();
+            const CRITICAL_DAYS = 14;
+
+            // Enrich each unit with computed fields
+            const enriched = allRepair.map(u => {
+                const refDate = u.received_date || u.created_at;
+                const days_in_repair = refDate
+                    ? Math.floor((now - new Date(refDate)) / (1000 * 60 * 60 * 24))
+                    : null;
+                return { ...u, days_in_repair };
+            });
+
+            // Summary stats
+            const stageCounts = { Received: 0, Diagnosis: 0, 'Under Repair': 0, Testing: 0, Other: 0 };
+            const modelCounts = {};
+            let totalDays = 0, daysCount = 0, criticalCount = 0;
+            for (const u of enriched) {
+                const stage = u.repair_stage || 'Received';
+                if (stageCounts.hasOwnProperty(stage)) stageCounts[stage]++;
+                else stageCounts.Other++;
+                modelCounts[u.terminal_type || 'Unknown'] = (modelCounts[u.terminal_type || 'Unknown'] || 0) + 1;
+                if (u.days_in_repair !== null) { totalDays += u.days_in_repair; daysCount++; }
+                if (u.days_in_repair !== null && u.days_in_repair > CRITICAL_DAYS) criticalCount++;
+            }
+
+            return res.status(200).json({
+                success: true,
+                data: enriched,
+                summary: {
+                    total: enriched.length,
+                    critical_count: criticalCount,
+                    avg_days_in_repair: daysCount > 0 ? Math.round(totalDays / daysCount) : 0,
+                    stage_counts: stageCounts,
+                    model_counts: modelCounts,
+                    critical_threshold_days: CRITICAL_DAYS
+                }
+            });
         }
 
         if (action === 'log_repair_action') {

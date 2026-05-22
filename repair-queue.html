@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Repair Queue | PayProTec</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/design-system/2.21.4/styles/salesforce-lightning-design-system.min.css" />
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -18,104 +19,316 @@
         })();
     </script>
     <style>
-        body { background: var(--surface-0); font-family: 'DM Sans', sans-serif; padding: var(--page-pad); }
+        body { background: #f1f5f9; font-family: 'DM Sans', sans-serif; padding: 16px; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
-        .modern-header { background: white; border-radius: var(--radius-lg); padding: 16px 24px; margin-bottom: var(--gap); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
-        .kpi-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
-        .kpi-card { background: white; padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); display: flex; align-items: center; gap: 14px; }
-        .kpi-icon { width: 44px; height: 44px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .kpi-val { font-size: 1.8rem; font-weight: 800; font-family: 'DM Mono', monospace; color: var(--text-primary); letter-spacing: -0.5px; line-height: 1; }
-        .kpi-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 4px; }
-        .main-card { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; }
-        .table-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
-        .slds-table thead th { background: #f8fafc !important; font-size: 10px !important; font-weight: 700 !important; color: var(--text-muted) !important; text-transform: uppercase !important; letter-spacing: 0.6px !important; padding: 12px !important; }
-        .slds-table tbody td { padding: 14px 12px !important; font-size: 13px; vertical-align: middle; }
-        .slds-table tbody tr:hover td { background: var(--surface-2) !important; }
+
+        .modern-header {
+            background: white; border-radius: 16px; padding: 14px 20px; margin-bottom: 16px;
+            display: flex; justify-content: space-between; align-items: center;
+            box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap;
+        }
+
+        /* KPI grid */
+        .kpi-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 14px; margin-bottom: 16px; }
+        .kpi-card {
+            background: white; border-radius: 14px; border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm); padding: 14px 16px;
+        }
+        .kpi-icon { width: 34px; height: 34px; border-radius: 9px; display: flex; align-items: center; justify-content: center; margin-bottom: 8px; }
+        .kpi-val { font-size: 1.6rem; font-weight: 800; font-family: 'DM Mono', monospace; letter-spacing: -0.5px; line-height: 1; display: block; }
+        .kpi-label { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); display: block; margin-top: 4px; }
+        .kpi-sub { font-size: 10px; color: var(--text-muted); display: block; margin-top: 2px; }
+
+        /* Stage pipeline */
+        .pipeline {
+            background: white; border-radius: 14px; border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm); padding: 16px 20px; margin-bottom: 16px;
+            display: grid; grid-template-columns: repeat(4, 1fr); gap: 0;
+        }
+        .pipeline-stage {
+            display: flex; align-items: center; padding: 0 8px;
+        }
+        .pipeline-stage:first-child { padding-left: 0; }
+        .pipeline-stage:last-child { padding-right: 0; }
+        .pipeline-box {
+            flex: 1; border-radius: 10px; padding: 12px 14px; position: relative;
+            border: 1px solid transparent;
+        }
+        .pipeline-arrow {
+            font-size: 20px; color: #cbd5e1; flex-shrink: 0; margin: 0 4px;
+        }
+        .pipeline-count { font-size: 1.4rem; font-weight: 900; font-family: 'DM Mono', monospace; line-height: 1; }
+        .pipeline-label { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-top: 3px; }
+
+        /* Panel */
+        .panel {
+            background: white; border-radius: 16px; border: 1px solid var(--border);
+            box-shadow: var(--shadow-sm); overflow: hidden; margin-bottom: 16px;
+        }
+        .panel-header {
+            padding: 12px 18px; border-bottom: 1px solid var(--border);
+            display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+        }
+        .panel-header h2 { font-size: 13px; font-weight: 800; color: var(--text-primary); margin: 0; flex: 1; }
+
+        /* Table */
+        .slds-table thead th {
+            background: #f8fafc !important; font-size: 10px !important; font-weight: 700 !important;
+            color: var(--text-muted) !important; text-transform: uppercase !important;
+            letter-spacing: 0.6px !important; padding: 10px 12px !important;
+        }
+        .slds-table tbody td { padding: 10px 12px !important; font-size: 13px; vertical-align: middle; }
+        .slds-table tbody tr:hover td { background: #f8fafc !important; }
+
+        /* Badges */
         .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
-        .stage-received { background: #fef3c7; color: #92400e; }
-        .stage-diagnosis { background: #e0f2fe; color: #0369a1; }
-        .stage-repair { background: #f3e8ff; color: #7c3aed; }
-        .stage-testing { background: #dcfce7; color: #166534; }
-        .action-btn { background: none; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 5px 12px; font-size: 11px; font-weight: 600; cursor: pointer; transition: 0.15s; font-family: 'DM Sans', sans-serif; }
-        .action-btn:hover { background: var(--surface-2); }
-        .action-btn.danger { color: var(--red-text); border-color: var(--red-bg); }
-        .action-btn.danger:hover { background: var(--red-bg); }
-        .action-btn.success { color: var(--green-text); border-color: var(--green-bg); }
-        .action-btn.success:hover { background: var(--green-bg); }
-        .empty-state { padding: 60px 20px; text-align: center; color: var(--text-muted); }
-        @media (max-width: 768px) { .kpi-row { grid-template-columns: 1fr; } .main-card { overflow-x: auto; } }
+        .stage-received    { background: #fef3c7; color: #92400e; }
+        .stage-diagnosis   { background: #e0f2fe; color: #0369a1; }
+        .stage-repair      { background: #f3e8ff; color: #7c3aed; }
+        .stage-testing     { background: #dcfce7; color: #166534; }
+        .badge-red         { background: #fee2e2; color: #991b1b; }
+        .badge-amber       { background: #fef3c7; color: #92400e; }
+        .badge-green       { background: #dcfce7; color: #166534; }
+        .badge-gray        { background: #f1f5f9; color: #475569; }
+
+        /* Filter row */
+        .filter-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+        .filter-input {
+            border: 1px solid #e2e8f0; border-radius: 8px; padding: 5px 10px;
+            font-size: 12px; font-family: 'DM Sans', sans-serif; color: #1e293b; background: white;
+        }
+        .filter-input:focus { outline: none; border-color: #004990; }
+        .filter-btn {
+            padding: 5px 12px; border-radius: 99px; border: 1px solid #e2e8f0;
+            font-size: 11px; font-weight: 700; cursor: pointer; background: white; color: #64748b; transition: 0.15s;
+        }
+        .filter-btn.active { background: #004990; color: white; border-color: #004990; }
+
+        /* Action buttons */
+        .action-btn { background: none; border: 1px solid var(--border); border-radius: 7px; padding: 4px 10px; font-size: 11px; font-weight: 700; cursor: pointer; transition: 0.15s; font-family: 'DM Sans', sans-serif; display: inline-flex; align-items: center; gap: 3px; }
+        .action-btn:hover { background: #f8fafc; }
+        .action-btn.success { color: #166534; border-color: #bbf7d0; }
+        .action-btn.success:hover { background: #f0fdf4; }
+        .action-btn.danger  { color: #991b1b; border-color: #fecaca; }
+        .action-btn.danger:hover  { background: #fef2f2; }
+        .action-btn.primary { color: #004990; border-color: #bfdbfe; }
+        .action-btn.primary:hover { background: #eff6ff; }
+
+        /* Days pill */
+        .days-pill {
+            display: inline-flex; align-items: center; gap: 4px;
+            font-family: 'DM Mono', monospace; font-weight: 800; font-size: 12px;
+            padding: 2px 8px; border-radius: 99px;
+        }
+
+        /* Critical alert banner */
+        .critical-banner {
+            background: #fff1f2; border: 1px solid #fecaca; border-radius: 12px;
+            padding: 10px 16px; margin-bottom: 16px; display: flex; align-items: center; gap: 10px;
+        }
+
+        /* Model breakdown chips */
+        .model-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 12px 18px; }
+        .model-chip { background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; padding: 4px 10px; font-size: 11px; font-weight: 700; color: #475569; display: flex; align-items: center; gap: 5px; }
+        .model-chip-count { background: #e2e8f0; color: #334155; border-radius: 99px; padding: 1px 7px; font-size: 10px; font-weight: 800; }
+
+        .empty-state { padding: 50px 20px; text-align: center; color: var(--text-muted); }
+
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1.2s linear infinite; }
+
+        @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 900px)  { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .pipeline { grid-template-columns: repeat(2, 1fr); } }
+        @media (max-width: 600px)  { .kpi-grid { grid-template-columns: 1fr; } .pipeline { grid-template-columns: 1fr; } }
     </style>
 </head>
 <body>
 <div class="dashboard-container">
 
+    <!-- Header -->
     <div class="modern-header">
-        <div style="display:flex; align-items:center; gap:15px;">
-            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 15px;">
-                <span class="material-icons" style="font-size:18px; vertical-align:middle;">arrow_back</span>
-                <span style="font-weight:700; font-size:11px; margin-left:5px;">HOME</span>
+        <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 12px; display:inline-flex; align-items:center; gap:5px;">
+                <span class="material-icons" style="font-size:18px;">arrow_back</span>
+                <span style="font-weight:700; font-size:11px;">HOME</span>
             </a>
-            <div>
-                <h1 style="font-size:1.5rem; font-weight:800; color:var(--pp-navy); margin:0;">Repair Queue</h1>
-                <p style="font-size:11px; color:var(--text-muted); margin:0;">Equipment at Warsaw Repairs</p>
-            </div>
-        </div>
-        <button onclick="loadQueue()" class="slds-button slds-button_neutral" style="border-radius:10px; font-weight:700; font-size:12px; padding:8px 16px;">
-            <span class="material-icons" style="font-size:16px; vertical-align:middle;">refresh</span>
-            Refresh
-        </button>
-    </div>
-
-    <div class="kpi-row">
-        <div class="kpi-card">
-            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:22px;">build</span></div>
-            <div>
-                <div class="kpi-val" id="kpi-total">—</div>
-                <div class="kpi-label">Total In Repair</div>
-            </div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:22px;">pending</span></div>
-            <div>
-                <div class="kpi-val" id="kpi-awaiting">—</div>
-                <div class="kpi-label">Awaiting Diagnosis</div>
-            </div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:22px;">check_circle</span></div>
-            <div>
-                <div class="kpi-val" id="kpi-ready">—</div>
-                <div class="kpi-label">Ready for Closure</div>
-            </div>
-        </div>
-    </div>
-
-    <div class="main-card">
-        <div class="table-header">
-            <div style="font-size:13px; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:8px;">
-                <span class="material-icons" style="color:var(--text-muted); font-size:18px;">hardware</span>
-                Equipment Under Repair
-            </div>
-        </div>
-        <div id="queue-body">
-            <div class="empty-state">
-                <div class="slds-spinner_container" style="position:relative; height:60px;">
-                    <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand">
-                        <span class="slds-assistive-text">Loading</span>
-                        <div class="slds-spinner__dot-a"></div>
-                        <div class="slds-spinner__dot-b"></div>
-                    </div>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <div style="width:38px; height:38px; border-radius:10px; background:#fef2f2; color:#dc2626; display:flex; align-items:center; justify-content:center;">
+                    <span class="material-icons" style="font-size:20px;">build</span>
+                </div>
+                <div>
+                    <h1 style="font-size:1.3rem; font-weight:800; color:#002d5a; margin:0; line-height:1.1;">Repair Queue</h1>
+                    <p style="font-size:11px; color:var(--text-muted); margin:0; font-weight:500;">Equipment at Warsaw Repairs — stage tracking & resolution</p>
                 </div>
             </div>
+            <span style="color:#cbd5e1; font-size:18px;">|</span>
+            <a href="equipments-dashboard.html" style="display:inline-flex;align-items:center;gap:4px;padding:4px 11px;background:#eff6ff;color:#004990;border:1px solid #bfdbfe;border-radius:20px;font-size:11px;font-weight:700;text-decoration:none;" onmouseover="this.style.background='#004990';this.style.color='white';" onmouseout="this.style.background='#eff6ff';this.style.color='#004990';"><span class="material-icons" style="font-size:13px;">inventory_2</span> Inventory</a>
+            <a href="equipment-roi.html" style="display:inline-flex;align-items:center;gap:4px;padding:4px 11px;background:#f0fdf4;color:#166534;border:1px solid #bbf7d0;border-radius:20px;font-size:11px;font-weight:700;text-decoration:none;" onmouseover="this.style.background='#166534';this.style.color='white';" onmouseout="this.style.background='#f0fdf4';this.style.color='#166534';"><span class="material-icons" style="font-size:13px;">insights</span> ROI</a>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+            <span id="last-updated" style="font-size:11px; color:var(--text-muted); font-weight:600;"></span>
+            <button onclick="exportCSV()" style="display:inline-flex;align-items:center;gap:4px;padding:6px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;font-size:11px;font-weight:700;color:#166534;cursor:pointer;">
+                <span class="material-icons" style="font-size:14px;">download</span> Export CSV
+            </button>
+            <button onclick="loadQueue()" class="slds-button slds-button_neutral" style="border-radius:10px; display:flex; align-items:center; gap:5px; font-weight:700; font-size:12px;">
+                <span class="material-icons" id="refresh-icon" style="font-size:16px;">refresh</span> Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Critical alert (shown if any unit > 14 days) -->
+    <div id="critical-banner" class="critical-banner" style="display:none;">
+        <span class="material-icons" style="color:#dc2626; font-size:20px; flex-shrink:0;">warning</span>
+        <div>
+            <span style="font-weight:800; font-size:13px; color:#991b1b;" id="critical-banner-text"></span>
+            <span style="font-size:11px; color:#b91c1c; margin-left:8px;">Units exceeding 14-day repair threshold — immediate review required.</span>
+        </div>
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+        <div class="kpi-card" style="border-top:3px solid #dc2626;">
+            <div class="kpi-icon" style="background:#fee2e2; color:#dc2626;"><span class="material-icons" style="font-size:18px;">build</span></div>
+            <span class="kpi-val" id="kpi-total" style="color:#002d5a;">—</span>
+            <span class="kpi-label">Total In Repair</span>
+        </div>
+        <div class="kpi-card" style="border-top:3px solid #92400e;">
+            <div class="kpi-icon" style="background:#fef3c7; color:#92400e;"><span class="material-icons" style="font-size:18px;">inbox</span></div>
+            <span class="kpi-val" id="kpi-received" style="color:#92400e;">—</span>
+            <span class="kpi-label">Received / Awaiting</span>
+        </div>
+        <div class="kpi-card" style="border-top:3px solid #7c3aed;">
+            <div class="kpi-icon" style="background:#f3e8ff; color:#7c3aed;"><span class="material-icons" style="font-size:18px;">hardware</span></div>
+            <span class="kpi-val" id="kpi-active" style="color:#7c3aed;">—</span>
+            <span class="kpi-label">Diagnosis + In Repair</span>
+        </div>
+        <div class="kpi-card" style="border-top:3px solid #0d9488;">
+            <div class="kpi-icon" style="background:#f0fdfa; color:#0d9488;"><span class="material-icons" style="font-size:18px;">check_circle</span></div>
+            <span class="kpi-val" id="kpi-testing" style="color:#0d9488;">—</span>
+            <span class="kpi-label">Testing / Ready</span>
+        </div>
+        <div class="kpi-card" style="border-top:3px solid #e11d48;">
+            <div class="kpi-icon" style="background:#fff1f2; color:#e11d48;"><span class="material-icons" style="font-size:18px;">priority_high</span></div>
+            <span class="kpi-val" id="kpi-critical" style="color:#e11d48;">—</span>
+            <span class="kpi-label">Critical (&gt;14 Days)</span>
+            <span class="kpi-sub" id="kpi-critical-sub"></span>
+        </div>
+        <div class="kpi-card" style="border-top:3px solid #0369a1;">
+            <div class="kpi-icon" style="background:#e0f2fe; color:#0369a1;"><span class="material-icons" style="font-size:18px;">schedule</span></div>
+            <span class="kpi-val" id="kpi-avg" style="color:#0369a1;">—</span>
+            <span class="kpi-label">Avg Days in Repair</span>
+            <span class="kpi-sub" id="kpi-avg-sub"></span>
+        </div>
+    </div>
+
+    <!-- Stage Pipeline -->
+    <div class="pipeline" id="pipeline-row">
+        <div class="pipeline-stage">
+            <div class="pipeline-box" style="background:#fef3c7; border-color:#fde68a;">
+                <div class="pipeline-count" style="color:#92400e;" id="pipe-received">—</div>
+                <div class="pipeline-label" style="color:#92400e;">Received</div>
+            </div>
+            <span class="material-icons pipeline-arrow">chevron_right</span>
+        </div>
+        <div class="pipeline-stage">
+            <div class="pipeline-box" style="background:#e0f2fe; border-color:#bae6fd;">
+                <div class="pipeline-count" style="color:#0369a1;" id="pipe-diagnosis">—</div>
+                <div class="pipeline-label" style="color:#0369a1;">Diagnosis</div>
+            </div>
+            <span class="material-icons pipeline-arrow">chevron_right</span>
+        </div>
+        <div class="pipeline-stage">
+            <div class="pipeline-box" style="background:#f3e8ff; border-color:#ddd6fe;">
+                <div class="pipeline-count" style="color:#7c3aed;" id="pipe-repair">—</div>
+                <div class="pipeline-label" style="color:#7c3aed;">Under Repair</div>
+            </div>
+            <span class="material-icons pipeline-arrow">chevron_right</span>
+        </div>
+        <div class="pipeline-stage" style="padding-right:0;">
+            <div class="pipeline-box" style="background:#dcfce7; border-color:#bbf7d0;">
+                <div class="pipeline-count" style="color:#166534;" id="pipe-testing">—</div>
+                <div class="pipeline-label" style="color:#166534;">Testing</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Breakdown chips -->
+    <div class="panel">
+        <div class="panel-header">
+            <span class="material-icons" style="color:#7c3aed; font-size:18px;">category</span>
+            <h2>By Model</h2>
+            <span id="model-total-badge" style="font-size:11px; font-weight:700; color:var(--text-muted); background:#f1f5f9; padding:3px 10px; border-radius:20px;"></span>
+        </div>
+        <div class="model-chips" id="model-chips">
+            <span style="color:#94a3b8; font-size:12px; padding:8px 0;">Loading...</span>
+        </div>
+    </div>
+
+    <!-- Main Table -->
+    <div class="panel">
+        <div class="panel-header">
+            <span class="material-icons" style="color:#dc2626; font-size:18px;">hardware</span>
+            <h2>Equipment Under Repair</h2>
+            <span id="filtered-count" style="font-size:11px; font-weight:700; color:var(--text-muted); background:#f1f5f9; padding:3px 10px; border-radius:20px;"></span>
+            <div class="filter-row" style="margin-left:auto;">
+                <input type="text" id="search-input" class="filter-input" placeholder="Search serial / model..." oninput="applyFilters()" style="min-width:180px;">
+                <select id="stage-filter" class="filter-input" onchange="applyFilters()">
+                    <option value="">All Stages</option>
+                    <option value="Received">Received</option>
+                    <option value="Diagnosis">Diagnosis</option>
+                    <option value="Under Repair">Under Repair</option>
+                    <option value="Testing">Testing</option>
+                </select>
+                <select id="model-filter" class="filter-input" onchange="applyFilters()">
+                    <option value="">All Models</option>
+                </select>
+                <select id="sort-select" class="filter-input" onchange="applyFilters()">
+                    <option value="days_desc">Oldest First</option>
+                    <option value="days_asc">Newest First</option>
+                    <option value="stage">By Stage</option>
+                    <option value="model">By Model</option>
+                </select>
+            </div>
+        </div>
+        <div style="overflow-x:auto;">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover" style="width:100%; min-width:800px;">
+                <thead>
+                    <tr>
+                        <th>Serial Number</th>
+                        <th>Model</th>
+                        <th style="text-align:center;">Stage</th>
+                        <th style="text-align:center;">Days In Repair</th>
+                        <th>Technician Notes</th>
+                        <th>Received Date</th>
+                        <th style="text-align:right; min-width:240px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="queue-tbody">
+                    <tr><td colspan="7" style="text-align:center; padding:40px;">
+                        <span class="material-icons spinner" style="font-size:28px; color:#cbd5e1;">sync</span>
+                    </td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="queue-empty" style="display:none;" class="empty-state">
+            <span class="material-icons" style="font-size:40px; color:#dcfce7; display:block; margin-bottom:10px;">check_circle</span>
+            <div style="font-weight:800; color:#166534; margin-bottom:4px;">Repair queue is clear!</div>
+            <div style="font-size:12px;">No equipment currently in the repair queue.</div>
+        </div>
+        <div id="filter-empty" style="display:none; padding:30px; text-align:center; color:#94a3b8; font-size:13px;">
+            No units match the current filters.
         </div>
     </div>
 
 </div>
 
+<script src="/js/site-config.js"></script>
 <script>
 const STAGES = ['Received', 'Diagnosis', 'Under Repair', 'Testing'];
 const STAGE_CLASSES = { 'Received': 'stage-received', 'Diagnosis': 'stage-diagnosis', 'Under Repair': 'stage-repair', 'Testing': 'stage-testing' };
 const technician = localStorage.getItem('pp_user_first_name') || 'Staff';
+
+let allData = [];
 
 function equipHeaders() {
     const token = localStorage.getItem('pp_session_token') || '';
@@ -124,107 +337,209 @@ function equipHeaders() {
 
 async function equipApi(action, extra = {}) {
     const r = await fetch('/api/equipments', {
-        method: 'POST',
-        headers: equipHeaders(),
+        method: 'POST', headers: equipHeaders(),
         body: JSON.stringify({ action, ...extra })
     });
     return r.json();
 }
 
-async function loadQueue() {
-    document.getElementById('queue-body').innerHTML = `<div class="empty-state"><div style="color:var(--text-muted);">Loading...</div></div>`;
-    const res = await equipApi('list_repair_queue');
-    if (!res.success) {
-        document.getElementById('queue-body').innerHTML = `<div class="empty-state">Error loading queue.</div>`;
-        return;
-    }
-
-    const data = res.data || [];
-    document.getElementById('kpi-total').textContent = data.length;
-    document.getElementById('kpi-awaiting').textContent = data.filter(e => !e.repair_stage || e.repair_stage === 'Received').length;
-    document.getElementById('kpi-ready').textContent = data.filter(e => e.repair_stage === 'Testing').length;
-
-    if (!data.length) {
-        document.getElementById('queue-body').innerHTML = `
-            <div class="empty-state">
-                <span class="material-icons" style="font-size:40px; color:var(--green); display:block; margin-bottom:12px;">check_circle</span>
-                <div style="font-weight:700; color:var(--text-primary); margin-bottom:4px;">Repair queue is clear</div>
-                <div style="font-size:12px;">No equipment currently at Warsaw Repairs.</div>
-            </div>`;
-        return;
-    }
-
-    document.getElementById('queue-body').innerHTML = `
-        <table class="slds-table slds-table_cell-buffer slds-table_bordered" style="width:100%;">
-            <thead>
-                <tr>
-                    <th>Serial Number</th>
-                    <th>Model</th>
-                    <th>Stage</th>
-                    <th>Notes</th>
-                    <th>Received</th>
-                    <th style="text-align:right;">Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                ${data.map(e => {
-                    const stage = e.repair_stage || 'Received';
-                    const badgeClass = STAGE_CLASSES[stage] || 'stage-received';
-                    return `<tr data-id="${e.id}">
-                        <td><span style="font-family:'DM Mono',monospace; font-weight:600;">${e.serial_number}</span></td>
-                        <td>${e.terminal_type || '—'}</td>
-                        <td><span class="badge ${badgeClass}">${stage}</span></td>
-                        <td style="color:var(--text-secondary); max-width:200px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${e.repair_notes || '—'}</td>
-                        <td style="color:var(--text-muted); font-size:12px;">${e.received_date ? fmtDate(e.received_date) : '—'}</td>
-                        <td style="text-align:right;">
-                            <div style="display:flex; gap:6px; justify-content:flex-end; flex-wrap:wrap;">
-                                <button class="action-btn" onclick="updateStage('${e.id}', '${e.serial_number}', '${stage}')">Update Stage</button>
-                                <button class="action-btn success" onclick="closeRepair('${e.id}', '${e.serial_number}', 'return_to_stock')">✓ Return to Stock</button>
-                                <button class="action-btn danger" onclick="closeRepair('${e.id}', '${e.serial_number}', 'scrap')">Scrap</button>
-                            </div>
-                        </td>
-                    </tr>`;
-                }).join('')}
-            </tbody>
-        </table>`;
+function fmtDate(d) {
+    if (!d) return '—';
+    return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 }
 
-async function updateStage(id, serial, currentStage) {
-    const currentIdx = STAGES.indexOf(currentStage);
-    const stageOptions = STAGES.map((s, i) =>
-        `<option value="${s}" ${s === currentStage ? 'selected' : ''}>${s}</option>`
-    ).join('');
+function esc(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 
+function daysPill(days) {
+    if (days === null || days === undefined) return '<span style="color:#94a3b8;">—</span>';
+    let bg, color;
+    if (days > 14)      { bg = '#fee2e2'; color = '#dc2626'; }
+    else if (days > 7)  { bg = '#fef3c7'; color = '#d97706'; }
+    else                { bg = '#dcfce7'; color = '#166534'; }
+    return `<span class="days-pill" style="background:${bg};color:${color};">
+        <span class="material-icons" style="font-size:12px;">schedule</span>${days}d
+    </span>`;
+}
+
+async function loadQueue() {
+    const icon = document.getElementById('refresh-icon');
+    icon.classList.add('spinner');
+    document.getElementById('queue-tbody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;"><span class="material-icons spinner" style="font-size:28px;color:#cbd5e1;">sync</span></td></tr>`;
+
+    try {
+        const res = await equipApi('list_repair_queue');
+        if (!res.success) throw new Error(res.message || 'Load failed');
+
+        allData = res.data || [];
+        const sum = res.summary || {};
+
+        // KPI cards
+        document.getElementById('kpi-total').textContent    = sum.total || 0;
+        document.getElementById('kpi-received').textContent = sum.stage_counts?.Received || 0;
+        document.getElementById('kpi-active').textContent   = (sum.stage_counts?.Diagnosis || 0) + (sum.stage_counts?.['Under Repair'] || 0);
+        document.getElementById('kpi-testing').textContent  = sum.stage_counts?.Testing || 0;
+        document.getElementById('kpi-critical').textContent = sum.critical_count || 0;
+        document.getElementById('kpi-critical-sub').textContent = sum.critical_count > 0 ? `>${sum.critical_threshold_days}d threshold` : 'All within threshold';
+        document.getElementById('kpi-avg').textContent      = (sum.avg_days_in_repair || 0) + 'd';
+        document.getElementById('kpi-avg-sub').textContent  = 'across all units';
+
+        // Pipeline
+        document.getElementById('pipe-received').textContent  = sum.stage_counts?.Received || 0;
+        document.getElementById('pipe-diagnosis').textContent  = sum.stage_counts?.Diagnosis || 0;
+        document.getElementById('pipe-repair').textContent     = sum.stage_counts?.['Under Repair'] || 0;
+        document.getElementById('pipe-testing').textContent    = sum.stage_counts?.Testing || 0;
+
+        // Critical banner
+        if (sum.critical_count > 0) {
+            document.getElementById('critical-banner').style.display = 'flex';
+            document.getElementById('critical-banner-text').textContent = `${sum.critical_count} unit${sum.critical_count !== 1 ? 's' : ''} exceed the 14-day repair threshold.`;
+        } else {
+            document.getElementById('critical-banner').style.display = 'none';
+        }
+
+        // Model chips + filter
+        renderModelChips(sum.model_counts || {});
+        populateModelFilter(sum.model_counts || {});
+
+        document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+        applyFilters();
+
+    } catch (err) {
+        document.getElementById('queue-tbody').innerHTML = `<tr><td colspan="7" style="text-align:center;color:#e11d48;padding:30px;">Error: ${esc(err.message)}</td></tr>`;
+    } finally {
+        icon.classList.remove('spinner');
+    }
+}
+
+function renderModelChips(modelCounts) {
+    const entries = Object.entries(modelCounts).sort((a, b) => b[1] - a[1]);
+    if (!entries.length) {
+        document.getElementById('model-chips').innerHTML = '<span style="color:#94a3b8;font-size:12px;padding:8px 0;">No data.</span>';
+        return;
+    }
+    document.getElementById('model-total-badge').textContent = entries.length + ' model' + (entries.length !== 1 ? 's' : '');
+    document.getElementById('model-chips').innerHTML = entries.map(([model, count]) =>
+        `<div class="model-chip"><span>${esc(model)}</span><span class="model-chip-count">${count}</span></div>`
+    ).join('');
+}
+
+function populateModelFilter(modelCounts) {
+    const sel = document.getElementById('model-filter');
+    const current = sel.value;
+    const models = Object.keys(modelCounts).sort();
+    sel.innerHTML = '<option value="">All Models</option>' + models.map(m => `<option value="${esc(m)}">${esc(m)}</option>`).join('');
+    if (current) sel.value = current;
+}
+
+function applyFilters() {
+    const search = document.getElementById('search-input').value.toLowerCase().trim();
+    const stage  = document.getElementById('stage-filter').value;
+    const model  = document.getElementById('model-filter').value;
+    const sort   = document.getElementById('sort-select').value;
+
+    let filtered = allData.filter(e => {
+        if (stage && (e.repair_stage || 'Received') !== stage) return false;
+        if (model && (e.terminal_type || '') !== model) return false;
+        if (search && !e.serial_number?.toLowerCase().includes(search) && !(e.terminal_type || '').toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    // Sort
+    if (sort === 'days_desc') filtered.sort((a, b) => (b.days_in_repair || 0) - (a.days_in_repair || 0));
+    else if (sort === 'days_asc') filtered.sort((a, b) => (a.days_in_repair || 0) - (b.days_in_repair || 0));
+    else if (sort === 'stage') filtered.sort((a, b) => STAGES.indexOf(a.repair_stage || 'Received') - STAGES.indexOf(b.repair_stage || 'Received'));
+    else if (sort === 'model') filtered.sort((a, b) => (a.terminal_type || '').localeCompare(b.terminal_type || ''));
+
+    renderTable(filtered);
+}
+
+function renderTable(data) {
+    const tbody   = document.getElementById('queue-tbody');
+    const empty   = document.getElementById('queue-empty');
+    const fEmpty  = document.getElementById('filter-empty');
+    const counter = document.getElementById('filtered-count');
+
+    counter.textContent = data.length + ' unit' + (data.length !== 1 ? 's' : '');
+
+    if (allData.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        fEmpty.style.display = 'none';
+        return;
+    }
+    empty.style.display = 'none';
+
+    if (data.length === 0) {
+        tbody.innerHTML = '';
+        fEmpty.style.display = 'block';
+        return;
+    }
+    fEmpty.style.display = 'none';
+
+    tbody.innerHTML = data.map(e => {
+        const stage = e.repair_stage || 'Received';
+        const badgeClass = STAGE_CLASSES[stage] || 'stage-received';
+        const isCritical = e.days_in_repair !== null && e.days_in_repair > 14;
+        return `<tr style="${isCritical ? 'background:#fff9f9;' : ''}">
+            <td>
+                <span style="font-family:'DM Mono',monospace;font-weight:700;color:#004990;">${esc(e.serial_number)}</span>
+                ${isCritical ? '<span class="material-icons" style="font-size:14px;color:#dc2626;vertical-align:middle;margin-left:4px;" title="Critical: exceeds 14-day threshold">warning</span>' : ''}
+            </td>
+            <td style="font-weight:600;">${esc(e.terminal_type || '—')}</td>
+            <td style="text-align:center;"><span class="badge ${badgeClass}">${esc(stage)}</span></td>
+            <td style="text-align:center;">${daysPill(e.days_in_repair)}</td>
+            <td style="color:#475569;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.repair_notes || '')}">${esc(e.repair_notes || '—')}</td>
+            <td style="color:var(--text-muted);font-size:12px;white-space:nowrap;">${fmtDate(e.received_date)}</td>
+            <td style="text-align:right;white-space:nowrap;">
+                <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button class="action-btn primary" onclick="updateStage('${e.id}','${e.serial_number.replace(/'/g,"\\'")}','${stage}','${esc(e.repair_notes||'')}')">
+                        <span class="material-icons" style="font-size:13px;">edit</span> Update
+                    </button>
+                    <button class="action-btn success" onclick="closeRepair('${e.id}','${e.serial_number.replace(/'/g,"\\'")}','return_to_stock')">
+                        <span class="material-icons" style="font-size:13px;">check</span> Return
+                    </button>
+                    <button class="action-btn danger" onclick="closeRepair('${e.id}','${e.serial_number.replace(/'/g,"\\'")}','scrap')">
+                        <span class="material-icons" style="font-size:13px;">delete_forever</span> Scrap
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function updateStage(id, serial, currentStage, currentNotes) {
+    const stageOptions = STAGES.map(s => `<option value="${s}"${s === currentStage ? ' selected' : ''}>${s}</option>`).join('');
     const { value: formValues, isConfirmed } = await Swal.fire({
         title: `Update: ${serial}`,
-        html: `
-            <div style="text-align:left;">
-                <label style="font-size:12px; font-weight:700; color:#475569; display:block; margin-bottom:6px;">REPAIR STAGE</label>
-                <select id="swal-stage" class="slds-select" style="width:100%; margin-bottom:14px; border-radius:8px;">${stageOptions}</select>
-                <label style="font-size:12px; font-weight:700; color:#475569; display:block; margin-bottom:6px;">TECHNICIAN NOTES</label>
-                <textarea id="swal-notes" class="slds-textarea" placeholder="Describe findings, parts replaced, etc..." style="width:100%; border-radius:8px; min-height:80px;"></textarea>
-            </div>`,
+        html: `<div style="text-align:left;">
+            <label style="font-size:11px;font-weight:700;color:#475569;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Repair Stage</label>
+            <select id="swal-stage" class="slds-select" style="width:100%;margin-bottom:12px;border-radius:8px;">${stageOptions}</select>
+            <label style="font-size:11px;font-weight:700;color:#475569;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Technician Notes</label>
+            <textarea id="swal-notes" class="slds-textarea" placeholder="Describe findings, parts replaced, issue resolved..." style="width:100%;border-radius:8px;min-height:90px;font-family:'DM Sans',sans-serif;font-size:13px;">${currentNotes || ''}</textarea>
+        </div>`,
         showCancelButton: true,
         confirmButtonText: 'Save Update',
         confirmButtonColor: '#004990',
+        cancelButtonText: 'Cancel',
         preConfirm: () => ({
             stage: document.getElementById('swal-stage').value,
-            notes: document.getElementById('swal-notes').value
+            notes: document.getElementById('swal-notes').value.trim()
         })
     });
 
     if (!isConfirmed || !formValues) return;
-
     Swal.fire({ title: 'Saving...', didOpen: () => Swal.showLoading() });
-    const res = await equipApi('log_repair_action', {
-        equipment_id: id,
-        repair_stage: formValues.stage,
-        repair_notes: formValues.notes,
-        technician
-    });
 
+    const res = await equipApi('log_repair_action', {
+        equipment_id: id, repair_stage: formValues.stage,
+        repair_notes: formValues.notes, technician
+    });
     if (res.success) {
-        Swal.fire('Updated', `${serial} moved to "${formValues.stage}".`, 'success');
+        await Swal.fire({ icon: 'success', title: 'Updated', text: `${serial} → "${formValues.stage}"`, timer: 1500, showConfirmButton: false });
         loadQueue();
     } else {
         Swal.fire('Error', res.message || 'Update failed.', 'error');
@@ -241,29 +556,52 @@ async function closeRepair(id, serial, outcome) {
         icon: isScrap ? 'warning' : 'question',
         showCancelButton: true,
         confirmButtonText: isScrap ? 'Yes, Scrap It' : 'Return to Stock',
-        confirmButtonColor: isScrap ? '#dc2626' : '#10b981'
+        confirmButtonColor: isScrap ? '#dc2626' : '#10b981',
+        cancelButtonText: 'Cancel'
     });
-
     if (!isConfirmed) return;
 
     Swal.fire({ title: 'Processing...', didOpen: () => Swal.showLoading() });
     const res = await equipApi('close_repair', { equipment_id: id, outcome, technician });
-
     if (res.success) {
-        Swal.fire(
-            isScrap ? 'Scrapped' : 'Done!',
-            isScrap ? `${serial} has been decommissioned.` : `${serial} returned to Warsaw Office stock.`,
-            'success'
-        );
+        await Swal.fire({
+            icon: 'success', timer: 1500, showConfirmButton: false,
+            title: isScrap ? 'Scrapped' : 'Done!',
+            text: isScrap ? `${serial} has been decommissioned.` : `${serial} returned to Warsaw Office stock.`
+        });
         loadQueue();
     } else {
         Swal.fire('Error', res.message || 'Operation failed.', 'error');
     }
 }
 
-window.addEventListener('load', function() { loadQueue(); });
+function exportCSV() {
+    const stage  = document.getElementById('stage-filter').value;
+    const model  = document.getElementById('model-filter').value;
+    const search = document.getElementById('search-input').value.toLowerCase().trim();
+
+    let rows = allData.filter(e => {
+        if (stage && (e.repair_stage || 'Received') !== stage) return false;
+        if (model && (e.terminal_type || '') !== model) return false;
+        if (search && !e.serial_number?.toLowerCase().includes(search) && !(e.terminal_type || '').toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    if (!rows.length) { alert('No data to export.'); return; }
+    const headers = ['Serial Number', 'Model', 'Stage', 'Days In Repair', 'Notes', 'Received Date'];
+    const csvRows = rows.map(e => [
+        e.serial_number, e.terminal_type || '', e.repair_stage || 'Received',
+        e.days_in_repair ?? '', e.repair_notes || '', fmtDate(e.received_date)
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `repair-queue-${new Date().toISOString().slice(0,10)}.csv`;
+    a.click();
+}
+
+window.addEventListener('load', loadQueue);
 </script>
-<script src="/js/site-config.js"></script>
 <script src="/bug-report.js"></script>
 </body>
 </html>
