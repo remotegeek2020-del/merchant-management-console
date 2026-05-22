@@ -1513,7 +1513,10 @@ async function addTask(merchantUuid) {
                             <div id="mention-dropdown" style="display:none;position:absolute;z-index:9999;background:white;border:1px solid #e2e8f0;border-radius:10px;box-shadow:0 6px 20px rgba(0,0,0,0.12);width:230px;max-height:200px;overflow-y:auto;left:0;top:100%;margin-top:3px;"></div>
                         </div>
                         <div id="mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:8px;min-height:0;"></div>
-                        <div style="display:flex;justify-content:flex-end;margin-top:10px;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+                            <button onclick="openTagPicker('${m.id}')" style="background:#f5f3ff;color:#5b21b6;padding:8px 14px;border-radius:8px;border:1px solid #ddd6fe;cursor:pointer;font-weight:600;font-size:12px;display:flex;align-items:center;gap:5px;">
+                                <span class="material-icons" style="font-size:15px;">alternate_email</span> Tag People
+                            </button>
                             <button onclick="addNote('${m.id}')" style="background:var(--pp-blue);color:white;padding:9px 22px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:12px;display:flex;align-items:center;gap:6px;">
                                 <span class="material-icons" style="font-size:16px;">send</span> Post Note
                             </button>
@@ -1913,9 +1916,9 @@ window.saveMerchant = async (uuid) => {
 };
 
     // ── @MENTION SYSTEM ───────────────────────────────────────────────────────
-    let _staffUsers    = [];  // [{userid, display_name}]
-    let _mentionAtPos  = -1;  // index of triggering @ in textarea.value
-
+    let _staffUsers      = [];
+    let _mentionAtPos    = -1;  // index of @ in textarea when dropdown opened
+    let _mentionCursorEnd = -1; // cursor position when dropdown was last rendered
 
     async function loadStaffUsers() {
         if (_staffUsers.length) return;
@@ -1964,18 +1967,16 @@ window.saveMerchant = async (uuid) => {
     window.handleNoteBodyInput = function(textarea) {
         const val = textarea.value;
         const pos = textarea.selectionStart;
-        // Look backwards from cursor for the nearest @
         const before = val.slice(0, pos);
         const atIdx = before.lastIndexOf('@');
         const dropdown = document.getElementById('mention-dropdown');
         if (!dropdown) return;
 
         if (atIdx !== -1) {
-            // Allow spaces in query so multi-word names (e.g. "Nick Ott") still match
             const query = before.slice(atIdx + 1);
-            // Stop if user has gone way past a name (3+ words typed = likely not a mention)
             if (query.split(' ').length <= 3) {
                 _mentionAtPos = atIdx;
+                _mentionCursorEnd = pos; // snapshot cursor — used by selectMention
                 const q = query.toLowerCase().trim();
                 const filtered = _staffUsers.filter(u =>
                     u.display_name.toLowerCase().includes(q)
@@ -1994,6 +1995,7 @@ window.saveMerchant = async (uuid) => {
             }
         }
         _mentionAtPos = -1;
+        _mentionCursorEnd = -1;
         dropdown.style.display = 'none';
     };
 
@@ -2002,18 +2004,20 @@ window.saveMerchant = async (uuid) => {
         const dropdown = document.getElementById('mention-dropdown');
         if (!textarea || _mentionAtPos === -1) return;
 
-        // Replace from the @ position up to the current cursor position
+        // Use _mentionCursorEnd (snapshotted when dropdown rendered) — avoids
+        // selectionStart unreliability during mousedown in some browsers
         const val = textarea.value;
-        const cursorPos = textarea.selectionStart;
-        textarea.value = val.slice(0, _mentionAtPos) + '@' + displayName + ' ' + val.slice(cursorPos);
-        textarea.focus();
+        const end = _mentionCursorEnd !== -1 ? _mentionCursorEnd : textarea.selectionStart;
+        textarea.value = val.slice(0, _mentionAtPos) + '@' + displayName + ' ' + val.slice(end);
         const newCaret = _mentionAtPos + displayName.length + 2;
+        textarea.focus();
         textarea.setSelectionRange(newCaret, newCaret);
 
         addMentionChip(userId, displayName);
 
         if (dropdown) dropdown.style.display = 'none';
         _mentionAtPos = -1;
+        _mentionCursorEnd = -1;
     };
 
     // Close dropdown when clicking outside
@@ -2023,6 +2027,44 @@ window.saveMerchant = async (uuid) => {
             dd.style.display = 'none';
         }
     });
+
+    window.openTagPicker = async function(merchantId) {
+        await loadStaffUsers();
+        if (!_staffUsers.length) return Swal.fire('No Staff', 'No staff users found.', 'info');
+
+        const alreadyTagged = new Set(getMentionedUserIds());
+
+        const { value: selected } = await Swal.fire({
+            title: 'Tag Staff Members',
+            html: `<div style="text-align:left;max-height:300px;overflow-y:auto;">` +
+                _staffUsers.map(u => `
+                    <label style="display:flex;align-items:center;gap:10px;padding:8px 4px;cursor:pointer;border-bottom:1px solid #f1f5f9;">
+                        <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g, '&quot;')}" ${alreadyTagged.has(u.userid) ? 'checked' : ''} style="width:16px;height:16px;accent-color:#5b21b6;">
+                        <span style="width:32px;height:32px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
+                        <span style="font-weight:600;color:#002d5a;">${u.display_name}</span>
+                    </label>`).join('') +
+                `</div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Tag Selected',
+            confirmButtonColor: '#004990',
+            preConfirm: () => {
+                const checked = Swal.getPopup().querySelectorAll('input[type=checkbox]:checked');
+                return Array.from(checked).map(cb => ({ userid: cb.value, display_name: cb.dataset.name }));
+            }
+        });
+
+        if (!selected || !selected.length) return;
+
+        const textarea = document.getElementById('new-note-body');
+        selected.forEach(u => {
+            addMentionChip(u.userid, u.display_name);
+            // Append @name to textarea if not already there
+            if (textarea && !textarea.value.includes('@' + u.display_name)) {
+                textarea.value = (textarea.value.trimEnd() ? textarea.value.trimEnd() + ' ' : '') + '@' + u.display_name + ' ';
+            }
+        });
+        if (textarea) textarea.focus();
+    };
 
  window.addNote = async function(uuid) {
     const titleEl = document.getElementById('new-note-title');
