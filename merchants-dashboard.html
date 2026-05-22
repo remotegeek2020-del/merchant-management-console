@@ -1623,7 +1623,7 @@ async function addTask(merchantUuid) {
             const result = await res.json();
             const p = result.data;
             if (!p) { panel.innerHTML = '<p style="padding:20px; color:#94a3b8;">No partner found for agent ID <strong>' + agentIdStr + '</strong>.</p>'; return; }
-            const enrolledStr = p.enrolled_at ? new Date(p.enrolled_at).toLocaleDateString('en-US', { year:'numeric', month:'long', day:'numeric' }) : '—';
+            const enrolledStr = p.enrolled_at ? fmtDate(p.enrolled_at) : '—';
             const portalBadge = p.is_portal_active
                 ? '<span style="background:#dcfce7;color:#15803d;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;">PORTAL ACTIVE</span>'
                 : '<span style="background:#f1f5f9;color:#94a3b8;font-size:10px;font-weight:800;padding:2px 8px;border-radius:4px;">PORTAL INACTIVE</span>';

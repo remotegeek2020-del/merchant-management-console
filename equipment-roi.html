@@ -342,11 +342,6 @@
         return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
-    function fmtDate(d) {
-        if (!d) return '—';
-        return new Date(d).toLocaleDateString('en-US', { month:'short', day:'numeric', year:'numeric' });
-    }
-
     async function loadROI() {
         // Spinners
         document.getElementById('model-table-body').innerHTML    = `<tr><td colspan="8" style="text-align:center;padding:40px;"><span class="material-icons spinner" style="font-size:28px;color:#cbd5e1;">sync</span></td></tr>`;

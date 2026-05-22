@@ -2551,7 +2551,7 @@ window.quickAddId = async function(personId, name) {
 
         const from = new Date(d.period.from);
         const to = new Date(d.period.to);
-        const fmt = dt => dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const fmt = dt => fmtDate(dt);
         if (totalLabel) totalLabel.textContent = `${d.total} new merchant${d.total !== 1 ? 's' : ''}`;
         if (periodLabel) periodLabel.textContent = `${fmt(from)} – ${fmt(to)}`;
 
@@ -2633,7 +2633,7 @@ window.quickAddId = async function(personId, name) {
             } else {
                 const mFrag = document.createDocumentFragment();
                 merchants.forEach(m => {
-                    const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+                    const dt = m.enrollment_date ? fmtDate(m.enrollment_date) : '—';
                     const statusColor = m.account_status === 'Approved' ? '#16a34a' : '#64748b';
                     const row = document.createElement('div');
                     row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:12px;min-height:32px;';
@@ -2680,7 +2680,7 @@ window.quickAddId = async function(personId, name) {
             </div>
             <div id="enroll-card-detail-${pid}" style="display:none;background:#f0fdfa;border:1px solid #99f6e4;border-top:none;border-radius:0 0 8px 8px;padding:0 10px 8px;">
                 ${info.merchants.map(m => {
-                    const dt = m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+                    const dt = m.enrollment_date ? fmtDate(m.enrollment_date) : '—';
                     return `<div style="font-size:11px;color:#0a1628;padding:4px 0;border-bottom:1px solid #ccfbf1;display:flex;justify-content:space-between;"><span>${m.dba_name}</span><span style="color:#94a3b8;">${dt}</span></div>`;
                 }).join('')}
             </div>`;
@@ -2708,7 +2708,7 @@ window.quickAddId = async function(personId, name) {
                 el.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;opacity:0.3;display:block;margin-bottom:6px;">group_add</span><div style="font-size:12px;">No new partners this week yet.</div></div>';
                 return;
             }
-            const fmtDate = d => d ? new Date(d).toLocaleDateString(undefined, { month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+            const fmtDate = d => d ? fmtDateTime(d) : '—';
             el.innerHTML = partners.map(p => `
                 <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:9px 10px;background:#faf5ff;border-radius:9px;border:1px solid #ede9fe;">
                     <div style="flex:1;min-width:0;">
