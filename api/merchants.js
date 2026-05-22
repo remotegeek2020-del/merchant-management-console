@@ -822,7 +822,7 @@ if (action === 'get_notes') {
     return res.status(200).json({ success: true, data: formattedData });
 }
     if (action === 'add_note') {
-    const { merchant_uuid, title, body, created_by } = req.body;
+    const { merchant_uuid, title, body, created_by, mentions } = req.body;
     const { error } = await supabase
         .from('merchant_notes')
         .insert([{ merchant_id: merchant_uuid, title, body, created_by }]);
@@ -833,6 +833,55 @@ if (action === 'get_notes') {
         status: 'success', category: 'merchants', target_id: merchant_uuid, target_type: 'merchant', severity: 'info',
         new_value: { title, body: body?.slice(0, 500) }
     }).then(() => {}).catch(() => {});
+
+    // Send @mention email notifications
+    if (mentions?.length) {
+        try {
+            const { data: mentionedUsers } = await supabase
+                .from('app_users')
+                .select('userid, first_name, last_name, email')
+                .in('userid', mentions);
+
+            const { data: taggerUser } = await supabase
+                .from('app_users')
+                .select('first_name, last_name')
+                .eq('userid', created_by)
+                .maybeSingle();
+            const taggerName = taggerUser ? `${taggerUser.first_name} ${taggerUser.last_name || ''}`.trim() : (session?.email || 'A staff member');
+
+            const { data: merchantRow } = await supabase
+                .from('merchants')
+                .select('dba_name')
+                .eq('id', merchant_uuid)
+                .maybeSingle();
+            const dbaName = merchantRow?.dba_name || 'a merchant';
+
+            if (mentionedUsers?.length && process.env.POSTMARK_SERVER_TOKEN) {
+                const { ServerClient } = await import('postmark');
+                const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                await Promise.all(mentionedUsers.map(u => {
+                    if (!u.email) return;
+                    const firstName = u.first_name || 'there';
+                    return client.sendEmail({
+                        From: process.env.EMAIL_FROM,
+                        To: u.email,
+                        Subject: `${taggerName} mentioned you in a note`,
+                        HtmlBody: `<div style="font-family:sans-serif;max-width:560px;margin:0 auto;padding:24px;">
+<p style="margin:0 0 8px;">Hi ${firstName},</p>
+<p style="margin:0 0 16px;"><strong>${taggerName}</strong> mentioned you in a note for <strong>${dbaName}</strong>:</p>
+<blockquote style="margin:0 0 20px;padding:12px 16px;background:#f8fafc;border-left:4px solid #004990;border-radius:4px;font-size:14px;color:#334155;">${(body || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>')}</blockquote>
+<p style="margin:0;font-size:12px;color:#94a3b8;">You received this because you were @mentioned in the merchant management console.</p>
+</div>`,
+                        TextBody: `Hi ${firstName},\n\n${taggerName} mentioned you in a note for ${dbaName}:\n\n"${body}"\n\nYou received this because you were @mentioned in the merchant management console.`,
+                        MessageStream: 'outbound'
+                    });
+                }));
+            }
+        } catch (e) {
+            console.error('[Mention Email Error]', e.message);
+        }
+    }
+
     return res.status(200).json({ success: true });
 }
 

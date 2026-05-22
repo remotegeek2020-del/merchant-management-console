@@ -1479,8 +1479,12 @@ async function addTask(merchantUuid) {
                 <div id="content-notes" class="tab-content" style="display:none; text-align:left;">
                     <div style="background:#f1f5f9; padding:15px; border-radius:12px; margin-bottom:20px;">
                         <input id="new-note-title" placeholder="Subject" class="modern-input" style="margin-bottom:8px;">
-                        <textarea id="new-note-body" placeholder="Internal commentary..." class="modern-input" style="height:60px;"></textarea>
-                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer;">ADD NEW NOTE</button>
+                        <div style="position:relative;">
+                            <textarea id="new-note-body" placeholder="Internal commentary… type @ to tag a staff member" class="modern-input" style="height:60px;" oninput="handleNoteBodyInput(this, event)"></textarea>
+                            <div id="mention-dropdown" style="display:none;position:absolute;z-index:9999;background:white;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12);width:220px;max-height:180px;overflow-y:auto;left:0;top:100%;margin-top:2px;"></div>
+                        </div>
+                        <div id="mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;"></div>
+                        <button onclick="addNote('${m.id}')" style="background:var(--pp-blue); color:white; width:100%; padding:10px; border-radius:8px; border:none; cursor:pointer; margin-top:8px;">ADD NEW NOTE</button>
                     </div>
 <div id="notes-list">${notes.map(n => {
     // Look for n.created_at (the actual DB column name)
@@ -1599,6 +1603,7 @@ async function addTask(merchantUuid) {
         if (tab === 'tasks') fetchMerchantTasks();
         if (tab === 'tickets') fetchMerchantTickets();
         if (tab === 'partner') fetchPartnerInfo();
+        if (tab === 'notes') { _mentionedIds = []; renderMentionChips(); loadStaffUsers(); }
     };
 
     async function fetchPartnerInfo() {
@@ -1850,61 +1855,159 @@ window.saveMerchant = async (uuid) => {
     }
 };
 
+    // ── @MENTION SYSTEM ───────────────────────────────────────────────────────
+    let _staffUsers = [];       // [{userid, display_name, email}]
+    let _mentionedIds = [];     // UUIDs of tagged users
+    let _mentionQuery = '';     // text after the last @
+    let _mentionActive = false; // dropdown open?
+
+    async function loadStaffUsers() {
+        if (_staffUsers.length) return;
+        try {
+            const res = await fetch('/api/users');
+            const result = await res.json();
+            _staffUsers = (result.data || []).map(u => ({
+                userid: String(u.id),
+                display_name: [u.first_name, u.last_name].filter(Boolean).join(' '),
+                email: u.email || ''
+            })).filter(u => u.display_name);
+        } catch (e) { console.error('[Mention] Failed to load staff', e); }
+    }
+
+    window.handleNoteBodyInput = function(textarea, event) {
+        const val = textarea.value;
+        const pos = textarea.selectionStart;
+        // Find the last @ before caret
+        const before = val.slice(0, pos);
+        const atIdx = before.lastIndexOf('@');
+        const dropdown = document.getElementById('mention-dropdown');
+        if (!dropdown) return;
+
+        if (atIdx !== -1) {
+            const query = before.slice(atIdx + 1);
+            // Only activate if no space in query (still typing the handle)
+            if (!query.includes(' ') || query.length === 0) {
+                _mentionQuery = query.toLowerCase();
+                _mentionActive = true;
+                const filtered = _staffUsers.filter(u =>
+                    u.display_name.toLowerCase().includes(_mentionQuery)
+                ).slice(0, 8);
+                if (filtered.length) {
+                    dropdown.innerHTML = filtered.map(u => `
+                        <div onclick="selectMention('${u.userid}', '${u.display_name.replace(/'/g, "\\'")}')"
+                            style="padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;border-bottom:1px solid #f1f5f9;font-size:13px;"
+                            onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+                            <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
+                            <span style="font-weight:600;color:#002d5a;">${u.display_name}</span>
+                        </div>`).join('');
+                    dropdown.style.display = 'block';
+                } else {
+                    dropdown.style.display = 'none';
+                }
+                return;
+            }
+        }
+        _mentionActive = false;
+        dropdown.style.display = 'none';
+    };
+
+    window.selectMention = function(userId, displayName) {
+        const textarea = document.getElementById('new-note-body');
+        const dropdown = document.getElementById('mention-dropdown');
+        if (!textarea) return;
+
+        // Replace the @query with @DisplayName in the textarea
+        const val = textarea.value;
+        const pos = textarea.selectionStart;
+        const before = val.slice(0, pos);
+        const atIdx = before.lastIndexOf('@');
+        const after = val.slice(pos);
+        textarea.value = before.slice(0, atIdx) + '@' + displayName + ' ' + after;
+        textarea.focus();
+        const newCaret = atIdx + displayName.length + 2;
+        textarea.setSelectionRange(newCaret, newCaret);
+
+        // Track mention
+        if (!_mentionedIds.includes(userId)) {
+            _mentionedIds.push(userId);
+            renderMentionChips();
+        }
+        if (dropdown) dropdown.style.display = 'none';
+        _mentionActive = false;
+    };
+
+    function renderMentionChips() {
+        const chips = document.getElementById('mention-chips');
+        if (!chips) return;
+        chips.innerHTML = _mentionedIds.map(id => {
+            const u = _staffUsers.find(s => s.userid === id);
+            if (!u) return '';
+            return `<span style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:3px 8px;border-radius:99px;">
+                <span class="material-icons" style="font-size:12px;">alternate_email</span>${u.display_name}
+                <span onclick="removeMention('${id}')" style="cursor:pointer;color:#7c3aed;margin-left:2px;line-height:1;">×</span>
+            </span>`;
+        }).join('');
+    }
+
+    window.removeMention = function(userId) {
+        _mentionedIds = _mentionedIds.filter(id => id !== userId);
+        renderMentionChips();
+    };
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', e => {
+        const dd = document.getElementById('mention-dropdown');
+        if (dd && !dd.contains(e.target) && e.target.id !== 'new-note-body') {
+            dd.style.display = 'none';
+            _mentionActive = false;
+        }
+    });
+
  window.addNote = async function(uuid) {
     const titleEl = document.getElementById('new-note-title');
     const bodyEl = document.getElementById('new-note-body');
-    
-    // 1. Get the UUID for the backend lookup
-    const userId = localStorage.getItem('pp_userid'); 
-    
-    // 2. Capture values
+
+    const userId = localStorage.getItem('pp_userid');
     const title = titleEl ? titleEl.value.trim() : '';
     const body = bodyEl ? bodyEl.value.trim() : '';
 
-    // 3. VALIDATE FIRST (Stop the function if empty)
     if (!title || !body) {
         return Swal.fire('Required', 'Subject and Body are required.', 'warning');
     }
 
-    // 4. SHOW SPINNER (Gives user feedback)
     Swal.fire({ title: 'Saving Note...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
     try {
-        // 5. FETCH ONLY ONCE (Using the userId/UUID)
-        const res = await fetch('/api/merchants', { 
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ 
-                action: 'add_note', 
-                merchant_uuid: uuid, 
-                title: title, 
-                body: body, 
-                created_by: userId // Send the UUID so backend can look up the name
-            }) 
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'add_note',
+                merchant_uuid: uuid,
+                title: title,
+                body: body,
+                created_by: userId,
+                mentions: _mentionedIds.length ? [..._mentionedIds] : undefined
+            })
         });
-        
+
         const result = await res.json();
-        
+
         if (result.success) {
-            // 6. CLEAN UP
             if (titleEl) titleEl.value = '';
             if (bodyEl) bodyEl.value = '';
+            _mentionedIds = [];
+            renderMentionChips();
+            document.getElementById('mention-dropdown').style.display = 'none';
 
-            await Swal.fire({
-                icon: 'success',
-                title: 'Note Saved',
-                timer: 1500,
-                showConfirmButton: false
-            });
-
-            // 7. REFRESH MODAL
-            openModal(uuid); 
+            await Swal.fire({ icon: 'success', title: 'Note Saved', timer: 1500, showConfirmButton: false });
+            openModal(uuid);
         } else {
             throw new Error(result.message || "Database rejected note");
         }
-    } catch (err) { 
+    } catch (err) {
         console.error("Note Save Error:", err);
-        Swal.fire('Error', 'Failed to save note: ' + err.message, 'error'); 
+        Swal.fire('Error', 'Failed to save note: ' + err.message, 'error');
     }
 };
     window.updateNote = async function(noteId, merchantId) {
