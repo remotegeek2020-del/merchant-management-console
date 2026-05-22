@@ -609,6 +609,46 @@ if (action === 'getMonthlyReport') {
             return res.status(200).json({ success: true });
         }
 
+        if (action === 'request_terminal_type') {
+            const { requested_name, notes } = req.body;
+            if (!requested_name?.trim()) return res.status(400).json({ success: false, message: 'Terminal type name is required.' });
+
+            // Get web developer email from site_settings
+            const { data: setting } = await supabase
+                .from('site_settings').select('value').eq('key', 'web_developer_email').single();
+            const devEmail = setting?.value;
+            if (!devEmail) return res.status(400).json({ success: false, message: 'Web developer email not configured in Portal CMS.' });
+
+            if (process.env.POSTMARK_SERVER_TOKEN) {
+                const { ServerClient } = await import('postmark');
+                const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+                await client.sendEmail({
+                    From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                    To: devEmail,
+                    Subject: `Terminal Type Request: "${requested_name.trim()}"`,
+                    HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;padding:36px 20px;">
+                        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:32px;margin-bottom:24px;display:block;">
+                        <h2 style="color:#002d5a;margin:0 0 16px;">New Terminal Type Request</h2>
+                        <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                          <tr><td style="padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;color:#475569;width:140px;">Requested by</td>
+                              <td style="padding:10px 14px;border:1px solid #e2e8f0;">${actorName} (${actorEmail})</td></tr>
+                          <tr><td style="padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;color:#475569;">Terminal Type</td>
+                              <td style="padding:10px 14px;border:1px solid #e2e8f0;font-weight:700;color:#002d5a;">${requested_name.trim()}</td></tr>
+                          ${notes ? `<tr><td style="padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;color:#475569;">Notes</td>
+                              <td style="padding:10px 14px;border:1px solid #e2e8f0;">${notes}</td></tr>` : ''}
+                        </table>
+                        <p style="margin:20px 0 0;font-size:13px;color:#64748b;">Add this terminal type via the <strong>Terminal Type Manager</strong> in Secret Dungeon.</p>
+                        <hr style="border:0;border-top:1px solid #e2e8f0;margin:24px 0;">
+                        <p style="font-size:11px;color:#94a3b8;text-align:center;">PayProTec Operations Console</p>
+                    </div>`,
+                    TextBody: `Terminal Type Request\n\nRequested by: ${actorName} (${actorEmail})\nTerminal Type: ${requested_name.trim()}${notes ? `\nNotes: ${notes}` : ''}\n\nAdd via Terminal Type Manager in Secret Dungeon.`,
+                    MessageStream: 'outbound'
+                });
+            }
+
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ message: 'Unknown action' });
 
     } catch (err) {

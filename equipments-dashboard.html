@@ -839,6 +839,16 @@ async function processFinalImport(itemsToCreate) {
               <span style="font-size:11px;color:#94a3b8;">Duplicates auto-skipped</span>
             </div>
           </div>
+
+          <!-- Request missing terminal type -->
+          <div style="margin-top:10px;padding-top:10px;border-top:1px dashed #e2e8f0;text-align:center;">
+            <button id="request-terminal-btn" type="button"
+              style="display:inline-flex;align-items:center;gap:5px;background:none;border:none;font-size:11px;font-weight:700;color:#94a3b8;cursor:pointer;padding:4px 8px;border-radius:6px;"
+              onmouseover="this.style.color='#475569'" onmouseout="this.style.color='#94a3b8'">
+              <span class="material-icons" style="font-size:14px;">help_outline</span>
+              Can't find your terminal type? Request to add it
+            </button>
+          </div>
         </div>`,
       didOpen: () => {
         // Seed 3 blank rows
@@ -851,6 +861,44 @@ async function processFinalImport(itemsToCreate) {
         // Focus first serial input
         const first = document.querySelector('.add-serial-input');
         if (first) first.focus();
+
+        // Request missing terminal type
+        document.getElementById('request-terminal-btn').addEventListener('click', async () => {
+          const { value: formVals, isConfirmed } = await Swal.fire({
+            title: '<span style="font-size:15px;font-weight:800;color:#002d5a;">Request Terminal Type</span>',
+            html: `<div style="text-align:left;font-family:\'DM Sans\',sans-serif;">
+              <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type Name *</label>
+              <input id="req-tt-name" type="text" placeholder="e.g. Pax A35"
+                style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;margin-bottom:12px;"
+                onfocus="this.style.borderColor=\'#0369a1\'" onblur="this.style.borderColor=\'#e2e8f0\'">
+              <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Notes <span style="font-weight:400;text-transform:none;">(optional)</span></label>
+              <textarea id="req-tt-notes" rows="3" placeholder="Manufacturer, model number, or any context…"
+                style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;resize:vertical;"
+                onfocus="this.style.borderColor=\'#0369a1\'" onblur="this.style.borderColor=\'#e2e8f0\'"></textarea>
+            </div>`,
+            showCancelButton: true,
+            confirmButtonText: 'Send Request',
+            confirmButtonColor: '#0369a1',
+            cancelButtonText: 'Back',
+            preConfirm: () => {
+              const name = document.getElementById('req-tt-name').value.trim();
+              if (!name) { Swal.showValidationMessage('Please enter a terminal type name.'); return false; }
+              return { name, notes: document.getElementById('req-tt-notes').value.trim() };
+            }
+          });
+          if (!isConfirmed || !formVals) return;
+          try {
+            const res = await fetch('/api/equipments', {
+              method: 'POST', headers: equipHeaders(),
+              body: JSON.stringify({ action: 'request_terminal_type', requested_name: formVals.name, notes: formVals.notes })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            Swal.fire({ icon: 'success', title: 'Request sent!', text: 'The web developer has been notified and will add it shortly.', timer: 3000, showConfirmButton: false });
+          } catch (err) {
+            Swal.fire('Error', err.message, 'error');
+          }
+        });
       },
       preConfirm: () => {
         const rows = [...document.querySelectorAll('#add-item-tbody tr')];
