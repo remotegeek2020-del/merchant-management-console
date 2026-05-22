@@ -2717,7 +2717,7 @@ window.quickAddId = async function(personId, name) {
                         ${p.company_name ? `<div style="font-size:10px;color:#7c3aed;margin-top:2px;font-weight:600;">${p.company_name}</div>` : ''}
                     </div>
                     <div style="text-align:right;flex-shrink:0;margin-left:10px;">
-                        <div style="font-size:10px;color:#94a3b8;">${fmtDate(p.created_at)}</div>
+                        <div style="font-size:10px;color:#94a3b8;">${fmtDate(p.enrolled_at)}</div>
                         <div style="margin-top:3px;">${p.agent_ids.map(id => `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:#ede9fe;color:#6d28d9;font-family:monospace;display:inline-block;margin:1px;">${id}</span>`).join('') || '<span style="font-size:10px;color:#94a3b8;">No IDs yet</span>'}</div>
                     </div>
                 </div>`).join('');

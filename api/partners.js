@@ -1818,9 +1818,10 @@ if (action === 'get_merchant_data_raw') {
 
             const { data: newPersons, error: personErr } = await supabase
                 .from('persons')
-                .select('id, full_name, email, created_at')
-                .gte('created_at', from)
-                .order('created_at', { ascending: false });
+                .select('id, full_name, email, enrolled_at')
+                .gte('enrolled_at', from)
+                .not('enrolled_at', 'is', null)
+                .order('enrolled_at', { ascending: false });
             if (personErr) throw personErr;
             if (!newPersons?.length) return res.status(200).json({ success: true, data: [], week_start: from });
 
@@ -1854,7 +1855,7 @@ if (action === 'get_merchant_data_raw') {
             const result = newPersons.map(p => {
                 const agentInfo = personAgentMap[p.id] || { agents: [], company_name: null };
                 const idStrings = agentInfo.agents.flatMap(aid => agentIdentMap[aid] || []);
-                return { person_id: p.id, full_name: p.full_name, email: p.email, created_at: p.created_at, company_name: agentInfo.company_name, agent_ids: idStrings };
+                return { person_id: p.id, full_name: p.full_name, email: p.email, enrolled_at: p.enrolled_at, company_name: agentInfo.company_name, agent_ids: idStrings };
             });
             return res.status(200).json({ success: true, data: result, week_start: from });
         }
