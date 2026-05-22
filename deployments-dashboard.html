@@ -875,8 +875,41 @@ async function processReturn() {
         const m = d?.merchants;
         if (!m) return;
         const location = [m.merchant_city, m.merchant_state].filter(Boolean).join(', ');
+
+        let _notes = [];
+        let _notesPage = 1;
+        const _notesPerPage = 5;
+
+        function renderNotes() {
+            const container = document.getElementById('swal-notes-list');
+            const pageInfo  = document.getElementById('swal-notes-page');
+            const prevBtn   = document.getElementById('swal-notes-prev');
+            const nextBtn   = document.getElementById('swal-notes-next');
+            if (!container) return;
+            const totalPages = Math.max(1, Math.ceil(_notes.length / _notesPerPage));
+            const start = (_notesPage - 1) * _notesPerPage;
+            const slice = _notes.slice(start, start + _notesPerPage);
+            if (!slice.length) {
+                container.innerHTML = '<div style="color:#94a3b8;font-size:12px;font-style:italic;padding:6px 0;">No notes found.</div>';
+            } else {
+                container.innerHTML = slice.map(n => `
+                    <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;margin-bottom:6px;background:white;">
+                        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:4px;">
+                            <span style="font-size:11px;font-weight:700;color:#002d5a;">${(n.title||'Note').replace(/</g,'&lt;')}</span>
+                            <span style="font-size:10px;color:#94a3b8;white-space:nowrap;flex-shrink:0;">${fmtDateTime(n.created_at)}</span>
+                        </div>
+                        <div style="font-size:12px;color:#374151;line-height:1.5;">${(n.body||'').replace(/</g,'&lt;').replace(/\n/g,'<br>')}</div>
+                        <div style="font-size:10px;color:#94a3b8;margin-top:4px;">— ${n.display_name||'Staff'}</div>
+                    </div>`).join('');
+            }
+            if (pageInfo) pageInfo.textContent = `Page ${_notesPage} of ${totalPages}`;
+            if (prevBtn)  prevBtn.disabled  = _notesPage <= 1;
+            if (nextBtn)  nextBtn.disabled  = _notesPage >= totalPages;
+        }
+
         Swal.fire({
             title: m.dba_name,
+            width: 600,
             html: `
                 <div style="text-align:left; font-size:13px; display:flex; flex-direction:column; gap:10px;">
                     <div style="background:#f8fafc; border-radius:8px; padding:12px 14px;">
@@ -898,6 +931,25 @@ async function processReturn() {
                         <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Status</span><span style="font-weight:600;">${d.status || '—'}</span></div>
                         <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Type</span><span style="font-weight:600;">${d.purchase_type || '—'}</span></div>
                     </div>
+                    <div style="background:#fdf4ff; border:1px solid #e9d5ff; border-radius:8px; padding:12px 14px;">
+                        <div style="font-size:10px; font-weight:700; color:#7c3aed; text-transform:uppercase; margin-bottom:8px; display:flex; align-items:center; gap:5px;">
+                            <span class="material-icons" style="font-size:13px;">sticky_note_2</span>
+                            Merchant Notes
+                        </div>
+                        <div id="swal-notes-list" style="min-height:40px;">
+                            <div style="display:flex;align-items:center;gap:8px;color:#94a3b8;font-size:12px;">
+                                <span class="material-icons" style="font-size:15px;animation:spin 1.5s linear infinite;color:#7c3aed;">sync</span>
+                                Loading notes…
+                            </div>
+                        </div>
+                        <div id="swal-notes-pagination" style="display:flex;align-items:center;gap:8px;margin-top:8px;justify-content:flex-end;">
+                            <button id="swal-notes-prev" onclick="window._notesPrev()" disabled
+                                style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#475569;">← Prev</button>
+                            <span id="swal-notes-page" style="font-size:11px;color:#64748b;font-weight:600;"></span>
+                            <button id="swal-notes-next" onclick="window._notesNext()" disabled
+                                style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#475569;">Next →</button>
+                        </div>
+                    </div>
                 </div>`,
             showConfirmButton: true,
             confirmButtonColor: '#004990',
@@ -905,7 +957,26 @@ async function processReturn() {
             showCancelButton: true,
             cancelButtonText: 'Close',
             cancelButtonColor: '#64748b',
-            reverseButtons: true
+            reverseButtons: true,
+            didOpen: async () => {
+                window._notesPrev = () => { if (_notesPage > 1) { _notesPage--; renderNotes(); } };
+                window._notesNext = () => { const tp = Math.ceil(_notes.length / _notesPerPage); if (_notesPage < tp) { _notesPage++; renderNotes(); } };
+                try {
+                    const res = await fetch('/api/merchants', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ action: 'get_notes', merchant_uuid: d.merchant_id, type: 'manual' })
+                    });
+                    const result = await res.json();
+                    _notes = result.data || [];
+                    _notesPage = 1;
+                } catch (e) {
+                    _notes = [];
+                }
+                renderNotes();
+                const pg = document.getElementById('swal-notes-pagination');
+                if (pg) pg.style.display = _notes.length > _notesPerPage ? 'flex' : 'none';
+            }
         }).then(result => {
             if (result.isConfirmed) {
                 const mid = m.merchant_id;
