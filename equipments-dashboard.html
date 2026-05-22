@@ -690,18 +690,23 @@ async function processFinalImport(itemsToCreate) {
     }
 }
 
-  const TERMINAL_TYPES = [
-        '2-in-1 Reader','A006','A60','A80','A920 Pro','Clover Go','Clover Mini','Clover Mini Station',
-        'Dejavoo P1','Dejavoo P3','Dejavoo P5','Dejavoo P8','Dejavoo P12','Dejavoo P17','Dejavoo P18',
-        'DuoPricer Labler','FD 100','FD 130','ICT 220','Ingenico Desk 3500',
-        'Pax A920','Pax A920 PRO','Pax E600','Pax S300 Pin Pad',
-        'QD2','QD3','QD4','RCKT POS','S80','S300','TSP100',
-        'Valor VL100','Valor VL110','Valor VL300','Valor VL500','VL550','VP550','VL100 Pro','Verifone',
-        'VP550E','VP550c','VP800','VP800 Cradle',
-        'VX510','VX510 DC','VX520','VX520 CTLS','VX520 DC','VX520 NFC','VX805',
-        'Z11 Terminal','Z3 - Pin Pad','Z6 - Pin Pad','Z8 EPX Dual-Comm Only No Wifi','Z8 Terminal','Z8 - Tri Com',
-        'Z9','Z9 - 4G','Z9 - Wireless','Z9 Base Station'
-  ];
+  let TERMINAL_TYPES = [];
+
+  async function loadTerminalTypes() {
+    if (TERMINAL_TYPES.length) return TERMINAL_TYPES;
+    try {
+      const res = await fetch('/api/equipments', {
+        method: 'POST', headers: equipHeaders(),
+        body: JSON.stringify({ action: 'list_terminal_types' })
+      });
+      const data = await res.json();
+      TERMINAL_TYPES = (data.terminal_types || []).filter(t => t.is_active).map(t => t.name);
+    } catch (e) {
+      console.warn('Could not load terminal types from DB, using fallback.', e);
+      TERMINAL_TYPES = ['Dejavoo P1','Pax A920','Pax A920 PRO','VX520','VX520 CTLS','VX805'];
+    }
+    return TERMINAL_TYPES;
+  }
 
   function _termOpts(selected) {
     return TERMINAL_TYPES.map(t =>
@@ -771,8 +776,9 @@ async function processFinalImport(itemsToCreate) {
     _updateAddCounter();
   }
 
-  function openAddModal() {
+  async function openAddModal() {
     const today = new Date().toISOString().slice(0, 10);
+    await loadTerminalTypes();
 
     Swal.fire({
       title: '<span style="font-size:17px;font-weight:800;color:#002d5a;">Add Equipment to Inventory</span>',
@@ -792,10 +798,9 @@ async function processFinalImport(itemsToCreate) {
             </div>
             <div>
               <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Status</label>
-              <select id="add-status" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;">
+              <select id="add-status" onchange="(function(s){const loc=document.getElementById('add-location');if(s.value==='stocked')loc.value='Warsaw Office';else if(s.value==='repairing')loc.value='Warsaw Repairs';})(this)" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;">
                 <option value="stocked">Stocked</option>
                 <option value="repairing">Repairing</option>
-                <option value="decommissioned">Decommissioned</option>
               </select>
             </div>
             <div>

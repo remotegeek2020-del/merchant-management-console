@@ -562,6 +562,53 @@ if (action === 'getMonthlyReport') {
             });
         }
 
+        // --- TERMINAL TYPES MANAGEMENT ---
+
+        if (action === 'list_terminal_types') {
+            const { data, error } = await supabase
+                .from('terminal_types')
+                .select('id, name, sort_order, is_active')
+                .order('sort_order', { ascending: true })
+                .order('name', { ascending: true });
+            if (error) throw error;
+            return res.status(200).json({ success: true, terminal_types: data });
+        }
+
+        if (action === 'add_terminal_type') {
+            const { name } = req.body;
+            if (!name?.trim()) return res.status(400).json({ success: false, message: 'Name is required.' });
+            const { data: maxRow } = await supabase
+                .from('terminal_types').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
+            const nextOrder = ((maxRow?.sort_order || 0) + 10);
+            const { error } = await supabase
+                .from('terminal_types').insert({ name: name.trim(), sort_order: nextOrder });
+            if (error) {
+                if (error.code === '23505') return res.status(409).json({ success: false, message: 'Terminal type already exists.' });
+                throw error;
+            }
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'update_terminal_type') {
+            const { type_id, name, sort_order, is_active } = req.body;
+            if (!type_id) return res.status(400).json({ success: false, message: 'type_id required.' });
+            const patch = {};
+            if (name !== undefined)       patch.name       = name.trim();
+            if (sort_order !== undefined)  patch.sort_order  = sort_order;
+            if (is_active !== undefined)   patch.is_active   = is_active;
+            const { error } = await supabase.from('terminal_types').update(patch).eq('id', type_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'delete_terminal_type') {
+            const { type_id } = req.body;
+            if (!type_id) return res.status(400).json({ success: false, message: 'type_id required.' });
+            const { error } = await supabase.from('terminal_types').delete().eq('id', type_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ message: 'Unknown action' });
 
     } catch (err) {
