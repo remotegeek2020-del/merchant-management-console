@@ -1154,7 +1154,7 @@ async function submitOnboarding() {
             email: selectedGHLContact.email,
             phone: selectedGHLContact.phone,
             hl_id: selectedGHLContact.id,
-            enrolled_at: (_ad && _ad.value) ? new Date(_ad.value).toISOString() : new Date().toISOString(),
+            enrolled_at: (_ad && _ad.value) ? new Date(_ad.value + 'T12:00:00').toISOString() : new Date().toISOString(),
             is_branded: !!(document.getElementById('brandedPartnerCheck') && document.getElementById('brandedPartnerCheck').checked)
         };
         payload.company = {
@@ -2985,7 +2985,7 @@ window.quickAddId = async function(personId, name) {
     window.editEnrolledAt = async function(personId, currentDate) {
         var result = await Swal.fire({title:'Partner Activation Date',html:'<input type="date" id="enrollDate" value="'+currentDate+'" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;outline:none;">',showCancelButton:true,confirmButtonColor:'#004990',confirmButtonText:'Save',preConfirm:function(){return document.getElementById('enrollDate').value;}});
         if (result.value) {
-            await fetch('/api/partners',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_person_field',id:personId,field:'enrolled_at',value:new Date(result.value).toISOString()})});
+            await fetch('/api/partners',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'update_person_field',id:personId,field:'enrolled_at',value:new Date(result.value + 'T12:00:00').toISOString()})});
             loadPartners();
         }
     };
