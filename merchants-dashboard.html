@@ -1950,14 +1950,6 @@ window.saveMerchant = async (uuid) => {
         if (chip) chip.remove();
     };
 
-    function pruneDeletedChips(textareaValue) {
-        const chips = document.getElementById('mention-chips');
-        if (!chips) return;
-        chips.querySelectorAll('[data-uid]').forEach(chip => {
-            if (!textareaValue.includes('@' + chip.dataset.name)) chip.remove();
-        });
-    }
-
     function clearMentionChips() {
         const chips = document.getElementById('mention-chips');
         if (chips) chips.innerHTML = '';
@@ -1970,20 +1962,21 @@ window.saveMerchant = async (uuid) => {
     }
 
     window.handleNoteBodyInput = function(textarea) {
-        pruneDeletedChips(textarea.value); // remove chips whose @name was deleted from text
-
         const val = textarea.value;
         const pos = textarea.selectionStart;
+        // Look backwards from cursor for the nearest @
         const before = val.slice(0, pos);
         const atIdx = before.lastIndexOf('@');
         const dropdown = document.getElementById('mention-dropdown');
         if (!dropdown) return;
 
         if (atIdx !== -1) {
+            // Allow spaces in query so multi-word names (e.g. "Nick Ott") still match
             const query = before.slice(atIdx + 1);
-            if (!query.includes(' ')) {
+            // Stop if user has gone way past a name (3+ words typed = likely not a mention)
+            if (query.split(' ').length <= 3) {
                 _mentionAtPos = atIdx;
-                const q = query.toLowerCase();
+                const q = query.toLowerCase().trim();
                 const filtered = _staffUsers.filter(u =>
                     u.display_name.toLowerCase().includes(q)
                 ).slice(0, 8);
@@ -2009,12 +2002,10 @@ window.saveMerchant = async (uuid) => {
         const dropdown = document.getElementById('mention-dropdown');
         if (!textarea || _mentionAtPos === -1) return;
 
-        // Insert @DisplayName at the stored @ position
+        // Replace from the @ position up to the current cursor position
         const val = textarea.value;
-        const afterAt = val.slice(_mentionAtPos + 1);
-        const spaceIdx = afterAt.search(/\s/);
-        const queryEnd = _mentionAtPos + 1 + (spaceIdx === -1 ? afterAt.length : spaceIdx);
-        textarea.value = val.slice(0, _mentionAtPos) + '@' + displayName + ' ' + val.slice(queryEnd);
+        const cursorPos = textarea.selectionStart;
+        textarea.value = val.slice(0, _mentionAtPos) + '@' + displayName + ' ' + val.slice(cursorPos);
         textarea.focus();
         const newCaret = _mentionAtPos + displayName.length + 2;
         textarea.setSelectionRange(newCaret, newCaret);
