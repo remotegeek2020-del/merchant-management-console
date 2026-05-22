@@ -690,8 +690,7 @@ async function processFinalImport(itemsToCreate) {
     }
 }
 
-  function openAddModal() {
-    const terminalOptions = [
+  const TERMINAL_TYPES = [
         '2-in-1 Reader','A006','A60','A80','A920 Pro','Clover Go','Clover Mini','Clover Mini Station',
         'Dejavoo P1','Dejavoo P3','Dejavoo P5','Dejavoo P8','Dejavoo P12','Dejavoo P17','Dejavoo P18',
         'DuoPricer Labler','FD 100','FD 130','ICT 220','Ingenico Desk 3500',
@@ -702,125 +701,224 @@ async function processFinalImport(itemsToCreate) {
         'VX510','VX510 DC','VX520','VX520 CTLS','VX520 DC','VX520 NFC','VX805',
         'Z11 Terminal','Z3 - Pin Pad','Z6 - Pin Pad','Z8 EPX Dual-Comm Only No Wifi','Z8 Terminal','Z8 - Tri Com',
         'Z9','Z9 - 4G','Z9 - Wireless','Z9 Base Station'
-    ];
+  ];
+
+  function _termOpts(selected) {
+    return TERMINAL_TYPES.map(t =>
+      `<option value="${t}"${t === selected ? ' selected' : ''}>${t}</option>`
+    ).join('');
+  }
+
+  function _addItemRow(serial = '', termType = '') {
+    const tbody = document.getElementById('add-item-tbody');
+    if (!tbody) return;
+    const rowNum = tbody.children.length + 1;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td style="padding:4px 6px;width:28px;text-align:center;color:#94a3b8;font-size:11px;font-weight:700;user-select:none;">${rowNum}</td>
+      <td style="padding:4px 6px;">
+        <input type="text" class="add-serial-input" value="${serial}"
+          placeholder="e.g. SN123456"
+          style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 9px;font-size:12px;font-family:'DM Mono',monospace;box-sizing:border-box;outline:none;"
+          onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0';_updateAddCounter()">
+      </td>
+      <td style="padding:4px 6px;">
+        <select class="add-term-select" style="width:100%;border:1px solid #e2e8f0;border-radius:6px;padding:6px 8px;font-size:12px;box-sizing:border-box;background:white;">
+          ${_termOpts(termType || 'Dejavoo P1')}
+        </select>
+      </td>
+      <td style="padding:4px 6px;width:32px;text-align:center;">
+        <button onclick="this.closest('tr').remove();_renumberAddRows();_updateAddCounter();"
+          style="background:none;border:none;cursor:pointer;color:#cbd5e1;padding:2px;border-radius:4px;line-height:1;"
+          title="Remove row"
+          onmouseover="this.style.color='#dc2626'" onmouseout="this.style.color='#cbd5e1'">
+          <span class="material-icons" style="font-size:15px;">close</span>
+        </button>
+      </td>`;
+    tbody.appendChild(tr);
+    const input = tr.querySelector('.add-serial-input');
+    input.addEventListener('paste', _handleAddPaste);
+    input.addEventListener('input', _updateAddCounter);
+    if (serial) _updateAddCounter();
+  }
+
+  function _renumberAddRows() {
+    const rows = document.querySelectorAll('#add-item-tbody tr');
+    rows.forEach((r, i) => { const n = r.querySelector('td'); if (n) n.textContent = i + 1; });
+  }
+
+  function _updateAddCounter() {
+    const inputs = document.querySelectorAll('#add-item-tbody .add-serial-input');
+    const filled = [...inputs].filter(i => i.value.trim()).length;
+    const el = document.getElementById('add-item-counter');
+    if (el) {
+      el.textContent = filled > 0 ? filled + ' unit' + (filled !== 1 ? 's' : '') + ' ready' : '';
+      el.style.color = filled > 0 ? '#166534' : '#94a3b8';
+    }
+  }
+
+  function _handleAddPaste(e) {
+    const text = (e.clipboardData || window.clipboardData).getData('text');
+    const lines = text.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+    if (lines.length <= 1) return;
+    e.preventDefault();
+    const thisRow = e.target.closest('tr');
+    const tbody = document.getElementById('add-item-tbody');
+    const termVal = thisRow ? thisRow.querySelector('.add-term-select').value : 'Dejavoo P1';
+    e.target.value = lines[0];
+    for (let i = 1; i < lines.length; i++) _addItemRow(lines[i], termVal);
+    _renumberAddRows();
+    _updateAddCounter();
+  }
+
+  function openAddModal() {
     const today = new Date().toISOString().slice(0, 10);
-    const optionsHtml = terminalOptions.map(t => `<option value="${t}">${t}</option>`).join('');
 
     Swal.fire({
-        title: '<span style="font-size:17px;font-weight:800;color:#002d5a;">Add Equipment to Inventory</span>',
-        width: '580px',
-        showCancelButton: true,
-        confirmButtonText: 'Add to Inventory',
-        confirmButtonColor: '#166534',
-        cancelButtonText: 'Cancel',
-        html: `
-            <div style="text-align:left;font-family:'DM Sans',sans-serif;">
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
-                    <div>
-                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type *</label>
-                        <select id="bulk-terminal-type" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
-                            ${optionsHtml}
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Received Date</label>
-                        <input type="date" id="bulk-received-date" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;box-sizing:border-box;">
-                    </div>
-                    <div>
-                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Status</label>
-                        <select id="bulk-status" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
-                            <option value="stocked">Stocked</option>
-                            <option value="repairing">Repairing</option>
-                            <option value="decommissioned">Decommissioned</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Location</label>
-                        <select id="bulk-location" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;font-size:13px;font-family:inherit;">
-                            <option value="Warsaw Office">Warsaw Office</option>
-                            <option value="Warsaw Repairs">Warsaw Repairs</option>
-                        </select>
-                    </div>
-                </div>
+      title: '<span style="font-size:17px;font-weight:800;color:#002d5a;">Add Equipment to Inventory</span>',
+      width: '680px',
+      showCancelButton: true,
+      confirmButtonText: 'Add to Inventory',
+      confirmButtonColor: '#166534',
+      cancelButtonText: 'Cancel',
+      html: `
+        <div style="text-align:left;font-family:'DM Sans',sans-serif;">
 
-                <div style="margin-bottom:10px;">
-                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">
-                        Serial Numbers *
-                        <span style="font-weight:500;text-transform:none;letter-spacing:0;color:#94a3b8;margin-left:6px;">— one per line, or comma-separated</span>
-                    </label>
-                    <textarea id="bulk-serials" rows="7"
-                        placeholder="SN123456&#10;SN789012&#10;SN345678&#10;..."
-                        oninput="(function(){
-                            const raw = document.getElementById('bulk-serials').value;
-                            const serials = raw.split(/[,\n]+/).map(s=>s.trim()).filter(Boolean);
-                            const u = [...new Set(serials)];
-                            const el = document.getElementById('bulk-serial-count');
-                            if(el) el.textContent = u.length > 0 ? u.length + ' serial' + (u.length!==1?'s':'') + ' detected' : '';
-                            el.style.color = u.length > 0 ? '#166534' : '#94a3b8';
-                        })()"
-                        style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:10px 12px;font-size:13px;font-family:'DM Mono',monospace;resize:vertical;box-sizing:border-box;line-height:1.6;">
-                    </textarea>
-                    <div style="display:flex;justify-content:flex-end;margin-top:4px;">
-                        <span id="bulk-serial-count" style="font-size:11px;font-weight:700;color:#94a3b8;"></span>
-                    </div>
-                </div>
+          <!-- Shared fields -->
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:14px;">
+            <div>
+              <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Received Date</label>
+              <input type="date" id="add-received-date" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;box-sizing:border-box;">
+            </div>
+            <div>
+              <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Status</label>
+              <select id="add-status" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;">
+                <option value="stocked">Stocked</option>
+                <option value="repairing">Repairing</option>
+                <option value="decommissioned">Decommissioned</option>
+              </select>
+            </div>
+            <div>
+              <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Location</label>
+              <select id="add-location" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;">
+                <option value="Warsaw Office">Warsaw Office</option>
+                <option value="Warsaw Repairs">Warsaw Repairs</option>
+              </select>
+            </div>
+          </div>
 
-                <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:8px 12px;font-size:11px;color:#166534;font-weight:600;">
-                    Existing serial numbers will be skipped automatically — no duplicates will be created.
-                </div>
-            </div>`,
-        preConfirm: () => {
-            const raw = document.getElementById('bulk-serials').value;
-            const serials = [...new Set(raw.split(/[,\n]+/).map(s => s.trim()).filter(Boolean))];
-            const terminal_type = document.getElementById('bulk-terminal-type').value;
-            const received_date = document.getElementById('bulk-received-date').value;
-            const status        = document.getElementById('bulk-status').value;
-            const location      = document.getElementById('bulk-location').value;
-            if (!serials.length) {
-                Swal.showValidationMessage('Please enter at least one serial number.');
-                return false;
-            }
-            return { serials, terminal_type, received_date, status, location };
+          <!-- Row table -->
+          <div style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;margin-bottom:10px;">
+            <div style="display:grid;grid-template-columns:28px 1fr 1fr 32px;background:#f8fafc;padding:6px 6px;border-bottom:1px solid #e2e8f0;">
+              <div></div>
+              <div style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;padding-left:9px;">Serial Number</div>
+              <div style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;padding-left:9px;">Terminal Type</div>
+              <div></div>
+            </div>
+            <div style="max-height:280px;overflow-y:auto;">
+              <table style="width:100%;border-collapse:collapse;" id="add-item-table">
+                <tbody id="add-item-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Footer controls -->
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <button id="add-row-btn" type="button"
+              style="display:inline-flex;align-items:center;gap:5px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:6px 13px;font-size:12px;font-weight:700;color:#0369a1;cursor:pointer;"
+              onmouseover="this.style.background='#e0f2fe'" onmouseout="this.style.background='#f0f9ff'">
+              <span class="material-icons" style="font-size:15px;">add</span> Add Row
+            </button>
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span id="add-item-counter" style="font-size:11px;font-weight:700;color:#94a3b8;"></span>
+              <span style="font-size:11px;color:#94a3b8;">Duplicates auto-skipped</span>
+            </div>
+          </div>
+        </div>`,
+      didOpen: () => {
+        // Seed 3 blank rows
+        _addItemRow(); _addItemRow(); _addItemRow();
+        document.getElementById('add-row-btn').addEventListener('click', () => {
+          _addItemRow();
+          const scroll = document.querySelector('#add-item-table').closest('div[style*="overflow-y"]');
+          if (scroll) scroll.scrollTop = scroll.scrollHeight;
+        });
+        // Focus first serial input
+        const first = document.querySelector('.add-serial-input');
+        if (first) first.focus();
+      },
+      preConfirm: () => {
+        const rows = [...document.querySelectorAll('#add-item-tbody tr')];
+        const entries = rows.map(r => ({
+          serial: r.querySelector('.add-serial-input').value.trim(),
+          terminal_type: r.querySelector('.add-term-select').value
+        })).filter(e => e.serial);
+
+        if (!entries.length) {
+          Swal.showValidationMessage('Enter at least one serial number.');
+          return false;
         }
+        // Deduplicate by serial within this batch
+        const seen = new Set();
+        const deduped = entries.filter(e => {
+          if (seen.has(e.serial)) return false;
+          seen.add(e.serial);
+          return true;
+        });
+
+        return {
+          entries: deduped,
+          received_date: document.getElementById('add-received-date').value,
+          status:        document.getElementById('add-status').value,
+          location:      document.getElementById('add-location').value
+        };
+      }
     }).then(async result => {
-        if (!result.isConfirmed || !result.value) return;
-        const { serials, terminal_type, received_date, status, location } = result.value;
+      if (!result.isConfirmed || !result.value) return;
+      const { entries, received_date, status, location } = result.value;
 
-        Swal.fire({ title: `Adding ${serials.length} unit${serials.length !== 1 ? 's' : ''}…`, didOpen: () => Swal.showLoading() });
+      Swal.fire({ title: `Adding ${entries.length} unit${entries.length !== 1 ? 's' : ''}…`, didOpen: () => Swal.showLoading() });
 
-        try {
-            const res = await fetch('/api/equipments', {
-                method: 'POST',
-                headers: equipHeaders(),
-                body: JSON.stringify({
-                    action: 'bulk_create',
-                    serials,
-                    terminal_type,
-                    received_date,
-                    status,
-                    current_location: location
-                })
-            });
-            const data = await res.json();
-            if (!data.success) throw new Error(data.message || 'Failed');
+      try {
+        // Group by terminal type and fire parallel requests
+        const byType = {};
+        entries.forEach(e => {
+          if (!byType[e.terminal_type]) byType[e.terminal_type] = [];
+          byType[e.terminal_type].push(e.serial);
+        });
 
-            const skipMsg = data.skipped_duplicates?.length
-                ? `<div style="margin-top:8px;font-size:12px;color:#b45309;">${data.skipped_duplicates.length} duplicate${data.skipped_duplicates.length !== 1 ? 's' : ''} skipped: ${data.skipped_duplicates.join(', ')}</div>`
-                : '';
+        let totalInserted = 0;
+        const allSkipped = [];
 
-            Swal.fire({
-                icon: 'success',
-                title: `${data.inserted} unit${data.inserted !== 1 ? 's' : ''} added`,
-                html: `<span style="font-size:13px;color:#475569;">${terminal_type} → ${location}</span>${skipMsg}`,
-                timer: data.skipped_duplicates?.length ? 0 : 2000,
-                showConfirmButton: !!data.skipped_duplicates?.length
-            });
-            fetchInventory();
-        } catch (err) {
-            Swal.fire('Error', err.message, 'error');
-        }
+        await Promise.all(Object.entries(byType).map(async ([terminal_type, serials]) => {
+          const res = await fetch('/api/equipments', {
+            method: 'POST',
+            headers: equipHeaders(),
+            body: JSON.stringify({ action: 'bulk_create', serials, terminal_type, received_date, status, current_location: location })
+          });
+          const data = await res.json();
+          if (!data.success) throw new Error(data.message || 'Failed');
+          totalInserted += data.inserted || 0;
+          if (data.skipped_duplicates?.length) allSkipped.push(...data.skipped_duplicates);
+        }));
+
+        const skipMsg = allSkipped.length
+          ? `<div style="margin-top:8px;font-size:12px;color:#b45309;">${allSkipped.length} duplicate${allSkipped.length !== 1 ? 's' : ''} skipped: ${allSkipped.join(', ')}</div>`
+          : '';
+
+        Swal.fire({
+          icon: 'success',
+          title: `${totalInserted} unit${totalInserted !== 1 ? 's' : ''} added`,
+          html: `<span style="font-size:13px;color:#475569;">${Object.keys(byType).length} terminal type${Object.keys(byType).length !== 1 ? 's' : ''} → ${location}</span>${skipMsg}`,
+          timer: allSkipped.length ? 0 : 2000,
+          showConfirmButton: !!allSkipped.length
+        });
+        fetchInventory();
+      } catch (err) {
+        Swal.fire('Error', err.message, 'error');
+      }
     });
-}
+  }
 
     function editEquipment(id) {
         selectedId = id;
