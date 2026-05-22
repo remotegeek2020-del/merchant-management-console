@@ -414,7 +414,19 @@ if (action === 'bulk_upsert') {
                 category: 'merchants',
                 target_type: 'merchant',
                 severity: 'info',
-                new_value: { count: totalProcessed, errors: errors.length > 0 ? errors : undefined }
+                new_value: {
+                    count: totalProcessed,
+                    records: dataToUpsert.map(r => ({
+                        merchant_id:   r.merchant_id,
+                        dba_name:      r.dba_name      || null,
+                        status:        r.status        || null,
+                        agent_id:      r.agent_id      || null,
+                        partner_name:  r.partner_name  || null,
+                        state:         r.state         || null,
+                        city:          r.city          || null,
+                    })),
+                    errors: errors.length > 0 ? errors : undefined
+                }
             });
         } catch (logErr) {
             console.warn('Activity log failed:', logErr.message);

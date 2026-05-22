@@ -185,6 +185,26 @@ function formatJsonDiff(val) {
     return escHtml(JSON.stringify(val, null, 2));
 }
 
+function buildRecordsTable(records) {
+    if (!records?.length) return '';
+    const cols = ['merchant_id','dba_name','status','agent_id','partner_name','state','city'];
+    const labels = ['MID','DBA Name','Status','Agent ID','Partner','State','City'];
+    return `<div style="overflow-x:auto;margin-top:8px;">
+        <table style="width:100%;border-collapse:collapse;font-size:11px;font-family:monospace;">
+            <thead>
+                <tr style="background:#e2e8f0;">
+                    ${labels.map(l => `<th style="padding:4px 8px;text-align:left;font-weight:700;color:#334155;white-space:nowrap;">${l}</th>`).join('')}
+                </tr>
+            </thead>
+            <tbody>
+                ${records.map((r,i) => `<tr style="background:${i%2===0?'#fff':'#f8fafc'};">
+                    ${cols.map(c => `<td style="padding:4px 8px;color:#475569;white-space:nowrap;">${escHtml(r[c] ?? '—')}</td>`).join('')}
+                </tr>`).join('')}
+            </tbody>
+        </table>
+    </div>`;
+}
+
 function buildDetailHtml(log) {
     const hasOld = log.old_value !== null && log.old_value !== undefined;
     const hasNew = log.new_value !== null && log.new_value !== undefined;
@@ -202,6 +222,23 @@ function buildDetailHtml(log) {
         metaHtml += `<span><b>User Agent:</b> ${escHtml(ua)}</span>`;
     }
     metaHtml += `</div>`;
+
+    // Special render for bulk uploads that have a records array
+    let newVal = log.new_value;
+    if (typeof newVal === 'string') { try { newVal = JSON.parse(newVal); } catch(e) {} }
+    if (hasNew && newVal?.records?.length) {
+        const errors = newVal.errors?.length
+            ? `<div style="margin-top:8px;padding:8px 12px;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;font-size:11px;color:#dc2626;font-weight:600;">${newVal.errors.length} error(s): ${newVal.errors.map(e => escHtml(e)).join('; ')}</div>`
+            : '';
+        const diffHtml = `<div class="diff-box diff-box-new" style="max-width:100%;">
+            <div class="diff-box-header">+ ${newVal.count} records uploaded</div>
+            <div class="diff-box-body" style="padding:0 12px 12px;">
+                ${buildRecordsTable(newVal.records)}
+                ${errors}
+            </div>
+        </div>`;
+        return `<div class="log-detail-inner">${metaHtml}<div class="diff-grid single">${diffHtml}</div></div>`;
+    }
 
     let diffHtml = '';
     if (hasEither) {
