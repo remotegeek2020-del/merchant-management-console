@@ -1332,7 +1332,17 @@ async function processReturn() {
                 body: JSON.stringify({ action: 'getLookups', query: val })
             });
             const result = await res.json();
-            list.innerHTML = (result.inventory || []).map(e => `
+            const items = result.inventory || [];
+            const addNewRow = `
+                <div class="suggestion-item" onclick="openAddEquipFromDep(document.getElementById('eSearch').value.trim())"
+                    style="display:flex;align-items:center;gap:10px;border-top:${items.length ? '1px solid #f1f5f9' : 'none'};background:#fafbff;">
+                    <span class="material-icons" style="font-size:18px;color:#5b21b6;">add_circle_outline</span>
+                    <div>
+                        <strong style="color:#5b21b6;font-size:13px;">Add New Equipment</strong>
+                        <div style="font-size:10px;color:#94a3b8;">This serial isn't in inventory yet</div>
+                    </div>
+                </div>`;
+            list.innerHTML = items.map(e => `
                 <div class="suggestion-item" onclick="selectEquip('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
                         <strong>${e.serial_number}</strong>
@@ -1340,16 +1350,159 @@ async function processReturn() {
                     </div>
                     <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">${e.status.toUpperCase()}</span>
                 </div>
-            `).join('');
+            `).join('') + addNewRow;
             list.style.display = 'block';
         } catch (e) { console.error(e); }
-    }, 200); // Hardware search can be slightly faster (200ms)
+    }, 200);
 }
 
     function selectEquip(id, serial, type) {
         document.getElementById('equipSelect').value = id;
         document.getElementById('eSearch').value = `${serial} (${type})`;
         document.getElementById('eSuggestions').style.display = 'none';
+    }
+
+    // ── ADD NEW EQUIPMENT FROM DEPLOYMENT MODAL ───────────────────────────────
+    let _depTerminalTypes = [];
+
+    async function _depLoadTerminalTypes() {
+        if (_depTerminalTypes.length) return;
+        try {
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'list_terminal_types' })
+            });
+            const data = await res.json();
+            _depTerminalTypes = (data.terminal_types || []).filter(t => t.is_active).map(t => t.name);
+        } catch (e) {
+            _depTerminalTypes = ['Dejavoo P1','Pax A920','Pax A920 PRO','VX520','VX520 CTLS','VX805'];
+        }
+    }
+
+    function _depTermOpts(selected) {
+        return _depTerminalTypes.map(t =>
+            `<option value="${t}"${t === selected ? ' selected' : ''}>${t}</option>`
+        ).join('');
+    }
+
+    // isBulk = true means the caller was the bulk search field
+    async function openAddEquipFromDep(prefillSerial, isBulk = false) {
+        document.getElementById('eSuggestions').style.display = 'none';
+        document.getElementById('bulkESuggestions').style.display = 'none';
+
+        await _depLoadTerminalTypes();
+        const today = new Date().toISOString().slice(0, 10);
+        const safeSerial = (prefillSerial || '').replace(/'/g, '');
+
+        const { isConfirmed, value } = await Swal.fire({
+            title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">Add New Equipment to Inventory</span>',
+            width: '520px',
+            showCancelButton: true,
+            confirmButtonText: 'Add to Inventory',
+            confirmButtonColor: '#166534',
+            cancelButtonText: 'Cancel',
+            html: `
+            <div style="text-align:left;font-family:'DM Sans',sans-serif;">
+                <div style="background:#faf5ff;border:1px solid #ddd6fe;border-radius:10px;padding:12px 14px;margin-bottom:16px;font-size:12px;color:#5b21b6;display:flex;align-items:center;gap:8px;">
+                    <span class="material-icons" style="font-size:16px;">info</span>
+                    After adding, the unit will be auto-selected in your deployment ticket.
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+                    <div>
+                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Received Date</label>
+                        <input type="date" id="dep-add-date" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Location</label>
+                        <select id="dep-add-location" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:13px;">
+                            <option value="Warsaw Office">Warsaw Office</option>
+                            <option value="Warsaw Repairs">Warsaw Repairs</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Serial Number <span style="color:#e53e3e;">*</span></label>
+                    <input id="dep-add-serial" type="text" value="${safeSerial}" placeholder="e.g. SN123456"
+                        style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;font-family:'DM Mono',monospace;box-sizing:border-box;"
+                        onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0'">
+                </div>
+                <div>
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type <span style="color:#e53e3e;">*</span></label>
+                    <select id="dep-add-type" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;">
+                        ${_depTermOpts('Dejavoo P1')}
+                    </select>
+                </div>
+            </div>`,
+            didOpen: () => {
+                const serialInput = document.getElementById('dep-add-serial');
+                if (serialInput && !safeSerial) serialInput.focus();
+                else document.getElementById('dep-add-type')?.focus();
+            },
+            preConfirm: () => {
+                const serial = document.getElementById('dep-add-serial').value.trim();
+                const type   = document.getElementById('dep-add-type').value;
+                const date   = document.getElementById('dep-add-date').value;
+                const loc    = document.getElementById('dep-add-location').value;
+                if (!serial) { Swal.showValidationMessage('Serial number is required.'); return false; }
+                if (!type)   { Swal.showValidationMessage('Terminal type is required.'); return false; }
+                return { serial, type, date, loc };
+            }
+        });
+
+        if (!isConfirmed || !value) return;
+
+        // Save to inventory
+        Swal.fire({ title: 'Adding to inventory…', didOpen: () => Swal.showLoading() });
+        try {
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    action: 'bulk_create',
+                    serials: [value.serial],
+                    terminal_type: value.type,
+                    received_date: value.date,
+                    status: 'stocked',
+                    current_location: value.loc
+                })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message || 'Failed to add equipment');
+
+            // Look up the newly created equipment to get its UUID
+            const lookupRes = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'getLookups', query: value.serial })
+            });
+            const lookupData = await lookupRes.json();
+            const newUnit = (lookupData.inventory || []).find(e => e.serial_number === value.serial);
+
+            await Swal.fire({
+                icon: 'success',
+                title: 'Equipment added!',
+                html: `<span style="font-size:13px;color:#475569;"><code>${value.serial}</code> (${value.type}) added to ${value.loc}.</span>`,
+                timer: 1800,
+                showConfirmButton: false
+            });
+
+            // Auto-select the new unit in the deployment form
+            if (newUnit) {
+                if (isBulk) {
+                    addBulkItem(newUnit.id, newUnit.serial_number, newUnit.terminal_type);
+                } else {
+                    selectEquip(newUnit.id, newUnit.serial_number, newUnit.terminal_type);
+                }
+            } else {
+                // Unit saved but lookup didn't find it — just fill the serial field
+                if (!isBulk) {
+                    document.getElementById('eSearch').value = `${value.serial} (${value.type})`;
+                }
+            }
+        } catch (err) {
+            Swal.fire('Error', err.message, 'error');
+        }
     }
 
 function toggleMerchantReceivedField(status) {
@@ -1544,7 +1697,17 @@ async function handleBulkEquipSearch(val) {
                 body: JSON.stringify({ action: 'getLookups', query: val })
             });
             const result = await res.json();
-            list.innerHTML = (result.inventory || []).map(e => `
+            const bulkItems2 = result.inventory || [];
+            const bulkAddNewRow = `
+                <div class="suggestion-item" onclick="openAddEquipFromDep(document.getElementById('bulkESearch').value.trim(), true)"
+                    style="display:flex;align-items:center;gap:10px;border-top:${bulkItems2.length ? '1px solid #f1f5f9' : 'none'};background:#fafbff;">
+                    <span class="material-icons" style="font-size:18px;color:#5b21b6;">add_circle_outline</span>
+                    <div>
+                        <strong style="color:#5b21b6;font-size:13px;">Add New Equipment</strong>
+                        <div style="font-size:10px;color:#94a3b8;">This serial isn't in inventory yet</div>
+                    </div>
+                </div>`;
+            list.innerHTML = bulkItems2.map(e => `
                 <div class="suggestion-item" onclick="addBulkItem('${e.id}', '${e.serial_number}', '${e.terminal_type}')" style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
                         <strong>${e.serial_number}</strong>
@@ -1552,7 +1715,7 @@ async function handleBulkEquipSearch(val) {
                     </div>
                     <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800;">STOCKED</span>
                 </div>
-            `).join('') || '<div style="padding:10px;color:#94a3b8;font-size:12px;">No stocked units found</div>';
+            `).join('') + bulkAddNewRow;
             list.style.display = 'block';
         } catch (e) { console.error(e); }
     }, 200);
