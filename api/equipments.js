@@ -468,19 +468,26 @@ if (action === 'getMonthlyReport') {
                         age_buckets: { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, d180_plus: 0 }
                     };
                 }
-                if (!locationMap[loc]) {
-                    locationMap[loc] = { location: loc, total: 0, deployed: 0, stocked: 0, repair: 0, scrapped: 0 };
+                // Location breakdown only tracks physical storage locations (stocked + repair).
+                // Deployed units are at merchant sites, decommissioned/scrapped are retired —
+                // neither represents a real warehouse location worth showing.
+                const isStorageUnit = status === 'stocked' || status === 'repair' || status === 'repairing';
+                if (isStorageUnit) {
+                    if (!locationMap[loc]) {
+                        locationMap[loc] = { location: loc, total: 0, deployed: 0, stocked: 0, repair: 0, scrapped: 0 };
+                    }
+                    locationMap[loc].total++;
+                    if (status === 'stocked') locationMap[loc].stocked++;
+                    else locationMap[loc].repair++;
                 }
 
                 const m = modelMap[model];
-                const l = locationMap[loc];
                 m.total_units++;
-                l.total++;
 
                 if (status === 'deployed') {
-                    m.deployed_units++; l.deployed++;
+                    m.deployed_units++;
                 } else if (status === 'stocked') {
-                    m.stocked_units++; l.stocked++;
+                    m.stocked_units++;
                     const stockDate = unit.received_date || unit.created_at;
                     if (stockDate) {
                         const d = new Date(stockDate);
@@ -508,9 +515,9 @@ if (action === 'getMonthlyReport') {
                         }
                     }
                 } else if (status === 'repair' || status === 'repairing') {
-                    m.repair_units++; l.repair++;
+                    m.repair_units++;
                 } else if (status === 'decommissioned' || status === 'scrapped') {
-                    m.scrapped_units++; l.scrapped++;
+                    m.scrapped_units++;
                 }
             }
 
