@@ -874,7 +874,7 @@ async function processReturn() {
     async function _depLoadStaff() {
         if (_depStaffUsers.length) return;
         try {
-            const r = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'list' }) });
+            const r = await fetch('/api/users');
             const j = await r.json();
             _depStaffUsers = (j.data || []).map(u => ({
                 userid: String(u.userid),
