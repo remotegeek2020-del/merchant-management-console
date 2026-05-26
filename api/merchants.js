@@ -853,36 +853,44 @@ if (action === 'get_notes') {
         .single();
 
     if (error) throw error;
+
+    // Always fetch actor + merchant for rich logging and notifications
+    const [{ data: actorRow }, { data: merchantRow }] = await Promise.all([
+        supabase.from('app_users').select('email, first_name, last_name').eq('userid', session?.userid || created_by).maybeSingle(),
+        supabase.from('merchants').select('dba_name, merchant_id').eq('id', merchant_uuid).maybeSingle()
+    ]);
+    const actorEmail = actorRow?.email || created_by || 'Staff';
+    const actorName  = actorRow ? `${actorRow.first_name || ''} ${actorRow.last_name || ''}`.trim() || actorRow.email : 'Staff';
+    const dbaName    = merchantRow?.dba_name || 'Unknown Merchant';
+    const mid        = merchantRow?.merchant_id || '';
+
+    let mentionedUsers = [];
+    if (mentions?.length) {
+        const { data: mu } = await supabase.from('app_users').select('userid, first_name, last_name, email').in('userid', mentions);
+        mentionedUsers = mu || [];
+    }
+    const taggedNames = mentionedUsers.map(u => `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email).filter(Boolean);
+
     supabase.from('activity_logs').insert({
-        email: session?.email || created_by || 'Staff', action: `Merchant note added: ${title || 'Untitled'}`,
+        email: actorEmail,
+        action: `Note added on ${dbaName}${mid ? ` [${mid}]` : ''}: "${title || 'Untitled'}"`,
         status: 'success', category: 'merchants', target_id: merchant_uuid, target_type: 'merchant', severity: 'info',
-        new_value: { title, body: body?.slice(0, 500) }
+        new_value: {
+            merchant: dbaName,
+            merchant_id: mid || undefined,
+            note_id: noteRow?.id,
+            title: title || 'Untitled',
+            body: body?.slice(0, 500),
+            ...(taggedNames.length ? { tagged: taggedNames } : {})
+        }
     }).then(() => {}).catch(() => {});
 
     // Send @mention email notifications + in-app notifications
-    if (mentions?.length) {
+    if (mentionedUsers.length) {
         try {
-            const { data: mentionedUsers } = await supabase
-                .from('app_users')
-                .select('userid, first_name, last_name, email')
-                .in('userid', mentions);
-
-            const { data: taggerUser } = await supabase
-                .from('app_users')
-                .select('first_name, last_name')
-                .eq('userid', created_by)
-                .maybeSingle();
-            const taggerName = taggerUser ? `${taggerUser.first_name} ${taggerUser.last_name || ''}`.trim() : (session?.email || 'A staff member');
-
-            const { data: merchantRow } = await supabase
-                .from('merchants')
-                .select('dba_name')
-                .eq('id', merchant_uuid)
-                .maybeSingle();
-            const dbaName = merchantRow?.dba_name || 'a merchant';
-
-            if (mentionedUsers?.length) {
-                // In-app notifications
+            const taggerName = actorName;
+            // In-app notifications
+            {
                 await supabase.from('user_notifications').insert(
                     mentionedUsers.map(u => ({
                         user_id: u.userid,
