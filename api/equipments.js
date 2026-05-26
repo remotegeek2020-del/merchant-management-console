@@ -468,17 +468,20 @@ if (action === 'getMonthlyReport') {
                         age_buckets: { d0_30: 0, d31_60: 0, d61_90: 0, d91_180: 0, d180_plus: 0 }
                     };
                 }
-                // Location breakdown only tracks physical storage locations (stocked + repair).
-                // Deployed units are at merchant sites, decommissioned/scrapped are retired —
-                // neither represents a real warehouse location worth showing.
-                const isStorageUnit = status === 'stocked' || status === 'repair' || status === 'repairing';
-                if (isStorageUnit) {
+                // Exclude pseudo-locations — 'Client Site' is a fallback for deployed units
+                // with no matched merchant DBA; 'Retired' is used for decommissioned stock.
+                // Neither is a real physical inventory location.
+                const EXCLUDED_LOCATIONS = new Set(['Client Site', 'Retired']);
+                if (!EXCLUDED_LOCATIONS.has(loc)) {
                     if (!locationMap[loc]) {
                         locationMap[loc] = { location: loc, total: 0, deployed: 0, stocked: 0, repair: 0, scrapped: 0 };
                     }
-                    locationMap[loc].total++;
-                    if (status === 'stocked') locationMap[loc].stocked++;
-                    else locationMap[loc].repair++;
+                    const l = locationMap[loc];
+                    l.total++;
+                    if (status === 'deployed')                          l.deployed++;
+                    else if (status === 'stocked')                      l.stocked++;
+                    else if (status === 'repair' || status === 'repairing') l.repair++;
+                    else if (status === 'decommissioned' || status === 'scrapped') l.scrapped++;
                 }
 
                 const m = modelMap[model];
