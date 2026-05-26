@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/pp-system.css">
     <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||(!r.includes('admin')&&!r.includes('super')))window.location.href='index.html?reason=denied';})();</script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||(!r.includes('admin')&&!r.includes('super')))window.location.href='/?reason=denied';})();</script>
     <style>
         .sev-info{background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
         .sev-warning{background:#fef3c7;color:#92400e;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:800;}
@@ -60,7 +60,7 @@
     <!-- HEADER -->
     <div class="pp-header">
         <div class="pp-header-left">
-            <a href="index.html" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <a href="/" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
             <h1 class="pp-header-title">Activity Audit Trail</h1>
         </div>
         <div style="display:flex;gap:8px;">

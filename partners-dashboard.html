@@ -229,7 +229,7 @@ input[type=number] {
 
         // 2. If no session, boot them to the login page immediately
         if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
+            window.location.href = '/?reason=unauthorized';
         }
     })();
 </script>
@@ -247,7 +247,7 @@ input[type=number] {
 <div class="modern-header">
     <div style="display: flex; align-items: center; gap: 15px;">
         <div style="display: flex; gap: 10px;">
-            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius: 10px; font-weight: 700;">BACK</a>
+            <a href="/" class="slds-button slds-button_neutral" style="border-radius: 10px; font-weight: 700;">BACK</a>
             
             <button onclick="openOnboardingWizard()" class="pagination-btn" style="background: var(--pp-blue); color: white; border: none; display: flex; align-items: center; gap: 8px;">
                 <span class="material-icons" style="font-size:18px;">person_add</span>

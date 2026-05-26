@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/pp-system.css">
     <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='index.html?reason=unauthorized';})();</script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href = '/?reason=unauthorized';})();</script>
     <style>
         .view-tabs{display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;}
         .view-tab{padding:7px 16px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;font-family:'DM Sans',sans-serif;transition:all 0.2s;}
@@ -50,7 +50,7 @@
     <!-- HEADER -->
     <div class="pp-header">
         <div class="pp-header-left">
-            <a href="index.html" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <a href="/" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
             <h1 class="pp-header-title">Task Center</h1>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">

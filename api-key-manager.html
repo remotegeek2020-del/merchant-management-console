@@ -11,10 +11,10 @@
     <script>
         (function() {
             if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
-                window.location.href = 'index.html?reason=unauthorized';
+                window.location.href = '/?reason=unauthorized';
             }
             const role = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g,'_');
-            if (role !== 'super_admin') window.location.href = 'index.html';
+            if (role !== 'super_admin') window.location.href = '/';
         })();
     </script>
     <style>

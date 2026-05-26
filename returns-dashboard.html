@@ -15,7 +15,7 @@
         const sessionUser = localStorage.getItem('pp_userid');
         const isVerified = localStorage.getItem('pp_verified');
         if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
+            window.location.href = '/?reason=unauthorized';
         }
     })();
     </script>
@@ -29,7 +29,7 @@
         <!-- Row 1: Title -->
         <div style="display:flex; align-items:center; justify-content:space-between;">
             <div class="pp-header-left">
-                <a href="index.html" class="pp-back-btn">
+                <a href="/" class="pp-back-btn">
                     <span class="material-icons" style="font-size:16px;">arrow_back</span>
                     HOME
                 </a>

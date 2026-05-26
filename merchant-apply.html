@@ -434,7 +434,7 @@
     <script>
     (function() {
         if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
+            window.location.href = '/?reason=unauthorized';
         }
     })();
 

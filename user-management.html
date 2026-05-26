@@ -15,7 +15,7 @@
         const rawRole = (localStorage.getItem('pp_role') || '').toLowerCase();
         const verified = localStorage.getItem('pp_verified');
         const hasAuth = uid && verified === 'true' && (rawRole.includes('super') || rawRole.includes('admin'));
-        if (!hasAuth) window.location.href = 'index.html?reason=denied';
+        if (!hasAuth) window.location.href = '/?reason=denied';
     })();
     </script>
     <style>
@@ -80,7 +80,7 @@
     <!-- HEADER -->
     <div class="pp-header">
         <div class="pp-header-left">
-            <a href="index.html" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <a href="/" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
             <h1 class="pp-header-title">User Management</h1>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">

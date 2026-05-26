@@ -15,7 +15,7 @@
         const sessionUser = localStorage.getItem('pp_userid');
         const isVerified  = localStorage.getItem('pp_verified');
         if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
+            window.location.href = '/?reason=unauthorized';
         }
     })();
     </script>
@@ -117,7 +117,7 @@
     <!-- Header -->
     <div class="modern-header">
         <div style="display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
-            <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 12px; display:inline-flex; align-items:center; gap:5px;">
+            <a href="/" class="slds-button slds-button_neutral" style="border-radius:10px; padding:5px 12px; display:inline-flex; align-items:center; gap:5px;">
                 <span class="material-icons" style="font-size:18px;">arrow_back</span>
                 <span style="font-weight:700; font-size:11px;">HOME</span>
             </a>

@@ -60,7 +60,7 @@
         const sessionUser = localStorage.getItem('pp_userid');
         const isVerified = localStorage.getItem('pp_verified');
         if (!sessionUser || isVerified !== 'true') {
-            window.location.href = 'index.html?reason=unauthorized';
+            window.location.href = '/?reason=unauthorized';
         }
     })();
     </script>
@@ -75,7 +75,7 @@
             <h1 style="font-size:1.5rem;font-weight:800;color:#001e3c;margin:0 0 2px;">Reports Center</h1>
             <p style="color:#64748b;margin:0;font-size:13px;">Generate, preview and export system-wide data reports</p>
         </div>
-        <a href="index.html" class="slds-button slds-button_neutral" style="border-radius:10px;">🏠 HOME</a>
+        <a href="/" class="slds-button slds-button_neutral" style="border-radius:10px;">🏠 HOME</a>
     </div>
 
     <!-- COHORT RETENTION CHART -->

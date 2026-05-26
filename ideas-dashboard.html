@@ -11,7 +11,7 @@
     <script>
         (function() {
             if (!localStorage.getItem('pp_userid') || localStorage.getItem('pp_verified') !== 'true') {
-                window.location.href = 'index.html?reason=unauthorized';
+                window.location.href = '/?reason=unauthorized';
             }
         })();
     </script>
@@ -149,7 +149,7 @@
 <div class="page-header">
     <div class="header-top">
         <div style="display:flex; align-items:center; gap:16px;">
-            <a href="index.html" style="background:rgba(255,255,255,0.2); border:none; border-radius:8px; color:white; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; display:flex; align-items:center; gap:5px;">
+            <a href="/" style="background:rgba(255,255,255,0.2); border:none; border-radius:8px; color:white; padding:7px 14px; font-size:12px; font-weight:700; cursor:pointer; text-decoration:none; display:flex; align-items:center; gap:5px;">
                 <span class="material-icons" style="font-size:16px;">arrow_back</span> Back
             </a>
             <div>

@@ -9,7 +9,7 @@
     <link rel="stylesheet" href="css/pp-system.css">
     <script src="js/tz.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='index.html?reason=unauthorized';})();</script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href = '/?reason=unauthorized';})();</script>
     <style>
         *,*::before,*::after{box-sizing:border-box;}
         :root{--teal:#0d9488;--teal-bg:#f0fdfa;--navy:#001e3c;--border:#e2e8f0;--surface:#f0f4f8;--white:#fff;--text:#0a1628;--muted:#94a3b8;}
@@ -134,7 +134,7 @@
     <span class="nav-title">Partner Community</span>
     <div class="nav-right">
         <span class="staff-chip" id="staffChip">Staff</span>
-        <a href="index.html" class="nav-btn"><span class="material-icons" style="font-size:14px;">arrow_back</span> Back</a>
+        <a href="/" class="nav-btn"><span class="material-icons" style="font-size:14px;">arrow_back</span> Back</a>
     </div>
 </nav>
 

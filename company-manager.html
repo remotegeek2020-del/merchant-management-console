@@ -8,7 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <link rel="stylesheet" href="css/pp-system.css">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||!r.includes('super'))window.location.href='index.html?reason=denied';})();</script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified'),r=(localStorage.getItem('pp_role')||'').toLowerCase();if(!u||v!=='true'||!r.includes('super'))window.location.href = '/?reason=denied';})();</script>
     <style>
         .co-card { background:white; border:1px solid #e2e8f0; border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px; transition:all 0.2s; cursor:pointer; }
         .co-card:hover { border-color:#004990; box-shadow:0 2px 8px rgba(0,73,144,0.08); }
