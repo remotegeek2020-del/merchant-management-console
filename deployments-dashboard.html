@@ -870,6 +870,19 @@ async function processReturn() {
     }
 }
     // --- MERCHANT INFO POPUP ---
+    let _depStaffUsers = [];
+    async function _depLoadStaff() {
+        if (_depStaffUsers.length) return;
+        try {
+            const r = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'list' }) });
+            const j = await r.json();
+            _depStaffUsers = (j.data || []).map(u => ({
+                userid: String(u.userid),
+                display_name: [u.first_name, u.last_name].filter(Boolean).join(' '),
+            })).filter(u => u.display_name);
+        } catch (e) { console.error('dep staff load', e); }
+    }
+
     function showMerchantInfo(index) {
         const d = currentDeployments[index];
         const m = d?.merchants;
@@ -942,12 +955,43 @@ async function processReturn() {
                                 Loading notes…
                             </div>
                         </div>
-                        <div id="swal-notes-pagination" style="display:flex;align-items:center;gap:8px;margin-top:8px;justify-content:flex-end;">
+                        <div id="swal-notes-pagination" style="display:none;align-items:center;gap:8px;margin-top:8px;justify-content:flex-end;">
                             <button id="swal-notes-prev" onclick="window._notesPrev()" disabled
                                 style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#475569;">← Prev</button>
                             <span id="swal-notes-page" style="font-size:11px;color:#64748b;font-weight:600;"></span>
                             <button id="swal-notes-next" onclick="window._notesNext()" disabled
                                 style="padding:3px 10px;border-radius:6px;border:1px solid #e2e8f0;background:white;font-size:11px;font-weight:700;cursor:pointer;color:#475569;">Next →</button>
+                        </div>
+
+                        <!-- Add Note Composer -->
+                        <div style="margin-top:14px;border-top:1px solid #e9d5ff;padding-top:12px;">
+                            <div style="font-size:10px;font-weight:800;color:#7c3aed;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:10px;display:flex;align-items:center;gap:5px;">
+                                <span class="material-icons" style="font-size:13px;">edit_note</span> Add Note
+                            </div>
+                            <!-- Tag picker panel -->
+                            <div id="dep-tag-picker-panel" style="display:none;border:1px solid #ddd6fe;border-radius:10px;padding:12px;margin-bottom:10px;background:#faf5ff;">
+                                <div style="font-size:12px;font-weight:700;color:#5b21b6;margin-bottom:8px;">Select people to notify:</div>
+                                <div id="dep-tag-picker-list" style="max-height:160px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;background:white;"></div>
+                                <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px;">
+                                    <button onclick="window._depCloseTagPanel()" style="padding:7px 14px;border-radius:7px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-weight:600;font-size:12px;color:#64748b;">Cancel</button>
+                                    <button onclick="window._depConfirmTagPanel()" style="padding:7px 14px;border-radius:7px;border:none;background:#5b21b6;color:white;cursor:pointer;font-weight:700;font-size:12px;">Done</button>
+                                </div>
+                            </div>
+                            <input id="dep-note-title" placeholder="Subject / Title"
+                                style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:600;font-family:inherit;outline:none;margin-bottom:8px;box-sizing:border-box;">
+                            <textarea id="dep-note-body" placeholder="Write your note here…"
+                                style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;outline:none;height:72px;resize:vertical;box-sizing:border-box;"></textarea>
+                            <div id="dep-mention-chips" style="display:flex;flex-wrap:wrap;gap:5px;margin-top:6px;min-height:0;"></div>
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;">
+                                <button onclick="window._depOpenTagPicker()"
+                                    style="background:#f5f3ff;color:#5b21b6;padding:7px 13px;border-radius:8px;border:1px solid #ddd6fe;cursor:pointer;font-weight:600;font-size:12px;display:flex;align-items:center;gap:5px;">
+                                    <span class="material-icons" style="font-size:15px;">alternate_email</span> Tag People
+                                </button>
+                                <button onclick="window._depPostNote()"
+                                    style="background:#5b21b6;color:white;padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-weight:700;font-size:12px;display:flex;align-items:center;gap:5px;">
+                                    <span class="material-icons" style="font-size:15px;">send</span> Post Note
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>`,
@@ -961,26 +1005,103 @@ async function processReturn() {
             didOpen: async () => {
                 window._notesPrev = () => { if (_notesPage > 1) { _notesPage--; renderNotes(); } };
                 window._notesNext = () => { const tp = Math.ceil(_notes.length / _notesPerPage); if (_notesPage < tp) { _notesPage++; renderNotes(); } };
-                try {
-                    const res = await fetch('/api/merchants', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ action: 'get_notes', merchant_uuid: d.merchant_id, type: 'manual' })
-                    });
-                    const result = await res.json();
-                    _notes = result.data || [];
+
+                async function fetchNotes() {
+                    try {
+                        const res = await fetch('/api/merchants', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'get_notes', merchant_uuid: d.merchant_id, type: 'manual' })
+                        });
+                        const result = await res.json();
+                        _notes = result.data || [];
+                    } catch (e) { _notes = []; }
                     _notesPage = 1;
-                } catch (e) {
-                    _notes = [];
+                    renderNotes();
+                    const pg = document.getElementById('swal-notes-pagination');
+                    if (pg) pg.style.display = _notes.length > _notesPerPage ? 'flex' : 'none';
                 }
-                renderNotes();
-                const pg = document.getElementById('swal-notes-pagination');
-                if (pg) pg.style.display = _notes.length > _notesPerPage ? 'flex' : 'none';
+                await fetchNotes();
+
+                window._depOpenTagPicker = async function() {
+                    await _depLoadStaff();
+                    const panel = document.getElementById('dep-tag-picker-panel');
+                    const list  = document.getElementById('dep-tag-picker-list');
+                    if (!panel || !list) return;
+                    const chips = document.getElementById('dep-mention-chips');
+                    const alreadyTagged = new Set(Array.from((chips||{querySelectorAll:()=>[]}).querySelectorAll('[data-uid]')).map(c => c.dataset.uid));
+                    list.innerHTML = _depStaffUsers.map(u => `
+                        <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;">
+                            <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g,'&quot;')}"
+                                ${alreadyTagged.has(u.userid) ? 'checked' : ''}
+                                style="width:15px;height:15px;accent-color:#5b21b6;flex-shrink:0;cursor:pointer;">
+                            <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
+                            <span style="font-weight:600;color:#002d5a;font-size:13px;">${u.display_name}</span>
+                        </label>`).join('');
+                    panel.style.display = 'block';
+                };
+
+                window._depCloseTagPanel = function() {
+                    const p = document.getElementById('dep-tag-picker-panel');
+                    if (p) p.style.display = 'none';
+                };
+
+                window._depConfirmTagPanel = function() {
+                    const list  = document.getElementById('dep-tag-picker-list');
+                    const chips = document.getElementById('dep-mention-chips');
+                    if (!list || !chips) { window._depCloseTagPanel(); return; }
+                    const checked = Array.from(list.querySelectorAll('input[type=checkbox]:checked'));
+                    chips.innerHTML = checked.map(cb =>
+                        `<span data-uid="${cb.value}" data-name="${cb.dataset.name.replace(/"/g,'&quot;')}" style="display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#5b21b6;font-size:11px;font-weight:700;padding:4px 10px;border-radius:99px;">
+                            <span class="material-icons" style="font-size:12px;">alternate_email</span>${cb.dataset.name}
+                            <span onclick="this.parentElement.remove()" style="cursor:pointer;font-size:14px;line-height:1;margin-left:3px;opacity:0.7;">×</span>
+                        </span>`
+                    ).join('');
+                    window._depCloseTagPanel();
+                };
+
+                window._depPostNote = async function() {
+                    const titleEl = document.getElementById('dep-note-title');
+                    const bodyEl  = document.getElementById('dep-note-body');
+                    const chips   = document.getElementById('dep-mention-chips');
+                    const title = titleEl?.value.trim() || '';
+                    const body  = bodyEl?.value.trim()  || '';
+                    if (!title || !body) {
+                        Swal.showValidationMessage('Subject and body are required.');
+                        return;
+                    }
+                    const mentions    = Array.from((chips||{querySelectorAll:()=>[]}).querySelectorAll('[data-uid]')).map(c => c.dataset.uid);
+                    const taggedNames = Array.from((chips||{querySelectorAll:()=>[]}).querySelectorAll('[data-uid]')).map(c => c.dataset.name).filter(Boolean);
+                    const fullBody = taggedNames.length ? body + '\n\nTagged: ' + taggedNames.map(n => '@' + n).join(', ') : body;
+
+                    const postBtn = document.querySelector('#dep-note-title')?.closest('div[style*="border-top:1px solid #e9d5ff"]')?.querySelector('button[onclick*="_depPostNote"]');
+                    if (postBtn) { postBtn.disabled = true; postBtn.textContent = 'Saving…'; }
+
+                    try {
+                        const res = await fetch('/api/merchants', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ action: 'add_note', merchant_uuid: d.merchant_id, title, body: fullBody, created_by: localStorage.getItem('pp_userid'), mentions })
+                        });
+                        const result = await res.json();
+                        if (!result.success) throw new Error(result.message || 'Save failed');
+                        if (titleEl) titleEl.value = '';
+                        if (bodyEl)  bodyEl.value  = '';
+                        if (chips)   chips.innerHTML = '';
+                        await fetchNotes();
+                        const Toast = Swal.mixin({ toast: true, position: 'top-end', showConfirmButton: false, timer: 2000, timerProgressBar: true });
+                        Toast.fire({ icon: 'success', title: 'Note saved' });
+                    } catch (err) {
+                        Swal.fire('Error', 'Failed to save note: ' + err.message, 'error');
+                    } finally {
+                        if (postBtn) { postBtn.disabled = false; postBtn.innerHTML = '<span class="material-icons" style="font-size:15px;">send</span> Post Note'; }
+                    }
+                };
             }
         }).then(result => {
             if (result.isConfirmed) {
                 const mid = m.merchant_id;
-                window.location.href = `merchants-dashboard.html?q=${encodeURIComponent(mid || m.dba_name)}&filterBy=${mid ? 'merchant_id' : 'dba_name'}`;
+                window.location.href = `/merchants-dashboard?q=${encodeURIComponent(mid || m.dba_name)}&filterBy=${mid ? 'merchant_id' : 'dba_name'}`;
             }
         });
     }
