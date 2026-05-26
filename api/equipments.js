@@ -684,7 +684,8 @@ if (action === 'getMonthlyReport') {
             return res.status(200).json({ success: true, merged: count || 0, from: src.name, into: tgt.name });
         }
 
-
+        if (action === 'request_terminal_type') {
+            const { requested_name, notes } = req.body;
             if (!requested_name?.trim()) return res.status(400).json({ success: false, message: 'Terminal type name is required.' });
 
             // Get web developer email from site_settings
