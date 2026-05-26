@@ -643,8 +643,48 @@ if (action === 'getMonthlyReport') {
             return res.status(200).json({ success: true });
         }
 
-        if (action === 'request_terminal_type') {
-            const { requested_name, notes } = req.body;
+        if (action === 'count_by_terminal_type') {
+            const { name } = req.body;
+            if (!name) return res.status(400).json({ success: false, message: 'name required.' });
+            const { count } = await supabase.from('equipments').select('id', { count: 'exact', head: true }).eq('terminal_type', name);
+            return res.status(200).json({ success: true, count: count || 0 });
+        }
+
+        if (action === 'merge_terminal_type') {
+            const { source_id, target_id } = req.body;
+            if (!source_id || !target_id) return res.status(400).json({ success: false, message: 'source_id and target_id required.' });
+            if (source_id === target_id) return res.status(400).json({ success: false, message: 'Source and target must be different.' });
+
+            const [{ data: src }, { data: tgt }] = await Promise.all([
+                supabase.from('terminal_types').select('id, name').eq('id', source_id).single(),
+                supabase.from('terminal_types').select('id, name').eq('id', target_id).single()
+            ]);
+            if (!src) return res.status(404).json({ success: false, message: 'Source terminal type not found.' });
+            if (!tgt) return res.status(404).json({ success: false, message: 'Target terminal type not found.' });
+
+            // Count affected equipment before update
+            const { count } = await supabase.from('equipments').select('id', { count: 'exact', head: true }).eq('terminal_type', src.name);
+
+            // Rewrite terminal_type text on all equipment records
+            const { error: updErr } = await supabase.from('equipments').update({ terminal_type: tgt.name }).eq('terminal_type', src.name);
+            if (updErr) throw updErr;
+
+            // Delete the source type
+            const { error: delErr } = await supabase.from('terminal_types').delete().eq('id', source_id);
+            if (delErr) throw delErr;
+
+            supabase.from('activity_logs').insert({
+                email: actorEmail,
+                action: `Terminal type merged: "${src.name}" → "${tgt.name}" (${count || 0} unit${count !== 1 ? 's' : ''} updated)`,
+                status: 'success', category: 'inventory', target_type: 'terminal_type', severity: 'warning',
+                old_value: { type_id: source_id, name: src.name },
+                new_value: { merged_into: tgt.name, equipment_updated: count || 0 }
+            }).then(() => {}).catch(() => {});
+
+            return res.status(200).json({ success: true, merged: count || 0, from: src.name, into: tgt.name });
+        }
+
+
             if (!requested_name?.trim()) return res.status(400).json({ success: false, message: 'Terminal type name is required.' });
 
             // Get web developer email from site_settings
