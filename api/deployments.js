@@ -17,7 +17,8 @@ export default async function handler(req, res) {
         .select('email, first_name, last_name')
         .eq('userid', session.userid)
         .maybeSingle();
-    const actorName = actorRow ? `${actorRow.first_name || ''} ${actorRow.last_name || ''}`.trim() || actorRow.email : 'Staff';
+    const actorEmail = actorRow?.email || session.userid;
+    const actorName  = actorRow ? `${actorRow.first_name || ''} ${actorRow.last_name || ''}`.trim() || actorRow.email : 'Staff';
 
     try {
 
@@ -199,7 +200,7 @@ if (action === 'update') {
     }
 
     supabase.from('activity_logs').insert({
-        email: session?.email || session?.userid || 'unknown',
+        email: actorEmail,
         action: `Deployment Updated — ${oldDep.merchants?.dba_name || deployment_id} (${oldDep.status} → ${status})`,
         status: 'success', category: 'deployments', target_id: deployment_id, target_type: 'deployment', severity: 'info',
         old_value: { status: oldDep.status, tracking_id: oldDep.tracking_id },
@@ -339,6 +340,13 @@ if (action === 'delete') {
             .eq('id', deployment_id);
 
         if (deleteError) throw deleteError;
+
+        supabase.from('activity_logs').insert({
+            email: actorEmail,
+            action: `Deployment Deleted — ${merchant_name || 'Unknown Merchant'} (${serial_number || 'bulk'}) [${deployment_id}]`,
+            status: 'success', category: 'deployments', target_id: deployment_id, target_type: 'deployment', severity: 'warning',
+            old_value: { deployment_id, merchant: merchant_name, serial_number: serial_number || null, equipment_id: equipment_id || null, merchant_id: merchant_id || null }
+        }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
         return res.status(200).json({ success: true });
 
@@ -522,7 +530,7 @@ if (action === 'create') {
         const equipMap = Object.fromEntries((itemEquips || []).map(e => [e.id, e]));
 
         supabase.from('activity_logs').insert({
-            email: session?.email || session?.userid || 'unknown',
+            email: actorEmail,
             action: `Deployment Created — Bulk (${items.length} units) for ${dbaName}`,
             status: 'success', category: 'deployments', target_id: dep.id, target_type: 'deployment', severity: 'info',
             new_value: {
@@ -600,7 +608,7 @@ if (action === 'create') {
     }]);
 
     supabase.from('activity_logs').insert({
-        email: session?.email || session?.userid || 'unknown',
+        email: actorEmail,
         action: `Deployment Created — ${dbaName} (${checkEquip.serial_number})`,
         status: 'success', category: 'deployments', target_id: newDep[0]?.id, target_type: 'deployment', severity: 'info',
         new_value: {
@@ -896,7 +904,7 @@ if (action === 'bulk_create') {
 
     try {
         await supabase.from('activity_logs').insert({
-            email: session?.email || session?.userid || 'unknown',
+            email: actorEmail,
             action: `Bulk Upload Deployments — ${totalCreated} units deployed`,
             status: 'success',
             category: 'deployments',
