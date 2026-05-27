@@ -11,6 +11,14 @@ export default async function handler(req, res) {
     const body = req.body || {};
     const { action, payload, query } = body;
 
+    // Resolve actor name once — used for created_by/updated_by and logging
+    const { data: actorRow } = await supabase
+        .from('app_users')
+        .select('email, first_name, last_name')
+        .eq('userid', session.userid)
+        .maybeSingle();
+    const actorName = actorRow ? `${actorRow.first_name || ''} ${actorRow.last_name || ''}`.trim() || actorRow.email : 'Staff';
+
     try {
 
         if (action === 'log_return') {
@@ -171,7 +179,8 @@ if (action === 'update') {
             target_deployment_date: target_date,
             notes,
             purchase_type,
-            merchant_received_date: merchant_received_date || null
+            merchant_received_date: merchant_received_date || null,
+            updated_by: session.userid
         })
         .eq('id', deployment_id);
 
@@ -406,11 +415,26 @@ if (action === 'delete') {
                 .select('*', { count: 'exact', head: true })
                 .gte('created_at', startOfDay.toISOString());
 
+            // Resolve created_by / updated_by userids → display names
+            const userIds = [...new Set((data || []).flatMap(d => [d.created_by, d.updated_by].filter(Boolean)))];
+            let userMap = {};
+            if (userIds.length) {
+                const { data: users } = await supabase.from('app_users')
+                    .select('userid, first_name, last_name')
+                    .in('userid', userIds);
+                userMap = Object.fromEntries((users || []).map(u => [
+                    u.userid,
+                    `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.userid
+                ]));
+            }
+
             // Normalize to items[] for unified frontend handling
             const safeData = (data || []).map(d => {
                 d.items = d.is_bulk
                     ? (d.deployment_items || []).map(i => ({ equipment_id: i.equipment_id, tid: i.tid, serial_number: i.equip?.serial_number, terminal_type: i.equip?.terminal_type, status: i.equip?.status, item_id: i.id }))
                     : (d.equipment_id ? [{ equipment_id: d.equipment_id, tid: d.tid, serial_number: d.equipments?.serial_number, terminal_type: d.equipments?.terminal_type, item_id: null }] : []);
+                d.created_by_name = d.created_by ? (userMap[d.created_by] || null) : null;
+                d.updated_by_name = d.updated_by ? (userMap[d.updated_by] || null) : null;
                 return d;
             });
 
@@ -468,7 +492,8 @@ if (action === 'create') {
             target_deployment_date: target_date,
             notes,
             purchase_type,
-            status: 'Open'
+            status: 'Open',
+            created_by: session.userid
         }).select().single();
         if (depErr) throw depErr;
 
@@ -547,7 +572,8 @@ if (action === 'create') {
             target_deployment_date: target_date,
             notes,
             purchase_type,
-            status: 'Open'
+            status: 'Open',
+            created_by: session.userid
         }])
         .select();
 
@@ -835,7 +861,8 @@ if (action === 'bulk_create') {
             is_bulk: true,
             status: 'Open',
             notes: `Bulk deployment: ${group.items.length} units`,
-            target_deployment_date: new Date().toISOString().split('T')[0]
+            target_deployment_date: new Date().toISOString().split('T')[0],
+            created_by: session.userid
         }).select().single();
         if (depErr) throw depErr;
 

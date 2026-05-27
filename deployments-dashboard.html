@@ -684,6 +684,7 @@ if (document.getElementById('kpi-total')) {
                             <td style="font-weight:700; color:var(--pp-blue);">
                                 ${d.deployment_id || '---'}
                                 ${d.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 6px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;letter-spacing:0.3px;">TICKET</span>` : ''}
+                                ${d.created_by_name ? `<div style="font-size:10px;color:#94a3b8;font-weight:500;margin-top:2px;font-family:inherit;"><span class="material-icons" style="font-size:10px;vertical-align:middle;">person_add</span> ${d.created_by_name}</div>` : ''}
                             </td>
                             <td>
                                 <div style="font-weight:600; color:#004990; cursor:pointer; text-decoration:underline; text-underline-offset:2px;" onclick="showMerchantInfo(${index})">${merchantName}</div>
@@ -695,6 +696,7 @@ if (document.getElementById('kpi-total')) {
                             <td class="hide-mobile">
                                 <div>${dateStr}</div>
                                 ${receivedStr ? `<div style="font-size:10px; color:#166534; font-weight:600; margin-top:2px;"><span class="material-icons" style="font-size:10px; vertical-align:middle;">check_circle</span> Rcvd: ${receivedStr}</div>` : ''}
+                                ${d.updated_by_name ? `<div style="font-size:10px;color:#94a3b8;font-weight:500;margin-top:2px;"><span class="material-icons" style="font-size:10px;vertical-align:middle;">edit</span> ${d.updated_by_name}</div>` : ''}
                             </td>
                             <td><span class="badge ${d.status === 'Open' ? 'status-open' : 'status-closed'}">${d.status || 'Open'}</span></td>
                             <td style="display:flex; gap:5px;">
