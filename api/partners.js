@@ -32,6 +32,14 @@ export default async function handler(req, res) {
 
     if (!action) return res.status(400).json({ success: false, message: "No action provided" });
 
+    let _partnerActor = null;
+    const resolveActor = async () => {
+        if (_partnerActor) return _partnerActor;
+        const { data } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+        _partnerActor = { email: data?.email || session.userid, name: data ? (`${data.first_name || ''} ${data.last_name || ''}`.trim() || data.email) : 'Staff' };
+        return _partnerActor;
+    };
+
     try {
 
         if (action === 'update_person_field') {
@@ -551,8 +559,9 @@ if (action === 'complete_onboarding') {
                 author_id, author_name
             }).select().single();
             if (error) throw error;
+            const pActor = await resolveActor();
             supabase.from('activity_logs').insert({
-                email: session?.email || author_name || 'Staff', action: `Partner note added`,
+                email: pActor.email, action: `Partner note added by ${pActor.name}`,
                 status: 'success', category: 'partners', target_id: person_id, target_type: 'person', severity: 'info',
                 new_value: { note_type: note_type || 'general', body: noteBody.trim().slice(0, 500) }
             }).then(() => {}).catch(() => {});
@@ -569,8 +578,9 @@ if (action === 'complete_onboarding') {
             updates.updated_at = new Date().toISOString();
             const { error } = await supabase.from('partner_notes').update(updates).eq('id', note_id);
             if (error) throw error;
+            const pActorUpd = await resolveActor();
             supabase.from('activity_logs').insert({
-                email: session?.email || 'Staff', action: `Partner note updated`,
+                email: pActorUpd.email, action: `Partner note updated by ${pActorUpd.name}`,
                 status: 'success', category: 'partners', target_id: oldNote?.person_id || note_id, target_type: 'person', severity: 'info',
                 old_value: { body: oldNote?.body?.slice(0, 500), is_pinned: oldNote?.is_pinned },
                 new_value: { body: updates.body?.slice(0, 500), is_pinned: updates.is_pinned }
@@ -584,8 +594,9 @@ if (action === 'complete_onboarding') {
             const { data: oldNote } = await supabase.from('partner_notes').select('body, person_id, note_type').eq('id', note_id).single();
             const { error } = await supabase.from('partner_notes').delete().eq('id', note_id);
             if (error) throw error;
+            const pActorDel = await resolveActor();
             supabase.from('activity_logs').insert({
-                email: session?.email || 'Staff', action: `Partner note deleted`,
+                email: pActorDel.email, action: `Partner note deleted by ${pActorDel.name}`,
                 status: 'success', category: 'partners', target_id: oldNote?.person_id || note_id, target_type: 'person', severity: 'warning',
                 old_value: { note_type: oldNote?.note_type, body: oldNote?.body?.slice(0, 500) }
             }).then(() => {}).catch(() => {});

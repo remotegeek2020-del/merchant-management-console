@@ -429,9 +429,12 @@ if (action === 'bulk_upsert') {
             return res.status(500).json({ success: false, message: errors[0] });
         }
 
+        const { data: bulkActorRow } = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+        const bulkActorEmail = bulkActorRow?.email || session.userid;
+
         try {
             await supabase.from('activity_logs').insert({
-                email: session?.email || session?.userid || 'unknown',
+                email: bulkActorEmail,
                 action: `Bulk Upload Merchants — ${totalProcessed} records synced`,
                 status: errors.length > 0 ? 'partial' : 'success',
                 category: 'merchants',
@@ -590,8 +593,9 @@ if (action === 'get_merchant_equipment') {
                 .insert([{ merchant_id, file_name, file_path, file_type, file_size, uploaded_by }]);
 
             if (error) throw error;
+            const { data: attachActorRow } = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
             supabase.from('activity_logs').insert({
-                email: session?.email || uploaded_by || 'Staff', action: `File uploaded: ${file_name}`,
+                email: attachActorRow?.email || uploaded_by || session.userid, action: `File uploaded: ${file_name}`,
                 status: 'success', category: 'merchants', target_id: merchant_id, target_type: 'merchant', severity: 'info',
                 new_value: { file_name, file_type, file_size }
             }).then(() => {}).catch(() => {});
@@ -607,8 +611,11 @@ if (action === 'get_merchant_equipment') {
                 .eq('id', note_id);
 
             if (error) throw error;
+            const { data: noteActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            const noteActorEmail = noteActorRow?.email || session.userid;
+            const noteActorName = noteActorRow ? `${noteActorRow.first_name || ''} ${noteActorRow.last_name || ''}`.trim() || noteActorRow.email : 'Staff';
             supabase.from('activity_logs').insert({
-                email: session?.email || 'Staff', action: `Merchant note updated`,
+                email: noteActorEmail, action: `Merchant note updated by ${noteActorName}`,
                 status: 'success', category: 'merchants', target_id: oldNote?.merchant_id || note_id, target_type: 'merchant', severity: 'info',
                 old_value: { title: oldNote?.title, body: oldNote?.body?.slice(0, 500) },
                 new_value: { title, body: body?.slice(0, 500) }
@@ -800,6 +807,16 @@ if (action === 'list') {
             }
         } catch (e) { /* non-fatal */ }
     }
+
+    const { data: updActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const updActorEmail = updActorRow?.email || session.userid;
+    const updActorName = updActorRow ? `${updActorRow.first_name || ''} ${updActorRow.last_name || ''}`.trim() || updActorRow.email : 'Staff';
+    supabase.from('activity_logs').insert({
+        email: updActorEmail,
+        action: `Merchant Updated by ${updActorName} — fields: ${Object.keys(payload).join(', ')}`,
+        status: 'success', category: 'merchants', target_id: id, target_type: 'merchant', severity: 'info',
+        new_value: { updated_fields: Object.keys(payload) }
+    }).then(() => {}).catch(() => {});
 
     return res.status(200).json({ success: true, data });
 }

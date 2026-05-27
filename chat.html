@@ -262,7 +262,7 @@ async function openChat(id, name, type, role) {
 function buildMsgHtml(m) {
     const isMine = m.sender_id === myId;
     const d = new Date(m.created_at);
-    const timeStr = d.toLocaleTimeString(undefined, { hour:'2-digit', minute:'2-digit' });
+    const timeStr = fmtTime(d);
     const isDeleted = !!m.deleted_at;
     const isEdited = !!m.edited_at;
     const actions = isMine && !isDeleted ? `
@@ -290,7 +290,7 @@ function renderAllMessages(currentMsgs, area) {
     let lastDate = '';
     const msgHtml = allMsgs.map(m => {
         const d = new Date(m.created_at);
-        const dateStr = d.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'numeric' });
+        const dateStr = new Intl.DateTimeFormat('en-US', { timeZone: localStorage.getItem('pp_tz') || 'America/Chicago', weekday:'short', month:'short', day:'numeric' }).format(d);
         let dateDivider = '';
         if (dateStr !== lastDate) { dateDivider = `<div class="date-divider">${dateStr}</div>`; lastDate = dateStr; }
         return dateDivider + buildMsgHtml(m);

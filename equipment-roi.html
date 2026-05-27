@@ -363,7 +363,7 @@
             roiData = data;
             allIdleSerials = data.idle_serials || [];
             renderDashboard(data);
-            document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' });
+            document.getElementById('last-updated').textContent = 'Updated ' + fmtTime(new Date());
         } catch (err) {
             document.getElementById('model-table-body').innerHTML = `<tr><td colspan="8" style="text-align:center;color:#e11d48;padding:30px;">Error: ${esc(err.message)}</td></tr>`;
         } finally {

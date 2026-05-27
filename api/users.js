@@ -139,8 +139,19 @@ export default async function handler(req, res) {
             } 
             
             if (action === 'delete') {
+                const { data: targetUser } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', userid).maybeSingle();
                 const { error } = await supabase.from('app_users').delete().eq('userid', userid);
                 if (error) throw error;
+                const { data: delActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+                const delActorEmail = delActorRow?.email || session.userid;
+                const delActorName = delActorRow ? `${delActorRow.first_name || ''} ${delActorRow.last_name || ''}`.trim() || delActorRow.email : 'Staff';
+                const targetName = targetUser ? `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim() || targetUser.email : userid;
+                supabase.from('activity_logs').insert({
+                    email: delActorEmail,
+                    action: `User Deleted by ${delActorName} — ${targetName} (${targetUser?.email || userid})`,
+                    status: 'success', category: 'users', target_id: userid, target_type: 'user', severity: 'warning',
+                    old_value: { userid, email: targetUser?.email, name: targetName }
+                }).then(() => {}).catch(() => {});
                 return res.status(200).json({ success: true });
             }
 

@@ -396,7 +396,7 @@ async function loadQueue() {
         renderModelChips(sum.model_counts || {});
         populateModelFilter(sum.model_counts || {});
 
-        document.getElementById('last-updated').textContent = 'Updated ' + new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        document.getElementById('last-updated').textContent = 'Updated ' + fmtTime(new Date());
 
         applyFilters();
 

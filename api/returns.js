@@ -349,6 +349,16 @@ if (action === 'complete_return') {
             const { error: delErr } = await supabase.from('returns').delete().eq('id', rma.id);
             if (delErr) throw delErr;
 
+            const { data: delActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            const delActorEmail = delActorRow?.email || session.userid;
+            const delActorName = delActorRow ? `${delActorRow.first_name || ''} ${delActorRow.last_name || ''}`.trim() || delActorRow.email : 'Staff';
+            supabase.from('activity_logs').insert({
+                email: delActorEmail,
+                action: `RMA Deleted by ${delActorName} — ${rma.return_id}${rma.is_bulk ? ' (bulk)' : ''}`,
+                status: 'success', category: 'returns', target_id: rma.id, target_type: 'return', severity: 'warning',
+                old_value: { return_id: rma.return_id, equipment_id: rma.equipment_id, merchant_id: rma.merchant_id, is_bulk: rma.is_bulk }
+            }).then(() => {}).catch(() => {});
+
             return res.status(200).json({ success: true });
         }
 
