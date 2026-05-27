@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     // Resolve actor identity from session — never trust client-provided headers for logging
     const { data: actor } = await supabase
         .from('app_users')
-        .select('email, first_name, last_name')
+        .select('email, first_name, last_name, role')
         .eq('userid', session.userid)
         .single();
     const actorEmail = actor?.email || 'Unknown';
@@ -98,6 +98,9 @@ if (action === 'getMonthlyReport') {
 }
 
         if (action === 'delete') {
+            if (actor?.role !== 'super_admin') {
+                return res.status(403).json({ success: false, message: 'Only Super Admins can delete equipment.' });
+            }
             const { data: equipToDelete } = await supabase.from('equipments').select('serial_number, terminal_type, status, current_location').eq('id', id).single();
             const { data, error } = await supabase.from('equipments').delete().eq('id', id);
             if (error) throw error;

@@ -14,7 +14,7 @@ export default async function handler(req, res) {
     // Resolve actor name once — used for created_by/updated_by and logging
     const { data: actorRow } = await supabase
         .from('app_users')
-        .select('email, first_name, last_name')
+        .select('email, first_name, last_name, role, can_delete_tickets')
         .eq('userid', session.userid)
         .maybeSingle();
     const actorEmail = actorRow?.email || session.userid;
@@ -279,6 +279,10 @@ if (action === 'delete') {
 
     if (!deployment_id) {
         return res.status(400).json({ success: false, message: "Missing Deployment ID" });
+    }
+
+    if (actorRow?.role !== 'super_admin' && !actorRow?.can_delete_tickets) {
+        return res.status(403).json({ success: false, message: 'You do not have permission to delete deployments.' });
     }
 
     try {

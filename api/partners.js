@@ -44,6 +44,10 @@ export default async function handler(req, res) {
 
         if (action === 'update_person_field') {
     const { id, field, value } = body;
+    const ALLOWED_PERSON_FIELDS = ['full_name', 'email', 'phone_number', 'is_branded', 'enrolled_at'];
+    if (!ALLOWED_PERSON_FIELDS.includes(field)) {
+        return res.status(400).json({ success: false, message: `Field '${field}' cannot be updated via this endpoint.` });
+    }
     const { error } = await supabase
         .from('persons')
         .update({ [field]: value })

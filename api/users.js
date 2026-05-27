@@ -161,12 +161,15 @@ export default async function handler(req, res) {
             } 
             
             if (action === 'delete') {
+                const { data: performer } = await supabase.from('app_users').select('email, first_name, last_name, role').eq('userid', session.userid).maybeSingle();
+                if (performer?.role !== 'super_admin') {
+                    return res.status(403).json({ success: false, message: 'Only Super Admins can delete staff accounts.' });
+                }
                 const { data: targetUser } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', userid).maybeSingle();
                 const { error } = await supabase.from('app_users').delete().eq('userid', userid);
                 if (error) throw error;
-                const { data: delActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
-                const delActorEmail = delActorRow?.email || session.userid;
-                const delActorName = delActorRow ? `${delActorRow.first_name || ''} ${delActorRow.last_name || ''}`.trim() || delActorRow.email : 'Staff';
+                const delActorEmail = performer?.email || session.userid;
+                const delActorName = performer ? `${performer.first_name || ''} ${performer.last_name || ''}`.trim() || performer.email : 'Staff';
                 const targetName = targetUser ? `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim() || targetUser.email : userid;
                 supabase.from('activity_logs').insert({
                     email: delActorEmail,
