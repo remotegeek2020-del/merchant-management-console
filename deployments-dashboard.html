@@ -304,6 +304,18 @@
     </div>
 </div>
        
+        <!-- Ticket meta: created/updated by -->
+        <div id="ticketMetaBar" style="display:none;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:11px;color:#64748b;display:flex;flex-wrap:wrap;gap:12px;">
+            <span id="metaCreated" style="display:flex;align-items:center;gap:5px;">
+                <span class="material-icons" style="font-size:13px;color:#0369a1;">person_add</span>
+                <span></span>
+            </span>
+            <span id="metaUpdated" style="display:none;display:flex;align-items:center;gap:5px;">
+                <span class="material-icons" style="font-size:13px;color:#7c3aed;">edit</span>
+                <span></span>
+            </span>
+        </div>
+
         <form id="editDepForm" onsubmit="submitUpdate(event)">
             <input type="hidden" id="editId">
             
@@ -1643,6 +1655,26 @@ async function openEditModal(index) {
     document.getElementById('editTid').value = d.tid || '';
     document.getElementById('editStatus').value = d.status || 'Open';
     _editingDepSnapshot = { status: d.status, tracking_id: d.tracking_id, purchase_type: d.purchase_type, target_deployment_date: d.target_deployment_date, merchant_received_date: d.merchant_received_date };
+
+    // Ticket meta bar — created by / updated by
+    const metaBar     = document.getElementById('ticketMetaBar');
+    const metaCreated = document.getElementById('metaCreated');
+    const metaUpdated = document.getElementById('metaUpdated');
+    if (metaBar) {
+        const createdDate = d.created_at ? fmtDateTime(d.created_at) : null;
+        const updatedDate = d.updated_at ? fmtDateTime(d.updated_at) : null;
+        if (metaCreated) {
+            const label = [d.created_by_name, createdDate].filter(Boolean).join(' · ');
+            metaCreated.querySelector('span:last-child').textContent = label ? `Created by ${label}` : (createdDate ? `Created ${createdDate}` : '');
+            metaCreated.style.display = label ? 'flex' : 'none';
+        }
+        if (metaUpdated) {
+            const label = [d.updated_by_name, updatedDate].filter(Boolean).join(' · ');
+            metaUpdated.querySelector('span:last-child').textContent = label ? `Last updated by ${label}` : '';
+            metaUpdated.style.display = label ? 'flex' : 'none';
+        }
+        metaBar.style.display = 'flex';
+    }
 
     // Hide TID field for bulk (per-item TIDs are shown in the items section below)
     const editTidWrap = document.getElementById('editTidWrap');
