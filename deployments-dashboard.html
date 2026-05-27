@@ -1350,7 +1350,7 @@ async function processReturn() {
                     <div style="text-align:right;">
                         <div class="slip-title">Bulk Packing Slip</div>
                         <div class="slip-subtitle">Deployment ID: <strong>${d.deployment_id || '---'}</strong></div>
-                        <div class="slip-subtitle">Printed: ${new Date().toLocaleDateString('en-US', { year:'numeric', month:'short', day:'numeric' })}</div>
+                        <div class="slip-subtitle">Printed: ${fmtDate(new Date())}</div>
                     </div>
                 </div>
 
@@ -1527,7 +1527,7 @@ async function processReturn() {
         document.getElementById('bulkESuggestions').style.display = 'none';
 
         await _depLoadTerminalTypes();
-        const today = new Date().toISOString().slice(0, 10);
+        const today = fmtDateInput(new Date());
         const safeSerial = (prefillSerial || '').replace(/'/g, '');
 
         const { isConfirmed, value } = await Swal.fire({
