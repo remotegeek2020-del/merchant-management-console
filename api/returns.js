@@ -132,6 +132,11 @@ if (action === 'complete_return') {
     const { id: rmaId, equipment_id, condition, destination, merchant_id, equipment_received_date } = payload || {};
     if (!rmaId) throw new Error("Missing RMA ID in payload");
 
+    const { data: actorRow } = await supabase
+        .from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const actorEmail = actorRow?.email || session.userid;
+    const actorName = actorRow ? `${actorRow.first_name || ''} ${actorRow.last_name || ''}`.trim() || actorRow.email : 'Staff';
+
     // Fetch the return record
     const { data: rmaData } = await supabase
         .from('returns')
@@ -227,8 +232,8 @@ if (action === 'complete_return') {
     await supabase.from('returns').update(returnUpdate).eq('id', rmaId);
 
     supabase.from('activity_logs').insert({
-        email: session?.email || session?.userid || 'unknown',
-        action: `RMA Completed — ${rmaId} (${condition})`,
+        email: actorEmail,
+        action: `RMA Completed by ${actorName} — ${rmaId} (${condition})`,
         status: 'success', category: 'returns', target_id: rmaId, target_type: 'return', severity: 'info',
         old_value: { status: 'In Transit', rma_id: rmaId },
         new_value: { status: 'Closed', condition, destination, equipment_received_date: equipment_received_date || null, is_bulk: isBulk }

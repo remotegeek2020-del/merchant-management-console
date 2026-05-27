@@ -594,7 +594,7 @@ async function logAuditAction(action, details, opts = {}) {
         });
         const finalResult = await res.json();
         if (finalResult.success) {
-            Swal.fire('Success', `Unit received on ${receivedDate}`, 'success').then(() => {
+            Swal.fire('Success', `Unit received on ${fmtDate(receivedDate)}`, 'success').then(() => {
                 document.getElementById('editDepModal').style.display = 'none';
                 fetchDeployments(currentPage);
             });
