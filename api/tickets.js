@@ -918,6 +918,13 @@ export default async function handler(req, res) {
             const { ticket_id } = req.body;
             if (!ticket_id) return res.status(400).json({ success: false, message: 'ticket_id required.' });
 
+            // Server-side permission check — never trust client-side localStorage
+            const { data: delActor } = await supabase.from('app_users')
+                .select('can_delete_tickets, role').eq('userid', staffSession.userid).maybeSingle();
+            if (!delActor?.can_delete_tickets && delActor?.role !== 'super_admin') {
+                return res.status(403).json({ success: false, message: 'You do not have permission to delete tickets.' });
+            }
+
             const { data: deletedTicket } = await supabase.from('support_tickets').select('ticket_number, subject').eq('id', ticket_id).single();
             // Delete comments first (FK), then the ticket
             await supabase.from('ticket_comments').delete().eq('ticket_id', ticket_id);

@@ -91,17 +91,39 @@ export default async function handler(req, res) {
             } 
             
             if (action === 'updateBatch') {
-                // Whitelist allowed fields — prevent role/credential escalation via this endpoint
+                // Verify caller's role from DB — never trust client-sent performerRole
+                const { data: batchPerformer } = await supabase.from('app_users')
+                    .select('role').eq('userid', session.userid).maybeSingle();
+                const callerRole = batchPerformer?.role;
+
                 const ALLOWED_BATCH_FIELDS = [
                     'first_name','last_name','email','role','is_active',
                     'access_admin_dashboard','access_merchants','access_deployments',
                     'access_returns','access_inventory','access_partners',
                     'access_jarvis','can_delete_tickets'
                 ];
+                // Only super_admin can change roles or grant delete-ticket permission
+                const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets'];
+
                 for (const uid of Object.keys(payload)) {
-                    const safePayload = Object.fromEntries(
+                    let safePayload = Object.fromEntries(
                         Object.entries(payload[uid]).filter(([k]) => ALLOWED_BATCH_FIELDS.includes(k))
                     );
+
+                    if (callerRole !== 'super_admin') {
+                        // Strip privileged fields — non-super_admin cannot grant roles or permissions
+                        PRIVILEGED_FIELDS.forEach(f => delete safePayload[f]);
+                    } else {
+                        // super_admin cannot accidentally demote themselves (lockout prevention)
+                        if (uid === session.userid && safePayload.role && safePayload.role !== 'super_admin') {
+                            delete safePayload.role;
+                        }
+                        // super_admin cannot grant super_admin to others (only insert can do that)
+                        if (uid !== session.userid && safePayload.role === 'super_admin') {
+                            return res.status(403).json({ success: false, message: 'Use the create user flow to grant Super Admin.' });
+                        }
+                    }
+
                     if (Object.keys(safePayload).length > 0) {
                         await supabase.from('app_users').update(safePayload).eq('userid', uid);
                     }
