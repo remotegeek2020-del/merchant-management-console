@@ -310,6 +310,16 @@ if (action === 'complete_return') {
                 }))
             );
 
+            const { data: addActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            const addActorEmail = addActorRow?.email || session.userid;
+            const addActorName  = addActorRow ? `${addActorRow.first_name || ''} ${addActorRow.last_name || ''}`.trim() || addActorRow.email : 'Staff';
+            supabase.from('activity_logs').insert({
+                email: addActorEmail,
+                action: `RMA Updated by ${addActorName} — ${equipment_ids.length} unit(s) added to ${rma.return_id} (${mDbaAdd})`,
+                status: 'success', category: 'returns', target_id: rma.return_id, target_type: 'return', severity: 'info',
+                new_value: { return_id: rma.return_id, equipment_ids_added: equipment_ids }
+            }).then(() => {}).catch(() => {});
+
             return res.status(200).json({ success: true, added: equipment_ids.length });
         }
 

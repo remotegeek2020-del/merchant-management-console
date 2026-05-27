@@ -604,6 +604,8 @@ if (action === 'get_merchant_equipment') {
 
         if (action === 'update_note') {
             const { note_id, title, body } = req.body;
+            if (title && title.length > 200) return res.status(400).json({ success: false, message: 'Title too long (max 200 characters).' });
+            if (body && body.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
             const { data: oldNote } = await supabase.from('merchant_notes').select('title, body, merchant_id').eq('id', note_id).single();
             const { error } = await supabase
                 .from('merchant_notes')
@@ -863,6 +865,8 @@ if (action === 'get_notes') {
 }
     if (action === 'add_note') {
     const { merchant_uuid, title, body, created_by, mentions } = req.body;
+    if (title && title.length > 200) return res.status(400).json({ success: false, message: 'Title too long (max 200 characters).' });
+    if (body && body.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
     const { data: noteRow, error } = await supabase
         .from('merchant_notes')
         .insert([{ merchant_id: merchant_uuid, title, body, created_by }])

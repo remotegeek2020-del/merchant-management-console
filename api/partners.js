@@ -558,6 +558,7 @@ if (action === 'complete_onboarding') {
         if (action === 'add_note') {
             const { person_id, body: noteBody, note_type, author_id, author_name } = body;
             if (!noteBody?.trim()) return res.status(400).json({ success: false, message: 'Note body required.' });
+            if (noteBody.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
             const { data, error } = await supabase.from('partner_notes').insert({
                 person_id, body: noteBody.trim(), note_type: note_type || 'general',
                 author_id, author_name
@@ -575,6 +576,7 @@ if (action === 'complete_onboarding') {
         // --- ACTION: UPDATE PARTNER NOTE ---
         if (action === 'update_note') {
             const { note_id, body: noteBody, is_pinned } = body;
+            if (noteBody !== undefined && noteBody.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
             const { data: oldNote } = await supabase.from('partner_notes').select('body, is_pinned, person_id').eq('id', note_id).single();
             const updates = {};
             if (noteBody !== undefined) updates.body = noteBody.trim();
@@ -776,9 +778,9 @@ if (action === 'complete_onboarding') {
             const { post_id, staff_id } = body;
             const { data: post } = await supabase.from('community_posts').select('author_id').eq('id', post_id).single();
             if (!post || post.author_id !== staff_id) {
-                // Super admins can delete any post - check role
-                const role = (body.staff_role || '').toLowerCase();
-                if (!role.includes('super')) {
+                // Verify role from DB — never trust client-sent role
+                const { data: actorData } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
+                if (actorData?.role !== 'super_admin') {
                     return res.status(403).json({ success: false, message: 'Not authorized.' });
                 }
             }

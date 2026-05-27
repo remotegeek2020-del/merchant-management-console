@@ -109,6 +109,19 @@ export default async function handler(req, res) {
 
         // --- LOGIN ---
         else if (action === 'login') {
+            // Rate limit: block after 5 failed login attempts within 15 minutes
+            const windowStart = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+            const { count: recentFailures } = await supabase
+                .from('activity_logs')
+                .select('*', { count: 'exact', head: true })
+                .eq('email', email)
+                .eq('action', 'login')
+                .eq('status', 'FAILURE')
+                .gte('created_at', windowStart);
+            if (recentFailures >= 5) {
+                return res.status(429).json({ success: false, message: 'Too many failed login attempts. Please wait 15 minutes and try again.' });
+            }
+
             const { data: dbUser, error: fetchError } = await supabase.from('app_users').select('*').eq('email', email).single();
             if (fetchError || !dbUser) {
                 error = { message: 'User not found' };

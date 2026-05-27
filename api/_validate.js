@@ -11,13 +11,20 @@ export async function validateSession(req) {
 
     const { data: session } = await supabase
         .from('staff_sessions')
-        .select('userid, expires_at')
+        .select('userid, expires_at, last_used')
         .eq('session_token', token)
         .maybeSingle();
 
     if (!session) return null;
 
     if (new Date(session.expires_at) < new Date()) {
+        await supabase.from('staff_sessions').delete().eq('session_token', token);
+        return null;
+    }
+
+    // Idle timeout: expire session after 8 hours of inactivity
+    const IDLE_TIMEOUT_MS = 8 * 60 * 60 * 1000;
+    if (session.last_used && (Date.now() - new Date(session.last_used).getTime()) > IDLE_TIMEOUT_MS) {
         await supabase.from('staff_sessions').delete().eq('session_token', token);
         return null;
     }
