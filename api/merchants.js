@@ -576,7 +576,7 @@ if (action === 'get_merchant_equipment') {
             const { data: oldNote } = await supabase.from('merchant_notes').select('title, body, merchant_id').eq('id', note_id).single();
             const { error } = await supabase
                 .from('merchant_notes')
-                .update({ title, body, updated_at: new Date().toISOString() })
+                .update({ title, body, updated_at: new Date().toISOString(), updated_by: session.userid })
                 .eq('id', note_id);
 
             if (error) throw error;
@@ -824,8 +824,8 @@ if (action === 'get_notes') {
     // 3. Map the names manually
     const formattedData = (notes || []).map(n => ({
         ...n,
-        // If created_by matches a UUID in our map, use the name; otherwise, keep the original string
-        display_name: userMap[n.created_by] || n.created_by || 'Unknown Staff'
+        display_name: userMap[n.created_by] || n.created_by || 'Unknown Staff',
+        updated_by_name: n.updated_by ? (userMap[n.updated_by] || n.updated_by) : null
     }));
 
     return res.status(200).json({ success: true, data: formattedData });

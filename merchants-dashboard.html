@@ -1538,6 +1538,9 @@ async function addTask(merchantUuid) {
                         No notes yet. Add the first one above.
                     </div>` : notes.map(n => {
                         const noteDate = n.created_at ? fmtDateTime(n.created_at) : 'Just now';
+                        const updatedLine = n.updated_by_name
+                            ? `<div style="font-size:10px;color:#94a3b8;margin-top:3px;">Edited by <b style="color:#64748b;">${n.updated_by_name}</b> · ${fmtDateTime(n.updated_at)}</div>`
+                            : '';
                         const safeTitle = (n.title || '').replace(/`/g,'&#96;').replace(/\$/g,'&#36;');
                         const safeBody  = (n.body  || '').replace(/`/g,'&#96;').replace(/\$/g,'&#36;');
                         const safeBodyDisplay = (n.body || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
@@ -1559,6 +1562,7 @@ async function addTask(merchantUuid) {
                                 <span style="font-size:11px;color:#cbd5e1;">·</span>
                                 <span style="font-size:11px;color:#94a3b8;">${noteDate}</span>
                             </div>
+                            ${updatedLine}
                         </div>
                         <!-- EDIT VIEW (hidden by default) -->
                         <div id="note-edit-${n.id}" style="display:none;">
