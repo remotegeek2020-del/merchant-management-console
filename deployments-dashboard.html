@@ -2403,7 +2403,15 @@ async function renderLegacy() {
                 <td style="font-family:monospace;font-size:12px;">${r.serial_number}</td>
                 <td style="font-size:12px;color:#64748b;">${r.tid || '—'}</td>
                 <td style="font-size:12px;">${merchantName}</td>
-                <td style="font-size:12px;">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}</td>
+                <td style="font-size:12px;" id="legtype-${r.id}">
+                    <span class="legtype-display">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}</span>
+                    <span class="legtype-edit" style="display:none;">
+                        <input id="legtype-input-${r.id}" value="${r.terminal_type||''}" style="width:110px;padding:2px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;">
+                        <button onclick="legSaveType('${r.id}')" style="padding:2px 6px;background:#004990;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin-left:2px;">Save</button>
+                        <button onclick="legCancelType('${r.id}')" style="padding:2px 6px;background:#e2e8f0;color:#374151;border:none;border-radius:4px;cursor:pointer;font-size:11px;">✕</button>
+                    </span>
+                    <button onclick="legEditType('${r.id}')" class="legtype-edit-btn" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0 2px;">✎</button>
+                </td>
                 <td style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
                 <td style="font-size:12px;color:#64748b;">${r.purchase_type || '—'}</td>
                 <td>${statusBadge}</td>
@@ -2425,6 +2433,40 @@ async function renderLegacy() {
         </div>` : `<div style="padding:8px 12px;font-size:11px;color:#94a3b8;text-align:right;">${total} record${total!==1?'s':''}</div>`;
     } catch (e) {
         tbody.innerHTML = `<tr><td colspan="8" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
+    }
+}
+
+function legEditType(id) {
+    const cell = document.getElementById('legtype-' + id);
+    if (!cell) return;
+    cell.querySelector('.legtype-display').style.display = 'none';
+    cell.querySelector('.legtype-edit').style.display = 'inline';
+    cell.querySelector('.legtype-edit-btn').style.display = 'none';
+    cell.querySelector('#legtype-input-' + id)?.focus();
+}
+function legCancelType(id) {
+    const cell = document.getElementById('legtype-' + id);
+    if (!cell) return;
+    cell.querySelector('.legtype-display').style.display = '';
+    cell.querySelector('.legtype-edit').style.display = 'none';
+    cell.querySelector('.legtype-edit-btn').style.display = '';
+}
+async function legSaveType(id) {
+    const input = document.getElementById('legtype-input-' + id);
+    if (!input) return;
+    const newType = input.value.trim();
+    const token = localStorage.getItem('pp_session_token') || '';
+    try {
+        const res = await fetch('/api/legacy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        await renderLegacy();
+    } catch (e) {
+        Swal.fire({ icon: 'error', title: 'Error', text: e.message, timer: 3000, showConfirmButton: false });
     }
 }
 

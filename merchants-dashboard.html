@@ -1938,7 +1938,15 @@ async function addTask(merchantUuid) {
                 const canRMA = r.status === 'active';
                 return `<tr>
                     <td style="font-family:monospace;font-size:12px;font-weight:700;color:#92400e;">${r.serial_number}</td>
-                    <td style="font-size:12px;">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}</td>
+                    <td style="font-size:12px;" id="mlegtype-${r.id}">
+                        <span class="mlegtype-display">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}</span>
+                        <span class="mlegtype-edit" style="display:none;">
+                            <input id="mlegtype-input-${r.id}" value="${r.terminal_type||''}" style="width:100px;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">
+                            <button onclick="mlegSaveType('${r.id}')" style="padding:2px 5px;background:#004990;color:white;border:none;border-radius:4px;cursor:pointer;font-size:10px;margin-left:2px;">Save</button>
+                            <button onclick="mlegCancelType('${r.id}')" style="padding:2px 5px;background:#e2e8f0;color:#374151;border:none;border-radius:4px;cursor:pointer;font-size:10px;">✕</button>
+                        </span>
+                        <button onclick="mlegEditType('${r.id}')" class="mlegtype-edit-btn" title="Edit terminal type" style="margin-left:3px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:11px;padding:0 2px;">✎</button>
+                    </td>
                     <td>${statusBadge}</td>
                     <td style="font-size:11px;color:#64748b;">${r.deployment_date ? fmtDate(r.deployment_date) : '—'}</td>
                     <td>${canRMA ? `<button onclick="legFileRMAFromMerchant('${r.id}','${r.serial_number.replace(/'/g,'')}')" style="padding:3px 9px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}</td>
@@ -1946,6 +1954,42 @@ async function addTask(merchantUuid) {
             }).join('');
         } catch (e) { container.style.display = 'none'; }
     }
+
+    window.mlegEditType = function(id) {
+        const cell = document.getElementById('mlegtype-' + id);
+        if (!cell) return;
+        cell.querySelector('.mlegtype-display').style.display = 'none';
+        cell.querySelector('.mlegtype-edit').style.display = 'inline';
+        cell.querySelector('.mlegtype-edit-btn').style.display = 'none';
+        cell.querySelector('#mlegtype-input-' + id)?.focus();
+    };
+    window.mlegCancelType = function(id) {
+        const cell = document.getElementById('mlegtype-' + id);
+        if (!cell) return;
+        cell.querySelector('.mlegtype-display').style.display = '';
+        cell.querySelector('.mlegtype-edit').style.display = 'none';
+        cell.querySelector('.mlegtype-edit-btn').style.display = '';
+    };
+    window.mlegSaveType = async function(id) {
+        const input = document.getElementById('mlegtype-input-' + id);
+        if (!input) return;
+        const newType = input.value.trim();
+        const token = localStorage.getItem('pp_session_token') || '';
+        try {
+            const res = await fetch('/api/legacy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.message);
+            const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+            const merchantUuid = saveBtn?.getAttribute('onclick').match(/'([^']+)'/)?.[1];
+            if (merchantUuid) fetchMerchantLegacyEquipment(merchantUuid);
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message, timer: 3000, showConfirmButton: false });
+        }
+    };
 
     window.legFileRMAFromMerchant = async function(legacyId, serial) {
         const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
