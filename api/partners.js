@@ -567,6 +567,34 @@ if (action === 'complete_onboarding') {
                             const ghlNotes = ghlData.notes || ghlData.data || [];
                             console.log('[GHL Notes Sync] Found', ghlNotes.length, 'notes in GHL');
 
+                            // Build a userId→display name map by resolving each unique GHL userId
+                            // against the GHL Users API, then cross-referencing with app users by email
+                            const uniqueUserIds = [...new Set(ghlNotes.map(gn => gn.userId).filter(Boolean))];
+                            const ghlUserNameMap = {};
+                            if (uniqueUserIds.length) {
+                                const { data: appUsers } = await supabase.from('app_users').select('email, first_name, last_name');
+                                const appUsersByEmail = {};
+                                (appUsers || []).forEach(u => {
+                                    if (u.email) appUsersByEmail[u.email.toLowerCase()] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email;
+                                });
+                                for (const uid of uniqueUserIds) {
+                                    try {
+                                        const uRes = await fetch(`https://services.leadconnectorhq.com/users/${uid}`, { headers: ghlHeaders });
+                                        if (uRes.ok) {
+                                            const uData = await uRes.json();
+                                            const ghlUser = uData.user || uData;
+                                            const email = (ghlUser.email || '').toLowerCase();
+                                            // Prefer app user name matched by email, then GHL name, then default
+                                            ghlUserNameMap[uid] = appUsersByEmail[email] || ghlUser.name || ghlUser.firstName || 'GoHighLevel';
+                                        } else {
+                                            ghlUserNameMap[uid] = 'GoHighLevel';
+                                        }
+                                    } catch (e) {
+                                        ghlUserNameMap[uid] = 'GoHighLevel';
+                                    }
+                                }
+                            }
+
                             // Load existing local GHL-sourced notes for diffing
                             const { data: existingGhlNotes, error: fetchErr } = await supabase
                                 .from('partner_notes')
@@ -582,10 +610,11 @@ if (action === 'complete_onboarding') {
                                 if (!gnId) { console.warn('[GHL Notes Sync] Note missing id:', JSON.stringify(gn)); continue; }
                                 liveIds.add(gnId);
 
+                                const resolvedName = gn.userId ? (ghlUserNameMap[gn.userId] || 'GoHighLevel') : 'GoHighLevel';
                                 const noteData = {
                                     title: gn.title || null,
                                     body: gn.body || gn.description || '',
-                                    author_name: gn.user || gn.userId || 'GoHighLevel',
+                                    author_name: resolvedName,
                                     updated_at: gn.dateAdded || gn.dateUpdated || new Date().toISOString()
                                 };
 
