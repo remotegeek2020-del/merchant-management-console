@@ -1938,14 +1938,9 @@ async function addTask(merchantUuid) {
                 const canRMA = r.status === 'active';
                 return `<tr>
                     <td style="font-family:monospace;font-size:12px;font-weight:700;color:#92400e;">${r.serial_number}</td>
-                    <td style="font-size:12px;" id="mlegtype-${r.id}">
-                        <span class="mlegtype-display">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}</span>
-                        <span class="mlegtype-edit" style="display:none;">
-                            <input id="mlegtype-input-${r.id}" value="${r.terminal_type||''}" style="width:100px;padding:2px 4px;border:1px solid #cbd5e1;border-radius:4px;font-size:11px;">
-                            <button onclick="mlegSaveType('${r.id}')" style="padding:2px 5px;background:#004990;color:white;border:none;border-radius:4px;cursor:pointer;font-size:10px;margin-left:2px;">Save</button>
-                            <button onclick="mlegCancelType('${r.id}')" style="padding:2px 5px;background:#e2e8f0;color:#374151;border:none;border-radius:4px;cursor:pointer;font-size:10px;">✕</button>
-                        </span>
-                        <button onclick="mlegEditType('${r.id}')" class="mlegtype-edit-btn" title="Edit terminal type" style="margin-left:3px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:11px;padding:0 2px;">✎</button>
+                    <td style="font-size:12px;">
+                        ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}
+                        <button onclick="mlegEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,"\\'")}','${r.serial_number.replace(/'/g,"\\'")}',this.closest('button'))" title="Edit terminal type" style="margin-left:3px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0 2px;vertical-align:middle;">✎</button>
                     </td>
                     <td>${statusBadge}</td>
                     <td style="font-size:11px;color:#64748b;">${r.deployment_date ? fmtDate(r.deployment_date) : '—'}</td>
@@ -1955,31 +1950,51 @@ async function addTask(merchantUuid) {
         } catch (e) { container.style.display = 'none'; }
     }
 
-    window.mlegEditType = function(id) {
-        const cell = document.getElementById('mlegtype-' + id);
-        if (!cell) return;
-        cell.querySelector('.mlegtype-display').style.display = 'none';
-        cell.querySelector('.mlegtype-edit').style.display = 'inline';
-        cell.querySelector('.mlegtype-edit-btn').style.display = 'none';
-        cell.querySelector('#mlegtype-input-' + id)?.focus();
-    };
-    window.mlegCancelType = function(id) {
-        const cell = document.getElementById('mlegtype-' + id);
-        if (!cell) return;
-        cell.querySelector('.mlegtype-display').style.display = '';
-        cell.querySelector('.mlegtype-edit').style.display = 'none';
-        cell.querySelector('.mlegtype-edit-btn').style.display = '';
-    };
-    window.mlegSaveType = async function(id) {
-        const input = document.getElementById('mlegtype-input-' + id);
-        if (!input) return;
-        const newType = input.value.trim();
+    let _mlegTermTypes = null;
+    async function _mlegLoadTermTypes() {
+        if (_mlegTermTypes) return _mlegTermTypes;
+        try {
+            const token = localStorage.getItem('pp_session_token') || '';
+            const res = await fetch('/api/legacy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'get_terminal_types' })
+            });
+            const data = await res.json();
+            _mlegTermTypes = data.types || [];
+        } catch (e) { _mlegTermTypes = []; }
+        return _mlegTermTypes;
+    }
+
+    window.mlegEditType = async function(id, currentType, serial) {
+        const types = await _mlegLoadTermTypes();
+        const options = types.map(t =>
+            `<option value="${t}"${t === currentType ? ' selected' : ''}>${t}</option>`
+        ).join('');
+        const { value: newType, isConfirmed } = await Swal.fire({
+            title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">Edit Terminal Type</span>',
+            width: '400px',
+            showCancelButton: true,
+            confirmButtonText: 'Save',
+            confirmButtonColor: '#004990',
+            html: `<div style="text-align:left;padding-top:8px;">
+                     <div style="font-size:12px;color:#64748b;margin-bottom:10px;">Serial: <b style="font-family:monospace;color:#0f172a;">${serial}</b></div>
+                     <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type</label>
+                     <select id="swal-mlegtype" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;">
+                       <option value="">— Unknown —</option>
+                       ${options}
+                     </select>
+                   </div>`,
+            didOpen: () => document.getElementById('swal-mlegtype')?.focus(),
+            preConfirm: () => document.getElementById('swal-mlegtype').value
+        });
+        if (!isConfirmed) return;
         const token = localStorage.getItem('pp_session_token') || '';
         try {
             const res = await fetch('/api/legacy', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-                body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType })
+                body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType || null })
             });
             const data = await res.json();
             if (!data.success) throw new Error(data.message);

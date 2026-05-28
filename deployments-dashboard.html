@@ -2352,21 +2352,6 @@ async function executeBulk(validData) {
 let legPage = 1;
 const LEG_LIMIT = 50;
 
-let _legTerminalTypes = null;
-async function loadLegTerminalTypes() {
-    if (_legTerminalTypes) return _legTerminalTypes;
-    try {
-        const token = localStorage.getItem('pp_session_token') || '';
-        const res = await fetch('/api/legacy', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ action: 'get_terminal_types' })
-        });
-        const data = await res.json();
-        _legTerminalTypes = data.types || [];
-    } catch (e) { _legTerminalTypes = []; }
-    return _legTerminalTypes;
-}
 
 function setDepView(view) {
     const isCurrent = view === 'current';
@@ -2377,7 +2362,7 @@ function setDepView(view) {
     document.getElementById('dep-view-current').style.border     = isCurrent ? 'none' : '1px solid #004990';
     document.getElementById('dep-view-legacy').style.background  = isCurrent ? 'white' : '#fef3c7';
     if (!isCurrent) {
-        loadLegTerminalTypes();
+        _depLoadTerminalTypes();
         if (document.getElementById('legacyTableBody').innerHTML === '') fetchLegacy();
     }
 }
@@ -2451,19 +2436,21 @@ async function renderLegacy() {
 }
 
 async function legEditType(id, currentType) {
-    const types = await loadLegTerminalTypes();
-    const options = types.map(t =>
-        `<option value="${t}"${t === currentType ? ' selected' : ''}>${t}</option>`
-    ).join('');
+    await _depLoadTerminalTypes();
     const { value: newType, isConfirmed } = await Swal.fire({
-        title: 'Edit Terminal Type',
-        html: `<select id="swal-legtype" class="swal2-select" style="width:100%;margin-top:8px;">
-                 <option value="">— Unknown —</option>
-                 ${options}
-               </select>`,
+        title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">Edit Terminal Type</span>',
+        width: '400px',
         showCancelButton: true,
         confirmButtonText: 'Save',
         confirmButtonColor: '#004990',
+        html: `<div style="text-align:left;padding-top:8px;">
+                 <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type</label>
+                 <select id="swal-legtype" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;">
+                   <option value="">— Unknown —</option>
+                   ${_depTermOpts(currentType)}
+                 </select>
+               </div>`,
+        didOpen: () => document.getElementById('swal-legtype')?.focus(),
         preConfirm: () => document.getElementById('swal-legtype').value
     });
     if (!isConfirmed) return;
