@@ -1084,7 +1084,7 @@ async function saveNote() {
    async function fetchInventory() {
     const tbody = document.getElementById('inventoryTableBody');
     const limit = parseInt(document.getElementById('pageSize').value) || 50;
-    const _invQ = document.getElementById('invSearch')?.value || '';
+    const _invQ = (document.getElementById('invSearch')?.value || '').trim();
     if (_invQ && _invQ !== _lastInvSearchLogged) { _lastInvSearchLogged = _invQ; _logSearch('Inventory', _invQ, 'equipments'); }
 
     tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;

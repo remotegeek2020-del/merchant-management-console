@@ -1245,7 +1245,7 @@ async function addTask(merchantUuid) {
             const res = await fetch('/api/merchants', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value, filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value, sort_by: staffSortField, sort_dir: staffSortDir })
+                body: JSON.stringify({ action: 'list', page: currentPage, limit: limit, query: document.getElementById('searchInput').value.trim(), filterBy: document.getElementById('filterBy').value, statusFilter: document.getElementById('statusFilter').value, sort_by: staffSortField, sort_dir: staffSortDir })
             });
             const result = await res.json();
             currentRecords = result.data;
@@ -2333,7 +2333,7 @@ window.saveMerchant = async (uuid) => {
                 body: JSON.stringify({
                     action: 'list',
                     page: 0, limit: 5000,
-                    query: document.getElementById('searchInput').value,
+                    query: document.getElementById('searchInput').value.trim(),
                     filterBy: document.getElementById('filterBy').value,
                     statusFilter: document.getElementById('statusFilter').value
                 })

@@ -626,7 +626,7 @@ async function logAuditAction(action, details, opts = {}) {
         clearTimeout(searchTimeout);
         searchTimeout = setTimeout(async () => {
             try {
-                const queryValue = document.getElementById('depSearch')?.value || '';
+                const queryValue = (document.getElementById('depSearch')?.value || '').trim();
                 if (queryValue && queryValue !== _lastDepSearchLogged) { _lastDepSearchLogged = queryValue; _logSearch('Deployments', queryValue, 'deployments'); }
                 const dateFrom = document.getElementById('dateFrom')?.value || '';
                 const dateTo = document.getElementById('dateTo')?.value || '';

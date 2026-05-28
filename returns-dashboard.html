@@ -352,7 +352,7 @@ async function fetchReturns() {
             method: 'POST', headers: authHeaders(),
             body: JSON.stringify({
                 action: 'list',
-                query: document.getElementById('retSearch').value,
+                query: document.getElementById('retSearch').value.trim(),
                 statusFilter: document.getElementById('filterStatus')?.value || '',
                 conditionFilter: document.getElementById('filterCondition')?.value || '',
                 reasonFilter: document.getElementById('filterReason')?.value || '',
