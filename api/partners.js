@@ -543,7 +543,49 @@ if (action === 'complete_onboarding') {
 
         // --- ACTION: GET PARTNER NOTES ---
         if (action === 'get_notes') {
-            const { person_id } = body;
+            const { person_id, hl_contact_id } = body;
+
+            // Fetch fresh GHL notes and upsert them locally so the list is always in sync
+            if (hl_contact_id) {
+                try {
+                    const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+                    const ghlApiKey     = (await getConfigValue('GHL_API_KEY'))     || process.env.GHL_API_KEY;
+                    if (ghlApiKey) {
+                        const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
+                        const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`, { headers: ghlHeaders });
+                        if (ghlRes.ok) {
+                            const ghlData = await ghlRes.json();
+                            const ghlNotes = ghlData.notes || [];
+                            for (const gn of ghlNotes) {
+                                await supabase.from('partner_notes').upsert({
+                                    person_id,
+                                    ghl_note_id: gn.id,
+                                    source: 'ghl',
+                                    body: gn.body || '',
+                                    note_type: 'general',
+                                    author_name: gn.user || 'GoHighLevel',
+                                    is_pinned: false,
+                                    created_at: gn.dateAdded || new Date().toISOString(),
+                                    updated_at: gn.dateAdded || new Date().toISOString()
+                                }, { onConflict: 'ghl_note_id', ignoreDuplicates: false });
+                            }
+                            // Remove local GHL-sourced notes that no longer exist in GHL
+                            if (ghlNotes.length === 0) {
+                                await supabase.from('partner_notes').delete()
+                                    .eq('person_id', person_id).eq('source', 'ghl');
+                            } else {
+                                const liveIds = ghlNotes.map(n => n.id);
+                                await supabase.from('partner_notes').delete()
+                                    .eq('person_id', person_id).eq('source', 'ghl')
+                                    .not('ghl_note_id', 'in', `(${liveIds.map(id => `"${id}"`).join(',')})`);
+                            }
+                        }
+                    }
+                } catch (ghlErr) {
+                    console.error('[GHL Notes Sync Error]', ghlErr.message);
+                }
+            }
+
             const { data, error } = await supabase
                 .from('partner_notes')
                 .select('*')
@@ -556,14 +598,39 @@ if (action === 'complete_onboarding') {
 
         // --- ACTION: ADD PARTNER NOTE ---
         if (action === 'add_note') {
-            const { person_id, body: noteBody, note_type, author_id, author_name } = body;
+            const { person_id, body: noteBody, note_type, author_id, author_name, hl_contact_id } = body;
             if (!noteBody?.trim()) return res.status(400).json({ success: false, message: 'Note body required.' });
             if (noteBody.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
             const { data, error } = await supabase.from('partner_notes').insert({
                 person_id, body: noteBody.trim(), note_type: note_type || 'general',
-                author_id, author_name
+                author_id, author_name, source: 'app'
             }).select().single();
             if (error) throw error;
+
+            // Mirror to GHL
+            if (hl_contact_id) {
+                try {
+                    const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+                    if (ghlApiKey) {
+                        const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' };
+                        const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`, {
+                            method: 'POST', headers: ghlHeaders,
+                            body: JSON.stringify({ userId: author_id || session.userid, body: noteBody.trim() })
+                        });
+                        if (ghlRes.ok) {
+                            const ghlData = await ghlRes.json();
+                            const ghlNoteId = ghlData.note?.id;
+                            if (ghlNoteId) {
+                                await supabase.from('partner_notes').update({ ghl_note_id: ghlNoteId }).eq('id', data.id);
+                                data.ghl_note_id = ghlNoteId;
+                            }
+                        }
+                    }
+                } catch (ghlErr) {
+                    console.error('[GHL Add Note Error]', ghlErr.message);
+                }
+            }
+
             const pActor = await resolveActor();
             supabase.from('activity_logs').insert({
                 email: pActor.email, action: `Partner note added by ${pActor.name}`,
@@ -575,15 +642,32 @@ if (action === 'complete_onboarding') {
 
         // --- ACTION: UPDATE PARTNER NOTE ---
         if (action === 'update_note') {
-            const { note_id, body: noteBody, is_pinned } = body;
+            const { note_id, body: noteBody, is_pinned, hl_contact_id } = body;
             if (noteBody !== undefined && noteBody.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
-            const { data: oldNote } = await supabase.from('partner_notes').select('body, is_pinned, person_id').eq('id', note_id).single();
+            const { data: oldNote } = await supabase.from('partner_notes').select('body, is_pinned, person_id, ghl_note_id').eq('id', note_id).single();
             const updates = {};
             if (noteBody !== undefined) updates.body = noteBody.trim();
             if (is_pinned !== undefined) updates.is_pinned = is_pinned;
             updates.updated_at = new Date().toISOString();
             const { error } = await supabase.from('partner_notes').update(updates).eq('id', note_id);
             if (error) throw error;
+
+            // Mirror to GHL if note has a GHL ID and body is being changed
+            if (oldNote?.ghl_note_id && hl_contact_id && noteBody !== undefined) {
+                try {
+                    const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+                    if (ghlApiKey) {
+                        const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' };
+                        await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes/${oldNote.ghl_note_id}`, {
+                            method: 'PUT', headers: ghlHeaders,
+                            body: JSON.stringify({ userId: session.userid, body: noteBody.trim() })
+                        });
+                    }
+                } catch (ghlErr) {
+                    console.error('[GHL Update Note Error]', ghlErr.message);
+                }
+            }
+
             const pActorUpd = await resolveActor();
             supabase.from('activity_logs').insert({
                 email: pActorUpd.email, action: `Partner note updated by ${pActorUpd.name}`,
@@ -596,8 +680,24 @@ if (action === 'complete_onboarding') {
 
         // --- ACTION: DELETE PARTNER NOTE ---
         if (action === 'delete_note') {
-            const { note_id } = body;
-            const { data: oldNote } = await supabase.from('partner_notes').select('body, person_id, note_type').eq('id', note_id).single();
+            const { note_id, hl_contact_id } = body;
+            const { data: oldNote } = await supabase.from('partner_notes').select('body, person_id, note_type, ghl_note_id').eq('id', note_id).single();
+
+            // Delete from GHL first
+            if (oldNote?.ghl_note_id && hl_contact_id) {
+                try {
+                    const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+                    if (ghlApiKey) {
+                        const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
+                        await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes/${oldNote.ghl_note_id}`, {
+                            method: 'DELETE', headers: ghlHeaders
+                        });
+                    }
+                } catch (ghlErr) {
+                    console.error('[GHL Delete Note Error]', ghlErr.message);
+                }
+            }
+
             const { error } = await supabase.from('partner_notes').delete().eq('id', note_id);
             if (error) throw error;
             const pActorDel = await resolveActor();
