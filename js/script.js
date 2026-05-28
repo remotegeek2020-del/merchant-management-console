@@ -204,8 +204,7 @@ async function authorizeUser(user, sessionToken) {
         'card-deployments': isSuperAdmin || parseBool(user.access_deployments),
         'card-returns': isSuperAdmin || parseBool(user.access_returns),
         'card-merchants': isSuperAdmin || parseBool(user.access_merchants),
-        'card-partners': isSuperAdmin || parseBool(user.access_partners),
-        'card-system-reports': isSuperAdmin || parseBool(user.access_sending_reports)
+        'card-partners': isSuperAdmin || parseBool(user.access_partners)
     };
 
     Object.keys(permMap).forEach(id => {

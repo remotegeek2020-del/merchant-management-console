@@ -605,6 +605,40 @@ function renderPreviewTable(data) {
     }
 </script>
 
+<!-- SENDING REPORTS (visible only to users with access_sending_reports or super_admin) -->
+<div id="sending-reports-section" style="display:none; margin-bottom:16px;">
+    <div style="background:white; border-radius:16px; border:1px solid #e2e8f0; box-shadow:0 1px 3px rgba(0,0,0,0.06); overflow:hidden;">
+        <div style="padding:16px 20px; background:#f8fafc; border-bottom:1px solid #e2e8f0; display:flex; align-items:center; gap:12px;">
+            <span class="material-icons" style="color:#0d9488; font-size:20px;">schedule_send</span>
+            <div>
+                <div style="font-size:14px; font-weight:800; color:#001e3c;">Automated Email Reports</div>
+                <div style="font-size:11px; color:#64748b;">Configure recipients and schedules, or send manually now</div>
+            </div>
+        </div>
+
+        <div style="padding:20px;">
+            <!-- Tabs -->
+            <div style="display:flex; border-bottom:1px solid #e2e8f0; margin-bottom:18px;" id="sr-tabs">
+                <button class="sr-tab" data-type="partners_merchants" onclick="srSwitchTab('partners_merchants')"
+                    style="flex:1;padding:11px 10px;border:none;border-bottom:3px solid #0369a1;background:none;font-size:13px;font-weight:700;color:#0369a1;cursor:pointer;font-family:inherit;">
+                    📊 Partners &amp; Merchants
+                </button>
+                <button class="sr-tab" data-type="ops" onclick="srSwitchTab('ops')"
+                    style="flex:1;padding:11px 10px;border:none;border-bottom:3px solid transparent;background:none;font-size:13px;font-weight:700;color:#94a3b8;cursor:pointer;font-family:inherit;">
+                    📦 Inventory / Ops
+                </button>
+            </div>
+
+            <div id="sr-loading" style="text-align:center; padding:32px; color:#94a3b8;">
+                <span class="material-icons" style="font-size:28px; display:block; margin-bottom:8px; animation:spin 1s linear infinite;">autorenew</span>
+                Loading…
+            </div>
+            <div id="sr-panel-partners_merchants" style="display:none;"></div>
+            <div id="sr-panel-ops"                style="display:none;"></div>
+        </div>
+    </div>
+</div>
+
 <style type="text/css" media="print">
     body * { visibility: hidden; }
     #resultsCard, #resultsCard * { visibility: visible; }
@@ -615,5 +649,227 @@ function renderPreviewTable(data) {
 
 <script src="/js/site-config.js"></script>
 <script src="/bug-report.js"></script>
+
+<script>
+// ── SENDING REPORTS ──────────────────────────────────────────────────────────
+(function() {
+    const role = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
+    const hasAccess = localStorage.getItem('pp_access_sending_reports') === 'true' || role === 'super_admin';
+    if (!hasAccess) return;
+
+    document.getElementById('sending-reports-section').style.display = 'block';
+
+    const REPORT_TYPES = {
+        partners_merchants: { label: 'Partners & Merchants', color: '#0369a1', bg: '#eff6ff', icon: '📊' },
+        ops:                { label: 'Inventory / Ops',       color: '#0d9488', bg: '#f0fdfa', icon: '📦' }
+    };
+    let srActiveTab = 'partners_merchants';
+
+    function srAuthHeaders() {
+        const token = localStorage.getItem('pp_session_token') || '';
+        return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token };
+    }
+
+    async function srApi(body) {
+        try {
+            const r = await fetch('/api/scheduled-reports', { method: 'POST', headers: srAuthHeaders(), body: JSON.stringify(body) });
+            return r.json();
+        } catch (e) {
+            return { success: false, message: 'Network error. Please try again.' };
+        }
+    }
+
+    function srRecipientRows(recipients, reportType) {
+        if (!recipients.length) return `<tr><td colspan="2" style="padding:14px;text-align:center;color:#94a3b8;font-size:12px;">No recipients yet</td></tr>`;
+        return recipients.map(r => `
+            <tr>
+                <td style="padding:9px 12px;font-size:13px;">${r.name ? `<strong>${r.name}</strong><br><span style="font-size:11px;color:#64748b;">${r.email}</span>` : r.email}</td>
+                <td style="padding:9px 12px;text-align:right;"><button onclick="srRemove('${r.id}','${reportType}')" style="background:#fee2e2;color:#991b1b;border:none;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;">Remove</button></td>
+            </tr>`).join('');
+    }
+
+    function srLogRows(logs) {
+        if (!logs || !logs.length) return `<tr><td colspan="3" style="padding:12px;text-align:center;color:#94a3b8;font-size:12px;">No sends yet</td></tr>`;
+        return logs.slice(0, 8).map(l => {
+            const ts = fmtDateTime(new Date(l.sent_at));
+            const sc = l.status === 'sent' ? '#16a34a' : l.status === 'partial' ? '#d97706' : '#dc2626';
+            return `<tr>
+                <td style="padding:5px 10px;font-size:11px;color:#64748b;">${ts}</td>
+                <td style="padding:5px 10px;font-size:11px;font-weight:700;color:${sc};text-transform:capitalize;">${l.status}</td>
+                <td style="padding:5px 10px;font-size:11px;color:#334155;">${l.recipient_count} sent · ${l.trigger}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    function srHourOptions(selected) {
+        return Array.from({length: 24}, (_, h) => {
+            const label = h === 0 ? '12:00 AM' : h < 12 ? `${h}:00 AM` : h === 12 ? '12:00 PM' : `${h-12}:00 PM`;
+            return `<option value="${h}" ${h === selected ? 'selected' : ''}>${label} UTC</option>`;
+        }).join('');
+    }
+
+    async function srLoadTab(reportType, scheduleSettings) {
+        const el = document.getElementById(`sr-panel-${reportType}`);
+        const [recipRes, logRes] = await Promise.all([
+            srApi({ action: 'get_recipients', report_type: reportType }),
+            srApi({ action: 'get_log',        report_type: reportType })
+        ]);
+        const rt = REPORT_TYPES[reportType];
+        const recipients = recipRes.data || [];
+        const logs       = logRes.data  || [];
+        const setting    = (scheduleSettings || []).find(s => s.report_type === reportType) || {};
+        const schedule      = setting.schedule || 'daily';
+        const preferredHour = setting.preferred_hour ?? 9;
+
+        el.innerHTML = `
+        <div>
+            <!-- Schedule -->
+            <div style="background:${rt.bg};border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+                <div style="font-size:12px;font-weight:800;color:${rt.color};margin-bottom:8px;">Automatic Schedule</div>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+                    <button id="sr-sched-daily-${reportType}" onclick="srSetSchedule('${reportType}','daily')"
+                        style="padding:6px 14px;border-radius:20px;border:2px solid ${schedule==='daily'?rt.color:'#e2e8f0'};background:${schedule==='daily'?rt.color:'white'};color:${schedule==='daily'?'white':'#64748b'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Daily</button>
+                    <button id="sr-sched-weekly-${reportType}" onclick="srSetSchedule('${reportType}','weekly')"
+                        style="padding:6px 14px;border-radius:20px;border:2px solid ${schedule==='weekly'?rt.color:'#e2e8f0'};background:${schedule==='weekly'?rt.color:'white'};color:${schedule==='weekly'?'white':'#64748b'};font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Weekly (Mon)</button>
+                    <span style="font-size:12px;color:#64748b;font-weight:600;">at</span>
+                    <select id="sr-hour-${reportType}" onchange="srSetTime('${reportType}')"
+                        style="padding:6px 10px;border:2px solid ${rt.color};border-radius:20px;font-size:12px;font-weight:700;color:${rt.color};background:white;cursor:pointer;font-family:inherit;">
+                        ${srHourOptions(preferredHour)}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Manual Send -->
+            <div style="background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+                <div style="font-size:12px;font-weight:800;color:#c2410c;margin-bottom:6px;">Manual Send</div>
+                <div style="font-size:11px;color:#78350f;margin-bottom:10px;">Send immediately to all current recipients for this report type.</div>
+                <button id="sr-manual-btn-${reportType}" onclick="srSendManual('${reportType}')"
+                    style="background:#f97316;color:white;border:none;border-radius:7px;padding:8px 20px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">
+                    ${rt.icon} Send ${rt.label} Now
+                </button>
+            </div>
+
+            <!-- Add Recipient -->
+            <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+                <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">Add Recipient</div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                    <input id="sr-name-${reportType}" placeholder="Name (optional)" style="flex:1;min-width:90px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px;font-family:inherit;">
+                    <input id="sr-email-${reportType}" placeholder="email@example.com" style="flex:2;min-width:150px;padding:7px 10px;border:1px solid #cbd5e1;border-radius:7px;font-size:12px;font-family:inherit;">
+                    <button onclick="srAdd('${reportType}')" style="background:${rt.color};color:white;border:none;border-radius:7px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;">Add</button>
+                </div>
+            </div>
+
+            <!-- Recipients -->
+            <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Recipients (<span id="sr-recip-count-${reportType}">${recipients.length}</span>)</div>
+            <table style="width:100%;border-collapse:collapse;margin-bottom:14px;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                <tbody id="sr-recip-${reportType}">${srRecipientRows(recipients, reportType)}</tbody>
+            </table>
+
+            <!-- Send Log -->
+            <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Recent Sends</div>
+            <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                <thead><tr style="background:#f8fafc;">
+                    <th style="padding:6px 10px;font-size:10px;font-weight:800;color:#94a3b8;text-align:left;text-transform:uppercase;">Time</th>
+                    <th style="padding:6px 10px;font-size:10px;font-weight:800;color:#94a3b8;text-align:left;text-transform:uppercase;">Status</th>
+                    <th style="padding:6px 10px;font-size:10px;font-weight:800;color:#94a3b8;text-align:left;text-transform:uppercase;">Details</th>
+                </tr></thead>
+                <tbody id="sr-log-${reportType}">${srLogRows(logs)}</tbody>
+            </table>
+        </div>`;
+    }
+
+    async function srInit() {
+        const schedRes = await srApi({ action: 'get_schedule' });
+        const scheduleSettings = schedRes.data || [];
+
+        document.getElementById('sr-loading').style.display = 'none';
+
+        await Promise.all(Object.keys(REPORT_TYPES).map(t => srLoadTab(t, scheduleSettings)));
+
+        document.getElementById(`sr-panel-${srActiveTab}`).style.display = 'block';
+    }
+
+    window.srSwitchTab = function(type) {
+        srActiveTab = type;
+        document.querySelectorAll('#sr-tabs .sr-tab').forEach(btn => {
+            const t = btn.dataset.type;
+            const rt = REPORT_TYPES[t];
+            const active = t === type;
+            btn.style.color = active ? rt.color : '#94a3b8';
+            btn.style.borderBottomColor = active ? rt.color : 'transparent';
+        });
+        Object.keys(REPORT_TYPES).forEach(t => {
+            document.getElementById(`sr-panel-${t}`).style.display = t === type ? 'block' : 'none';
+        });
+    };
+
+    window.srAdd = async function(reportType) {
+        const email = document.getElementById(`sr-email-${reportType}`).value.trim();
+        const name  = document.getElementById(`sr-name-${reportType}`).value.trim();
+        if (!email) return;
+        const r = await srApi({ action: 'add_recipient', email, name, report_type: reportType });
+        if (r.success) {
+            document.getElementById(`sr-email-${reportType}`).value = '';
+            document.getElementById(`sr-name-${reportType}`).value = '';
+            const res2 = await srApi({ action: 'get_recipients', report_type: reportType });
+            const recipients = res2.data || [];
+            document.getElementById(`sr-recip-${reportType}`).innerHTML = srRecipientRows(recipients, reportType);
+            document.getElementById(`sr-recip-count-${reportType}`).textContent = recipients.length;
+        } else {
+            Swal.fire({ icon: 'error', title: 'Error', text: r.message || 'Failed to add recipient' });
+        }
+    };
+
+    window.srRemove = async function(id, reportType) {
+        const r = await srApi({ action: 'remove_recipient', id });
+        if (r.success) {
+            const res2 = await srApi({ action: 'get_recipients', report_type: reportType });
+            const recipients = res2.data || [];
+            document.getElementById(`sr-recip-${reportType}`).innerHTML = srRecipientRows(recipients, reportType);
+            document.getElementById(`sr-recip-count-${reportType}`).textContent = recipients.length;
+        }
+    };
+
+    window.srSendManual = async function(reportType) {
+        const rt = REPORT_TYPES[reportType];
+        const btn = document.getElementById(`sr-manual-btn-${reportType}`);
+        const orig = btn.textContent;
+        btn.textContent = 'Sending…';
+        btn.disabled = true;
+        const r = await srApi({ action: 'send_manual', report_type: reportType });
+        btn.textContent = orig;
+        btn.disabled = false;
+        if (r.success) {
+            Swal.fire({ icon: 'success', title: 'Sent!', text: `Delivered to ${r.sent} of ${r.total} recipient(s).`, confirmButtonColor: rt.color, timer: 3000, showConfirmButton: false });
+            const logRes = await srApi({ action: 'get_log', report_type: reportType });
+            document.getElementById(`sr-log-${reportType}`).innerHTML = srLogRows(logRes.data || []);
+        } else {
+            Swal.fire({ icon: 'error', title: 'Send Failed', text: r.message || 'Unknown error' });
+        }
+    };
+
+    window.srSetSchedule = async function(reportType, schedule) {
+        const rt = REPORT_TYPES[reportType];
+        const r = await srApi({ action: 'set_schedule', report_type: reportType, schedule });
+        if (r.success) {
+            ['daily', 'weekly'].forEach(s => {
+                const btn = document.getElementById(`sr-sched-${s}-${reportType}`);
+                if (!btn) return;
+                const active = s === schedule;
+                btn.style.background   = active ? rt.color : 'white';
+                btn.style.color        = active ? 'white' : '#64748b';
+                btn.style.borderColor  = active ? rt.color : '#e2e8f0';
+            });
+        }
+    };
+
+    window.srSetTime = async function(reportType) {
+        const hour = parseInt(document.getElementById(`sr-hour-${reportType}`).value, 10);
+        await srApi({ action: 'set_time', report_type: reportType, preferred_hour: hour });
+    };
+
+    srInit();
+})();
+</script>
 </body>
 </html>
