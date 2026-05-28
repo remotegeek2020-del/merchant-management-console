@@ -34,6 +34,12 @@
             .slds-table { min-width: 500px; }
         }
         @media(max-width:600px){.filter-grid{grid-template-columns:1fr;}}
+        /* ── Page-level Tabs ──────────────────────────────────── */
+        .page-tab-bar { background:white; border-radius:16px; padding:8px; margin-bottom:16px; display:flex; gap:4px; box-shadow:0 1px 3px rgba(0,0,0,0.06); border:1px solid #e2e8f0; }
+        .page-tab-btn { padding:10px 20px; border-radius:10px; border:none; background:transparent; color:#64748b; font-size:13px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif; transition:all 0.15s; display:flex; align-items:center; gap:8px; }
+        .page-tab-btn:hover:not(.active) { background:#f1f5f9; }
+        .page-tab-btn.active { background:#004990; color:white; }
+        .page-tab-btn.active-email { background:#0d9488; color:white; }
         /* ── Cohort Retention Card ─────────────────────────────── */
         .cohort-card { background: white; border-radius: 16px; border: 1px solid #e2e8f0; box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 16px; }
         .cohort-header { padding: 14px 20px; background: #f8fafc; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; }
@@ -110,6 +116,18 @@
         </div>
         <a href="/" class="slds-button slds-button_neutral" style="border-radius:10px;">🏠 HOME</a>
     </div>
+
+    <!-- PAGE TABS -->
+    <div class="page-tab-bar" id="page-tab-bar">
+        <button class="page-tab-btn active" data-tab="csv" onclick="switchPageTab('csv')">
+            <span class="material-icons" style="font-size:16px;">analytics</span>
+            CSV Reports
+        </button>
+        <!-- Automated Emails tab injected by JS for authorized users -->
+    </div>
+
+    <!-- TAB: CSV Reports -->
+    <div id="tab-csv">
 
     <!-- COHORT RETENTION CHART -->
     <div class="cohort-card">
@@ -213,6 +231,13 @@
             </table>
         </div>
     </div>
+
+    </div><!-- end #tab-csv -->
+
+    <!-- TAB: Automated Emails (shown only to authorized users) -->
+    <div id="tab-email" style="display:none;">
+    </div><!-- end #tab-email -->
+
 </div>
 
 <script>
@@ -478,6 +503,16 @@ function renderPreviewTable(data) {
         window.print();
     }
 
+    function switchPageTab(tab) {
+        document.querySelectorAll('.page-tab-btn').forEach(b => {
+            b.classList.remove('active', 'active-email');
+            if (b.dataset.tab === tab) b.classList.add(tab === 'email' ? 'active-email' : 'active');
+        });
+        document.getElementById('tab-csv').style.display   = tab === 'csv'   ? 'block' : 'none';
+        document.getElementById('tab-email').style.display = tab === 'email' ? 'block' : 'none';
+    }
+    window.switchPageTab = switchPageTab;
+
     window.onload = function() {
         toggleFilters();
         loadCohortRetention();
@@ -638,32 +673,6 @@ function renderPreviewTable(data) {
     }
 </script>
 
-<!-- SENDING REPORTS (visible only to users with access_sending_reports or super_admin) -->
-<div id="sending-reports-section" style="display:none; margin-bottom:16px;">
-    <div class="cohort-card">
-        <div class="cohort-header">
-            <div class="cohort-title">
-                <span class="material-icons" style="font-size:18px;color:#0d9488;">schedule_send</span>
-                Automated Email Reports
-            </div>
-            <div style="display:flex; gap:6px;" id="sr-tabs">
-                <button class="sr-tab-btn active-pm" data-type="partners_merchants" onclick="srSwitchTab('partners_merchants')">
-                    📊 Partners &amp; Merchants
-                </button>
-                <button class="sr-tab-btn" data-type="ops" onclick="srSwitchTab('ops')">
-                    📦 Inventory / Ops
-                </button>
-            </div>
-        </div>
-
-        <div id="sr-loading" style="text-align:center; padding:40px; color:#94a3b8;">
-            <span class="material-icons" style="font-size:28px; display:block; margin-bottom:8px; animation:spin 1s linear infinite;">autorenew</span>
-            Loading…
-        </div>
-        <div id="sr-panel-partners_merchants" style="display:none;"></div>
-        <div id="sr-panel-ops"                style="display:none;"></div>
-    </div>
-</div>
 
 <style type="text/css" media="print">
     body * { visibility: hidden; }
@@ -683,7 +692,39 @@ function renderPreviewTable(data) {
     const hasAccess = localStorage.getItem('pp_access_sending_reports') === 'true' || role === 'super_admin';
     if (!hasAccess) return;
 
-    document.getElementById('sending-reports-section').style.display = 'block';
+    // Inject the tab button
+    const tabBar = document.getElementById('page-tab-bar');
+    const emailBtn = document.createElement('button');
+    emailBtn.className = 'page-tab-btn';
+    emailBtn.dataset.tab = 'email';
+    emailBtn.innerHTML = '<span class="material-icons" style="font-size:16px;">schedule_send</span> Automated Emails';
+    emailBtn.onclick = () => switchPageTab('email');
+    tabBar.appendChild(emailBtn);
+
+    // Build the email panel inside #tab-email
+    document.getElementById('tab-email').innerHTML = `
+        <div class="cohort-card">
+            <div class="cohort-header">
+                <div class="cohort-title">
+                    <span class="material-icons" style="font-size:18px;color:#0d9488;">schedule_send</span>
+                    Automated Email Reports
+                </div>
+                <div style="display:flex; gap:6px;" id="sr-tabs">
+                    <button class="sr-tab-btn active-pm" data-type="partners_merchants" onclick="srSwitchTab('partners_merchants')">
+                        📊 Partners &amp; Merchants
+                    </button>
+                    <button class="sr-tab-btn" data-type="ops" onclick="srSwitchTab('ops')">
+                        📦 Inventory / Ops
+                    </button>
+                </div>
+            </div>
+            <div id="sr-loading" style="text-align:center; padding:40px; color:#94a3b8;">
+                <span class="material-icons" style="font-size:28px; display:block; margin-bottom:8px; animation:spin 1s linear infinite;">autorenew</span>
+                Loading…
+            </div>
+            <div id="sr-panel-partners_merchants" style="display:none;"></div>
+            <div id="sr-panel-ops"                style="display:none;"></div>
+        </div>`;
 
     const REPORT_TYPES = {
         partners_merchants: { label: 'Partners & Merchants', color: '#0369a1', bg: '#eff6ff', icon: '📊', pillClass: 'active-pm',  tabClass: 'active-pm'  },
