@@ -93,7 +93,7 @@ if (action === 'list') {
         if (bulkRetIds.length > 0)  conditions.push(`id.in.(${bulkRetIds.join(',')})`);
         q = q.or(conditions.join(','));
     }
-    if (statusFilter) q = q.ilike('status', statusFilter);
+    if (statusFilter) q = q.eq('status', statusFilter);
     if (conditionFilter) q = q.ilike('condition', `%${conditionFilter}%`);
     if (reasonFilter) q = q.eq('return_reason', reasonFilter);
     if (dateFrom) q = q.gte('return_date_initiated', dateFrom);

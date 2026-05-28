@@ -1051,10 +1051,10 @@ async function processReturn() {
                     const alreadyTagged = new Set(Array.from((chips||{querySelectorAll:()=>[]}).querySelectorAll('[data-uid]')).map(c => c.dataset.uid));
                     list.innerHTML = _depStaffUsers.map(u => `
                         <label style="display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;">
-                            <input type="checkbox" value="${u.userid}" data-name="${u.display_name.replace(/"/g,'&quot;')}"
+                            <input type="checkbox" value="${u.userid}" data-name="${(u.display_name || '').replace(/"/g,'&quot;')}"
                                 ${alreadyTagged.has(u.userid) ? 'checked' : ''}
                                 style="width:15px;height:15px;accent-color:#5b21b6;flex-shrink:0;cursor:pointer;">
-                            <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${u.display_name.charAt(0).toUpperCase()}</span>
+                            <span style="width:28px;height:28px;border-radius:50%;background:#004990;color:white;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0;">${(u.display_name || '?').charAt(0).toUpperCase()}</span>
                             <span style="font-weight:600;color:#002d5a;font-size:13px;">${u.display_name}</span>
                         </label>`).join('');
                     panel.style.display = 'block';
@@ -1439,9 +1439,9 @@ async function processReturn() {
             });
             const result = await res.json();
             list.innerHTML = (result.merchants || []).map(m => `
-                <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${m.dba_name.replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
+                <div class="suggestion-item" onclick="selectMerchant('${m.id}', '${(m.dba_name || '').replace(/'/g, "\\'")}')" style="display:flex; justify-content:space-between; align-items:center;">
                     <div>
-                        <strong style="color:#004990;">${m.dba_name}</strong>
+                        <strong style="color:#004990;">${m.dba_name || ''}</strong>
                         <div style="font-size:10px; color:#64748b;">MID: ${m.merchant_id || 'N/A'}</div>
                     </div>
                     <span class="material-icons" style="font-size:16px; color:#cbd5e1;">add_circle_outline</span>
@@ -1488,7 +1488,7 @@ async function processReturn() {
                         <strong>${e.serial_number}</strong>
                         <div style="font-size:10px; color:#64748b;">${e.terminal_type}</div>
                     </div>
-                    <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">${e.status.toUpperCase()}</span>
+                    <span style="font-size:9px; background:#f0fdf4; color:#166534; padding:2px 6px; border-radius:4px; font-weight:800; border:1px solid #bbf7d0;">${(e.status || '').toUpperCase()}</span>
                 </div>
             `).join('') + addNewRow;
             list.style.display = 'block';

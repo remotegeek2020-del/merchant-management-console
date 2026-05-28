@@ -170,10 +170,15 @@ let retCurrentPage = 0;
 let retTotalCount = 0;
 let retSearchTimeout = null;
 let _lastRetSearchLogged = '';
+
+function authHeaders(extra = {}) {
+    const token = localStorage.getItem('pp_session_token') || '';
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...extra };
+}
 function _logSearch(context, query, category) {
     if (!query || query.length < 2) return;
     const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
-    fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    fetch('/api/logs', { method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
     }).catch(() => {});
 }
@@ -232,7 +237,7 @@ async function closeLinkedTicket(ticketId, btnEl) {
     if (!confirm.isConfirmed) return;
     Swal.fire({ title: 'Closing...', didOpen: () => Swal.showLoading() });
     const res = await fetch('/api/tickets', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status: 'closed', staff_name: currentStaffName })
     });
     const result = await res.json();
@@ -249,7 +254,7 @@ async function logAuditAction(action, details, opts = {}) {
     try {
         await fetch('/api/logs', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({
                 email: userEmail || 'Unknown',
                 action,
@@ -277,7 +282,7 @@ function conditionBadge(condition) {
 async function viewHistory(id, sn) {
     Swal.fire({ title: `History: ${sn}`, html: '<div style="text-align:center; padding:20px;"><div class="slds-spinner slds-spinner_medium slds-spinner_brand"><div class="slds-spinner__dot-a"></div><div class="slds-spinner__dot-b"></div></div></div>', showConfirmButton: false, showCloseButton: true });
     const res = await fetch('/api/returns', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: authHeaders(),
         body: JSON.stringify({ action: 'getHistory', equipment_id: id })
     });
     const result = await res.json();
@@ -344,7 +349,7 @@ async function fetchReturns() {
     tbody.innerHTML = `<tr><td colspan="9"><div class="pp-empty"><div class="pp-spinner"></div></div></td></tr>`;
     try {
         const res = await fetch('/api/returns', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: authHeaders(),
             body: JSON.stringify({
                 action: 'list',
                 query: document.getElementById('retSearch').value,
@@ -476,7 +481,7 @@ async function deleteReturn(returnUuid, returnId, dbaName) {
     try {
         const res = await fetch('/api/returns', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ action: 'delete', return_uuid: returnUuid })
         });
         const result = await res.json();
@@ -535,7 +540,7 @@ async function finalizeRMA(id, equipment_id) {
     Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
         const res = await fetch('/api/returns', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: authHeaders(),
             body: JSON.stringify({ action: 'complete_return', payload: { id, equipment_id, condition: finalCondition, destination: finalDestination, equipment_received_date: receivedDate } })
         });
         const r = await res.json();
