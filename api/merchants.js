@@ -512,33 +512,39 @@ if (action === 'get_merchant_equipment') {
         .order('serial_number');
     if (e1) throw e1;
 
-    // Find active deployment display IDs for these units
+    // Find active deployment display IDs and deployment dates for these units
     const equipIds = (current || []).map(e => e.id);
     const equipToDepId = {};
+    const equipToDepDate = {};
     if (equipIds.length > 0) {
         // Single-unit deployments
         const { data: singleDeps } = await supabase
             .from('deployments')
-            .select('deployment_id, equipment_id')
+            .select('deployment_id, equipment_id, target_deployment_date')
             .in('equipment_id', equipIds)
             .neq('status', 'Closed');
-        (singleDeps || []).forEach(d => { equipToDepId[d.equipment_id] = d.deployment_id; });
+        (singleDeps || []).forEach(d => {
+            equipToDepId[d.equipment_id] = d.deployment_id;
+            equipToDepDate[d.equipment_id] = d.target_deployment_date || null;
+        });
 
         // Bulk deployments via deployment_items
         const { data: bulkItems } = await supabase
             .from('deployment_items')
-            .select('equipment_id, dep:deployment_id(deployment_id, status)')
+            .select('equipment_id, dep:deployment_id(deployment_id, status, target_deployment_date)')
             .in('equipment_id', equipIds);
         (bulkItems || []).forEach(item => {
             if (item.dep?.status !== 'Closed' && !equipToDepId[item.equipment_id]) {
                 equipToDepId[item.equipment_id] = item.dep?.deployment_id;
+                equipToDepDate[item.equipment_id] = item.dep?.target_deployment_date || null;
             }
         });
     }
 
     const currentWithDep = (current || []).map(e => ({
         ...e,
-        deployment_display_id: equipToDepId[e.id] || null
+        deployment_display_id: equipToDepId[e.id] || null,
+        deployment_date: equipToDepDate[e.id] || null
     }));
 
     // Closed deployments for this merchant (past equipment)
