@@ -176,7 +176,7 @@
                     <span class="material-icons" style="color:var(--pp-accent); font-size:18px;">local_shipping</span>
                     Recent Deployments
                 </div>
-                <a href="deployments-dashboard.html" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">View All</a>
+                <a href="/deployments-dashboard" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">View All</a>
             </div>
             <div class="panel-body" id="dep-list">
                 <div class="empty-state"><div class="skeleton" style="height:14px; width:180px; margin:0 auto;"></div></div>
@@ -199,7 +199,7 @@
                     <button class="filter-chip" data-tpriority="urgent" onclick="setTicketPriorityFilter(this,'urgent')">Urgent Only</button>
                     <button class="filter-chip" data-tpriority="all" onclick="setTicketPriorityFilter(this,'all')">All Open</button>
                 </div>
-                <a href="tickets-dashboard.html" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none; white-space:nowrap;">View All →</a>
+                <a href="/tickets-dashboard" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none; white-space:nowrap;">View All →</a>
             </div>
         </div>
         <div class="panel-body" id="priority-tickets-list">
@@ -216,7 +216,7 @@
                 <span class="material-icons" style="color:var(--text-muted); font-size:18px;">history</span>
                 Recent Activity
             </div>
-            <a href="activity-logs.html" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">Full Log</a>
+            <a href="/activity-logs" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">Full Log</a>
         </div>
         <div class="panel-body" id="activity-log">
             <div class="empty-state"><div class="skeleton" style="height:14px; width:220px; margin:0 auto;"></div></div>
@@ -313,13 +313,13 @@ function renderKPIs(kpis) {
             <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:20px;">local_shipping</span></div>
             <div class="kpi-val">${kpis.active_deployments}</div>
             <div class="kpi-label">Active Deployments</div>
-            <div class="kpi-sub"><a href="deployments-dashboard.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View tickets →</a></div>
+            <div class="kpi-sub"><a href="/deployments-dashboard" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View tickets →</a></div>
         </div>
         <div class="kpi-card">
             <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">assignment_return</span></div>
             <div class="kpi-val">${kpis.open_rmas}</div>
             <div class="kpi-label">Open RMAs</div>
-            <div class="kpi-sub"><a href="returns-dashboard.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View returns →</a></div>
+            <div class="kpi-sub"><a href="/returns-dashboard" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View returns →</a></div>
         </div>`;
 
     document.getElementById('kpi-grid-2').innerHTML = `
@@ -333,7 +333,7 @@ function renderKPIs(kpis) {
             <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">inventory_2</span></div>
             <div class="kpi-val">${kpis.equipment.stocked}</div>
             <div class="kpi-label">Units In Stock</div>
-            <div class="kpi-sub"><a href="equipments-dashboard.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View inventory →</a></div>
+            <div class="kpi-sub"><a href="/equipments-dashboard" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View inventory →</a></div>
         </div>
         <div class="kpi-card">
             <div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">devices</span></div>
@@ -345,7 +345,7 @@ function renderKPIs(kpis) {
             <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">build</span></div>
             <div class="kpi-val">${kpis.equipment.repair}</div>
             <div class="kpi-label">In Repair</div>
-            <div class="kpi-sub"><a href="repair-queue.html" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View queue →</a></div>
+            <div class="kpi-sub"><a href="/repair-queue" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View queue →</a></div>
         </div>`;
 }
 
@@ -442,14 +442,14 @@ async function openMerchantDetail(merchantId) {
                 <div class="detail-row"><span class="detail-key">Status</span><span class="detail-val">${m.account_status || '—'}</span></div>
                 <div class="detail-row"><span class="detail-key">Location</span><span class="detail-val">${[m.merchant_city, m.merchant_state].filter(Boolean).join(', ') || '—'}</span></div>
                 <div class="detail-row"><span class="detail-key">Phone</span><span class="detail-val">${m.merchant_phone || '—'}</span></div>
-                <div class="detail-row"><span class="detail-key">Enrolled</span><span class="detail-val">${m.enrollment_date || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Enrolled</span><span class="detail-val">${m.enrollment_date ? fmtDate(m.enrollment_date) : '—'}</span></div>
             </div>
             <div class="detail-section">
                 <div class="detail-label">Volume Performance</div>
                 <div class="detail-row"><span class="detail-key">30-Day Volume</span><span class="detail-val">${fmt(m.volume_30_day)}</span></div>
                 <div class="detail-row"><span class="detail-key">90-Day Monthly Avg</span><span class="detail-val">${fmt(baseline)}</span></div>
                 <div class="detail-row"><span class="detail-key">Drop</span><span class="detail-val" style="color:var(--red-text); font-weight:800;">-${drop}%</span></div>
-                <div class="detail-row"><span class="detail-key">Last Batch</span><span class="detail-val">${m.last_batch_date || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Last Batch</span><span class="detail-val">${m.last_batch_date ? fmtDate(m.last_batch_date) : '—'}</span></div>
             </div>
             <div class="detail-section">
                 <div class="detail-label">Partner / Agent</div>
@@ -600,7 +600,7 @@ function renderPriorityTickets(data) {
 
     el.innerHTML = `<div style="display:grid; grid-template-columns:repeat(2,1fr);">` +
         data.map(t => `
-        <div style="display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border); font-size:13px; cursor:pointer; transition:background 0.12s;" onclick="window.location='tickets-dashboard.html'" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+        <div style="display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border); font-size:13px; cursor:pointer; transition:background 0.12s;" onclick="window.location='/tickets-dashboard'" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
             <div style="flex-shrink:0;">
                 <span style="display:inline-block; padding:2px 8px; border-radius:99px; font-size:9px; font-weight:800; text-transform:uppercase; background:${priorityBg(t.priority)}; color:${priorityColor(t.priority)};">${t.priority}</span>
             </div>
@@ -753,8 +753,9 @@ async function loadAll() {
 
 // Only admins and super_admins can see Staff Access Control and Activity Log
 const ppRole = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
-const canManageStaff = ppRole === 'admin' || ppRole === 'super_admin' || ppRole === 'operations_admin';
-const isAdminRole = ppRole === 'admin' || ppRole === 'super_admin' || ppRole === 'operations_admin';
+const hasAdminDashAccess = localStorage.getItem('pp_access_admin_dashboard') === 'true';
+const canManageStaff = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'super_admin';
+const isAdminRole = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'super_admin';
 const staffWidget = document.querySelector('[data-widget="staff-access"]');
 if (staffWidget) staffWidget.style.display = canManageStaff ? '' : 'none';
 const activityWidget = document.querySelector('[data-widget="activity-log"]');

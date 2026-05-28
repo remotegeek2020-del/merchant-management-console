@@ -137,7 +137,8 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_deployments', parseBool(user.access_deployments) ? 'true' : 'false');
         localStorage.setItem('pp_access_returns',     parseBool(user.access_returns)     ? 'true' : 'false');
         localStorage.setItem('pp_access_merchants',   parseBool(user.access_merchants)   ? 'true' : 'false');
-        localStorage.setItem('pp_access_partners',    parseBool(user.access_partners)    ? 'true' : 'false');
+        localStorage.setItem('pp_access_partners',          parseBool(user.access_partners)          ? 'true' : 'false');
+        localStorage.setItem('pp_access_admin_dashboard',   parseBool(user.access_admin_dashboard)   ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
 
