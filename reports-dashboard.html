@@ -972,8 +972,24 @@ function initSendingReportsTab() {
 
     srInit();
 }
-// Run after auth completes so localStorage has the latest access flags
-window.addEventListener('pp-authorized', initSendingReportsTab, { once: true });
+
+// Validate session and get fresh access flags from server before deciding to show tab
+(async function() {
+    try {
+        const token = localStorage.getItem('pp_session_token') || '';
+        const r = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'validate' })
+        });
+        const data = await r.json();
+        if (data.success && data.user) {
+            localStorage.setItem('pp_access_sending_reports', data.user.access_sending_reports ? 'true' : 'false');
+            localStorage.setItem('pp_role', data.user.role || '');
+        }
+    } catch (e) {}
+    initSendingReportsTab();
+})();
 </script>
 </body>
 </html>
