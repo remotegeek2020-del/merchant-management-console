@@ -191,42 +191,60 @@ export default async function handler(req, res) {
             const { rows } = body; // array of parsed CSV row objects
             if (!rows?.length) return res.status(400).json({ success: false, message: 'No rows provided' });
 
+            // Filter: must have both serial_number and mid
+            const validRows = rows.filter(r => r.serial_number?.trim() && r.mid?.trim());
+
+            // Deduplicate by serial: keep the row with the latest last_modified_date
+            const bySerial = new Map();
+            for (const r of validRows) {
+                const key = r.serial_number.trim();
+                const existing = bySerial.get(key);
+                if (!existing || (r.last_modified_date || '') > (existing.last_modified_date || '')) {
+                    bySerial.set(key, r);
+                }
+            }
+            const dedupedRows = [...bySerial.values()];
+
             // Build MID → merchant_id lookup
-            const mids = [...new Set(rows.map(r => r.mid).filter(Boolean))];
+            const mids = [...new Set(dedupedRows.map(r => r.mid).filter(Boolean))];
             const { data: merchants } = await supabase.from('merchants')
                 .select('id, merchant_id').in('merchant_id', mids);
             const midMap = {};
             (merchants || []).forEach(m => { midMap[m.merchant_id] = m.id; });
 
-            // Check which serials already exist (skip duplicates)
-            const serials = rows.map(r => r.serial_number).filter(Boolean);
-            const { data: existing } = await supabase.from('legacy_deployments')
-                .select('serial_number').in('serial_number', serials);
-            const existingSerials = new Set((existing || []).map(e => e.serial_number));
+            // Check serials already in legacy_deployments OR in equipments
+            const serials = dedupedRows.map(r => r.serial_number.trim());
+            const [{ data: existingLegacy }, { data: existingEquip }] = await Promise.all([
+                supabase.from('legacy_deployments').select('serial_number').in('serial_number', serials),
+                supabase.from('equipments').select('serial_number').in('serial_number', serials)
+            ]);
+            const existingSerials = new Set([
+                ...(existingLegacy || []).map(e => e.serial_number),
+                ...(existingEquip  || []).map(e => e.serial_number),
+            ]);
 
             const toInsert = [];
             const skipped = [];
 
-            for (const r of rows) {
-                if (!r.serial_number) { skipped.push({ row: r, reason: 'Missing serial number' }); continue; }
-                if (existingSerials.has(r.serial_number)) { skipped.push({ row: r, reason: 'Duplicate serial' }); continue; }
+            for (const r of dedupedRows) {
+                const serial = r.serial_number.trim();
+                if (existingSerials.has(serial)) { skipped.push({ serial, reason: 'Already exists in legacy or inventory' }); continue; }
 
-                // Determine terminal type
                 let terminal_type = r.terminal_type?.trim() || null;
                 let terminal_type_source = 'unknown';
                 if (terminal_type) {
                     terminal_type_source = 'csv';
                 } else {
-                    const est = estimateTerminalType(r.serial_number);
+                    const est = estimateTerminalType(serial);
                     if (est) { terminal_type = est; terminal_type_source = 'estimated'; }
                 }
 
                 toInsert.push({
                     deployment_date: r.deployment_date || null,
                     tid: r.tid || null,
-                    serial_number: r.serial_number.trim(),
-                    mid: r.mid || null,
-                    merchant_id: r.mid ? (midMap[r.mid] || null) : null,
+                    serial_number: serial,
+                    mid: r.mid.trim(),
+                    merchant_id: midMap[r.mid.trim()] || null,
                     tracking_number: r.tracking_number || null,
                     notes: r.notes || null,
                     purchase_type: r.purchase_type || null,
@@ -244,7 +262,13 @@ export default async function handler(req, res) {
                 inserted = toInsert.length;
             }
 
-            return res.status(200).json({ success: true, inserted, skipped: skipped.length, skipped_details: skipped });
+            return res.status(200).json({
+                success: true, inserted,
+                skipped: skipped.length,
+                filtered_no_serial_mid: rows.length - validRows.length,
+                deduped: validRows.length - dedupedRows.length,
+                skipped_details: skipped
+            });
         }
 
         // ── PREVIEW (estimate without inserting) ──────────────────────────────
@@ -252,31 +276,58 @@ export default async function handler(req, res) {
             const { rows } = body;
             if (!rows?.length) return res.status(400).json({ success: false, message: 'No rows provided' });
 
-            const mids = [...new Set(rows.map(r => r.mid).filter(Boolean))];
+            // Filter: must have both serial_number and mid
+            const validRows = rows.filter(r => r.serial_number?.trim() && r.mid?.trim());
+
+            // Deduplicate by serial: keep latest last_modified_date
+            const bySerial = new Map();
+            for (const r of validRows) {
+                const key = r.serial_number.trim();
+                const existing = bySerial.get(key);
+                if (!existing || (r.last_modified_date || '') > (existing.last_modified_date || '')) {
+                    bySerial.set(key, r);
+                }
+            }
+            const dedupedRows = [...bySerial.values()];
+
+            const mids = [...new Set(dedupedRows.map(r => r.mid).filter(Boolean))];
             const { data: merchants } = await supabase.from('merchants')
                 .select('id, merchant_id, dba_name').in('merchant_id', mids);
             const midMap = {};
             (merchants || []).forEach(m => { midMap[m.merchant_id] = { id: m.id, name: m.dba_name }; });
 
-            const serials = rows.map(r => r.serial_number).filter(Boolean);
-            const { data: existing } = await supabase.from('legacy_deployments')
-                .select('serial_number').in('serial_number', serials);
-            const existingSerials = new Set((existing || []).map(e => e.serial_number));
+            const serials = dedupedRows.map(r => r.serial_number.trim());
+            const [{ data: existingLegacy }, { data: existingEquip }] = await Promise.all([
+                supabase.from('legacy_deployments').select('serial_number').in('serial_number', serials),
+                supabase.from('equipments').select('serial_number, status').in('serial_number', serials)
+            ]);
+            const legacySerials = new Set((existingLegacy || []).map(e => e.serial_number));
+            const equipMap = {};
+            (existingEquip || []).forEach(e => { equipMap[e.serial_number] = e.status; });
 
-            const preview = rows.map(r => {
-                const est = estimateTerminalType(r.serial_number);
+            const preview = dedupedRows.map(r => {
+                const serial = r.serial_number.trim();
                 const csvType = r.terminal_type?.trim() || null;
+                const est = estimateTerminalType(serial);
+                const inEquip = equipMap[serial];
                 return {
                     ...r,
-                    merchant_name: midMap[r.mid]?.name || null,
-                    merchant_matched: !!midMap[r.mid],
+                    serial_number: serial,
+                    merchant_name: midMap[r.mid?.trim()]?.name || null,
+                    merchant_matched: !!midMap[r.mid?.trim()],
                     terminal_type: csvType || est || null,
                     terminal_type_source: csvType ? 'csv' : (est ? 'estimated' : 'unknown'),
-                    is_duplicate: existingSerials.has(r.serial_number)
+                    is_duplicate_legacy: legacySerials.has(serial),
+                    is_in_inventory: !!inEquip,
+                    inventory_status: inEquip || null,
                 };
             });
 
-            return res.status(200).json({ success: true, preview });
+            return res.status(200).json({
+                success: true, preview,
+                filtered_no_serial_mid: rows.length - validRows.length,
+                deduped: validRows.length - dedupedRows.length
+            });
         }
 
         // ── UPDATE (manual correction of terminal type / merchant) ────────────
