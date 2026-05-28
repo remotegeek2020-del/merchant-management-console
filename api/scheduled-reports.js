@@ -406,6 +406,13 @@ export default async function handler(req, res) {
     if (!session) return sessionErrorResponse(res);
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
+    // Verify caller has sending_reports access (or is super_admin) — never trust client
+    const { data: caller } = await supabase.from('app_users')
+        .select('role, access_sending_reports').eq('userid', session.userid).maybeSingle();
+    if (caller?.role !== 'super_admin' && !caller?.access_sending_reports) {
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+
     res.setHeader('Content-Type', 'application/json');
     const { action, email, name, id, report_type = 'partners_merchants', schedule } = req.body;
 

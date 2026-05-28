@@ -139,6 +139,7 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_merchants',   parseBool(user.access_merchants)   ? 'true' : 'false');
         localStorage.setItem('pp_access_partners',          parseBool(user.access_partners)          ? 'true' : 'false');
         localStorage.setItem('pp_access_admin_dashboard',   parseBool(user.access_admin_dashboard)   ? 'true' : 'false');
+        localStorage.setItem('pp_access_sending_reports',   parseBool(user.access_sending_reports)   ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
     } catch (e) { console.error("Storage Error:", e); }
 
@@ -203,7 +204,8 @@ async function authorizeUser(user, sessionToken) {
         'card-deployments': isSuperAdmin || parseBool(user.access_deployments),
         'card-returns': isSuperAdmin || parseBool(user.access_returns),
         'card-merchants': isSuperAdmin || parseBool(user.access_merchants),
-        'card-partners': isSuperAdmin || parseBool(user.access_partners)
+        'card-partners': isSuperAdmin || parseBool(user.access_partners),
+        'card-system-reports': isSuperAdmin || parseBool(user.access_sending_reports)
     };
 
     Object.keys(permMap).forEach(id => {
