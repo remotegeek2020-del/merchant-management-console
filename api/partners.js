@@ -545,41 +545,68 @@ if (action === 'complete_onboarding') {
         if (action === 'get_notes') {
             const { person_id, hl_contact_id } = body;
 
-            // Fetch fresh GHL notes and upsert them locally so the list is always in sync
+            // Pull fresh GHL notes and mirror them locally
             if (hl_contact_id) {
                 try {
-                    const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
-                    const ghlApiKey     = (await getConfigValue('GHL_API_KEY'))     || process.env.GHL_API_KEY;
+                    const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
                     if (ghlApiKey) {
                         const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
                         const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`, { headers: ghlHeaders });
                         if (ghlRes.ok) {
                             const ghlData = await ghlRes.json();
-                            const ghlNotes = ghlData.notes || [];
+                            // GHL may return notes under 'notes' or 'data'
+                            const ghlNotes = ghlData.notes || ghlData.data || [];
+
+                            // Load existing local GHL-sourced notes for diffing
+                            const { data: existingGhlNotes } = await supabase
+                                .from('partner_notes')
+                                .select('id, ghl_note_id, title, body')
+                                .eq('person_id', person_id)
+                                .eq('source', 'ghl');
+                            const existingMap = new Map((existingGhlNotes || []).map(n => [n.ghl_note_id, n]));
+                            const liveIds = new Set();
+
                             for (const gn of ghlNotes) {
-                                await supabase.from('partner_notes').upsert({
-                                    person_id,
-                                    ghl_note_id: gn.id,
-                                    source: 'ghl',
+                                // Handle both 'id' and '_id' field names from GHL
+                                const gnId = gn.id || gn._id;
+                                if (!gnId) continue;
+                                liveIds.add(gnId);
+
+                                const noteData = {
                                     title: gn.title || null,
                                     body: gn.body || '',
-                                    note_type: 'general',
                                     author_name: gn.user || 'GoHighLevel',
-                                    is_pinned: false,
-                                    created_at: gn.dateAdded || new Date().toISOString(),
                                     updated_at: gn.dateAdded || new Date().toISOString()
-                                }, { onConflict: 'ghl_note_id', ignoreDuplicates: false });
+                                };
+
+                                const existing = existingMap.get(gnId);
+                                if (existing) {
+                                    // Update only if content changed
+                                    if (existing.body !== noteData.body || (existing.title || null) !== (noteData.title || null)) {
+                                        await supabase.from('partner_notes').update(noteData).eq('id', existing.id);
+                                    }
+                                } else {
+                                    // Insert new note from GHL
+                                    await supabase.from('partner_notes').insert({
+                                        person_id,
+                                        ghl_note_id: gnId,
+                                        source: 'ghl',
+                                        note_type: 'general',
+                                        is_pinned: false,
+                                        created_at: gn.dateAdded || new Date().toISOString(),
+                                        ...noteData
+                                    });
+                                }
                             }
-                            // Remove local GHL-sourced notes that no longer exist in GHL
-                            if (ghlNotes.length === 0) {
-                                await supabase.from('partner_notes').delete()
-                                    .eq('person_id', person_id).eq('source', 'ghl');
-                            } else {
-                                const liveIds = ghlNotes.map(n => n.id);
-                                await supabase.from('partner_notes').delete()
-                                    .eq('person_id', person_id).eq('source', 'ghl')
-                                    .not('ghl_note_id', 'in', `(${liveIds.map(id => `"${id}"`).join(',')})`);
+
+                            // Delete local GHL notes that were removed in GHL
+                            for (const [gnId, existing] of existingMap) {
+                                if (!liveIds.has(gnId)) {
+                                    await supabase.from('partner_notes').delete().eq('id', existing.id);
+                                }
                             }
+                        } else {
+                            console.error('[GHL Notes Sync] HTTP', ghlRes.status, await ghlRes.text());
                         }
                     }
                 } catch (ghlErr) {
