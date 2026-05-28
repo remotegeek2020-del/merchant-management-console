@@ -2352,6 +2352,22 @@ async function executeBulk(validData) {
 let legPage = 1;
 const LEG_LIMIT = 50;
 
+let _legTerminalTypes = null;
+async function loadLegTerminalTypes() {
+    if (_legTerminalTypes) return _legTerminalTypes;
+    try {
+        const token = localStorage.getItem('pp_session_token') || '';
+        const res = await fetch('/api/legacy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'get_terminal_types' })
+        });
+        const data = await res.json();
+        _legTerminalTypes = data.types || [];
+    } catch (e) { _legTerminalTypes = []; }
+    return _legTerminalTypes;
+}
+
 function setDepView(view) {
     const isCurrent = view === 'current';
     document.getElementById('dep-section-current').style.display = isCurrent ? '' : 'none';
@@ -2360,7 +2376,10 @@ function setDepView(view) {
     document.getElementById('dep-view-current').style.color      = isCurrent ? 'white'   : '#004990';
     document.getElementById('dep-view-current').style.border     = isCurrent ? 'none' : '1px solid #004990';
     document.getElementById('dep-view-legacy').style.background  = isCurrent ? 'white' : '#fef3c7';
-    if (!isCurrent && document.getElementById('legacyTableBody').innerHTML === '') fetchLegacy();
+    if (!isCurrent) {
+        loadLegTerminalTypes();
+        if (document.getElementById('legacyTableBody').innerHTML === '') fetchLegacy();
+    }
 }
 
 async function fetchLegacy() {
@@ -2403,14 +2422,9 @@ async function renderLegacy() {
                 <td style="font-family:monospace;font-size:12px;">${r.serial_number}</td>
                 <td style="font-size:12px;color:#64748b;">${r.tid || '—'}</td>
                 <td style="font-size:12px;">${merchantName}</td>
-                <td style="font-size:12px;" id="legtype-${r.id}">
-                    <span class="legtype-display">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}</span>
-                    <span class="legtype-edit" style="display:none;">
-                        <input id="legtype-input-${r.id}" value="${r.terminal_type||''}" style="width:110px;padding:2px 5px;border:1px solid #cbd5e1;border-radius:4px;font-size:12px;">
-                        <button onclick="legSaveType('${r.id}')" style="padding:2px 6px;background:#004990;color:white;border:none;border-radius:4px;cursor:pointer;font-size:11px;margin-left:2px;">Save</button>
-                        <button onclick="legCancelType('${r.id}')" style="padding:2px 6px;background:#e2e8f0;color:#374151;border:none;border-radius:4px;cursor:pointer;font-size:11px;">✕</button>
-                    </span>
-                    <button onclick="legEditType('${r.id}')" class="legtype-edit-btn" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0 2px;">✎</button>
+                <td style="font-size:12px;">
+                    ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}
+                    <button onclick="legEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,'\\\'')}')" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>
                 </td>
                 <td style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
                 <td style="font-size:12px;color:#64748b;">${r.purchase_type || '—'}</td>
@@ -2436,31 +2450,29 @@ async function renderLegacy() {
     }
 }
 
-function legEditType(id) {
-    const cell = document.getElementById('legtype-' + id);
-    if (!cell) return;
-    cell.querySelector('.legtype-display').style.display = 'none';
-    cell.querySelector('.legtype-edit').style.display = 'inline';
-    cell.querySelector('.legtype-edit-btn').style.display = 'none';
-    cell.querySelector('#legtype-input-' + id)?.focus();
-}
-function legCancelType(id) {
-    const cell = document.getElementById('legtype-' + id);
-    if (!cell) return;
-    cell.querySelector('.legtype-display').style.display = '';
-    cell.querySelector('.legtype-edit').style.display = 'none';
-    cell.querySelector('.legtype-edit-btn').style.display = '';
-}
-async function legSaveType(id) {
-    const input = document.getElementById('legtype-input-' + id);
-    if (!input) return;
-    const newType = input.value.trim();
+async function legEditType(id, currentType) {
+    const types = await loadLegTerminalTypes();
+    const options = types.map(t =>
+        `<option value="${t}"${t === currentType ? ' selected' : ''}>${t}</option>`
+    ).join('');
+    const { value: newType, isConfirmed } = await Swal.fire({
+        title: 'Edit Terminal Type',
+        html: `<select id="swal-legtype" class="swal2-select" style="width:100%;margin-top:8px;">
+                 <option value="">— Unknown —</option>
+                 ${options}
+               </select>`,
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        confirmButtonColor: '#004990',
+        preConfirm: () => document.getElementById('swal-legtype').value
+    });
+    if (!isConfirmed) return;
     const token = localStorage.getItem('pp_session_token') || '';
     try {
         const res = await fetch('/api/legacy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType })
+            body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType || null })
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.message);

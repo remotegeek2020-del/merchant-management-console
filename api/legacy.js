@@ -330,6 +330,14 @@ export default async function handler(req, res) {
             });
         }
 
+        // ── GET TERMINAL TYPES ────────────────────────────────────────────────
+        if (action === 'get_terminal_types') {
+            const { data, error } = await supabase.from('terminal_types')
+                .select('name').eq('is_active', true).order('sort_order');
+            if (error) throw error;
+            return res.status(200).json({ success: true, types: (data || []).map(t => t.name) });
+        }
+
         // ── UPDATE (manual correction of terminal type / merchant) ────────────
         if (action === 'update') {
             if (!(await isSuperAdmin(supabase, session.userid))) return res.status(403).json({ success: false, message: 'Super admin only.' });
