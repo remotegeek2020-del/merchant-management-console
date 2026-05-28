@@ -171,7 +171,16 @@
         </div>
     </div>
 
-    <article class="main-card">
+    <!-- View toggle: Current / Legacy -->
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <button id="dep-view-current" onclick="setDepView('current')" style="padding:7px 18px;border-radius:8px;border:none;background:#004990;color:white;font-weight:700;font-size:12px;cursor:pointer;">Current Deployments</button>
+        <button id="dep-view-legacy" onclick="setDepView('legacy')" style="padding:7px 18px;border-radius:8px;border:1px solid #d97706;background:white;color:#b45309;font-weight:700;font-size:12px;cursor:pointer;">
+            <span style="background:#d97706;color:white;font-size:9px;padding:1px 5px;border-radius:4px;margin-right:4px;font-weight:800;">LEGACY</span>Historical Records
+        </button>
+    </div>
+
+    <!-- CURRENT view -->
+    <article id="dep-section-current" class="main-card">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
@@ -188,6 +197,43 @@
             <tbody id="deploymentTableBody"></tbody>
         </table>
         <div id="paginationControls"></div>
+    </article>
+
+    <!-- LEGACY view -->
+    <article id="dep-section-legacy" class="main-card" style="display:none;">
+        <!-- Legacy filter bar -->
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
+            <div style="flex:1;min-width:200px;">
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Search Serial / TID / MID / Merchant</label>
+                <input type="text" id="legSearch" oninput="fetchLegacy()" placeholder="Serial, TID, MID, or merchant name…"
+                    style="width:100%;height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 12px;font-size:13px;">
+            </div>
+            <div>
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Status</label>
+                <select id="legStatus" onchange="fetchLegacy()" style="height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 10px;font-size:13px;background:white;cursor:pointer;">
+                    <option value="all">All</option>
+                    <option value="active">Active</option>
+                    <option value="rma_filed">RMA Filed</option>
+                    <option value="converted">Converted</option>
+                </select>
+            </div>
+        </div>
+        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
+            <thead>
+                <tr>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Serial</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">TID</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Merchant</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Terminal Type</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Dep. Date</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Purchase Type</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Status</th>
+                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="legacyTableBody"></tbody>
+        </table>
+        <div id="legacyPaginationControls"></div>
     </article>
 </div>
 
@@ -2302,7 +2348,123 @@ async function executeBulk(validData) {
         }
     }
 
-    
+// ── LEGACY DEPLOYMENTS ────────────────────────────────────────────────────────
+let legPage = 1;
+const LEG_LIMIT = 50;
+
+function setDepView(view) {
+    const isCurrent = view === 'current';
+    document.getElementById('dep-section-current').style.display = isCurrent ? '' : 'none';
+    document.getElementById('dep-section-legacy').style.display  = isCurrent ? 'none' : '';
+    document.getElementById('dep-view-current').style.background = isCurrent ? '#004990' : 'white';
+    document.getElementById('dep-view-current').style.color      = isCurrent ? 'white'   : '#004990';
+    document.getElementById('dep-view-current').style.border     = isCurrent ? 'none' : '1px solid #004990';
+    document.getElementById('dep-view-legacy').style.background  = isCurrent ? 'white' : '#fef3c7';
+    if (!isCurrent && document.getElementById('legacyTableBody').innerHTML === '') fetchLegacy();
+}
+
+async function fetchLegacy() {
+    legPage = 1;
+    await renderLegacy();
+}
+
+async function renderLegacy() {
+    const tbody = document.getElementById('legacyTableBody');
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
+    const search = document.getElementById('legSearch')?.value.trim() || '';
+    const status = document.getElementById('legStatus')?.value || 'all';
+    const token  = localStorage.getItem('pp_session_token') || '';
+    try {
+        const res = await fetch('/api/legacy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'list', search, status, page: legPage, limit: LEG_LIMIT })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const rows = data.data || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
+            document.getElementById('legacyPaginationControls').innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const statusBadge = {
+                active:    '<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Active</span>',
+                rma_filed: '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">RMA Filed</span>',
+                converted: '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Converted</span>'
+            }[r.status] || r.status;
+            const typeEstBadge = r.terminal_type_source === 'estimated'
+                ? '<span style="font-size:9px;background:#fef3c7;color:#b45309;padding:1px 4px;border-radius:3px;margin-left:4px;">EST</span>'
+                : '';
+            const merchantName = r.merchants?.dba_name || `<span style="color:#94a3b8;font-size:11px;">MID: ${r.mid || '—'}</span>`;
+            const canRMA = r.status === 'active';
+            return `<tr>
+                <td style="font-family:monospace;font-size:12px;">${r.serial_number}</td>
+                <td style="font-size:12px;color:#64748b;">${r.tid || '—'}</td>
+                <td style="font-size:12px;">${merchantName}</td>
+                <td style="font-size:12px;">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}</td>
+                <td style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
+                <td style="font-size:12px;color:#64748b;">${r.purchase_type || '—'}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    ${canRMA ? `<button onclick="legFileRMA('${r.id}','${(r.serial_number||'').replace(/'/g,'')}')" style="padding:3px 10px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}
+                    ${r.status === 'converted' && r.converted_equipment_id ? `<span style="font-size:10px;color:#16a34a;">✓ In Inventory</span>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
+
+        // Pagination
+        const total = data.total || 0;
+        const pages = Math.ceil(total / LEG_LIMIT);
+        const pc = document.getElementById('legacyPaginationControls');
+        pc.innerHTML = pages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:12px;">
+            ${legPage > 1 ? `<button onclick="legPage--;renderLegacy()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">← Prev</button>` : ''}
+            <span style="font-size:12px;color:#64748b;padding:5px 10px;">Page ${legPage} of ${pages} · ${total} records</span>
+            ${legPage < pages ? `<button onclick="legPage++;renderLegacy()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">Next →</button>` : ''}
+        </div>` : `<div style="padding:8px 12px;font-size:11px;color:#94a3b8;text-align:right;">${total} record${total!==1?'s':''}</div>`;
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="8" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
+    }
+}
+
+async function legFileRMA(legacyId, serial) {
+    const { value: reason, isConfirmed } = await Swal.fire({
+        title: 'File RMA — Legacy Equipment',
+        html: `<div style="text-align:left;margin-bottom:8px;font-size:13px;color:#64748b;">Serial: <b style="color:#0f172a;font-family:monospace;">${serial}</b></div>
+               <select id="swal-rma-reason" class="swal2-input" style="margin:4px 0;">
+                 <option value="Legacy Equipment Return">Legacy Equipment Return</option>
+                 <option value="Defective">Defective</option>
+                 <option value="Upgrade">Upgrade</option>
+                 <option value="Merchant Closed">Merchant Closed</option>
+                 <option value="Other">Other</option>
+               </select>
+               <textarea id="swal-rma-notes" class="swal2-textarea" placeholder="Notes (optional)" style="margin:4px 0;height:70px;"></textarea>`,
+        showCancelButton: true,
+        confirmButtonText: 'File RMA',
+        confirmButtonColor: '#b45309',
+        preConfirm: () => ({
+            reason: document.getElementById('swal-rma-reason').value,
+            notes:  document.getElementById('swal-rma-notes').value
+        })
+    });
+    if (!isConfirmed) return;
+    const token = localStorage.getItem('pp_session_token') || '';
+    const res = await fetch('/api/legacy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+        body: JSON.stringify({ action: 'file_rma', legacy_id: legacyId, return_reason: reason.reason, notes: reason.notes })
+    });
+    const data = await res.json();
+    if (data.success) {
+        await Swal.fire({ icon: 'success', title: `RMA ${data.return_id} Created`, text: 'The legacy RMA has been filed. You can complete it from the Returns dashboard.', timer: 3000, showConfirmButton: false });
+        fetchLegacy();
+    } else {
+        Swal.fire('Error', data.message, 'error');
+    }
+}
+
+
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'deployments'})});})();</script>
 <script src="/js/site-config.js"></script>

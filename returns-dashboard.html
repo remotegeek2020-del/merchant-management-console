@@ -382,12 +382,18 @@ async function fetchReturns() {
             const isBulk = r.is_bulk;
             const itemCount = r.items?.length || 0;
             const merchantMid = r.merchants?.merchant_id || '';
+            const isLegacy = !!r.legacy_deployment_id;
+            const legacySerial = r.legacy_deployments?.serial_number;
+            const legacyType   = r.legacy_deployments?.terminal_type;
             const equipCell = isBulk
                 ? `<div><span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:3px 9px;border-radius:4px;font-weight:700;">${itemCount} UNIT${itemCount !== 1 ? 'S' : ''}</span></div>`
-                : `<div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}</div><div class="pp-muted">${r.equipments?.serial_number || ''}</div>`;
-            return `<tr>
+                : isLegacy
+                    ? `<div style="font-weight:600;font-size:13px;">${legacyType || 'Unknown'}</div><div class="pp-muted" style="font-family:monospace;">${legacySerial || '—'}</div>`
+                    : `<div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}</div><div class="pp-muted">${r.equipments?.serial_number || ''}</div>`;
+            return `<tr${isLegacy ? ' style="background:#fffbeb;"' : ''}>
                 <td class="pp-id">
                     ${r.return_id || 'PENDING'}
+                    ${isLegacy ? `<span style="display:inline-block;font-size:8px;background:#d97706;color:white;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">LEGACY</span>` : ''}
                     ${r.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">TICKET</span>` : ''}
                 </td>
                 <td style="color:#94a3b8; font-size:12px;">${fmtDate(r.created_at)}</td>
@@ -406,7 +412,7 @@ async function fetchReturns() {
                             <span class="material-icons" style="font-size:16px;">history</span>
                         </button>
                         ${isOpen ? `
-                        <button class="pp-btn pp-btn-success" onclick="finalizeRMA('${r.id}', '${isBulk ? '' : (r.equipment_id || '')}')">
+                        <button class="pp-btn pp-btn-success" onclick="finalizeRMA('${r.id}', '${isBulk ? '' : (isLegacy ? '' : (r.equipment_id || ''))}')">
                             <span class="material-icons" style="font-size:14px;">check_circle</span>
                             <span class="btn-label">Complete & Restock</span>
                         </button>

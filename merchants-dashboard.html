@@ -1494,6 +1494,29 @@ async function addTask(merchantUuid) {
                     </div>
                 </div>
 
+                <!-- Legacy Equipment section (injected below past equipment) -->
+                <div id="merchant-legacy-equip-section" style="display:none;margin-top:18px;">
+                    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                        <div style="font-size:10px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.6px;">Legacy Equipment</div>
+                        <span style="background:#d97706;color:white;font-size:9px;padding:1px 6px;border-radius:4px;font-weight:800;">LEGACY</span>
+                        <span style="font-size:10px;color:#94a3b8;">(Pre-app records — Salesforce)</span>
+                    </div>
+                    <div style="background:#fffbeb;border-radius:12px;border:1px solid #fcd34d;overflow:hidden;">
+                        <table class="slds-table slds-table_bordered slds-table_cell-buffer">
+                            <thead>
+                                <tr>
+                                    <th style="font-size:10px;">SERIAL NUMBER</th>
+                                    <th style="font-size:10px;">TERMINAL TYPE</th>
+                                    <th style="font-size:10px;">STATUS</th>
+                                    <th style="font-size:10px;">DEPLOYED</th>
+                                    <th style="font-size:10px;">ACTION</th>
+                                </tr>
+                            </thead>
+                            <tbody id="merchant-legacy-equip-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+
                 <div id="content-lifecycle" class="tab-content" style="display:none; text-align:left;">
                      <div id="lifecycle-list" style="max-height:500px; overflow-y:auto; padding:10px;">
                          <p style="text-align:center; padding:20px; color:#94a3b8;">Loading lifecycle history...</p>
@@ -1878,11 +1901,85 @@ async function addTask(merchantUuid) {
                     `;
                 });
             }
+            // Legacy equipment
+            await fetchMerchantLegacyEquipment(merchantUuid);
+
         } catch (err) {
             tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:red;">Failed to load equipment.</td></tr>';
             pastTbody.innerHTML = '';
         }
     }
+
+    async function fetchMerchantLegacyEquipment(merchantUuid) {
+        const container = document.getElementById('merchant-legacy-equip-section');
+        if (!container) return;
+        const token = localStorage.getItem('pp_session_token') || '';
+        try {
+            const res = await fetch('/api/legacy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'get_by_merchant', merchant_id: merchantUuid })
+            });
+            const result = await res.json();
+            const rows = result.data || [];
+            if (!rows.length) { container.style.display = 'none'; return; }
+            container.style.display = 'block';
+            const tbody = document.getElementById('merchant-legacy-equip-body');
+            tbody.innerHTML = rows.map(r => {
+                const statusBadge = r.status === 'rma_filed'
+                    ? '<span style="background:#fef3c7;color:#b45309;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;">RMA Filed</span>'
+                    : '<span style="background:#dbeafe;color:#1d4ed8;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;">Active</span>';
+                const typeEst = r.terminal_type_source === 'estimated'
+                    ? '<span style="font-size:9px;background:#fef3c7;color:#b45309;padding:1px 4px;border-radius:3px;margin-left:3px;" title="Estimated from serial number">EST</span>' : '';
+                const canRMA = r.status === 'active';
+                return `<tr>
+                    <td style="font-family:monospace;font-size:12px;font-weight:700;color:#92400e;">${r.serial_number}</td>
+                    <td style="font-size:12px;">${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}</td>
+                    <td>${statusBadge}</td>
+                    <td style="font-size:11px;color:#64748b;">${r.deployment_date ? fmtDate(r.deployment_date) : '—'}</td>
+                    <td>${canRMA ? `<button onclick="legFileRMAFromMerchant('${r.id}','${r.serial_number.replace(/'/g,'')}')" style="padding:3px 9px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}</td>
+                </tr>`;
+            }).join('');
+        } catch (e) { container.style.display = 'none'; }
+    }
+
+    window.legFileRMAFromMerchant = async function(legacyId, serial) {
+        const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
+        const merchantUuid = saveBtn?.getAttribute('onclick').match(/'([^']+)'/)?.[1];
+        const { value: reason, isConfirmed } = await Swal.fire({
+            title: 'File RMA — Legacy Equipment',
+            html: `<div style="text-align:left;margin-bottom:8px;font-size:13px;color:#64748b;">Serial: <b style="color:#0f172a;font-family:monospace;">${serial}</b></div>
+                   <select id="swal-rma-reason2" class="swal2-input" style="margin:4px 0;">
+                     <option value="Legacy Equipment Return">Legacy Equipment Return</option>
+                     <option value="Defective">Defective</option>
+                     <option value="Upgrade">Upgrade</option>
+                     <option value="Merchant Closed">Merchant Closed</option>
+                     <option value="Other">Other</option>
+                   </select>
+                   <textarea id="swal-rma-notes2" class="swal2-textarea" placeholder="Notes (optional)" style="margin:4px 0;height:70px;"></textarea>`,
+            showCancelButton: true,
+            confirmButtonText: 'File RMA',
+            confirmButtonColor: '#b45309',
+            preConfirm: () => ({
+                reason: document.getElementById('swal-rma-reason2').value,
+                notes:  document.getElementById('swal-rma-notes2').value
+            })
+        });
+        if (!isConfirmed) return;
+        const token = localStorage.getItem('pp_session_token') || '';
+        const res = await fetch('/api/legacy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'file_rma', legacy_id: legacyId, return_reason: reason.reason, notes: reason.notes })
+        });
+        const data = await res.json();
+        if (data.success) {
+            await Swal.fire({ icon: 'success', title: `RMA ${data.return_id} Created`, timer: 2500, showConfirmButton: false });
+            if (merchantUuid) fetchMerchantLegacyEquipment(merchantUuid);
+        } else {
+            Swal.fire('Error', data.message, 'error');
+        }
+    };
 
 window.saveMerchant = async (uuid) => {
     // These strings MUST match the 'id' attributes in your HTML input tags

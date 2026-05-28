@@ -61,10 +61,11 @@ if (action === 'list') {
     let q = supabase.from('returns').select(`
         id, return_id, return_reason, condition, destination, status, created_at,
         return_date_initiated, equipment_received_date,
-        merchant_id, equipment_id, ticket_id, is_bulk,
+        merchant_id, equipment_id, ticket_id, is_bulk, legacy_deployment_id,
         merchants:merchant_id (dba_name, merchant_id, merchant_city, merchant_state, merchant_phone, email, agent_id, agent_name),
         equipments:equipment_id (serial_number, terminal_type),
-        return_items(id, equipment_id, condition, equip:equipment_id(serial_number, terminal_type))
+        return_items(id, equipment_id, condition, equip:equipment_id(serial_number, terminal_type)),
+        legacy_deployments:legacy_deployment_id(serial_number, terminal_type, mid)
     `, { count: 'exact' }).order('return_date_initiated', { ascending: false });
 
     if (searchQuery) {
@@ -140,7 +141,7 @@ if (action === 'complete_return') {
     // Fetch the return record
     const { data: rmaData } = await supabase
         .from('returns')
-        .select('deployment_id, merchant_id, ticket_id, is_bulk, equipment_id')
+        .select('deployment_id, merchant_id, ticket_id, is_bulk, equipment_id, legacy_deployment_id')
         .eq('id', rmaId)
         .single();
 
@@ -148,6 +149,47 @@ if (action === 'complete_return') {
     const isBulk = rmaData?.is_bulk || false;
     if (!condition) throw new Error("Missing condition for complete_return");
     const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
+
+    // ── LEGACY RMA: create real equipment from legacy record ──────────────────
+    if (rmaData?.legacy_deployment_id) {
+        const { data: leg } = await supabase.from('legacy_deployments')
+            .select('serial_number, terminal_type').eq('id', rmaData.legacy_deployment_id).single();
+        if (leg?.serial_number) {
+            const { data: newEquip } = await supabase.from('equipments').insert({
+                serial_number: leg.serial_number,
+                terminal_type: leg.terminal_type || 'Unknown',
+                status: finalStatus,
+                current_location: destination || 'Warsaw Office',
+                received_date: new Date().toISOString(),
+                merchant_id: null
+            }).select('id').single();
+
+            if (newEquip?.id) {
+                await supabase.from('legacy_deployments').update({
+                    status: 'converted',
+                    converted_equipment_id: newEquip.id
+                }).eq('id', rmaData.legacy_deployment_id);
+
+                await supabase.from('equipment_logs').insert([{
+                    equipment_id: newEquip.id,
+                    merchant_id: resolved_merchant_id,
+                    action: 'Converted from Legacy RMA',
+                    from_location: 'Legacy (Salesforce)',
+                    to_location: destination || 'Warsaw Office',
+                    notes: `Legacy RMA completed. Unit marked as ${condition}. Added to active inventory.`
+                }]);
+            }
+        }
+
+        // Close the return record and exit — no real equipment_id to update
+        await supabase.from('returns').update({
+            status: 'Closed', condition, destination,
+            equipment_received_date: equipment_received_date || new Date().toISOString()
+        }).eq('id', rmaId);
+
+        return res.status(200).json({ success: true, legacy: true });
+    }
+    // ─────────────────────────────────────────────────────────────────────────
 
     if (isBulk) {
         // Process all return_items

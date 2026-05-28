@@ -3,6 +3,7 @@
   "trailingSlash": false,
   "functions": {
     "api/partners.js": { "maxDuration": 30 },
+    "api/legacy.js": { "maxDuration": 30 },
     "api/reports.js": { "maxDuration": 30 },
     "api/merchants.js": { "maxDuration": 30 },
     "api/ai-import.js": { "maxDuration": 60 },
