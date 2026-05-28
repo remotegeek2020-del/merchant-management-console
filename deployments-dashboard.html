@@ -449,10 +449,15 @@
     let _editingDepSnapshot = null; // captures old values when edit modal opens
     let _lastDepSearchLogged = '';
 
+    function authHeaders(extra = {}) {
+        const token = localStorage.getItem('pp_session_token') || '';
+        return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...extra };
+    }
+
     function _logSearch(context, query, category) {
         if (!query || query.length < 2) return;
         const email = localStorage.getItem('pp_userid') || localStorage.getItem('pp_user_email') || 'Unknown';
-        fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        fetch('/api/logs', { method: 'POST', headers: authHeaders(),
             body: JSON.stringify({ email, action: `Search ${context}: "${query}"`, status: 'success', category: category || 'general', target_type: 'search', new_value: { query, context }, severity: 'info' })
         }).catch(() => {});
     }
@@ -480,7 +485,7 @@ async function logAuditAction(action, details, opts = {}) {
     try {
         await fetch('/api/logs', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({
                 email: userEmail || 'Unknown Admin',
                 action: action,
@@ -519,7 +524,7 @@ async function logAuditAction(action, details, opts = {}) {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({
                     action: 'return_to_office',
                     payload: {
@@ -579,7 +584,7 @@ async function logAuditAction(action, details, opts = {}) {
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ 
                 action: 'return_to_office', 
                 payload: {
@@ -629,7 +634,7 @@ async function logAuditAction(action, details, opts = {}) {
                 const purchaseTypeFilter = document.getElementById('filterPurchaseType')?.value || '';
                 const res = await fetch('/api/deployments', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders(),
                     body: JSON.stringify({
                         action: 'list',
                         query: queryValue,
@@ -770,7 +775,7 @@ if (document.getElementById('kpi-total')) {
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ action: 'update', payload }) // Action must be 'update'
         });
         const result = await res.json();
@@ -851,7 +856,7 @@ async function processReturn() {
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({
                 action: 'return_to_office',
                 payload: {
@@ -1024,7 +1029,7 @@ async function processReturn() {
                     try {
                         const res = await fetch('/api/merchants', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: authHeaders(),
                             body: JSON.stringify({ action: 'get_notes', merchant_uuid: d.merchant_id, type: 'manual' })
                         });
                         const result = await res.json();
@@ -1094,7 +1099,7 @@ async function processReturn() {
                     try {
                         const res = await fetch('/api/merchants', {
                             method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
+                            headers: authHeaders(),
                             body: JSON.stringify({ action: 'add_note', merchant_uuid: d.merchant_id, title, body: fullBody, created_by: localStorage.getItem('pp_userid'), mentions })
                         });
                         const result = await res.json();
@@ -1138,7 +1143,7 @@ async function processReturn() {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ 
                     action: 'delete', 
                     payload: { 
@@ -1183,7 +1188,7 @@ async function processReturn() {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'getHistory', equipment_ids: ids })
             });
             const result = await res.json();
@@ -1429,7 +1434,7 @@ async function processReturn() {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'getLookups', query: val })
             });
             const result = await res.json();
@@ -1463,7 +1468,7 @@ async function processReturn() {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'getLookups', query: val })
             });
             const result = await res.json();
@@ -1505,7 +1510,7 @@ async function processReturn() {
         try {
             const res = await fetch('/api/equipments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'list_terminal_types' })
             });
             const data = await res.json();
@@ -1592,7 +1597,7 @@ async function processReturn() {
         try {
             const res = await fetch('/api/equipments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({
                     action: 'bulk_create',
                     serials: [value.serial],
@@ -1608,7 +1613,7 @@ async function processReturn() {
             // Look up the newly created equipment to get its UUID
             const lookupRes = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'getLookups', query: value.serial })
             });
             const lookupData = await lookupRes.json();
@@ -1728,7 +1733,7 @@ async function openEditModal(index) {
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ action: 'check_rma', payload: { deployment_id: d.id } })
         });
         const result = await res.json();
@@ -1848,7 +1853,7 @@ async function handleBulkEquipSearch(val) {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'getLookups', query: val })
             });
             const result = await res.json();
@@ -1950,7 +1955,7 @@ async function saveDeployment(event) {
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ action: 'create', payload })
         });
         const result = await res.json();
@@ -1986,7 +1991,7 @@ async function saveDeployment(event) {
         try {
             const res = await fetch('/api/equipments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'list', filterStatus: 'stocked', filterLocation: 'Warsaw Office', limit: 200, page: 0 })
             });
             const result = await res.json();
@@ -2005,7 +2010,7 @@ async function saveDeployment(event) {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'getLookups', query: document.getElementById('mSearch').value || '' })
             });
             // We already have the name from selectMerchant; use it alongside UUID to ask oracle-agent
@@ -2044,7 +2049,7 @@ async function saveDeployment(event) {
             try {
                 const mRes = await fetch('/api/merchants', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: authHeaders(),
                     body: JSON.stringify({ action: 'list', query: dbaName, filterBy: 'dba_name', limit: 1, page: 0 })
                 });
                 const mResult = await mRes.json();
@@ -2065,7 +2070,7 @@ async function saveDeployment(event) {
 
             const agentRes = await fetch('/api/oracle-agent', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ query: prompt, userId, userName })
             });
             const agentResult = await agentRes.json();
@@ -2155,7 +2160,7 @@ async function handleBulkUpload(input) {
         try {
             const res = await fetch('/api/deployments', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: authHeaders(),
                 body: JSON.stringify({ action: 'bulk_validate', payload })
             });
             const result = await res.json();
@@ -2217,7 +2222,7 @@ async function executeBulk(validData) {
     try {
         const res = await fetch('/api/deployments', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: authHeaders(),
             body: JSON.stringify({ action: 'bulk_create', payload: validData })
         });
         const result = await res.json();
@@ -2282,7 +2287,7 @@ async function executeBulk(validData) {
         if (!confirm.isConfirmed) return;
         Swal.fire({ title: 'Closing...', didOpen: () => Swal.showLoading() });
         const res = await fetch('/api/tickets', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: authHeaders(),
             body: JSON.stringify({ action: 'update_status', ticket_id: ticketId, status: 'closed', staff_name: currentStaffName })
         });
         const result = await res.json();
