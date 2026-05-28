@@ -108,8 +108,8 @@ export default async function handler(req, res) {
                     'access_returns','access_inventory','access_partners',
                     'access_jarvis','can_delete_tickets','access_sending_reports'
                 ];
-                // Only super_admin can change roles, grant delete-ticket permission, or grant sending reports
-                const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets', 'access_sending_reports'];
+                // Only super_admin can change roles or grant delete-ticket permission
+                const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets'];
 
                 for (const uid of Object.keys(payload)) {
                     let safePayload = Object.fromEntries(
