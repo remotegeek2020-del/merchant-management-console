@@ -763,8 +763,8 @@ async function loadAll() {
 // Only admins and super_admins can see Staff Access Control and Activity Log
 const ppRole = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
 const hasAdminDashAccess = localStorage.getItem('pp_access_admin_dashboard') === 'true';
-const canManageStaff = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'super_admin';
-const isAdminRole = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'super_admin';
+const isAdminRole = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'operations_admin' || ppRole === 'super_admin';
+const canManageStaff = isAdminRole;
 const staffWidget = document.querySelector('[data-widget="staff-access"]');
 if (staffWidget) staffWidget.style.display = canManageStaff ? '' : 'none';
 const activityWidget = document.querySelector('[data-widget="activity-log"]');
