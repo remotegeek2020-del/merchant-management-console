@@ -1913,6 +1913,9 @@ async function addTask(merchantUuid) {
     async function fetchMerchantLegacyEquipment(merchantUuid) {
         const container = document.getElementById('merchant-legacy-equip-section');
         if (!container) return;
+        container.style.display = 'block';
+        const tbody = document.getElementById('merchant-legacy-equip-body');
+        tbody.innerHTML = '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">Loading…</td></tr>';
         const token = localStorage.getItem('pp_session_token') || '';
         try {
             const res = await fetch('/api/legacy', {
@@ -1922,9 +1925,10 @@ async function addTask(merchantUuid) {
             });
             const result = await res.json();
             const rows = result.data || [];
-            if (!rows.length) { container.style.display = 'none'; return; }
-            container.style.display = 'block';
-            const tbody = document.getElementById('merchant-legacy-equip-body');
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8;font-size:12px;"><span class="material-icons" style="font-size:28px;display:block;margin-bottom:6px;">history</span>No legacy equipment on record for this merchant.</td></tr>';
+                return;
+            }
             tbody.innerHTML = rows.map(r => {
                 const statusBadge = r.status === 'rma_filed'
                     ? '<span style="background:#fef3c7;color:#b45309;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;">RMA Filed</span>'
