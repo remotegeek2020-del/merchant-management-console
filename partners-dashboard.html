@@ -3276,7 +3276,14 @@ function loadNotes(personId, hlContactId) {
 
             var bodyDiv = document.createElement('div');
             bodyDiv.style.cssText = 'font-size:13px;color:#475569;line-height:1.5;';
-            bodyDiv.textContent = n.body;
+            if (isGHL && /<[a-z][\s\S]*>/i.test(n.body)) {
+                // GHL stores notes as rich HTML — strip scripts then render
+                var tmp = document.createElement('div');
+                tmp.innerHTML = n.body.replace(/<script[\s\S]*?<\/script>/gi, '');
+                bodyDiv.innerHTML = tmp.innerHTML;
+            } else {
+                bodyDiv.textContent = n.body;
+            }
 
             card.appendChild(bodyDiv);
             el.appendChild(card);
