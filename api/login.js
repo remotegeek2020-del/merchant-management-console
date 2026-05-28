@@ -196,6 +196,7 @@ export default async function handler(req, res) {
                 access_partners: user.access_partners,
                 access_jarvis: user.access_jarvis,
                 access_admin_dashboard: user.access_admin_dashboard,
+                access_sending_reports: user.access_sending_reports,
                 can_delete_tickets: user.can_delete_tickets
             },
             newDeviceToken: generatedDeviceToken
