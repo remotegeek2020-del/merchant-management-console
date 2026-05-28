@@ -549,45 +549,54 @@ if (action === 'complete_onboarding') {
             if (hl_contact_id) {
                 try {
                     const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
-                    if (ghlApiKey) {
-                        const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
-                        const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`, { headers: ghlHeaders });
+                    if (!ghlApiKey) {
+                        console.warn('[GHL Notes Sync] No GHL_API_KEY configured');
+                    } else {
+                        const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Accept': 'application/json' };
+                        const ghlUrl = `https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`;
+                        console.log('[GHL Notes Sync] Fetching:', ghlUrl);
+                        const ghlRes = await fetch(ghlUrl, { headers: ghlHeaders });
+                        const ghlRawText = await ghlRes.text();
+                        console.log('[GHL Notes Sync] Status:', ghlRes.status, 'Body:', ghlRawText.slice(0, 500));
+
                         if (ghlRes.ok) {
-                            const ghlData = await ghlRes.json();
-                            // GHL may return notes under 'notes' or 'data'
+                            let ghlData;
+                            try { ghlData = JSON.parse(ghlRawText); } catch (e) { ghlData = {}; }
+
+                            // GHL returns { notes: [...] } — also handle 'data' as fallback
                             const ghlNotes = ghlData.notes || ghlData.data || [];
+                            console.log('[GHL Notes Sync] Found', ghlNotes.length, 'notes in GHL');
 
                             // Load existing local GHL-sourced notes for diffing
-                            const { data: existingGhlNotes } = await supabase
+                            const { data: existingGhlNotes, error: fetchErr } = await supabase
                                 .from('partner_notes')
                                 .select('id, ghl_note_id, title, body')
                                 .eq('person_id', person_id)
                                 .eq('source', 'ghl');
+                            if (fetchErr) console.error('[GHL Notes Sync] DB fetch error:', fetchErr.message);
                             const existingMap = new Map((existingGhlNotes || []).map(n => [n.ghl_note_id, n]));
                             const liveIds = new Set();
 
                             for (const gn of ghlNotes) {
-                                // Handle both 'id' and '_id' field names from GHL
                                 const gnId = gn.id || gn._id;
-                                if (!gnId) continue;
+                                if (!gnId) { console.warn('[GHL Notes Sync] Note missing id:', JSON.stringify(gn)); continue; }
                                 liveIds.add(gnId);
 
                                 const noteData = {
                                     title: gn.title || null,
-                                    body: gn.body || '',
-                                    author_name: gn.user || 'GoHighLevel',
-                                    updated_at: gn.dateAdded || new Date().toISOString()
+                                    body: gn.body || gn.description || '',
+                                    author_name: gn.user || gn.userId || 'GoHighLevel',
+                                    updated_at: gn.dateAdded || gn.dateUpdated || new Date().toISOString()
                                 };
 
                                 const existing = existingMap.get(gnId);
                                 if (existing) {
-                                    // Update only if content changed
                                     if (existing.body !== noteData.body || (existing.title || null) !== (noteData.title || null)) {
-                                        await supabase.from('partner_notes').update(noteData).eq('id', existing.id);
+                                        const { error: upErr } = await supabase.from('partner_notes').update(noteData).eq('id', existing.id);
+                                        if (upErr) console.error('[GHL Notes Sync] Update error for', gnId, upErr.message);
                                     }
                                 } else {
-                                    // Insert new note from GHL
-                                    await supabase.from('partner_notes').insert({
+                                    const { error: insErr } = await supabase.from('partner_notes').insert({
                                         person_id,
                                         ghl_note_id: gnId,
                                         source: 'ghl',
@@ -596,6 +605,8 @@ if (action === 'complete_onboarding') {
                                         created_at: gn.dateAdded || new Date().toISOString(),
                                         ...noteData
                                     });
+                                    if (insErr) console.error('[GHL Notes Sync] Insert error for', gnId, insErr.message);
+                                    else console.log('[GHL Notes Sync] Inserted note', gnId);
                                 }
                             }
 
@@ -603,15 +614,18 @@ if (action === 'complete_onboarding') {
                             for (const [gnId, existing] of existingMap) {
                                 if (!liveIds.has(gnId)) {
                                     await supabase.from('partner_notes').delete().eq('id', existing.id);
+                                    console.log('[GHL Notes Sync] Deleted stale note', gnId);
                                 }
                             }
                         } else {
-                            console.error('[GHL Notes Sync] HTTP', ghlRes.status, await ghlRes.text());
+                            console.error('[GHL Notes Sync] HTTP', ghlRes.status, ghlRawText.slice(0, 500));
                         }
                     }
                 } catch (ghlErr) {
-                    console.error('[GHL Notes Sync Error]', ghlErr.message);
+                    console.error('[GHL Notes Sync Error]', ghlErr.message, ghlErr.stack);
                 }
+            } else {
+                console.log('[GHL Notes Sync] No hl_contact_id provided for person_id:', person_id);
             }
 
             const { data, error } = await supabase
