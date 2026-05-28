@@ -504,68 +504,12 @@ if (action === 'get_merchant_history') {
 if (action === 'get_merchant_equipment') {
     const { merchant_uuid } = req.body;
 
-    // Currently assigned equipment — no FK join, just base fields
+    // Single SQL function handles single + bulk deployment date joins
     const { data: current, error: e1 } = await supabase
-        .from('equipments')
-        .select('id, serial_number, terminal_type, status, received_date')
-        .eq('merchant_id', merchant_uuid)
-        .order('serial_number');
+        .rpc('get_merchant_equipment_with_deployment', { p_merchant_uuid: merchant_uuid });
     if (e1) throw e1;
 
-    // Find active deployment display IDs for these units
-    const equipIds = (current || []).map(e => e.id);
-    const equipToDepId = {};
-    if (equipIds.length > 0) {
-        // Single-unit deployments
-        const { data: singleDeps } = await supabase
-            .from('deployments')
-            .select('deployment_id, equipment_id')
-            .in('equipment_id', equipIds)
-            .neq('status', 'Closed');
-        (singleDeps || []).forEach(d => { equipToDepId[d.equipment_id] = d.deployment_id; });
-
-        // Bulk deployments via deployment_items — join resolved separately to avoid PostgREST embed issues
-        const { data: bulkItems } = await supabase
-            .from('deployment_items')
-            .select('equipment_id, deployment_id')
-            .in('equipment_id', equipIds);
-        if (bulkItems?.length) {
-            const bulkDepUuids = [...new Set(bulkItems.map(i => i.deployment_id))];
-            const { data: bulkDeps } = await supabase
-                .from('deployments')
-                .select('id, deployment_id, status')
-                .in('id', bulkDepUuids)
-                .neq('status', 'Closed');
-            const uuidToDisplayId = {};
-            (bulkDeps || []).forEach(d => { uuidToDisplayId[d.id] = d.deployment_id; });
-            bulkItems.forEach(item => {
-                if (!equipToDepId[item.equipment_id] && uuidToDisplayId[item.deployment_id]) {
-                    equipToDepId[item.equipment_id] = uuidToDisplayId[item.deployment_id];
-                }
-            });
-        }
-    }
-
-    // Fetch deployment dates in one query using the resolved display IDs
-    const equipToDepDate = {};
-    const allDepDisplayIds = [...new Set(Object.values(equipToDepId).filter(Boolean))];
-    if (allDepDisplayIds.length > 0) {
-        const { data: depDateRows } = await supabase
-            .from('deployments')
-            .select('deployment_id, target_deployment_date')
-            .in('deployment_id', allDepDisplayIds);
-        const depIdToDate = {};
-        (depDateRows || []).forEach(d => { depIdToDate[d.deployment_id] = d.target_deployment_date || null; });
-        Object.entries(equipToDepId).forEach(([equipId, depDisplayId]) => {
-            equipToDepDate[equipId] = depIdToDate[depDisplayId] || null;
-        });
-    }
-
-    const currentWithDep = (current || []).map(e => ({
-        ...e,
-        deployment_display_id: equipToDepId[e.id] || null,
-        deployment_date: equipToDepDate[e.id] || null
-    }));
+    const currentEquipIds = new Set((current || []).map(e => e.id));
 
     // Closed deployments for this merchant (past equipment)
     const { data: closedDeps, error: e2 } = await supabase
@@ -580,9 +524,6 @@ if (action === 'get_merchant_equipment') {
         .eq('status', 'Closed')
         .order('created_at', { ascending: false });
     if (e2) throw e2;
-
-    // Exclude equipment that is currently deployed to this merchant
-    const currentEquipIds = new Set(equipIds);
 
     const past = [];
     for (const dep of (closedDeps || [])) {
@@ -608,7 +549,7 @@ if (action === 'get_merchant_equipment') {
         }
     }
 
-    return res.status(200).json({ success: true, current: currentWithDep, past });
+    return res.status(200).json({ success: true, current: current || [], past });
 }
         // --- ACTION: ADD ATTACHMENT RECORD ---
         if (action === 'add_attachment') {
