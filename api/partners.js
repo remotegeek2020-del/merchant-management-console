@@ -667,6 +667,109 @@ if (action === 'complete_onboarding') {
             return res.status(200).json({ success: true, data: data || [] });
         }
 
+        // --- ACTION: BACKFILL GHL NOTES (super admin only) ---
+        if (action === 'backfill_ghl_notes') {
+            const { data: actor } = await supabase.from('app_users').select('role, is_active').eq('userid', session.userid).single();
+            if (!actor || actor.role !== 'super_admin' || !actor.is_active) return res.status(403).json({ success: false, message: 'Super admin only.' });
+
+            const offset = parseInt(body.offset) || 0;
+            const limit  = 15; // safe batch size within Vercel timeout
+
+            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+            if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL_API_KEY not configured.' });
+
+            // Fetch app users once for email→name resolution
+            const { data: appUsers } = await supabase.from('app_users').select('email, first_name, last_name');
+            const appUsersByEmail = {};
+            (appUsers || []).forEach(u => {
+                if (u.email) appUsersByEmail[u.email.toLowerCase()] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email;
+            });
+
+            // Get this batch of persons with hl_contact_id
+            const { data: persons, error: pErr } = await supabase
+                .from('persons')
+                .select('id, hl_contact_id, full_name')
+                .not('hl_contact_id', 'is', null)
+                .neq('hl_contact_id', '')
+                .order('id')
+                .range(offset, offset + limit - 1);
+            if (pErr) throw pErr;
+
+            // Count total for progress reporting
+            const { count: total } = await supabase
+                .from('persons')
+                .select('id', { count: 'exact', head: true })
+                .not('hl_contact_id', 'is', null)
+                .neq('hl_contact_id', '');
+
+            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Accept': 'application/json' };
+            const ghlUserCache = {}; // userId → display name, shared across this batch
+            let inserted = 0;
+            let skipped  = 0;
+
+            for (const person of (persons || [])) {
+                try {
+                    const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${person.hl_contact_id}/notes`, { headers: ghlHeaders });
+                    if (!ghlRes.ok) { skipped++; continue; }
+                    const ghlData = await ghlRes.json();
+                    const ghlNotes = ghlData.notes || ghlData.data || [];
+                    if (!ghlNotes.length) continue;
+
+                    // Resolve unique user IDs in this person's notes
+                    const uniqueIds = [...new Set(ghlNotes.map(gn => gn.userId).filter(Boolean))];
+                    for (const uid of uniqueIds) {
+                        if (ghlUserCache[uid] !== undefined) continue;
+                        try {
+                            const uRes = await fetch(`https://services.leadconnectorhq.com/users/${uid}`, { headers: ghlHeaders });
+                            if (uRes.ok) {
+                                const uData = await uRes.json();
+                                const ghlUser = uData.user || uData;
+                                const email = (ghlUser.email || '').toLowerCase();
+                                ghlUserCache[uid] = appUsersByEmail[email] || ghlUser.name || ghlUser.firstName || 'GoHighLevel';
+                            } else {
+                                ghlUserCache[uid] = 'GoHighLevel';
+                            }
+                        } catch { ghlUserCache[uid] = 'GoHighLevel'; }
+                    }
+
+                    // Load existing GHL-sourced notes for this person (avoid duplicates)
+                    const { data: existing } = await supabase
+                        .from('partner_notes').select('ghl_note_id')
+                        .eq('person_id', person.id).eq('source', 'ghl');
+                    const existingIds = new Set((existing || []).map(n => n.ghl_note_id));
+
+                    for (const gn of ghlNotes) {
+                        const gnId = gn.id || gn._id;
+                        if (!gnId || existingIds.has(gnId)) continue;
+                        const resolvedName = gn.userId ? (ghlUserCache[gn.userId] || 'GoHighLevel') : 'GoHighLevel';
+                        const { error: insErr } = await supabase.from('partner_notes').insert({
+                            person_id: person.id,
+                            ghl_note_id: gnId,
+                            source: 'ghl',
+                            note_type: 'general',
+                            is_pinned: false,
+                            created_at: gn.dateAdded || new Date().toISOString(),
+                            updated_at: gn.dateAdded || new Date().toISOString(),
+                            title: gn.title || null,
+                            body: gn.body || gn.description || '',
+                            author_name: resolvedName
+                        });
+                        if (!insErr) inserted++;
+                    }
+                } catch (e) { skipped++; }
+            }
+
+            const processed = offset + (persons?.length || 0);
+            return res.status(200).json({
+                success: true,
+                inserted,
+                skipped,
+                processed,
+                total,
+                done: processed >= total
+            });
+        }
+
         // --- ACTION: ADD PARTNER NOTE ---
         if (action === 'add_note') {
             const { person_id, body: noteBody, title: noteTitle, note_type, author_id, author_name, hl_contact_id } = body;
