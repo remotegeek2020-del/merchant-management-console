@@ -512,32 +512,52 @@ if (action === 'get_merchant_equipment') {
         .order('serial_number');
     if (e1) throw e1;
 
-    // Find active deployment display IDs and deployment dates for these units
+    // Find active deployment display IDs for these units
     const equipIds = (current || []).map(e => e.id);
     const equipToDepId = {};
-    const equipToDepDate = {};
     if (equipIds.length > 0) {
         // Single-unit deployments
         const { data: singleDeps } = await supabase
             .from('deployments')
-            .select('deployment_id, equipment_id, target_deployment_date')
+            .select('deployment_id, equipment_id')
             .in('equipment_id', equipIds)
             .neq('status', 'Closed');
-        (singleDeps || []).forEach(d => {
-            equipToDepId[d.equipment_id] = d.deployment_id;
-            equipToDepDate[d.equipment_id] = d.target_deployment_date || null;
-        });
+        (singleDeps || []).forEach(d => { equipToDepId[d.equipment_id] = d.deployment_id; });
 
-        // Bulk deployments via deployment_items
+        // Bulk deployments via deployment_items — join resolved separately to avoid PostgREST embed issues
         const { data: bulkItems } = await supabase
             .from('deployment_items')
-            .select('equipment_id, dep:deployment_id(deployment_id, status, target_deployment_date)')
+            .select('equipment_id, deployment_id')
             .in('equipment_id', equipIds);
-        (bulkItems || []).forEach(item => {
-            if (item.dep?.status !== 'Closed' && !equipToDepId[item.equipment_id]) {
-                equipToDepId[item.equipment_id] = item.dep?.deployment_id;
-                equipToDepDate[item.equipment_id] = item.dep?.target_deployment_date || null;
-            }
+        if (bulkItems?.length) {
+            const bulkDepUuids = [...new Set(bulkItems.map(i => i.deployment_id))];
+            const { data: bulkDeps } = await supabase
+                .from('deployments')
+                .select('id, deployment_id, status')
+                .in('id', bulkDepUuids)
+                .neq('status', 'Closed');
+            const uuidToDisplayId = {};
+            (bulkDeps || []).forEach(d => { uuidToDisplayId[d.id] = d.deployment_id; });
+            bulkItems.forEach(item => {
+                if (!equipToDepId[item.equipment_id] && uuidToDisplayId[item.deployment_id]) {
+                    equipToDepId[item.equipment_id] = uuidToDisplayId[item.deployment_id];
+                }
+            });
+        }
+    }
+
+    // Fetch deployment dates in one query using the resolved display IDs
+    const equipToDepDate = {};
+    const allDepDisplayIds = [...new Set(Object.values(equipToDepId).filter(Boolean))];
+    if (allDepDisplayIds.length > 0) {
+        const { data: depDateRows } = await supabase
+            .from('deployments')
+            .select('deployment_id, target_deployment_date')
+            .in('deployment_id', allDepDisplayIds);
+        const depIdToDate = {};
+        (depDateRows || []).forEach(d => { depIdToDate[d.deployment_id] = d.target_deployment_date || null; });
+        Object.entries(equipToDepId).forEach(([equipId, depDisplayId]) => {
+            equipToDepDate[equipId] = depIdToDate[depDisplayId] || null;
         });
     }
 
