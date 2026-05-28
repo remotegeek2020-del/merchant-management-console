@@ -1987,16 +1987,21 @@ async function submitOnboarding() {
 
                     <!-- NOTES PANEL -->
                     <div id="pppanel-notes" style="display:none;">
-                        <div style="display:flex;gap:8px;margin-bottom:12px;">
-                            <select id="pp-note-type" style="padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;">
-                                <option value="general">General</option>
-                                <option value="call">Call Log</option>
-                                <option value="follow_up">Follow-up</option>
-                                <option value="win">Win</option>
-                                <option value="issue">Issue</option>
-                            </select>
-                            <input id="pp-note-input" placeholder="Add a note about this partner..." style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">
-                            <button onclick="ppSubmitNote('${p.id}','${p.hl_id||''}')" style="padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">Post</button>
+                        <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px;">
+                            <div style="display:flex;gap:8px;">
+                                <select id="pp-note-type" style="padding:8px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;background:white;">
+                                    <option value="general">General</option>
+                                    <option value="call">Call Log</option>
+                                    <option value="follow_up">Follow-up</option>
+                                    <option value="win">Win</option>
+                                    <option value="issue">Issue</option>
+                                </select>
+                                <input id="pp-note-title" placeholder="Title (optional)" style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;background:white;font-weight:600;">
+                            </div>
+                            <div style="display:flex;gap:8px;">
+                                <input id="pp-note-input" placeholder="Add a note about this partner..." style="flex:1;padding:8px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;background:white;">
+                                <button onclick="ppSubmitNote('${p.id}','${p.hl_id||''}')" style="padding:8px 16px;background:#004990;color:white;border:none;border-radius:8px;font-weight:700;cursor:pointer;font-size:12px;">Post</button>
+                            </div>
                         </div>
                         <div id="pp-notes-list" style="max-height:360px;overflow-y:auto;display:flex;flex-direction:column;gap:8px;">
                             <div style="text-align:center;color:#94a3b8;padding:20px;">Loading notes...</div>
@@ -3132,16 +3137,19 @@ window.ppLoadSubPartners = async function() {
 // Submit a note
 window.ppSubmitNote = async function(personId, hlContactId) {
     var input = document.getElementById('pp-note-input');
+    var titleInput = document.getElementById('pp-note-title');
     var type = document.getElementById('pp-note-type');
     var body = input ? input.value.trim() : '';
     if (!body) return;
+    var title = titleInput ? titleInput.value.trim() : '';
     var staffId = localStorage.getItem('pp_userid') || '';
     var staffName = [localStorage.getItem('pp_user_first_name'), localStorage.getItem('pp_user_last_name')].filter(Boolean).join(' ') || 'Staff';
     var btn = document.querySelector('#pppanel-notes button');
     if (btn) { btn.disabled = true; btn.textContent = '...'; }
-    await pAPI({action:'add_note', person_id:personId, body:body, note_type:type ? type.value : 'general', author_id:staffId, author_name:staffName, hl_contact_id:hlContactId||''});
+    await pAPI({action:'add_note', person_id:personId, title:title||null, body:body, note_type:type ? type.value : 'general', author_id:staffId, author_name:staffName, hl_contact_id:hlContactId||''});
     if (btn) { btn.disabled = false; btn.textContent = 'Post'; }
     if (input) input.value = '';
+    if (titleInput) titleInput.value = '';
     loadNotes(personId, hlContactId);
 };
 
@@ -3153,6 +3161,36 @@ window.ppTogglePin = async function(noteId, pin, personId, hlContactId) {
 window.ppDeleteNote = async function(noteId, personId, hlContactId) {
     var c = await Swal.fire({title:'Delete note?',icon:'warning',showCancelButton:true,confirmButtonColor:'#ef4444',confirmButtonText:'Delete'});
     if (c.isConfirmed) { await pAPI({action:'delete_note', note_id:noteId, hl_contact_id:hlContactId||''}); loadNotes(personId, hlContactId); }
+};
+
+window.ppEditNote = async function(note, personId, hlContactId) {
+    var { value: result } = await Swal.fire({
+        title: 'Edit Note',
+        width: 500,
+        html: `
+            <div style="text-align:left;display:flex;flex-direction:column;gap:10px;">
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Title (optional)</label>
+                    <input id="edit-note-title" value="${(note.title||'').replace(/"/g,'&quot;')}" placeholder="Note title…"
+                        style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-weight:600;box-sizing:border-box;outline:none;">
+                </div>
+                <div>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Description *</label>
+                    <textarea id="edit-note-body" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;height:120px;resize:vertical;box-sizing:border-box;outline:none;">${note.body||''}</textarea>
+                </div>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonColor: '#004990',
+        confirmButtonText: 'Save',
+        preConfirm: () => {
+            var b = document.getElementById('edit-note-body').value.trim();
+            if (!b) { Swal.showValidationMessage('Description is required.'); return false; }
+            return { title: document.getElementById('edit-note-title').value.trim(), body: b };
+        }
+    });
+    if (!result) return;
+    await pAPI({action:'update_note', note_id:note.id, title:result.title||null, body:result.body, hl_contact_id:hlContactId||''});
+    loadNotes(personId, hlContactId);
 };
 
 // Load notes into the modal
@@ -3210,21 +3248,36 @@ function loadNotes(personId, hlContactId) {
             pinBtn.style.cssText = 'background:none;border:1px solid #e2e8f0;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;color:#64748b;';
             pinBtn.onclick = (function(id, newPin, pid, hlId) { return function() { ppTogglePin(id, newPin, pid, hlId); }; })(n.id, !n.is_pinned, personId, hlContactId);
 
+            var editBtn = document.createElement('button');
+            editBtn.textContent = 'Edit';
+            editBtn.style.cssText = 'background:none;border:1px solid #bfdbfe;color:#2563eb;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;';
+            editBtn.onclick = (function(note, pid, hlId) { return function() { ppEditNote(note, pid, hlId); }; })(n, personId, hlContactId);
+
             var delBtn = document.createElement('button');
             delBtn.textContent = 'Del';
             delBtn.style.cssText = 'background:none;border:1px solid #fecaca;color:#ef4444;border-radius:6px;cursor:pointer;padding:2px 8px;font-size:11px;';
             delBtn.onclick = (function(id, pid, hlId) { return function() { ppDeleteNote(id, pid, hlId); }; })(n.id, personId, hlContactId);
-            
+
             btnDiv.appendChild(pinBtn);
+            btnDiv.appendChild(editBtn);
             btnDiv.appendChild(delBtn);
             row.appendChild(metaDiv);
             row.appendChild(btnDiv);
-            
+
+            if (n.title) {
+                var titleDiv = document.createElement('div');
+                titleDiv.style.cssText = 'font-size:13px;font-weight:700;color:#0a1628;margin-bottom:4px;';
+                titleDiv.textContent = n.title;
+                card.appendChild(row);
+                card.appendChild(titleDiv);
+            } else {
+                card.appendChild(row);
+            }
+
             var bodyDiv = document.createElement('div');
             bodyDiv.style.cssText = 'font-size:13px;color:#475569;line-height:1.5;';
             bodyDiv.textContent = n.body;
-            
-            card.appendChild(row);
+
             card.appendChild(bodyDiv);
             el.appendChild(card);
         });
