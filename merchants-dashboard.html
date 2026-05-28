@@ -1450,7 +1450,12 @@ async function addTask(merchantUuid) {
 
                 <div id="content-equipment" class="tab-content" style="display:none; text-align:left;">
                     <!-- Current Equipment -->
-                    <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.6px; margin-bottom:8px;">Currently Deployed</div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.6px;">Currently Deployed</div>
+                        <button onclick="openMerchantDepModal('${m.id}', '${(m.dba_name || '').replace(/'/g, "\\'")}', '${(m.merchant_id || '').replace(/'/g, "\\'")}')" style="display:flex; align-items:center; gap:5px; background:#004990; color:white; border:none; border-radius:8px; padding:6px 14px; font-size:11px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">
+                            <span class="material-icons" style="font-size:14px;">add</span> Add New Deployment
+                        </button>
+                    </div>
                     <div style="background:white; border-radius:12px; border:1px solid #e2e8f0; overflow:hidden; margin-bottom:18px;">
                         <table class="slds-table slds-table_bordered slds-table_cell-buffer">
                             <thead>
@@ -2514,6 +2519,248 @@ window.saveMerchant = async (uuid) => {
     });
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'merchants'})});})();</script>
+<!-- ── NEW DEPLOYMENT FROM MERCHANT MODAL ──────────────────────────────── -->
+<div id="merch-dep-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:99999; align-items:center; justify-content:center;" onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:white; border-radius:16px; padding:24px; width:480px; max-width:95vw; max-height:90vh; overflow-y:auto; position:relative; box-shadow:0 20px 60px rgba(0,0,0,0.2);" onclick="event.stopPropagation()">
+        <span onclick="document.getElementById('merch-dep-modal').style.display='none'" style="position:absolute; top:14px; right:16px; cursor:pointer; color:#94a3b8; font-size:22px; line-height:1; font-weight:300;">✕</span>
+        <h2 style="font-size:1.15rem; font-weight:800; color:#002d5a; margin-bottom:14px;">Create Deployment Ticket</h2>
+
+        <!-- Merchant (read-only) -->
+        <div id="md-merchant-label" style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:9px 14px; margin-bottom:14px; font-size:13px; font-weight:700; color:#1d4ed8;"></div>
+
+        <!-- Mode toggle -->
+        <div style="display:flex; gap:8px; margin-bottom:14px;">
+            <button type="button" id="md-single-btn" onclick="mdSetMode('single')" style="flex:1; border-radius:8px; background:#004990; color:white; font-weight:700; font-size:11px; border:none; padding:8px; cursor:pointer; font-family:'DM Sans',sans-serif;">Single Unit</button>
+            <button type="button" id="md-bulk-btn" onclick="mdSetMode('bulk')" style="flex:1; border-radius:8px; background:#f1f5f9; color:#64748b; font-weight:700; font-size:11px; border:none; padding:8px; cursor:pointer; font-family:'DM Sans',sans-serif;">Multiple Units (Bulk)</button>
+        </div>
+
+        <!-- Single mode -->
+        <div id="md-single-fields">
+            <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">Hardware (Serial Number)</label>
+            <div style="position:relative; margin-bottom:14px;">
+                <input id="md-equip-search" placeholder="Type serial number…" oninput="mdHandleEquipSearch(this.value)" autocomplete="off"
+                    style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; box-sizing:border-box;">
+                <input type="hidden" id="md-equip-id">
+                <div id="md-equip-suggestions" style="position:absolute; z-index:200; background:white; width:100%; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; display:none; box-shadow:0 4px 16px rgba(0,0,0,0.1); margin-top:4px;"></div>
+            </div>
+            <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">TID</label>
+            <input id="md-tid" placeholder="TID" style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; box-sizing:border-box;">
+        </div>
+
+        <!-- Bulk mode -->
+        <div id="md-bulk-fields" style="display:none; margin-bottom:14px;">
+            <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">Add Units</label>
+            <div style="position:relative; margin-bottom:8px;">
+                <input id="md-bulk-search" placeholder="Search serial number…" oninput="mdHandleBulkSearch(this.value)" autocomplete="off"
+                    style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; box-sizing:border-box;">
+                <div id="md-bulk-suggestions" style="position:absolute; z-index:200; background:white; width:100%; border:1px solid #e2e8f0; border-radius:8px; max-height:200px; overflow-y:auto; display:none; box-shadow:0 4px 16px rgba(0,0,0,0.1); margin-top:4px;"></div>
+            </div>
+            <div id="md-bulk-list" style="min-height:50px; border:1px solid #e2e8f0; border-radius:8px; padding:8px; background:#f8fafc;">
+                <div style="color:#94a3b8; font-size:12px; text-align:center; padding:8px;">No units added yet</div>
+            </div>
+        </div>
+
+        <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">Deployment Date *</label>
+        <input type="date" id="md-date" style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; box-sizing:border-box;">
+
+        <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">Tracking Number</label>
+        <input id="md-tracking" placeholder="Tracking Number" style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; box-sizing:border-box;">
+
+        <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">Purchase Type *</label>
+        <select id="md-purchase-type" style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; margin-bottom:14px; box-sizing:border-box;">
+            <option value="">Select Purchase Type…</option>
+            <option>Free Placement</option>
+            <option>Agent Purchase</option>
+            <option>Rental</option>
+            <option>Reprogram</option>
+            <option>Swap</option>
+            <option>Swap/No Return</option>
+        </select>
+
+        <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px; text-transform:uppercase;">Internal Notes</label>
+        <textarea id="md-notes" placeholder="Internal notes…" style="width:100%; padding:9px 12px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:13px; font-family:'DM Sans',sans-serif; outline:none; height:65px; resize:vertical; margin-bottom:18px; box-sizing:border-box;"></textarea>
+
+        <button id="md-save-btn" onclick="mdSaveDeployment()" style="width:100%; background:#004990; color:white; border:none; border-radius:10px; padding:12px; font-size:13px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">
+            CREATE DEPLOYMENT
+        </button>
+    </div>
+</div>
+
+<script>
+(function() {
+    let _mdMerchantUuid = null;
+    let _mdMode = 'single';
+    let _mdBulkItems = [];
+    let _mdLookupTimer = null;
+
+    window.openMerchantDepModal = function(uuid, name, mid) {
+        _mdMerchantUuid = uuid;
+        _mdBulkItems = [];
+        document.getElementById('md-merchant-label').innerHTML =
+            '<span style="font-size:10px;font-weight:700;color:#6b7280;display:block;margin-bottom:2px;">MERCHANT</span>' +
+            name + (mid ? ' <span style="font-size:11px;font-weight:400;color:#6b7280;">· ' + mid + '</span>' : '');
+        document.getElementById('md-equip-search').value = '';
+        document.getElementById('md-equip-id').value = '';
+        document.getElementById('md-equip-suggestions').style.display = 'none';
+        document.getElementById('md-tid').value = '';
+        document.getElementById('md-bulk-search').value = '';
+        document.getElementById('md-bulk-suggestions').style.display = 'none';
+        document.getElementById('md-bulk-list').innerHTML = '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:8px;">No units added yet</div>';
+        document.getElementById('md-date').value = '';
+        document.getElementById('md-tracking').value = '';
+        document.getElementById('md-purchase-type').value = '';
+        document.getElementById('md-notes').value = '';
+        const btn = document.getElementById('md-save-btn');
+        btn.disabled = false; btn.textContent = 'CREATE DEPLOYMENT';
+        mdSetMode('single');
+        document.getElementById('merch-dep-modal').style.display = 'flex';
+    };
+
+    window.mdSetMode = function(mode) {
+        _mdMode = mode;
+        document.getElementById('md-single-fields').style.display = mode === 'single' ? 'block' : 'none';
+        document.getElementById('md-bulk-fields').style.display = mode === 'bulk' ? 'block' : 'none';
+        const sBtn = document.getElementById('md-single-btn');
+        const bBtn = document.getElementById('md-bulk-btn');
+        sBtn.style.cssText += ';background:' + (mode==='single'?'#004990':'#f1f5f9') + ';color:' + (mode==='single'?'white':'#64748b');
+        bBtn.style.cssText += ';background:' + (mode==='bulk'?'#004990':'#f1f5f9') + ';color:' + (mode==='bulk'?'white':'#64748b');
+    };
+
+    window.mdHandleEquipSearch = function(val) {
+        const list = document.getElementById('md-equip-suggestions');
+        document.getElementById('md-equip-id').value = '';
+        if (!val) { list.style.display = 'none'; return; }
+        clearTimeout(_mdLookupTimer);
+        _mdLookupTimer = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getLookups', query: val })
+                });
+                const result = await res.json();
+                const items = result.inventory || [];
+                if (!items.length) { list.innerHTML = '<div style="padding:10px;color:#94a3b8;font-size:12px;">No matching equipment found</div>'; list.style.display = 'block'; return; }
+                list.innerHTML = items.map(e => `
+                    <div onclick="mdSelectEquip('${e.id}','${(e.serial_number||'').replace(/'/g,"\\'")}','${(e.terminal_type||'').replace(/'/g,"\\'")}')"
+                        style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;display:flex;justify-content:space-between;align-items:center;"
+                        onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+                        <div><strong>${e.serial_number}</strong><div style="font-size:10px;color:#64748b;">${e.terminal_type||''}</div></div>
+                        <span style="font-size:9px;background:#f0fdf4;color:#166534;padding:2px 6px;border-radius:4px;font-weight:800;border:1px solid #bbf7d0;">${(e.status||'').toUpperCase()}</span>
+                    </div>`).join('');
+                list.style.display = 'block';
+            } catch(e) { console.error(e); }
+        }, 220);
+    };
+
+    window.mdSelectEquip = function(id, serial, type) {
+        document.getElementById('md-equip-id').value = id;
+        document.getElementById('md-equip-search').value = serial + ' (' + type + ')';
+        document.getElementById('md-equip-suggestions').style.display = 'none';
+    };
+
+    window.mdHandleBulkSearch = function(val) {
+        const list = document.getElementById('md-bulk-suggestions');
+        if (!val) { list.style.display = 'none'; return; }
+        clearTimeout(_mdLookupTimer);
+        _mdLookupTimer = setTimeout(async () => {
+            try {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'getLookups', query: val })
+                });
+                const result = await res.json();
+                const items = (result.inventory || []).filter(e => !_mdBulkItems.find(b => b.equipment_id === e.id));
+                if (!items.length) { list.innerHTML = '<div style="padding:10px;color:#94a3b8;font-size:12px;">No matching equipment found</div>'; list.style.display = 'block'; return; }
+                list.innerHTML = items.map(e => `
+                    <div onclick="mdAddBulkItem('${e.id}','${(e.serial_number||'').replace(/'/g,"\\'")}','${(e.terminal_type||'').replace(/'/g,"\\'")}')"
+                        style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;display:flex;justify-content:space-between;align-items:center;"
+                        onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+                        <div><strong>${e.serial_number}</strong><div style="font-size:10px;color:#64748b;">${e.terminal_type||''}</div></div>
+                        <span style="font-size:9px;background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:4px;font-weight:800;">+ ADD</span>
+                    </div>`).join('');
+                list.style.display = 'block';
+            } catch(e) { console.error(e); }
+        }, 220);
+    };
+
+    window.mdAddBulkItem = function(id, serial, type) {
+        if (_mdBulkItems.find(b => b.equipment_id === id)) return;
+        _mdBulkItems.push({ equipment_id: id, serial_number: serial, terminal_type: type });
+        document.getElementById('md-bulk-search').value = '';
+        document.getElementById('md-bulk-suggestions').style.display = 'none';
+        mdRenderBulkList();
+    };
+
+    window.mdRemoveBulkItem = function(id) {
+        _mdBulkItems = _mdBulkItems.filter(b => b.equipment_id !== id);
+        mdRenderBulkList();
+    };
+
+    function mdRenderBulkList() {
+        const el = document.getElementById('md-bulk-list');
+        if (!_mdBulkItems.length) {
+            el.innerHTML = '<div style="color:#94a3b8;font-size:12px;text-align:center;padding:8px;">No units added yet</div>';
+            return;
+        }
+        el.innerHTML = _mdBulkItems.map(b => `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:white;border-radius:6px;margin-bottom:4px;border:1px solid #e2e8f0;">
+                <div>
+                    <div style="font-weight:700;font-size:12px;">${b.serial_number}</div>
+                    <div style="font-size:10px;color:#64748b;">${b.terminal_type}</div>
+                </div>
+                <span onclick="mdRemoveBulkItem('${b.equipment_id}')" style="cursor:pointer;color:#ef4444;font-size:20px;line-height:1;padding:0 4px;">×</span>
+            </div>`).join('');
+    }
+
+    window.mdSaveDeployment = async function() {
+        const date = document.getElementById('md-date').value;
+        const purchaseType = document.getElementById('md-purchase-type').value;
+        if (!date) return Swal.fire('Missing Field', 'Please select a deployment date.', 'warning');
+        if (!purchaseType) return Swal.fire('Missing Field', 'Please select a purchase type.', 'warning');
+
+        let payload;
+        if (_mdMode === 'bulk') {
+            if (!_mdBulkItems.length) return Swal.fire('Missing Field', 'Please add at least one unit.', 'warning');
+            payload = {
+                merchant_id: _mdMerchantUuid, is_bulk: true,
+                items: _mdBulkItems.map(i => ({ equipment_id: i.equipment_id, tid: null })),
+                tracking_id: document.getElementById('md-tracking').value,
+                target_date: date, purchase_type: purchaseType,
+                notes: document.getElementById('md-notes').value
+            };
+        } else {
+            const equipId = document.getElementById('md-equip-id').value;
+            if (!equipId) return Swal.fire('Missing Field', 'Please select a hardware unit.', 'warning');
+            payload = {
+                merchant_id: _mdMerchantUuid, equipment_id: equipId,
+                tid: document.getElementById('md-tid').value,
+                tracking_id: document.getElementById('md-tracking').value,
+                target_date: date, purchase_type: purchaseType,
+                notes: document.getElementById('md-notes').value
+            };
+        }
+
+        const btn = document.getElementById('md-save-btn');
+        btn.disabled = true; btn.textContent = 'Creating…';
+
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'create', payload })
+            });
+            const result = await res.json();
+            if (!result.success) throw new Error(result.message || 'Create failed');
+            document.getElementById('merch-dep-modal').style.display = 'none';
+            await fetchMerchantEquipment();
+            Swal.fire({ icon: 'success', title: 'Deployment Created!', text: 'Equipment will now appear in Currently Deployed.', timer: 2000, showConfirmButton: false });
+        } catch(e) {
+            Swal.fire('Error', e.message, 'error');
+            btn.disabled = false; btn.textContent = 'CREATE DEPLOYMENT';
+        }
+    };
+})();
+</script>
+
 <script src="/js/site-config.js"></script>
 <script>window.NAV_SHORTCUT_PAGE = 'merchants';</script>
 <script src="/js/nav-shortcuts.js"></script>
