@@ -141,6 +141,7 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_admin_dashboard',   parseBool(user.access_admin_dashboard)   ? 'true' : 'false');
         localStorage.setItem('pp_access_sending_reports',   parseBool(user.access_sending_reports)   ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
+        window.dispatchEvent(new CustomEvent('pp-authorized', { detail: user }));
     } catch (e) { console.error("Storage Error:", e); }
 
     // Bootstrap timezone from business profile (non-blocking)

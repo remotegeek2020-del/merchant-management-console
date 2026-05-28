@@ -687,10 +687,11 @@ function renderPreviewTable(data) {
 
 <script>
 // ── SENDING REPORTS ──────────────────────────────────────────────────────────
-(function() {
+function initSendingReportsTab() {
     const role = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
     const hasAccess = localStorage.getItem('pp_access_sending_reports') === 'true' || role === 'super_admin';
     if (!hasAccess) return;
+    if (document.querySelector('.page-tab-btn[data-tab="email"]')) return; // already injected
 
     // Inject the tab button
     const tabBar = document.getElementById('page-tab-bar');
@@ -970,7 +971,9 @@ function renderPreviewTable(data) {
     };
 
     srInit();
-})();
+}
+// Run after auth completes so localStorage has the latest access flags
+window.addEventListener('pp-authorized', initSendingReportsTab, { once: true });
 </script>
 </body>
 </html>
