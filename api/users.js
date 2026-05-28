@@ -12,6 +12,12 @@ export default async function handler(req, res) {
     
     try {
         if (req.method === 'GET' || req.query.action === 'list') {
+            // Require admin dashboard access to list staff
+            const { data: listCaller } = await supabase.from('app_users')
+                .select('role, access_admin_dashboard').eq('userid', session.userid).maybeSingle();
+            if (!listCaller?.access_admin_dashboard && listCaller?.role !== 'super_admin' && listCaller?.role !== 'admin') {
+                return res.status(403).json({ success: false, message: 'Access denied.' });
+            }
             // Only return non-sensitive fields
             const { data, error } = await supabase.from('app_users')
                 .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,created_at')

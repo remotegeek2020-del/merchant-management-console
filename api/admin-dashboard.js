@@ -7,6 +7,19 @@ export default async function handler(req, res) {
 
     if (req.method !== 'POST') return res.status(405).json({ message: 'Method not allowed' });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // Verify caller has admin dashboard access — never trust client-sent role
+    const { data: caller } = await supabase
+        .from('app_users')
+        .select('role, access_admin_dashboard, email, first_name, last_name')
+        .eq('userid', session.userid)
+        .maybeSingle();
+    if (!caller?.access_admin_dashboard && caller?.role !== 'super_admin' && caller?.role !== 'admin') {
+        return res.status(403).json({ success: false, message: 'Access denied.' });
+    }
+    const callerEmail = caller.email || session.userid;
+    const callerName  = `${caller.first_name || ''} ${caller.last_name || ''}`.trim() || callerEmail;
+
     const { action } = req.body;
 
     try {
@@ -183,7 +196,7 @@ export default async function handler(req, res) {
                                 <td style="padding:10px 12px; font-weight:600;">${m.dba_name}</td>
                                 <td style="padding:10px 12px; font-family:monospace; font-size:12px;">${m.merchant_id}</td>
                                 <td style="padding:10px 12px; color:#dc2626; font-weight:700;">-${drop}%</td>
-                                <td style="padding:10px 12px; color:#64748b;">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString() : '—'}</td>
+                                <td style="padding:10px 12px; color:#64748b;">${m.last_batch_date ? m.last_batch_date.slice(0, 10) : '—'}</td>
                             </tr>`;
                         }).join('');
                         await client.sendEmail({
@@ -213,6 +226,13 @@ export default async function handler(req, res) {
                     emailsSent++;
                 }
             }
+
+            supabase.from('activity_logs').insert({
+                email: callerEmail,
+                action: `Partner Risk Alerts Sent by ${callerName} — ${emailsSent} partner(s) notified, ${merchants.length} merchant(s) flagged`,
+                status: 'success', category: 'merchants', target_type: 'merchant', severity: 'warning',
+                new_value: { partners_notified: emailsSent, merchant_ids }
+            }).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true, partners_notified: emailsSent, merchant_count: merchants.length });
         }
