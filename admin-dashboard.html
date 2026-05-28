@@ -160,7 +160,7 @@
                     </div>
                     <span id="risk-count" style="font-size:11px; color:var(--text-muted);"></span>
                 </div>
-                <button id="bulk-alert-btn" onclick="sendBulkAlerts()" style="display:none; background:#dc2626; color:white; border:none; border-radius:8px; font-weight:700; font-size:11px; padding:6px 14px; cursor:pointer; white-space:nowrap; display:none; align-items:center; gap:5px;">
+                <button id="bulk-alert-btn" onclick="sendBulkAlerts()" style="display:none; background:#dc2626; color:white; border:none; border-radius:8px; font-weight:700; font-size:11px; padding:6px 14px; cursor:pointer; white-space:nowrap; align-items:center; gap:5px;">
                     <span class="material-icons" style="font-size:14px;">notifications_active</span>
                     <span id="bulk-alert-label">Send Alerts</span>
                 </button>
@@ -287,12 +287,17 @@ function authHeaders(extra = {}) {
 }
 
 async function api(action, extra = {}) {
-    const r = await fetch('/api/admin-dashboard', {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify({ action, ...extra })
-    });
-    return r.json();
+    try {
+        const r = await fetch('/api/admin-dashboard', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ action, ...extra })
+        });
+        return r.json();
+    } catch (e) {
+        console.error('[api]', action, e);
+        return { success: false, message: 'Network error. Please try again.' };
+    }
 }
 
 function renderKPIs(kpis) {
@@ -530,7 +535,7 @@ async function openDepDetail(depId) {
     document.getElementById('dep-modal-title').textContent = d.deployment_id || `Deployment #${depId}`;
 
     const trackingHtml = d.tracking_id
-        ? `<a href="https://parcelsapp.com/en/tracking/${d.tracking_id}" target="_blank" style="color:var(--pp-blue); font-weight:600; font-family:'DM Mono',monospace;">${d.tracking_id} <span class="material-icons" style="font-size:12px; vertical-align:middle;">open_in_new</span></a>`
+        ? `<a href="https://parcelsapp.com/en/tracking/${d.tracking_id}" target="_blank" rel="noopener noreferrer" style="color:var(--pp-blue); font-weight:600; font-family:'DM Mono',monospace;">${d.tracking_id} <span class="material-icons" style="font-size:12px; vertical-align:middle;">open_in_new</span></a>`
         : '<span style="color:var(--text-muted);">Not yet assigned</span>';
 
     document.getElementById('dep-modal-body').innerHTML = `
@@ -544,6 +549,9 @@ async function openDepDetail(depId) {
         <div class="detail-section">
             <div class="detail-label">Tracking</div>
             <div class="detail-row"><span class="detail-key">Tracking #</span><span class="detail-val" style="max-width:100%;">${trackingHtml}</span></div>
+            ${d.tid ? `<div class="detail-row"><span class="detail-key">TID</span><span class="detail-val" style="font-family:'DM Mono',monospace;">${d.tid}</span></div>` : ''}
+            ${d.target_deployment_date ? `<div class="detail-row"><span class="detail-key">Target Date</span><span class="detail-val">${fmtDate(d.target_deployment_date)}</span></div>` : ''}
+            ${d.merchant_received_date ? `<div class="detail-row"><span class="detail-key">Received Date</span><span class="detail-val">${fmtDate(d.merchant_received_date)}</span></div>` : ''}
         </div>
         <div class="detail-section">
             <div class="detail-label">Merchant</div>
@@ -775,7 +783,7 @@ function applyLayout() {
         const widgets = {};
         Array.from(container.children).forEach(el => { if (el.dataset.widget) widgets[el.dataset.widget] = el; });
         saved.forEach(id => { if (widgets[id]) container.appendChild(widgets[id]); });
-    } catch(e) {}
+    } catch(e) { console.warn('Could not restore dashboard layout:', e); }
 }
 
 function saveLayout() {
