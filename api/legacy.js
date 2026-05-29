@@ -137,13 +137,34 @@ export default async function handler(req, res) {
 
         // ── FILE RMA ──────────────────────────────────────────────────────────
         if (action === 'file_rma') {
-            const { legacy_id, return_reason, notes: rmaNote } = body;
+            const { legacy_id, return_reason, return_date, destination, notes: rmaNote } = body;
             if (!legacy_id) return res.status(400).json({ success: false, message: 'legacy_id required' });
+            if (!destination) return res.status(400).json({ success: false, message: 'destination required' });
 
             const { data: leg, error: legErr } = await supabase
                 .from('legacy_deployments').select('*').eq('id', legacy_id).single();
             if (legErr || !leg) return res.status(404).json({ success: false, message: 'Legacy record not found' });
             if (leg.status !== 'active') return res.status(400).json({ success: false, message: 'RMA already filed for this record' });
+
+            // Determine condition and status based on destination
+            let condition, returnStatus, equipReceivedDate;
+            if (destination === 'Warsaw Office') {
+                condition = 'Working (Back to Stock)';
+                returnStatus = 'Closed';
+                equipReceivedDate = return_date || new Date().toISOString().slice(0, 10);
+            } else if (destination === 'Warsaw Repairs') {
+                condition = 'Defective (Received in Repairs)';
+                returnStatus = 'Open';
+                equipReceivedDate = null;
+            } else if (destination === 'Scrap') {
+                condition = 'Scrapped';
+                returnStatus = 'Closed';
+                equipReceivedDate = return_date || new Date().toISOString().slice(0, 10);
+            } else {
+                condition = 'IN TRANSIT';
+                returnStatus = 'Open';
+                equipReceivedDate = null;
+            }
 
             // Generate a return_id
             const { data: lastRet } = await supabase.from('returns')
@@ -151,7 +172,7 @@ export default async function handler(req, res) {
             const lastNum = lastRet?.return_id ? parseInt(lastRet.return_id.replace(/\D/g, ''), 10) || 1000 : 1000;
             const return_id = `RMA-${String(lastNum + 1).padStart(5, '0')}`;
 
-            const { data: newReturn, error: retErr } = await supabase.from('returns').insert({
+            const insertPayload = {
                 return_id,
                 merchant_id: leg.merchant_id || null,
                 equipment_id: null,
@@ -159,11 +180,15 @@ export default async function handler(req, res) {
                 legacy_deployment_id: legacy_id,
                 return_reason: return_reason || 'Legacy Equipment Return',
                 notes: rmaNote || null,
-                return_date_initiated: new Date().toISOString(),
-                status: 'Open',
-                condition: 'IN TRANSIT',
+                return_date_initiated: return_date ? new Date(return_date).toISOString() : new Date().toISOString(),
+                status: returnStatus,
+                condition,
+                destination,
                 is_bulk: false
-            }).select('id, return_id').single();
+            };
+            if (equipReceivedDate) insertPayload.equipment_received_date = new Date(equipReceivedDate).toISOString();
+
+            const { data: newReturn, error: retErr } = await supabase.from('returns').insert(insertPayload).select('id, return_id').single();
             if (retErr) throw retErr;
 
             // Update legacy record
@@ -177,9 +202,9 @@ export default async function handler(req, res) {
             const actorName = actor ? `${actor.first_name || ''} ${actor.last_name || ''}`.trim() || actor.email : 'Staff';
             supabase.from('activity_logs').insert({
                 email: actor?.email || session.userid,
-                action: `Legacy RMA filed by ${actorName} — Serial: ${leg.serial_number}`,
+                action: `Legacy RMA filed by ${actorName} — Serial: ${leg.serial_number} → ${destination}`,
                 status: 'success', category: 'returns', severity: 'info',
-                new_value: { return_id, serial_number: leg.serial_number, legacy_id }
+                new_value: { return_id, serial_number: leg.serial_number, legacy_id, destination }
             }).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true, return_id: newReturn.return_id, id: newReturn.id });
