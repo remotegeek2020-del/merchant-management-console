@@ -497,16 +497,27 @@ if (action === 'getMonthlyReport') {
                 .eq('id', equipment_id);
             if (error) throw error;
 
-            // Close open returns record and set final condition/destination
+            // Close linked open return — check both single (returns.equipment_id) and bulk (return_items)
+            const finalCondition = isScrap ? 'Scrapped' : 'Working (Back to Stock)';
+            const finalDest      = isScrap ? 'Scrap'    : 'Warsaw Office';
+            const closePayload   = { status: 'Closed', condition: finalCondition, destination: finalDest, equipment_received_date: new Date().toISOString() };
+
             const { data: openReturn } = await supabase.from('returns')
                 .select('id').eq('equipment_id', equipment_id).eq('status', 'Open').maybeSingle();
             if (openReturn) {
-                await supabase.from('returns').update({
-                    status: 'Closed',
-                    condition: isScrap ? 'Scrapped' : 'Working (Back to Stock)',
-                    destination: isScrap ? 'Scrap' : 'Warsaw Office',
-                    equipment_received_date: new Date().toISOString()
-                }).eq('id', openReturn.id);
+                await supabase.from('returns').update(closePayload).eq('id', openReturn.id);
+            } else {
+                // Bulk return: equipment linked via return_items, not returns.equipment_id
+                const { data: bulkItem } = await supabase.from('return_items')
+                    .select('return_id').eq('equipment_id', equipment_id)
+                    .limit(1).maybeSingle();
+                if (bulkItem) {
+                    const { data: bulkReturn } = await supabase.from('returns')
+                        .select('id').eq('id', bulkItem.return_id).eq('status', 'Open').maybeSingle();
+                    if (bulkReturn) {
+                        await supabase.from('returns').update(closePayload).eq('id', bulkReturn.id);
+                    }
+                }
             }
 
             await supabase.from('equipment_logs').insert([{
