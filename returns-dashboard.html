@@ -584,10 +584,6 @@ async function fetchReturns() {
                         </button>
                         ${isOpen ? (() => {
                             const dest = r.destination || '';
-                            // Legacy Warsaw Repairs: equipment is already in the repair queue — it auto-closes when done
-                            if (isLegacy && dest === 'Warsaw Repairs') {
-                                return `<span style="font-size:11px;color:#b45309;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;">In Repair Queue</span>`;
-                            }
                             let btnLabel, btnClass, btnIcon;
                             if (dest === 'Warsaw Repairs') {
                                 btnLabel = 'Complete & Repair'; btnClass = 'pp-btn-warning'; btnIcon = 'build';
@@ -597,7 +593,6 @@ async function fetchReturns() {
                                 btnLabel = 'Complete & Restock'; btnClass = 'pp-btn-success'; btnIcon = 'check_circle';
                             }
                             const destEsc = dest.replace(/'/g,"\\'");
-                            // For legacy returns, equipment_id is already set on the return record
                             const eqId = isBulk ? '' : (r.equipment_id || '');
                             const ticketBtn = r.ticket_id ? `<button class="pp-btn" onclick="closeLinkedTicket(${r.ticket_id}, this)" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;" title="Close partner ticket"><span class="material-icons" style="font-size:14px;">task_alt</span><span class="btn-label">Close Ticket</span></button>` : '';
                             return `<button class="pp-btn ${btnClass}" onclick="finalizeRMA('${r.id}', '${eqId}', '${destEsc}')"><span class="material-icons" style="font-size:14px;">${btnIcon}</span><span class="btn-label">${btnLabel}</span></button>${ticketBtn}`;
