@@ -485,16 +485,20 @@ async function fetchReturns() {
                         <button class="pp-btn pp-btn-icon" onclick="viewHistory('${isBulk ? (r.items?.[0]?.equipment_id || '') : r.equipment_id}', '${isBulk ? 'bulk' : (r.equipments?.serial_number || '')}')" title="View History">
                             <span class="material-icons" style="font-size:16px;">history</span>
                         </button>
-                        ${isOpen ? `
-                        <button class="pp-btn pp-btn-success" onclick="finalizeRMA('${r.id}', '${isBulk ? '' : (isLegacy ? '' : (r.equipment_id || ''))}')">
-                            <span class="material-icons" style="font-size:14px;">check_circle</span>
-                            <span class="btn-label">Complete & Restock</span>
-                        </button>
-                        ${r.ticket_id ? `<button class="pp-btn" onclick="closeLinkedTicket(${r.ticket_id}, this)" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;" title="Close partner ticket">
-                            <span class="material-icons" style="font-size:14px;">task_alt</span>
-                            <span class="btn-label">Close Ticket</span>
-                        </button>` : ''}` : `
-                        <span style="font-size:11px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Processed</span>`}
+                        ${isOpen ? (() => {
+                            const dest = r.destination || '';
+                            let btnLabel, btnClass, btnIcon;
+                            if (dest === 'Warsaw Repairs') {
+                                btnLabel = 'Complete & Repair'; btnClass = 'pp-btn-warning'; btnIcon = 'build';
+                            } else if (dest === 'Scrap') {
+                                btnLabel = 'Complete & Scrap'; btnClass = 'pp-btn-danger'; btnIcon = 'delete_forever';
+                            } else {
+                                btnLabel = 'Complete & Restock'; btnClass = 'pp-btn-success'; btnIcon = 'check_circle';
+                            }
+                            const destEsc = dest.replace(/'/g,"\\'");
+                            const ticketBtn = r.ticket_id ? `<button class="pp-btn" onclick="closeLinkedTicket(${r.ticket_id}, this)" style="background:#f3e8ff;color:#7c3aed;border:1px solid #d8b4fe;" title="Close partner ticket"><span class="material-icons" style="font-size:14px;">task_alt</span><span class="btn-label">Close Ticket</span></button>` : '';
+                            return `<button class="pp-btn ${btnClass}" onclick="finalizeRMA('${r.id}', '${isBulk ? '' : (isLegacy ? '' : (r.equipment_id || ''))}', '${destEsc}')"><span class="material-icons" style="font-size:14px;">${btnIcon}</span><span class="btn-label">${btnLabel}</span></button>${ticketBtn}`;
+                        })() : `<span style="font-size:11px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Processed</span>`}
                         ${canDeleteTickets ? `
                         <button class="pp-btn" onclick="deleteReturn('${r.id}', '${(r.return_id || 'this return').replace(/'/g,"\\'")}', '${(r.merchants?.dba_name || '').replace(/'/g,"\\'")}'" )" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;" title="Delete Return">
                             <span class="material-icons" style="font-size:14px;">delete_forever</span>
@@ -576,54 +580,55 @@ async function deleteReturn(returnUuid, returnId, dbaName) {
     }
 }
 
-async function finalizeRMA(id, equipment_id) {
-    const destOnchange = `document.querySelectorAll('.fin-dest-label').forEach(el=>{el.style.borderColor='#e2e8f0';el.style.background='#fff'});this.closest('label').style.borderColor='#004990';this.closest('label').style.background='#eff6ff';`;
-    const scrapOnchange = `document.querySelectorAll('.fin-dest-label').forEach(el=>{el.style.borderColor='#e2e8f0';el.style.background='#fff'});this.closest('label').style.borderColor='#dc2626';this.closest('label').style.background='#fff1f2';`;
-
-    const { value: formData, isConfirmed } = await Swal.fire({
-        title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">Complete RMA — Final Disposition</span>',
-        width: '480px',
-        showCancelButton: true,
-        confirmButtonText: 'Complete RMA',
-        confirmButtonColor: '#004990',
-        html: `<div style="text-align:left;padding-top:4px;">
-            <div style="margin-bottom:12px;">
-                <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Receipt Date <span style="color:#ef4444;">*</span></label>
-                <input type="date" id="fin-date" value="${fmtDateInput(new Date())}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
-            </div>
-            <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:7px;">Destination <span style="color:#ef4444;">*</span></label>
-            <div style="display:flex;flex-direction:column;gap:6px;">
-                <label class="fin-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
-                    <input type="radio" name="fin-dest" value="Warsaw Office" style="margin-top:2px;flex-shrink:0;" onchange="${destOnchange}">
-                    <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Warsaw Office — Back to Stock</div><div style="font-size:11px;color:#64748b;">Working unit returned to inventory</div></div>
-                </label>
-                <label class="fin-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
-                    <input type="radio" name="fin-dest" value="Warsaw Repairs" style="margin-top:2px;flex-shrink:0;" onchange="${destOnchange}">
-                    <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Warsaw Repairs</div><div style="font-size:11px;color:#64748b;">Defective — send to repair queue</div></div>
-                </label>
-                <label class="fin-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
-                    <input type="radio" name="fin-dest" value="Scrap" style="margin-top:2px;flex-shrink:0;" onchange="${scrapOnchange}">
-                    <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Scrap</div><div style="font-size:11px;color:#64748b;">Equipment decommissioned — cannot be undone</div></div>
-                </label>
-            </div>
-        </div>`,
-        preConfirm: () => {
-            const date = document.getElementById('fin-date').value;
-            const dest = document.querySelector('input[name="fin-dest"]:checked')?.value;
-            if (!date) { Swal.showValidationMessage('Please select a receipt date'); return; }
-            if (!dest) { Swal.showValidationMessage('Please select a destination'); return; }
-            return { date, dest };
-        }
-    });
-    if (!isConfirmed || !formData) return;
-
+async function finalizeRMA(id, equipment_id, destination) {
     const conditionMap = {
         'Warsaw Office':  'Working (Back to Stock)',
         'Warsaw Repairs': 'Defective (Received in Repairs)',
         'Scrap':          'Scrapped'
     };
-    const finalCondition   = conditionMap[formData.dest];
-    const finalDestination = formData.dest;
+    const dest = destination || 'Warsaw Office';
+    const isRepairs = dest === 'Warsaw Repairs';
+    const isScrap   = dest === 'Scrap';
+
+    let titleText, confirmColor, confirmText, noteHtml;
+    if (isRepairs) {
+        titleText    = 'Complete & Send to Repairs';
+        confirmColor = '#b45309';
+        confirmText  = 'Confirm — Send to Repairs';
+        noteHtml     = `<div style="margin-top:10px;padding:8px 12px;background:#fef9c3;border:1px solid #fde68a;border-radius:8px;font-size:12px;color:#92400e;">RMA will stay <strong>Open</strong> until the repair is resolved in the repair queue.</div>`;
+    } else if (isScrap) {
+        titleText    = 'Complete & Scrap Unit';
+        confirmColor = '#dc2626';
+        confirmText  = 'Confirm — Scrap It';
+        noteHtml     = `<div style="margin-top:10px;padding:8px 12px;background:#fee2e2;border:1px solid #fecaca;border-radius:8px;font-size:12px;color:#991b1b;">Unit will be permanently decommissioned. This cannot be undone.</div>`;
+    } else {
+        titleText    = 'Complete & Return to Stock';
+        confirmColor = '#10b981';
+        confirmText  = 'Confirm — Back to Stock';
+        noteHtml     = `<div style="margin-top:10px;padding:8px 12px;background:#dcfce7;border:1px solid #bbf7d0;border-radius:8px;font-size:12px;color:#166534;">Unit will be marked as stocked at Warsaw Office and RMA will close.</div>`;
+    }
+
+    const { value: formData, isConfirmed } = await Swal.fire({
+        title: `<span style="font-size:15px;font-weight:800;color:#002d5a;">${titleText}</span>`,
+        width: '420px',
+        showCancelButton: true,
+        confirmButtonText: confirmText,
+        confirmButtonColor: confirmColor,
+        html: `<div style="text-align:left;padding-top:4px;">
+            <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Date Received <span style="color:#ef4444;">*</span></label>
+            <input type="date" id="fin-date" value="${fmtDateInput(new Date())}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+            ${noteHtml}
+        </div>`,
+        preConfirm: () => {
+            const date = document.getElementById('fin-date').value;
+            if (!date) { Swal.showValidationMessage('Please select a date received'); return; }
+            return { date };
+        }
+    });
+    if (!isConfirmed || !formData) return;
+
+    const finalCondition   = conditionMap[dest];
+    const finalDestination = dest;
 
     Swal.fire({ title: 'Updating...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
     try {
@@ -633,12 +638,11 @@ async function finalizeRMA(id, equipment_id) {
         });
         const r = await res.json();
         if (r.success) {
-            const toRepairs = finalDestination === 'Warsaw Repairs';
             Swal.fire({
                 icon: 'success',
-                title: toRepairs ? 'Sent to Repairs' : 'RMA Closed!',
-                html: `Unit moved to <b>${finalDestination}</b> as <b>${finalCondition}</b>.${toRepairs ? '<br><span style="font-size:12px;color:#64748b;">RMA stays open until repair is resolved.</span>' : ''}`,
-                timer: 3000, showConfirmButton: false
+                title: isRepairs ? 'Sent to Repairs' : 'RMA Closed!',
+                html: `Unit moved to <b>${finalDestination}</b>.${isRepairs ? '<br><span style="font-size:12px;color:#64748b;">RMA stays open until repair is resolved.</span>' : ''}`,
+                timer: 2500, showConfirmButton: false
             }).then(() => fetchReturns());
         } else { throw new Error(r.message); }
     } catch (err) { Swal.fire('Error', err.message, 'error'); }
