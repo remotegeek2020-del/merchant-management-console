@@ -125,7 +125,22 @@ export default async function handler(req, res) {
             const bulkEquipIds = new Set(bulks.flatMap(d => (d.deployment_items || []).map(i => i.equipment_id)));
             const filteredSingles = singles.filter(s => !bulkEquipIds.has(s.id));
 
-            return res.status(200).json({ success: true, singles: filteredSingles, bulks });
+            // Legacy deployments — active only (not returned/closed)
+            const { data: legacyItems } = await supabase
+                .from('legacy_deployments')
+                .select('id, serial_number, terminal_type, tid')
+                .eq('merchant_id', merchant.id)
+                .eq('status', 'active');
+
+            const legacy = (legacyItems || []).map(l => ({
+                id: l.id,
+                serial_number: l.serial_number,
+                terminal_type: l.terminal_type,
+                tid: l.tid,
+                is_legacy: true
+            }));
+
+            return res.status(200).json({ success: true, singles: filteredSingles, bulks, legacy });
         }
 
         if (action === 'create') {

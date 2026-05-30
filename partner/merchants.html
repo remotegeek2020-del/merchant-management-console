@@ -566,7 +566,7 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
             Swal.fire({ icon: 'error', title: 'Error', text: result.message, confirmButtonColor: '#0d9488' });
             return;
         }
-        const hasEquipment = (result.singles?.length > 0) || (result.bulks?.length > 0);
+        const hasEquipment = (result.singles?.length > 0) || (result.bulks?.length > 0) || (result.legacy?.length > 0);
         if (!hasEquipment) {
             Swal.fire({
                 icon: 'info', title: 'No Active Equipment',
@@ -576,7 +576,7 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
             return;
         }
         Swal.close();
-        openTicketForm(merchantId, merchantName, 'rma_request', result.singles || [], result.bulks || [], []);
+        openTicketForm(merchantId, merchantName, 'rma_request', result.singles || [], result.bulks || [], [], result.legacy || []);
     } else {
         // Fetch terminal types from DB for deployment form
         Swal.fire({ title: 'Loading...', didOpen: () => Swal.showLoading() });
@@ -594,7 +594,7 @@ window.openTicketMenu = async function(merchantId='', merchantName='') {
     }
 };
 
-window.openTicketForm = async function(merchantId, merchantName, type, singles, bulks, terminalTypes = []) {
+window.openTicketForm = async function(merchantId, merchantName, type, singles, bulks, terminalTypes = [], legacy = []) {
     const isDeployment = type === 'deployment_request';
 
     const typeOptions = terminalTypes.length > 0
@@ -627,6 +627,18 @@ window.openTicketForm = async function(merchantId, merchantName, type, singles, 
                     <span style="font-size:9px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 6px;border-radius:4px;white-space:nowrap;">BULK</span>
                 </label>`).join('');
         });
+        if ((legacy || []).length) {
+            equipCheckboxes += `<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;margin-top:10px;">Legacy Units</div>`;
+            equipCheckboxes += (legacy || []).map(l => {
+                const label = [l.terminal_type, l.serial_number].filter(Boolean).join(' — ');
+                const tidRef = l.tid ? ` · TID: ${l.tid}` : '';
+                return `<label style="display:flex;align-items:center;gap:8px;padding:7px 10px;border:1px solid #e2e8f0;border-radius:6px;margin-bottom:4px;cursor:pointer;background:white;font-size:12px;">
+                    <input type="checkbox" class="tick-unit-cb" value="l:${l.id}" data-serial="${l.serial_number || ''}" data-type="${l.terminal_type || ''}" data-depid="" style="width:14px;height:14px;flex-shrink:0;">
+                    <span style="flex:1;">${label || 'Unknown'}${tidRef}</span>
+                    <span style="font-size:9px;font-weight:700;background:#f3e8ff;color:#7c3aed;padding:1px 6px;border-radius:4px;white-space:nowrap;">LEGACY</span>
+                </label>`;
+            }).join('');
+        }
     }
 
     const { value: form } = await Swal.fire({
