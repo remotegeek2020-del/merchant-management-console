@@ -204,7 +204,7 @@
                 <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Status</label>
                 <select id="legStatus" onchange="fetchLegacy()" style="height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 10px;font-size:13px;background:white;cursor:pointer;width:100%;">
                     <option value="all">All</option>
-                    <option value="active" selected>Pending RMA</option>
+                    <option value="active" selected>Active</option>
                     <option value="rma_filed">RMA Filed</option>
                     <option value="converted">Converted</option>
                 </select>
@@ -221,12 +221,13 @@
                         <th>Merchant</th>
                         <th>Terminal Type</th>
                         <th class="hide-mobile">Deploy Date</th>
+                        <th class="hide-mobile">Purchase Type</th>
                         <th>Status</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody id="legacyTableBody">
-                    <tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;">Loading…</td></tr>
+                    <tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;">Loading…</td></tr>
                 </tbody>
             </table>
             <div id="legacyPaginationControls"></div>
@@ -676,7 +677,7 @@ async function fetchLegacy() {
 
 async function renderLegacy() {
     const tbody = document.getElementById('legacyTableBody');
-    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
     const search = document.getElementById('legSearch')?.value.trim() || '';
     const status = document.getElementById('legStatus')?.value || 'all';
     try {
@@ -696,13 +697,13 @@ async function renderLegacy() {
 
         const rows = data.data || [];
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
             document.getElementById('legacyPaginationControls').innerHTML = '';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             const statusBadge = {
-                active:    '<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Pending RMA</span>',
+                active:    '<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Active</span>',
                 rma_filed: '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">RMA Filed</span>',
                 converted: '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Converted</span>'
             }[r.status] || r.status;
@@ -715,14 +716,17 @@ async function renderLegacy() {
             return `<tr>
                 <td style="font-family:monospace;font-size:12px;">${r.serial_number}</td>
                 <td class="hide-mobile" style="font-size:12px;color:#64748b;">${r.tid || '—'}</td>
-                <td style="font-size:12px;">${merchantName}<div style="font-size:10px;color:#94a3b8;font-family:monospace;">${r.mid || ''}</div></td>
+                <td style="font-size:12px;">${merchantName}</td>
                 <td style="font-size:12px;">
                     ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}
+                    <button onclick="legEditType('${r.id}','${safeType}')" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>
                 </td>
                 <td class="hide-mobile" style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
+                <td class="hide-mobile" style="font-size:12px;color:#64748b;">${r.purchase_type || '—'}</td>
                 <td>${statusBadge}</td>
                 <td>
                     ${canRMA ? `<button onclick="legFileRMA('${r.id}','${safeSerial}','${safeType}')" style="padding:3px 10px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}
+                    ${r.status === 'converted' && r.converted_equipment_id ? `<span style="font-size:10px;color:#16a34a;">✓ In Inventory</span>` : ''}
                 </td>
             </tr>`;
         }).join('');
@@ -736,7 +740,39 @@ async function renderLegacy() {
             ${legPage < pages ? `<button onclick="legPage++;renderLegacy()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">Next →</button>` : ''}
         </div>` : `<div style="padding:8px 12px;font-size:11px;color:#94a3b8;text-align:right;">${total} record${total!==1?'s':''}</div>`;
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="7" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
+    }
+}
+
+async function legEditType(id, currentType) {
+    await _legLoadTerminalTypes();
+    const { value: newType, isConfirmed } = await Swal.fire({
+        title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">Edit Terminal Type</span>',
+        width: '400px',
+        showCancelButton: true,
+        confirmButtonText: 'Save',
+        confirmButtonColor: '#004990',
+        html: `<div style="text-align:left;padding-top:8px;">
+                 <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type</label>
+                 <select id="swal-legtype" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;">
+                   <option value="">— Unknown —</option>
+                   ${_legTermOpts(currentType)}
+                 </select>
+               </div>`,
+        didOpen: () => document.getElementById('swal-legtype')?.focus(),
+        preConfirm: () => document.getElementById('swal-legtype').value
+    });
+    if (!isConfirmed) return;
+    try {
+        const res = await fetch('/api/legacy', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'update', legacy_id: id, terminal_type: newType || null })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        await renderLegacy();
+    } catch (e) {
+        Swal.fire('Error', e.message, 'error');
     }
 }
 
