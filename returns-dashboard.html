@@ -346,8 +346,9 @@ async function logAuditAction(action, details, opts = {}) {
 function conditionBadge(condition) {
     if (!condition) return '<span class="pp-badge">Unknown</span>';
     const c = condition.toLowerCase();
-    if (c.includes('defective') || c.includes('repair')) return `<span class="pp-badge defective">${condition}</span>`;
     if (c.includes('working') || c.includes('stock')) return `<span class="pp-badge working">${condition}</span>`;
+    if (c.includes('defective') || c.includes('repair')) return `<span class="pp-badge defective">${condition}</span>`;
+    if (c.includes('scrap'))   return `<span class="pp-badge closed">${condition}</span>`;
     if (c.includes('transit')) return `<span class="pp-badge in-transit">${condition}</span>`;
     return `<span class="pp-badge">${condition}</span>`;
 }

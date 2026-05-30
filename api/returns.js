@@ -371,13 +371,23 @@ if (action === 'complete_return') {
 
             const { data: rma, error: fetchErr } = await supabase
                 .from('returns')
-                .select('id, return_id, equipment_id, merchant_id, is_bulk')
+                .select('id, return_id, equipment_id, merchant_id, is_bulk, legacy_deployment_id')
                 .eq('id', return_uuid)
                 .single();
             if (fetchErr || !rma) return res.status(404).json({ success: false, message: 'Return not found.' });
 
-            // Reset equipment back to stocked
-            if (!rma.is_bulk && rma.equipment_id) {
+            if (rma.legacy_deployment_id) {
+                // Legacy return: delete the equipment record created by conversion and reset legacy to active
+                if (rma.equipment_id) {
+                    await supabase.from('equipments').delete().eq('id', rma.equipment_id);
+                }
+                await supabase.from('legacy_deployments').update({
+                    status: 'active',
+                    return_id: null,
+                    converted_equipment_id: null
+                }).eq('id', rma.legacy_deployment_id);
+            } else if (!rma.is_bulk && rma.equipment_id) {
+                // Regular single return: reset equipment back to stocked
                 await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', rma.equipment_id);
                 await supabase.from('equipment_logs').insert([{
                     equipment_id: rma.equipment_id, merchant_id: rma.merchant_id,
