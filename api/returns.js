@@ -418,22 +418,31 @@ if (action === 'complete_return') {
                     converted_equipment_id: null
                 }).eq('id', rma.legacy_deployment_id);
             } else if (!rma.is_bulk && rma.equipment_id) {
-                // Regular single return: reset equipment back to stocked
-                await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', rma.equipment_id);
-                await supabase.from('equipment_logs').insert([{
-                    equipment_id: rma.equipment_id, merchant_id: rma.merchant_id,
-                    action: 'RETURN_DELETED', from_location: 'In Transit / RMA', to_location: 'Warsaw Office',
-                    notes: `Return ${rma.return_id} deleted. Unit reset to stock.`
-                }]);
+                // Only reset equipment if it's still in a transit/pending state — don't touch
+                // units that are already stocked, decommissioned, or sitting in the repair queue.
+                const { data: eq } = await supabase.from('equipments').select('status, current_location').eq('id', rma.equipment_id).maybeSingle();
+                const safeToReset = eq && eq.status !== 'stocked' && eq.status !== 'decommissioned' && eq.status !== 'pending_return';
+                if (safeToReset) {
+                    await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', rma.equipment_id);
+                    await supabase.from('equipment_logs').insert([{
+                        equipment_id: rma.equipment_id, merchant_id: rma.merchant_id,
+                        action: 'RETURN_DELETED', from_location: eq.current_location || 'In Transit / RMA', to_location: 'Warsaw Office',
+                        notes: `Return ${rma.return_id} deleted. Unit reset to stock.`
+                    }]);
+                }
             } else if (rma.is_bulk) {
                 const { data: items } = await supabase.from('return_items').select('equipment_id').eq('return_id', rma.id);
                 for (const item of (items || [])) {
-                    await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', item.equipment_id);
-                    await supabase.from('equipment_logs').insert([{
-                        equipment_id: item.equipment_id, merchant_id: rma.merchant_id,
-                        action: 'RETURN_DELETED', from_location: 'In Transit / RMA', to_location: 'Warsaw Office',
-                        notes: `Bulk return ${rma.return_id} deleted. Unit reset to stock.`
-                    }]);
+                    const { data: eq } = await supabase.from('equipments').select('status, current_location').eq('id', item.equipment_id).maybeSingle();
+                    const safeToReset = eq && eq.status !== 'stocked' && eq.status !== 'decommissioned' && eq.status !== 'pending_return';
+                    if (safeToReset) {
+                        await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', item.equipment_id);
+                        await supabase.from('equipment_logs').insert([{
+                            equipment_id: item.equipment_id, merchant_id: rma.merchant_id,
+                            action: 'RETURN_DELETED', from_location: eq.current_location || 'In Transit / RMA', to_location: 'Warsaw Office',
+                            notes: `Bulk return ${rma.return_id} deleted. Unit reset to stock.`
+                        }]);
+                    }
                 }
             }
 
