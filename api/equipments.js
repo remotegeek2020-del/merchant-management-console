@@ -12,7 +12,7 @@ export default async function handler(req, res) {
     // Resolve actor identity from session — never trust client-provided headers for logging
     const { data: actor } = await supabase
         .from('app_users')
-        .select('email, first_name, last_name, role')
+        .select('email, first_name, last_name, role, can_manage_retired_units')
         .eq('userid', session.userid)
         .single();
     const actorEmail = actor?.email || 'Unknown';
@@ -106,13 +106,51 @@ if (action === 'getMonthlyReport') {
             if (error) throw error;
             supabase.from('activity_logs').insert([{
                 email: actorEmail,
-                action: `Inventory Deleted — ${equipToDelete?.serial_number || id}`,
+                action: `Retired Unit Deleted Forever by ${actorName} — ${equipToDelete?.serial_number || id} (${equipToDelete?.terminal_type || 'Unknown'})`,
                 status: 'success', category: 'inventory', target_id: equipToDelete?.serial_number || id, target_type: 'equipment', severity: 'critical',
                 old_value: equipToDelete ? { serial_number: equipToDelete.serial_number, terminal_type: equipToDelete.terminal_type, status: equipToDelete.status, current_location: equipToDelete.current_location } : null,
+                new_value: { deleted: true, deleted_by: actorEmail },
                 user_agent: req.headers['user-agent'],
                 ip_address: req.headers['x-forwarded-for'] || 'internal'
             }]).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true, data });
+        }
+
+        if (action === 'restore_retired') {
+            const canRestore = actor?.role === 'super_admin' || actor?.can_manage_retired_units;
+            if (!canRestore) return res.status(403).json({ success: false, message: 'Permission denied.' });
+
+            const { data: retiredEquip, error: retFetchErr } = await supabase
+                .from('equipments').select('id, serial_number, terminal_type, status, current_location').eq('id', id).single();
+            if (retFetchErr || !retiredEquip) return res.status(404).json({ success: false, message: 'Equipment not found.' });
+            if (retiredEquip.status !== 'decommissioned') {
+                return res.status(400).json({ success: false, message: 'Unit is not retired/decommissioned.' });
+            }
+
+            const { error: restoreErr } = await supabase.from('equipments')
+                .update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null })
+                .eq('id', id);
+            if (restoreErr) throw restoreErr;
+
+            await supabase.from('equipment_logs').insert([{
+                equipment_id: id,
+                action: 'RESTORED_TO_STOCK',
+                from_location: 'Retired',
+                to_location: 'Warsaw Office',
+                notes: `Retired unit restored to stock by ${actorEmail}. Status changed from decommissioned → stocked.`
+            }]);
+
+            supabase.from('activity_logs').insert([{
+                email: actorEmail,
+                action: `Retired Unit Restored to Stock by ${actorName} — ${retiredEquip.serial_number} (${retiredEquip.terminal_type || 'Unknown'})`,
+                status: 'success', category: 'inventory', target_id: retiredEquip.serial_number, target_type: 'equipment', severity: 'warning',
+                old_value: { serial_number: retiredEquip.serial_number, terminal_type: retiredEquip.terminal_type, status: 'decommissioned', current_location: 'Retired' },
+                new_value: { status: 'stocked', current_location: 'Warsaw Office', restored_by: actorEmail },
+                user_agent: req.headers['user-agent'],
+                ip_address: req.headers['x-forwarded-for'] || 'internal'
+            }]).then(() => {}).catch(() => {});
+
+            return res.status(200).json({ success: true });
         }
         
         if (action === 'getNotes') {

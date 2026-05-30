@@ -141,13 +141,27 @@ if (action === 'complete_return') {
     // Fetch the return record
     const { data: rmaData } = await supabase
         .from('returns')
-        .select('deployment_id, merchant_id, ticket_id, is_bulk, equipment_id, legacy_deployment_id')
+        .select('return_id, deployment_id, merchant_id, ticket_id, is_bulk, equipment_id, legacy_deployment_id')
         .eq('id', rmaId)
         .single();
 
     const resolved_merchant_id = merchant_id || rmaData?.merchant_id || null;
     const isBulk = rmaData?.is_bulk || false;
     if (!condition) throw new Error("Missing condition for complete_return");
+
+    // Fetch merchant name and equipment serial for activity log enrichment
+    const [{ data: rmaActMerchant }, { data: rmaActEquip }] = await Promise.all([
+        resolved_merchant_id
+            ? supabase.from('merchants').select('dba_name').eq('id', resolved_merchant_id).maybeSingle()
+            : Promise.resolve({ data: null }),
+        (equipment_id || rmaData?.equipment_id)
+            ? supabase.from('equipments').select('serial_number, terminal_type').eq('id', equipment_id || rmaData?.equipment_id).maybeSingle()
+            : Promise.resolve({ data: null })
+    ]);
+    const rmaActMerchantName = rmaActMerchant?.dba_name || resolved_merchant_id || 'Unknown';
+    const rmaActSerial       = rmaActEquip?.serial_number  || equipment_id || null;
+    const rmaActType         = rmaActEquip?.terminal_type  || null;
+
     let finalStatus, finalLocation;
     if (destination === 'Warsaw Office') {
         finalStatus = 'stocked'; finalLocation = 'Warsaw Office';
@@ -213,6 +227,30 @@ if (action === 'complete_return') {
             legReturnUpdate.equipment_received_date = equipment_received_date || new Date().toISOString();
         }
         await supabase.from('returns').update(legReturnUpdate).eq('id', rmaId);
+
+        supabase.from('activity_logs').insert({
+            email: actorEmail,
+            action: `Legacy RMA Completed by ${actorName} — ${rmaData?.return_id || rmaId} → ${destination}`,
+            status: 'success', category: 'returns',
+            target_id: rmaData?.return_id || rmaId, target_type: 'return',
+            severity: destination === 'Scrap' ? 'warning' : 'info',
+            old_value: {
+                return_id: rmaData?.return_id,
+                status: 'Open',
+                merchant: rmaActMerchantName,
+                serial_number: rmaActSerial,
+                terminal_type: rmaActType,
+                source: 'legacy'
+            },
+            new_value: {
+                status: legIsRepairs ? 'Open (In Repair Queue)' : 'Closed',
+                condition,
+                destination,
+                equipment_status: finalStatus,
+                equipment_location: finalLocation,
+                equipment_received_date: equipment_received_date || null
+            }
+        }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
         return res.status(200).json({ success: true, legacy: true });
     }
@@ -306,10 +344,26 @@ if (action === 'complete_return') {
 
     supabase.from('activity_logs').insert({
         email: actorEmail,
-        action: `RMA Completed by ${actorName} — ${rmaId} (${condition})`,
-        status: 'success', category: 'returns', target_id: rmaId, target_type: 'return', severity: 'info',
-        old_value: { status: 'In Transit', rma_id: rmaId },
-        new_value: { status: 'Closed', condition, destination, equipment_received_date: equipment_received_date || null, is_bulk: isBulk }
+        action: `RMA Completed by ${actorName} — ${rmaData?.return_id || rmaId} → ${destination}`,
+        status: 'success', category: 'returns',
+        target_id: rmaData?.return_id || rmaId, target_type: 'return',
+        severity: destination === 'Scrap' ? 'warning' : 'info',
+        old_value: {
+            return_id: rmaData?.return_id,
+            status: 'Open',
+            merchant: rmaActMerchantName,
+            serial_number: rmaActSerial,
+            terminal_type: rmaActType,
+            is_bulk: isBulk
+        },
+        new_value: {
+            status: isRepairs ? 'Open (In Repair Queue)' : 'Closed',
+            condition,
+            destination,
+            equipment_status: finalStatus,
+            equipment_location: finalLocation,
+            equipment_received_date: equipment_received_date || null
+        }
     }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
     // Auto-close linked support ticket
@@ -407,10 +461,25 @@ if (action === 'complete_return') {
                 .single();
             if (fetchErr || !rma) return res.status(404).json({ success: false, message: 'Return not found.' });
 
+            // Fetch supporting context for logging before modifying anything
+            const [{ data: delMerchant }, { data: delEquip }] = await Promise.all([
+                rma.merchant_id
+                    ? supabase.from('merchants').select('dba_name').eq('id', rma.merchant_id).maybeSingle()
+                    : Promise.resolve({ data: null }),
+                rma.equipment_id
+                    ? supabase.from('equipments').select('status, current_location, serial_number, terminal_type').eq('id', rma.equipment_id).maybeSingle()
+                    : Promise.resolve({ data: null })
+            ]);
+            const delMerchantName = delMerchant?.dba_name || rma.merchant_id || 'Unknown';
+
+            let equipAction = 'no_equipment';
+            let safeToReset = false;
+
             if (rma.legacy_deployment_id) {
                 // Legacy return: delete the equipment record created by conversion and reset legacy to active
                 if (rma.equipment_id) {
                     await supabase.from('equipments').delete().eq('id', rma.equipment_id);
+                    equipAction = 'legacy_equipment_deleted';
                 }
                 await supabase.from('legacy_deployments').update({
                     status: 'active',
@@ -420,30 +489,35 @@ if (action === 'complete_return') {
             } else if (!rma.is_bulk && rma.equipment_id) {
                 // Only reset equipment if it's still in a transit/pending state — don't touch
                 // units that are already stocked, decommissioned, or sitting in the repair queue.
-                const { data: eq } = await supabase.from('equipments').select('status, current_location').eq('id', rma.equipment_id).maybeSingle();
-                const safeToReset = eq && eq.status !== 'stocked' && eq.status !== 'decommissioned' && eq.status !== 'pending_return';
+                safeToReset = delEquip && delEquip.status !== 'stocked' && delEquip.status !== 'decommissioned' && delEquip.status !== 'pending_return';
                 if (safeToReset) {
                     await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', rma.equipment_id);
                     await supabase.from('equipment_logs').insert([{
                         equipment_id: rma.equipment_id, merchant_id: rma.merchant_id,
-                        action: 'RETURN_DELETED', from_location: eq.current_location || 'In Transit / RMA', to_location: 'Warsaw Office',
-                        notes: `Return ${rma.return_id} deleted. Unit reset to stock.`
+                        action: 'RETURN_DELETED', from_location: delEquip.current_location || 'In Transit / RMA', to_location: 'Warsaw Office',
+                        notes: `Return ${rma.return_id} deleted by ${session.userid}. Unit reset to stock.`
                     }]);
+                    equipAction = 'reset_to_stock';
+                } else {
+                    equipAction = `preserved_as_${delEquip?.status || 'unknown'}`;
                 }
             } else if (rma.is_bulk) {
                 const { data: items } = await supabase.from('return_items').select('equipment_id').eq('return_id', rma.id);
+                const resetSerials = [];
                 for (const item of (items || [])) {
-                    const { data: eq } = await supabase.from('equipments').select('status, current_location').eq('id', item.equipment_id).maybeSingle();
-                    const safeToReset = eq && eq.status !== 'stocked' && eq.status !== 'decommissioned' && eq.status !== 'pending_return';
-                    if (safeToReset) {
+                    const { data: eq } = await supabase.from('equipments').select('status, current_location, serial_number').eq('id', item.equipment_id).maybeSingle();
+                    const itemSafe = eq && eq.status !== 'stocked' && eq.status !== 'decommissioned' && eq.status !== 'pending_return';
+                    if (itemSafe) {
                         await supabase.from('equipments').update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null }).eq('id', item.equipment_id);
                         await supabase.from('equipment_logs').insert([{
                             equipment_id: item.equipment_id, merchant_id: rma.merchant_id,
                             action: 'RETURN_DELETED', from_location: eq.current_location || 'In Transit / RMA', to_location: 'Warsaw Office',
                             notes: `Bulk return ${rma.return_id} deleted. Unit reset to stock.`
                         }]);
+                        resetSerials.push(eq.serial_number || item.equipment_id);
                     }
                 }
+                equipAction = resetSerials.length ? `bulk_reset_${resetSerials.length}_units` : 'bulk_preserved';
             }
 
             // Delete return_items then the return
@@ -454,11 +528,26 @@ if (action === 'complete_return') {
             const { data: delActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
             const delActorEmail = delActorRow?.email || session.userid;
             const delActorName = delActorRow ? `${delActorRow.first_name || ''} ${delActorRow.last_name || ''}`.trim() || delActorRow.email : 'Staff';
+
             supabase.from('activity_logs').insert({
                 email: delActorEmail,
-                action: `RMA Deleted by ${delActorName} — ${rma.return_id}${rma.is_bulk ? ' (bulk)' : ''}`,
-                status: 'success', category: 'returns', target_id: rma.id, target_type: 'return', severity: 'warning',
-                old_value: { return_id: rma.return_id, equipment_id: rma.equipment_id, merchant_id: rma.merchant_id, is_bulk: rma.is_bulk }
+                action: `RMA Deleted by ${delActorName} — ${rma.return_id || rma.id}${rma.is_bulk ? ' (bulk)' : ''}`,
+                status: 'success', category: 'returns',
+                target_id: rma.return_id || rma.id, target_type: 'return',
+                severity: 'warning',
+                old_value: {
+                    return_id: rma.return_id,
+                    merchant: delMerchantName,
+                    serial_number: delEquip?.serial_number || null,
+                    terminal_type: delEquip?.terminal_type || null,
+                    equipment_status_at_deletion: delEquip?.status || null,
+                    is_bulk: rma.is_bulk,
+                    was_legacy: !!rma.legacy_deployment_id
+                },
+                new_value: {
+                    deleted: true,
+                    equipment_action: equipAction
+                }
             }).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true });

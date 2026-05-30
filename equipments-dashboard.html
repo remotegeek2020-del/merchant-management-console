@@ -747,15 +747,10 @@ async function processFinalImport(itemsToCreate) {
             const res = await fetch('/api/equipments', {
                 method: 'POST',
                 headers: equipHeaders(),
-                body: JSON.stringify({ action: 'update', id, payload: { status: 'stocked', current_location: 'Warsaw Office' } })
+                body: JSON.stringify({ action: 'restore_retired', id })
             });
             const result = await res.json();
             if (result.success) {
-                await logAuditAction('Retired Unit Restored', 'success', {
-                    target_id: serial, target_type: 'equipment', severity: 'warning',
-                    old_value: { status: 'decommissioned', current_location: 'Retired' },
-                    new_value: { status: 'stocked', current_location: 'Warsaw Office' }
-                });
                 await Swal.fire({ icon: 'success', title: 'Restored!', text: `${serial} is back in Warsaw Office stock.`, timer: 1800, showConfirmButton: false });
                 fetchInventory();
             } else { Swal.fire('Error', result.message || 'Action failed.', 'error'); }
@@ -788,11 +783,6 @@ async function processFinalImport(itemsToCreate) {
             });
             const result = await res.json();
             if (result.success) {
-                await logAuditAction('Retired Unit Deleted', 'success', {
-                    target_id: serial, target_type: 'equipment', severity: 'critical',
-                    old_value: { serial_number: serial, status: 'decommissioned' },
-                    new_value: { deleted: true }
-                });
                 await Swal.fire({ icon: 'success', title: 'Deleted', text: `${serial} has been permanently removed.`, timer: 1800, showConfirmButton: false });
                 fetchInventory();
             } else { Swal.fire('Error', result.message || 'Delete failed.', 'error'); }
