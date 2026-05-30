@@ -107,28 +107,23 @@
                 <button class="toggle-btn" id="btn-retired" onclick="filterByLoc('Retired')">RETIRED</button>
             </div>
             
-            <input type="text" id="invSearch" placeholder="Search..." class="slds-input" style="width:140px; border-radius:10px;">
-            <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
-            
-            <button class="slds-button slds-button_neutral" 
-                style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #cbd5e1; background: white;" 
-                onclick="printPDFReport()">
-                <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
-                Print PDF Summary
-            </button>
-            <button class="slds-button slds-button_outline-brand" 
-                style="border-radius:10px; border:1px solid var(--pp-accent); color:var(--pp-accent); display:flex; align-items:center; gap:5px;" 
-                onclick="triggerAIUpload()">
-                <span class="material-icons" style="font-size:18px;">auto_awesome</span>
-                AI Import
-            </button>
-
-            <input type="file" id="ai-file-input" accept="application/pdf" style="display:none;" onchange="handleAIFile(this)">
-
-            <button class="slds-button slds-button_success" style="border-radius:10px; background:#166534; color:white; display:flex; align-items:center; gap:5px;" onclick="openAddModal()">
-                <span class="material-icons" style="font-size:18px;">add</span>
-                Add Item
-            </button>
+            <div id="inv-header-controls" style="display:flex; align-items:center; gap:10px;">
+                <input type="text" id="invSearch" placeholder="Search..." class="slds-input" style="width:140px; border-radius:10px;">
+                <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
+                <button class="slds-button slds-button_neutral" style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #cbd5e1; background: white;" onclick="printPDFReport()">
+                    <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
+                    Print PDF Summary
+                </button>
+                <button class="slds-button slds-button_outline-brand" style="border-radius:10px; border:1px solid var(--pp-accent); color:var(--pp-accent); display:flex; align-items:center; gap:5px;" onclick="triggerAIUpload()">
+                    <span class="material-icons" style="font-size:18px;">auto_awesome</span>
+                    AI Import
+                </button>
+                <input type="file" id="ai-file-input" accept="application/pdf" style="display:none;" onchange="handleAIFile(this)">
+                <button class="slds-button slds-button_success" style="border-radius:10px; background:#166534; color:white; display:flex; align-items:center; gap:5px;" onclick="openAddModal()">
+                    <span class="material-icons" style="font-size:18px;">add</span>
+                    Add Item
+                </button>
+            </div>
         </div>
     </div>
 
@@ -1543,12 +1538,10 @@ async function fetchCombinedLogs() {
     document.getElementById('btn-retired').classList.toggle('active', loc === 'Retired');
 
     const isRepairs = loc === 'Warsaw Repairs';
-    document.getElementById('rq-inv-panel').style.display      = isRepairs ? '' : 'none';
-    document.getElementById('inv-main-card').style.display     = isRepairs ? 'none' : '';
-    document.getElementById('inv-pagination-bar').style.display = isRepairs ? 'none' : '';
-    // Hide the generic search/print bar when in repair queue mode
-    document.getElementById('invSearch').closest('div').querySelectorAll('button[onclick="fetchInventory()"], button[onclick="printPDFReport()"]')
-        .forEach(b => b.style.display = isRepairs ? 'none' : '');
+    document.getElementById('rq-inv-panel').style.display        = isRepairs ? '' : 'none';
+    document.getElementById('inv-main-card').style.display       = isRepairs ? 'none' : '';
+    document.getElementById('inv-pagination-bar').style.display  = isRepairs ? 'none' : 'flex';
+    document.getElementById('inv-header-controls').style.display = isRepairs ? 'none' : 'flex';
 
     if (isRepairs) { rqInvLoadQueue(); } else { fetchInventory(); }
 }
