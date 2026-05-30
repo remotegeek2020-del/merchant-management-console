@@ -374,6 +374,102 @@ async function viewHistory(id, sn) {
     Swal.update({ html: `<div style="text-align:left; max-height:400px; overflow-y:auto;">${timeline}</div>` });
 }
 
+function viewRMADetails(index) {
+    const r = currentReturns[index];
+    if (!r) return;
+
+    const isLegacy = !!r.legacy_deployment_id;
+    const isBulk   = r.is_bulk;
+    const isOpen   = r.status?.toLowerCase() === 'open';
+    const items    = r.items || [];
+
+    const statusColor = isOpen ? '#d97706' : '#059669';
+    const statusBg    = isOpen ? '#fef3c7' : '#d1fae5';
+
+    // Equipment section
+    let equipHtml;
+    if (isBulk) {
+        equipHtml = items.length
+            ? items.map(item => `
+                <div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;margin-bottom:5px;">
+                    <span class="material-icons" style="font-size:16px;color:#64748b;">point_of_sale</span>
+                    <div>
+                        <div style="font-weight:700;font-size:12px;color:#004990;">${item.serial_number || '---'}</div>
+                        <div style="font-size:10px;color:#64748b;">${item.terminal_type || ''}${item.tid ? ' · TID: ' + item.tid : ''}${item.condition ? ' · ' + item.condition : ''}</div>
+                    </div>
+                </div>`).join('')
+            : `<div style="font-size:12px;color:#94a3b8;padding:8px;">No unit details available</div>`;
+    } else if (isLegacy) {
+        const ls = r.legacy_deployments?.serial_number || '—';
+        const lt = r.legacy_deployments?.terminal_type || 'Unknown';
+        equipHtml = `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:7px;">
+            <span class="material-icons" style="font-size:16px;color:#d97706;">point_of_sale</span>
+            <div>
+                <div style="font-weight:700;font-size:12px;color:#92400e;">${ls}</div>
+                <div style="font-size:10px;color:#92400e;">${lt} · Legacy (Salesforce)</div>
+            </div>
+        </div>`;
+    } else {
+        const eq = r.equipments || {};
+        equipHtml = `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;">
+            <span class="material-icons" style="font-size:16px;color:#64748b;">point_of_sale</span>
+            <div>
+                <div style="font-weight:700;font-size:12px;color:#004990;">${eq.serial_number || '---'}</div>
+                <div style="font-size:10px;color:#64748b;">${eq.terminal_type || ''}</div>
+            </div>
+        </div>`;
+    }
+
+    const row = (label, val) => val
+        ? `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:5px 0;border-bottom:1px solid #f1f5f9;">
+               <span style="color:#64748b;font-size:12px;">${label}</span>
+               <span style="font-weight:600;font-size:12px;color:#0f172a;text-align:right;max-width:60%;">${val}</span>
+           </div>`
+        : '';
+
+    Swal.fire({
+        title: `<span style="font-size:15px;font-weight:800;color:#002d5a;font-family:monospace;">${r.return_id || 'RMA'}</span>`,
+        width: '480px',
+        showConfirmButton: false,
+        showCloseButton: true,
+        html: `<div style="text-align:left;font-size:13px;">
+
+            <!-- Status row -->
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:14px;flex-wrap:wrap;">
+                <span style="background:${statusBg};color:${statusColor};padding:3px 10px;border-radius:20px;font-size:11px;font-weight:800;">${r.status?.toUpperCase()}</span>
+                ${isLegacy ? `<span style="background:#d97706;color:white;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:800;">LEGACY</span>` : ''}
+                ${isBulk ? `<span style="background:#dbeafe;color:#1d4ed8;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:800;">BULK · ${items.length} UNIT${items.length !== 1 ? 'S' : ''}</span>` : ''}
+                ${r.ticket_id ? `<span style="background:#f3e8ff;color:#7c3aed;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:800;">TICKET</span>` : ''}
+            </div>
+
+            <!-- Units -->
+            <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Equipment</div>
+            <div style="margin-bottom:14px;">${equipHtml}</div>
+
+            <!-- Return details -->
+            <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Return Details</div>
+            <div style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+                ${row('Merchant', r.merchants?.dba_name || '---')}
+                ${row('MID', r.merchants?.merchant_id || null)}
+                ${row('Reason', r.return_reason || null)}
+                ${row('Condition', r.condition || null)}
+                ${row('Destination', r.destination || null)}
+                ${row('Date Initiated', r.return_date_initiated ? fmtDate(r.return_date_initiated) : (r.created_at ? fmtDate(r.created_at) : null))}
+                ${row('Date Received', r.equipment_received_date ? fmtDate(r.equipment_received_date) : null)}
+                ${r.notes ? row('Notes', r.notes) : ''}
+            </div>
+
+            <!-- Linked deployment -->
+            ${r.deployment_id ? `
+            <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Linked Deployment</div>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;display:flex;align-items:center;gap:8px;">
+                <span class="material-icons" style="font-size:16px;color:#1d4ed8;">link</span>
+                <span style="font-size:12px;font-weight:600;color:#1d4ed8;font-family:monospace;">${r.deployment_id}</span>
+            </div>` : ''}
+        </div>`
+    });
+}
+
 function showReturnMerchantInfo(index) {
     const r = currentReturns[index];
     const m = r?.merchants;
@@ -466,9 +562,10 @@ async function fetchReturns() {
                     : `<div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}</div><div class="pp-muted">${r.equipments?.serial_number || ''}</div>`;
             return `<tr${isLegacy ? ' style="background:#fffbeb;"' : ''}>
                 <td class="pp-id">
-                    ${r.return_id || 'PENDING'}
+                    <span style="cursor:pointer;color:#004990;text-decoration:underline;text-underline-offset:2px;font-weight:700;" onclick="viewRMADetails(${index})">${r.return_id || 'PENDING'}</span>
                     ${isLegacy ? `<span style="display:inline-block;font-size:8px;background:#d97706;color:white;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">LEGACY</span>` : ''}
                     ${r.ticket_id ? `<span style="display:inline-block;font-size:8px;background:#f3e8ff;color:#7c3aed;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">TICKET</span>` : ''}
+                    ${isBulk ? `<span style="display:inline-block;font-size:8px;background:#dbeafe;color:#1d4ed8;padding:2px 5px;border-radius:4px;font-weight:800;margin-left:5px;vertical-align:middle;">${itemCount}U</span>` : ''}
                 </td>
                 <td style="color:#94a3b8; font-size:12px;">${fmtDate(r.created_at)}</td>
                 <td>
