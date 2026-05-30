@@ -113,13 +113,16 @@ export default async function handler(req, res) {
             // Equipment
             const { data: equipment } = await supabase.from('equipments').select('id, serial_number, terminal_type, status, current_location, received_date').eq('merchant_id', merchant_uuid);
 
+            // Legacy equipment (active only)
+            const { data: legacyEquipment } = await supabase.from('legacy_deployments').select('id, serial_number, terminal_type, tid, deployment_date, status').eq('merchant_id', merchant_uuid).eq('status', 'active');
+
             // Notes
             const { data: notes } = await supabase.from('merchant_notes').select('id, title, body, created_at, created_by').eq('merchant_id', merchant_uuid).order('created_at', { ascending: false });
 
             // RMAs
             const { data: rmas } = await supabase.from('returns').select('id, return_id, return_reason, condition, status, destination, created_at, equipments:equipment_id(serial_number, terminal_type)').eq('merchant_id', merchant_uuid).order('created_at', { ascending: false });
 
-            return res.status(200).json({ success: true, data: { merchant, equipment: equipment || [], notes: notes || [], rmas: rmas || [] } });
+            return res.status(200).json({ success: true, data: { merchant, equipment: equipment || [], legacyEquipment: legacyEquipment || [], notes: notes || [], rmas: rmas || [] } });
         }
 
         // ── ADD NOTE ───────────────────────────────────────
