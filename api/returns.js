@@ -560,6 +560,7 @@ if (action === 'complete_return') {
 
         return res.status(400).json({ success: false, message: "Invalid action" });
     } catch (err) {
-        return res.status(500).json({ success: false, message: "Server Error: " + err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }

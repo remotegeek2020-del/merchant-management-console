@@ -222,8 +222,8 @@ if (action === 'getMonthlyReport') {
                 .range(page * limit, (page + 1) * limit - 1);
 
             if (error) {
-                console.error("Table Data Error:", error.message);
-                return res.status(500).json({ success: false, message: error.message });
+                console.error('[API Error]', error.message);
+                return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
             }
 
             // --- KPI METRICS (High-Performance for 50k+ records) ---
@@ -355,9 +355,14 @@ if (action === 'getMonthlyReport') {
 
         if (action === 'update') {
             const { data: oldEquip } = await supabase.from('equipments').select('serial_number, terminal_type, status, current_location').eq('id', id).single();
+            const ALLOWED_UPDATE_FIELDS = ['serial_number', 'terminal_type', 'condition', 'notes', 'received_date', 'current_location'];
+            const patch = {};
+            for (const field of ALLOWED_UPDATE_FIELDS) {
+                if (payload[field] !== undefined) patch[field] = payload[field];
+            }
             const { data: updatedData, error: updateError } = await supabase
                 .from('equipments')
-                .update(payload)
+                .update(patch)
                 .eq('id', id)
                 .select();
 
@@ -855,7 +860,7 @@ if (action === 'getMonthlyReport') {
         return res.status(400).json({ message: 'Unknown action' });
 
     } catch (err) {
-        console.error('Inventory Engine Error:', err);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }

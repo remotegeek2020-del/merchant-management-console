@@ -139,12 +139,15 @@ export default async function handler(req, res) {
         .range(offset, offset + limit - 1)
         .order('enrollment_date', { ascending: false });
 
-    if (error) return res.status(500).json({ success: false, message: error.message });
+    if (error) {
+        console.error('[API Error]', error.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
+    }
 
-    return res.status(200).json({ 
-        success: true, 
-        rawData: data || [], 
-        totalCount: count || 0 
+    return res.status(200).json({
+        success: true,
+        rawData: data || [],
+        totalCount: count || 0
     });
 }
   if (action === 'get_global_tasks') {
@@ -534,7 +537,8 @@ if (action === 'bulk_upsert') {
                 : `Successfully synced ${totalProcessed} records.`
         });
     } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
 if (action === 'get_full_merchant') {
@@ -712,8 +716,8 @@ if (action === 'get_stats_for_filter') {
             total:  summary.total
         });
     } catch (err) {
-        console.error("get_stats_for_filter error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
 
@@ -796,8 +800,8 @@ if (action === 'list') {
             }
         });
     } catch (err) {
-        console.error("Critical API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
      if (action === 'update') {
@@ -1199,7 +1203,7 @@ if (action === 'get_notes') {
         return res.status(400).json({ success: false, message: "Unknown action" });
 
     } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 } // End of handler function

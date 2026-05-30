@@ -160,8 +160,8 @@ if (action === 'getMonthlyReport') {
         .order('target_deployment_date', { ascending: false });
 
     if (error) {
-        console.error("Report Error:", error.message);
-        return res.status(500).json({ success: false, message: error.message });
+        console.error('[API Error]', error.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 
     const rawData = data.map(d => ({
@@ -383,8 +383,8 @@ if (action === 'delete') {
         return res.status(200).json({ success: true });
 
     } catch (err) {
-        console.error("Delete Operation Failed:", err.message);
-        return res.status(500).json({ success: false, message: "Database error: " + err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
 
@@ -871,7 +871,8 @@ if (action === 'return_to_office') {
 
         return res.status(200).json({ success: true });
     } catch (err) {
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
 
@@ -1011,7 +1012,7 @@ if (action === 'getLookups') {
         return res.status(400).json({ success: false, message: "Invalid Action" });
 
     } catch (err) {
-        console.error("API Error:", err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        console.error('[API Error]', err.message);
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
