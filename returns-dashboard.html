@@ -665,7 +665,7 @@ function switchTab(tab) {
     document.getElementById('tab-rma').style.color                = isLegacy ? '#94a3b8' : '#004990';
     document.getElementById('tab-legacy').style.borderBottomColor = isLegacy ? '#b45309' : 'transparent';
     document.getElementById('tab-legacy').style.color             = isLegacy ? '#b45309' : '#94a3b8';
-    document.getElementById('rma-filter-bar').style.display = isLegacy ? 'none' : '';
+    document.getElementById('rma-filter-bar').style.display = isLegacy ? 'none' : 'flex';
     if (isLegacy && document.getElementById('legacyTableBody').innerHTML.includes('Loading')) fetchLegacy();
 }
 

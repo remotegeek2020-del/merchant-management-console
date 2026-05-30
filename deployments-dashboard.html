@@ -2521,8 +2521,8 @@ function setDepView(view) {
 
     // Hide deployment-specific search/filter bar and KPIs when not on current deployments
     const isCurrent = view === 'current';
-    document.getElementById('dep-filter-bar').style.display = isCurrent ? '' : 'none';
-    document.getElementById('dep-kpi-bar').style.display    = isCurrent ? '' : 'none';
+    document.getElementById('dep-filter-bar').style.display = isCurrent ? 'flex' : 'none';
+    document.getElementById('dep-kpi-bar').style.display    = isCurrent ? 'flex' : 'none';
 
     if (view === 'legacy') {
         _depLoadTerminalTypes();
