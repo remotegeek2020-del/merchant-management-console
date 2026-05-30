@@ -230,13 +230,11 @@ if (action === 'complete_return') {
             }
         }
 
-        // Warsaw Repairs stays Open; Warsaw Office and Scrap close immediately
-        const legIsRepairs = destination === 'Warsaw Repairs';
-        const legReturnUpdate = { condition, destination };
-        if (!legIsRepairs) {
-            legReturnUpdate.status = 'Closed';
-            legReturnUpdate.equipment_received_date = equipment_received_date || new Date().toISOString();
-        }
+        // Always close — the RMA tracks the return, not the repair. Equipment is in the repair queue from here.
+        const legReturnUpdate = {
+            condition, destination, status: 'Closed',
+            equipment_received_date: equipment_received_date || new Date().toISOString()
+        };
         await supabase.from('returns').update(legReturnUpdate).eq('id', rmaId);
 
         supabase.from('activity_logs').insert({
@@ -344,13 +342,9 @@ if (action === 'complete_return') {
         }
     }
 
-    // Warsaw Repairs stays Open until repair is resolved; all others close immediately
-    const isRepairs = destination === 'Warsaw Repairs';
-    const returnUpdate = { condition, destination };
-    if (!isRepairs) {
-        returnUpdate.status = 'Closed';
-        if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
-    }
+    // Always close — the RMA tracks the return, not the repair. Equipment is in the repair queue from here.
+    const returnUpdate = { condition, destination, status: 'Closed' };
+    if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
     await supabase.from('returns').update(returnUpdate).eq('id', rmaId);
 
     supabase.from('activity_logs').insert({
