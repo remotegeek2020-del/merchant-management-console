@@ -47,6 +47,32 @@
             .kpi-container { grid-template-columns: 1fr !important; }
         }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* Repair queue embedded styles */
+        .rq-pipeline { display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm); }
+        .rq-pipeline-stage { display:flex;align-items:center;padding:0 6px; }
+        .rq-pipeline-stage:first-child { padding-left:0; }
+        .rq-pipeline-stage:last-child  { padding-right:0; }
+        .rq-pipeline-box  { flex:1;border-radius:10px;padding:10px 12px;border:1px solid transparent; }
+        .rq-pipeline-arrow { font-size:18px;color:#cbd5e1;flex-shrink:0;margin:0 2px; }
+        .rq-pipeline-count { font-size:1.3rem;font-weight:900;font-family:'DM Mono',monospace;line-height:1; }
+        .rq-pipeline-label { font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-top:3px; }
+        .rq-badge { font-weight:700;font-size:10px;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap; }
+        .rq-stage-received  { background:#fef3c7;color:#92400e; }
+        .rq-stage-diagnosis { background:#e0f2fe;color:#0369a1; }
+        .rq-stage-repair    { background:#f3e8ff;color:#7c3aed; }
+        .rq-stage-testing   { background:#dcfce7;color:#166534; }
+        .rq-days-pill { display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-weight:800;font-size:12px;padding:2px 8px;border-radius:99px; }
+        .rq-action-btn { background:none;border:1px solid var(--border);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;transition:0.15s;font-family:'DM Sans',sans-serif;display:inline-flex;align-items:center;gap:3px; }
+        .rq-action-btn.primary { color:#004990;border-color:#bfdbfe; }
+        .rq-action-btn.primary:hover { background:#eff6ff; }
+        .rq-action-btn.success { color:#166534;border-color:#bbf7d0; }
+        .rq-action-btn.success:hover { background:#f0fdf4; }
+        .rq-action-btn.danger  { color:#991b1b;border-color:#fecaca; }
+        .rq-action-btn.danger:hover  { background:#fef2f2; }
+        .rq-model-chips { display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;background:white;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;box-shadow:var(--shadow-sm); }
+        .rq-model-chip { background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:4px; }
+        .rq-model-chip-count { background:#e2e8f0;color:#334155;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:800; }
+        @media(max-width:900px){ .rq-pipeline{grid-template-columns:repeat(2,1fr);} }
     </style>
 </head>
     <script>
@@ -179,6 +205,10 @@
         <button id="dep-view-legacy" onclick="setDepView('legacy')" style="padding:9px 22px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#94a3b8;margin-bottom:-2px;">
             <span class="material-icons" style="font-size:15px;vertical-align:-3px;margin-right:5px;">history</span>Legacy Equipment
         </button>
+        <button id="dep-view-repairs" onclick="setDepView('repairs')" style="padding:9px 22px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#94a3b8;margin-bottom:-2px;">
+            <span class="material-icons" style="font-size:15px;vertical-align:-3px;margin-right:5px;">build</span>Repairs
+            <span id="dep-repairs-badge" style="display:none;background:#dc2626;color:white;font-size:9px;font-weight:800;padding:1px 6px;border-radius:99px;margin-left:4px;vertical-align:middle;"></span>
+        </button>
     </div>
 
     <!-- CURRENT view -->
@@ -258,6 +288,104 @@
                 <tbody id="legacyTableBody"></tbody>
             </table>
             <div id="legacyPaginationControls"></div>
+        </div>
+    </div>
+
+    <!-- REPAIRS view -->
+    <div id="dep-section-repairs" style="display:none;">
+        <!-- KPIs -->
+        <div class="pp-kpi-grid" style="grid-template-columns:repeat(3,1fr);">
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">build</span> Total In Repair</div>
+                <div class="pp-kpi-value" style="color:#dc2626;" id="rq-kpi-total">—</div>
+            </div>
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">priority_high</span> Critical (&gt;14 days)</div>
+                <div class="pp-kpi-value danger" id="rq-kpi-critical">—</div>
+            </div>
+            <div class="pp-kpi dark">
+                <div class="pp-kpi-label">Avg Days In Repair</div>
+                <div class="pp-kpi-value" id="rq-kpi-avg">—</div>
+            </div>
+        </div>
+
+        <!-- Stage pipeline -->
+        <div class="rq-pipeline">
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#fef3c7;border-color:#fde68a;">
+                    <div class="rq-pipeline-count" style="color:#92400e;" id="rq-pipe-received">—</div>
+                    <div class="rq-pipeline-label" style="color:#92400e;">Received</div>
+                </div>
+                <span class="material-icons rq-pipeline-arrow">chevron_right</span>
+            </div>
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#e0f2fe;border-color:#bae6fd;">
+                    <div class="rq-pipeline-count" style="color:#0369a1;" id="rq-pipe-diagnosis">—</div>
+                    <div class="rq-pipeline-label" style="color:#0369a1;">Diagnosis</div>
+                </div>
+                <span class="material-icons rq-pipeline-arrow">chevron_right</span>
+            </div>
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#f3e8ff;border-color:#ddd6fe;">
+                    <div class="rq-pipeline-count" style="color:#7c3aed;" id="rq-pipe-repair">—</div>
+                    <div class="rq-pipeline-label" style="color:#7c3aed;">Under Repair</div>
+                </div>
+                <span class="material-icons rq-pipeline-arrow">chevron_right</span>
+            </div>
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#dcfce7;border-color:#bbf7d0;">
+                    <div class="rq-pipeline-count" style="color:#166534;" id="rq-pipe-testing">—</div>
+                    <div class="rq-pipeline-label" style="color:#166534;">Testing</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model chips -->
+        <div class="rq-model-chips" id="rq-model-chips">
+            <span style="color:#94a3b8;font-size:12px;">Loading...</span>
+        </div>
+
+        <!-- Table -->
+        <div class="pp-table-card">
+            <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #e2e8f0;flex-wrap:wrap;">
+                <span class="material-icons" style="color:#dc2626;font-size:18px;">hardware</span>
+                <span style="font-size:13px;font-weight:800;color:#0f172a;flex:1;">Equipment Under Repair</span>
+                <span id="rq-filtered-count" style="font-size:11px;font-weight:700;color:#64748b;background:#f1f5f9;padding:3px 10px;border-radius:20px;"></span>
+                <div style="position:relative;">
+                    <span class="material-icons" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:16px;pointer-events:none;">search</span>
+                    <input type="text" id="rq-search" class="filter-input" placeholder="Serial / model…" oninput="rqApplyFilters()" style="padding-left:32px;height:32px;border:1px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;">
+                </div>
+                <select id="rq-stage-filter" onchange="rqApplyFilters()" style="height:32px;border:1px solid #e2e8f0;border-radius:8px;padding:0 10px;font-size:12px;background:white;cursor:pointer;">
+                    <option value="">All Stages</option>
+                    <option value="Received">Received</option>
+                    <option value="Diagnosis">Diagnosis</option>
+                    <option value="Under Repair">Under Repair</option>
+                    <option value="Testing">Testing</option>
+                </select>
+                <select id="rq-sort" onchange="rqApplyFilters()" style="height:32px;border:1px solid #e2e8f0;border-radius:8px;padding:0 10px;font-size:12px;background:white;cursor:pointer;">
+                    <option value="days_desc">Oldest First</option>
+                    <option value="days_asc">Newest First</option>
+                    <option value="stage">By Stage</option>
+                </select>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="pp-table">
+                    <thead>
+                        <tr>
+                            <th>Serial Number</th>
+                            <th>Model</th>
+                            <th>Stage</th>
+                            <th>Days In Repair</th>
+                            <th class="hide-mobile">Technician Notes</th>
+                            <th class="hide-mobile">Received Date</th>
+                            <th style="text-align:right;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="rq-tbody">
+                        <tr><td colspan="7" style="padding:40px;text-align:center;color:#94a3b8;">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -2344,6 +2472,8 @@ async function executeBulk(validData) {
             if (el) el.value = urlQ;
         }
         fetchDeployments();
+        // Load repair queue in background to show badge count on tab
+        rqLoadQueue();
     };
 
     async function closeLinkedTicket(ticketId) {
@@ -2379,16 +2509,21 @@ const LEG_LIMIT = 50;
 
 
 function setDepView(view) {
-    const isCurrent = view === 'current';
-    document.getElementById('dep-section-current').style.display     = isCurrent ? '' : 'none';
-    document.getElementById('dep-section-legacy').style.display      = isCurrent ? 'none' : '';
-    document.getElementById('dep-view-current').style.borderBottomColor = isCurrent ? '#004990' : 'transparent';
-    document.getElementById('dep-view-current').style.color             = isCurrent ? '#004990' : '#94a3b8';
-    document.getElementById('dep-view-legacy').style.borderBottomColor  = isCurrent ? 'transparent' : '#b45309';
-    document.getElementById('dep-view-legacy').style.color              = isCurrent ? '#94a3b8' : '#b45309';
-    if (!isCurrent) {
+    const tabs = ['current', 'legacy', 'repairs'];
+    const colors = { current: '#004990', legacy: '#b45309', repairs: '#dc2626' };
+    tabs.forEach(t => {
+        const btn = document.getElementById('dep-view-' + t);
+        const sec = document.getElementById('dep-section-' + t);
+        const active = t === view;
+        if (btn) { btn.style.borderBottomColor = active ? colors[t] : 'transparent'; btn.style.color = active ? colors[t] : '#94a3b8'; }
+        if (sec) sec.style.display = active ? '' : 'none';
+    });
+    if (view === 'legacy') {
         _depLoadTerminalTypes();
         if (document.getElementById('legacyTableBody').innerHTML === '') fetchLegacy();
+    }
+    if (view === 'repairs') {
+        if (!rqAllData.length) rqLoadQueue();
     }
 }
 
@@ -2633,6 +2768,159 @@ async function legFileRMA(legacyId, serial, currentTerminalType) {
 }
 
 
+
+// ── EMBEDDED REPAIR QUEUE ────────────────────────────────────────────────────
+const RQ_STAGES = ['Received', 'Diagnosis', 'Under Repair', 'Testing'];
+const RQ_STAGE_CLASSES = { 'Received':'rq-stage-received','Diagnosis':'rq-stage-diagnosis','Under Repair':'rq-stage-repair','Testing':'rq-stage-testing' };
+let rqAllData = [];
+
+function rqDaysPill(days) {
+    if (days === null || days === undefined) return '<span style="color:#94a3b8;">—</span>';
+    let bg, color;
+    if (days > 14)     { bg='#fee2e2';color='#dc2626'; }
+    else if (days > 7) { bg='#fef3c7';color='#d97706'; }
+    else               { bg='#dcfce7';color='#166534'; }
+    return `<span class="rq-days-pill" style="background:${bg};color:${color};"><span class="material-icons" style="font-size:12px;">schedule</span>${days}d</span>`;
+}
+
+function rqEsc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : ''; }
+
+async function rqLoadQueue() {
+    document.getElementById('rq-tbody').innerHTML = '<tr><td colspan="7" style="padding:40px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
+    try {
+        const res = await fetch('/api/equipments', { method:'POST', headers: authHeaders(), body: JSON.stringify({ action:'list_repair_queue' }) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'Load failed');
+        rqAllData = data.data || [];
+        const sum = data.summary || {};
+
+        // KPIs
+        const total = sum.total || 0;
+        document.getElementById('rq-kpi-total').textContent    = total;
+        document.getElementById('rq-kpi-critical').textContent = sum.critical_count || 0;
+        document.getElementById('rq-kpi-avg').textContent      = (sum.avg_days_in_repair || 0) + 'd';
+
+        // Pipeline
+        document.getElementById('rq-pipe-received').textContent  = sum.stage_counts?.Received || 0;
+        document.getElementById('rq-pipe-diagnosis').textContent = sum.stage_counts?.Diagnosis || 0;
+        document.getElementById('rq-pipe-repair').textContent    = sum.stage_counts?.['Under Repair'] || 0;
+        document.getElementById('rq-pipe-testing').textContent   = sum.stage_counts?.Testing || 0;
+
+        // Badge on tab
+        const badge = document.getElementById('dep-repairs-badge');
+        if (total > 0) { badge.textContent = total; badge.style.display = ''; }
+        else { badge.style.display = 'none'; }
+
+        // Model chips
+        const mc = sum.model_counts || {};
+        const entries = Object.entries(mc).sort((a,b)=>b[1]-a[1]);
+        document.getElementById('rq-model-chips').innerHTML = entries.length
+            ? entries.map(([m,c])=>`<div class="rq-model-chip"><span>${rqEsc(m)}</span><span class="rq-model-chip-count">${c}</span></div>`).join('')
+            : '<span style="color:#94a3b8;font-size:12px;">No equipment in repair.</span>';
+
+        rqApplyFilters();
+    } catch (e) {
+        document.getElementById('rq-tbody').innerHTML = `<tr><td colspan="7" style="padding:30px;text-align:center;color:#ef4444;">${rqEsc(e.message)}</td></tr>`;
+    }
+}
+
+function rqApplyFilters() {
+    const search = document.getElementById('rq-search')?.value.toLowerCase().trim() || '';
+    const stage  = document.getElementById('rq-stage-filter')?.value || '';
+    const sort   = document.getElementById('rq-sort')?.value || 'days_desc';
+
+    let filtered = rqAllData.filter(e => {
+        if (stage && (e.repair_stage || 'Received') !== stage) return false;
+        if (search && !e.serial_number?.toLowerCase().includes(search) && !(e.terminal_type||'').toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    if (sort === 'days_desc') filtered.sort((a,b)=>(b.days_in_repair||0)-(a.days_in_repair||0));
+    else if (sort === 'days_asc') filtered.sort((a,b)=>(a.days_in_repair||0)-(b.days_in_repair||0));
+    else if (sort === 'stage') filtered.sort((a,b)=>RQ_STAGES.indexOf(a.repair_stage||'Received')-RQ_STAGES.indexOf(b.repair_stage||'Received'));
+
+    const tbody = document.getElementById('rq-tbody');
+    document.getElementById('rq-filtered-count').textContent = filtered.length + ' unit' + (filtered.length !== 1 ? 's' : '');
+
+    if (!filtered.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="padding:30px;text-align:center;color:#94a3b8;">No units match.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = filtered.map(e => {
+        const stage = e.repair_stage || 'Received';
+        const cls   = RQ_STAGE_CLASSES[stage] || 'rq-stage-received';
+        const crit  = e.days_in_repair !== null && e.days_in_repair > 14;
+        const sn    = (e.serial_number||'').replace(/'/g,"\\'");
+        return `<tr style="${crit ? 'background:#fff9f9;' : ''}">
+            <td style="font-family:monospace;font-weight:700;color:#004990;">
+                ${rqEsc(e.serial_number)}
+                ${crit ? '<span class="material-icons" style="font-size:14px;color:#dc2626;vertical-align:middle;margin-left:3px;" title="Exceeds 14-day threshold">warning</span>' : ''}
+            </td>
+            <td style="font-weight:600;">${rqEsc(e.terminal_type||'—')}</td>
+            <td><span class="rq-badge ${cls}">${rqEsc(stage)}</span></td>
+            <td>${rqDaysPill(e.days_in_repair)}</td>
+            <td class="hide-mobile" style="color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${rqEsc(e.repair_notes||'')}">${rqEsc(e.repair_notes||'—')}</td>
+            <td class="hide-mobile" style="font-size:12px;color:#64748b;">${fmtDate(e.received_date)}</td>
+            <td style="text-align:right;white-space:nowrap;">
+                <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button class="rq-action-btn primary" onclick="rqUpdateStage('${e.id}','${sn}','${rqEsc(stage)}','${rqEsc(e.repair_notes||'')}')">
+                        <span class="material-icons" style="font-size:13px;">edit</span> Update
+                    </button>
+                    <button class="rq-action-btn success" onclick="rqCloseRepair('${e.id}','${sn}','return_to_stock')">
+                        <span class="material-icons" style="font-size:13px;">check</span> Return
+                    </button>
+                    <button class="rq-action-btn danger" onclick="rqCloseRepair('${e.id}','${sn}','scrap')">
+                        <span class="material-icons" style="font-size:13px;">delete_forever</span> Scrap
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function rqUpdateStage(id, serial, currentStage, currentNotes) {
+    const opts = RQ_STAGES.map(s=>`<option value="${s}"${s===currentStage?' selected':''}>${s}</option>`).join('');
+    const { value: fv, isConfirmed } = await Swal.fire({
+        title: `Update: ${serial}`,
+        html: `<div style="text-align:left;">
+            <label style="font-size:11px;font-weight:700;color:#475569;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Repair Stage</label>
+            <select id="swal-rq-stage" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px;">${opts}</select>
+            <label style="font-size:11px;font-weight:700;color:#475569;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Technician Notes</label>
+            <textarea id="swal-rq-notes" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;min-height:90px;box-sizing:border-box;" placeholder="Describe findings, parts replaced, issue resolved...">${currentNotes||''}</textarea>
+        </div>`,
+        showCancelButton: true, confirmButtonText: 'Save Update', confirmButtonColor: '#004990',
+        preConfirm: () => ({ stage: document.getElementById('swal-rq-stage').value, notes: document.getElementById('swal-rq-notes').value.trim() })
+    });
+    if (!isConfirmed || !fv) return;
+    Swal.fire({ title:'Saving…', didOpen:()=>Swal.showLoading() });
+    const r = await fetch('/api/equipments', { method:'POST', headers:authHeaders(), body:JSON.stringify({ action:'log_repair_action', equipment_id:id, repair_stage:fv.stage, repair_notes:fv.notes }) });
+    const d = await r.json();
+    if (d.success) {
+        await Swal.fire({ icon:'success', title:'Updated', text:`${serial} → "${fv.stage}"`, timer:1500, showConfirmButton:false });
+        rqLoadQueue();
+    } else { Swal.fire('Error', d.message||'Update failed.', 'error'); }
+}
+
+async function rqCloseRepair(id, serial, outcome) {
+    const isScrap = outcome === 'scrap';
+    const { isConfirmed } = await Swal.fire({
+        title: isScrap ? `Scrap ${serial}?` : `Return ${serial} to Stock?`,
+        text: isScrap ? 'This will mark the unit as decommissioned. This cannot be undone.' : 'This will move the unit back to Warsaw Office as stocked.',
+        icon: isScrap ? 'warning' : 'question',
+        showCancelButton: true,
+        confirmButtonText: isScrap ? 'Yes, Scrap It' : 'Return to Stock',
+        confirmButtonColor: isScrap ? '#dc2626' : '#10b981'
+    });
+    if (!isConfirmed) return;
+    Swal.fire({ title:'Processing…', didOpen:()=>Swal.showLoading() });
+    const r = await fetch('/api/equipments', { method:'POST', headers:authHeaders(), body:JSON.stringify({ action:'close_repair', equipment_id:id, outcome }) });
+    const d = await r.json();
+    if (d.success) {
+        await Swal.fire({ icon:'success', timer:1500, showConfirmButton:false, title:isScrap?'Scrapped':'Done!', text:isScrap?`${serial} has been decommissioned.`:`${serial} returned to Warsaw Office stock.` });
+        rqLoadQueue();
+    } else { Swal.fire('Error', d.message||'Operation failed.', 'error'); }
+}
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'deployments'})});})();</script>
 <script src="/js/site-config.js"></script>
