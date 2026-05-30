@@ -157,37 +157,51 @@ if (action === 'complete_return') {
         finalStatus = 'decommissioned'; finalLocation = 'Retired';
     }
 
-    // ── LEGACY RMA: create real equipment from legacy record ──────────────────
+    // ── LEGACY RMA ────────────────────────────────────────────────────────────
     if (rmaData?.legacy_deployment_id) {
-        const { data: leg } = await supabase.from('legacy_deployments')
-            .select('serial_number, terminal_type').eq('id', rmaData.legacy_deployment_id).single();
-        if (leg?.serial_number) {
-            const legEqInsert = {
-                serial_number: leg.serial_number,
-                terminal_type: leg.terminal_type || 'Unknown',
-                status: finalStatus,
-                current_location: finalLocation,
-                received_date: new Date().toISOString(),
-                merchant_id: null
-            };
-            if (destination === 'Warsaw Repairs') legEqInsert.repair_stage = 'received';
+        const existingEquipId = equipment_id || rmaData?.equipment_id;
 
-            const { data: newEquip } = await supabase.from('equipments').insert(legEqInsert).select('id').single();
-
-            if (newEquip?.id) {
-                await supabase.from('legacy_deployments').update({
-                    status: 'converted',
-                    converted_equipment_id: newEquip.id
-                }).eq('id', rmaData.legacy_deployment_id);
-
-                await supabase.from('equipment_logs').insert([{
-                    equipment_id: newEquip.id,
-                    merchant_id: resolved_merchant_id,
-                    action: 'Converted from Legacy RMA',
-                    from_location: 'Legacy (Salesforce)',
-                    to_location: finalLocation,
-                    notes: `Legacy RMA completed. Unit marked as ${condition}. Added to active inventory.`
-                }]);
+        if (existingEquipId) {
+            // Equipment already created when RMA was filed — just update its status
+            const eqUpdate = { status: finalStatus, current_location: finalLocation, merchant_id: null };
+            if (destination === 'Warsaw Repairs') eqUpdate.repair_stage = 'received';
+            await supabase.from('equipments').update(eqUpdate).eq('id', existingEquipId);
+            await supabase.from('equipment_logs').insert([{
+                equipment_id: existingEquipId,
+                merchant_id: resolved_merchant_id,
+                action: 'Legacy RMA Completed',
+                from_location: 'Legacy (Salesforce)',
+                to_location: finalLocation,
+                notes: `Legacy RMA completed. Unit marked as ${condition}.`
+            }]);
+        } else {
+            // Equipment not yet created — create it now (legacy file_rma path without auto-create)
+            const { data: leg } = await supabase.from('legacy_deployments')
+                .select('serial_number, terminal_type').eq('id', rmaData.legacy_deployment_id).single();
+            if (leg?.serial_number) {
+                const legEqInsert = {
+                    serial_number: leg.serial_number,
+                    terminal_type: leg.terminal_type || 'Unknown',
+                    status: finalStatus,
+                    current_location: finalLocation,
+                    received_date: new Date().toISOString(),
+                    merchant_id: null
+                };
+                if (destination === 'Warsaw Repairs') legEqInsert.repair_stage = 'received';
+                const { data: newEquip } = await supabase.from('equipments').insert(legEqInsert).select('id').single();
+                if (newEquip?.id) {
+                    await supabase.from('legacy_deployments').update({
+                        status: 'converted', converted_equipment_id: newEquip.id
+                    }).eq('id', rmaData.legacy_deployment_id);
+                    await supabase.from('equipment_logs').insert([{
+                        equipment_id: newEquip.id,
+                        merchant_id: resolved_merchant_id,
+                        action: 'Converted from Legacy RMA',
+                        from_location: 'Legacy (Salesforce)',
+                        to_location: finalLocation,
+                        notes: `Legacy RMA completed. Unit marked as ${condition}. Added to active inventory.`
+                    }]);
+                }
             }
         }
 
