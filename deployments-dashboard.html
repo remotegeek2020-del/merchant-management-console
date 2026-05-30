@@ -172,45 +172,67 @@
     </div>
 
     <!-- View toggle: Current / Legacy -->
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <button id="dep-view-current" onclick="setDepView('current')" style="padding:7px 18px;border-radius:8px;border:none;background:#004990;color:white;font-weight:700;font-size:12px;cursor:pointer;">Current Deployments</button>
-        <button id="dep-view-legacy" onclick="setDepView('legacy')" style="padding:7px 18px;border-radius:8px;border:1px solid #d97706;background:white;color:#b45309;font-weight:700;font-size:12px;cursor:pointer;">
-            <span style="background:#d97706;color:white;font-size:9px;padding:1px 5px;border-radius:4px;margin-right:4px;font-weight:800;">LEGACY</span>Historical Records
+    <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin-bottom:16px;">
+        <button id="dep-view-current" onclick="setDepView('current')" style="padding:9px 22px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid #004990;color:#004990;margin-bottom:-2px;">
+            <span class="material-icons" style="font-size:15px;vertical-align:-3px;margin-right:5px;">local_shipping</span>Current Deployments
+        </button>
+        <button id="dep-view-legacy" onclick="setDepView('legacy')" style="padding:9px 22px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#94a3b8;margin-bottom:-2px;">
+            <span class="material-icons" style="font-size:15px;vertical-align:-3px;margin-right:5px;">history</span>Legacy Equipment
         </button>
     </div>
 
     <!-- CURRENT view -->
-    <article id="dep-section-current" class="main-card">
-        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Merchant (DBA)</th>
-                    <th>Hardware (Serial)</th>
-                    <th class="hide-mobile">TID</th>
-                    <th class="hide-mobile">Tracking ID</th>
-                    <th class="hide-mobile">Deployment Date</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="deploymentTableBody"></tbody>
-        </table>
-        <div id="paginationControls"></div>
-    </article>
+    <div id="dep-section-current">
+        <article class="main-card">
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Merchant (DBA)</th>
+                        <th>Hardware (Serial)</th>
+                        <th class="hide-mobile">TID</th>
+                        <th class="hide-mobile">Tracking ID</th>
+                        <th class="hide-mobile">Deployment Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="deploymentTableBody"></tbody>
+            </table>
+            <div id="paginationControls"></div>
+        </article>
+    </div>
 
     <!-- LEGACY view -->
-    <article id="dep-section-legacy" class="main-card" style="display:none;">
-        <!-- Legacy filter bar -->
-        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;">
-            <div style="flex:1;min-width:200px;">
-                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Search Serial / TID / MID / Merchant</label>
-                <input type="text" id="legSearch" oninput="fetchLegacy()" placeholder="Serial, TID, MID, or merchant name…"
-                    style="width:100%;height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 12px;font-size:13px;">
+    <div id="dep-section-legacy" style="display:none;">
+        <!-- Legacy KPIs -->
+        <div class="pp-kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">devices</span> Total Legacy</div>
+                <div class="pp-kpi-value accent" id="dep-leg-kpi-total">—</div>
             </div>
-            <div>
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">pending_actions</span> Active</div>
+                <div class="pp-kpi-value" id="dep-leg-kpi-active">—</div>
+            </div>
+            <div class="pp-kpi dark">
+                <div class="pp-kpi-label">RMA Filed</div>
+                <div class="pp-kpi-value" id="dep-leg-kpi-rma">—</div>
+            </div>
+        </div>
+
+        <!-- Legacy filter bar -->
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:14px;">
+            <div style="flex:1 1 200px;min-width:180px;">
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Search</label>
+                <div style="position:relative;">
+                    <span class="material-icons" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:17px;pointer-events:none;">search</span>
+                    <input type="text" id="legSearch" oninput="fetchLegacy()" placeholder="Serial, TID, MID, or merchant name…" style="width:100%;height:36px;padding-left:33px;border-radius:8px;border:1px solid #cbd5e1;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+            </div>
+            <div style="min-width:140px;">
                 <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Status</label>
-                <select id="legStatus" onchange="fetchLegacy()" style="height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 10px;font-size:13px;background:white;cursor:pointer;">
+                <select id="legStatus" onchange="fetchLegacy()" style="height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 10px;font-size:13px;background:white;cursor:pointer;width:100%;">
                     <option value="all">All</option>
                     <option value="active">Active</option>
                     <option value="rma_filed">RMA Filed</option>
@@ -218,23 +240,27 @@
                 </select>
             </div>
         </div>
-        <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
-            <thead>
-                <tr>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Serial</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">TID</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Merchant</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Terminal Type</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Dep. Date</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Purchase Type</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Status</th>
-                    <th style="font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;">Actions</th>
-                </tr>
-            </thead>
-            <tbody id="legacyTableBody"></tbody>
-        </table>
-        <div id="legacyPaginationControls"></div>
-    </article>
+
+        <!-- Legacy table -->
+        <div class="pp-table-card">
+            <table class="pp-table">
+                <thead>
+                    <tr>
+                        <th>Serial Number</th>
+                        <th class="hide-mobile">TID</th>
+                        <th>Merchant</th>
+                        <th>Terminal Type</th>
+                        <th class="hide-mobile">Deploy Date</th>
+                        <th class="hide-mobile">Purchase Type</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="legacyTableBody"></tbody>
+            </table>
+            <div id="legacyPaginationControls"></div>
+        </div>
+    </div>
 </div>
 
 <div id="newDepModal" class="modal-backdrop" onclick="closeModal(event, 'newDepModal')">
@@ -2355,12 +2381,12 @@ const LEG_LIMIT = 50;
 
 function setDepView(view) {
     const isCurrent = view === 'current';
-    document.getElementById('dep-section-current').style.display = isCurrent ? '' : 'none';
-    document.getElementById('dep-section-legacy').style.display  = isCurrent ? 'none' : '';
-    document.getElementById('dep-view-current').style.background = isCurrent ? '#004990' : 'white';
-    document.getElementById('dep-view-current').style.color      = isCurrent ? 'white'   : '#004990';
-    document.getElementById('dep-view-current').style.border     = isCurrent ? 'none' : '1px solid #004990';
-    document.getElementById('dep-view-legacy').style.background  = isCurrent ? 'white' : '#fef3c7';
+    document.getElementById('dep-section-current').style.display     = isCurrent ? '' : 'none';
+    document.getElementById('dep-section-legacy').style.display      = isCurrent ? 'none' : '';
+    document.getElementById('dep-view-current').style.borderBottomColor = isCurrent ? '#004990' : 'transparent';
+    document.getElementById('dep-view-current').style.color             = isCurrent ? '#004990' : '#94a3b8';
+    document.getElementById('dep-view-legacy').style.borderBottomColor  = isCurrent ? 'transparent' : '#b45309';
+    document.getElementById('dep-view-legacy').style.color              = isCurrent ? '#94a3b8' : '#b45309';
     if (!isCurrent) {
         _depLoadTerminalTypes();
         if (document.getElementById('legacyTableBody').innerHTML === '') fetchLegacy();
@@ -2386,6 +2412,13 @@ async function renderLegacy() {
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
+
+        if (data.stats) {
+            document.getElementById('dep-leg-kpi-total').innerText  = data.stats.total     ?? '—';
+            document.getElementById('dep-leg-kpi-active').innerText = data.stats.active    ?? '—';
+            document.getElementById('dep-leg-kpi-rma').innerText    = data.stats.rma_filed ?? '—';
+        }
+
         const rows = data.data || [];
         if (!rows.length) {
             tbody.innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
