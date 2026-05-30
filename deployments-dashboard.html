@@ -1014,11 +1014,27 @@ async function processReturn() {
     // For bulk: let user pick which units to return
     let selectedEquipmentIds = null;
     if (d.is_bulk && d.items?.length > 0) {
+        // Only show units still at merchant (deployed or pending_return); exclude already-returned units
+        const returnableItems = d.items.filter(item => item.status === 'deployed' || item.status === 'pending_return');
+        const alreadyReturnedItems = d.items.filter(item => item.status !== 'deployed' && item.status !== 'pending_return');
+
+        if (!returnableItems.length) {
+            await Swal.fire('Nothing to Return', 'All units from this deployment have already been returned.', 'info');
+            return;
+        }
+
+        const alreadyReturnedHtml = alreadyReturnedItems.length
+            ? `<div style="margin-top:10px;padding:8px 10px;background:#f1f5f9;border-radius:7px;border:1px solid #e2e8f0;">
+                <div style="font-size:10px;color:#94a3b8;font-weight:600;margin-bottom:4px;">ALREADY RETURNED (${alreadyReturnedItems.length})</div>
+                ${alreadyReturnedItems.map(item => `<div style="font-size:11px;color:#94a3b8;padding:2px 0;">${item.serial_number || '---'} · ${item.status}</div>`).join('')}
+               </div>`
+            : '';
+
         const pickerResult = await Swal.fire({
             title: 'Select Units to Return',
             html: `<div style="text-align:left;">
                 <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Check the units being returned:</div>
-                ${d.items.map(item => `
+                ${returnableItems.map(item => `
                     <label style="display:flex;align-items:center;gap:10px;padding:9px 10px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;margin-bottom:5px;cursor:pointer;">
                         <input type="checkbox" class="bulk-return-cb" value="${item.equipment_id}" checked style="width:15px;height:15px;cursor:pointer;">
                         <div>
@@ -1027,12 +1043,13 @@ async function processReturn() {
                         </div>
                     </label>
                 `).join('')}
+                ${alreadyReturnedHtml}
             </div>`,
             showCancelButton: true,
             confirmButtonText: 'Continue →',
             confirmButtonColor: '#004990',
             preConfirm: () => {
-                const checked = Array.from(document.querySelectorAll('.bulk-return-cb:checked')).map(cb => cb.value);
+                const checked = Array.from(Swal.getPopup().querySelectorAll('.bulk-return-cb:checked')).map(cb => cb.value);
                 if (!checked.length) { Swal.showValidationMessage('Select at least one unit to return'); return false; }
                 return checked;
             }
