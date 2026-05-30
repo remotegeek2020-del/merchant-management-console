@@ -551,7 +551,14 @@ export default async function handler(req, res) {
                 const rets = Array.isArray(d.returns) ? d.returns : (d.returns ? [d.returns] : []);
                 return !rets.some(r => r.status === 'Closed');
             });
-            return res.status(200).json({ success: true, deployments: eligible });
+            // Legacy deployments — active only
+            const { data: legacyDeps } = await supabase
+                .from('legacy_deployments')
+                .select('id, serial_number, terminal_type, tid')
+                .eq('merchant_id', merchant.id)
+                .eq('status', 'active');
+
+            return res.status(200).json({ success: true, deployments: eligible, legacy: (legacyDeps || []) });
         }
 
         if (action === 'create_linked_record') {
@@ -668,10 +675,84 @@ export default async function handler(req, res) {
                 }
 
             } else if (record_type === 'rma') {
-                // selected_units: [{ equipment_id, deployment_id }] — one entry per device staff chose
+                // selected_units: [{ equipment_id, deployment_id, is_legacy, legacy_id }]
                 const { selected_units, return_reason, return_date_initiated, notes } = req.body;
                 if (!selected_units?.length || !return_reason) {
                     return res.status(400).json({ success: false, message: 'selected_units and return_reason required.' });
+                }
+
+                // ── LEGACY PATH ──────────────────────────────────────────────────
+                const legacySelected = selected_units.filter(u => u.is_legacy && u.legacy_id);
+                if (legacySelected.length) {
+                    const today = new Date().toISOString().split('T')[0];
+                    let firstReturnId = null;
+                    let unitCount = 0;
+
+                    for (const unit of legacySelected) {
+                        const { data: leg } = await supabase.from('legacy_deployments')
+                            .select('*').eq('id', unit.legacy_id).maybeSingle();
+                        if (!leg || leg.status !== 'active') continue;
+
+                        const returnId = genId('RMA');
+
+                        // Create equipment record (conversion)
+                        const { data: newEquip } = await supabase.from('equipments').insert({
+                            terminal_type: leg.terminal_type || null,
+                            serial_number: leg.serial_number,
+                            merchant_id: null,
+                            status: 'pending_return',
+                            current_location: 'In Transit / RMA',
+                            condition: 'In Transit',
+                            received_date: today,
+                            notes: `Converted from legacy. RMA ${returnId}`
+                        }).select('id').single();
+
+                        // Create return record
+                        const { data: newReturn } = await supabase.from('returns').insert({
+                            return_id: returnId,
+                            merchant_id: leg.merchant_id || null,
+                            equipment_id: newEquip.id,
+                            deployment_id: null,
+                            legacy_deployment_id: unit.legacy_id,
+                            return_reason,
+                            notes: notes || null,
+                            return_date_initiated: return_date_initiated || today,
+                            condition: 'IN TRANSIT',
+                            destination: 'In Transit / RMA',
+                            status: 'Open',
+                            is_bulk: false,
+                            ticket_id: parseInt(ticket_id)
+                        }).select('id, return_id').single();
+
+                        // Mark legacy as converted
+                        await supabase.from('legacy_deployments').update({
+                            status: 'converted',
+                            return_id: newReturn.id,
+                            converted_equipment_id: newEquip.id
+                        }).eq('id', unit.legacy_id);
+
+                        await supabase.from('equipment_logs').insert({
+                            equipment_id: newEquip.id, merchant_id: leg.merchant_id,
+                            action: 'Legacy RMA Initiated', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
+                            notes: `Legacy RMA from support ticket. Serial: ${leg.serial_number}`
+                        });
+
+                        if (!firstReturnId) firstReturnId = newReturn.return_id;
+                        unitCount++;
+                    }
+
+                    if (!firstReturnId) return res.status(400).json({ success: false, message: 'No valid legacy units found.' });
+
+                    await supabase.from('support_tickets').update({ linked_return_id: firstReturnId }).eq('id', ticket_id);
+                    await supabase.from('ticket_comments').insert({
+                        ticket_id, author_type: 'system', author_name: author,
+                        change_summary: `Legacy RMA initiated: <strong>${firstReturnId}</strong> — ${unitCount} unit(s) converted and marked In Transit.`,
+                        is_internal: false
+                    });
+                    await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
+                    logActivity({ email: staffEmail || author, action: `Legacy RMA ${firstReturnId} created from ticket ${ticket_id} (${unitCount} unit(s))`, target_id: ticket_id,
+                        new_value: { return_id: firstReturnId, return_reason, unit_count: unitCount } });
+                    return res.status(200).json({ success: true, return_id: firstReturnId, unit_count: unitCount });
                 }
 
                 // Use the first unit's deployment as the primary deployment for the returns record

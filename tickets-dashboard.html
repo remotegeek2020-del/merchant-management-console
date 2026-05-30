@@ -1166,9 +1166,10 @@ async function createLinkedRMA() {
     Swal.fire({ title: 'Loading eligible equipment...', didOpen: () => Swal.showLoading() });
     const depData = await tkApi('get_merchant_deployments', { merchant_id: t.merchant_id });
     const deps = depData.deployments || [];
+    const legacyUnits = depData.legacy || [];
     Swal.close();
 
-    if (!deps.length) {
+    if (!deps.length && !legacyUnits.length) {
         Swal.fire('No Deployments', 'There are no eligible deployment records for this merchant.', 'warning');
         return;
     }
@@ -1210,18 +1211,33 @@ async function createLinkedRMA() {
         }
     });
 
-    // Deduplicate by equipment_id
+    // Add legacy units
+    legacyUnits.forEach(l => allUnits.push({
+        equipment_id: null, deployment_id: null,
+        deployment_display: 'LEGACY',
+        serial_number: l.serial_number || '—',
+        terminal_type: l.terminal_type || '—',
+        is_legacy: true, legacy_id: l.id,
+        is_bulk: false
+    }));
+
+    // Deduplicate regular units by equipment_id (legacy always included — no eq id yet)
     const seen = new Set();
-    const units = allUnits.filter(u => { if (seen.has(u.equipment_id)) return false; seen.add(u.equipment_id); return true; });
+    const units = allUnits.filter(u => {
+        if (u.is_legacy) return true;
+        if (seen.has(u.equipment_id)) return false;
+        seen.add(u.equipment_id); return true;
+    });
 
     const hasRequested = requestedSerials.size > 0;
     const unitCheckboxes = units.map(u => {
         const isReq = requestedSerials.has(u.serial_number);
+        const legacyBadge = u.is_legacy ? '<span style="font-size:10px;font-weight:700;color:#7c3aed;background:#f3e8ff;padding:2px 6px;border-radius:4px;white-space:nowrap;">LEGACY</span>' : '';
         return `<label style="display:flex;align-items:center;gap:8px;padding:8px 10px;border:2px solid ${isReq ? '#f59e0b' : '#e2e8f0'};border-radius:6px;margin-bottom:4px;cursor:pointer;background:${isReq ? '#fffbeb' : 'white'};" onclick="event.stopPropagation()">
-            <input type="checkbox" class="rma-unit-cb" value="${u.equipment_id}" data-dep-id="${u.deployment_id}" ${isReq ? 'checked' : ''} style="width:14px;height:14px;flex-shrink:0;">
+            <input type="checkbox" class="rma-unit-cb" value="${u.equipment_id || ''}" data-dep-id="${u.deployment_id || ''}" data-is-legacy="${u.is_legacy || false}" data-legacy-id="${u.legacy_id || ''}" ${isReq ? 'checked' : ''} style="width:14px;height:14px;flex-shrink:0;">
             <span style="flex:1;font-size:12px;"><strong>${escapeHtml(u.terminal_type)}</strong> — <span style="font-family:'DM Mono',monospace;">${escapeHtml(u.serial_number)}</span></span>
             <span style="font-size:10px;font-family:'DM Mono',monospace;background:#f1f5f9;color:#64748b;padding:2px 6px;border-radius:4px;white-space:nowrap;">${escapeHtml(u.deployment_display || '')}</span>
-            ${isReq ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fde68a;padding:2px 6px;border-radius:4px;white-space:nowrap;">★ Requested</span>' : ''}
+            ${legacyBadge}${isReq ? '<span style="font-size:10px;font-weight:700;color:#92400e;background:#fde68a;padding:2px 6px;border-radius:4px;white-space:nowrap;">★ Requested</span>' : ''}
         </label>`;
     }).join('');
 
@@ -1277,7 +1293,10 @@ async function createLinkedRMA() {
             const finalReason = reasonSel === 'Other' ? reasonOther : reasonSel;
             if (!finalReason) { Swal.showValidationMessage('Please select or enter a return reason'); return false; }
             return {
-                selected_units: checked.map(cb => ({ equipment_id: cb.value, deployment_id: cb.dataset.depId })),
+                selected_units: checked.map(cb => {
+                    const isLeg = cb.dataset.isLegacy === 'true';
+                    return { equipment_id: isLeg ? null : cb.value, deployment_id: isLeg ? null : cb.dataset.depId, is_legacy: isLeg, legacy_id: isLeg ? cb.dataset.legacyId : null };
+                }),
                 return_reason: finalReason,
                 return_date_initiated: document.getElementById('rma-date').value,
                 notes: document.getElementById('rma-notes').value
