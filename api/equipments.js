@@ -306,6 +306,23 @@ if (action === 'getMonthlyReport') {
 
             if (updateError) throw updateError;
 
+            // Sync open returns record if equipment moved out of repair
+            const newStatus = payload.status;
+            if (newStatus === 'stocked' || newStatus === 'decommissioned') {
+                const { data: openReturn } = await supabase.from('returns')
+                    .select('id').eq('equipment_id', id).eq('status', 'Open').maybeSingle();
+                if (openReturn) {
+                    const retCondition  = newStatus === 'stocked' ? 'Working (Back to Stock)' : 'Scrapped';
+                    const retDestination = newStatus === 'stocked' ? 'Warsaw Office' : 'Retired';
+                    await supabase.from('returns').update({
+                        status: 'Closed',
+                        condition: retCondition,
+                        destination: retDestination,
+                        equipment_received_date: new Date().toISOString()
+                    }).eq('id', openReturn.id);
+                }
+            }
+
             supabase.from('activity_logs').insert([{
                 email: actorEmail,
                 action: `Inventory Updated — ${payload.serial_number || oldEquip?.serial_number}`,
@@ -385,6 +402,16 @@ if (action === 'getMonthlyReport') {
                 .update({ repair_stage, repair_notes, condition: repair_stage })
                 .eq('id', equipment_id);
             if (error) throw error;
+
+            // Keep open returns condition in sync with repair stage
+            const { data: openReturn } = await supabase.from('returns')
+                .select('id').eq('equipment_id', equipment_id).eq('status', 'Open').maybeSingle();
+            if (openReturn) {
+                await supabase.from('returns').update({
+                    condition: `Defective (${repair_stage})`
+                }).eq('id', openReturn.id);
+            }
+
             await supabase.from('equipment_logs').insert([{
                 equipment_id,
                 action: 'repair_update',
@@ -412,6 +439,19 @@ if (action === 'getMonthlyReport') {
                 .update({ status: newStatus, current_location: newLocation, repair_stage: null, repair_notes: null, merchant_id: null })
                 .eq('id', equipment_id);
             if (error) throw error;
+
+            // Close open returns record and set final condition/destination
+            const { data: openReturn } = await supabase.from('returns')
+                .select('id').eq('equipment_id', equipment_id).eq('status', 'Open').maybeSingle();
+            if (openReturn) {
+                await supabase.from('returns').update({
+                    status: 'Closed',
+                    condition: isScrap ? 'Scrapped' : 'Working (Back to Stock)',
+                    destination: isScrap ? 'Scrap' : 'Warsaw Office',
+                    equipment_received_date: new Date().toISOString()
+                }).eq('id', openReturn.id);
+            }
+
             await supabase.from('equipment_logs').insert([{
                 equipment_id,
                 action: isScrap ? 'scrapped' : 'repair_completed',
