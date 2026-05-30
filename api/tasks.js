@@ -94,16 +94,28 @@ export default async function handler(req, res) {
         // ── UPDATE TASK ───────────────────────────────────
         if (action === 'update_task') {
             const { task_id, payload } = req.body;
-            const { data: oldTask } = await supabase.from('merchant_tasks').select('title, status, assigned_to, priority, due_date').eq('id', task_id).single();
-            const { error } = await supabase.from('merchant_tasks').update(payload).eq('id', task_id);
+            const { data: oldTask } = await supabase.from('merchant_tasks').select('title, status, assigned_to, priority, due_date, created_by').eq('id', task_id).maybeSingle();
+            if (!oldTask) return res.status(404).json({ success: false, message: 'Task not found.' });
+
+            const { data: actor } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
+            const isAdmin = ['super_admin', 'Operations Admin'].includes(actor?.role);
+            if (!isAdmin && oldTask.created_by !== session.userid && oldTask.assigned_to !== session.userid) {
+                return res.status(403).json({ success: false, message: 'You can only edit tasks you created or are assigned to.' });
+            }
+
+            const ALLOWED_TASK_FIELDS = ['title', 'body', 'status', 'priority', 'due_date', 'notes', 'assigned_to'];
+            const patch = {};
+            for (const k of ALLOWED_TASK_FIELDS) { if (k in payload) patch[k] = payload[k]; }
+
+            const { error } = await supabase.from('merchant_tasks').update(patch).eq('id', task_id);
             if (error) throw error;
 
             await supabase.from('activity_logs').insert({
                 email: staff_name || userid, action: `Updated task: ${oldTask?.title || task_id}`,
                 status: 'success', category: 'tasks',
                 target_id: task_id, target_type: 'task',
-                old_value: oldTask ? { status: oldTask.status, assigned_to: oldTask.assigned_to, priority: oldTask.priority, due_date: oldTask.due_date } : null,
-                new_value: payload
+                old_value: { status: oldTask.status, assigned_to: oldTask.assigned_to, priority: oldTask.priority, due_date: oldTask.due_date },
+                new_value: patch
             });
 
             return res.status(200).json({ success: true });
@@ -112,6 +124,15 @@ export default async function handler(req, res) {
         // ── DELETE TASK ───────────────────────────────────
         if (action === 'delete_task') {
             const { task_id } = req.body;
+            const { data: task } = await supabase.from('merchant_tasks').select('created_by').eq('id', task_id).maybeSingle();
+            if (!task) return res.status(404).json({ success: false, message: 'Task not found.' });
+
+            const { data: actor } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
+            const isAdmin = ['super_admin', 'Operations Admin'].includes(actor?.role);
+            if (!isAdmin && task.created_by !== session.userid) {
+                return res.status(403).json({ success: false, message: 'You can only delete tasks you created.' });
+            }
+
             await supabase.from('task_comments').delete().eq('task_id', task_id);
             await supabase.from('merchant_tasks').delete().eq('id', task_id);
             return res.status(200).json({ success: true });
@@ -158,6 +179,6 @@ export default async function handler(req, res) {
         return res.status(400).json({ success: false, message: 'Unknown action' });
     } catch (err) {
         console.error('Tasks API error:', err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }

@@ -89,7 +89,7 @@ export default async function handler(req, res) {
                 return res.status(429).json({ success: false, message: 'Too many failed attempts. Please log in again.' });
             }
 
-            if (tfaUser.tfa_code === code) {
+            if (tfaUser.tfa_code && await bcrypt.compare(code, tfaUser.tfa_code)) {
                 if (remember) {
                     generatedDeviceToken = crypto.randomUUID();
                     await supabase.from('trusted_devices').insert({
@@ -149,7 +149,8 @@ export default async function handler(req, res) {
                         generatedSessionToken = await createStaffSession(supabase, dbUser.userid, req);
                     } else {
                         const tfaCode = Math.floor(100000 + Math.random() * 900000).toString();
-                        await supabase.from('app_users').update({ tfa_code: tfaCode, tfa_attempts: 0 }).eq('userid', dbUser.userid);
+                        const tfaHash = await bcrypt.hash(tfaCode, 10);
+                        await supabase.from('app_users').update({ tfa_code: tfaHash, tfa_attempts: 0 }).eq('userid', dbUser.userid);
                         if (process.env.POSTMARK_SERVER_TOKEN) {
                             const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
                             await client.sendEmail({

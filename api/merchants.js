@@ -644,7 +644,13 @@ if (action === 'get_merchant_equipment') {
             const { note_id, title, body } = req.body;
             if (title && title.length > 200) return res.status(400).json({ success: false, message: 'Title too long (max 200 characters).' });
             if (body && body.length > 5000) return res.status(400).json({ success: false, message: 'Note too long (max 5000 characters).' });
-            const { data: oldNote } = await supabase.from('merchant_notes').select('title, body, merchant_id').eq('id', note_id).single();
+            const { data: oldNote } = await supabase.from('merchant_notes').select('title, body, merchant_id, created_by').eq('id', note_id).maybeSingle();
+            if (!oldNote) return res.status(404).json({ success: false, message: 'Note not found.' });
+            const { data: noteActor } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
+            const noteIsAdmin = ['super_admin', 'Operations Admin'].includes(noteActor?.role);
+            if (!noteIsAdmin && oldNote.created_by !== session.userid) {
+                return res.status(403).json({ success: false, message: 'You can only edit notes you created.' });
+            }
             const { error } = await supabase
                 .from('merchant_notes')
                 .update({ title, body, updated_at: new Date().toISOString(), updated_by: session.userid })
@@ -680,8 +686,14 @@ if (action === 'get_merchant_equipment') {
         if (action === 'delete_attachment') {
             const { file_id, file_path } = req.body;
 
-            // Pre-fetch for audit log
-            const { data: attachRow } = await supabase.from('merchant_attachments').select('file_name, merchant_id').eq('id', file_id).maybeSingle();
+            // Pre-fetch for audit log + ownership check
+            const { data: attachRow } = await supabase.from('merchant_attachments').select('file_name, merchant_id, uploaded_by').eq('id', file_id).maybeSingle();
+            if (!attachRow) return res.status(404).json({ success: false, message: 'Attachment not found.' });
+            const { data: delActor } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
+            const delIsAdmin = ['super_admin', 'Operations Admin'].includes(delActor?.role);
+            if (!delIsAdmin && attachRow.uploaded_by !== session.userid) {
+                return res.status(403).json({ success: false, message: 'You can only delete files you uploaded.' });
+            }
             const { data: delActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
             const delActorEmail = delActorRow?.email || session.userid;
             const delActorName  = delActorRow ? `${delActorRow.first_name || ''} ${delActorRow.last_name || ''}`.trim() || delActorEmail : 'Staff';
