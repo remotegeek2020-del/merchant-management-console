@@ -252,7 +252,7 @@ if (action === 'complete_return') {
                 source: 'legacy'
             },
             new_value: {
-                status: legIsRepairs ? 'Open (In Repair Queue)' : 'Closed',
+                status: 'Closed',
                 condition,
                 destination,
                 equipment_status: finalStatus,
