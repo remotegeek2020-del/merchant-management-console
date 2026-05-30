@@ -46,7 +46,7 @@
         </div>
 
         <!-- Row 2: Filter Bar -->
-        <div style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:12px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
+        <div id="rma-filter-bar" style="display:flex; gap:12px; align-items:flex-end; flex-wrap:wrap; padding:12px 16px; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px;">
 
             <!-- Search -->
             <div style="display:flex; flex-direction:column; gap:4px; flex:1 1 220px; min-width:200px;">
@@ -122,42 +122,115 @@
         </div>
     </div>
 
-    <!-- KPIs -->
-    <div class="pp-kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
-        <div class="pp-kpi">
-            <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">pending_actions</span> Open RMAs</div>
-            <div class="pp-kpi-value accent" id="kpi-open">—</div>
+    <!-- TABS -->
+    <div style="display:flex;gap:0;border-bottom:2px solid #e2e8f0;margin-bottom:16px;">
+        <button id="tab-rma" onclick="switchTab('rma')" style="padding:9px 22px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid #004990;color:#004990;margin-bottom:-2px;">
+            <span class="material-icons" style="font-size:15px;vertical-align:-3px;margin-right:5px;">assignment_return</span>RMA Ledger
+        </button>
+        <button id="tab-legacy" onclick="switchTab('legacy')" style="padding:9px 22px;font-size:13px;font-weight:700;border:none;background:none;cursor:pointer;border-bottom:3px solid transparent;color:#94a3b8;margin-bottom:-2px;">
+            <span class="material-icons" style="font-size:15px;vertical-align:-3px;margin-right:5px;">history</span>Legacy Equipment
+        </button>
+    </div>
+
+    <!-- RMA SECTION -->
+    <div id="section-rma">
+        <!-- KPIs -->
+        <div class="pp-kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">pending_actions</span> Open RMAs</div>
+                <div class="pp-kpi-value accent" id="kpi-open">—</div>
+            </div>
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">build_circle</span> Defective Units</div>
+                <div class="pp-kpi-value danger" id="kpi-defective">—</div>
+            </div>
+            <div class="pp-kpi dark">
+                <div class="pp-kpi-label">Total Lifetime Returns</div>
+                <div class="pp-kpi-value" id="kpi-total">—</div>
+            </div>
         </div>
-        <div class="pp-kpi">
-            <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">build_circle</span> Defective Units</div>
-            <div class="pp-kpi-value danger" id="kpi-defective">—</div>
-        </div>
-        <div class="pp-kpi dark">
-            <div class="pp-kpi-label">Total Lifetime Returns</div>
-            <div class="pp-kpi-value" id="kpi-total">—</div>
+
+        <!-- TABLE -->
+        <div class="pp-table-card">
+            <table class="pp-table">
+                <thead>
+                    <tr>
+                        <th>RMA ID</th>
+                        <th>Date</th>
+                        <th>Merchant</th>
+                        <th class="hide-mobile">Equipment (S/N)</th>
+                        <th class="hide-mobile">Reason</th>
+                        <th>Condition</th>
+                        <th class="hide-mobile">Destination</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="returnsTableBody">
+                    <tr><td colspan="9"><div class="pp-empty"><span class="material-icons">sync</span><p>Loading...</p></div></td></tr>
+                </tbody>
+            </table>
         </div>
     </div>
 
-    <!-- TABLE -->
-    <div class="pp-table-card">
-        <table class="pp-table">
-            <thead>
-                <tr>
-                    <th>RMA ID</th>
-                    <th>Date</th>
-                    <th>Merchant</th>
-                    <th class="hide-mobile">Equipment (S/N)</th>
-                    <th class="hide-mobile">Reason</th>
-                    <th>Condition</th>
-                    <th class="hide-mobile">Destination</th>
-                    <th>Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody id="returnsTableBody">
-                <tr><td colspan="9"><div class="pp-empty"><span class="material-icons">sync</span><p>Loading...</p></div></td></tr>
-            </tbody>
-        </table>
+    <!-- LEGACY SECTION -->
+    <div id="section-legacy" style="display:none;">
+        <!-- Legacy KPIs -->
+        <div class="pp-kpi-grid" style="grid-template-columns: repeat(3, 1fr);">
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">devices</span> Total Legacy</div>
+                <div class="pp-kpi-value accent" id="leg-kpi-total">—</div>
+            </div>
+            <div class="pp-kpi">
+                <div class="pp-kpi-label"><span class="material-icons" style="font-size:14px;">pending_actions</span> Pending RMA</div>
+                <div class="pp-kpi-value" id="leg-kpi-active">—</div>
+            </div>
+            <div class="pp-kpi dark">
+                <div class="pp-kpi-label">RMA Filed</div>
+                <div class="pp-kpi-value" id="leg-kpi-rma">—</div>
+            </div>
+        </div>
+
+        <!-- Legacy Filter Bar -->
+        <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;padding:10px 14px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;margin-bottom:14px;">
+            <div style="flex:1 1 200px;min-width:180px;">
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Search</label>
+                <div style="position:relative;">
+                    <span class="material-icons" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:17px;pointer-events:none;">search</span>
+                    <input type="text" id="legSearch" oninput="fetchLegacy()" placeholder="Serial, TID, MID, or merchant…" style="width:100%;height:36px;padding-left:33px;border-radius:8px;border:1px solid #cbd5e1;font-size:13px;outline:none;box-sizing:border-box;">
+                </div>
+            </div>
+            <div style="min-width:140px;">
+                <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px;">Status</label>
+                <select id="legStatus" onchange="fetchLegacy()" style="height:36px;border-radius:8px;border:1px solid #cbd5e1;padding:0 10px;font-size:13px;background:white;cursor:pointer;width:100%;">
+                    <option value="all">All</option>
+                    <option value="active" selected>Pending RMA</option>
+                    <option value="rma_filed">RMA Filed</option>
+                    <option value="converted">Converted</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Legacy Table -->
+        <div class="pp-table-card">
+            <table class="pp-table">
+                <thead>
+                    <tr>
+                        <th>Serial Number</th>
+                        <th class="hide-mobile">TID</th>
+                        <th>Merchant</th>
+                        <th>Terminal Type</th>
+                        <th class="hide-mobile">Deploy Date</th>
+                        <th>Status</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="legacyTableBody">
+                    <tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;">Loading…</td></tr>
+                </tbody>
+            </table>
+            <div id="legacyPaginationControls"></div>
+        </div>
     </div>
 
 </div>
@@ -562,6 +635,229 @@ async function finalizeRMA(id, equipment_id) {
 }
 
 // window.onload handled above
+
+// ── TAB SWITCHING ─────────────────────────────────────────────────────────────
+function switchTab(tab) {
+    const isLegacy = tab === 'legacy';
+    document.getElementById('section-rma').style.display    = isLegacy ? 'none' : '';
+    document.getElementById('section-legacy').style.display = isLegacy ? '' : 'none';
+    document.getElementById('tab-rma').style.borderBottomColor    = isLegacy ? 'transparent' : '#004990';
+    document.getElementById('tab-rma').style.color                = isLegacy ? '#94a3b8' : '#004990';
+    document.getElementById('tab-legacy').style.borderBottomColor = isLegacy ? '#b45309' : 'transparent';
+    document.getElementById('tab-legacy').style.color             = isLegacy ? '#b45309' : '#94a3b8';
+    document.getElementById('rma-filter-bar').style.display = isLegacy ? 'none' : '';
+    if (isLegacy && document.getElementById('legacyTableBody').innerHTML.includes('Loading')) fetchLegacy();
+}
+
+// ── LEGACY EQUIPMENT ──────────────────────────────────────────────────────────
+let legPage = 1;
+const LEG_LIMIT = 50;
+let _legTerminalTypes = [];
+
+async function _legLoadTerminalTypes() {
+    if (_legTerminalTypes.length) return;
+    try {
+        const res = await fetch('/api/equipments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'list_terminal_types' }) });
+        const data = await res.json();
+        _legTerminalTypes = (data.terminal_types || []).filter(t => t.is_active).map(t => t.name);
+    } catch (e) {
+        _legTerminalTypes = ['Dejavoo P1','Pax A920','Pax A920 PRO','VX520','VX520 CTLS','VX805'];
+    }
+}
+
+function _legTermOpts(selected) {
+    return _legTerminalTypes.map(t => `<option value="${t}"${t === selected ? ' selected' : ''}>${t}</option>`).join('');
+}
+
+async function fetchLegacy() {
+    legPage = 1;
+    await renderLegacy();
+}
+
+async function renderLegacy() {
+    const tbody = document.getElementById('legacyTableBody');
+    tbody.innerHTML = '<tr><td colspan="7" style="padding:20px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
+    const search = document.getElementById('legSearch')?.value.trim() || '';
+    const status = document.getElementById('legStatus')?.value || 'all';
+    try {
+        const res = await fetch('/api/legacy', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'list', search, status, page: legPage, limit: LEG_LIMIT })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+
+        // Update KPIs from stats
+        if (data.stats) {
+            document.getElementById('leg-kpi-total').innerText  = data.stats.total  ?? '—';
+            document.getElementById('leg-kpi-active').innerText = data.stats.active  ?? '—';
+            document.getElementById('leg-kpi-rma').innerText    = data.stats.rma_filed ?? '—';
+        }
+
+        const rows = data.data || [];
+        if (!rows.length) {
+            tbody.innerHTML = '<tr><td colspan="7" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
+            document.getElementById('legacyPaginationControls').innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const statusBadge = {
+                active:    '<span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Pending RMA</span>',
+                rma_filed: '<span style="background:#fef3c7;color:#b45309;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">RMA Filed</span>',
+                converted: '<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">Converted</span>'
+            }[r.status] || r.status;
+            const typeEstBadge = r.terminal_type_source === 'estimated'
+                ? '<span style="font-size:9px;background:#fef3c7;color:#b45309;padding:1px 4px;border-radius:3px;margin-left:4px;">EST</span>' : '';
+            const merchantName = r.merchants?.dba_name || `<span style="color:#94a3b8;font-size:11px;">MID: ${r.mid || '—'}</span>`;
+            const safeSerial = (r.serial_number||'').replace(/'/g,'');
+            const safeType   = (r.terminal_type||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            const canRMA = r.status === 'active';
+            return `<tr>
+                <td style="font-family:monospace;font-size:12px;">${r.serial_number}</td>
+                <td class="hide-mobile" style="font-size:12px;color:#64748b;">${r.tid || '—'}</td>
+                <td style="font-size:12px;">${merchantName}<div style="font-size:10px;color:#94a3b8;font-family:monospace;">${r.mid || ''}</div></td>
+                <td style="font-size:12px;">
+                    ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}
+                </td>
+                <td class="hide-mobile" style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
+                <td>${statusBadge}</td>
+                <td>
+                    ${canRMA ? `<button onclick="legFileRMA('${r.id}','${safeSerial}','${safeType}')" style="padding:3px 10px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}
+                </td>
+            </tr>`;
+        }).join('');
+
+        const total = data.total || 0;
+        const pages = Math.ceil(total / LEG_LIMIT);
+        const pc = document.getElementById('legacyPaginationControls');
+        pc.innerHTML = pages > 1 ? `<div style="display:flex;gap:8px;justify-content:center;padding:12px;">
+            ${legPage > 1 ? `<button onclick="legPage--;renderLegacy()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">← Prev</button>` : ''}
+            <span style="font-size:12px;color:#64748b;padding:5px 10px;">Page ${legPage} of ${pages} · ${total} records</span>
+            ${legPage < pages ? `<button onclick="legPage++;renderLegacy()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">Next →</button>` : ''}
+        </div>` : `<div style="padding:8px 12px;font-size:11px;color:#94a3b8;text-align:right;">${total} record${total!==1?'s':''}</div>`;
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="7" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
+    }
+}
+
+async function legFileRMA(legacyId, serial, currentTerminalType) {
+    await _legLoadTerminalTypes();
+    const today = new Date().toISOString().slice(0, 10);
+    const destRadioOnchange = `document.querySelectorAll('.rma-dest-label').forEach(el=>{el.style.borderColor='#e2e8f0';el.style.background='#fff'});this.closest('label').style.borderColor='#004990';this.closest('label').style.background='#eff6ff';`;
+    const destScrapOnchange = `document.querySelectorAll('.rma-dest-label').forEach(el=>{el.style.borderColor='#e2e8f0';el.style.background='#fff'});this.closest('label').style.borderColor='#dc2626';this.closest('label').style.background='#fff1f2';`;
+
+    const { value: formData, isConfirmed } = await Swal.fire({
+        title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">File RMA — Legacy Equipment</span>',
+        width: '520px',
+        showCancelButton: true,
+        confirmButtonText: 'File RMA',
+        confirmButtonColor: '#b45309',
+        html: `<div style="text-align:left;padding-top:4px;">
+            <div style="margin-bottom:14px;padding:10px 14px;background:#fff7ed;border-radius:8px;border-left:3px solid #b45309;">
+                <div style="font-size:10px;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:.5px;">Legacy Equipment</div>
+                <div style="font-size:14px;font-weight:700;font-family:monospace;color:#0f172a;">${serial}</div>
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type <span style="color:#ef4444;">*</span></label>
+                <select id="swal-rma-type" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                    <option value="">— Select terminal type —</option>
+                    ${_legTermOpts(currentTerminalType)}
+                </select>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                <div>
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Reason <span style="color:#ef4444;">*</span></label>
+                    <select id="swal-rma-reason" onchange="const ow=document.getElementById('swal-rma-other-wrap');ow.style.display=this.value==='Other'?'block':'none';" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                        <option value="">— Select reason —</option>
+                        <option value="Merchant Cancellation">Merchant Cancellation</option>
+                        <option value="Equipment Type Swap">Equipment Type Swap</option>
+                        <option value="Technical Issue Swap">Technical Issue Swap</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <div id="swal-rma-other-wrap" style="display:none;margin-top:6px;">
+                        <input type="text" id="swal-rma-other" placeholder="Describe reason…" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                    </div>
+                </div>
+                <div>
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Date <span style="color:#ef4444;">*</span></label>
+                    <input type="date" id="swal-rma-date" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                </div>
+            </div>
+
+            <div style="margin-bottom:12px;">
+                <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:7px;">Destination <span style="color:#ef4444;">*</span></label>
+                <div style="display:flex;flex-direction:column;gap:6px;">
+                    <label class="rma-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
+                        <input type="radio" name="rma-dest" value="Warsaw Office" style="margin-top:2px;flex-shrink:0;" onchange="${destRadioOnchange}">
+                        <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Warsaw Office — Inventory</div><div style="font-size:11px;color:#64748b;">Working equipment returned to stock</div></div>
+                    </label>
+                    <label class="rma-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
+                        <input type="radio" name="rma-dest" value="Warsaw Repairs" style="margin-top:2px;flex-shrink:0;" onchange="${destRadioOnchange}">
+                        <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Warsaw Repairs</div><div style="font-size:11px;color:#64748b;">Defective, sent to service center</div></div>
+                    </label>
+                    <label class="rma-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
+                        <input type="radio" name="rma-dest" value="Scrap" style="margin-top:2px;flex-shrink:0;" onchange="${destScrapOnchange}">
+                        <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Scrap</div><div style="font-size:11px;color:#64748b;">Equipment decommissioned / scrapped</div></div>
+                    </label>
+                </div>
+            </div>
+
+            <div>
+                <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Notes</label>
+                <textarea id="swal-rma-notes" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;height:60px;box-sizing:border-box;resize:vertical;" placeholder="Optional"></textarea>
+            </div>
+        </div>`,
+        preConfirm: () => {
+            const terminal_type = document.getElementById('swal-rma-type').value;
+            let reason          = document.getElementById('swal-rma-reason').value;
+            const return_date   = document.getElementById('swal-rma-date').value;
+            const destination   = document.querySelector('input[name="rma-dest"]:checked')?.value;
+            const notes         = document.getElementById('swal-rma-notes').value;
+            if (!terminal_type) { Swal.showValidationMessage('Please select a terminal type'); return; }
+            if (!reason)        { Swal.showValidationMessage('Please select a return reason'); return; }
+            if (reason === 'Other') {
+                const custom = document.getElementById('swal-rma-other').value.trim();
+                if (!custom)  { Swal.showValidationMessage('Please describe the reason'); return; }
+                reason = custom;
+            }
+            if (!return_date)   { Swal.showValidationMessage('Return date is required'); return; }
+            if (!destination)   { Swal.showValidationMessage('Please select a destination'); return; }
+            return { terminal_type, reason, return_date, destination, notes };
+        }
+    });
+    if (!isConfirmed) return;
+
+    const token = localStorage.getItem('pp_session_token') || '';
+    if (formData.terminal_type !== currentTerminalType) {
+        await fetch('/api/legacy', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ action: 'update', legacy_id: legacyId, terminal_type: formData.terminal_type })
+        });
+    }
+
+    const res = await fetch('/api/legacy', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({
+            action: 'file_rma',
+            legacy_id: legacyId,
+            return_reason: formData.reason,
+            return_date: formData.return_date,
+            destination: formData.destination,
+            notes: formData.notes
+        })
+    });
+    const data = await res.json();
+    if (data.success) {
+        await Swal.fire({ icon: 'success', title: `RMA ${data.return_id} Filed`, text: 'You can view it in the RMA Ledger tab.', timer: 3000, showConfirmButton: false });
+        fetchLegacy();
+    } else {
+        Swal.fire('Error', data.message, 'error');
+    }
+}
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid');if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'mark_seen',userid:uid,section:'returns'})});})();</script>
 <script src="/js/site-config.js"></script>

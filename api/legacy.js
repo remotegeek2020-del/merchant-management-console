@@ -108,7 +108,16 @@ export default async function handler(req, res) {
                 .order('deployment_date', { ascending: false })
                 .range(offset, offset + limit - 1);
             if (error) throw error;
-            return res.status(200).json({ success: true, data: data || [], total: count || 0 });
+
+            const { data: statRows } = await supabase.from('legacy_deployments').select('status');
+            const stats = { total: 0, active: 0, rma_filed: 0 };
+            (statRows || []).forEach(r => {
+                stats.total++;
+                if (r.status === 'active') stats.active++;
+                else if (r.status === 'rma_filed') stats.rma_filed++;
+            });
+
+            return res.status(200).json({ success: true, data: data || [], total: count || 0, stats });
         }
 
         // ── GET BY MERCHANT ───────────────────────────────────────────────────
