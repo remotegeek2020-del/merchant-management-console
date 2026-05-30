@@ -594,6 +594,74 @@ async function processFinalImport(itemsToCreate) {
     }
 }
 
+    async function retiredBackToStock(id, serial) {
+        const { isConfirmed } = await Swal.fire({
+            title: 'Return to Stock?',
+            text: `This will move ${serial} back to Warsaw Office as stocked inventory.`,
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonText: 'Yes, Back to Stock',
+            confirmButtonColor: '#10b981',
+            cancelButtonText: 'Cancel'
+        });
+        if (!isConfirmed) return;
+        try {
+            Swal.fire({ title: 'Processing…', didOpen: () => Swal.showLoading() });
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: equipHeaders(),
+                body: JSON.stringify({ action: 'update', id, payload: { status: 'stocked', current_location: 'Warsaw Office' } })
+            });
+            const result = await res.json();
+            if (result.success) {
+                await logAuditAction('Retired Unit Restored', 'success', {
+                    target_id: serial, target_type: 'equipment', severity: 'warning',
+                    old_value: { status: 'decommissioned', current_location: 'Retired' },
+                    new_value: { status: 'stocked', current_location: 'Warsaw Office' }
+                });
+                await Swal.fire({ icon: 'success', title: 'Restored!', text: `${serial} is back in Warsaw Office stock.`, timer: 1800, showConfirmButton: false });
+                fetchInventory();
+            } else { Swal.fire('Error', result.message || 'Action failed.', 'error'); }
+        } catch (err) { Swal.fire('Error', 'Action failed.', 'error'); }
+    }
+
+    async function deleteRetiredUnit(id, serial) {
+        const { isConfirmed, value: typed } = await Swal.fire({
+            title: 'Delete Forever?',
+            html: `<p style="color:#64748b;font-size:13px;margin-bottom:14px;">This permanently deletes <strong>${serial}</strong> and all its history. This <strong>cannot be undone</strong>.</p>
+                   <p style="font-size:12px;color:#94a3b8;margin-bottom:8px;">Type <strong>DELETE</strong> to confirm.</p>
+                   <input id="swal-delete-confirm" class="swal2-input" placeholder="DELETE" style="text-transform:uppercase;">`,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonText: 'Delete Forever',
+            confirmButtonColor: '#dc2626',
+            preConfirm: () => {
+                const v = (document.getElementById('swal-delete-confirm')?.value || '').trim().toUpperCase();
+                if (v !== 'DELETE') { Swal.showValidationMessage('Type DELETE to confirm'); return false; }
+                return true;
+            }
+        });
+        if (!isConfirmed) return;
+        try {
+            Swal.fire({ title: 'Deleting…', didOpen: () => Swal.showLoading() });
+            const res = await fetch('/api/equipments', {
+                method: 'POST',
+                headers: equipHeaders(),
+                body: JSON.stringify({ action: 'delete', id })
+            });
+            const result = await res.json();
+            if (result.success) {
+                await logAuditAction('Retired Unit Deleted', 'success', {
+                    target_id: serial, target_type: 'equipment', severity: 'critical',
+                    old_value: { serial_number: serial, status: 'decommissioned' },
+                    new_value: { deleted: true }
+                });
+                await Swal.fire({ icon: 'success', title: 'Deleted', text: `${serial} has been permanently removed.`, timer: 1800, showConfirmButton: false });
+                fetchInventory();
+            } else { Swal.fire('Error', result.message || 'Delete failed.', 'error'); }
+        } catch (err) { Swal.fire('Error', 'Delete failed.', 'error'); }
+    }
+
     async function deleteEquipment(id, serial) {
     const confirm = await Swal.fire({
         title: 'Are you sure?',
@@ -1156,12 +1224,18 @@ async function saveNote() {
             let locClass = item.current_location === 'Warsaw Office' ? 'loc-office' : 'loc-repair';
             if (item.status === 'deployed') locClass = 'loc-deployed';
             const isDeployed = item.status === 'deployed';
+            const isRetired  = item.status === 'decommissioned';
 
             if (isStaleRepair) {
                 row.style.backgroundColor = '#fff1f2'; 
             }
 
-            const actionButtons = isDeployed ? `
+            const canManageRetired = (localStorage.getItem('pp_role') || '').toLowerCase().includes('super') ||
+                                      localStorage.getItem('pp_can_manage_retired_units') === 'true';
+
+            let actionButtons;
+            if (isDeployed) {
+                actionButtons = `
                 <div style="display: flex; gap: 5px; justify-content: center;">
                     <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Details">
                         <span class="material-icons" style="font-size:18px; color: #94a3b8;">visibility</span>
@@ -1169,8 +1243,23 @@ async function saveNote() {
                     <button onclick="showLifecycle('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Full History">
                         <span class="material-icons" style="font-size:18px; color:#64748b;">history</span>
                     </button>
-                </div>
-            ` : `
+                </div>`;
+            } else if (isRetired) {
+                actionButtons = `
+                <div style="display: flex; gap: 5px; justify-content: center;">
+                    <button onclick="showLifecycle('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Full History">
+                        <span class="material-icons" style="font-size:18px; color:#64748b;">history</span>
+                    </button>
+                    ${canManageRetired ? `
+                    <button onclick="retiredBackToStock('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Back to Stock">
+                        <span class="material-icons" style="font-size:18px; color:#10b981;">undo</span>
+                    </button>
+                    <button onclick="deleteRetiredUnit('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Delete Forever">
+                        <span class="material-icons" style="font-size:18px; color:#dc2626;">delete_forever</span>
+                    </button>` : ''}
+                </div>`;
+            } else {
+                actionButtons = `
                 <div style="display: flex; gap: 5px; justify-content: center;">
                     <button onclick="editEquipment('${item.id}')" class="slds-button slds-button_icon slds-button_icon-border" title="Edit">
                         <span class="material-icons" style="font-size:18px; color: var(--pp-blue);">edit</span>
@@ -1181,8 +1270,8 @@ async function saveNote() {
                     <button onclick="decommissionEquipment('${item.id}', '${item.serial_number}')" class="slds-button slds-button_icon slds-button_icon-border" title="Decommission">
                         <span class="material-icons" style="font-size:18px; color: #64748b;">archive</span>
                     </button>
-                </div>
-            `;
+                </div>`;
+            }
 
             row.innerHTML = `
                 <td style="font-weight:700; color:var(--pp-blue);">

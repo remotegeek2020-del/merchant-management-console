@@ -166,7 +166,8 @@ const ACCESS_FLAGS = [
     { key: 'access_partners',        label: 'Partners',         short: 'PRT' },
     { key: 'access_admin_dashboard', label: 'Admin Dashboard',  short: 'ADM' },
     { key: 'access_sending_reports', label: 'Sending Reports',  short: 'RPT' },
-    { key: 'can_delete_tickets',     label: 'Delete Tickets',   short: 'DEL', privileged: true },
+    { key: 'can_delete_tickets',       label: 'Delete Tickets',        short: 'DEL', privileged: true },
+    { key: 'can_manage_retired_units', label: 'Manage Retired Units',  short: 'RTD', privileged: true },
 ];
 const PRIVILEGED_KEYS = ACCESS_FLAGS.filter(f => f.privileged).map(f => f.key);
 

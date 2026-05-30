@@ -20,7 +20,7 @@ export default async function handler(req, res) {
             }
             // Only return non-sensitive fields
             const { data, error } = await supabase.from('app_users')
-                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,created_at')
+                .select('userid,first_name,last_name,email,role,is_active,last_seen,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,created_at')
                 .order('first_name');
             if (error) throw error;
             return res.status(200).json({ success: true, data });
@@ -106,10 +106,11 @@ export default async function handler(req, res) {
                     'first_name','last_name','email','role','is_active',
                     'access_admin_dashboard','access_merchants','access_deployments',
                     'access_returns','access_inventory','access_partners',
-                    'access_jarvis','can_delete_tickets','access_sending_reports'
+                    'access_jarvis','can_delete_tickets','access_sending_reports',
+                    'can_manage_retired_units'
                 ];
-                // Only super_admin can change roles or grant delete-ticket permission
-                const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets'];
+                // Only super_admin can change roles or grant privileged permissions
+                const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets', 'can_manage_retired_units'];
 
                 for (const uid of Object.keys(payload)) {
                     let safePayload = Object.fromEntries(
