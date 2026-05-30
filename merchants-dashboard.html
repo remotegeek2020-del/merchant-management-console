@@ -2082,7 +2082,7 @@ async function addTask(merchantUuid) {
                 const terminal_type = document.getElementById('swal-rma-type2').value;
                 let reason          = document.getElementById('swal-rma-reason2').value;
                 const return_date   = document.getElementById('swal-rma-date2').value;
-                const destination   = document.querySelector('input[name="rma-dest2"]:checked')?.value;
+                const destination   = Swal.getPopup().querySelector('input[name="rma-dest2"]:checked')?.value;
                 const notes         = document.getElementById('swal-rma-notes2').value;
                 if (!terminal_type) { Swal.showValidationMessage('Please select a terminal type'); return; }
                 if (!reason)        { Swal.showValidationMessage('Please select a return reason'); return; }

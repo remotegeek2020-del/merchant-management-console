@@ -2725,7 +2725,7 @@ async function legFileRMA(legacyId, serial, currentTerminalType) {
             const terminal_type = document.getElementById('swal-rma-type').value;
             let reason          = document.getElementById('swal-rma-reason').value;
             const return_date   = document.getElementById('swal-rma-date').value;
-            const destination   = document.querySelector('input[name="rma-dest"]:checked')?.value;
+            const destination   = Swal.getPopup().querySelector('input[name="rma-dest"]:checked')?.value;
             const notes         = document.getElementById('swal-rma-notes').value;
             if (!terminal_type) { Swal.showValidationMessage('Please select a terminal type'); return; }
             if (!reason)        { Swal.showValidationMessage('Please select a return reason'); return; }
