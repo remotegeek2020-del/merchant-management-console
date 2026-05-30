@@ -77,11 +77,13 @@ if (action === 'getMonthlyReport') {
     return res.status(200).json({ success: true, rawData, totalCount: count });
 }
         if (action === 'getActivityLogs') {
+            const serial = req.body.serial;
             const { data, error } = await supabase
                 .from('activity_logs')
                 .select('*')
-                .ilike('status', `%${req.body.serial}%`) 
-                .order('created_at', { ascending: false });
+                .or(`target_id.ilike.%${serial}%,action.ilike.%${serial}%`)
+                .order('created_at', { ascending: false })
+                .limit(200);
 
             if (error) throw error;
             return res.status(200).json({ success: true, data });
@@ -167,13 +169,28 @@ if (action === 'getMonthlyReport') {
         if (action === 'saveNote') {
             const { data, error } = await supabase
                 .from('equipment_notes')
-                .insert([{ 
-                    equipment_id: req.body.equipment_id, 
-                    note_text: req.body.note_text, 
+                .insert([{
+                    equipment_id: req.body.equipment_id,
+                    note_text: req.body.note_text,
                     author_name: actorName
-                }]);
+                }])
+                .select()
+                .single();
 
             if (error) throw error;
+
+            // Fetch serial for the log
+            const { data: noteEquip } = await supabase.from('equipments')
+                .select('serial_number, terminal_type').eq('id', req.body.equipment_id).maybeSingle();
+            supabase.from('activity_logs').insert([{
+                email: actorEmail,
+                action: `Equipment Note Added by ${actorName} — ${noteEquip?.serial_number || req.body.equipment_id}`,
+                status: 'success', category: 'inventory',
+                target_id: noteEquip?.serial_number || req.body.equipment_id, target_type: 'equipment',
+                severity: 'info',
+                new_value: { note_text: req.body.note_text, author: actorName, terminal_type: noteEquip?.terminal_type }
+            }]).then(() => {}).catch(() => {});
+
             return res.status(200).json({ success: true, data });
         }
         if (action === 'list') {

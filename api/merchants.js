@@ -189,12 +189,37 @@ export default async function handler(req, res) {
 if (action === 'delete_task') {
     const { task_id } = req.body;
 
+    // Fetch task details before deletion for the audit log
+    const { data: taskToDelete } = await supabase
+        .from('merchant_tasks')
+        .select('title, status, due_date, assigned_to, merchant_id, merchants:merchant_id(dba_name)')
+        .eq('id', task_id).maybeSingle();
+
     const { error } = await supabase
         .from('merchant_tasks')
         .delete()
         .eq('id', task_id);
 
     if (error) throw error;
+
+    const { data: dtActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const dtActorEmail = dtActorRow?.email || session.userid;
+    const dtActorName  = dtActorRow ? `${dtActorRow.first_name || ''} ${dtActorRow.last_name || ''}`.trim() || dtActorRow.email : 'Staff';
+    supabase.from('activity_logs').insert({
+        email: dtActorEmail,
+        action: `Task Deleted by ${dtActorName} — "${taskToDelete?.title || task_id}"`,
+        status: 'success', category: 'merchants',
+        target_id: task_id, target_type: 'task',
+        severity: 'warning',
+        old_value: {
+            title: taskToDelete?.title,
+            status: taskToDelete?.status,
+            due_date: taskToDelete?.due_date,
+            merchant: taskToDelete?.merchants?.dba_name || taskToDelete?.merchant_id
+        },
+        new_value: { deleted: true }
+    }).then(() => {}).catch(() => {});
+
     return res.status(200).json({ success: true });
 }
         // --- ACTION: add_task (api/merchants.js) ---
@@ -272,12 +297,32 @@ if (action === 'update_task_status') {
         .eq('id', task_id);
 
     if (error) throw error;
+
+    const { data: utsActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const utsActorEmail = utsActorRow?.email || session.userid;
+    const utsActorName  = utsActorRow ? `${utsActorRow.first_name || ''} ${utsActorRow.last_name || ''}`.trim() || utsActorRow.email : 'Staff';
+    supabase.from('activity_logs').insert({
+        email: utsActorEmail,
+        action: `Task Status Updated by ${utsActorName} — ${task?.status || '?'} → ${newStatus}`,
+        status: 'success', category: 'merchants',
+        target_id: task_id, target_type: 'task',
+        severity: 'info',
+        old_value: { status: task?.status },
+        new_value: { status: newStatus }
+    }).then(() => {}).catch(() => {});
+
     return res.status(200).json({ success: true, status: newStatus });
 }
 
         // --- ACTION: update_task (api/merchants.js) ---
 if (action === 'update_task') {
-    const { task_id, payload } = req.body; 
+    const { task_id, payload } = req.body;
+
+    // Fetch current state before update for audit log
+    const { data: oldTask } = await supabase
+        .from('merchant_tasks')
+        .select('title, status, due_date, assigned_to, merchant_id, merchants:merchant_id(dba_name)')
+        .eq('id', task_id).maybeSingle();
 
     const { error } = await supabase
         .from('merchant_tasks')
@@ -286,11 +331,25 @@ if (action === 'update_task') {
             body: payload.body,
             due_date: payload.due_date,
             assigned_to: payload.assigned_to,
-            status: payload.status // "Completed" or "Pending"
+            status: payload.status
         })
         .eq('id', task_id);
 
     if (error) throw error;
+
+    const { data: utActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const utActorEmail = utActorRow?.email || session.userid;
+    const utActorName  = utActorRow ? `${utActorRow.first_name || ''} ${utActorRow.last_name || ''}`.trim() || utActorRow.email : 'Staff';
+    supabase.from('activity_logs').insert({
+        email: utActorEmail,
+        action: `Task Updated by ${utActorName} — "${payload.title || oldTask?.title || task_id}"`,
+        status: 'success', category: 'merchants',
+        target_id: task_id, target_type: 'task',
+        severity: 'info',
+        old_value: { title: oldTask?.title, status: oldTask?.status, due_date: oldTask?.due_date, merchant: oldTask?.merchants?.dba_name },
+        new_value: { title: payload.title, status: payload.status, due_date: payload.due_date }
+    }).then(() => {}).catch(() => {});
+
     return res.status(200).json({ success: true });
 }
 
@@ -723,14 +782,11 @@ if (action === 'list') {
     // 1. Validate ID
     if (!id) return res.status(400).json({ success: false, message: "Missing Merchant UUID" });
 
-    // Fetch current status if account_status is being changed
-    let oldStatus = null;
-    if (payload.account_status !== undefined) {
-        const { data: cur } = await supabase.from('merchants')
-            .select('account_status, dba_name, merchant_id, agent_id')
-            .eq('id', id).single();
-        oldStatus = cur;
-    }
+    // Always fetch current state for audit log old_value
+    const { data: oldMerchant } = await supabase.from('merchants')
+        .select('account_status, dba_name, merchant_id, agent_id, merchant_city, merchant_state, email, agent_name')
+        .eq('id', id).maybeSingle();
+    const oldStatus = oldMerchant; // kept for webhook compatibility below
 
     // 2. Perform the Update on the BASE TABLE
     const { data, error } = await supabase
@@ -780,11 +836,25 @@ if (action === 'list') {
     const { data: updActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
     const updActorEmail = updActorRow?.email || session.userid;
     const updActorName = updActorRow ? `${updActorRow.first_name || ''} ${updActorRow.last_name || ''}`.trim() || updActorRow.email : 'Staff';
+
+    const statusChanged = payload.account_status && oldMerchant?.account_status !== payload.account_status;
+    const isSuspendOrTerminate = statusChanged && ['suspended', 'terminated', 'closed'].includes((payload.account_status || '').toLowerCase());
+    const logSeverity = isSuspendOrTerminate ? 'critical' : statusChanged ? 'warning' : 'info';
+
+    // Build old_value snapshot from only the fields being changed
+    const oldSnapshot = {};
+    for (const key of Object.keys(payload)) {
+        if (oldMerchant && key in oldMerchant) oldSnapshot[key] = oldMerchant[key];
+    }
+
     supabase.from('activity_logs').insert({
         email: updActorEmail,
-        action: `Merchant Updated by ${updActorName} — fields: ${Object.keys(payload).join(', ')}`,
-        status: 'success', category: 'merchants', target_id: id, target_type: 'merchant', severity: 'info',
-        new_value: { updated_fields: Object.keys(payload) }
+        action: `Merchant Updated by ${updActorName} — ${oldMerchant?.dba_name || id} (${Object.keys(payload).join(', ')})`,
+        status: 'success', category: 'merchants',
+        target_id: oldMerchant?.merchant_id || id, target_type: 'merchant',
+        severity: logSeverity,
+        old_value: oldSnapshot,
+        new_value: payload
     }).then(() => {}).catch(() => {});
 
     return res.status(200).json({ success: true, data });

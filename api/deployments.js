@@ -58,6 +58,20 @@ export default async function handler(req, res) {
         notes: `Return initiated: ${reason}`
     }]);
 
+    const { data: lrActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const lrActorEmail = lrActorRow?.email || session.userid;
+    const lrActorName  = lrActorRow ? `${lrActorRow.first_name || ''} ${lrActorRow.last_name || ''}`.trim() || lrActorRow.email : 'Staff';
+    const { data: lrEquip } = await supabase.from('equipments').select('serial_number, terminal_type').eq('id', equipment_id).maybeSingle();
+    supabase.from('activity_logs').insert({
+        email: lrActorEmail,
+        action: `Return Initiated by ${lrActorName} — ${lrEquip?.serial_number || equipment_id} (${merchantDba0})`,
+        status: 'success', category: 'returns',
+        target_id: lrEquip?.serial_number || equipment_id, target_type: 'equipment',
+        severity: 'info',
+        old_value: { status: 'deployed', merchant: merchantDba0 },
+        new_value: { status: 'in_transit', return_reason: reason, return_date: return_date_initiated }
+    }).then(() => {}).catch(() => {});
+
     return res.status(200).json({ success: true });
 }
 
@@ -107,6 +121,20 @@ export default async function handler(req, res) {
         to_location: destination,
         notes: `RMA Closed. Received on ${equipment_received_date}`
     }]);
+
+    const { data: crActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const crActorEmail = crActorRow?.email || session.userid;
+    const crActorName  = crActorRow ? `${crActorRow.first_name || ''} ${crActorRow.last_name || ''}`.trim() || crActorRow.email : 'Staff';
+    const { data: crEquip } = await supabase.from('equipments').select('serial_number, terminal_type').eq('id', equipment_id).maybeSingle();
+    supabase.from('activity_logs').insert({
+        email: crActorEmail,
+        action: `RMA Completed by ${crActorName} — ${crEquip?.serial_number || equipment_id} → ${destination}`,
+        status: 'success', category: 'returns',
+        target_id: crEquip?.serial_number || equipment_id, target_type: 'equipment',
+        severity: destination === 'Scrap' ? 'warning' : 'info',
+        old_value: { status: 'in_transit', return_id },
+        new_value: { status: 'stocked', destination, equipment_received_date }
+    }).then(() => {}).catch(() => {});
 
     return res.status(200).json({ success: true });
 }
@@ -692,7 +720,7 @@ if (action === 'return_to_office') {
                 }
             } else {
                 // SINGLE: existing logic
-                const { error } = await supabase.from('returns').upsert({
+                const { error } = await supabase.from('returns').insert({
                     deployment_id,
                     equipment_id,
                     merchant_id,
@@ -701,7 +729,7 @@ if (action === 'return_to_office') {
                     condition: 'IN TRANSIT',
                     destination: 'In Transit / RMA',
                     status: 'Open'
-                }, { onConflict: 'deployment_id' });
+                });
                 if (error) throw error;
 
                 const { data: mRecSingle } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
