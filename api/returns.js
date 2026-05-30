@@ -130,8 +130,19 @@ if (action === 'list') {
 }
 
 if (action === 'complete_return') {
-    const { id: rmaId, equipment_id, condition, destination, merchant_id, equipment_received_date } = payload || {};
+    const { id: rmaId, equipment_id, destination, merchant_id, equipment_received_date } = payload || {};
     if (!rmaId) throw new Error("Missing RMA ID in payload");
+
+    // Derive condition from destination server-side so it's never missing due to
+    // client-side map misses (whitespace, casing, unexpected destination values).
+    const conditionByDest = {
+        'Warsaw Office':  'Working (Back to Stock)',
+        'Warsaw Repairs': 'Defective (Received in Repairs)',
+        'Scrap':          'Scrapped'
+    };
+    const condition = (payload?.condition && payload.condition.trim())
+        || conditionByDest[destination?.trim()]
+        || 'Working (Back to Stock)';
 
     const { data: actorRow } = await supabase
         .from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();

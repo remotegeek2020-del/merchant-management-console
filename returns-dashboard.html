@@ -590,7 +590,7 @@ async function finalizeRMA(id, equipment_id, destination) {
         'Warsaw Repairs': 'Defective (Received in Repairs)',
         'Scrap':          'Scrapped'
     };
-    const dest = destination || 'Warsaw Office';
+    const dest = (destination || 'Warsaw Office').trim();
     const isRepairs = dest === 'Warsaw Repairs';
     const isScrap   = dest === 'Scrap';
 
@@ -624,7 +624,7 @@ async function finalizeRMA(id, equipment_id, destination) {
             ${noteHtml}
         </div>`,
         preConfirm: () => {
-            const date = document.getElementById('fin-date').value;
+            const date = Swal.getPopup().querySelector('#fin-date')?.value;
             if (!date) { Swal.showValidationMessage('Please select a date received'); return; }
             return { date };
         }
