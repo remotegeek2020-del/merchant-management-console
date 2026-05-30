@@ -1944,7 +1944,7 @@ async function addTask(merchantUuid) {
                     </td>
                     <td>${statusBadge}</td>
                     <td style="font-size:11px;color:#64748b;">${r.deployment_date ? fmtDate(r.deployment_date) : '—'}</td>
-                    <td>${canRMA ? `<button onclick="legFileRMAFromMerchant('${r.id}','${r.serial_number.replace(/'/g,'')}')" style="padding:3px 9px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}</td>
+                    <td>${canRMA ? `<button onclick="legFileRMAFromMerchant('${r.id}','${r.serial_number.replace(/'/g,'')}','${(r.terminal_type||'').replace(/'/g,"\\\'")}')" style="padding:3px 9px;background:#b45309;color:white;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">File RMA</button>` : ''}</td>
                 </tr>`;
             }).join('');
         } catch (e) { container.style.display = 'none'; }
@@ -2006,38 +2006,122 @@ async function addTask(merchantUuid) {
         }
     };
 
-    window.legFileRMAFromMerchant = async function(legacyId, serial) {
+    window.legFileRMAFromMerchant = async function(legacyId, serial, currentTerminalType) {
         const saveBtn = document.querySelector('[onclick^="saveMerchant"]');
         const merchantUuid = saveBtn?.getAttribute('onclick').match(/'([^']+)'/)?.[1];
-        const { value: reason, isConfirmed } = await Swal.fire({
-            title: 'File RMA — Legacy Equipment',
-            html: `<div style="text-align:left;margin-bottom:8px;font-size:13px;color:#64748b;">Serial: <b style="color:#0f172a;font-family:monospace;">${serial}</b></div>
-                   <select id="swal-rma-reason2" class="swal2-input" style="margin:4px 0;">
-                     <option value="Legacy Equipment Return">Legacy Equipment Return</option>
-                     <option value="Defective">Defective</option>
-                     <option value="Upgrade">Upgrade</option>
-                     <option value="Merchant Closed">Merchant Closed</option>
-                     <option value="Other">Other</option>
-                   </select>
-                   <textarea id="swal-rma-notes2" class="swal2-textarea" placeholder="Notes (optional)" style="margin:4px 0;height:70px;"></textarea>`,
+        const types = await _mlegLoadTermTypes();
+        const termOpts = types.map(t => `<option value="${t}"${t === currentTerminalType ? ' selected' : ''}>${t}</option>`).join('');
+        const today = new Date().toISOString().slice(0, 10);
+        const destRadioOnchange = `document.querySelectorAll('.rma-dest-label').forEach(el=>{el.style.borderColor='#e2e8f0';el.style.background='#fff'});this.closest('label').style.borderColor='#004990';this.closest('label').style.background='#eff6ff';`;
+        const destScrapOnchange = `document.querySelectorAll('.rma-dest-label').forEach(el=>{el.style.borderColor='#e2e8f0';el.style.background='#fff'});this.closest('label').style.borderColor='#dc2626';this.closest('label').style.background='#fff1f2';`;
+
+        const { value: formData, isConfirmed } = await Swal.fire({
+            title: '<span style="font-size:16px;font-weight:800;color:#002d5a;">File RMA — Legacy Equipment</span>',
+            width: '520px',
             showCancelButton: true,
             confirmButtonText: 'File RMA',
             confirmButtonColor: '#b45309',
-            preConfirm: () => ({
-                reason: document.getElementById('swal-rma-reason2').value,
-                notes:  document.getElementById('swal-rma-notes2').value
-            })
+            html: `<div style="text-align:left;padding-top:4px;">
+                <div style="margin-bottom:14px;padding:10px 14px;background:#fff7ed;border-radius:8px;border-left:3px solid #b45309;">
+                    <div style="font-size:10px;font-weight:800;color:#b45309;text-transform:uppercase;letter-spacing:.5px;">Legacy Equipment</div>
+                    <div style="font-size:14px;font-weight:700;font-family:monospace;color:#0f172a;">${serial}</div>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Terminal Type <span style="color:#ef4444;">*</span></label>
+                    <select id="swal-rma-type2" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                        <option value="">— Select terminal type —</option>
+                        ${termOpts}
+                    </select>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+                    <div>
+                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Reason <span style="color:#ef4444;">*</span></label>
+                        <select id="swal-rma-reason2" onchange="const ow=document.getElementById('swal-rma-other-wrap2');ow.style.display=this.value==='Other'?'block':'none';" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                            <option value="">— Select reason —</option>
+                            <option value="Merchant Cancellation">Merchant Cancellation</option>
+                            <option value="Equipment Type Swap">Equipment Type Swap</option>
+                            <option value="Technical Issue Swap">Technical Issue Swap</option>
+                            <option value="Other">Other</option>
+                        </select>
+                        <div id="swal-rma-other-wrap2" style="display:none;margin-top:6px;">
+                            <input type="text" id="swal-rma-other2" placeholder="Describe reason…" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div>
+                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Date <span style="color:#ef4444;">*</span></label>
+                        <input type="date" id="swal-rma-date2" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                    </div>
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:7px;">Destination <span style="color:#ef4444;">*</span></label>
+                    <div style="display:flex;flex-direction:column;gap:6px;">
+                        <label class="rma-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
+                            <input type="radio" name="rma-dest2" value="Warsaw Office" style="margin-top:2px;flex-shrink:0;" onchange="${destRadioOnchange}">
+                            <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Warsaw Office — Inventory</div><div style="font-size:11px;color:#64748b;">Working equipment returned to stock</div></div>
+                        </label>
+                        <label class="rma-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
+                            <input type="radio" name="rma-dest2" value="Warsaw Repairs" style="margin-top:2px;flex-shrink:0;" onchange="${destRadioOnchange}">
+                            <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Warsaw Repairs</div><div style="font-size:11px;color:#64748b;">Defective, sent to service center</div></div>
+                        </label>
+                        <label class="rma-dest-label" style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;cursor:pointer;background:#fff;">
+                            <input type="radio" name="rma-dest2" value="Scrap" style="margin-top:2px;flex-shrink:0;" onchange="${destScrapOnchange}">
+                            <div><div style="font-size:13px;font-weight:700;color:#0f172a;">Scrap</div><div style="font-size:11px;color:#64748b;">Equipment decommissioned / scrapped</div></div>
+                        </label>
+                    </div>
+                </div>
+
+                <div>
+                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Notes</label>
+                    <textarea id="swal-rma-notes2" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;height:60px;box-sizing:border-box;resize:vertical;" placeholder="Optional"></textarea>
+                </div>
+            </div>`,
+            preConfirm: () => {
+                const terminal_type = document.getElementById('swal-rma-type2').value;
+                let reason          = document.getElementById('swal-rma-reason2').value;
+                const return_date   = document.getElementById('swal-rma-date2').value;
+                const destination   = document.querySelector('input[name="rma-dest2"]:checked')?.value;
+                const notes         = document.getElementById('swal-rma-notes2').value;
+                if (!terminal_type) { Swal.showValidationMessage('Please select a terminal type'); return; }
+                if (!reason)        { Swal.showValidationMessage('Please select a return reason'); return; }
+                if (reason === 'Other') {
+                    const custom = document.getElementById('swal-rma-other2').value.trim();
+                    if (!custom)  { Swal.showValidationMessage('Please describe the reason'); return; }
+                    reason = custom;
+                }
+                if (!return_date)   { Swal.showValidationMessage('Return date is required'); return; }
+                if (!destination)   { Swal.showValidationMessage('Please select a destination'); return; }
+                return { terminal_type, reason, return_date, destination, notes };
+            }
         });
         if (!isConfirmed) return;
+
         const token = localStorage.getItem('pp_session_token') || '';
+        if (formData.terminal_type !== currentTerminalType) {
+            await fetch('/api/legacy', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'update', legacy_id: legacyId, terminal_type: formData.terminal_type })
+            });
+        }
+
         const res = await fetch('/api/legacy', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ action: 'file_rma', legacy_id: legacyId, return_reason: reason.reason, notes: reason.notes })
+            body: JSON.stringify({
+                action: 'file_rma',
+                legacy_id: legacyId,
+                return_reason: formData.reason,
+                return_date: formData.return_date,
+                destination: formData.destination,
+                notes: formData.notes
+            })
         });
         const data = await res.json();
         if (data.success) {
-            await Swal.fire({ icon: 'success', title: `RMA ${data.return_id} Created`, timer: 2500, showConfirmButton: false });
+            await Swal.fire({ icon: 'success', title: `RMA ${data.return_id} Filed`, text: 'You can view it in the Returns dashboard.', timer: 2500, showConfirmButton: false });
             if (merchantUuid) fetchMerchantLegacyEquipment(merchantUuid);
         } else {
             Swal.fire('Error', data.message, 'error');
