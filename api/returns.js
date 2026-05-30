@@ -148,21 +148,31 @@ if (action === 'complete_return') {
     const resolved_merchant_id = merchant_id || rmaData?.merchant_id || null;
     const isBulk = rmaData?.is_bulk || false;
     if (!condition) throw new Error("Missing condition for complete_return");
-    const finalStatus = (condition.toLowerCase().includes('working') || destination === 'Warsaw Office') ? 'stocked' : 'repairing';
+    let finalStatus, finalLocation;
+    if (destination === 'Warsaw Office') {
+        finalStatus = 'stocked'; finalLocation = 'Warsaw Office';
+    } else if (destination === 'Warsaw Repairs') {
+        finalStatus = 'pending_return'; finalLocation = 'Warsaw Repairs';
+    } else {
+        finalStatus = 'decommissioned'; finalLocation = 'Retired';
+    }
 
     // ── LEGACY RMA: create real equipment from legacy record ──────────────────
     if (rmaData?.legacy_deployment_id) {
         const { data: leg } = await supabase.from('legacy_deployments')
             .select('serial_number, terminal_type').eq('id', rmaData.legacy_deployment_id).single();
         if (leg?.serial_number) {
-            const { data: newEquip } = await supabase.from('equipments').insert({
+            const legEqInsert = {
                 serial_number: leg.serial_number,
                 terminal_type: leg.terminal_type || 'Unknown',
                 status: finalStatus,
-                current_location: destination || 'Warsaw Office',
+                current_location: finalLocation,
                 received_date: new Date().toISOString(),
                 merchant_id: null
-            }).select('id').single();
+            };
+            if (destination === 'Warsaw Repairs') legEqInsert.repair_stage = 'received';
+
+            const { data: newEquip } = await supabase.from('equipments').insert(legEqInsert).select('id').single();
 
             if (newEquip?.id) {
                 await supabase.from('legacy_deployments').update({
@@ -175,17 +185,20 @@ if (action === 'complete_return') {
                     merchant_id: resolved_merchant_id,
                     action: 'Converted from Legacy RMA',
                     from_location: 'Legacy (Salesforce)',
-                    to_location: destination || 'Warsaw Office',
+                    to_location: finalLocation,
                     notes: `Legacy RMA completed. Unit marked as ${condition}. Added to active inventory.`
                 }]);
             }
         }
 
-        // Close the return record and exit — no real equipment_id to update
-        await supabase.from('returns').update({
-            status: 'Closed', condition, destination,
-            equipment_received_date: equipment_received_date || new Date().toISOString()
-        }).eq('id', rmaId);
+        // Warsaw Repairs stays Open; Warsaw Office and Scrap close immediately
+        const legIsRepairs = destination === 'Warsaw Repairs';
+        const legReturnUpdate = { condition, destination };
+        if (!legIsRepairs) {
+            legReturnUpdate.status = 'Closed';
+            legReturnUpdate.equipment_received_date = equipment_received_date || new Date().toISOString();
+        }
+        await supabase.from('returns').update(legReturnUpdate).eq('id', rmaId);
 
         return res.status(200).json({ success: true, legacy: true });
     }
@@ -199,9 +212,9 @@ if (action === 'complete_return') {
             .eq('return_id', rmaId);
 
         for (const ri of (retItems || [])) {
-            await supabase.from('equipments').update({
-                status: finalStatus, current_location: destination, merchant_id: null
-            }).eq('id', ri.equipment_id);
+            const bulkEqUpdate = { status: finalStatus, current_location: finalLocation, merchant_id: null };
+            if (destination === 'Warsaw Repairs') bulkEqUpdate.repair_stage = 'received';
+            await supabase.from('equipments').update(bulkEqUpdate).eq('id', ri.equipment_id);
         }
 
         // Update per-item condition so reports always reflect final state
@@ -213,7 +226,7 @@ if (action === 'complete_return') {
                 merchant_id: resolved_merchant_id,
                 action: 'RMA Completed',
                 from_location: 'In Transit / RMA',
-                to_location: destination,
+                to_location: finalLocation,
                 notes: `Bulk inspection finished. Unit marked as ${condition}.`
             }))
         );
@@ -221,16 +234,16 @@ if (action === 'complete_return') {
         const actualEquipId = equipment_id || rmaData?.equipment_id;
         if (!actualEquipId) throw new Error("Missing equipment_id for single return");
 
-        await supabase.from('equipments').update({
-            status: finalStatus, current_location: destination, merchant_id: null
-        }).eq('id', actualEquipId);
+        const singleEqUpdate = { status: finalStatus, current_location: finalLocation, merchant_id: null };
+        if (destination === 'Warsaw Repairs') singleEqUpdate.repair_stage = 'received';
+        await supabase.from('equipments').update(singleEqUpdate).eq('id', actualEquipId);
 
         await supabase.from('equipment_logs').insert([{
             equipment_id: actualEquipId,
             merchant_id: resolved_merchant_id,
             action: 'RMA Completed',
             from_location: 'In Transit / RMA',
-            to_location: destination,
+            to_location: finalLocation,
             notes: `Inspection finished. Unit marked as ${condition}.`
         }]);
     }
@@ -268,9 +281,13 @@ if (action === 'complete_return') {
         }
     }
 
-    // Close the RMA
-    const returnUpdate = { status: 'Closed', condition, destination };
-    if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
+    // Warsaw Repairs stays Open until repair is resolved; all others close immediately
+    const isRepairs = destination === 'Warsaw Repairs';
+    const returnUpdate = { condition, destination };
+    if (!isRepairs) {
+        returnUpdate.status = 'Closed';
+        if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
+    }
     await supabase.from('returns').update(returnUpdate).eq('id', rmaId);
 
     supabase.from('activity_logs').insert({
