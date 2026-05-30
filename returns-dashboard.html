@@ -551,21 +551,19 @@ function retGotoPage(p) {
 }
 
 async function deleteReturn(returnUuid, returnId, dbaName) {
-    const { value: confirmed } = await Swal.fire({
+    const { isConfirmed } = await Swal.fire({
         title: 'Delete Return?',
         html: `<div style="text-align:left;font-size:13px;">
-            <p>You are about to permanently delete <b>${returnId}</b> for <b>${dbaName}</b>.</p>
-            <p style="margin-top:8px;color:#64748b;">Equipment will be reset to stock. This cannot be undone.</p>
-            <p style="margin-top:12px;">Type <b>DELETE</b> to confirm:</p>
+            <p>Permanently delete <b>${returnId}</b> for <b>${dbaName}</b>?</p>
+            <p style="margin-top:8px;color:#b91c1c;font-weight:600;">This cannot be undone.</p>
         </div>`,
-        input: 'text',
+        icon: 'warning',
         allowOutsideClick: false,
         showCancelButton: true,
         confirmButtonColor: '#b91c1c',
-        confirmButtonText: 'Delete Permanently',
-        inputValidator: v => v !== 'DELETE' && 'You must type DELETE to confirm'
+        confirmButtonText: 'Yes, Delete It'
     });
-    if (confirmed !== 'DELETE') return;
+    if (!isConfirmed) return;
 
     Swal.fire({ title: 'Deleting…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
     try {

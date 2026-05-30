@@ -773,7 +773,7 @@ async function processFinalImport(itemsToCreate) {
             confirmButtonText: 'Delete Forever',
             confirmButtonColor: '#dc2626',
             preConfirm: () => {
-                const v = (document.getElementById('swal-delete-confirm')?.value || '').trim().toUpperCase();
+                const v = (Swal.getPopup().querySelector('#swal-delete-confirm')?.value || '').trim().toUpperCase();
                 if (v !== 'DELETE') { Swal.showValidationMessage('Type DELETE to confirm'); return false; }
                 return true;
             }
