@@ -200,10 +200,40 @@ export default async function handler(req, res) {
             const { data: newReturn, error: retErr } = await supabase.from('returns').insert(insertPayload).select('id, return_id').single();
             if (retErr) throw retErr;
 
-            // Update legacy record
+            // Create equipment record so it enters regular inventory
+            const today = new Date().toISOString().slice(0, 10);
+            let eqStatus, eqLocation, eqCondition, eqRepairStage;
+            if (destination === 'Warsaw Office') {
+                eqStatus = 'stocked'; eqLocation = 'Warsaw Office'; eqCondition = 'Working'; eqRepairStage = null;
+            } else if (destination === 'Warsaw Repairs') {
+                eqStatus = 'pending_return'; eqLocation = 'Warsaw Repairs'; eqCondition = 'Defective'; eqRepairStage = 'received';
+            } else { // Scrap
+                eqStatus = 'decommissioned'; eqLocation = 'Retired'; eqCondition = 'Scrapped'; eqRepairStage = null;
+            }
+
+            const eqPayload = {
+                terminal_type: leg.terminal_type || null,
+                serial_number: leg.serial_number,
+                merchant_id: null,
+                status: eqStatus,
+                current_location: eqLocation,
+                condition: eqCondition,
+                received_date: return_date || today,
+                notes: `Converted from legacy record. RMA ${return_id}${rmaNote ? ' — ' + rmaNote : ''}`
+            };
+            if (eqRepairStage) eqPayload.repair_stage = eqRepairStage;
+
+            const { data: newEquip, error: eqErr } = await supabase.from('equipments').insert(eqPayload).select('id').single();
+            if (eqErr) throw eqErr;
+
+            // Link return to the new equipment record
+            await supabase.from('returns').update({ equipment_id: newEquip.id }).eq('id', newReturn.id);
+
+            // Mark legacy as converted
             await supabase.from('legacy_deployments').update({
-                status: 'rma_filed',
-                return_id: newReturn.id
+                status: 'converted',
+                return_id: newReturn.id,
+                converted_equipment_id: newEquip.id
             }).eq('id', legacy_id);
 
             // Activity log
@@ -211,9 +241,9 @@ export default async function handler(req, res) {
             const actorName = actor ? `${actor.first_name || ''} ${actor.last_name || ''}`.trim() || actor.email : 'Staff';
             supabase.from('activity_logs').insert({
                 email: actor?.email || session.userid,
-                action: `Legacy RMA filed by ${actorName} — Serial: ${leg.serial_number} → ${destination}`,
+                action: `Legacy converted by ${actorName} — Serial: ${leg.serial_number} → ${destination}`,
                 status: 'success', category: 'returns', severity: 'info',
-                new_value: { return_id, serial_number: leg.serial_number, legacy_id, destination }
+                new_value: { return_id, serial_number: leg.serial_number, legacy_id, destination, equipment_id: newEquip.id }
             }).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true, return_id: newReturn.return_id, id: newReturn.id });
