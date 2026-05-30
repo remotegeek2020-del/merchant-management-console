@@ -696,6 +696,13 @@ window.openTicketForm = async function(merchantId, merchantName, type, singles, 
                 const checked = [...document.querySelectorAll('.tick-unit-cb:checked')];
                 if (!checked.length) { Swal.showValidationMessage('Please select at least one unit to return'); return false; }
 
+                const hasLegacy  = checked.some(cb => cb.value.startsWith('l:'));
+                const hasRegular = checked.some(cb => !cb.value.startsWith('l:'));
+                if (hasLegacy && hasRegular) {
+                    Swal.showValidationMessage('Please file separate RMA requests for legacy and regular equipment — they cannot be mixed in one ticket.');
+                    return false;
+                }
+
                 const desc = document.getElementById('tickDesc').value || '';
                 const priority = document.getElementById('tickPriority').value;
 
