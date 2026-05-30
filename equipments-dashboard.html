@@ -47,6 +47,31 @@
         }
         @media (max-width: 480px) { .summary-bar { grid-template-columns: repeat(2, 1fr) !important; } .main-card { overflow-x: auto; } }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+        /* ── Embedded Repair Queue ── */
+        .rq-pipeline { display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm); }
+        .rq-pipeline-stage { display:flex;align-items:center;padding:0 6px; }
+        .rq-pipeline-stage:first-child { padding-left:0; }
+        .rq-pipeline-stage:last-child  { padding-right:0; }
+        .rq-pipeline-box  { flex:1;border-radius:10px;padding:10px 12px;border:1px solid transparent; }
+        .rq-pipeline-arrow { font-size:18px;color:#cbd5e1;flex-shrink:0;margin:0 2px; }
+        .rq-pipeline-count { font-size:1.3rem;font-weight:900;font-family:'DM Mono',monospace;line-height:1; }
+        .rq-pipeline-label { font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.4px;margin-top:3px; }
+        .rq-stage-badge { font-weight:700;font-size:10px;padding:3px 10px;border-radius:99px;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap; }
+        .rq-stage-received  { background:#fef3c7;color:#92400e; }
+        .rq-stage-diagnosis { background:#e0f2fe;color:#0369a1; }
+        .rq-stage-repair    { background:#f3e8ff;color:#7c3aed; }
+        .rq-stage-testing   { background:#dcfce7;color:#166534; }
+        .rq-days-pill { display:inline-flex;align-items:center;gap:3px;font-family:'DM Mono',monospace;font-weight:800;font-size:12px;padding:2px 8px;border-radius:99px; }
+        .rq-model-chips { display:flex;flex-wrap:wrap;gap:6px;padding:10px 14px;background:white;border:1px solid var(--border);border-radius:12px;margin-bottom:14px;box-shadow:var(--shadow-sm); }
+        .rq-model-chip { background:#f1f5f9;border:1px solid #e2e8f0;border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:#475569;display:flex;align-items:center;gap:4px; }
+        .rq-model-chip-count { background:#e2e8f0;color:#334155;border-radius:99px;padding:1px 7px;font-size:10px;font-weight:800; }
+        .rq-action-btn { background:none;border:1px solid var(--border);border-radius:7px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;transition:0.15s;font-family:'DM Sans',sans-serif;display:inline-flex;align-items:center;gap:3px; }
+        .rq-action-btn.primary { color:#004990;border-color:#bfdbfe; } .rq-action-btn.primary:hover { background:#eff6ff; }
+        .rq-action-btn.success { color:#166534;border-color:#bbf7d0; } .rq-action-btn.success:hover { background:#f0fdf4; }
+        .rq-action-btn.danger  { color:#991b1b;border-color:#fecaca; } .rq-action-btn.danger:hover  { background:#fef2f2; }
+        .rq-critical-banner { display:none;align-items:center;gap:10px;padding:10px 16px;background:#fff1f2;border:1px solid #fecaca;border-radius:10px;margin-bottom:14px;color:#991b1b;font-weight:700;font-size:13px; }
+        @media(max-width:900px){ .rq-pipeline{grid-template-columns:repeat(2,1fr);} }
     </style>
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <script>
@@ -116,7 +141,124 @@
         <div class="kpi-card" style="border: 2px solid #e11d48; background: #fff1f2;"><div><span class="kpi-label" style="color: #e11d48;">Critical Alerts</span><span class="kpi-val" id="kpi-alerts" style="color: #e11d48;">0</span></div></div>
     </div>
 
-    <article class="main-card">
+    <!-- ── REPAIR QUEUE PANEL (shown when REPAIRS tab is active) ── -->
+    <div id="rq-inv-panel" style="display:none;">
+
+        <!-- Critical Banner -->
+        <div class="rq-critical-banner" id="rq-inv-critical">
+            <span class="material-icons">warning</span>
+            <span id="rq-inv-critical-text">Units exceed the 14-day repair threshold.</span>
+        </div>
+
+        <!-- KPI row (repair-specific) -->
+        <div class="summary-bar" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px;">
+            <div class="kpi-card" style="border-top:3px solid #dc2626;">
+                <div><span class="kpi-label">Total In Repair</span><span class="kpi-val" id="rq-inv-kpi-total" style="color:#dc2626;">—</span></div>
+            </div>
+            <div class="kpi-card" style="border-top:3px solid #d97706;">
+                <div><span class="kpi-label">Received / Awaiting</span><span class="kpi-val" id="rq-inv-kpi-received" style="color:#d97706;">—</span></div>
+            </div>
+            <div class="kpi-card" style="border-top:3px solid #7c3aed;">
+                <div><span class="kpi-label">Critical (&gt;14 Days)</span><span class="kpi-val" id="rq-inv-kpi-critical" style="color:#7c3aed;">—</span></div>
+            </div>
+            <div class="kpi-card" style="border-top:3px solid #059669;">
+                <div><span class="kpi-label">Avg Days In Repair</span><span class="kpi-val" id="rq-inv-kpi-avg" style="color:#059669;">—</span></div>
+            </div>
+        </div>
+
+        <!-- Pipeline -->
+        <div class="rq-pipeline">
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#fef3c7;border-color:#fde68a;">
+                    <div class="rq-pipeline-count" style="color:#92400e;" id="rq-inv-pipe-received">—</div>
+                    <div class="rq-pipeline-label" style="color:#92400e;">Received</div>
+                </div>
+                <span class="material-icons rq-pipeline-arrow">chevron_right</span>
+            </div>
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#e0f2fe;border-color:#bae6fd;">
+                    <div class="rq-pipeline-count" style="color:#0369a1;" id="rq-inv-pipe-diagnosis">—</div>
+                    <div class="rq-pipeline-label" style="color:#0369a1;">Diagnosis</div>
+                </div>
+                <span class="material-icons rq-pipeline-arrow">chevron_right</span>
+            </div>
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#f3e8ff;border-color:#ddd6fe;">
+                    <div class="rq-pipeline-count" style="color:#7c3aed;" id="rq-inv-pipe-repair">—</div>
+                    <div class="rq-pipeline-label" style="color:#7c3aed;">Under Repair</div>
+                </div>
+                <span class="material-icons rq-pipeline-arrow">chevron_right</span>
+            </div>
+            <div class="rq-pipeline-stage">
+                <div class="rq-pipeline-box" style="background:#dcfce7;border-color:#bbf7d0;">
+                    <div class="rq-pipeline-count" style="color:#166534;" id="rq-inv-pipe-testing">—</div>
+                    <div class="rq-pipeline-label" style="color:#166534;">Testing</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Model chips -->
+        <div class="rq-model-chips" id="rq-inv-model-chips">
+            <span style="color:#94a3b8;font-size:12px;">Loading...</span>
+        </div>
+
+        <!-- Table card -->
+        <article class="main-card">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);gap:10px;flex-wrap:wrap;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <span class="material-icons" style="color:#991b1b;">build</span>
+                    <span style="font-weight:800;font-size:14px;color:#002d5a;">Repair Queue</span>
+                    <span id="rq-inv-count" style="background:#f1f5f9;border-radius:99px;padding:2px 10px;font-size:11px;font-weight:700;color:#475569;">—</span>
+                </div>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+                    <input id="rq-inv-search" type="text" placeholder="Search serial / model…" oninput="rqInvApplyFilters()" style="border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:12px;width:160px;font-family:'DM Sans',sans-serif;">
+                    <select id="rq-inv-stage-filter" onchange="rqInvApplyFilters()" style="border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:12px;font-family:'DM Sans',sans-serif;">
+                        <option value="">All Stages</option>
+                        <option value="Received">Received</option>
+                        <option value="Diagnosis">Diagnosis</option>
+                        <option value="Under Repair">Under Repair</option>
+                        <option value="Testing">Testing</option>
+                    </select>
+                    <select id="rq-inv-model-filter" onchange="rqInvApplyFilters()" style="border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:12px;font-family:'DM Sans',sans-serif;">
+                        <option value="">All Models</option>
+                    </select>
+                    <select id="rq-inv-sort" onchange="rqInvApplyFilters()" style="border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:12px;font-family:'DM Sans',sans-serif;">
+                        <option value="days_desc">Longest First</option>
+                        <option value="days_asc">Shortest First</option>
+                        <option value="stage">By Stage</option>
+                        <option value="model">By Model</option>
+                    </select>
+                    <button onclick="rqInvExportCSV()" style="border:1px solid #bbf7d0;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:700;color:#166534;background:#f0fdf4;cursor:pointer;font-family:'DM Sans',sans-serif;display:inline-flex;align-items:center;gap:4px;">
+                        <span class="material-icons" style="font-size:14px;">download</span> CSV
+                    </button>
+                </div>
+            </div>
+            <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
+                <thead>
+                    <tr>
+                        <th>Serial Number</th>
+                        <th>Model</th>
+                        <th style="text-align:center;">Stage</th>
+                        <th style="text-align:center;">Days</th>
+                        <th class="hide-mobile">Technician Notes</th>
+                        <th class="hide-mobile">Received</th>
+                        <th style="text-align:right;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="rq-inv-tbody"></tbody>
+            </table>
+            <div id="rq-inv-empty" style="display:none;text-align:center;padding:40px;color:#94a3b8;">
+                <span class="material-icons" style="font-size:36px;display:block;margin-bottom:8px;">build_circle</span>
+                No units in the repair queue.
+            </div>
+            <div id="rq-inv-filter-empty" style="display:none;text-align:center;padding:30px;color:#94a3b8;">
+                No units match the current filters.
+            </div>
+        </article>
+    </div>
+    <!-- ── END REPAIR QUEUE PANEL ── -->
+
+    <article class="main-card" id="inv-main-card">
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
@@ -133,7 +275,7 @@
         </table>
     </article>
 
-    <div class="pagination-bar" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; background: white; padding: 15px; border-radius: 12px;">
+    <div class="pagination-bar" id="inv-pagination-bar" style="display: flex; justify-content: space-between; align-items: center; margin-top: 20px; background: white; padding: 15px; border-radius: 12px;">
         <div style="display: flex; align-items: center; gap: 10px;">
             <span style="font-size: 12px; font-weight: 700; color: #64748b;">SHOW:</span>
             <select id="pageSize" onchange="changePageSize()" class="slds-select" style="width: 80px;">
@@ -1391,17 +1533,223 @@ async function fetchCombinedLogs() {
 
     function closeModal() { document.getElementById('customModal').classList.remove('is-open'); }
     
-    function filterByLoc(loc) { 
-    currentFilter = loc; 
-    currentPage = 0; 
-    
+    function filterByLoc(loc) {
+    currentFilter = loc;
+    currentPage = 0;
+
     document.getElementById('btn-office').classList.toggle('active', loc === 'Warsaw Office');
     document.getElementById('btn-repairs').classList.toggle('active', loc === 'Warsaw Repairs');
     document.getElementById('btn-deployed').classList.toggle('active', loc === 'deployed');
     document.getElementById('btn-retired').classList.toggle('active', loc === 'Retired');
-    
-    fetchInventory(); 
+
+    const isRepairs = loc === 'Warsaw Repairs';
+    document.getElementById('rq-inv-panel').style.display      = isRepairs ? '' : 'none';
+    document.getElementById('inv-main-card').style.display     = isRepairs ? 'none' : '';
+    document.getElementById('inv-pagination-bar').style.display = isRepairs ? 'none' : '';
+    // Hide the generic search/print bar when in repair queue mode
+    document.getElementById('invSearch').closest('div').querySelectorAll('button[onclick="fetchInventory()"], button[onclick="printPDFReport()"]')
+        .forEach(b => b.style.display = isRepairs ? 'none' : '');
+
+    if (isRepairs) { rqInvLoadQueue(); } else { fetchInventory(); }
 }
+
+// ── EMBEDDED REPAIR QUEUE ────────────────────────────────────────────────────
+const RQ_INV_STAGES = ['Received', 'Diagnosis', 'Under Repair', 'Testing'];
+const RQ_INV_STAGE_CLASSES = { 'Received': 'rq-stage-received', 'Diagnosis': 'rq-stage-diagnosis', 'Under Repair': 'rq-stage-repair', 'Testing': 'rq-stage-testing' };
+let rqInvAllData = [];
+
+async function rqInvLoadQueue() {
+    document.getElementById('rq-inv-tbody').innerHTML = `<tr><td colspan="7" style="text-align:center;padding:40px;"><span class="material-icons" style="font-size:28px;color:#cbd5e1;">sync</span></td></tr>`;
+    try {
+        const r = await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'list_repair_queue' }) });
+        const res = await r.json();
+        if (!res.success) throw new Error(res.message || 'Load failed');
+
+        rqInvAllData = res.data || [];
+        const sum = res.summary || {};
+
+        document.getElementById('rq-inv-kpi-total').textContent    = sum.total || 0;
+        document.getElementById('rq-inv-kpi-received').textContent = sum.stage_counts?.Received || 0;
+        document.getElementById('rq-inv-kpi-critical').textContent = sum.critical_count || 0;
+        document.getElementById('rq-inv-kpi-avg').textContent      = (sum.avg_days_in_repair || 0) + 'd';
+
+        document.getElementById('rq-inv-pipe-received').textContent  = sum.stage_counts?.Received || 0;
+        document.getElementById('rq-inv-pipe-diagnosis').textContent = sum.stage_counts?.Diagnosis || 0;
+        document.getElementById('rq-inv-pipe-repair').textContent    = sum.stage_counts?.['Under Repair'] || 0;
+        document.getElementById('rq-inv-pipe-testing').textContent   = sum.stage_counts?.Testing || 0;
+
+        const banner = document.getElementById('rq-inv-critical');
+        if (sum.critical_count > 0) {
+            banner.style.display = 'flex';
+            document.getElementById('rq-inv-critical-text').textContent = `${sum.critical_count} unit${sum.critical_count !== 1 ? 's' : ''} exceed the 14-day repair threshold.`;
+        } else { banner.style.display = 'none'; }
+
+        // Model chips
+        const mc = sum.model_counts || {};
+        const entries = Object.entries(mc).sort((a, b) => b[1] - a[1]);
+        document.getElementById('rq-inv-model-chips').innerHTML = entries.length
+            ? entries.map(([m, c]) => `<div class="rq-model-chip"><span>${m}</span><span class="rq-model-chip-count">${c}</span></div>`).join('')
+            : '<span style="color:#94a3b8;font-size:12px;">No models.</span>';
+
+        // Model filter
+        const mSel = document.getElementById('rq-inv-model-filter');
+        const cur = mSel.value;
+        mSel.innerHTML = '<option value="">All Models</option>' + Object.keys(mc).sort().map(m => `<option value="${m}">${m}</option>`).join('');
+        if (cur) mSel.value = cur;
+
+        rqInvApplyFilters();
+    } catch (err) {
+        document.getElementById('rq-inv-tbody').innerHTML = `<tr><td colspan="7" style="text-align:center;color:#e11d48;padding:30px;">Error: ${err.message}</td></tr>`;
+    }
+}
+
+function rqInvApplyFilters() {
+    const search = (document.getElementById('rq-inv-search')?.value || '').toLowerCase().trim();
+    const stage  = document.getElementById('rq-inv-stage-filter')?.value || '';
+    const model  = document.getElementById('rq-inv-model-filter')?.value || '';
+    const sort   = document.getElementById('rq-inv-sort')?.value || 'days_desc';
+
+    let filtered = rqInvAllData.filter(e => {
+        if (stage && (e.repair_stage || 'Received') !== stage) return false;
+        if (model && (e.terminal_type || '') !== model) return false;
+        if (search && !e.serial_number?.toLowerCase().includes(search) && !(e.terminal_type || '').toLowerCase().includes(search)) return false;
+        return true;
+    });
+
+    if (sort === 'days_desc')      filtered.sort((a, b) => (b.days_in_repair || 0) - (a.days_in_repair || 0));
+    else if (sort === 'days_asc')  filtered.sort((a, b) => (a.days_in_repair || 0) - (b.days_in_repair || 0));
+    else if (sort === 'stage')     filtered.sort((a, b) => RQ_INV_STAGES.indexOf(a.repair_stage || 'Received') - RQ_INV_STAGES.indexOf(b.repair_stage || 'Received'));
+    else if (sort === 'model')     filtered.sort((a, b) => (a.terminal_type || '').localeCompare(b.terminal_type || ''));
+
+    rqInvRenderTable(filtered);
+}
+
+function rqInvRenderTable(data) {
+    const tbody  = document.getElementById('rq-inv-tbody');
+    const empty  = document.getElementById('rq-inv-empty');
+    const fEmpty = document.getElementById('rq-inv-filter-empty');
+    const count  = document.getElementById('rq-inv-count');
+
+    count.textContent = data.length + ' unit' + (data.length !== 1 ? 's' : '');
+
+    if (rqInvAllData.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+        fEmpty.style.display = 'none';
+        return;
+    }
+    empty.style.display = 'none';
+
+    if (data.length === 0) {
+        tbody.innerHTML = '';
+        fEmpty.style.display = 'block';
+        return;
+    }
+    fEmpty.style.display = 'none';
+
+    const rqEscInv = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;') : '';
+    tbody.innerHTML = data.map(e => {
+        const stage = e.repair_stage || 'Received';
+        const cls   = RQ_INV_STAGE_CLASSES[stage] || 'rq-stage-received';
+        const days  = e.days_in_repair;
+        const isCrit = days !== null && days > 14;
+        let daysBg = '#dcfce7', daysFg = '#166534';
+        if (days > 14)     { daysBg = '#fee2e2'; daysFg = '#dc2626'; }
+        else if (days > 7) { daysBg = '#fef3c7'; daysFg = '#d97706'; }
+        const daysPillHtml = days !== null && days !== undefined
+            ? `<span class="rq-days-pill" style="background:${daysBg};color:${daysFg};"><span class="material-icons" style="font-size:12px;">schedule</span>${days}d</span>`
+            : '<span style="color:#94a3b8;">—</span>';
+        const sn = (e.serial_number || '').replace(/'/g, "\\'");
+        const notes = (e.repair_notes || '').replace(/'/g, "\\'");
+        return `<tr style="${isCrit ? 'background:#fff9f9;' : ''}">
+            <td style="font-family:monospace;font-weight:700;color:#004990;">
+                ${rqEscInv(e.serial_number)}
+                ${isCrit ? '<span class="material-icons" style="font-size:14px;color:#dc2626;vertical-align:middle;margin-left:3px;" title="Exceeds 14-day threshold">warning</span>' : ''}
+            </td>
+            <td style="font-weight:600;">${rqEscInv(e.terminal_type || '—')}</td>
+            <td style="text-align:center;"><span class="rq-stage-badge ${cls}">${rqEscInv(stage)}</span></td>
+            <td style="text-align:center;">${daysPillHtml}</td>
+            <td class="hide-mobile" style="color:#475569;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${rqEscInv(e.repair_notes || '')}">${rqEscInv(e.repair_notes || '—')}</td>
+            <td class="hide-mobile" style="font-size:12px;color:#64748b;">${fmtDate(e.received_date)}</td>
+            <td style="text-align:right;white-space:nowrap;">
+                <div style="display:flex;gap:5px;justify-content:flex-end;">
+                    <button class="rq-action-btn primary" onclick="rqInvUpdateStage('${e.id}','${sn}','${rqEscInv(stage)}','${notes}')">
+                        <span class="material-icons" style="font-size:13px;">edit</span> Update
+                    </button>
+                    <button class="rq-action-btn success" onclick="rqInvCloseRepair('${e.id}','${sn}','return_to_stock')">
+                        <span class="material-icons" style="font-size:13px;">check</span> Return
+                    </button>
+                    <button class="rq-action-btn danger" onclick="rqInvCloseRepair('${e.id}','${sn}','scrap')">
+                        <span class="material-icons" style="font-size:13px;">delete_forever</span> Scrap
+                    </button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function rqInvUpdateStage(id, serial, currentStage, currentNotes) {
+    const opts = RQ_INV_STAGES.map(s => `<option value="${s}"${s === currentStage ? ' selected' : ''}>${s}</option>`).join('');
+    const { value: fv, isConfirmed } = await Swal.fire({
+        title: `Update: ${serial}`,
+        html: `<div style="text-align:left;">
+            <label style="font-size:11px;font-weight:700;color:#475569;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Repair Stage</label>
+            <select id="swal-rq-stage" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;margin-bottom:12px;">${opts}</select>
+            <label style="font-size:11px;font-weight:700;color:#475569;display:block;margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;">Technician Notes</label>
+            <textarea id="swal-rq-notes" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;min-height:90px;box-sizing:border-box;" placeholder="Describe findings, parts replaced...">${currentNotes || ''}</textarea>
+        </div>`,
+        showCancelButton: true, confirmButtonText: 'Save Update', confirmButtonColor: '#004990',
+        preConfirm: () => ({ stage: document.getElementById('swal-rq-stage').value, notes: document.getElementById('swal-rq-notes').value.trim() })
+    });
+    if (!isConfirmed || !fv) return;
+    Swal.fire({ title: 'Saving…', didOpen: () => Swal.showLoading() });
+    const res = await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'log_repair_action', equipment_id: id, repair_stage: fv.stage, repair_notes: fv.notes }) });
+    const d = await res.json();
+    if (d.success) {
+        await Swal.fire({ icon: 'success', title: 'Updated', text: `${serial} → "${fv.stage}"`, timer: 1500, showConfirmButton: false });
+        rqInvLoadQueue();
+    } else { Swal.fire('Error', d.message || 'Update failed.', 'error'); }
+}
+
+async function rqInvCloseRepair(id, serial, outcome) {
+    const isScrap = outcome === 'scrap';
+    const { isConfirmed } = await Swal.fire({
+        title: isScrap ? `Scrap ${serial}?` : `Return ${serial} to Stock?`,
+        text: isScrap ? 'This will mark the unit as decommissioned. This cannot be undone.' : 'This will move the unit back to Warsaw Office as stocked.',
+        icon: isScrap ? 'warning' : 'question',
+        showCancelButton: true,
+        confirmButtonText: isScrap ? 'Yes, Scrap It' : 'Return to Stock',
+        confirmButtonColor: isScrap ? '#dc2626' : '#10b981'
+    });
+    if (!isConfirmed) return;
+    Swal.fire({ title: 'Processing…', didOpen: () => Swal.showLoading() });
+    const res = await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'close_repair', equipment_id: id, outcome }) });
+    const d = await res.json();
+    if (d.success) {
+        await Swal.fire({ icon: 'success', timer: 1500, showConfirmButton: false, title: isScrap ? 'Scrapped' : 'Done!', text: isScrap ? `${serial} has been decommissioned.` : `${serial} returned to Warsaw Office stock.` });
+        rqInvLoadQueue();
+    } else { Swal.fire('Error', d.message || 'Operation failed.', 'error'); }
+}
+
+function rqInvExportCSV() {
+    const stage  = document.getElementById('rq-inv-stage-filter')?.value || '';
+    const model  = document.getElementById('rq-inv-model-filter')?.value || '';
+    const search = (document.getElementById('rq-inv-search')?.value || '').toLowerCase().trim();
+    let rows = rqInvAllData.filter(e => {
+        if (stage && (e.repair_stage || 'Received') !== stage) return false;
+        if (model && (e.terminal_type || '') !== model) return false;
+        if (search && !e.serial_number?.toLowerCase().includes(search) && !(e.terminal_type || '').toLowerCase().includes(search)) return false;
+        return true;
+    });
+    if (!rows.length) { Swal.fire('No Data', 'No units match the current filters.', 'info'); return; }
+    const headers = ['Serial Number', 'Model', 'Stage', 'Days In Repair', 'Notes', 'Received Date'];
+    const csvRows = rows.map(e => [e.serial_number, e.terminal_type || '', e.repair_stage || 'Received', e.days_in_repair ?? '', e.repair_notes || '', fmtDate(e.received_date)]
+        .map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `repair-queue-${new Date().toISOString().slice(0, 10)}.csv`; a.click();
+}
+// ─────────────────────────────────────────────────────────────────────────────
 
     function changePageSize() { currentPage = 0; fetchInventory(); }
     function nextPage() { currentPage++; fetchInventory(); }
