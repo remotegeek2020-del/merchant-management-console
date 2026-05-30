@@ -496,7 +496,7 @@ if (action === 'getMonthlyReport') {
             const { equipment_id, outcome } = req.body;
             const isScrap = outcome === 'scrap';
             const newStatus = isScrap ? 'decommissioned' : 'stocked';
-            const newLocation = isScrap ? 'Scrapped' : 'Warsaw Office';
+            const newLocation = isScrap ? 'Retired' : 'Warsaw Office';
             const { error } = await supabase.from('equipments')
                 .update({ status: newStatus, current_location: newLocation, repair_stage: null, repair_notes: null, merchant_id: null })
                 .eq('id', equipment_id);
