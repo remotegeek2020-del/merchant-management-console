@@ -1199,7 +1199,7 @@ async function createLinkedRMA() {
                 }));
         } else {
             const eq = d.equipments;
-            if (eq) allUnits.push({
+            if (eq && eq.status === 'deployed') allUnits.push({
                 equipment_id: eq.id || d.equipment_id,
                 deployment_id: d.id,
                 deployment_display: d.deployment_id,

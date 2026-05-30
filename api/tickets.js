@@ -696,6 +696,7 @@ export default async function handler(req, res) {
                         ret = newRet;
                     }
 
+                    await supabase.from('equipments').update({ status: 'pending_return' }).eq('id', selected_units[0].equipment_id);
                     await supabase.from('equipment_logs').insert({
                         equipment_id: selected_units[0].equipment_id, merchant_id: dep.merchant_id, deployment_id: dep.id,
                         action: 'RMA Initiated', from_location: 'Merchant Site', to_location: 'In Transit / RMA',
@@ -736,6 +737,7 @@ export default async function handler(req, res) {
                     await supabase.from('return_items').insert(
                         equipIds.map(eqId => ({ return_id: ret.id, equipment_id: eqId, condition: 'IN TRANSIT' }))
                     );
+                    await supabase.from('equipments').update({ status: 'pending_return' }).in('id', equipIds);
                     await supabase.from('equipment_logs').insert(
                         selected_units.map(u => ({
                             equipment_id: u.equipment_id,
@@ -974,6 +976,7 @@ export default async function handler(req, res) {
             await supabase.from('return_items').insert(
                 equipment_ids.map(eqId => ({ return_id: rma.id, equipment_id: eqId, condition: 'IN TRANSIT' }))
             );
+            await supabase.from('equipments').update({ status: 'pending_return' }).in('id', equipment_ids);
             await supabase.from('equipment_logs').insert(
                 equipment_ids.map(eqId => ({
                     equipment_id: eqId, merchant_id: rma.merchant_id,
@@ -989,6 +992,6 @@ export default async function handler(req, res) {
 
     } catch (err) {
         console.error('Tickets Error:', err.message);
-        return res.status(500).json({ success: false, message: err.message });
+        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
     }
 }
