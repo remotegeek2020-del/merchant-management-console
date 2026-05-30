@@ -109,13 +109,12 @@ export default async function handler(req, res) {
                 .range(offset, offset + limit - 1);
             if (error) throw error;
 
-            const { data: statRows } = await supabase.from('legacy_deployments').select('status');
-            const stats = { total: 0, active: 0, rma_filed: 0 };
-            (statRows || []).forEach(r => {
-                stats.total++;
-                if (r.status === 'active') stats.active++;
-                else if (r.status === 'rma_filed') stats.rma_filed++;
-            });
+            const [{ count: statTotal }, { count: statActive }, { count: statRma }] = await Promise.all([
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }),
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }).eq('status', 'rma_filed'),
+            ]);
+            const stats = { total: statTotal || 0, active: statActive || 0, rma_filed: statRma || 0 };
 
             return res.status(200).json({ success: true, data: data || [], total: count || 0, stats });
         }
@@ -135,12 +134,13 @@ export default async function handler(req, res) {
 
         // ── STATS ─────────────────────────────────────────────────────────────
         if (action === 'stats') {
-            const { data } = await supabase.from('legacy_deployments').select('status');
-            const counts = { active: 0, rma_filed: 0, converted: 0, total: 0 };
-            (data || []).forEach(r => {
-                counts.total++;
-                if (counts[r.status] !== undefined) counts[r.status]++;
-            });
+            const [{ count: cTotal }, { count: cActive }, { count: cRma }, { count: cConverted }] = await Promise.all([
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }),
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }).eq('status', 'active'),
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }).eq('status', 'rma_filed'),
+                supabase.from('legacy_deployments').select('*', { count: 'exact', head: true }).eq('status', 'converted'),
+            ]);
+            const counts = { total: cTotal || 0, active: cActive || 0, rma_filed: cRma || 0, converted: cConverted || 0 };
             return res.status(200).json({ success: true, counts });
         }
 
