@@ -731,26 +731,43 @@ if (action === 'getMonthlyReport') {
                 if (error.code === '23505') return res.status(409).json({ success: false, message: 'Terminal type already exists.' });
                 throw error;
             }
+            supabase.from('activity_logs').insert({
+                email: actorEmail, action: `Terminal Type Added by ${actorName} — ${name.trim()}`,
+                status: 'success', category: 'inventory', target_id: name.trim(), target_type: 'terminal_type', severity: 'info',
+                old_value: null, new_value: { name: name.trim(), sort_order: nextOrder }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 
         if (action === 'update_terminal_type') {
             const { type_id, name, sort_order, is_active } = req.body;
             if (!type_id) return res.status(400).json({ success: false, message: 'type_id required.' });
+            const { data: ttOld } = await supabase.from('terminal_types').select('name, sort_order, is_active').eq('id', type_id).maybeSingle();
             const patch = {};
             if (name !== undefined)       patch.name       = name.trim();
             if (sort_order !== undefined)  patch.sort_order  = sort_order;
             if (is_active !== undefined)   patch.is_active   = is_active;
             const { error } = await supabase.from('terminal_types').update(patch).eq('id', type_id);
             if (error) throw error;
+            supabase.from('activity_logs').insert({
+                email: actorEmail, action: `Terminal Type Updated by ${actorName} — ${ttOld?.name || type_id}`,
+                status: 'success', category: 'inventory', target_id: ttOld?.name || String(type_id), target_type: 'terminal_type', severity: 'info',
+                old_value: ttOld || null, new_value: patch
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 
         if (action === 'delete_terminal_type') {
             const { type_id } = req.body;
             if (!type_id) return res.status(400).json({ success: false, message: 'type_id required.' });
+            const { data: ttDel } = await supabase.from('terminal_types').select('name, sort_order, is_active').eq('id', type_id).maybeSingle();
             const { error } = await supabase.from('terminal_types').delete().eq('id', type_id);
             if (error) throw error;
+            supabase.from('activity_logs').insert({
+                email: actorEmail, action: `Terminal Type Deleted by ${actorName} — ${ttDel?.name || type_id}`,
+                status: 'success', category: 'inventory', target_id: ttDel?.name || String(type_id), target_type: 'terminal_type', severity: 'warning',
+                old_value: ttDel || null, new_value: { deleted: true }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 

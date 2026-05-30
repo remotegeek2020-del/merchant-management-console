@@ -275,6 +275,14 @@ if (action === 'add_task') {
         }
     }
 
+    supabase.from('activity_logs').insert({
+        email: dtActorEmail,
+        action: `Task Created by ${dtActorRow ? `${dtActorRow.first_name || ''} ${dtActorRow.last_name || ''}`.trim() || dtActorEmail : 'Staff'} — ${title}`,
+        status: 'success', category: 'tasks', target_id: data?.[0]?.id || null, target_type: 'task', severity: 'info',
+        old_value: null,
+        new_value: { title, body: body || null, due_date: due_date || null, assigned_to: assigned_to || null, merchant_id: merchant_uuid, status: 'Pending' }
+    }).then(() => {}).catch(() => {});
+
     return res.status(200).json({ success: true, data });
 }
 
@@ -667,14 +675,28 @@ if (action === 'get_merchant_equipment') {
         // --- ACTION: DELETE ATTACHMENT ---
         if (action === 'delete_attachment') {
             const { file_id, file_path } = req.body;
-            
+
+            // Pre-fetch for audit log
+            const { data: attachRow } = await supabase.from('merchant_attachments').select('file_name, merchant_id').eq('id', file_id).maybeSingle();
+            const { data: delActorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            const delActorEmail = delActorRow?.email || session.userid;
+            const delActorName  = delActorRow ? `${delActorRow.first_name || ''} ${delActorRow.last_name || ''}`.trim() || delActorEmail : 'Staff';
+
             // Delete from Storage
             await supabase.storage.from('merchant-files').remove([file_path]);
-            
+
             // Delete from Database
             const { error } = await supabase.from('merchant_attachments').delete().eq('id', file_id);
-            
             if (error) throw error;
+
+            supabase.from('activity_logs').insert({
+                email: delActorEmail,
+                action: `Attachment Deleted by ${delActorName} — ${attachRow?.file_name || file_path}`,
+                status: 'success', category: 'merchants', target_id: file_id, target_type: 'attachment', severity: 'warning',
+                old_value: { file_id, file_name: attachRow?.file_name, file_path, merchant_id: attachRow?.merchant_id },
+                new_value: { deleted: true, deleted_by: delActorEmail }
+            }).then(() => {}).catch(() => {});
+
             return res.status(200).json({ success: true });
         }
 

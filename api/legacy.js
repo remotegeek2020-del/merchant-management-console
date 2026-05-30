@@ -226,9 +226,10 @@ export default async function handler(req, res) {
             const actorName = actor ? `${actor.first_name || ''} ${actor.last_name || ''}`.trim() || actor.email : 'Staff';
             supabase.from('activity_logs').insert({
                 email: actor?.email || session.userid,
-                action: `Legacy converted by ${actorName} — Serial: ${leg.serial_number} → ${destination}`,
-                status: 'success', category: 'returns', severity: 'info',
-                new_value: { return_id, serial_number: leg.serial_number, legacy_id, destination, equipment_id: newEquip.id }
+                action: `Legacy RMA Filed by ${actorName} — Serial: ${leg.serial_number} → ${destination}`,
+                status: 'success', category: 'returns', target_id: return_id, target_type: 'return', severity: 'info',
+                old_value: { serial_number: leg.serial_number, legacy_status: 'active', legacy_id },
+                new_value: { return_id, serial_number: leg.serial_number, destination, equipment_id: newEquip.id, equipment_status: 'pending_return' }
             }).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true, return_id: newReturn.return_id, id: newReturn.id });
@@ -392,11 +393,22 @@ export default async function handler(req, res) {
             if (!(await isSuperAdmin(supabase, session.userid))) return res.status(403).json({ success: false, message: 'Super admin only.' });
             const { legacy_id, terminal_type, merchant_id } = body;
             if (!legacy_id) return res.status(400).json({ success: false, message: 'legacy_id required' });
+            const { data: legOld } = await supabase.from('legacy_deployments').select('serial_number, terminal_type, merchant_id').eq('id', legacy_id).maybeSingle();
             const updates = {};
             if (terminal_type !== undefined) { updates.terminal_type = terminal_type; updates.terminal_type_source = 'manual'; }
             if (merchant_id !== undefined) updates.merchant_id = merchant_id;
             const { error } = await supabase.from('legacy_deployments').update(updates).eq('id', legacy_id);
             if (error) throw error;
+            const { data: legActor } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            const legActorEmail = legActor?.email || session.userid;
+            const legActorName  = legActor ? `${legActor.first_name || ''} ${legActor.last_name || ''}`.trim() || legActorEmail : 'Staff';
+            supabase.from('activity_logs').insert({
+                email: legActorEmail,
+                action: `Legacy Record Updated by ${legActorName} — ${legOld?.serial_number || legacy_id}`,
+                status: 'success', category: 'returns', target_id: legOld?.serial_number || legacy_id, target_type: 'legacy_deployment', severity: 'info',
+                old_value: { serial_number: legOld?.serial_number, terminal_type: legOld?.terminal_type, merchant_id: legOld?.merchant_id },
+                new_value: updates
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 

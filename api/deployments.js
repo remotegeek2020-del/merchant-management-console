@@ -718,6 +718,13 @@ if (action === 'return_to_office') {
                         }))
                     );
                 }
+                supabase.from('activity_logs').insert({
+                    email: actorEmail,
+                    action: `Return Initiated by ${actorName} — Bulk (${depItems?.length || 0} units) from ${mDba}`,
+                    status: 'success', category: 'returns', target_id: ret?.return_id || deployment_id, target_type: 'return', severity: 'info',
+                    old_value: { deployment_id, merchant: mDba, unit_count: depItems?.length || 0 },
+                    new_value: { return_id: ret?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated }
+                }).then(() => {}).catch(() => {});
             } else {
                 // SINGLE: existing logic
                 const { error } = await supabase.from('returns').insert({
@@ -742,6 +749,13 @@ if (action === 'return_to_office') {
                     to_location: 'In Transit / RMA',
                     notes: `Unit marked In Transit. Reason: ${notes || 'N/A'}`
                 }]);
+                supabase.from('activity_logs').insert({
+                    email: actorEmail,
+                    action: `Return Initiated by ${actorName} — Single unit from ${mDbaSingle}`,
+                    status: 'success', category: 'returns', target_id: deployment_id, target_type: 'deployment', severity: 'info',
+                    old_value: { deployment_id, merchant: mDbaSingle, equipment_id },
+                    new_value: { status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated }
+                }).then(() => {}).catch(() => {});
             }
 
         } else {
@@ -813,6 +827,14 @@ if (action === 'return_to_office') {
                         }))
                     );
                 }
+                supabase.from('activity_logs').insert({
+                    email: actorEmail,
+                    action: `RMA Completed by ${actorName} — Bulk (${retItems?.length || 0} units) → ${finalDestination}`,
+                    status: 'success', category: 'returns', target_id: deployment_id, target_type: 'deployment',
+                    severity: finalDestination === 'Scrap' ? 'warning' : 'info',
+                    old_value: { deployment_id, status: 'Open', destination: 'In Transit / RMA' },
+                    new_value: { status: 'Closed', condition: finalCondition, destination: finalDestination, unit_count: retItems?.length || 0, equipment_received_date: equipment_received_date || null }
+                }).then(() => {}).catch(() => {});
             } else {
                 // SINGLE: existing logic
                 const { error: returnUpdateError } = await supabase.from('returns').update({
@@ -836,6 +858,14 @@ if (action === 'return_to_office') {
                     to_location: finalDestination,
                     notes: `Inspection finished. Unit marked as ${finalCondition}. Received: ${equipment_received_date || 'N/A'}`
                 }]);
+                supabase.from('activity_logs').insert({
+                    email: actorEmail,
+                    action: `RMA Completed by ${actorName} — Single unit → ${finalDestination}`,
+                    status: 'success', category: 'returns', target_id: deployment_id, target_type: 'deployment',
+                    severity: finalDestination === 'Scrap' ? 'warning' : 'info',
+                    old_value: { deployment_id, equipment_id, status: 'Open', destination: 'In Transit / RMA' },
+                    new_value: { status: 'Closed', condition: finalCondition, destination: finalDestination, equipment_received_date: equipment_received_date || null }
+                }).then(() => {}).catch(() => {});
             }
         }
 
