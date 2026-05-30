@@ -590,7 +590,42 @@ async function finalizeRMA(id, equipment_id, destination) {
         'Warsaw Repairs': 'Defective (Received in Repairs)',
         'Scrap':          'Scrapped'
     };
-    const dest = (destination || 'Warsaw Office').trim();
+    const FINAL_DESTS = ['Warsaw Office', 'Warsaw Repairs', 'Scrap'];
+    let dest = (destination || '').trim();
+
+    // If destination is not a final value (e.g. "In Transit / RMA"), ask user to choose
+    if (!FINAL_DESTS.includes(dest)) {
+        const { value: chosenDest, isConfirmed: destConfirmed } = await Swal.fire({
+            title: '<span style="font-size:15px;font-weight:800;color:#002d5a;">Select Destination</span>',
+            width: '420px',
+            showCancelButton: true,
+            confirmButtonText: 'Continue →',
+            confirmButtonColor: '#004990',
+            html: `<div style="text-align:left;padding-top:4px;">
+                <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Where is this unit going?</div>
+                <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;margin-bottom:8px;cursor:pointer;">
+                    <input type="radio" name="fin-dest" value="Warsaw Office" checked style="margin-top:2px;flex-shrink:0;">
+                    <div><div style="font-weight:700;font-size:13px;color:#0f172a;">Warsaw Office — Back to Stock</div><div style="font-size:11px;color:#64748b;">Working unit returned to inventory</div></div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;margin-bottom:8px;cursor:pointer;">
+                    <input type="radio" name="fin-dest" value="Warsaw Repairs" style="margin-top:2px;flex-shrink:0;">
+                    <div><div style="font-weight:700;font-size:13px;color:#0f172a;">Warsaw Repairs</div><div style="font-size:11px;color:#64748b;">Defective — send to repair queue</div></div>
+                </label>
+                <label style="display:flex;align-items:flex-start;gap:10px;padding:10px 12px;border:2px solid #e2e8f0;border-radius:8px;cursor:pointer;">
+                    <input type="radio" name="fin-dest" value="Scrap" style="margin-top:2px;flex-shrink:0;">
+                    <div><div style="font-weight:700;font-size:13px;color:#dc2626;">Scrap</div><div style="font-size:11px;color:#64748b;">Permanently decommission unit</div></div>
+                </label>
+            </div>`,
+            preConfirm: () => {
+                const sel = Swal.getPopup().querySelector('input[name="fin-dest"]:checked')?.value;
+                if (!sel) { Swal.showValidationMessage('Please select a destination'); return false; }
+                return sel;
+            }
+        });
+        if (!destConfirmed || !chosenDest) return;
+        dest = chosenDest;
+    }
+
     const isRepairs = dest === 'Warsaw Repairs';
     const isScrap   = dest === 'Scrap';
 

@@ -129,10 +129,12 @@ if (action === 'getMonthlyReport') {
                 return res.status(400).json({ success: false, message: 'Unit is not retired/decommissioned.' });
             }
 
-            const { error: restoreErr } = await supabase.from('equipments')
+            const { data: restoreData, error: restoreErr } = await supabase.from('equipments')
                 .update({ status: 'stocked', current_location: 'Warsaw Office', merchant_id: null })
-                .eq('id', id);
+                .eq('id', id)
+                .select('id');
             if (restoreErr) throw restoreErr;
+            if (!restoreData?.length) return res.status(404).json({ success: false, message: 'Equipment not found or update had no effect.' });
 
             await supabase.from('equipment_logs').insert([{
                 equipment_id: id,
