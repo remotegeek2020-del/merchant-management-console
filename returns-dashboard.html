@@ -506,7 +506,7 @@ async function fetchReturns() {
                             return `<button class="pp-btn ${btnClass}" onclick="finalizeRMA('${r.id}', '${eqId}', '${destEsc}')"><span class="material-icons" style="font-size:14px;">${btnIcon}</span><span class="btn-label">${btnLabel}</span></button>${ticketBtn}`;
                         })() : `<span style="font-size:11px; color:#94a3b8; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Processed</span>`}
                         ${canDeleteTickets ? `
-                        <button class="pp-btn" onclick="deleteReturn('${r.id}', '${(r.return_id || 'this return').replace(/'/g,"\\'")}', '${(r.merchants?.dba_name || '').replace(/'/g,"\\'")}'" )" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;" title="Delete Return">
+                        <button class="pp-btn" onclick="deleteReturn('${r.id}', '${(r.return_id || 'this return').replace(/'/g,"\\'")}', '${(r.merchants?.dba_name || '').replace(/'/g,"\\'")}')" style="background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;" title="Delete Return">
                             <span class="material-icons" style="font-size:14px;">delete_forever</span>
                         </button>` : ''}
                     </div>
