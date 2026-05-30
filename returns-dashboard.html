@@ -951,23 +951,17 @@ async function legFileRMA(legacyId, serial, currentTerminalType) {
                 </select>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
-                <div>
-                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Reason <span style="color:#ef4444;">*</span></label>
-                    <select id="swal-rma-reason" onchange="const ow=document.getElementById('swal-rma-other-wrap');ow.style.display=this.value==='Other'?'block':'none';" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
-                        <option value="">— Select reason —</option>
-                        <option value="Merchant Cancellation">Merchant Cancellation</option>
-                        <option value="Equipment Type Swap">Equipment Type Swap</option>
-                        <option value="Technical Issue Swap">Technical Issue Swap</option>
-                        <option value="Other">Other</option>
-                    </select>
-                    <div id="swal-rma-other-wrap" style="display:none;margin-top:6px;">
-                        <input type="text" id="swal-rma-other" placeholder="Describe reason…" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
-                    </div>
-                </div>
-                <div>
-                    <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Date <span style="color:#ef4444;">*</span></label>
-                    <input type="date" id="swal-rma-date" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+            <div style="margin-bottom:12px;">
+                <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Reason <span style="color:#ef4444;">*</span></label>
+                <select id="swal-rma-reason" onchange="const ow=document.getElementById('swal-rma-other-wrap');ow.style.display=this.value==='Other'?'block':'none';" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
+                    <option value="">— Select reason —</option>
+                    <option value="Merchant Cancellation">Merchant Cancellation</option>
+                    <option value="Equipment Type Swap">Equipment Type Swap</option>
+                    <option value="Technical Issue Swap">Technical Issue Swap</option>
+                    <option value="Other">Other</option>
+                </select>
+                <div id="swal-rma-other-wrap" style="display:none;margin-top:6px;">
+                    <input type="text" id="swal-rma-other" placeholder="Describe reason…" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
                 </div>
             </div>
 
@@ -997,7 +991,6 @@ async function legFileRMA(legacyId, serial, currentTerminalType) {
         preConfirm: () => {
             const terminal_type = document.getElementById('swal-rma-type').value;
             let reason          = document.getElementById('swal-rma-reason').value;
-            const return_date   = document.getElementById('swal-rma-date').value;
             const destination   = Swal.getPopup().querySelector('input[name="rma-dest"]:checked')?.value;
             const notes         = document.getElementById('swal-rma-notes').value;
             if (!terminal_type) { Swal.showValidationMessage('Please select a terminal type'); return; }
@@ -1007,9 +1000,8 @@ async function legFileRMA(legacyId, serial, currentTerminalType) {
                 if (!custom)  { Swal.showValidationMessage('Please describe the reason'); return; }
                 reason = custom;
             }
-            if (!return_date)   { Swal.showValidationMessage('Return date is required'); return; }
             if (!destination)   { Swal.showValidationMessage('Please select a destination'); return; }
-            return { terminal_type, reason, return_date, destination, notes };
+            return { terminal_type, reason, destination, notes };
         }
     });
     if (!isConfirmed) return;
@@ -1030,7 +1022,7 @@ async function legFileRMA(legacyId, serial, currentTerminalType) {
             action: 'file_rma',
             legacy_id: legacyId,
             return_reason: formData.reason,
-            return_date: formData.return_date,
+            return_date: today,
             destination: formData.destination,
             notes: formData.notes
         })

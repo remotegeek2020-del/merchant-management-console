@@ -2049,10 +2049,6 @@ async function addTask(merchantUuid) {
                             <input type="text" id="swal-rma-other2" placeholder="Describe reason…" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
                         </div>
                     </div>
-                    <div>
-                        <label style="font-size:10px;font-weight:800;color:#475569;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:5px;">Return Date <span style="color:#ef4444;">*</span></label>
-                        <input type="date" id="swal-rma-date2" value="${today}" style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px 12px;font-size:13px;box-sizing:border-box;">
-                    </div>
                 </div>
 
                 <div style="margin-bottom:12px;">
@@ -2081,7 +2077,6 @@ async function addTask(merchantUuid) {
             preConfirm: () => {
                 const terminal_type = document.getElementById('swal-rma-type2').value;
                 let reason          = document.getElementById('swal-rma-reason2').value;
-                const return_date   = document.getElementById('swal-rma-date2').value;
                 const destination   = Swal.getPopup().querySelector('input[name="rma-dest2"]:checked')?.value;
                 const notes         = document.getElementById('swal-rma-notes2').value;
                 if (!terminal_type) { Swal.showValidationMessage('Please select a terminal type'); return; }
@@ -2091,9 +2086,8 @@ async function addTask(merchantUuid) {
                     if (!custom)  { Swal.showValidationMessage('Please describe the reason'); return; }
                     reason = custom;
                 }
-                if (!return_date)   { Swal.showValidationMessage('Return date is required'); return; }
                 if (!destination)   { Swal.showValidationMessage('Please select a destination'); return; }
-                return { terminal_type, reason, return_date, destination, notes };
+                return { terminal_type, reason, destination, notes };
             }
         });
         if (!isConfirmed) return;
@@ -2114,7 +2108,7 @@ async function addTask(merchantUuid) {
                 action: 'file_rma',
                 legacy_id: legacyId,
                 return_reason: formData.reason,
-                return_date: formData.return_date,
+                return_date: today,
                 destination: formData.destination,
                 notes: formData.notes
             })

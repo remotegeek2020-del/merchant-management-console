@@ -156,24 +156,18 @@ export default async function handler(req, res) {
             if (leg.status !== 'active') return res.status(400).json({ success: false, message: 'RMA already filed for this record' });
 
             // Determine condition and status based on destination
-            let condition, returnStatus, equipReceivedDate;
-            if (destination === 'Warsaw Office') {
-                condition = 'Working (Back to Stock)';
-                returnStatus = 'Closed';
-                equipReceivedDate = return_date || new Date().toISOString().slice(0, 10);
-            } else if (destination === 'Warsaw Repairs') {
+            // Always create as Open — the return is finalized later from the returns dashboard.
+            // Destination at filing time is the *intended* destination only.
+            let condition, returnStatus, eqStatus, eqLocation, eqCondition, eqRepairStage;
+            if (destination === 'Warsaw Repairs') {
                 condition = 'Defective (Received in Repairs)';
-                returnStatus = 'Open';
-                equipReceivedDate = null;
-            } else if (destination === 'Scrap') {
-                condition = 'Scrapped';
-                returnStatus = 'Closed';
-                equipReceivedDate = return_date || new Date().toISOString().slice(0, 10);
+                eqStatus = 'pending_return'; eqLocation = 'Warsaw Repairs'; eqCondition = 'Defective'; eqRepairStage = 'received';
             } else {
-                condition = 'IN TRANSIT';
-                returnStatus = 'Open';
-                equipReceivedDate = null;
+                // Warsaw Office, Scrap, or any other — create as Open/In Transit
+                condition = destination === 'Scrap' ? 'Scrapped' : 'Working (Back to Stock)';
+                eqStatus = 'pending_return'; eqLocation = 'In Transit / RMA'; eqCondition = 'In Transit'; eqRepairStage = null;
             }
+            returnStatus = 'Open';
 
             // Generate a return_id
             const { data: lastRet } = await supabase.from('returns')
@@ -195,21 +189,12 @@ export default async function handler(req, res) {
                 destination,
                 is_bulk: false
             };
-            if (equipReceivedDate) insertPayload.equipment_received_date = new Date(equipReceivedDate).toISOString();
 
             const { data: newReturn, error: retErr } = await supabase.from('returns').insert(insertPayload).select('id, return_id').single();
             if (retErr) throw retErr;
 
-            // Create equipment record so it enters regular inventory
+            // Create equipment record — always as pending_return/In Transit until return is finalized
             const today = new Date().toISOString().slice(0, 10);
-            let eqStatus, eqLocation, eqCondition, eqRepairStage;
-            if (destination === 'Warsaw Office') {
-                eqStatus = 'stocked'; eqLocation = 'Warsaw Office'; eqCondition = 'Working'; eqRepairStage = null;
-            } else if (destination === 'Warsaw Repairs') {
-                eqStatus = 'pending_return'; eqLocation = 'Warsaw Repairs'; eqCondition = 'Defective'; eqRepairStage = 'received';
-            } else { // Scrap
-                eqStatus = 'decommissioned'; eqLocation = 'Retired'; eqCondition = 'Scrapped'; eqRepairStage = null;
-            }
 
             const eqPayload = {
                 terminal_type: leg.terminal_type || null,
