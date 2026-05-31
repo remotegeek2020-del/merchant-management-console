@@ -2319,6 +2319,63 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, documents: [], apiUnavailable: true });
         }
 
+        // --- ACTION: LIST PARTNER HL CONTACT IDs (for Secret Dungeon manager) ---
+        if (action === 'list_partner_hl_ids') {
+            const { search } = body;
+            let query = supabase
+                .from('persons')
+                .select('id, full_name, email, hl_contact_id')
+                .order('full_name');
+            if (search && search.trim()) {
+                const s = search.trim();
+                query = query.or(`full_name.ilike.%${s}%,email.ilike.%${s}%,hl_contact_id.ilike.%${s}%`);
+            }
+            const { data, error } = await query;
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, partners: data || [] });
+        }
+
+        // --- ACTION: UPDATE HL CONTACT ID (for Secret Dungeon manager) ---
+        if (action === 'update_hl_contact_id') {
+            const { person_id, hl_contact_id: newHlId } = body;
+            if (!person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
+            const trimmed = (newHlId || '').trim();
+
+            // Check for duplicate if non-empty
+            if (trimmed) {
+                const { data: existing } = await supabase
+                    .from('persons')
+                    .select('id, full_name')
+                    .eq('hl_contact_id', trimmed)
+                    .neq('id', person_id)
+                    .maybeSingle();
+                if (existing) {
+                    return res.status(409).json({
+                        success: false,
+                        message: `This contact ID is already linked to "${existing.full_name}".`
+                    });
+                }
+            }
+
+            const { error } = await supabase
+                .from('persons')
+                .update({ hl_contact_id: trimmed || null })
+                .eq('id', person_id);
+            if (error) return res.status(500).json({ success: false, message: error.message });
+
+            const actor = await resolveActor();
+            await supabase.from('activity_logs').insert({
+                actor_email: actor.email,
+                actor_name: actor.name,
+                action: 'HL Contact ID updated',
+                entity_type: 'partner',
+                entity_id: person_id,
+                details: JSON.stringify({ new_hl_contact_id: trimmed || null })
+            });
+
+            return res.status(200).json({ success: true });
+        }
+
         // --- ACTION: DELETE GHL MEDIA FILE ---
         if (action === 'delete_ghl_document') {
             const { document_id } = body;
