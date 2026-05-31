@@ -12,7 +12,8 @@
     "api/scheduled-reports.js": { "maxDuration": 60 },
     "api/email-log.js": { "maxDuration": 30 },
     "api/cron-daily-report.js": { "maxDuration": 60 },
-    "api/cron-weekly-report.js": { "maxDuration": 60 }
+    "api/cron-weekly-report.js": { "maxDuration": 60 },
+    "api/ghl-documents.js": { "maxDuration": 30 }
   },
   "crons": [
     {

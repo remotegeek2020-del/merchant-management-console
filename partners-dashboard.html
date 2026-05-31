@@ -1892,7 +1892,7 @@ async function submitOnboarding() {
 
     // Tab switcher for partner detail modal (overridden by module-level definition below)
     window.ppSwitchTab = function(tab) {
-        ['ids','scorecard','notes','tickets','subpartners'].forEach(function(t) {
+        ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents'].forEach(function(t) {
             var btn = document.getElementById('pptab-' + t);
             var panel = document.getElementById('pppanel-' + t);
             if (btn) {
@@ -1904,6 +1904,8 @@ async function submitOnboarding() {
         });
         if (tab === 'tickets') ppLoadPartnerTickets();
         if (tab === 'subpartners') ppLoadSubPartners();
+        if (tab === 'ghlinfo') ppLoadGHLInfo();
+        if (tab === 'documents') ppLoadDocuments();
     };
 
     window.openPartnerDetails = async function(personId) {
@@ -1964,13 +1966,17 @@ async function submitOnboarding() {
                             <div style="font-size:11px; color:#64748b;" id="main-merch-count">Crunching numbers...</div>
                         </div>
                     </div>
+                    <!-- Context store for lazy-load functions -->
+                    <div id="pp-ctx" data-person-id="${p.id}" data-hl-id="${p.hl_id || ''}"></div>
                     <!-- TAB BAR -->
-                    <div id="pp-tab-bar" style="display:flex;gap:4px;background:#f1f5f9;border-radius:10px;padding:3px;margin:16px 0;">
-                        <button onclick="ppSwitchTab('ids')" id="pptab-ids" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
-                        <button onclick="ppSwitchTab('scorecard')" id="pptab-scorecard" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
-                        <button onclick="ppSwitchTab('notes')" id="pptab-notes" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
-                        <button onclick="ppSwitchTab('tickets')" id="pptab-tickets" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Tickets</button>
-                        <button onclick="ppSwitchTab('subpartners')" id="pptab-subpartners" style="flex:1;padding:8px;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Sub-Partners</button>
+                    <div id="pp-tab-bar" style="display:flex;gap:3px;background:#f1f5f9;border-radius:10px;padding:3px;margin:16px 0;">
+                        <button onclick="ppSwitchTab('ids')" id="pptab-ids" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:white;color:#004990;box-shadow:0 1px 3px rgba(0,0,0,.08);">Agent IDs</button>
+                        <button onclick="ppSwitchTab('scorecard')" id="pptab-scorecard" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Scorecard</button>
+                        <button onclick="ppSwitchTab('notes')" id="pptab-notes" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Notes</button>
+                        <button onclick="ppSwitchTab('tickets')" id="pptab-tickets" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Tickets</button>
+                        <button onclick="ppSwitchTab('subpartners')" id="pptab-subpartners" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Sub-Partners</button>
+                        <button onclick="ppSwitchTab('ghlinfo')" id="pptab-ghlinfo" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">GHL Info</button>
+                        <button onclick="ppSwitchTab('documents')" id="pptab-documents" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Documents</button>
                     </div>
 
                     <!-- IDS PANEL -->
@@ -2016,6 +2022,16 @@ async function submitOnboarding() {
                     <!-- SUB-PARTNERS PANEL -->
                     <div id="pppanel-subpartners" style="display:none;">
                         <div id="pp-subpartners-list"><div style="text-align:center;color:#94a3b8;padding:20px;">Loading sub-partners...</div></div>
+                    </div>
+
+                    <!-- GHL INFO PANEL -->
+                    <div id="pppanel-ghlinfo" style="display:none;">
+                        <div id="pp-ghlinfo-content" style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading GHL data...</div>
+                    </div>
+
+                    <!-- DOCUMENTS PANEL -->
+                    <div id="pppanel-documents" style="display:none;">
+                        <div id="pp-documents-content" style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading documents...</div>
                     </div>
                 </div>`
         });
@@ -3015,7 +3031,7 @@ function pAPI(body) {
 
 // Tab switcher - scoped to Swal modal to avoid duplicate ID issues
 window.ppSwitchTab = function(tab) {
-    ['ids','scorecard','notes','tickets','subpartners'].forEach(function(t) {
+    ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents'].forEach(function(t) {
         var btn = document.getElementById('pptab-' + t);
         var panel = document.getElementById('pppanel-' + t);
         if (btn) {
@@ -3027,6 +3043,8 @@ window.ppSwitchTab = function(tab) {
     });
     if (tab === 'tickets') ppLoadPartnerTickets();
     if (tab === 'subpartners') ppLoadSubPartners();
+    if (tab === 'ghlinfo') ppLoadGHLInfo();
+    if (tab === 'documents') ppLoadDocuments();
 };
 
 window.ppLoadPartnerTickets = async function() {
@@ -3132,6 +3150,245 @@ window.ppLoadSubPartners = async function() {
     } catch (e) {
         el.innerHTML = '<p style="padding:20px;text-align:center;color:#ef4444;">Failed to load sub-partners.</p>';
     }
+};
+
+// ── GHL INFO TAB ──────────────────────────────────────────────────────────────
+window.ppLoadGHLInfo = async function() {
+    var el = document.getElementById('pp-ghlinfo-content');
+    if (!el) return;
+    var ctx = document.getElementById('pp-ctx');
+    var hlId = ctx ? ctx.dataset.hlId : '';
+    if (!hlId) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;">
+            <span class="material-icons" style="font-size:40px;opacity:0.3;display:block;margin-bottom:8px;">link_off</span>
+            <div style="font-weight:700;color:#475569;margin-bottom:4px;">No GHL Contact Linked</div>
+            <div style="font-size:12px;">Link a HighLevel contact to this partner via the onboarding wizard.</div>
+        </div>`;
+        return;
+    }
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;"><span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading from GHL...</div>';
+
+    try {
+        var res = await pAPI({ action: 'get_ghl_contact', hl_contact_id: hlId });
+        if (!res.success) { el.innerHTML = `<p style="padding:20px;text-align:center;color:#ef4444;">${res.message || 'Failed to load GHL data.'}</p>`; return; }
+
+        var c = res.contact;
+        var assigned = res.assignedUser;
+        var followers = res.followers || [];
+
+        var section = (title, icon, html) => `
+            <div style="margin-bottom:14px;">
+                <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;display:flex;align-items:center;gap:5px;">
+                    <span class="material-icons" style="font-size:13px;">${icon}</span>${title}
+                </div>
+                ${html}
+            </div>`;
+
+        var row = (label, value) => value ? `<div style="display:flex;gap:8px;margin-bottom:5px;font-size:13px;">
+            <span style="color:#94a3b8;min-width:110px;font-size:11px;font-weight:700;">${label}</span>
+            <span style="color:#334155;">${value}</span>
+        </div>` : '';
+
+        var chip = (text, bg, color) => `<span style="display:inline-block;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:700;background:${bg};color:${color};margin:2px;">${text}</span>`;
+
+        var userCard = (u) => `<div style="display:inline-flex;align-items:center;gap:6px;padding:5px 10px;background:#f0f9ff;border-radius:8px;border:1px solid #bae6fd;margin:2px;">
+            <span class="material-icons" style="font-size:15px;color:#0369a1;">person</span>
+            <div>
+                <div style="font-size:12px;font-weight:700;color:#002d5a;">${u.name}</div>
+                ${u.email ? `<div style="font-size:10px;color:#64748b;">${u.email}</div>` : ''}
+            </div>
+        </div>`;
+
+        var html = '<div style="max-height:420px;overflow-y:auto;padding:2px;">';
+
+        // Assigned user
+        html += section('Assigned To', 'person_pin', assigned
+            ? userCard(assigned)
+            : '<span style="color:#94a3b8;font-size:12px;">Not assigned</span>');
+
+        // Followers
+        html += section('Followers', 'group', followers.length
+            ? followers.map(f => userCard(f)).join('')
+            : '<span style="color:#94a3b8;font-size:12px;">No followers</span>');
+
+        // Contact & Profile
+        var addr = [c.address1, c.city, c.state, c.postalCode, c.country].filter(Boolean).join(', ');
+        var profileHtml = [
+            row('Address', addr || null),
+            row('Website', c.website ? `<a href="${c.website}" target="_blank" style="color:#0369a1;">${c.website}</a>` : null),
+            row('Source', c.source || null),
+            row('Timezone', c.timezone || null),
+            row('DND', c.dnd !== undefined ? (c.dnd ? '🔕 On' : '✅ Off') : null),
+            row('Created', c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : null),
+        ].filter(Boolean).join('');
+        if (profileHtml) html += section('Profile & Contact', 'info', profileHtml);
+
+        // Tags
+        if (c.tags && c.tags.length) {
+            html += section('Tags', 'label', c.tags.map(t => chip(t, '#f0fdf4', '#166534')).join(''));
+        }
+
+        // Custom fields
+        var customFields = (c.customField || c.customFields || []).filter(f => f.value !== null && f.value !== undefined && f.value !== '');
+        if (customFields.length) {
+            var cfHtml = customFields.map(f => row(f.fieldKey || f.id || 'Field', String(f.value))).join('');
+            html += section('Custom Fields', 'tune', cfHtml);
+        }
+
+        html += '</div>';
+        el.innerHTML = html;
+        el.style.display = 'block';
+    } catch (e) {
+        el.innerHTML = '<p style="padding:20px;text-align:center;color:#ef4444;">Failed to load GHL info. Please try again.</p>';
+    }
+};
+
+// ── DOCUMENTS TAB ─────────────────────────────────────────────────────────────
+window.ppLoadDocuments = async function() {
+    var el = document.getElementById('pp-documents-content');
+    if (!el) return;
+    var ctx = document.getElementById('pp-ctx');
+    var hlId = ctx ? ctx.dataset.hlId : '';
+    if (!hlId) {
+        el.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;">
+            <span class="material-icons" style="font-size:40px;opacity:0.3;display:block;margin-bottom:8px;">link_off</span>
+            <div style="font-weight:700;color:#475569;margin-bottom:4px;">No GHL Contact Linked</div>
+            <div style="font-size:12px;">Link a HighLevel contact to this partner via the onboarding wizard.</div>
+        </div>`;
+        return;
+    }
+    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;"><span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading documents...</div>';
+
+    try {
+        var res = await pAPI({ action: 'get_ghl_documents', hl_contact_id: hlId });
+        if (!res.success) { el.innerHTML = `<p style="padding:20px;text-align:center;color:#ef4444;">${res.message || 'Failed to load documents.'}</p>`; return; }
+
+        var docs = res.documents || [];
+        var fmtSize = bytes => {
+            if (!bytes) return '';
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        };
+        var fmtDocDate = s => s ? new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+        var extIcon = name => {
+            var ext = (name || '').split('.').pop().toLowerCase();
+            return ({ pdf:'picture_as_pdf', doc:'description', docx:'description', xls:'table_chart', xlsx:'table_chart',
+                      png:'image', jpg:'image', jpeg:'image', txt:'article', csv:'table_chart' })[ext] || 'insert_drive_file';
+        };
+
+        var html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e2e8f0;">
+            <div style="font-size:13px;font-weight:700;color:#334155;">${docs.length} document${docs.length !== 1 ? 's' : ''}</div>
+            <button id="pp-doc-upload-btn" onclick="ppUploadDocument()" style="padding:7px 14px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">
+                <span class="material-icons" style="font-size:15px;">upload</span>Upload Document
+            </button>
+        </div>`;
+
+        if (!docs.length) {
+            html += `<div style="text-align:center;padding:30px;color:#94a3b8;">
+                <span class="material-icons" style="font-size:36px;opacity:0.3;display:block;margin-bottom:8px;">folder_open</span>
+                <div style="font-weight:700;color:#475569;margin-bottom:4px;">No Documents Yet</div>
+                <div style="font-size:12px;">Upload your first document using the button above.</div>
+            </div>`;
+        } else {
+            html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;">';
+            docs.forEach(function(doc) {
+                var name = doc.name || doc.filename || doc.originalName || 'Unnamed File';
+                var url  = doc.url || doc.downloadUrl || doc.fileUrl || null;
+                var size = fmtSize(doc.fileSize || doc.size || 0);
+                var date = fmtDocDate(doc.createdAt || doc.created_at || doc.dateAdded);
+                var docId = doc.id || doc._id || '';
+                html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+                    <span class="material-icons" style="font-size:22px;color:#64748b;flex-shrink:0;">${extIcon(name)}</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;color:#002d5a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${name}">${name}</div>
+                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${[size, date].filter(Boolean).join(' · ')}</div>
+                    </div>
+                    <div style="display:flex;gap:6px;flex-shrink:0;">
+                        ${url ? `<a href="${url}" target="_blank" style="padding:5px 10px;background:#eff6ff;color:#0369a1;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">download</span>Download</a>` : ''}
+                        ${docId ? `<button onclick="ppDeleteDocument('${docId}')" style="padding:5px 10px;background:#fff1f2;color:#dc2626;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">delete</span>Delete</button>` : ''}
+                    </div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        el.innerHTML = html;
+        el.style.display = 'block';
+    } catch (e) {
+        el.innerHTML = '<p style="padding:20px;text-align:center;color:#ef4444;">Failed to load documents. Please try again.</p>';
+    }
+};
+
+window.ppDeleteDocument = async function(documentId) {
+    var ctx = document.getElementById('pp-ctx');
+    var hlId = ctx ? ctx.dataset.hlId : '';
+    if (!hlId || !documentId) return;
+
+    var confirm = await Swal.fire({
+        title: 'Delete Document?',
+        text: 'This will permanently delete the document from HighLevel.',
+        icon: 'warning', showCancelButton: true,
+        confirmButtonText: 'Yes, Delete', confirmButtonColor: '#dc2626',
+        cancelButtonText: 'Cancel'
+    });
+    if (!confirm.isConfirmed) return;
+
+    var res = await pAPI({ action: 'delete_ghl_document', hl_contact_id: hlId, document_id: documentId });
+    if (res.success) {
+        await ppLoadDocuments();
+    } else {
+        Swal.fire('Error', res.message || 'Failed to delete document.', 'error');
+    }
+};
+
+window.ppUploadDocument = function() {
+    var ctx = document.getElementById('pp-ctx');
+    var hlId = ctx ? ctx.dataset.hlId : '';
+    if (!hlId) return;
+
+    var input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt,.csv,.zip';
+    input.onchange = async function() {
+        if (!this.files || !this.files[0]) return;
+        var file = this.files[0];
+        var maxBytes = 3 * 1024 * 1024; // 3MB (becomes ~4MB as base64)
+        if (file.size > maxBytes) {
+            Swal.fire('File Too Large', 'Please upload files smaller than 3 MB.', 'warning');
+            return;
+        }
+
+        var btn = document.getElementById('pp-doc-upload-btn');
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:15px;animation:spin 1s linear infinite;">autorenew</span> Uploading...'; }
+
+        try {
+            var base64 = await new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function() { resolve(reader.result.split(',')[1]); };
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
+
+            var res = await fetch('/api/ghl-documents', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hl_contact_id: hlId, filename: file.name, mimetype: file.type, data: base64 })
+            });
+            var data = await res.json();
+
+            if (data.success) {
+                await ppLoadDocuments();
+            } else {
+                Swal.fire('Upload Failed', data.message || 'Failed to upload document.', 'error');
+                if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload Document'; }
+            }
+        } catch (e) {
+            Swal.fire('Upload Failed', 'An error occurred. Please try again.', 'error');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload Document'; }
+        }
+    };
+    input.click();
 };
 
 // Submit a note
