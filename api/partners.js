@@ -2254,17 +2254,35 @@ if (action === 'get_merchant_data_raw') {
         if (action === 'get_ghl_contact') {
             const { hl_contact_id } = body;
             if (!hl_contact_id) return res.status(400).json({ success: false, message: 'hl_contact_id required.' });
-            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+            const ghlApiKey      = (await getConfigValue('GHL_API_KEY'))      || process.env.GHL_API_KEY;
+            const ghlLocationId  = (await getConfigValue('GHL_LOCATION_ID'))  || process.env.GHL_LOCATION_ID;
             if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
             const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Accept': 'application/json' };
 
-            const cRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}`, { headers: ghlHeaders });
+            // Fetch contact + custom field definitions in parallel
+            const [cRes, cfRes] = await Promise.all([
+                fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}`, { headers: ghlHeaders }),
+                ghlLocationId
+                    ? fetch(`https://services.leadconnectorhq.com/custom-fields/?locationId=${ghlLocationId}&model=contact`, { headers: ghlHeaders })
+                    : Promise.resolve(null)
+            ]);
+
             if (!cRes.ok) {
                 const errText = await cRes.text();
                 return res.status(cRes.status).json({ success: false, message: `GHL error ${cRes.status}: ${errText.slice(0, 300)}` });
             }
             const cData = await cRes.json();
             const contact = cData.contact || cData;
+
+            // Build fieldId → friendly name map
+            const fieldNameMap = {};
+            if (cfRes && cfRes.ok) {
+                try {
+                    const cfData = await cfRes.json();
+                    const defs = cfData.customFields || cfData.custom_fields || [];
+                    defs.forEach(f => { if (f.id) fieldNameMap[f.id] = f.name || f.fieldKey || f.id; });
+                } catch { /* non-fatal */ }
+            }
 
             // Resolve assignedTo and followers to display names
             const userIdsToResolve = [...new Set([contact.assignedTo, ...(contact.followers || [])].filter(Boolean))];
@@ -2288,37 +2306,30 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({
                 success: true,
                 contact,
+                fieldNameMap,
                 assignedUser: contact.assignedTo ? { uid: contact.assignedTo, ...userMap[contact.assignedTo] } : null,
                 followers: (contact.followers || []).map(uid => ({ uid, ...(userMap[uid] || { name: 'Unknown', email: null }) }))
             });
         }
 
         // --- ACTION: GET GHL DOCUMENTS ---
+        // GHL's public API does not expose per-contact documents; return empty list with flag.
         if (action === 'get_ghl_documents') {
-            const { hl_contact_id } = body;
-            if (!hl_contact_id) return res.status(400).json({ success: false, message: 'hl_contact_id required.' });
-            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
-            if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
-            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Accept': 'application/json' };
-
-            const dRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/documents`, { headers: ghlHeaders });
-            if (!dRes.ok) {
-                const errText = await dRes.text();
-                return res.status(dRes.status).json({ success: false, message: `GHL error ${dRes.status}: ${errText.slice(0, 300)}` });
-            }
-            const dData = await dRes.json();
-            return res.status(200).json({ success: true, documents: dData.documents || dData.data || [] });
+            return res.status(200).json({ success: true, documents: [], apiUnavailable: true });
         }
 
-        // --- ACTION: DELETE GHL DOCUMENT ---
+        // --- ACTION: DELETE GHL MEDIA FILE ---
         if (action === 'delete_ghl_document') {
-            const { hl_contact_id, document_id } = body;
-            if (!hl_contact_id || !document_id) return res.status(400).json({ success: false, message: 'hl_contact_id and document_id required.' });
+            const { document_id } = body;
+            if (!document_id) return res.status(400).json({ success: false, message: 'document_id required.' });
             const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+            const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
             if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
             const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
 
-            const delRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/documents/${document_id}`, {
+            const params = new URLSearchParams({ id: document_id });
+            if (ghlLocationId) params.append('locationId', ghlLocationId);
+            const delRes = await fetch(`https://services.leadconnectorhq.com/medias/${document_id}?${params}`, {
                 method: 'DELETE', headers: ghlHeaders
             });
             if (!delRes.ok) {

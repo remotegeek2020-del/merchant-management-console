@@ -3231,8 +3231,22 @@ window.ppLoadGHLInfo = async function() {
         // Custom fields
         var customFields = (c.customField || c.customFields || []).filter(f => f.value !== null && f.value !== undefined && f.value !== '');
         if (customFields.length) {
-            var cfHtml = customFields.map(f => row(f.fieldKey || f.id || 'Field', String(f.value))).join('');
-            html += section('Custom Fields', 'tune', cfHtml);
+            var fieldNameMap = res.fieldNameMap || {};
+            var formatCfValue = function(val) {
+                if (val === null || val === undefined) return '';
+                if (Array.isArray(val)) return val.map(function(v) {
+                    if (v && typeof v === 'object') return v.name || v.label || v.value || Object.values(v).filter(function(x) { return typeof x !== 'object'; }).join(', ');
+                    return String(v);
+                }).filter(Boolean).join(', ');
+                if (typeof val === 'object') return val.name || val.label || val.value || Object.values(val).filter(function(v) { return typeof v !== 'object'; }).join(', ') || '';
+                return String(val);
+            };
+            var cfHtml = customFields.map(function(f) {
+                var label = fieldNameMap[f.id] || f.fieldKey || f.id || 'Field';
+                var value = formatCfValue(f.value);
+                return value ? row(label, value) : '';
+            }).filter(Boolean).join('');
+            if (cfHtml) html += section('Custom Fields', 'tune', cfHtml);
         }
 
         html += '</div>';
@@ -3244,7 +3258,7 @@ window.ppLoadGHLInfo = async function() {
 };
 
 // ── DOCUMENTS TAB ─────────────────────────────────────────────────────────────
-window.ppLoadDocuments = async function() {
+window.ppLoadDocuments = function() {
     var el = document.getElementById('pp-documents-content');
     if (!el) return;
     var ctx = document.getElementById('pp-ctx');
@@ -3257,88 +3271,45 @@ window.ppLoadDocuments = async function() {
         </div>`;
         return;
     }
-    el.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;"><span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading documents...</div>';
 
-    try {
-        var res = await pAPI({ action: 'get_ghl_documents', hl_contact_id: hlId });
-        if (!res.success) { el.innerHTML = `<p style="padding:20px;text-align:center;color:#ef4444;">${res.message || 'Failed to load documents.'}</p>`; return; }
-
-        var docs = res.documents || [];
-        var fmtSize = bytes => {
-            if (!bytes) return '';
-            if (bytes < 1024) return bytes + ' B';
-            if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-        };
-        var fmtDocDate = s => s ? new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
-        var extIcon = name => {
-            var ext = (name || '').split('.').pop().toLowerCase();
-            return ({ pdf:'picture_as_pdf', doc:'description', docx:'description', xls:'table_chart', xlsx:'table_chart',
-                      png:'image', jpg:'image', jpeg:'image', txt:'article', csv:'table_chart' })[ext] || 'insert_drive_file';
-        };
-
-        var html = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e2e8f0;">
-            <div style="font-size:13px;font-weight:700;color:#334155;">${docs.length} document${docs.length !== 1 ? 's' : ''}</div>
+    el.innerHTML = `<div>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e2e8f0;">
+            <div style="font-size:13px;font-weight:700;color:#334155;">GHL Media Files</div>
             <button id="pp-doc-upload-btn" onclick="ppUploadDocument()" style="padding:7px 14px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">
-                <span class="material-icons" style="font-size:15px;">upload</span>Upload Document
+                <span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL
             </button>
-        </div>`;
-
-        if (!docs.length) {
-            html += `<div style="text-align:center;padding:30px;color:#94a3b8;">
-                <span class="material-icons" style="font-size:36px;opacity:0.3;display:block;margin-bottom:8px;">folder_open</span>
-                <div style="font-weight:700;color:#475569;margin-bottom:4px;">No Documents Yet</div>
-                <div style="font-size:12px;">Upload your first document using the button above.</div>
-            </div>`;
-        } else {
-            html += '<div style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;">';
-            docs.forEach(function(doc) {
-                var name = doc.name || doc.filename || doc.originalName || 'Unnamed File';
-                var url  = doc.url || doc.downloadUrl || doc.fileUrl || null;
-                var size = fmtSize(doc.fileSize || doc.size || 0);
-                var date = fmtDocDate(doc.createdAt || doc.created_at || doc.dateAdded);
-                var docId = doc.id || doc._id || '';
-                html += `<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
-                    <span class="material-icons" style="font-size:22px;color:#64748b;flex-shrink:0;">${extIcon(name)}</span>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:13px;font-weight:700;color:#002d5a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${name}">${name}</div>
-                        <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${[size, date].filter(Boolean).join(' · ')}</div>
-                    </div>
-                    <div style="display:flex;gap:6px;flex-shrink:0;">
-                        ${url ? `<a href="${url}" target="_blank" style="padding:5px 10px;background:#eff6ff;color:#0369a1;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">download</span>Download</a>` : ''}
-                        ${docId ? `<button onclick="ppDeleteDocument('${docId}')" style="padding:5px 10px;background:#fff1f2;color:#dc2626;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">delete</span>Delete</button>` : ''}
-                    </div>
-                </div>`;
-            });
-            html += '</div>';
-        }
-
-        el.innerHTML = html;
-        el.style.display = 'block';
-    } catch (e) {
-        el.innerHTML = '<p style="padding:20px;text-align:center;color:#ef4444;">Failed to load documents. Please try again.</p>';
-    }
+        </div>
+        <div id="pp-doc-list">
+            <div style="padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;display:flex;gap:10px;align-items:flex-start;">
+                <span class="material-icons" style="font-size:20px;color:#0369a1;flex-shrink:0;margin-top:1px;">info</span>
+                <div style="font-size:12px;color:#475569;line-height:1.5;">
+                    <span style="font-weight:700;color:#0c4a6e;display:block;margin-bottom:3px;">GHL API Note</span>
+                    HighLevel's public API does not expose per-contact documents. Files uploaded here are saved to your GHL media library. To view all documents for this contact, open their profile in HighLevel.
+                </div>
+            </div>
+        </div>
+    </div>`;
+    el.style.display = 'block';
 };
 
 window.ppDeleteDocument = async function(documentId) {
-    var ctx = document.getElementById('pp-ctx');
-    var hlId = ctx ? ctx.dataset.hlId : '';
-    if (!hlId || !documentId) return;
+    if (!documentId) return;
 
-    var confirm = await Swal.fire({
-        title: 'Delete Document?',
-        text: 'This will permanently delete the document from HighLevel.',
+    var confirmed = await Swal.fire({
+        title: 'Delete from GHL?',
+        text: 'This will permanently delete the file from your GHL media library.',
         icon: 'warning', showCancelButton: true,
         confirmButtonText: 'Yes, Delete', confirmButtonColor: '#dc2626',
         cancelButtonText: 'Cancel'
     });
-    if (!confirm.isConfirmed) return;
+    if (!confirmed.isConfirmed) return;
 
-    var res = await pAPI({ action: 'delete_ghl_document', hl_contact_id: hlId, document_id: documentId });
+    var res = await pAPI({ action: 'delete_ghl_document', document_id: documentId });
     if (res.success) {
-        await ppLoadDocuments();
+        var row = document.getElementById('pp-doc-' + documentId);
+        if (row) row.remove();
     } else {
-        Swal.fire('Error', res.message || 'Failed to delete document.', 'error');
+        Swal.fire('Error', res.message || 'Failed to delete file from GHL.', 'error');
     }
 };
 
@@ -3349,13 +3320,13 @@ window.ppUploadDocument = function() {
 
     var input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt,.csv,.zip';
+    input.accept = '.pdf,.doc,.docx,.xls,.xlsx,.png,.jpg,.jpeg,.txt,.csv,.zip,.rar';
     input.onchange = async function() {
         if (!this.files || !this.files[0]) return;
         var file = this.files[0];
-        var maxBytes = 3 * 1024 * 1024; // 3MB (becomes ~4MB as base64)
+        var maxBytes = 10 * 1024 * 1024;
         if (file.size > maxBytes) {
-            Swal.fire('File Too Large', 'Please upload files smaller than 3 MB.', 'warning');
+            Swal.fire('File Too Large', 'Please upload files smaller than 10 MB.', 'warning');
             return;
         }
 
@@ -3377,15 +3348,35 @@ window.ppUploadDocument = function() {
             });
             var data = await res.json();
 
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL'; }
+
             if (data.success) {
-                await ppLoadDocuments();
+                var doc = data.document || {};
+                var fileUrl = doc.url || doc.fileUrl || doc.downloadUrl || null;
+                var ext = (file.name || '').split('.').pop().toLowerCase();
+                var extIconMap = { pdf:'picture_as_pdf', doc:'description', docx:'description', xls:'table_chart', xlsx:'table_chart',
+                    png:'image', jpg:'image', jpeg:'image', txt:'article', csv:'table_chart' };
+                var iconName = extIconMap[ext] || 'insert_drive_file';
+                var docId = doc.id || doc._id || '';
+                var fileRow = `<div id="pp-doc-${docId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:6px;">
+                    <span class="material-icons" style="font-size:22px;color:#16a34a;flex-shrink:0;">${iconName}</span>
+                    <div style="flex:1;min-width:0;">
+                        <div style="font-size:13px;font-weight:700;color:#002d5a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${file.name}">${file.name}</div>
+                        <div style="font-size:11px;color:#16a34a;margin-top:2px;">Uploaded to GHL ✓</div>
+                    </div>
+                    <div style="display:flex;gap:5px;flex-shrink:0;">
+                        ${fileUrl ? `<a href="${fileUrl}" target="_blank" style="padding:5px 10px;background:#eff6ff;color:#0369a1;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">open_in_new</span>View</a>` : ''}
+                        ${docId ? `<button onclick="ppDeleteDocument('${docId}')" style="padding:5px 10px;background:#fff1f2;color:#dc2626;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">delete</span>Del</button>` : ''}
+                    </div>
+                </div>`;
+                var docList = document.getElementById('pp-doc-list');
+                if (docList) docList.insertAdjacentHTML('afterbegin', fileRow);
             } else {
-                Swal.fire('Upload Failed', data.message || 'Failed to upload document.', 'error');
-                if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload Document'; }
+                Swal.fire('Upload Failed', data.message || 'Failed to upload to GHL.', 'error');
             }
         } catch (e) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL'; }
             Swal.fire('Upload Failed', 'An error occurred. Please try again.', 'error');
-            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload Document'; }
         }
     };
     input.click();
