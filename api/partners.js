@@ -2314,59 +2314,63 @@ if (action === 'get_merchant_data_raw') {
         }
 
         // --- ACTION: LIST PARTNER DOCUMENTS ---
-        if (action === 'list_partner_documents') {
-            const { person_id } = body;
-            if (!person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
-            const { data, error } = await supabase
-                .from('partner_documents')
-                .select('id, filename, file_url, file_size, uploaded_at, uploaded_by')
-                .eq('partner_id', person_id)
-                .order('uploaded_at', { ascending: false });
-            if (error) return res.status(500).json({ success: false, message: error.message });
-            return res.status(200).json({ success: true, documents: data || [] });
+        // --- ACTION: LIST DOCUMENT NOTES (from GHL contact notes) ---
+        if (action === 'list_document_notes') {
+            const { hl_contact_id } = body;
+            if (!hl_contact_id) return res.status(200).json({ success: true, documents: [] });
+            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+            if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
+            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
+            const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`, { headers: ghlHeaders });
+            if (!ghlRes.ok) return res.status(200).json({ success: true, documents: [] });
+            const ghlData = await ghlRes.json();
+            const notes = ghlData.notes || [];
+            const documents = notes
+                .filter(n => (n.body || '').startsWith('[DOC]'))
+                .map(n => {
+                    const lines = (n.body || '').split('\n');
+                    const filename = lines[0].replace('[DOC]', '').trim();
+                    const file_url = lines[1]?.trim() || null;
+                    return { id: n.id, filename, file_url, date_added: n.dateAdded };
+                });
+            return res.status(200).json({ success: true, documents });
         }
 
-        // --- ACTION: SAVE PARTNER DOCUMENT METADATA ---
-        if (action === 'save_partner_document') {
-            const { person_id, filename, file_url, file_size } = body;
-            if (!person_id || !filename) return res.status(400).json({ success: false, message: 'person_id and filename required.' });
-            const actor = await resolveActor();
-            const { data, error } = await supabase
-                .from('partner_documents')
-                .insert({ partner_id: person_id, filename, file_url: file_url || null, file_size: file_size || null, uploaded_by: actor.name || actor.email })
-                .select('id')
-                .single();
-            if (error) return res.status(500).json({ success: false, message: error.message });
-            return res.status(200).json({ success: true, id: data.id });
+        // --- ACTION: CREATE DOCUMENT NOTE (GHL) ---
+        if (action === 'create_document_note') {
+            const { hl_contact_id, filename, file_url } = body;
+            if (!hl_contact_id || !filename) return res.status(400).json({ success: false, message: 'hl_contact_id and filename required.' });
+            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+            if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
+            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28', 'Content-Type': 'application/json' };
+            const noteBody = file_url ? `[DOC] ${filename}\n${file_url}` : `[DOC] ${filename}`;
+            const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes`, {
+                method: 'POST', headers: ghlHeaders,
+                body: JSON.stringify({ userId: session.userid, body: noteBody })
+            });
+            if (!ghlRes.ok) {
+                const errText = await ghlRes.text();
+                return res.status(ghlRes.status).json({ success: false, message: `GHL error: ${errText.slice(0, 300)}` });
+            }
+            const ghlData = await ghlRes.json();
+            return res.status(200).json({ success: true, note_id: ghlData.note?.id });
         }
 
-        // --- ACTION: UPDATE PARTNER DOCUMENT URL (after GHL upload succeeds) ---
-        if (action === 'update_partner_document_url') {
-            const { document_id, file_url } = body;
-            if (!document_id) return res.status(400).json({ success: false, message: 'document_id required.' });
-            const { error } = await supabase
-                .from('partner_documents')
-                .update({ file_url: file_url || null })
-                .eq('id', document_id);
-            if (error) return res.status(500).json({ success: false, message: error.message });
+        // --- ACTION: DELETE DOCUMENT NOTE (GHL) ---
+        if (action === 'delete_document_note') {
+            const { hl_contact_id, note_id } = body;
+            if (!hl_contact_id || !note_id) return res.status(400).json({ success: false, message: 'hl_contact_id and note_id required.' });
+            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
+            if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
+            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
+            const ghlRes = await fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}/notes/${note_id}`, {
+                method: 'DELETE', headers: ghlHeaders
+            });
+            if (!ghlRes.ok && ghlRes.status !== 404) {
+                const errText = await ghlRes.text();
+                return res.status(ghlRes.status).json({ success: false, message: `GHL error: ${errText.slice(0, 300)}` });
+            }
             return res.status(200).json({ success: true });
-        }
-
-        // --- ACTION: DELETE PARTNER DOCUMENT ---
-        if (action === 'delete_partner_document') {
-            const { document_id } = body;
-            if (!document_id) return res.status(400).json({ success: false, message: 'document_id required.' });
-            const { error } = await supabase
-                .from('partner_documents')
-                .delete()
-                .eq('id', document_id);
-            if (error) return res.status(500).json({ success: false, message: error.message });
-            return res.status(200).json({ success: true });
-        }
-
-        // --- ACTION: GET GHL DOCUMENTS (legacy — superseded by list_partner_documents) ---
-        if (action === 'get_ghl_documents') {
-            return res.status(200).json({ success: true, documents: [], apiUnavailable: true });
         }
 
         // --- ACTION: LIST PARTNER HL CONTACT IDs (for Secret Dungeon manager) ---
@@ -2423,27 +2427,6 @@ if (action === 'get_merchant_data_raw') {
                 details: JSON.stringify({ new_hl_contact_id: trimmed || null })
             });
 
-            return res.status(200).json({ success: true });
-        }
-
-        // --- ACTION: DELETE GHL MEDIA FILE ---
-        if (action === 'delete_ghl_document') {
-            const { document_id } = body;
-            if (!document_id) return res.status(400).json({ success: false, message: 'document_id required.' });
-            const ghlApiKey = (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY;
-            const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
-            if (!ghlApiKey) return res.status(500).json({ success: false, message: 'GHL not configured.' });
-            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
-
-            const params = new URLSearchParams({ id: document_id });
-            if (ghlLocationId) params.append('locationId', ghlLocationId);
-            const delRes = await fetch(`https://services.leadconnectorhq.com/medias/${document_id}?${params}`, {
-                method: 'DELETE', headers: ghlHeaders
-            });
-            if (!delRes.ok) {
-                const errText = await delRes.text();
-                return res.status(delRes.status).json({ success: false, message: `GHL error ${delRes.status}: ${errText.slice(0, 300)}` });
-            }
             return res.status(200).json({ success: true });
         }
 
