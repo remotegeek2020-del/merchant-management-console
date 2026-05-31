@@ -2263,7 +2263,7 @@ if (action === 'get_merchant_data_raw') {
             const [cRes, cfRes] = await Promise.all([
                 fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}`, { headers: ghlHeaders }),
                 ghlLocationId
-                    ? fetch(`https://services.leadconnectorhq.com/custom-fields/?locationId=${ghlLocationId}&model=contact`, { headers: ghlHeaders })
+                    ? fetch(`https://services.leadconnectorhq.com/locations/${ghlLocationId}/customFields`, { headers: ghlHeaders })
                     : Promise.resolve(null)
             ]);
 
@@ -2307,6 +2307,7 @@ if (action === 'get_merchant_data_raw') {
                 success: true,
                 contact,
                 fieldNameMap,
+                ghlLocationId: ghlLocationId || null,
                 assignedUser: contact.assignedTo ? { uid: contact.assignedTo, ...userMap[contact.assignedTo] } : null,
                 followers: (contact.followers || []).map(uid => ({ uid, ...(userMap[uid] || { name: 'Unknown', email: null }) }))
             });

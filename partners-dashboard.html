@@ -3172,6 +3172,9 @@ window.ppLoadGHLInfo = async function() {
         var res = await pAPI({ action: 'get_ghl_contact', hl_contact_id: hlId });
         if (!res.success) { el.innerHTML = `<p style="padding:20px;text-align:center;color:#ef4444;">${res.message || 'Failed to load GHL data.'}</p>`; return; }
 
+        // Store location ID so the Documents tab can build the GHL link
+        if (ctx && res.ghlLocationId) ctx.dataset.ghlLocationId = res.ghlLocationId;
+
         var c = res.contact;
         var assigned = res.assignedUser;
         var followers = res.followers || [];
@@ -3258,7 +3261,7 @@ window.ppLoadGHLInfo = async function() {
 };
 
 // ── DOCUMENTS TAB ─────────────────────────────────────────────────────────────
-window.ppLoadDocuments = function() {
+window.ppLoadDocuments = async function() {
     var el = document.getElementById('pp-documents-content');
     if (!el) return;
     var ctx = document.getElementById('pp-ctx');
@@ -3272,6 +3275,29 @@ window.ppLoadDocuments = function() {
         return;
     }
 
+    var locationId = ctx ? ctx.dataset.ghlLocationId : '';
+
+    // If location ID not cached yet, fetch it now (GHL Info tab may not have been opened)
+    if (!locationId) {
+        try {
+            var cfgRes = await pAPI({ action: 'get_ghl_contact', hl_contact_id: hlId });
+            if (cfgRes.success && cfgRes.ghlLocationId) {
+                locationId = cfgRes.ghlLocationId;
+                if (ctx) ctx.dataset.ghlLocationId = locationId;
+            }
+        } catch (e) { /* non-fatal */ }
+    }
+
+    var ghlContactUrl = (locationId && hlId)
+        ? `https://app.gohighlevel.com/v2/location/${locationId}/contacts/detail/${hlId}`
+        : null;
+
+    var ghlLink = ghlContactUrl
+        ? `<a href="${ghlContactUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:6px 12px;background:#004990;color:white;border-radius:7px;font-size:12px;font-weight:700;text-decoration:none;">
+               <span class="material-icons" style="font-size:14px;">open_in_new</span>View Contact in GHL
+           </a>`
+        : '';
+
     el.innerHTML = `<div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e2e8f0;">
             <div style="font-size:13px;font-weight:700;color:#334155;">GHL Media Files</div>
@@ -3280,12 +3306,15 @@ window.ppLoadDocuments = function() {
             </button>
         </div>
         <div id="pp-doc-list">
-            <div style="padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;display:flex;gap:10px;align-items:flex-start;">
-                <span class="material-icons" style="font-size:20px;color:#0369a1;flex-shrink:0;margin-top:1px;">info</span>
-                <div style="font-size:12px;color:#475569;line-height:1.5;">
-                    <span style="font-weight:700;color:#0c4a6e;display:block;margin-bottom:3px;">GHL API Note</span>
-                    HighLevel's public API does not expose per-contact documents. Files uploaded here are saved to your GHL media library. To view all documents for this contact, open their profile in HighLevel.
+            <div style="padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;">
+                <div style="display:flex;gap:10px;align-items:flex-start;">
+                    <span class="material-icons" style="font-size:20px;color:#0369a1;flex-shrink:0;margin-top:1px;">info</span>
+                    <div style="font-size:12px;color:#475569;line-height:1.5;">
+                        <span style="font-weight:700;color:#0c4a6e;display:block;margin-bottom:3px;">GHL API Note</span>
+                        HighLevel's public API does not expose per-contact documents. Files uploaded here are saved to your GHL media library. To view all documents for this contact, use the link below.
+                    </div>
                 </div>
+                ${ghlLink}
             </div>
         </div>
     </div>`;
