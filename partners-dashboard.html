@@ -3353,9 +3353,9 @@ window.ppUploadDocument = function() {
     input.onchange = async function() {
         if (!this.files || !this.files[0]) return;
         var file = this.files[0];
-        var maxBytes = 15 * 1024 * 1024;
+        var maxBytes = 25 * 1024 * 1024;
         if (file.size > maxBytes) {
-            Swal.fire('File Too Large', 'Please upload files smaller than 15 MB.', 'warning');
+            Swal.fire('File Too Large', 'Please upload files smaller than 25 MB.', 'warning');
             return;
         }
 
@@ -3363,17 +3363,18 @@ window.ppUploadDocument = function() {
         if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:15px;animation:spin 1s linear infinite;">autorenew</span> Uploading...'; }
 
         try {
-            var base64 = await new Promise(function(resolve, reject) {
-                var reader = new FileReader();
-                reader.onload = function() { resolve(reader.result.split(',')[1]); };
-                reader.onerror = reject;
-                reader.readAsDataURL(file);
-            });
+            var token = localStorage.getItem('pp_session_token') || '';
+            var formData = new FormData();
+            formData.append('file', file, file.name);
 
-            var res = await fetch('/api/ghl-documents', {
+            // Send directly to Supabase Edge Function — bypasses Vercel's 4.5MB body limit
+            var res = await fetch('https://zuzwljjrppyrzngmhdru.supabase.co/functions/v1/ghl-media-upload', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ hl_contact_id: hlId, filename: file.name, mimetype: file.type, data: base64 })
+                headers: {
+                    'Authorization': 'Bearer ' + token,
+                    'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow'
+                },
+                body: formData
             });
 
             var data;
