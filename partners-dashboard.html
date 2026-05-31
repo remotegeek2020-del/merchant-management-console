@@ -3353,9 +3353,9 @@ window.ppUploadDocument = function() {
     input.onchange = async function() {
         if (!this.files || !this.files[0]) return;
         var file = this.files[0];
-        var maxBytes = 10 * 1024 * 1024;
+        var maxBytes = 15 * 1024 * 1024;
         if (file.size > maxBytes) {
-            Swal.fire('File Too Large', 'Please upload files smaller than 10 MB.', 'warning');
+            Swal.fire('File Too Large', 'Please upload files smaller than 15 MB.', 'warning');
             return;
         }
 
@@ -3375,7 +3375,10 @@ window.ppUploadDocument = function() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ hl_contact_id: hlId, filename: file.name, mimetype: file.type, data: base64 })
             });
-            var data = await res.json();
+
+            var data;
+            try { data = await res.json(); }
+            catch (_) { data = { success: false, message: `Server error (HTTP ${res.status}). Please try again.` }; }
 
             if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL'; }
 
@@ -3387,6 +3390,22 @@ window.ppUploadDocument = function() {
                     png:'image', jpg:'image', jpeg:'image', txt:'article', csv:'table_chart' };
                 var iconName = extIconMap[ext] || 'insert_drive_file';
                 var docId = doc.id || doc._id || '';
+
+                // Success modal with link to the uploaded file
+                await Swal.fire({
+                    title: 'Uploaded!',
+                    html: `<div style="font-size:14px;color:#334155;">
+                        <b>${file.name}</b> was saved to GHL.
+                        ${fileUrl ? `<br><br><a href="${fileUrl}" target="_blank" rel="noopener noreferrer"
+                            style="display:inline-flex;align-items:center;gap:5px;padding:8px 16px;background:#004990;color:white;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;margin-top:4px;">
+                            <span class="material-icons" style="font-size:15px;">open_in_new</span>View Uploaded File
+                        </a>` : ''}
+                    </div>`,
+                    icon: 'success',
+                    confirmButtonText: 'Done',
+                    confirmButtonColor: '#004990'
+                });
+
                 var fileRow = `<div id="pp-doc-${docId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:6px;">
                     <span class="material-icons" style="font-size:22px;color:#16a34a;flex-shrink:0;">${iconName}</span>
                     <div style="flex:1;min-width:0;">
@@ -3405,7 +3424,7 @@ window.ppUploadDocument = function() {
             }
         } catch (e) {
             if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL'; }
-            Swal.fire('Upload Failed', 'An error occurred. Please try again.', 'error');
+            Swal.fire('Upload Failed', e.message || 'An error occurred. Please try again.', 'error');
         }
     };
     input.click();

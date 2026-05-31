@@ -1,7 +1,7 @@
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 
-export const config = { api: { bodyParser: { sizeLimit: '10mb' } } };
+export const config = { api: { bodyParser: { sizeLimit: '25mb' } } };
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
