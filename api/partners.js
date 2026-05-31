@@ -2313,8 +2313,58 @@ if (action === 'get_merchant_data_raw') {
             });
         }
 
-        // --- ACTION: GET GHL DOCUMENTS ---
-        // GHL's public API does not expose per-contact documents; return empty list with flag.
+        // --- ACTION: LIST PARTNER DOCUMENTS ---
+        if (action === 'list_partner_documents') {
+            const { person_id } = body;
+            if (!person_id) return res.status(400).json({ success: false, message: 'person_id required.' });
+            const { data, error } = await supabase
+                .from('partner_documents')
+                .select('id, filename, file_url, file_size, uploaded_at, uploaded_by')
+                .eq('partner_id', person_id)
+                .order('uploaded_at', { ascending: false });
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, documents: data || [] });
+        }
+
+        // --- ACTION: SAVE PARTNER DOCUMENT METADATA ---
+        if (action === 'save_partner_document') {
+            const { person_id, filename, file_url, file_size } = body;
+            if (!person_id || !filename) return res.status(400).json({ success: false, message: 'person_id and filename required.' });
+            const actor = await resolveActor();
+            const { data, error } = await supabase
+                .from('partner_documents')
+                .insert({ partner_id: person_id, filename, file_url: file_url || null, file_size: file_size || null, uploaded_by: actor.name || actor.email })
+                .select('id')
+                .single();
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, id: data.id });
+        }
+
+        // --- ACTION: UPDATE PARTNER DOCUMENT URL (after GHL upload succeeds) ---
+        if (action === 'update_partner_document_url') {
+            const { document_id, file_url } = body;
+            if (!document_id) return res.status(400).json({ success: false, message: 'document_id required.' });
+            const { error } = await supabase
+                .from('partner_documents')
+                .update({ file_url: file_url || null })
+                .eq('id', document_id);
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: DELETE PARTNER DOCUMENT ---
+        if (action === 'delete_partner_document') {
+            const { document_id } = body;
+            if (!document_id) return res.status(400).json({ success: false, message: 'document_id required.' });
+            const { error } = await supabase
+                .from('partner_documents')
+                .delete()
+                .eq('id', document_id);
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true });
+        }
+
+        // --- ACTION: GET GHL DOCUMENTS (legacy — superseded by list_partner_documents) ---
         if (action === 'get_ghl_documents') {
             return res.status(200).json({ success: true, documents: [], apiUnavailable: true });
         }

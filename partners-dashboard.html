@@ -3261,91 +3261,85 @@ window.ppLoadGHLInfo = async function() {
 };
 
 // ── DOCUMENTS TAB ─────────────────────────────────────────────────────────────
+var _ppDocExtIcon = function(name) {
+    var ext = (name || '').split('.').pop().toLowerCase();
+    return ({ pdf:'picture_as_pdf', doc:'description', docx:'description', xls:'table_chart',
+              xlsx:'table_chart', png:'image', jpg:'image', jpeg:'image', txt:'article', csv:'table_chart' })[ext] || 'insert_drive_file';
+};
+
 window.ppLoadDocuments = async function() {
     var el = document.getElementById('pp-documents-content');
     if (!el) return;
     var ctx = document.getElementById('pp-ctx');
-    var hlId = ctx ? ctx.dataset.hlId : '';
-    if (!hlId) {
-        el.innerHTML = `<div style="text-align:center;padding:40px;color:#94a3b8;">
-            <span class="material-icons" style="font-size:40px;opacity:0.3;display:block;margin-bottom:8px;">link_off</span>
-            <div style="font-weight:700;color:#475569;margin-bottom:4px;">No GHL Contact Linked</div>
-            <div style="font-size:12px;">Link a HighLevel contact to this partner via the onboarding wizard.</div>
-        </div>`;
-        return;
-    }
+    var personId = ctx ? ctx.dataset.personId : '';
+    if (!personId) { el.innerHTML = '<p style="padding:20px;color:#94a3b8;text-align:center;">No partner context.</p>'; return; }
 
-    var locationId = ctx ? ctx.dataset.ghlLocationId : '';
+    el.innerHTML = '<div style="text-align:center;padding:30px;color:#94a3b8;"><span class="material-icons" style="font-size:24px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading…</div>';
 
-    // If location ID not cached yet, fetch it now (GHL Info tab may not have been opened)
-    if (!locationId) {
-        try {
-            var cfgRes = await pAPI({ action: 'get_ghl_contact', hl_contact_id: hlId });
-            if (cfgRes.success && cfgRes.ghlLocationId) {
-                locationId = cfgRes.ghlLocationId;
-                if (ctx) ctx.dataset.ghlLocationId = locationId;
-            }
-        } catch (e) { /* non-fatal */ }
-    }
+    var res = await pAPI({ action: 'list_partner_documents', person_id: personId });
+    if (!res.success) { el.innerHTML = `<p style="padding:20px;text-align:center;color:#ef4444;">${res.message || 'Failed to load documents.'}</p>`; return; }
 
-    var ghlContactUrl = (locationId && hlId)
-        ? `https://app.mypayprotec.com/v2/location/${locationId}/contacts/detail/${hlId}`
-        : null;
+    var docs = res.documents || [];
+    var fmtDate = function(s) { return s ? new Date(s).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : ''; };
 
-    var ghlLink = ghlContactUrl
-        ? `<a href="${ghlContactUrl}" target="_blank" style="display:inline-flex;align-items:center;gap:4px;margin-top:8px;padding:6px 12px;background:#004990;color:white;border-radius:7px;font-size:12px;font-weight:700;text-decoration:none;">
-               <span class="material-icons" style="font-size:14px;">open_in_new</span>View Contact in GHL
-           </a>`
-        : '';
-
-    el.innerHTML = `<div>
+    var html = `<div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid #e2e8f0;">
-            <div style="font-size:13px;font-weight:700;color:#334155;">GHL Media Files</div>
+            <div style="font-size:13px;font-weight:700;color:#334155;">${docs.length} document${docs.length !== 1 ? 's' : ''}</div>
             <button id="pp-doc-upload-btn" onclick="ppUploadDocument()" style="padding:7px 14px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:5px;">
-                <span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL
+                <span class="material-icons" style="font-size:15px;">upload</span>Add Document
             </button>
         </div>
-        <div id="pp-doc-list">
-            <div style="padding:16px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:10px;">
-                <div style="display:flex;gap:10px;align-items:flex-start;">
-                    <span class="material-icons" style="font-size:20px;color:#0369a1;flex-shrink:0;margin-top:1px;">info</span>
-                    <div style="font-size:12px;color:#475569;line-height:1.5;">
-                        <span style="font-weight:700;color:#0c4a6e;display:block;margin-bottom:3px;">GHL API Note</span>
-                        HighLevel's public API does not expose per-contact documents. Files uploaded here are saved to your GHL media library. To view all documents for this contact, use the link below.
-                    </div>
+        <div id="pp-doc-list" style="display:flex;flex-direction:column;gap:6px;max-height:360px;overflow-y:auto;">`;
+
+    if (!docs.length) {
+        html += `<div style="text-align:center;padding:30px;color:#94a3b8;">
+            <span class="material-icons" style="font-size:36px;opacity:0.3;display:block;margin-bottom:8px;">folder_open</span>
+            <div style="font-weight:700;color:#475569;margin-bottom:4px;">No Documents Yet</div>
+            <div style="font-size:12px;">Click Add Document to track documents for this partner.</div>
+        </div>`;
+    } else {
+        docs.forEach(function(doc) {
+            var name = doc.filename || 'Unnamed';
+            html += `<div id="pp-doc-${doc.id}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+                <span class="material-icons" style="font-size:22px;color:#64748b;flex-shrink:0;">${_ppDocExtIcon(name)}</span>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:13px;font-weight:700;color:#002d5a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${name}">${name}</div>
+                    <div style="font-size:11px;color:#94a3b8;margin-top:2px;">${[doc.uploaded_by, fmtDate(doc.uploaded_at)].filter(Boolean).join(' · ')}</div>
                 </div>
-                ${ghlLink}
-            </div>
-        </div>
-    </div>`;
+                <div style="display:flex;gap:5px;flex-shrink:0;">
+                    ${doc.file_url ? `<a href="${doc.file_url}" target="_blank" style="padding:5px 10px;background:#eff6ff;color:#0369a1;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">open_in_new</span>View</a>` : ''}
+                    <button onclick="ppDeleteDocument('${doc.id}')" style="padding:5px 10px;background:#fff1f2;color:#dc2626;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">delete</span>Del</button>
+                </div>
+            </div>`;
+        });
+    }
+
+    html += '</div></div>';
+    el.innerHTML = html;
     el.style.display = 'block';
 };
 
 window.ppDeleteDocument = async function(documentId) {
     if (!documentId) return;
-
     var confirmed = await Swal.fire({
-        title: 'Delete from GHL?',
-        text: 'This will permanently delete the file from your GHL media library.',
+        title: 'Remove document?', text: 'This removes the record from the portal.',
         icon: 'warning', showCancelButton: true,
-        confirmButtonText: 'Yes, Delete', confirmButtonColor: '#dc2626',
-        cancelButtonText: 'Cancel'
+        confirmButtonText: 'Remove', confirmButtonColor: '#dc2626', cancelButtonText: 'Cancel'
     });
     if (!confirmed.isConfirmed) return;
-
-    var res = await pAPI({ action: 'delete_ghl_document', document_id: documentId });
+    var res = await pAPI({ action: 'delete_partner_document', document_id: documentId });
     if (res.success) {
         var row = document.getElementById('pp-doc-' + documentId);
         if (row) row.remove();
     } else {
-        Swal.fire('Error', res.message || 'Failed to delete file from GHL.', 'error');
+        Swal.fire('Error', res.message || 'Failed to remove document.', 'error');
     }
 };
 
 window.ppUploadDocument = function() {
     var ctx = document.getElementById('pp-ctx');
-    var hlId = ctx ? ctx.dataset.hlId : '';
-    if (!hlId) return;
+    var personId = ctx ? ctx.dataset.personId : '';
+    if (!personId) return;
 
     var input = document.createElement('input');
     input.type = 'file';
@@ -3353,80 +3347,54 @@ window.ppUploadDocument = function() {
     input.onchange = async function() {
         if (!this.files || !this.files[0]) return;
         var file = this.files[0];
-        var maxBytes = 25 * 1024 * 1024;
-        if (file.size > maxBytes) {
+        if (file.size > 25 * 1024 * 1024) {
             Swal.fire('File Too Large', 'Please upload files smaller than 25 MB.', 'warning');
             return;
         }
 
         var btn = document.getElementById('pp-doc-upload-btn');
-        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:15px;animation:spin 1s linear infinite;">autorenew</span> Uploading...'; }
+        if (btn) { btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="font-size:15px;animation:spin 1s linear infinite;">autorenew</span> Saving…'; }
 
-        try {
-            var token = localStorage.getItem('pp_session_token') || '';
-            var formData = new FormData();
-            formData.append('file', file, file.name);
-
-            // Send directly to Supabase Edge Function — bypasses Vercel's 4.5MB body limit
-            var res = await fetch('https://zuzwljjrppyrzngmhdru.supabase.co/functions/v1/ghl-media-upload', {
-                method: 'POST',
-                headers: {
-                    'Authorization': 'Bearer ' + token,
-                    'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow'
-                },
-                body: formData
-            });
-
-            var data;
-            try { data = await res.json(); }
-            catch (_) { data = { success: false, message: `Server error (HTTP ${res.status}). Please try again.` }; }
-
-            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL'; }
-
-            if (data.success) {
-                var doc = data.document || {};
-                var fileUrl = doc.url || doc.fileUrl || doc.downloadUrl || null;
-                var ext = (file.name || '').split('.').pop().toLowerCase();
-                var extIconMap = { pdf:'picture_as_pdf', doc:'description', docx:'description', xls:'table_chart', xlsx:'table_chart',
-                    png:'image', jpg:'image', jpeg:'image', txt:'article', csv:'table_chart' };
-                var iconName = extIconMap[ext] || 'insert_drive_file';
-                var docId = doc.id || doc._id || '';
-
-                // Success modal with link to the uploaded file
-                await Swal.fire({
-                    title: 'Uploaded!',
-                    html: `<div style="font-size:14px;color:#334155;">
-                        <b>${file.name}</b> was saved to GHL.
-                        ${fileUrl ? `<br><br><a href="${fileUrl}" target="_blank" rel="noopener noreferrer"
-                            style="display:inline-flex;align-items:center;gap:5px;padding:8px 16px;background:#004990;color:white;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;margin-top:4px;">
-                            <span class="material-icons" style="font-size:15px;">open_in_new</span>View Uploaded File
-                        </a>` : ''}
-                    </div>`,
-                    icon: 'success',
-                    confirmButtonText: 'Done',
-                    confirmButtonColor: '#004990'
-                });
-
-                var fileRow = `<div id="pp-doc-${docId}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;margin-bottom:6px;">
-                    <span class="material-icons" style="font-size:22px;color:#16a34a;flex-shrink:0;">${iconName}</span>
-                    <div style="flex:1;min-width:0;">
-                        <div style="font-size:13px;font-weight:700;color:#002d5a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${file.name}">${file.name}</div>
-                        <div style="font-size:11px;color:#16a34a;margin-top:2px;">Uploaded to GHL ✓</div>
-                    </div>
-                    <div style="display:flex;gap:5px;flex-shrink:0;">
-                        ${fileUrl ? `<a href="${fileUrl}" target="_blank" style="padding:5px 10px;background:#eff6ff;color:#0369a1;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">open_in_new</span>View</a>` : ''}
-                        ${docId ? `<button onclick="ppDeleteDocument('${docId}')" style="padding:5px 10px;background:#fff1f2;color:#dc2626;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:13px;">delete</span>Del</button>` : ''}
-                    </div>
-                </div>`;
-                var docList = document.getElementById('pp-doc-list');
-                if (docList) docList.insertAdjacentHTML('afterbegin', fileRow);
-            } else {
-                Swal.fire('Upload Failed', data.message || 'Failed to upload to GHL.', 'error');
-            }
-        } catch (e) {
-            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Upload to GHL'; }
-            Swal.fire('Upload Failed', e.message || 'An error occurred. Please try again.', 'error');
+        // Step 1: Save metadata to Supabase immediately — document appears in list right away
+        var saveRes = await pAPI({ action: 'save_partner_document', person_id: personId, filename: file.name, file_size: file.size });
+        if (!saveRes.success) {
+            if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Add Document'; }
+            Swal.fire('Error', saveRes.message || 'Failed to save document record.', 'error');
+            return;
         }
+        var docRecordId = saveRes.id;
+
+        // Step 2: Reload list so document name appears immediately
+        await ppLoadDocuments();
+        if (btn) { btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:15px;">upload</span>Add Document'; }
+
+        // Step 3: Try GHL upload in background — updates file_url if it succeeds
+        (async function() {
+            try {
+                var token = localStorage.getItem('pp_session_token') || '';
+                var formData = new FormData();
+                formData.append('file', file, file.name);
+                var controller = new AbortController();
+                var timeout = setTimeout(function() { controller.abort(); }, 30000);
+                var res = await fetch('https://zuzwljjrppyrzngmhdru.supabase.co/functions/v1/ghl-media-upload', {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + token, 'apikey': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow' },
+                    body: formData,
+                    signal: controller.signal
+                });
+                clearTimeout(timeout);
+                var data; try { data = await res.json(); } catch(_) { data = {}; }
+                if (data.success) {
+                    var doc = data.document || {};
+                    var fileUrl = doc.url || doc.fileUrl || doc.downloadUrl || null;
+                    if (fileUrl) {
+                        // Update the record with the GHL URL and refresh the list
+                        await pAPI({ action: 'update_partner_document_url', document_id: docRecordId, file_url: fileUrl });
+                        await ppLoadDocuments();
+                    }
+                }
+            } catch(_) { /* GHL upload failed silently — document name still shows */ }
+        })();
     };
     input.click();
 };
