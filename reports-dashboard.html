@@ -741,7 +741,7 @@ function initSendingReportsTab() {
     async function srApi(body) {
         try {
             const r = await fetch('/api/scheduled-reports', { method: 'POST', headers: srAuthHeaders(), body: JSON.stringify(body) });
-            return r.json();
+            return await r.json();
         } catch (e) {
             return { success: false, message: 'Network error. Please try again.' };
         }
@@ -935,11 +935,13 @@ function initSendingReportsTab() {
     window.srSendManual = async function(reportType) {
         const rt = REPORT_TYPES[reportType];
         const btn = document.getElementById(`sr-manual-btn-${reportType}`);
-        const orig = btn.textContent;
-        btn.textContent = 'Sending…';
+        const orig = btn.innerHTML;
+        btn.innerHTML = '<span class="material-icons" style="font-size:16px;">hourglass_top</span> Sending…';
         btn.disabled = true;
-        const r = await srApi({ action: 'send_manual', report_type: reportType });
-        btn.textContent = orig;
+        let r;
+        try { r = await srApi({ action: 'send_manual', report_type: reportType }); }
+        catch (e) { r = { success: false, message: 'Network error. Please try again.' }; }
+        btn.innerHTML = orig;
         btn.disabled = false;
         if (r.success) {
             Swal.fire({ icon: 'success', title: 'Sent!', text: `Delivered to ${r.sent} of ${r.total} recipient(s).`, confirmButtonColor: rt.color, timer: 3000, showConfirmButton: false });

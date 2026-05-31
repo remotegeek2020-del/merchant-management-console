@@ -336,35 +336,44 @@ async function sendReport(reportType, trigger = 'cron') {
     if (!recipients || recipients.length === 0) return { sent: 0, skipped: 'no recipients', report_type: reportType };
 
     let html, subject, reportData;
-    if (reportType === 'ops') {
-        reportData = await buildOpsData();
-        html = buildOpsEmail(reportData);
-        subject = `📦 Operations Report — ${reportData.date}`;
-    } else {
-        reportData = await buildPartnersData();
-        html = buildPartnersEmail(reportData);
-        subject = `📊 Partners & Merchants Report — ${reportData.date}`;
+    try {
+        if (reportType === 'ops') {
+            reportData = await buildOpsData();
+            html = buildOpsEmail(reportData);
+            subject = `📦 Operations Report — ${reportData.date}`;
+        } else {
+            reportData = await buildPartnersData();
+            html = buildPartnersEmail(reportData);
+            subject = `📊 Partners & Merchants Report — ${reportData.date}`;
+        }
+    } catch (buildErr) {
+        await supabase.from('report_send_log').insert({
+            trigger, report_type: reportType, recipient_count: 0, status: 'failed',
+            error_message: `Data build failed: ${buildErr.message}`
+        });
+        throw buildErr;
     }
 
     if (!process.env.POSTMARK_SERVER_TOKEN) throw new Error('POSTMARK_SERVER_TOKEN not configured');
     const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
 
+    const emailPayload = {
+        From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+        Subject: subject,
+        HtmlBody: html,
+        MessageStream: 'outbound'
+    };
+
+    const results = await Promise.allSettled(
+        recipients.map(r => client.sendEmail({ ...emailPayload, To: r.email }))
+    );
+
     let sent = 0;
     const errors = [];
-    for (const r of recipients) {
-        try {
-            await client.sendEmail({
-                From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
-                To: r.email,
-                Subject: subject,
-                HtmlBody: html,
-                MessageStream: 'outbound'
-            });
-            sent++;
-        } catch (e) {
-            errors.push(`${r.email}: ${e.message}`);
-        }
-    }
+    results.forEach((r, i) => {
+        if (r.status === 'fulfilled') { sent++; }
+        else { errors.push(`${recipients[i].email}: ${r.reason?.message || 'unknown error'}`); }
+    });
 
     await supabase.from('report_send_log').insert({
         trigger,
@@ -463,7 +472,7 @@ export default async function handler(req, res) {
 
         if (action === 'set_schedule') {
             const { error } = await supabase.from('report_schedule_settings')
-                .upsert({ report_type, schedule, updated_at: new Date().toISOString() }, { onConflict: 'report_type' });
+                .upsert({ report_type, schedule, enabled: true, updated_at: new Date().toISOString() }, { onConflict: 'report_type' });
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
