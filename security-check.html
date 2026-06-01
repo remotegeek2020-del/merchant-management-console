@@ -98,6 +98,42 @@
         </div>
     </div>
 
+    <!-- Schedule Settings -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">
+                <span class="material-icons" style="color:#6366f1; font-size:18px;">schedule_send</span>
+                Send Schedule
+            </div>
+        </div>
+        <div class="panel-body">
+            <div style="display:flex; flex-wrap:wrap; gap:16px; align-items:flex-end;">
+                <div>
+                    <div style="font-size:11px; font-weight:700; color:#94a3b8; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">Frequency</div>
+                    <div style="display:flex; gap:6px;" id="sched-freq-btns">
+                        <button onclick="schedSetFreq('daily')" id="sched-daily" class="btn btn-ghost" style="font-size:11px;">Daily</button>
+                        <button onclick="schedSetFreq('twice_daily')" id="sched-twice_daily" class="btn btn-ghost" style="font-size:11px;">Twice Daily</button>
+                        <button onclick="schedSetFreq('weekly')" id="sched-weekly" class="btn btn-ghost" style="font-size:11px;">Weekly (Mon)</button>
+                    </div>
+                </div>
+                <div>
+                    <div style="font-size:11px; font-weight:700; color:#94a3b8; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">Time (UTC)</div>
+                    <select id="sched-hour" onchange="schedSave()" style="background:#0f172a; border:1px solid #334155; color:#e2e8f0; padding:8px 12px; border-radius:8px; font-size:12px; font-family:DM Sans,sans-serif;">
+                        <!-- filled by JS -->
+                    </select>
+                </div>
+                <div>
+                    <div style="font-size:11px; font-weight:700; color:#94a3b8; margin-bottom:6px; text-transform:uppercase; letter-spacing:.5px;">Enabled</div>
+                    <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                        <input type="checkbox" id="sched-enabled" onchange="schedSave()" style="width:16px; height:16px; cursor:pointer; accent-color:#6366f1;">
+                        <span style="font-size:12px; color:#e2e8f0;">Auto-send report</span>
+                    </label>
+                </div>
+            </div>
+            <p style="font-size:11px; color:#64748b; margin:10px 0 0;" id="sched-hint">Loading schedule…</p>
+        </div>
+    </div>
+
     <!-- Last Run Info -->
     <div id="last-run-bar" style="display:none; margin-bottom:20px;">
         <div style="font-size:11px; color:#64748b; display:flex; align-items:center; gap:6px;">
@@ -249,9 +285,72 @@ function renderReport(report) {
         ${sectionsHtml}`;
 }
 
+let currentSched = { schedule: 'daily', enabled: true, preferred_hour: 8 };
+
+async function loadSchedule() {
+    const r = await api('get_schedule');
+    if (r.success && r.schedule) {
+        currentSched = r.schedule;
+        renderSchedule();
+    }
+}
+
+function renderSchedule() {
+    const { schedule, enabled, preferred_hour } = currentSched;
+
+    // Frequency buttons
+    ['daily','twice_daily','weekly'].forEach(f => {
+        const btn = document.getElementById('sched-' + f);
+        if (!btn) return;
+        btn.style.background = schedule === f ? '#6366f1' : 'transparent';
+        btn.style.color = schedule === f ? 'white' : '#94a3b8';
+        btn.style.borderColor = schedule === f ? '#6366f1' : '#334155';
+    });
+
+    // Hour select
+    const sel = document.getElementById('sched-hour');
+    if (!sel.options.length) {
+        for (let h = 0; h < 24; h++) {
+            const opt = document.createElement('option');
+            opt.value = h;
+            opt.textContent = `${String(h).padStart(2,'0')}:00 UTC`;
+            sel.appendChild(opt);
+        }
+    }
+    sel.value = preferred_hour ?? 8;
+
+    // Enabled checkbox
+    document.getElementById('sched-enabled').checked = enabled !== false;
+
+    // Hint text
+    const freqLabel = schedule === 'daily' ? 'daily' : schedule === 'twice_daily' ? 'twice daily (12h apart)' : 'every Monday';
+    const hour = preferred_hour ?? 8;
+    document.getElementById('sched-hint').textContent = enabled !== false
+        ? `Report will be sent ${freqLabel} at ${String(hour).padStart(2,'0')}:00 UTC.`
+        : 'Automatic sending is disabled. Reports will only run when triggered manually.';
+}
+
+async function schedSetFreq(freq) {
+    currentSched.schedule = freq;
+    renderSchedule();
+    await schedSave();
+}
+
+async function schedSave() {
+    currentSched.preferred_hour = parseInt(document.getElementById('sched-hour').value, 10);
+    currentSched.enabled = document.getElementById('sched-enabled').checked;
+    await api('set_schedule', {
+        schedule: currentSched.schedule,
+        enabled: currentSched.enabled,
+        preferred_hour: currentSched.preferred_hour
+    });
+    renderSchedule();
+}
+
 window.addEventListener('load', function() {
     loadEmails();
     loadLastReport();
+    loadSchedule();
 });
 </script>
 <script src="/js/site-config.js"></script>

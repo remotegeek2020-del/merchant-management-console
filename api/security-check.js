@@ -15,6 +15,29 @@ export default async function handler(req, res) {
     }
 
     try {
+        if (action === 'get_schedule') {
+            const { data } = await supabase.from('report_schedule_settings')
+                .select('schedule, enabled, preferred_hour')
+                .eq('report_type', 'security')
+                .maybeSingle();
+            return res.status(200).json({ success: true, schedule: data || { schedule: 'daily', enabled: true, preferred_hour: 8 } });
+        }
+
+        if (action === 'set_schedule') {
+            const { schedule, enabled, preferred_hour } = req.body;
+            const validSchedules = ['daily', 'twice_daily', 'weekly'];
+            if (schedule && !validSchedules.includes(schedule))
+                return res.status(400).json({ success: false, message: 'Invalid schedule value.' });
+            await supabase.from('report_schedule_settings').upsert({
+                report_type: 'security',
+                schedule: schedule ?? 'daily',
+                enabled: enabled !== false,
+                preferred_hour: typeof preferred_hour === 'number' ? preferred_hour : 8,
+                updated_at: new Date().toISOString()
+            }, { onConflict: 'report_type' });
+            return res.status(200).json({ success: true });
+        }
+
         if (action === 'list_emails') {
             const { data, error } = await supabase.from('security_check_emails').select('*').order('created_at');
             if (error) throw error;
@@ -655,6 +678,307 @@ export default async function handler(req, res) {
                 icon: 'bug_report',
                 status: penChecks.some(c => c.status === 'fail') ? 'fail' : penChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
                 checks: penChecks
+            });
+
+            // ── 11. Secrets & Key Rotation ────────────────────────────────────
+            const [appConfigAgeRes, apiKeysAgeRes] = await Promise.all([
+                safeQuery(() => supabase.from('app_config').select('key, updated_at').order('updated_at')),
+                safeQuery(() => supabase.from('api_keys').select('id, name, created_at, last_rotated_at, is_active').eq('is_active', true).limit(50))
+            ]);
+
+            const configKeys = appConfigAgeRes.data || [];
+            const ROTATE_THRESHOLD_MS = 90 * 24 * 60 * 60 * 1000;
+            const staleConfigKeys = configKeys.filter(k =>
+                k.updated_at && (Date.now() - new Date(k.updated_at).getTime()) > ROTATE_THRESHOLD_MS
+            );
+            const criticalConfigKeys = ['GHL_API_KEY', 'GHL_LOCATION_ID', 'POSTMARK_SERVER_TOKEN'];
+            const missingConfigKeys = criticalConfigKeys.filter(k => !configKeys.find(c => c.key === k));
+
+            const apiKeysList = apiKeysAgeRes.data || [];
+            const staleApiKeys = apiKeysList.filter(k => {
+                const ref = k.last_rotated_at || k.created_at;
+                return ref && (Date.now() - new Date(ref).getTime()) > ROTATE_THRESHOLD_MS;
+            });
+
+            const hasCronSecret = !!process.env.CRON_SECRET;
+
+            const secretsChecks = [];
+
+            secretsChecks.push({
+                name: 'App config secrets not rotated in 90+ days',
+                status: staleConfigKeys.length > 0 ? 'warn' : missingConfigKeys.length > 0 ? 'fail' : 'pass',
+                detail: missingConfigKeys.length > 0
+                    ? `MISSING critical config: ${missingConfigKeys.join(', ')} — related features will fail`
+                    : staleConfigKeys.length > 0
+                        ? `${staleConfigKeys.length} secret(s) not rotated in 90+ days: ${staleConfigKeys.map(k => k.key).join(', ')} — rotation recommended`
+                        : `All ${configKeys.length} configured secret(s) are within the 90-day rotation window`
+            });
+
+            secretsChecks.push({
+                name: 'Cron endpoint secret (CRON_SECRET)',
+                status: hasCronSecret ? 'pass' : 'warn',
+                detail: hasCronSecret
+                    ? 'CRON_SECRET is set — cron endpoints are protected from unauthorized calls'
+                    : 'CRON_SECRET is not set — cron endpoints can be triggered by anyone with the URL'
+            });
+
+            secretsChecks.push({
+                name: 'Active API keys not rotated in 90+ days',
+                status: staleApiKeys.length > 3 ? 'fail' : staleApiKeys.length > 0 ? 'warn' : 'pass',
+                detail: staleApiKeys.length > 0
+                    ? `${staleApiKeys.length} active API key(s) older than 90 days without rotation: ${staleApiKeys.map(k => k.name || k.id.slice(0, 8) + '...').join(', ')}`
+                    : `All ${apiKeysList.length} active API key(s) are within rotation policy`
+            });
+
+            sections.push({
+                title: 'Secrets & Key Rotation',
+                icon: 'vpn_key',
+                status: secretsChecks.some(c => c.status === 'fail') ? 'fail' : secretsChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: secretsChecks
+            });
+
+            // ── 12. Trusted Device Security ───────────────────────────────────
+            const now2 = new Date();
+            const [trustedDevicesRes, expiredDevicesRes] = await Promise.all([
+                safeQuery(() => supabase.from('trusted_devices').select('userid, created_at, last_used, expires_at')),
+                safeQuery(() =>
+                    supabase.from('trusted_devices')
+                        .select('*', { count: 'exact', head: true })
+                        .lt('expires_at', now2.toISOString())
+                )
+            ]);
+
+            const allTrusted = trustedDevicesRes.data || [];
+            const expiredCount = expiredDevicesRes.count || 0;
+
+            // Group by user to detect excessive device counts
+            const devicesByUser = {};
+            allTrusted.forEach(d => { devicesByUser[d.userid] = (devicesByUser[d.userid] || 0) + 1; });
+            const overloadedUsers = Object.entries(devicesByUser).filter(([, c]) => c >= 5);
+
+            // Stale trusted devices — last_used > 90 days ago
+            const staleDevices = allTrusted.filter(d =>
+                d.last_used && (Date.now() - new Date(d.last_used).getTime()) > ROTATE_THRESHOLD_MS
+            );
+
+            // Devices expiring within 7 days
+            const expiringDevices = allTrusted.filter(d =>
+                d.expires_at &&
+                new Date(d.expires_at) > now2 &&
+                (new Date(d.expires_at).getTime() - Date.now()) < 7 * 24 * 60 * 60 * 1000
+            );
+
+            const deviceChecks = [
+                {
+                    name: 'Expired trusted devices not cleaned up',
+                    status: expiredCount > 20 ? 'warn' : 'pass',
+                    detail: expiredCount > 0
+                        ? `${expiredCount} expired trusted device token(s) still in database — consider purging`
+                        : 'No expired trusted device records found'
+                },
+                {
+                    name: 'Users with 5+ trusted devices (possible token hoarding)',
+                    status: overloadedUsers.length > 0 ? 'warn' : 'pass',
+                    detail: overloadedUsers.length > 0
+                        ? `${overloadedUsers.length} user(s) have ≥5 trusted devices: ${overloadedUsers.map(([uid, c]) => `${uid.slice(0, 8)}... (${c})`).join(', ')} — review for account sharing`
+                        : `All users have fewer than 5 trusted devices — within normal range`
+                },
+                {
+                    name: 'Trusted devices inactive for 90+ days',
+                    status: staleDevices.length > 5 ? 'warn' : 'pass',
+                    detail: staleDevices.length > 0
+                        ? `${staleDevices.length} device(s) not seen in 90+ days — consider revoking stale trust tokens`
+                        : 'All trusted devices have recent activity'
+                },
+                {
+                    name: 'Total trusted device tokens in circulation',
+                    status: 'info',
+                    detail: `${allTrusted.length} total trusted device token(s) across all users (${expiredCount} expired, ${expiringDevices.length} expiring within 7 days)`
+                }
+            ];
+
+            sections.push({
+                title: 'Trusted Device Security',
+                icon: 'devices',
+                status: deviceChecks.some(c => c.status === 'fail') ? 'fail' : deviceChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: deviceChecks
+            });
+
+            // ── 13. Webhook & Integration Security ────────────────────────────
+            const [webhookEndpointsRes, failedWebhooksRes, staleWebhooksRes] = await Promise.all([
+                safeQuery(() => supabase.from('webhook_endpoints')
+                    .select('id, label, url, secret, is_active, last_triggered_at, last_status, created_at')
+                    .eq('is_active', true)
+                ),
+                safeQuery(() => supabase.from('webhook_delivery_log')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('success', false)
+                    .gte('created_at', since24h)
+                ),
+                safeQuery(() => supabase.from('webhook_delivery_log')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('success', false)
+                    .gte('created_at', since7d)
+                )
+            ]);
+
+            const activeEndpoints = webhookEndpointsRes.data || [];
+            const endpointsNoSecret = activeEndpoints.filter(e => !e.secret || e.secret.length < 8);
+            const failedLast24h = failedWebhooksRes.count || 0;
+            const failedLast7d = staleWebhooksRes.count || 0;
+
+            // Endpoints not triggered in 30+ days (dormant)
+            const dormantEndpoints = activeEndpoints.filter(e =>
+                e.last_triggered_at && (Date.now() - new Date(e.last_triggered_at).getTime()) > 30 * 24 * 60 * 60 * 1000
+            );
+            const neverTriggered = activeEndpoints.filter(e => !e.last_triggered_at);
+
+            // Endpoints with last_status indicating errors (4xx/5xx)
+            const errorEndpoints = activeEndpoints.filter(e => e.last_status && e.last_status >= 400);
+
+            const webhookChecks = [
+                {
+                    name: 'Active webhook endpoints without a signing secret',
+                    status: endpointsNoSecret.length > 0 ? 'fail' : 'pass',
+                    detail: endpointsNoSecret.length > 0
+                        ? `CRITICAL: ${endpointsNoSecret.length} active webhook(s) have no signing secret — payloads cannot be verified: ${endpointsNoSecret.map(e => e.label || e.url.slice(0, 40)).join(', ')}`
+                        : `All ${activeEndpoints.length} active webhook endpoint(s) have signing secrets configured`
+                },
+                {
+                    name: 'Failed webhook deliveries (last 24h)',
+                    status: failedLast24h > 10 ? 'fail' : failedLast24h > 0 ? 'warn' : 'pass',
+                    detail: failedLast24h > 0
+                        ? `${failedLast24h} failed delivery attempt(s) in the last 24 hours (${failedLast7d} in the last 7 days) — check endpoint availability`
+                        : 'All webhook deliveries in the last 24 hours succeeded'
+                },
+                {
+                    name: 'Active webhooks with error response codes',
+                    status: errorEndpoints.length > 0 ? 'warn' : 'pass',
+                    detail: errorEndpoints.length > 0
+                        ? `${errorEndpoints.length} active endpoint(s) last returned HTTP ${errorEndpoints.map(e => e.last_status).join('/')} errors: ${errorEndpoints.map(e => e.label || e.id.slice(0, 8)).join(', ')}`
+                        : 'All active webhook endpoints are responding successfully'
+                },
+                {
+                    name: 'Dormant or never-triggered active webhooks',
+                    status: (dormantEndpoints.length + neverTriggered.length) > 0 ? 'warn' : 'pass',
+                    detail: (dormantEndpoints.length + neverTriggered.length) > 0
+                        ? `${dormantEndpoints.length} endpoint(s) dormant 30+ days, ${neverTriggered.length} never triggered — consider disabling unused endpoints`
+                        : 'All active webhook endpoints have recent delivery activity'
+                }
+            ];
+
+            sections.push({
+                title: 'Webhook & Integration Security',
+                icon: 'webhook',
+                status: webhookChecks.some(c => c.status === 'fail') ? 'fail' : webhookChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: webhookChecks
+            });
+
+            // ── 14. Anomalous Activity Detection ──────────────────────────────
+            const [recentLoginsRes, adminActionsRes, apiAbuseRes] = await Promise.all([
+                // All successful logins in last 24h with IP
+                safeQuery(() => supabase.from('activity_logs')
+                    .select('email, ip_address, created_at')
+                    .eq('status', 'SUCCESS')
+                    .gte('created_at', since24h)
+                    .not('ip_address', 'is', null)
+                    .limit(1000)
+                ),
+                // All admin/security category actions in last 7 days
+                safeQuery(() => supabase.from('activity_logs')
+                    .select('email, action, created_at, ip_address')
+                    .in('category', ['admin', 'security', 'staff'])
+                    .gte('created_at', since7d)
+                    .order('created_at', { ascending: false })
+                    .limit(500)
+                ),
+                // API usage in last 24h grouped by key
+                safeQuery(() => supabase.from('api_usage_log')
+                    .select('api_key_id, ip_address, status_code')
+                    .gte('created_at', since24h)
+                    .limit(5000)
+                )
+            ]);
+
+            const anomalyChecks = [];
+
+            // Multi-IP logins: same email from 3+ distinct IPs in 24h
+            const ipsByEmail = {};
+            (recentLoginsRes.data || []).forEach(l => {
+                if (!ipsByEmail[l.email]) ipsByEmail[l.email] = new Set();
+                if (l.ip_address) ipsByEmail[l.email].add(l.ip_address);
+            });
+            const multiIpUsers = Object.entries(ipsByEmail)
+                .filter(([, ips]) => ips.size >= 3)
+                .map(([email, ips]) => ({ email, count: ips.size }));
+
+            anomalyChecks.push({
+                name: 'Logins from 3+ distinct IPs per user (24h)',
+                status: multiIpUsers.length > 0 ? 'warn' : 'pass',
+                detail: multiIpUsers.length > 0
+                    ? `${multiIpUsers.length} user(s) logged in from 3+ different IP addresses in 24h — possible credential sharing or account takeover: ${multiIpUsers.map(u => `${u.email} (${u.count} IPs)`).join(', ')}`
+                    : 'No users with suspicious multi-IP login patterns in the last 24 hours'
+            });
+
+            // Off-hours admin actions: midnight to 5 AM UTC
+            const adminActions = adminActionsRes.data || [];
+            const offHoursActions = adminActions.filter(a => {
+                const h = new Date(a.created_at).getUTCHours();
+                return h >= 0 && h < 5;
+            });
+            const offHoursActors = [...new Set(offHoursActions.map(a => a.email))];
+
+            anomalyChecks.push({
+                name: 'Admin/security actions between 00:00–05:00 UTC (7d)',
+                status: offHoursActions.length > 10 ? 'fail' : offHoursActions.length > 0 ? 'warn' : 'pass',
+                detail: offHoursActions.length > 0
+                    ? `${offHoursActions.length} admin action(s) performed in off-hours window by: ${offHoursActors.join(', ')} — verify these are expected and not from a compromised account`
+                    : 'No admin actions detected in the midnight–5 AM UTC window'
+            });
+
+            // API abuse: single API key making 500+ calls in 24h
+            const apiCalls = apiAbuseRes.data || [];
+            const callsByKey = {};
+            const errorsByKey = {};
+            apiCalls.forEach(r => {
+                const key = r.api_key_id || r.ip_address || 'unknown';
+                callsByKey[key] = (callsByKey[key] || 0) + 1;
+                if (r.status_code && r.status_code >= 400) errorsByKey[key] = (errorsByKey[key] || 0) + 1;
+            });
+            const highVolumeKeys = Object.entries(callsByKey).filter(([, c]) => c >= 500).map(([k, c]) => `${k.slice(0, 8)}... (${c} calls)`);
+            const highErrorKeys = Object.entries(errorsByKey).filter(([, c]) => c >= 50).map(([k, c]) => `${k.slice(0, 8)}... (${c} errors)`);
+
+            anomalyChecks.push({
+                name: 'API keys with 500+ calls in 24h (abuse threshold)',
+                status: highVolumeKeys.length > 0 ? 'warn' : 'pass',
+                detail: highVolumeKeys.length > 0
+                    ? `High-volume API keys detected: ${highVolumeKeys.join(', ')} — review if this is expected usage or a scraping attempt`
+                    : `${apiCalls.length} API call(s) logged in 24h — no single key exceeds 500 calls`
+            });
+
+            anomalyChecks.push({
+                name: 'API keys with 50+ error responses in 24h',
+                status: highErrorKeys.length > 0 ? 'warn' : 'pass',
+                detail: highErrorKeys.length > 0
+                    ? `Keys generating excessive errors: ${highErrorKeys.join(', ')} — may indicate misconfigured clients or probing`
+                    : 'No API keys generating excessive error responses'
+            });
+
+            // Activity log coverage — check the log isn't silent (should have entries in last 24h if system is active)
+            const recentLogCount = (recentLoginsRes.data || []).length;
+            anomalyChecks.push({
+                name: 'Activity log coverage (audit trail health)',
+                status: recentLogCount === 0 ? 'warn' : 'pass',
+                detail: recentLogCount === 0
+                    ? 'No activity log entries in the last 24 hours — audit trail may be broken or system is completely idle'
+                    : `${recentLogCount} activity log entries in the last 24 hours — audit trail is active`
+            });
+
+            sections.push({
+                title: 'Anomalous Activity Detection',
+                icon: 'crisis_alert',
+                status: anomalyChecks.some(c => c.status === 'fail') ? 'fail' : anomalyChecks.some(c => c.status === 'warn') ? 'warn' : 'pass',
+                checks: anomalyChecks
             });
 
             // ── Overall status & save ─────────────────────────────────────────
