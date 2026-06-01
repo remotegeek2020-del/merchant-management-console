@@ -175,6 +175,10 @@ export default async function handler(req, res) {
             const lastNum = lastRet?.return_id ? parseInt(lastRet.return_id.replace(/\D/g, ''), 10) || 1000 : 1000;
             const return_id = `RMA-${String(lastNum + 1).padStart(5, '0')}`;
 
+            // Resolve actor before insert so created_by is populated
+            const { data: actorPre } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            const actorNamePre = actorPre ? `${actorPre.first_name || ''} ${actorPre.last_name || ''}`.trim() || actorPre.email : 'Staff';
+
             const insertPayload = {
                 return_id,
                 merchant_id: leg.merchant_id || null,
@@ -187,7 +191,8 @@ export default async function handler(req, res) {
                 status: returnStatus,
                 condition,
                 destination,
-                is_bulk: false
+                is_bulk: false,
+                created_by: session.userid
             };
 
             const { data: newReturn, error: retErr } = await supabase.from('returns').insert(insertPayload).select('id, return_id').single();
@@ -221,16 +226,13 @@ export default async function handler(req, res) {
                 converted_equipment_id: newEquip.id
             }).eq('id', legacy_id);
 
-            // Activity log
-            const { data: actor } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
-            const actorName = actor ? `${actor.first_name || ''} ${actor.last_name || ''}`.trim() || actor.email : 'Staff';
-            supabase.from('activity_logs').insert({
-                email: actor?.email || session.userid,
-                action: `Legacy RMA Filed by ${actorName} — Serial: ${leg.serial_number} → ${destination}`,
+            await supabase.from('activity_logs').insert({
+                email: actorPre?.email || session.userid,
+                action: `Legacy RMA Filed by ${actorNamePre} — Serial: ${leg.serial_number} → ${destination}`,
                 status: 'success', category: 'returns', target_id: return_id, target_type: 'return', severity: 'info',
                 old_value: { serial_number: leg.serial_number, legacy_status: 'active', legacy_id },
-                new_value: { return_id, serial_number: leg.serial_number, destination, equipment_id: newEquip.id, equipment_status: 'pending_return' }
-            }).then(() => {}).catch(() => {});
+                new_value: { return_id, serial_number: leg.serial_number, destination, equipment_id: newEquip.id, equipment_status: 'pending_return', created_by: actorNamePre }
+            });
 
             return res.status(200).json({ success: true, return_id: newReturn.return_id, id: newReturn.id });
         }

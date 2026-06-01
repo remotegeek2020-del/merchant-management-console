@@ -62,6 +62,7 @@ if (action === 'list') {
         id, return_id, return_reason, condition, destination, status, created_at,
         return_date_initiated, equipment_received_date,
         merchant_id, equipment_id, ticket_id, is_bulk, legacy_deployment_id,
+        created_by, updated_by, updated_at,
         merchants:merchant_id (dba_name, merchant_id, merchant_city, merchant_state, merchant_phone, email, agent_id, agent_name),
         equipments:equipment_id (serial_number, terminal_type),
         return_items(id, equipment_id, condition, equip:equipment_id(serial_number, terminal_type)),
@@ -105,11 +106,25 @@ if (action === 'list') {
     const { data, error, count } = await q;
     if (error) throw error;
 
+    // Resolve created_by / updated_by userids → display names
+    const auditUserIds = [...new Set((data || []).flatMap(r => [r.created_by, r.updated_by].filter(Boolean)))];
+    let auditUserMap = {};
+    if (auditUserIds.length) {
+        const { data: auditUsers } = await supabase.from('app_users')
+            .select('userid, first_name, last_name, email').in('userid', auditUserIds);
+        auditUserMap = Object.fromEntries((auditUsers || []).map(u => [
+            u.userid,
+            `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email || u.userid
+        ]));
+    }
+
     // Normalize to items[] for unified frontend handling
     const normalized = (data || []).map(r => {
         r.items = r.is_bulk
             ? (r.return_items || []).map(i => ({ equipment_id: i.equipment_id, condition: i.condition, serial_number: i.equip?.serial_number, terminal_type: i.equip?.terminal_type, item_id: i.id }))
             : (r.equipment_id ? [{ equipment_id: r.equipment_id, condition: r.condition, serial_number: r.equipments?.serial_number, terminal_type: r.equipments?.terminal_type, item_id: null }] : []);
+        r.created_by_name = r.created_by ? (auditUserMap[r.created_by] || null) : null;
+        r.updated_by_name = r.updated_by ? (auditUserMap[r.updated_by] || null) : null;
         return r;
     });
 
@@ -233,7 +248,8 @@ if (action === 'complete_return') {
         // Always close — the RMA tracks the return, not the repair. Equipment is in the repair queue from here.
         const legReturnUpdate = {
             condition, destination, status: 'Closed',
-            equipment_received_date: equipment_received_date || new Date().toISOString()
+            equipment_received_date: equipment_received_date || new Date().toISOString(),
+            updated_by: session.userid, updated_at: new Date().toISOString()
         };
         await supabase.from('returns').update(legReturnUpdate).eq('id', rmaId);
 
@@ -343,7 +359,7 @@ if (action === 'complete_return') {
     }
 
     // Always close — the RMA tracks the return, not the repair. Equipment is in the repair queue from here.
-    const returnUpdate = { condition, destination, status: 'Closed' };
+    const returnUpdate = { condition, destination, status: 'Closed', updated_by: session.userid, updated_at: new Date().toISOString() };
     if (equipment_received_date) returnUpdate.equipment_received_date = equipment_received_date;
     await supabase.from('returns').update(returnUpdate).eq('id', rmaId);
 
@@ -434,6 +450,7 @@ if (action === 'complete_return') {
             await supabase.from('return_items').insert(
                 equipment_ids.map(eqId => ({ return_id: rma.id, equipment_id: eqId, condition: 'IN TRANSIT' }))
             );
+            await supabase.from('returns').update({ updated_by: session.userid, updated_at: new Date().toISOString() }).eq('id', rma.id);
             await supabase.from('equipment_logs').insert(
                 equipment_ids.map(eqId => ({
                     equipment_id: eqId, merchant_id: rma.merchant_id,

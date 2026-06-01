@@ -721,7 +721,8 @@ export default async function handler(req, res) {
                             destination: 'In Transit / RMA',
                             status: 'Open',
                             is_bulk: false,
-                            ticket_id: parseInt(ticket_id)
+                            ticket_id: parseInt(ticket_id),
+                            created_by: staffSession?.userid || null
                         }).select('id, return_id').single();
 
                         // Mark legacy as converted
@@ -752,6 +753,12 @@ export default async function handler(req, res) {
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     logActivity({ email: staffEmail || author, action: `Legacy RMA ${firstReturnId} created from ticket ${ticket_id} (${unitCount} unit(s))`, target_id: ticket_id,
                         new_value: { return_id: firstReturnId, return_reason, unit_count: unitCount } });
+                    supabase.from('activity_logs').insert({
+                        email: staffEmail || author,
+                        action: `Legacy RMA Filed — ${firstReturnId} (${unitCount} unit(s)) from ticket #${ticket_id}`,
+                        status: 'success', category: 'returns', target_id: firstReturnId, target_type: 'return', severity: 'info',
+                        new_value: { return_id: firstReturnId, return_reason, unit_count: unitCount, source: 'ticket', ticket_id }
+                    }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
                     return res.status(200).json({ success: true, return_id: firstReturnId, unit_count: unitCount });
                 }
 
@@ -786,7 +793,8 @@ export default async function handler(req, res) {
                             condition: 'IN TRANSIT',
                             destination: 'In Transit / RMA',
                             status: 'Open',
-                            ticket_id: parseInt(ticket_id)
+                            ticket_id: parseInt(ticket_id),
+                            created_by: staffSession?.userid || null
                         }).select('id, return_id').single();
                         if (retErr) throw retErr;
                         ret = newRet;
@@ -809,6 +817,12 @@ export default async function handler(req, res) {
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     logActivity({ email: staffEmail || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id}`, target_id: ticket_id,
                         new_value: { return_id: finalReturnId, return_reason, unit_count: 1 } });
+                    supabase.from('activity_logs').insert({
+                        email: staffEmail || author,
+                        action: `RMA Filed — ${finalReturnId} from ticket #${ticket_id}`,
+                        status: 'success', category: 'returns', target_id: finalReturnId, target_type: 'return', severity: 'info',
+                        new_value: { return_id: finalReturnId, return_reason, unit_count: 1, source: 'ticket', ticket_id }
+                    }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
                     return res.status(200).json({ success: true, return_id: finalReturnId, unit_count: 1 });
 
                 } else {
@@ -825,7 +839,8 @@ export default async function handler(req, res) {
                         destination: 'In Transit / RMA',
                         status: 'Open',
                         is_bulk: true,
-                        ticket_id: parseInt(ticket_id)
+                        ticket_id: parseInt(ticket_id),
+                        created_by: staffSession?.userid || null
                     }).select('id, return_id').single();
                     if (retErr) throw retErr;
 
@@ -856,6 +871,12 @@ export default async function handler(req, res) {
                     await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) });
                     logActivity({ email: staffEmail || author, action: `RMA ${finalReturnId} created from ticket ${ticket_id} (${equipIds.length} unit(s))`, target_id: ticket_id,
                         new_value: { return_id: finalReturnId, return_reason, unit_count: equipIds.length } });
+                    supabase.from('activity_logs').insert({
+                        email: staffEmail || author,
+                        action: `RMA Filed — ${finalReturnId} — Bulk (${equipIds.length} units) from ticket #${ticket_id}`,
+                        status: 'success', category: 'returns', target_id: finalReturnId, target_type: 'return', severity: 'info',
+                        new_value: { return_id: finalReturnId, return_reason, unit_count: equipIds.length, source: 'ticket', ticket_id }
+                    }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
                     return res.status(200).json({ success: true, return_id: finalReturnId, unit_count: equipIds.length });
                 }
             }

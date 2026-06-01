@@ -694,7 +694,8 @@ if (action === 'return_to_office') {
                     condition: 'IN TRANSIT',
                     destination: 'In Transit / RMA',
                     status: 'Open',
-                    is_bulk: true
+                    is_bulk: true,
+                    created_by: session.userid
                 }).select().single();
                 if (retErr) throw retErr;
 
@@ -718,16 +719,16 @@ if (action === 'return_to_office') {
                         }))
                     );
                 }
-                supabase.from('activity_logs').insert({
+                await supabase.from('activity_logs').insert({
                     email: actorEmail,
-                    action: `Return Initiated by ${actorName} — Bulk (${depItems?.length || 0} units) from ${mDba}`,
+                    action: `RMA Filed by ${actorName} — ${ret?.return_id || 'RMA'} — Bulk (${depItems?.length || 0} units) from ${mDba}`,
                     status: 'success', category: 'returns', target_id: ret?.return_id || deployment_id, target_type: 'return', severity: 'info',
                     old_value: { deployment_id, merchant: mDba, unit_count: depItems?.length || 0 },
-                    new_value: { return_id: ret?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated }
-                }).then(() => {}).catch(() => {});
+                    new_value: { return_id: ret?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName }
+                });
             } else {
-                // SINGLE: existing logic
-                const { error } = await supabase.from('returns').insert({
+                // SINGLE: capture returned row so we can use return_id in the activity log
+                const { data: singleRet, error: singleRetErr } = await supabase.from('returns').insert({
                     deployment_id,
                     equipment_id,
                     merchant_id,
@@ -735,9 +736,10 @@ if (action === 'return_to_office') {
                     return_date_initiated,
                     condition: 'IN TRANSIT',
                     destination: 'In Transit / RMA',
-                    status: 'Open'
-                });
-                if (error) throw error;
+                    status: 'Open',
+                    created_by: session.userid
+                }).select('id, return_id').single();
+                if (singleRetErr) throw singleRetErr;
 
                 const { data: mRecSingle } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).single();
                 const mDbaSingle = mRecSingle?.dba_name || 'Merchant Site';
@@ -749,13 +751,13 @@ if (action === 'return_to_office') {
                     to_location: 'In Transit / RMA',
                     notes: `Unit marked In Transit. Reason: ${notes || 'N/A'}`
                 }]);
-                supabase.from('activity_logs').insert({
+                await supabase.from('activity_logs').insert({
                     email: actorEmail,
-                    action: `Return Initiated by ${actorName} — Single unit from ${mDbaSingle}`,
-                    status: 'success', category: 'returns', target_id: deployment_id, target_type: 'deployment', severity: 'info',
+                    action: `RMA Filed by ${actorName} — ${singleRet?.return_id || 'RMA'} — Single unit from ${mDbaSingle}`,
+                    status: 'success', category: 'returns', target_id: singleRet?.return_id || deployment_id, target_type: 'return', severity: 'info',
                     old_value: { deployment_id, merchant: mDbaSingle, equipment_id },
-                    new_value: { status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated }
-                }).then(() => {}).catch(() => {});
+                    new_value: { return_id: singleRet?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName }
+                });
             }
 
         } else {

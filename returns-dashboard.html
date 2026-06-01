@@ -459,6 +459,15 @@ function viewRMADetails(index) {
                 ${r.notes ? row('Notes', r.notes) : ''}
             </div>
 
+            <!-- Audit trail -->
+            <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Audit Trail</div>
+            <div style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+                ${row('Filed By', r.created_by_name || '—')}
+                ${row('Filed On', r.created_at ? fmtDate(r.created_at) : null)}
+                ${r.updated_by_name ? row('Last Updated By', r.updated_by_name) : ''}
+                ${r.updated_at ? row('Last Updated', fmtDate(r.updated_at)) : ''}
+            </div>
+
             <!-- Linked deployment -->
             ${r.deployment_id ? `
             <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Linked Deployment</div>
