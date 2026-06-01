@@ -44,8 +44,11 @@ export default async function handler(req, res) {
             return_reason: reason,
             notes,
             return_date_initiated,
-            status: 'Open'
-        }]);
+            status: 'Open',
+            created_by: session.userid
+        }])
+        .select('id, return_id')
+        .single();
 
     if (returnError) throw returnError;
 
@@ -64,12 +67,12 @@ export default async function handler(req, res) {
     const { data: lrEquip } = await supabase.from('equipments').select('serial_number, terminal_type').eq('id', equipment_id).maybeSingle();
     supabase.from('activity_logs').insert({
         email: lrActorEmail,
-        action: `Return Initiated by ${lrActorName} — ${lrEquip?.serial_number || equipment_id} (${merchantDba0})`,
+        action: `RMA Filed by ${lrActorName} — ${returnData?.return_id || 'RMA'} — ${lrEquip?.serial_number || equipment_id} (${merchantDba0})`,
         status: 'success', category: 'returns',
-        target_id: lrEquip?.serial_number || equipment_id, target_type: 'equipment',
+        target_id: returnData?.return_id || equipment_id, target_type: 'return',
         severity: 'info',
-        old_value: { status: 'deployed', merchant: merchantDba0 },
-        new_value: { status: 'in_transit', return_reason: reason, return_date: return_date_initiated }
+        old_value: { status: 'deployed', merchant: merchantDba0, serial_number: lrEquip?.serial_number },
+        new_value: { return_id: returnData?.return_id, status: 'Open', return_reason: reason, return_date: return_date_initiated, created_by: lrActorName }
     }).then(() => {}).catch(() => {});
 
     return res.status(200).json({ success: true });

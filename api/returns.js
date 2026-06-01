@@ -378,7 +378,7 @@ if (action === 'complete_return') {
             is_bulk: isBulk
         },
         new_value: {
-            status: isRepairs ? 'Open (In Repair Queue)' : 'Closed',
+            status: 'Closed',
             condition,
             destination,
             equipment_status: finalStatus,
