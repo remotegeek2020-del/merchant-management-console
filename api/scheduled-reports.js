@@ -284,16 +284,14 @@ async function buildPartnersData() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    const [statsRes, activityRes, leaderboardRes] = await Promise.all([
-        supabase.rpc('get_merchant_aggregate_stats'),
-        supabase.rpc('get_weekly_report_activity'),
-        supabase.from('partner_leaderboard_mv')
-            .select('name, merchant_count, volume_30_day, volume_90_day')
-            .order('volume_30_day', { ascending: false }).limit(10)
-    ]);
-
+    // Sequential — get_merchant_aggregate_stats and get_weekly_report_activity share the same
+    // cache row; running them in parallel causes lock contention when the cache is cold.
+    const statsRes = await supabase.rpc('get_merchant_aggregate_stats');
     if (statsRes.error) throw statsRes.error;
+    const activityRes = await supabase.rpc('get_weekly_report_activity');
     if (activityRes.error) throw activityRes.error;
+    // Use RPC wrapper so this query also bypasses statement/lock timeouts
+    const leaderboardRes = await supabase.rpc('get_partner_leaderboard', { lim: 10 });
 
     const s = statsRes.data;
     const a = activityRes.data;
@@ -311,7 +309,7 @@ async function buildPartnersData() {
         newMerchantsThisWeek:  Number(s.new_this_week || 0),
         approvedThisWeek:      Number(s.approved_this_week || 0),
         newAgentsThisWeek:     Number(a.new_agents_this_week || 0),
-        topPartners:           leaderboardRes.data || [],
+        topPartners:           Array.isArray(leaderboardRes.data) ? leaderboardRes.data : [],
         topSubmittingPartners: a.top_submitting_partners || [],
         statusBreakdown:       sortedBreakdown
     };
