@@ -378,7 +378,12 @@ if (action === 'getMonthlyReport') {
                 .eq('id', id)
                 .select();
 
-            if (updateError) throw updateError;
+            if (updateError) {
+                if (updateError.code === '23505') {
+                    return res.status(409).json({ success: false, message: 'That serial number is already assigned to another unit in the system.' });
+                }
+                throw updateError;
+            }
 
             // Sync open returns record if equipment moved out of repair
             const newStatus = payload.status;
