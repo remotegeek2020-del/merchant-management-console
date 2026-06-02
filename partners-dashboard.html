@@ -3918,7 +3918,7 @@ window.ppLoadMerchants = async function() {
     idStrings = [...new Set(idStrings)];
 
     try {
-        // Fetch each agent ID in parallel then flatten
+        // Fetch each agent ID in parallel then flatten, tagging each merchant with its agent ID string
         const results = await Promise.all(idStrings.map(async idStr => {
             const r = await fetch('/api/partners', {
                 method: 'POST',
@@ -3926,7 +3926,7 @@ window.ppLoadMerchants = async function() {
                 body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idStr })
             });
             const d = await r.json();
-            return (d.success && d.data) ? d.data : [];
+            return (d.success && d.data) ? d.data.map(m => ({ ...m, _agent_id_str: idStr })) : [];
         }));
         _ppMerchantsAll = results.flat();
         ppFilterMerchants();
@@ -3942,7 +3942,8 @@ window.ppFilterMerchants = function() {
     var list = q ? _ppMerchantsAll.filter(m =>
         (m.dba_name || '').toLowerCase().includes(q) ||
         (m.merchant_id || '').toLowerCase().includes(q) ||
-        (m.account_status || '').toLowerCase().includes(q)
+        (m.account_status || '').toLowerCase().includes(q) ||
+        (m._agent_id_str || '').toLowerCase().includes(q)
     ) : _ppMerchantsAll;
 
     if (countEl) countEl.textContent = `${list.length.toLocaleString()} merchant${list.length !== 1 ? 's' : ''}`;
@@ -3972,6 +3973,7 @@ window.ppFilterMerchants = function() {
                 <a href="${url}" target="_blank" style="color:#004990;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.dba_name || '—'}</a>
             </td>
             <td style="padding:8px 10px;">${statusBadge(m.account_status)}</td>
+            <td style="padding:8px 10px;font-size:11px;color:#475569;font-family:monospace;font-weight:600;">${m._agent_id_str || '—'}</td>
             <td style="padding:8px 10px;font-size:12px;color:#334155;">${m.volume_30_day ? '$' + Number(m.volume_30_day).toLocaleString() : '—'}</td>
             <td style="padding:8px 10px;font-size:11px;color:#64748b;">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
             <td style="padding:8px 10px;">
@@ -3988,6 +3990,7 @@ window.ppFilterMerchants = function() {
                         <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">MID</th>
                         <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Merchant Name</th>
                         <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Status</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Agent ID</th>
                         <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">30D Vol</th>
                         <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Last Batch</th>
                         <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;"></th>
