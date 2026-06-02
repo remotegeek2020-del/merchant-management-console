@@ -2504,6 +2504,21 @@ window.quickAddId = async function(personId, name) {
                 }
             }
 
+            // Handle ?hl_id=<ghl_contact_id> URL param — opened from GoHighLevel contact button
+            const hlIdParam = urlParams.get('hl_id');
+            if (hlIdParam) {
+                const matched = allPartners.find(p => p.hl_id === hlIdParam);
+                if (matched) {
+                    openPartnerDetails(matched.id);
+                } else {
+                    Swal.fire({
+                        icon: 'warning', title: 'Partner Not Found',
+                        text: 'No partner in the portal is linked to this GoHighLevel contact.',
+                        confirmButtonColor: '#004990'
+                    });
+                }
+            }
+
         } catch (err) {
             console.error("Failed to load partners:", err);
             document.getElementById('partnerGrid').innerHTML = 
