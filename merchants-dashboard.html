@@ -2251,6 +2251,51 @@ window.saveMerchant = async (uuid) => {
         return Swal.fire('Required', 'Subject and Body are required.', 'warning');
     }
 
+    // ── JARVIS SENSITIVE DATA SCAN ─────────────────────────────────────────
+    const scanContent = title + ': ' + body;
+    if (scanContent.length > 20) {
+        try {
+            Swal.fire({ title: 'Scanning note...', html: '<span style="font-size:12px;color:#64748b;">JARVIS is checking for sensitive data</span>', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const scanRes = await fetch('/api/jarvis-scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: scanContent, content_type: 'note' })
+            });
+            const scanData = await scanRes.json();
+            if (scanData.flagged && scanData.confidence !== 'low') {
+                const findingsHtml = (scanData.findings || []).map(f => `<li style="text-align:left;margin-bottom:4px;">${f}</li>`).join('');
+                const proceed = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Sensitive Data Detected',
+                    html: `<div style="text-align:left;">
+                        <p style="margin-bottom:12px;font-size:14px;">JARVIS detected potentially sensitive information in this note:</p>
+                        <ul style="font-size:13px;color:#dc2626;padding-left:20px;margin-bottom:12px;">${findingsHtml}</ul>
+                        <p style="font-size:12px;color:#64748b;">Saving this note will notify the development team. Do you want to proceed?</p>
+                    </div>`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Proceed Anyway',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#dc2626'
+                });
+                if (!proceed.isConfirmed) return;
+                // Fire alert to dev list (non-blocking)
+                const _mRec = currentRecords.find(r => r.id === uuid);
+                fetch('/api/sensitive-data-alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        merchant_id: uuid,
+                        merchant_name: _mRec ? (_mRec.dba_name || '') : '',
+                        content_type: 'note',
+                        findings: scanData.findings || [],
+                        submitted_by: localStorage.getItem('pp_username') || userId || 'Unknown'
+                    })
+                }).catch(() => {});
+            }
+        } catch (_) { /* scan failure must never block the note */ }
+    }
+    // ── END JARVIS SCAN ────────────────────────────────────────────────────
+
     // Capture BEFORE Swal.fire() — opening a new Swal destroys the merchant modal DOM
     const mentions  = getMentionedUserIds();
     const taggedNames = getMentionedUserNames();
@@ -2344,6 +2389,59 @@ window.saveMerchant = async (uuid) => {
         if (file.size > 10 * 1024 * 1024) {
             return Swal.fire('Error', 'File is too large (Max 10MB)', 'error');
         }
+
+        // ── JARVIS SENSITIVE DATA SCAN ─────────────────────────────────────
+        try {
+            let scanContent = file.name;
+            // For small text-based files, also scan the text content
+            const isTextType = file.type.startsWith('text/') || /\.(txt|csv|json|xml|log|md)$/i.test(file.name);
+            if (isTextType && file.size < 200 * 1024) {
+                await new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = e => { scanContent = file.name + '\n' + (e.target.result || '').slice(0, 3000); resolve(); };
+                    reader.onerror = resolve;
+                    reader.readAsText(file);
+                });
+            }
+            Swal.fire({ title: 'Scanning file...', html: '<span style="font-size:12px;color:#64748b;">JARVIS is checking for sensitive data</span>', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            const scanRes = await fetch('/api/jarvis-scan', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ content: scanContent, content_type: 'file' })
+            });
+            const scanData = await scanRes.json();
+            if (scanData.flagged && scanData.confidence !== 'low') {
+                const findingsHtml = (scanData.findings || []).map(f => `<li style="text-align:left;margin-bottom:4px;">${f}</li>`).join('');
+                const proceed = await Swal.fire({
+                    icon: 'warning',
+                    title: 'Sensitive Data Detected',
+                    html: `<div style="text-align:left;">
+                        <p style="margin-bottom:12px;font-size:14px;">JARVIS detected potentially sensitive information in <strong>${file.name}</strong>:</p>
+                        <ul style="font-size:13px;color:#dc2626;padding-left:20px;margin-bottom:12px;">${findingsHtml}</ul>
+                        <p style="font-size:12px;color:#64748b;">Uploading this file will notify the development team. Do you want to proceed?</p>
+                    </div>`,
+                    showCancelButton: true,
+                    confirmButtonText: 'Proceed Anyway',
+                    cancelButtonText: 'Cancel',
+                    confirmButtonColor: '#dc2626'
+                });
+                if (!proceed.isConfirmed) return;
+                const _mRec2 = currentRecords.find(r => r.id === merchantId);
+                fetch('/api/sensitive-data-alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        merchant_id: merchantId,
+                        merchant_name: _mRec2 ? (_mRec2.dba_name || '') : '',
+                        content_type: 'file',
+                        findings: scanData.findings || [],
+                        submitted_by: localStorage.getItem('pp_username') || localStorage.getItem('pp_userid') || 'Unknown'
+                    })
+                }).catch(() => {});
+            }
+        } catch (_) { /* scan failure must never block the upload */ }
+        // ── END JARVIS SCAN ────────────────────────────────────────────────
+
         Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
 
         try {
