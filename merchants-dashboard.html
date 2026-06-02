@@ -2255,10 +2255,11 @@ window.saveMerchant = async (uuid) => {
     const scanContent = title + ': ' + body;
     if (scanContent.length > 20) {
         try {
+            const _scanToken = localStorage.getItem('pp_session_token') || '';
             Swal.fire({ title: 'Scanning note...', html: '<span style="font-size:12px;color:#64748b;">JARVIS is checking for sensitive data</span>', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const scanRes = await fetch('/api/jarvis-scan', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _scanToken },
                 body: JSON.stringify({ content: scanContent, content_type: 'note' })
             });
             const scanData = await scanRes.json();
@@ -2392,22 +2393,44 @@ window.saveMerchant = async (uuid) => {
 
         // ── JARVIS SENSITIVE DATA SCAN ─────────────────────────────────────
         try {
-            let scanContent = file.name;
-            // For small text-based files, also scan the text content
+            const _fileToken = localStorage.getItem('pp_session_token') || '';
+            let scanPayload = { content_type: 'file', file_name: file.name };
+
             const isTextType = file.type.startsWith('text/') || /\.(txt|csv|json|xml|log|md)$/i.test(file.name);
+            const isBinaryReadable = /^(application\/pdf|image\/)/.test(file.type) ||
+                /\.(pdf|png|jpg|jpeg|gif|webp|bmp|tiff)$/i.test(file.name);
+
             if (isTextType && file.size < 200 * 1024) {
+                // Small text file: read as text and scan
                 await new Promise(resolve => {
                     const reader = new FileReader();
-                    reader.onload = e => { scanContent = file.name + '\n' + (e.target.result || '').slice(0, 3000); resolve(); };
+                    reader.onload = e => { scanPayload.content = file.name + '\n' + (e.target.result || '').slice(0, 3000); resolve(); };
                     reader.onerror = resolve;
                     reader.readAsText(file);
                 });
+            } else if (isBinaryReadable && file.size < 3 * 1024 * 1024) {
+                // PDF or image under 3MB: send as base64 for Gemini multimodal scan
+                await new Promise(resolve => {
+                    const reader = new FileReader();
+                    reader.onload = e => {
+                        const b64 = e.target.result.split(',')[1]; // strip data URL prefix
+                        scanPayload.content_base64 = b64;
+                        scanPayload.mime_type = file.type || 'application/octet-stream';
+                        resolve();
+                    };
+                    reader.onerror = resolve;
+                    reader.readAsDataURL(file);
+                });
+            } else {
+                // Large file or unrecognized type: scan filename only
+                scanPayload.content = file.name;
             }
+
             Swal.fire({ title: 'Scanning file...', html: '<span style="font-size:12px;color:#64748b;">JARVIS is checking for sensitive data</span>', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             const scanRes = await fetch('/api/jarvis-scan', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ content: scanContent, content_type: 'file' })
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _fileToken },
+                body: JSON.stringify(scanPayload)
             });
             const scanData = await scanRes.json();
             if (scanData.flagged && scanData.confidence !== 'low') {
