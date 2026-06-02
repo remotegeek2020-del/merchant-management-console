@@ -2293,7 +2293,7 @@ window.saveMerchant = async (uuid) => {
                     })
                 }).catch(() => {});
             }
-        } catch (_) { /* scan failure must never block the note */ }
+        } catch (scanErr) { console.error('[Jarvis Note Scan]', scanErr); }
     }
     // ── END JARVIS SCAN ────────────────────────────────────────────────────
 
@@ -2408,8 +2408,8 @@ window.saveMerchant = async (uuid) => {
                     reader.onerror = resolve;
                     reader.readAsText(file);
                 });
-            } else if (isBinaryReadable && file.size < 3 * 1024 * 1024) {
-                // PDF or image under 3MB: send as base64 for Gemini multimodal scan
+            } else if (isBinaryReadable && file.size < 2 * 1024 * 1024) {
+                // PDF or image under 2MB: send as base64 for Gemini multimodal scan
                 await new Promise(resolve => {
                     const reader = new FileReader();
                     reader.onload = e => {
@@ -2462,7 +2462,7 @@ window.saveMerchant = async (uuid) => {
                     })
                 }).catch(() => {});
             }
-        } catch (_) { /* scan failure must never block the upload */ }
+        } catch (scanErr) { console.error('[Jarvis File Scan]', scanErr); }
         // ── END JARVIS SCAN ────────────────────────────────────────────────
 
         Swal.fire({ title: 'Uploading...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });

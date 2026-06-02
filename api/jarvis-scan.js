@@ -1,32 +1,30 @@
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { validateSession, sessionErrorResponse } from './_validate.js';
 
-// Vercel body size limit is 4.5 MB — increase for base64-encoded file payloads
 export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
-const systemPrompt = `You are a sensitive financial data detector for a merchant management system. Your ONLY job is to determine whether the provided content contains genuinely sensitive financial or identity data that should not be stored in plain text notes or attached as unencrypted documents.
+const SCAN_INSTRUCTIONS = `You are a sensitive financial data detector for a merchant management system. Your ONLY job is to determine whether the provided content contains genuinely sensitive financial or identity data.
 
-WHAT TO FLAG (only flag if clearly present):
-- Bank account numbers (routing numbers, account numbers)
+WHAT TO FLAG (only if clearly present):
+- Bank account numbers or routing numbers
 - EIN / TIN / SSN / Tax ID numbers
 - Credit or debit card numbers (full PAN)
 - Bank login credentials or passwords
-- Wire transfer details with full account info
 - Social Security Numbers
+- Wire transfer details with full account/routing info
 
-WHAT NOT TO FLAG (these are normal in a merchant context):
-- Business names that contain words like "bank", "capital", "financial"
-- General payment volume amounts or transaction totals
+WHAT NOT TO FLAG:
+- Business names containing "bank", "capital", "financial"
+- General payment volumes or transaction totals
 - Processing fees, rates, percentages
-- Merchant IDs or portal reference numbers
-- General descriptions of financial products or services
+- Merchant portal reference numbers
 
-CALIBRATION: Be conservative. Only flag content where you are at least 75% confident that real sensitive data is present. A false positive wastes time; a false negative is a minor data risk. Err toward NOT flagging.
+CALIBRATION: Be conservative — only flag at 75%+ confidence. Err toward NOT flagging.
 
-Respond ONLY with a JSON object in this exact format:
-{"flagged": true/false, "confidence": "high"/"medium"/"low", "findings": ["finding 1", "finding 2"]}
-
-Where findings is an empty array if not flagged, or a brief list of what was detected (e.g. "Routing number pattern detected", "EIN format detected"). Keep each finding under 60 characters.`;
+Respond ONLY with valid JSON — no markdown, no explanation:
+{"flagged":true,"confidence":"high","findings":["Routing number detected"]}
+or
+{"flagged":false,"confidence":"low","findings":[]}`;
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
@@ -42,34 +40,36 @@ export default async function handler(req, res) {
 
     try {
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash', systemInstruction: systemPrompt });
 
-        let result;
+        let rawText;
 
         if (content_base64 && mime_type) {
-            // Binary file path: send to Gemini as inline multimodal data
-            const prompt = `Scan this file (named "${file_name || 'unknown'}") for sensitive financial or identity data.`;
-            result = await model.generateContent({
-                contents: [{
-                    role: 'user',
-                    parts: [
-                        { text: prompt },
-                        { inlineData: { mimeType: mime_type, data: content_base64 } }
-                    ]
-                }]
-            });
+            // Binary file (PDF / image): use multimodal — embed instructions in user turn
+            const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+            const result = await model.generateContent([
+                { text: SCAN_INSTRUCTIONS + `\n\nScan the attached file named "${file_name || 'unknown'}" and return the JSON result.` },
+                { inlineData: { mimeType: mime_type, data: content_base64 } }
+            ]);
+            rawText = result.response.text().trim();
+
         } else if (content && typeof content === 'string') {
-            // Text path: send as plain text
+            // Text / filename: use plain text path with system instruction
+            const model = genAI.getGenerativeModel({
+                model: 'gemini-2.5-flash',
+                systemInstruction: SCAN_INSTRUCTIONS
+            });
             const truncated = content.slice(0, 4000);
-            result = await model.generateContent(
+            const result = await model.generateContent(
                 `Content type: ${content_type || 'text'}\n\nContent to scan:\n"""\n${truncated}\n"""`
             );
+            rawText = result.response.text().trim();
+
         } else {
             return res.status(400).json({ flagged: false, error: 'No content provided' });
         }
 
-        const raw = result.response.text().trim();
-        const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+        // Strip markdown code fences if Gemini wraps the response
+        const jsonStr = rawText.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
         const parsed = JSON.parse(jsonStr);
 
         return res.status(200).json({
@@ -77,8 +77,9 @@ export default async function handler(req, res) {
             confidence: parsed.confidence || 'low',
             findings: Array.isArray(parsed.findings) ? parsed.findings.slice(0, 5) : []
         });
+
     } catch (err) {
-        console.error('[Jarvis Scan Error]', err.message);
-        return res.status(200).json({ flagged: false, error: 'Scan unavailable' });
+        console.error('[Jarvis Scan Error]', err.message, err.stack?.split('\n')[1] || '');
+        return res.status(200).json({ flagged: false, error: 'Scan unavailable: ' + err.message });
     }
 }
