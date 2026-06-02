@@ -1892,7 +1892,7 @@ async function submitOnboarding() {
 
     // Tab switcher for partner detail modal (overridden by module-level definition below)
     window.ppSwitchTab = function(tab) {
-        ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents'].forEach(function(t) {
+        ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents','merchants'].forEach(function(t) {
             var btn = document.getElementById('pptab-' + t);
             var panel = document.getElementById('pppanel-' + t);
             if (btn) {
@@ -1906,9 +1906,11 @@ async function submitOnboarding() {
         if (tab === 'subpartners') ppLoadSubPartners();
         if (tab === 'ghlinfo') ppLoadGHLInfo();
         if (tab === 'documents') ppLoadDocuments();
+        if (tab === 'merchants') ppLoadMerchants();
     };
 
     window.openPartnerDetails = async function(personId) {
+        _ppMerchantsAll = []; // reset merchant cache for new modal
         const p = allPartners.find(ptr => ptr.id === personId);
         if (!p) return;
         let branchIdStrings = [];
@@ -1977,6 +1979,7 @@ async function submitOnboarding() {
                         <button onclick="ppSwitchTab('subpartners')" id="pptab-subpartners" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Sub-Partners</button>
                         <button onclick="ppSwitchTab('ghlinfo')" id="pptab-ghlinfo" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">GHL Info</button>
                         <button onclick="ppSwitchTab('documents')" id="pptab-documents" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Documents</button>
+                        <button onclick="ppSwitchTab('merchants')" id="pptab-merchants" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Merchants</button>
                     </div>
 
                     <!-- IDS PANEL -->
@@ -2032,6 +2035,15 @@ async function submitOnboarding() {
                     <!-- DOCUMENTS PANEL -->
                     <div id="pppanel-documents" style="display:none;">
                         <div id="pp-documents-content" style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading documents...</div>
+                    </div>
+
+                    <!-- MERCHANTS PANEL -->
+                    <div id="pppanel-merchants" style="display:none;">
+                        <div id="pp-merchants-search-bar" style="display:flex;gap:8px;margin-bottom:10px;">
+                            <input id="pp-merchants-search" type="text" placeholder="Search by name, MID, or status..." oninput="ppFilterMerchants()" style="flex:1;padding:7px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;outline:none;background:white;">
+                            <div id="pp-merchants-count" style="display:flex;align-items:center;font-size:11px;color:#94a3b8;white-space:nowrap;padding:0 4px;"></div>
+                        </div>
+                        <div id="pp-merchants-content" style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading merchants...</div>
                     </div>
                 </div>`
         });
@@ -3031,7 +3043,7 @@ function pAPI(body) {
 
 // Tab switcher - scoped to Swal modal to avoid duplicate ID issues
 window.ppSwitchTab = function(tab) {
-    ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents'].forEach(function(t) {
+    ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents','merchants'].forEach(function(t) {
         var btn = document.getElementById('pptab-' + t);
         var panel = document.getElementById('pppanel-' + t);
         if (btn) {
@@ -3045,6 +3057,7 @@ window.ppSwitchTab = function(tab) {
     if (tab === 'subpartners') ppLoadSubPartners();
     if (tab === 'ghlinfo') ppLoadGHLInfo();
     if (tab === 'documents') ppLoadDocuments();
+    if (tab === 'merchants') ppLoadMerchants();
 };
 
 window.ppLoadPartnerTickets = async function() {
@@ -3880,6 +3893,109 @@ window.bulkTogglePortal = async function(active) {
         clearSelection();
         loadPartners();
     } catch (err) { Swal.fire({ icon: 'error', title: 'Failed', text: err.message }); }
+};
+
+// Merchants tab — load all merchants for the current partner across all their agent IDs
+let _ppMerchantsAll = [];
+window.ppLoadMerchants = async function() {
+    var el = document.getElementById('pp-merchants-content');
+    var countEl = document.getElementById('pp-merchants-count');
+    if (!el) return;
+    if (_ppMerchantsAll.length) { ppFilterMerchants(); return; } // already loaded
+    el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">Loading merchants...</div>';
+    if (countEl) countEl.textContent = '';
+
+    // Get agent ID strings from the context store set when the modal opened
+    var ctxEl = document.getElementById('pp-ctx');
+    var personId = ctxEl ? ctxEl.getAttribute('data-person-id') : null;
+    if (!personId) { el.innerHTML = '<div style="text-align:center;color:#ef4444;padding:30px;">Could not identify partner.</div>'; return; }
+
+    var partner = allPartners.find(p => p.id === personId);
+    if (!partner) { el.innerHTML = '<div style="text-align:center;color:#ef4444;padding:30px;">Partner not found.</div>'; return; }
+
+    var idStrings = [];
+    partner.companies.forEach(co => { co.ids.forEach(id => { idStrings = getAllBranchIds(id, idStrings); }); });
+    idStrings = [...new Set(idStrings)];
+
+    try {
+        // Fetch each agent ID in parallel then flatten
+        const results = await Promise.all(idStrings.map(async idStr => {
+            const r = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'get_merchant_data_raw', identifier_id: idStr })
+            });
+            const d = await r.json();
+            return (d.success && d.data) ? d.data : [];
+        }));
+        _ppMerchantsAll = results.flat();
+        ppFilterMerchants();
+    } catch (err) {
+        el.innerHTML = `<div style="text-align:center;color:#ef4444;padding:30px;">Error: ${err.message}</div>`;
+    }
+};
+
+window.ppFilterMerchants = function() {
+    var el = document.getElementById('pp-merchants-content');
+    var countEl = document.getElementById('pp-merchants-count');
+    var q = (document.getElementById('pp-merchants-search')?.value || '').toLowerCase().trim();
+    var list = q ? _ppMerchantsAll.filter(m =>
+        (m.dba_name || '').toLowerCase().includes(q) ||
+        (m.merchant_id || '').toLowerCase().includes(q) ||
+        (m.account_status || '').toLowerCase().includes(q)
+    ) : _ppMerchantsAll;
+
+    if (countEl) countEl.textContent = `${list.length.toLocaleString()} merchant${list.length !== 1 ? 's' : ''}`;
+
+    if (!list.length) {
+        el.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:30px;">No merchants found.</div>';
+        return;
+    }
+
+    const statusBadge = s => {
+        const colors = {
+            'Approved': 'background:#dcfce7;color:#166534',
+            'Pending': 'background:#fef9c3;color:#854d0e',
+            'Cancelled': 'background:#fee2e2;color:#991b1b',
+            'Declined': 'background:#fee2e2;color:#991b1b',
+            'Suspended': 'background:#fef3c7;color:#92400e',
+        };
+        const style = colors[s] || 'background:#f1f5f9;color:#475569';
+        return `<span style="${style};padding:2px 8px;border-radius:99px;font-size:10px;font-weight:700;">${s || '—'}</span>`;
+    };
+
+    const rows = list.map(m => {
+        const url = `merchants-dashboard.html?q=${encodeURIComponent(m.merchant_id)}&filterBy=merchant_id`;
+        return `<tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:8px 10px;font-size:12px;color:#94a3b8;">${m.merchant_id || '—'}</td>
+            <td style="padding:8px 10px;font-size:13px;font-weight:700;color:#002d5a;">
+                <a href="${url}" target="_blank" style="color:#004990;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.dba_name || '—'}</a>
+            </td>
+            <td style="padding:8px 10px;">${statusBadge(m.account_status)}</td>
+            <td style="padding:8px 10px;font-size:12px;color:#334155;">${m.volume_30_day ? '$' + Number(m.volume_30_day).toLocaleString() : '—'}</td>
+            <td style="padding:8px 10px;font-size:11px;color:#64748b;">${m.last_batch_date ? new Date(m.last_batch_date).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—'}</td>
+            <td style="padding:8px 10px;">
+                <a href="${url}" target="_blank" style="display:inline-flex;align-items:center;gap:3px;background:#eff6ff;border:1px solid #bfdbfe;color:#004990;border-radius:6px;padding:3px 9px;font-size:11px;font-weight:700;text-decoration:none;" onmouseover="this.style.background='#004990';this.style.color='white'" onmouseout="this.style.background='#eff6ff';this.style.color='#004990'"><span class="material-icons" style="font-size:12px;">open_in_new</span>View</a>
+            </td>
+        </tr>`;
+    }).join('');
+
+    el.innerHTML = `
+        <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;">
+                <thead style="position:sticky;top:0;background:#f8fafc;z-index:1;">
+                    <tr style="border-bottom:2px solid #e2e8f0;">
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">MID</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Merchant Name</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Status</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">30D Vol</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Last Batch</th>
+                        <th style="padding:8px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;"></th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>`;
 };
 
 // Single card portal toggle
