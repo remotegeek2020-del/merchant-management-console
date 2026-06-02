@@ -195,6 +195,18 @@ if (action === 'getMonthlyReport') {
 
             return res.status(200).json({ success: true, data });
         }
+        if (action === 'list_deployed_serials') {
+            const q = req.body.query || '';
+            let sb = supabase.from('equipments')
+                .select('id, serial_number, terminal_type, current_location')
+                .eq('status', 'deployed')
+                .order('serial_number', { ascending: true })
+                .limit(100);
+            if (q) sb = sb.ilike('serial_number', `%${q}%`);
+            const { data, error } = await sb;
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
         if (action === 'list') {
             const limit = parseInt(req.body.limit) || 50;
             const page = parseInt(req.body.page) || 0;
