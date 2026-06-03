@@ -21,19 +21,48 @@
         body { background: var(--surface-0); font-family: 'DM Sans', sans-serif; padding: var(--page-pad); }
         .dashboard-container { max-width: 1600px; margin: 0 auto; }
         .modern-header { background: white; border-radius: var(--radius-lg); padding: 16px 24px; margin-bottom: var(--gap); display: flex; justify-content: space-between; align-items: center; box-shadow: var(--shadow-sm); border: 1px solid var(--border); gap: 12px; flex-wrap: wrap; }
+        /* KPI */
         .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap); margin-bottom: var(--gap); }
         .kpi-card { background: white; padding: 20px; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); }
         .kpi-icon { width: 40px; height: 40px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
         .kpi-val { font-size: 1.9rem; font-weight: 800; color: var(--text-primary); font-family: 'DM Mono', monospace; letter-spacing: -1px; line-height: 1; }
         .kpi-label { font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.7px; margin-top: 4px; }
         .kpi-sub { font-size: 11px; color: var(--text-secondary); margin-top: 6px; }
+        /* Layout */
         .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
         .three-col { display: grid; grid-template-columns: 2fr 1fr; gap: var(--gap); margin-bottom: var(--gap); }
+        /* Panels */
         .panel { background: white; border-radius: var(--radius-lg); border: 1px solid var(--border); box-shadow: var(--shadow-sm); overflow: hidden; }
         .panel-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
         .panel-title { font-size: 13px; font-weight: 700; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
         .panel-body { padding: 0; }
+        /* Badges */
+        .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+        .badge-open   { background: var(--blue-bg);  color: var(--blue-text); }
+        .badge-transit { background: var(--amber-bg); color: var(--amber-text); }
+        .badge-closed  { background: var(--gray-bg);  color: var(--gray-text); }
+        .badge-approved { background: #dcfce7; color: #166534; }
+        .badge-pending  { background: var(--amber-bg); color: var(--amber-text); }
+        .badge-active   { background: #dcfce7; color: #166534; }
+        .badge-inactive { background: var(--gray-bg); color: var(--gray-text); }
+        /* Row styles */
+        .dep-row  { display: flex; align-items: center; gap: 12px; padding: 11px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .dep-row:last-child { border-bottom: none; }
+        .dep-row:hover { background: var(--surface-2); }
+        .dep-icon { width: 30px; height: 30px; background: var(--blue-bg); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .list-row { display: flex; align-items: center; gap: 12px; padding: 11px 20px; border-bottom: 1px solid var(--border); font-size: 13px; transition: background .1s; }
+        .list-row:last-child { border-bottom: none; }
+        .list-row:hover { background: var(--surface-2); }
+        .list-icon { width: 30px; height: 30px; border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        /* At-risk */
         .risk-row { display: grid; grid-template-columns: auto 1fr auto auto auto auto; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
+        .risk-row:last-child { border-bottom: none; }
+        .risk-row:hover { background: var(--surface-2); }
+        .risk-name { font-weight: 600; color: var(--text-primary); }
+        .risk-mid  { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); }
+        .drop-badge { background: var(--red-bg); color: var(--red-text); font-weight: 800; font-size: 11px; padding: 3px 10px; border-radius: 99px; min-width: 52px; text-align: center; }
+        .drop-badge.mild { background: var(--amber-bg); color: var(--amber-text); }
+        /* Toggles */
         .toggle-pill { position:relative; display:inline-block; width:36px; height:20px; }
         .toggle-pill input { opacity:0; width:0; height:0; }
         .toggle-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:#cbd5e1; border-radius:20px; transition:.2s; }
@@ -45,48 +74,34 @@
         .access-row:hover { background:var(--surface-2); }
         .access-col { display:flex; flex-direction:column; align-items:center; gap:4px; min-width:70px; }
         .access-col-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px; }
-        #merchant-detail-modal { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
-        #merchant-detail-modal.is-open { display:flex; }
-        .detail-modal-box { background:white; border-radius:16px; width:95%; max-width:520px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden; }
-        .detail-section { padding:16px 20px; border-bottom:1px solid var(--border); }
-        .detail-section:last-child { border-bottom:none; }
-        .detail-label { font-size:9px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.6px; margin-bottom:10px; }
-        .detail-row { display:flex; justify-content:space-between; margin-bottom:6px; font-size:13px; }
-        .detail-key { color:var(--text-muted); }
-        .detail-val { font-weight:600; color:var(--text-primary); text-align:right; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-        .risk-row:last-child { border-bottom: none; }
-        .risk-row:hover { background: var(--surface-2); }
-        .risk-name { font-weight: 600; color: var(--text-primary); }
-        .risk-mid { font-family: 'DM Mono', monospace; font-size: 11px; color: var(--text-muted); }
-        .drop-badge { background: var(--red-bg); color: var(--red-text); font-weight: 800; font-size: 11px; padding: 3px 10px; border-radius: 99px; min-width: 52px; text-align: center; }
-        .drop-badge.mild { background: var(--amber-bg); color: var(--amber-text); }
-        .dep-row { display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--border); font-size: 13px; }
-        .dep-row:last-child { border-bottom: none; }
-        .dep-row:hover { background: var(--surface-2); }
-        .dep-icon { width: 32px; height: 32px; background: var(--blue-bg); border-radius: var(--radius-sm); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .badge { font-weight: 700; font-size: 10px; padding: 3px 10px; border-radius: 99px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
-        .badge-open { background: var(--blue-bg); color: var(--blue-text); }
-        .badge-transit { background: var(--amber-bg); color: var(--amber-text); }
-        .badge-closed { background: var(--gray-bg); color: var(--gray-text); }
-        .equip-bar { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1px; background: var(--border); }
-        .equip-seg { background: white; padding: 16px 20px; text-align: center; }
-        .equip-num { font-size: 1.4rem; font-weight: 800; font-family: 'DM Mono', monospace; }
-        .equip-lbl { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-top: 2px; }
+        /* Activity */
         .activity-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px 20px; border-bottom: 1px solid var(--border); font-size: 12px; }
         .activity-row:last-child { border-bottom: none; }
         .activity-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
         .dot-success { background: var(--green); }
         .dot-failure { background: var(--red); }
-        .dot-info { background: var(--pp-accent); }
-        .empty-state { padding: 40px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
+        .dot-info    { background: var(--pp-accent); }
+        /* Misc */
+        .empty-state { padding: 36px 20px; text-align: center; color: var(--text-muted); font-size: 13px; }
         .skeleton { background: linear-gradient(90deg, #f0f4f8 25%, #e2e8f0 50%, #f0f4f8 75%); background-size: 400% 100%; animation: shimmer 1.2s infinite; border-radius: 6px; }
         @keyframes shimmer { 0% { background-position: 100% 0; } 100% { background-position: -100% 0; } }
-        @media (max-width: 1100px) { .kpi-grid { grid-template-columns: repeat(2, 1fr); } .three-col { grid-template-columns: 1fr; } }
-        @media (max-width: 700px) { .kpi-grid { grid-template-columns: 1fr 1fr; } .two-col { grid-template-columns: 1fr; } }
-
-        /* ── PER-USER DRAG LAYOUT ── */
+        .view-btn { font-size: 11px; font-weight: 700; color: var(--pp-blue); background: none; border: 1px solid var(--border); padding: 3px 10px; border-radius: 6px; cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-block; }
+        .view-btn:hover { background: var(--blue-bg); border-color: var(--pp-blue); }
+        /* Modals */
+        .detail-section { padding: 16px 20px; border-bottom: 1px solid var(--border); }
+        .detail-section:last-child { border-bottom: none; }
+        .detail-label { font-size: 9px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 10px; }
+        .detail-row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 13px; }
+        .detail-key { color: var(--text-muted); }
+        .detail-val { font-weight: 600; color: var(--text-primary); text-align: right; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* Ticket priority */
+        #merchant-detail-modal { display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center; }
+        #merchant-detail-modal.is-open { display:flex; }
+        .detail-modal-box { background:white; border-radius:16px; width:95%; max-width:520px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden; }
+        /* Drag layout */
         #dashboard-widgets > [data-widget] > .kpi-grid,
         #dashboard-widgets > [data-widget] > .three-col,
+        #dashboard-widgets > [data-widget] > .two-col,
         #dashboard-widgets > [data-widget] > .panel { margin-bottom: 0; }
         .drag-handle { display:none; align-items:center; gap:6px; padding:7px 14px; background:#f8fafc; border:1px dashed #cbd5e1; border-radius:var(--radius-lg) var(--radius-lg) 0 0; cursor:grab; font-size:11px; font-weight:700; color:#64748b; user-select:none; }
         .drag-handle:active { cursor:grabbing; }
@@ -95,6 +110,14 @@
         .arrange-mode [data-widget].widget-drag-over { box-shadow:0 0 0 3px #004990, 0 4px 16px rgba(0,73,144,0.12) !important; }
         .arrange-mode [data-widget].widget-dragging { opacity:0.35; }
         @keyframes toast-in { from{opacity:0;transform:translateY(8px);} to{opacity:1;transform:translateY(0);} }
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .kpi-grid { grid-template-columns: repeat(2,1fr); }
+            .three-col, .two-col { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 700px) { .kpi-grid { grid-template-columns: 1fr 1fr; } }
+        /* Section divider label */
+        .section-divider { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin: 4px 0 calc(var(--gap) - 4px); padding: 0 4px; }
     </style>
 </head>
 <body>
@@ -125,153 +148,214 @@
 
     <div id="dashboard-widgets">
 
-    <!-- KPI Row -->
-    <div data-widget="kpi-row-1" data-widget-label="Merchants &amp; Volume" style="margin-bottom:var(--gap);">
+    <!-- ── KPI ROW 1: Core Operations ─────────────────────────────────── -->
+    <div data-widget="kpi-row-1" data-widget-label="Core Operations" style="margin-bottom:var(--gap);">
     <div class="kpi-grid" id="kpi-grid">
-        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">storefront</span></div><div class="kpi-val skeleton" style="height:32px; width:80px;">&nbsp;</div><div class="kpi-label">Active Merchants</div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">payments</span></div><div class="kpi-val skeleton" style="height:32px; width:100px;">&nbsp;</div><div class="kpi-label">MTD Volume</div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:20px;">local_shipping</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Active Deployments</div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">assignment_return</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Open RMAs</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1;font-size:20px;">storefront</span></div><div class="kpi-val skeleton" style="height:32px;width:80px;">&nbsp;</div><div class="kpi-label">Active Merchants</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534;font-size:20px;">payments</span></div><div class="kpi-val skeleton" style="height:32px;width:100px;">&nbsp;</div><div class="kpi-label">MTD Volume</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e;font-size:20px;">local_shipping</span></div><div class="kpi-val skeleton" style="height:32px;width:60px;">&nbsp;</div><div class="kpi-label">Active Deployments</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b;font-size:20px;">assignment_return</span></div><div class="kpi-val skeleton" style="height:32px;width:60px;">&nbsp;</div><div class="kpi-label">Open RMAs</div></div>
     </div>
-    </div><!-- /kpi-row-1 -->
-
-    <!-- Secondary KPIs -->
-    <div data-widget="kpi-row-2" data-widget-label="Equipment Summary" style="margin-bottom:var(--gap);">
-    <div class="kpi-grid" id="kpi-grid-2" style="grid-template-columns: repeat(4,1fr);">
-        <div class="kpi-card"><div class="kpi-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed; font-size:20px;">fiber_new</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">New This Week</div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">inventory_2</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Units In Stock</div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">devices</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">Units Deployed</div></div>
-        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">build</span></div><div class="kpi-val skeleton" style="height:32px; width:60px;">&nbsp;</div><div class="kpi-label">In Repair</div></div>
     </div>
-    </div><!-- /kpi-row-2 -->
 
-    <!-- At-Risk + Recent Deployments -->
-    <div data-widget="at-risk-deployments" data-widget-label="At-Risk Merchants &amp; Recent Deployments" style="margin-bottom:var(--gap);">
-    <div class="three-col">
-        <div class="panel">
+    <!-- ── KPI ROW 2: Support & Inventory ─────────────────────────────── -->
+    <div data-widget="kpi-row-2" data-widget-label="Support &amp; Inventory" style="margin-bottom:var(--gap);">
+    <div class="kpi-grid" id="kpi-grid-2">
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e;font-size:20px;">confirmation_number</span></div><div class="kpi-val skeleton" style="height:32px;width:60px;">&nbsp;</div><div class="kpi-label">Open Tickets</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed;font-size:20px;">task_alt</span></div><div class="kpi-val skeleton" style="height:32px;width:60px;">&nbsp;</div><div class="kpi-label">Open Tasks</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534;font-size:20px;">inventory_2</span></div><div class="kpi-val skeleton" style="height:32px;width:60px;">&nbsp;</div><div class="kpi-label">Units In Stock</div></div>
+        <div class="kpi-card"><div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b;font-size:20px;">build</span></div><div class="kpi-val skeleton" style="height:32px;width:60px;">&nbsp;</div><div class="kpi-label">In Repair</div></div>
+    </div>
+    </div>
+
+    <!-- ── DEPLOYMENTS + RETURNS ──────────────────────────────────────── -->
+    <div data-widget="deployments-returns" data-widget-label="Recent Deployments &amp; Returns" style="margin-bottom:var(--gap);">
+    <div class="two-col" id="dep-ret-grid">
+        <div class="panel" id="dep-panel">
             <div class="panel-header">
-                <div style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-                    <label style="display:flex; align-items:center; cursor:pointer; margin:0;">
-                        <input type="checkbox" id="select-all-risk" onchange="toggleSelectAll(this)" style="width:15px; height:15px; cursor:pointer; accent-color:#004990;">
-                    </label>
-                    <div class="panel-title">
-                        <span class="material-icons" style="color:#dc2626; font-size:18px;">trending_down</span>
-                        At-Risk Merchants
-                    </div>
-                    <span id="risk-count" style="font-size:11px; color:var(--text-muted);"></span>
+                <div class="panel-title">
+                    <span class="material-icons" style="color:var(--pp-accent);font-size:18px;">local_shipping</span>
+                    Recent Deployments
                 </div>
-                <button id="bulk-alert-btn" onclick="sendBulkAlerts()" style="display:none; background:#dc2626; color:white; border:none; border-radius:8px; font-weight:700; font-size:11px; padding:6px 14px; cursor:pointer; white-space:nowrap; align-items:center; gap:5px;">
-                    <span class="material-icons" style="font-size:14px;">notifications_active</span>
-                    <span id="bulk-alert-label">Send Alerts</span>
-                </button>
+                <a href="/deployments-dashboard" class="view-btn">View All →</a>
             </div>
-            <div class="panel-body" id="risk-table" style="max-height:480px; overflow-y:auto;">
-                <div class="empty-state"><div class="skeleton" style="height:14px; width:200px; margin:0 auto 10px;"></div><div class="skeleton" style="height:14px; width:160px; margin:0 auto;"></div></div>
+            <div class="panel-body" id="dep-list">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:180px;margin:0 auto;"></div></div>
             </div>
         </div>
+        <div class="panel" id="ret-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:#dc2626;font-size:18px;">assignment_return</span>
+                    Recent Returns
+                </div>
+                <a href="/returns-dashboard" class="view-btn">View All →</a>
+            </div>
+            <div class="panel-body" id="ret-list">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:180px;margin:0 auto;"></div></div>
+            </div>
+        </div>
+    </div>
+    </div>
 
+    <!-- ── AT-RISK MERCHANTS + OPEN TASKS ─────────────────────────────── -->
+    <div data-widget="at-risk-tasks" data-widget-label="At-Risk Merchants &amp; Open Tasks" style="margin-bottom:var(--gap);">
+    <div class="three-col" id="risk-tasks-grid">
+        <div class="panel" id="risk-panel">
+            <div class="panel-header">
+                <div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0;">
+                    <label style="display:flex;align-items:center;cursor:pointer;margin:0;">
+                        <input type="checkbox" id="select-all-risk" onchange="toggleSelectAll(this)" style="width:15px;height:15px;cursor:pointer;accent-color:#004990;">
+                    </label>
+                    <div class="panel-title">
+                        <span class="material-icons" style="color:#dc2626;font-size:18px;">trending_down</span>
+                        At-Risk Merchants
+                    </div>
+                    <span id="risk-count" style="font-size:11px;color:var(--text-muted);"></span>
+                </div>
+                <div style="display:flex;gap:8px;align-items:center;">
+                    <button id="bulk-alert-btn" onclick="sendBulkAlerts()" style="display:none;background:#dc2626;color:white;border:none;border-radius:8px;font-weight:700;font-size:11px;padding:6px 14px;cursor:pointer;white-space:nowrap;align-items:center;gap:5px;">
+                        <span class="material-icons" style="font-size:14px;">notifications_active</span>
+                        <span id="bulk-alert-label">Send Alerts</span>
+                    </button>
+                    <a href="/merchants-dashboard" class="view-btn">View All →</a>
+                </div>
+            </div>
+            <div class="panel-body" id="risk-table" style="max-height:400px;overflow-y:auto;">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:200px;margin:0 auto 10px;"></div><div class="skeleton" style="height:14px;width:160px;margin:0 auto;"></div></div>
+            </div>
+        </div>
+        <div class="panel" id="tasks-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:#7c3aed;font-size:18px;">task_alt</span>
+                    Open Tasks
+                </div>
+                <a href="/merchants-dashboard" class="view-btn">Merchants →</a>
+            </div>
+            <div class="panel-body" id="tasks-list" style="max-height:400px;overflow-y:auto;">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:160px;margin:0 auto;"></div></div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- ── PRIORITY TICKETS + NEW MERCHANTS ───────────────────────────── -->
+    <div data-widget="tickets-merchants" data-widget-label="Priority Tickets &amp; New Merchants" style="margin-bottom:var(--gap);">
+    <div class="two-col" id="tickets-merchants-grid">
         <div class="panel">
             <div class="panel-header">
                 <div class="panel-title">
-                    <span class="material-icons" style="color:var(--pp-accent); font-size:18px;">local_shipping</span>
-                    Recent Deployments
+                    <span class="material-icons" style="color:#dc2626;font-size:18px;">priority_high</span>
+                    Priority Tickets
                 </div>
-                <a href="/deployments-dashboard" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">View All</a>
-            </div>
-            <div class="panel-body" id="dep-list">
-                <div class="empty-state"><div class="skeleton" style="height:14px; width:180px; margin:0 auto;"></div></div>
-            </div>
-        </div>
-    </div>
-    </div><!-- /at-risk-deployments -->
-
-    <!-- Priority Tickets -->
-    <div data-widget="priority-tickets" data-widget-label="Priority Tickets" style="margin-bottom:var(--gap);">
-    <div class="panel">
-        <div class="panel-header">
-            <div class="panel-title">
-                <span class="material-icons" style="color:#dc2626; font-size:18px;">priority_high</span>
-                Priority Tickets
-            </div>
-            <div style="display:flex; align-items:center; gap:8px;">
-                <div id="ticket-priority-filters" style="display:flex; gap:6px;">
-                    <button class="filter-chip active" data-tpriority="high_urgent" onclick="setTicketPriorityFilter(this,'high_urgent')">High &amp; Urgent</button>
-                    <button class="filter-chip" data-tpriority="urgent" onclick="setTicketPriorityFilter(this,'urgent')">Urgent Only</button>
-                    <button class="filter-chip" data-tpriority="all" onclick="setTicketPriorityFilter(this,'all')">All Open</button>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div id="ticket-priority-filters" style="display:flex;gap:6px;">
+                        <button class="filter-chip active" data-tpriority="high_urgent" onclick="setTicketPriorityFilter(this,'high_urgent')">High &amp; Urgent</button>
+                        <button class="filter-chip" data-tpriority="urgent" onclick="setTicketPriorityFilter(this,'urgent')">Urgent Only</button>
+                        <button class="filter-chip" data-tpriority="all" onclick="setTicketPriorityFilter(this,'all')">All Open</button>
+                    </div>
+                    <a href="/tickets-dashboard" class="view-btn" style="white-space:nowrap;">View All →</a>
                 </div>
-                <a href="/tickets-dashboard" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none; white-space:nowrap;">View All →</a>
+            </div>
+            <div class="panel-body" id="priority-tickets-list" style="max-height:400px;overflow-y:auto;">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:220px;margin:0 auto;"></div></div>
             </div>
         </div>
-        <div class="panel-body" id="priority-tickets-list">
-            <div class="empty-state"><div class="skeleton" style="height:14px; width:220px; margin:0 auto;"></div></div>
-        </div>
-    </div>
-    </div><!-- /priority-tickets -->
-
-    <!-- Activity Log -->
-    <div data-widget="activity-log" data-widget-label="Recent Activity" style="margin-bottom:var(--gap);">
-    <div class="panel">
-        <div class="panel-header">
-            <div class="panel-title">
-                <span class="material-icons" style="color:var(--text-muted); font-size:18px;">history</span>
-                Recent Activity
+        <div class="panel" id="new-merchants-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:#0369a1;font-size:18px;">storefront</span>
+                    New Merchants
+                </div>
+                <a href="/merchants-dashboard" class="view-btn">View All →</a>
             </div>
-            <a href="/activity-logs" style="font-size:11px; color:var(--pp-blue); font-weight:600; text-decoration:none;">Full Log</a>
-        </div>
-        <div class="panel-body" id="activity-log">
-            <div class="empty-state"><div class="skeleton" style="height:14px; width:220px; margin:0 auto;"></div></div>
+            <div class="panel-body" id="new-merchants-list" style="max-height:400px;overflow-y:auto;">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:160px;margin:0 auto;"></div></div>
+            </div>
         </div>
     </div>
-    </div><!-- /activity-log -->
+    </div>
 
-    <!-- Staff Access Management -->
+    <!-- ── RECENT PARTNERS + ACTIVITY LOG ─────────────────────────────── -->
+    <div data-widget="partners-activity" data-widget-label="Recent Partners &amp; Activity" style="margin-bottom:var(--gap);">
+    <div class="two-col" id="partners-activity-grid">
+        <div class="panel" id="partners-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:#0369a1;font-size:18px;">groups</span>
+                    Recent Partners
+                </div>
+                <a href="/partners-dashboard" class="view-btn">View All →</a>
+            </div>
+            <div class="panel-body" id="partners-list" style="max-height:360px;overflow-y:auto;">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:160px;margin:0 auto;"></div></div>
+            </div>
+        </div>
+        <div class="panel" id="activity-panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <span class="material-icons" style="color:var(--text-muted);font-size:18px;">history</span>
+                    Recent Activity
+                </div>
+                <a href="/activity-logs" class="view-btn">Full Log →</a>
+            </div>
+            <div class="panel-body" id="activity-log" style="max-height:360px;overflow-y:auto;">
+                <div class="empty-state"><div class="skeleton" style="height:14px;width:220px;margin:0 auto;"></div></div>
+            </div>
+        </div>
+    </div>
+    </div>
+
+    <!-- ── STAFF ACCESS CONTROL ───────────────────────────────────────── -->
     <div data-widget="staff-access" data-widget-label="Staff Access Control" style="margin-bottom:var(--gap);">
-    <div class="panel" data-panel="staff-access">
+    <div class="panel">
         <div class="panel-header">
             <div class="panel-title">
-                <span class="material-icons" style="color:#7c3aed; font-size:18px;">manage_accounts</span>
+                <span class="material-icons" style="color:#7c3aed;font-size:18px;">manage_accounts</span>
                 Staff Access Control
             </div>
-            <button onclick="saveAccessChanges()" id="save-access-btn" class="slds-button" style="background:#004990; color:white; border-radius:8px; font-weight:700; font-size:11px; padding:6px 14px; border:none; cursor:pointer; display:none;">
+            <button onclick="saveAccessChanges()" id="save-access-btn" class="slds-button" style="background:#004990;color:white;border-radius:8px;font-weight:700;font-size:11px;padding:6px 14px;border:none;cursor:pointer;display:none;">
                 Save Changes
             </button>
         </div>
         <div class="panel-body" id="staff-access-table">
-            <div class="empty-state"><div class="skeleton" style="height:14px; width:200px; margin:0 auto;"></div></div>
+            <div class="empty-state"><div class="skeleton" style="height:14px;width:200px;margin:0 auto;"></div></div>
         </div>
     </div>
-    </div><!-- /staff-access -->
+    </div>
 
     </div><!-- /dashboard-widgets -->
-
 </div>
 
-<!-- Deployment Detail Modal -->
-<div id="dep-detail-modal" style="display:none; position:fixed; top:0; left:0; width:100vw; height:100vh; background:rgba(0,0,0,0.55); z-index:9999; align-items:center; justify-content:center;">
-    <div style="background:white; border-radius:16px; width:95%; max-width:480px; box-shadow:0 30px 60px rgba(0,0,0,0.2); overflow:hidden;">
-        <div style="padding:16px 20px; background:var(--pp-navy); display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-weight:800; font-size:14px; color:white;" id="dep-modal-title">Deployment Detail</div>
-            <button onclick="closeDepModal()" style="background:none; border:none; color:white; cursor:pointer; padding:0;"><span class="material-icons">close</span></button>
+<!-- ── Deployment Detail Modal ──────────────────────────────────────── -->
+<div id="dep-detail-modal" style="display:none;position:fixed;top:0;left:0;width:100vw;height:100vh;background:rgba(0,0,0,0.55);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:white;border-radius:16px;width:95%;max-width:480px;box-shadow:0 30px 60px rgba(0,0,0,0.2);overflow:hidden;">
+        <div style="padding:16px 20px;background:var(--pp-navy);display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-weight:800;font-size:14px;color:white;" id="dep-modal-title">Deployment Detail</div>
+            <button onclick="closeDepModal()" style="background:none;border:none;color:white;cursor:pointer;padding:0;"><span class="material-icons">close</span></button>
         </div>
-        <div id="dep-modal-body" style="max-height:70vh; overflow-y:auto;">
-            <div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>
+        <div id="dep-modal-body" style="max-height:70vh;overflow-y:auto;">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);">Loading...</div>
         </div>
     </div>
 </div>
 
-<!-- Merchant Detail Modal -->
+<!-- ── Merchant Detail Modal ────────────────────────────────────────── -->
 <div id="merchant-detail-modal">
     <div class="detail-modal-box">
-        <div style="padding:16px 20px; background:var(--pp-navy); display:flex; justify-content:space-between; align-items:center;">
-            <div style="font-weight:800; font-size:14px; color:white;" id="modal-merchant-title">Merchant Detail</div>
-            <button onclick="closeDetailModal()" style="background:none; border:none; color:white; cursor:pointer; padding:0;"><span class="material-icons">close</span></button>
+        <div style="padding:16px 20px;background:var(--pp-navy);display:flex;justify-content:space-between;align-items:center;">
+            <div style="font-weight:800;font-size:14px;color:white;" id="modal-merchant-title">Merchant Detail</div>
+            <button onclick="closeDetailModal()" style="background:none;border:none;color:white;cursor:pointer;padding:0;"><span class="material-icons">close</span></button>
         </div>
-        <div id="modal-body" style="max-height:70vh; overflow-y:auto;">
-            <div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>
+        <div id="modal-body" style="max-height:70vh;overflow-y:auto;">
+            <div style="padding:40px;text-align:center;color:var(--text-muted);">Loading...</div>
         </div>
     </div>
 </div>
+
 <script>
+// ── Utilities ────────────────────────────────────────────────────────────────
 const fmt = n => '$' + parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const timeAgo = d => {
     const s = Math.floor((Date.now() - new Date(d)) / 1000);
@@ -280,108 +364,164 @@ const timeAgo = d => {
     if (s < 86400) return Math.floor(s/3600) + 'h ago';
     return Math.floor(s/86400) + 'd ago';
 };
-
 function authHeaders(extra = {}) {
     const token = localStorage.getItem('pp_session_token') || '';
     return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token, ...extra };
 }
-
 async function api(action, extra = {}) {
     try {
-        const r = await fetch('/api/admin-dashboard', {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({ action, ...extra })
-        });
+        const r = await fetch('/api/admin-dashboard', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action, ...extra }) });
         return r.json();
     } catch (e) {
         console.error('[api]', action, e);
-        return { success: false, message: 'Network error. Please try again.' };
+        return { success: false, message: 'Network error.' };
     }
 }
 
+// ── Access flags ─────────────────────────────────────────────────────────────
+const ppRole = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
+const hasAdminDashAccess = localStorage.getItem('pp_access_admin_dashboard') === 'true';
+const isAdminRole = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'operations_admin' || ppRole === 'super_admin';
+const ppAccess = {
+    merchants:   localStorage.getItem('pp_access_merchants')   === 'true',
+    deployments: localStorage.getItem('pp_access_deployments') === 'true',
+    returns:     localStorage.getItem('pp_access_returns')     === 'true',
+    partners:    localStorage.getItem('pp_access_partners')    === 'true',
+    inventory:   localStorage.getItem('pp_access_inventory')   === 'true',
+};
+
+function applyAccessGating() {
+    // Deployments + Returns row
+    const depP = document.getElementById('dep-panel');
+    const retP = document.getElementById('ret-panel');
+    const drGrid = document.getElementById('dep-ret-grid');
+    if (!ppAccess.deployments) depP.style.display = 'none';
+    if (!ppAccess.returns)     retP.style.display = 'none';
+    if (!ppAccess.deployments && !ppAccess.returns) {
+        document.querySelector('[data-widget="deployments-returns"]').style.display = 'none';
+    } else if (!ppAccess.deployments || !ppAccess.returns) {
+        drGrid.style.gridTemplateColumns = '1fr';
+    }
+
+    // At-risk panel (merchants access)
+    const riskP = document.getElementById('risk-panel');
+    const rtGrid = document.getElementById('risk-tasks-grid');
+    if (!ppAccess.merchants) {
+        riskP.style.display = 'none';
+        rtGrid.style.gridTemplateColumns = '1fr';
+    }
+
+    // New merchants panel
+    const nmP = document.getElementById('new-merchants-panel');
+    const tmGrid = document.getElementById('tickets-merchants-grid');
+    if (!ppAccess.merchants) {
+        nmP.style.display = 'none';
+        tmGrid.style.gridTemplateColumns = '1fr';
+    }
+
+    // Partners panel
+    const partnersP = document.getElementById('partners-panel');
+    const paGrid = document.getElementById('partners-activity-grid');
+    if (!ppAccess.partners) {
+        partnersP.style.display = 'none';
+        paGrid.style.gridTemplateColumns = '1fr';
+    }
+
+    // Activity log + Staff access (admin only)
+    const actP = document.getElementById('activity-panel');
+    if (!isAdminRole) {
+        actP.style.display = 'none';
+        if (!ppAccess.partners) {
+            document.querySelector('[data-widget="partners-activity"]').style.display = 'none';
+        } else {
+            paGrid.style.gridTemplateColumns = '1fr';
+        }
+    }
+    const staffW = document.querySelector('[data-widget="staff-access"]');
+    if (staffW) staffW.style.display = isAdminRole ? '' : 'none';
+}
+
+// ── KPI Render ───────────────────────────────────────────────────────────────
 function renderKPIs(kpis) {
     document.getElementById('kpi-grid').innerHTML = `
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">storefront</span></div>
+            <div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1;font-size:20px;">storefront</span></div>
             <div class="kpi-val">${kpis.approved.toLocaleString()}</div>
             <div class="kpi-label">Active Merchants</div>
             <div class="kpi-sub">${kpis.pending.toLocaleString()} pending &nbsp;·&nbsp; ${kpis.closed.toLocaleString()} closed</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">payments</span></div>
+            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534;font-size:20px;">payments</span></div>
             <div class="kpi-val">${fmt(kpis.total_mtd)}</div>
             <div class="kpi-label">MTD Volume</div>
             <div class="kpi-sub">${fmt(kpis.total_90d / 3)} monthly avg (90d)</div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e; font-size:20px;">local_shipping</span></div>
+            <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e;font-size:20px;">local_shipping</span></div>
             <div class="kpi-val">${kpis.active_deployments}</div>
             <div class="kpi-label">Active Deployments</div>
-            <div class="kpi-sub"><a href="/deployments-dashboard" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View tickets →</a></div>
+            <div class="kpi-sub"><a href="/deployments-dashboard" style="color:var(--pp-blue);text-decoration:none;font-size:11px;">View tickets →</a></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">assignment_return</span></div>
+            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b;font-size:20px;">assignment_return</span></div>
             <div class="kpi-val">${kpis.open_rmas}</div>
             <div class="kpi-label">Open RMAs</div>
-            <div class="kpi-sub"><a href="/returns-dashboard" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View returns →</a></div>
+            <div class="kpi-sub"><a href="/returns-dashboard" style="color:var(--pp-blue);text-decoration:none;font-size:11px;">View returns →</a></div>
         </div>`;
 
     document.getElementById('kpi-grid-2').innerHTML = `
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed; font-size:20px;">fiber_new</span></div>
-            <div class="kpi-val">${kpis.new_this_week}</div>
-            <div class="kpi-label">New This Week</div>
-            <div class="kpi-sub">Enrolled since Sunday</div>
+            <div class="kpi-icon" style="background:#fef3c7;"><span class="material-icons" style="color:#92400e;font-size:20px;">confirmation_number</span></div>
+            <div class="kpi-val">${(kpis.open_tickets || 0).toLocaleString()}</div>
+            <div class="kpi-label">Open Tickets</div>
+            <div class="kpi-sub"><a href="/tickets-dashboard" style="color:var(--pp-blue);text-decoration:none;font-size:11px;">View tickets →</a></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534; font-size:20px;">inventory_2</span></div>
+            <div class="kpi-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed;font-size:20px;">task_alt</span></div>
+            <div class="kpi-val">${(kpis.open_tasks || 0).toLocaleString()}</div>
+            <div class="kpi-label">Open Tasks</div>
+            <div class="kpi-sub">${kpis.new_this_week} new merchants this week</div>
+        </div>
+        <div class="kpi-card">
+            <div class="kpi-icon" style="background:#dcfce7;"><span class="material-icons" style="color:#166534;font-size:20px;">inventory_2</span></div>
             <div class="kpi-val">${kpis.equipment.stocked}</div>
             <div class="kpi-label">Units In Stock</div>
-            <div class="kpi-sub"><a href="/equipments-dashboard" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View inventory →</a></div>
+            <div class="kpi-sub"><a href="/equipments-dashboard" style="color:var(--pp-blue);text-decoration:none;font-size:11px;">View inventory →</a></div>
         </div>
         <div class="kpi-card">
-            <div class="kpi-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1; font-size:20px;">devices</span></div>
-            <div class="kpi-val">${kpis.equipment.deployed}</div>
-            <div class="kpi-label">Units Deployed</div>
-            <div class="kpi-sub">At merchant sites</div>
-        </div>
-        <div class="kpi-card">
-            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b; font-size:20px;">build</span></div>
+            <div class="kpi-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#991b1b;font-size:20px;">build</span></div>
             <div class="kpi-val">${kpis.equipment.repair}</div>
             <div class="kpi-label">In Repair</div>
-            <div class="kpi-sub"><a href="/repair-queue" style="color:var(--pp-blue); text-decoration:none; font-size:11px;">View queue →</a></div>
+            <div class="kpi-sub">${kpis.equipment.deployed} units deployed at merchants</div>
         </div>`;
 }
 
+// ── At-Risk Merchants ─────────────────────────────────────────────────────────
 let atRiskCache = [];
-
 function renderAtRisk(data) {
     atRiskCache = data;
     document.getElementById('risk-count').textContent = data.length ? `${data.length} merchant(s)` : '';
     if (!data.length) {
-        document.getElementById('risk-table').innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px; color:var(--green); display:block; margin-bottom:8px;">check_circle</span>All merchants are on track.</div>`;
+        document.getElementById('risk-table').innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px;color:var(--green);display:block;margin-bottom:8px;">check_circle</span>All merchants are on track.</div>`;
         return;
     }
     document.getElementById('risk-table').innerHTML = data.map(m => `
         <div class="risk-row">
-            <input type="checkbox" class="risk-check" data-mid="${m.merchant_id}" onchange="updateBulkBtn()" style="width:15px; height:15px; cursor:pointer; accent-color:#004990;">
+            <input type="checkbox" class="risk-check" data-mid="${m.merchant_id}" onchange="updateBulkBtn()" style="width:15px;height:15px;cursor:pointer;accent-color:#004990;">
             <div>
                 <div class="risk-name">${m.dba_name}</div>
                 <div class="risk-mid">${m.merchant_id} &nbsp;·&nbsp; ${fmt(m.volume_30_day)} vs ${fmt(m.baseline)} expected</div>
             </div>
-            <div style="font-size:11px; color:var(--text-muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px;" title="${m.agent_name || '—'}">${m.agent_name || '—'}</div>
-            <div style="font-size:11px; color:var(--text-muted);">${m.last_batch_date ? fmtDate(m.last_batch_date) : '—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100px;" title="${m.agent_name || '—'}">${m.agent_name || '—'}</div>
+            <div style="font-size:11px;color:var(--text-muted);">${m.last_batch_date ? fmtDate(m.last_batch_date) : '—'}</div>
             <div class="drop-badge ${m.drop_pct < 30 ? 'mild' : ''}">-${m.drop_pct}%</div>
-            <button onclick="openMerchantDetail('${m.merchant_id}')" style="font-size:11px; font-weight:700; color:var(--pp-blue); background:none; border:1px solid var(--border); padding:3px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;">View →</button>
+            <button onclick="openMerchantDetail('${m.merchant_id}')" class="view-btn">View →</button>
         </div>`).join('');
 }
-
 function toggleSelectAll(master) {
     document.querySelectorAll('.risk-check').forEach(cb => cb.checked = master.checked);
     updateBulkBtn();
 }
-
 function updateBulkBtn() {
     const checked = document.querySelectorAll('.risk-check:checked');
     const btn = document.getElementById('bulk-alert-btn');
@@ -397,22 +537,12 @@ function updateBulkBtn() {
     if (checked.length === all.length && all.length > 0) { master.checked = true; master.indeterminate = false; }
     if (checked.length === 0) { master.checked = false; master.indeterminate = false; }
 }
-
 async function sendBulkAlerts() {
     const checked = [...document.querySelectorAll('.risk-check:checked')];
     if (!checked.length) return;
     const merchantIds = checked.map(cb => cb.dataset.mid);
-
-    const { isConfirmed } = await Swal.fire({
-        title: `Send Alerts to Partners?`,
-        text: `This will notify the partners responsible for ${merchantIds.length} selected merchant(s) about the volume drop.`,
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Send Now',
-        confirmButtonColor: '#dc2626'
-    });
+    const { isConfirmed } = await Swal.fire({ title: `Send Alerts to Partners?`, text: `This will notify the partners responsible for ${merchantIds.length} selected merchant(s) about the volume drop.`, icon: 'warning', showCancelButton: true, confirmButtonText: 'Send Now', confirmButtonColor: '#dc2626' });
     if (!isConfirmed) return;
-
     Swal.fire({ title: 'Sending...', didOpen: () => Swal.showLoading() });
     const r = await api('send_partner_alerts', { merchant_ids: merchantIds });
     if (r.success) {
@@ -425,20 +555,17 @@ async function sendBulkAlerts() {
     }
 }
 
+// ── Merchant Detail Modal ─────────────────────────────────────────────────────
 async function openMerchantDetail(merchantId) {
     document.getElementById('modal-merchant-title').textContent = merchantId;
-    document.getElementById('modal-body').innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>`;
+    document.getElementById('modal-body').innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);">Loading...</div>`;
     document.getElementById('merchant-detail-modal').classList.add('is-open');
-
     try {
         const r = await api('get_merchant_detail', { merchant_id: merchantId });
         if (!r.success) throw new Error(r.message);
-
-        const m = r.merchant;
-        const p = r.partner;
+        const m = r.merchant; const p = r.partner;
         const baseline = parseFloat(m.volume_90_day) / 3;
         const drop = Math.round((1 - parseFloat(m.volume_30_day) / baseline) * 100);
-
         document.getElementById('modal-merchant-title').textContent = m.dba_name;
         document.getElementById('modal-body').innerHTML = `
             <div class="detail-section">
@@ -453,91 +580,72 @@ async function openMerchantDetail(merchantId) {
                 <div class="detail-label">Volume Performance</div>
                 <div class="detail-row"><span class="detail-key">30-Day Volume</span><span class="detail-val">${fmt(m.volume_30_day)}</span></div>
                 <div class="detail-row"><span class="detail-key">90-Day Monthly Avg</span><span class="detail-val">${fmt(baseline)}</span></div>
-                <div class="detail-row"><span class="detail-key">Drop</span><span class="detail-val" style="color:var(--red-text); font-weight:800;">-${drop}%</span></div>
+                <div class="detail-row"><span class="detail-key">Drop</span><span class="detail-val" style="color:var(--red-text);font-weight:800;">-${drop}%</span></div>
                 <div class="detail-row"><span class="detail-key">Last Batch</span><span class="detail-val">${m.last_batch_date ? fmtDate(m.last_batch_date) : '—'}</span></div>
             </div>
             <div class="detail-section">
                 <div class="detail-label">Partner / Agent</div>
                 ${p ? `
                 <div class="detail-row"><span class="detail-key">Agent Group</span><span class="detail-val">${p.agent_name || '—'}</span></div>
-                <div class="detail-row"><span class="detail-key">Contact Name</span><span class="detail-val">${p.full_name || '—'}</span></div>
+                <div class="detail-row"><span class="detail-key">Contact</span><span class="detail-val">${p.full_name || '—'}</span></div>
                 <div class="detail-row"><span class="detail-key">Email</span><span class="detail-val"><a href="mailto:${p.email}" style="color:var(--pp-blue);">${p.email || '—'}</a></span></div>
                 <div class="detail-row"><span class="detail-key">Phone</span><span class="detail-val">${p.phone_number || '—'}</span></div>
-                ` : `<div style="color:var(--text-muted); font-size:13px;">No partner linked to Agent ID: ${m.agent_id || 'N/A'}</div>`}
+                ` : `<div style="color:var(--text-muted);font-size:13px;">No partner linked to Agent ID: ${m.agent_id || 'N/A'}</div>`}
             </div>
-            <div class="detail-section" style="display:flex; gap:10px; justify-content:flex-end;">
-                <button onclick="closeDetailModal()" style="background:none; border:1px solid var(--border); border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Close</button>
-                <button onclick="sendAlertForMerchant('${merchantId}')" style="background:#dc2626; color:white; border:none; border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer; display:flex; align-items:center; gap:6px;">
-                    <span class="material-icons" style="font-size:14px;">notifications_active</span>
-                    Send Alert to Partner
+            <div class="detail-section" style="display:flex;gap:10px;justify-content:flex-end;">
+                <button onclick="closeDetailModal()" style="background:none;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer;">Close</button>
+                <a href="/merchants-dashboard" style="background:#0369a1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:6px;">
+                    <span class="material-icons" style="font-size:14px;">open_in_new</span> Open Merchant
+                </a>
+                <button onclick="sendAlertForMerchant('${merchantId}')" style="background:#dc2626;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                    <span class="material-icons" style="font-size:14px;">notifications_active</span> Alert Partner
                 </button>
             </div>`;
     } catch (err) {
-        document.getElementById('modal-body').innerHTML = `<div style="padding:20px; color:var(--red-text);">Error: ${err.message}</div>`;
+        document.getElementById('modal-body').innerHTML = `<div style="padding:20px;color:var(--red-text);">Error: ${err.message}</div>`;
     }
 }
-
-function closeDetailModal() {
-    document.getElementById('merchant-detail-modal').classList.remove('is-open');
-}
-
+function closeDetailModal() { document.getElementById('merchant-detail-modal').classList.remove('is-open'); }
 async function sendAlertForMerchant(merchantId) {
-    const { isConfirmed } = await Swal.fire({
-        title: 'Send Alert to Partner?',
-        text: 'This will notify the partner responsible for this merchant about the volume drop.',
-        icon: 'warning',
-        showCancelButton: true,
-        confirmButtonText: 'Send',
-        confirmButtonColor: '#dc2626'
-    });
+    const { isConfirmed } = await Swal.fire({ title: 'Send Alert to Partner?', text: 'This will notify the partner responsible for this merchant about the volume drop.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Send', confirmButtonColor: '#dc2626' });
     if (!isConfirmed) return;
     Swal.fire({ title: 'Sending...', didOpen: () => Swal.showLoading() });
     const r = await api('send_partner_alerts', { merchant_ids: [merchantId] });
-    if (r.success) {
-        Swal.fire('Sent!', `Alert sent to ${r.partners_notified} partner(s).`, 'success');
-    } else {
-        Swal.fire('Error', r.message || 'Could not send alert.', 'error');
-    }
+    if (r.success) Swal.fire('Sent!', `Alert sent to ${r.partners_notified} partner(s).`, 'success');
+    else Swal.fire('Error', r.message || 'Could not send alert.', 'error');
 }
 
+// ── Recent Deployments ────────────────────────────────────────────────────────
 function renderDeployments(data) {
-    if (!data.length) {
-        document.getElementById('dep-list').innerHTML = `<div class="empty-state">No recent deployments.</div>`;
-        return;
-    }
+    const el = document.getElementById('dep-list');
+    if (!data.length) { el.innerHTML = `<div class="empty-state">No recent deployments.</div>`; return; }
     const statusClass = s => s === 'Open' ? 'badge-open' : s === 'In Transit' ? 'badge-transit' : 'badge-closed';
-    document.getElementById('dep-list').innerHTML = data.map(d => `
+    el.innerHTML = data.map(d => `
         <div class="dep-row">
-            <div class="dep-icon"><span class="material-icons" style="color:#0369a1; font-size:16px;">local_shipping</span></div>
-            <div style="flex:1; min-width:0;">
-                <div style="font-weight:600; font-size:12px; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${d.merchants?.dba_name || '—'}</div>
-                <div style="font-size:11px; color:var(--text-muted); font-family:'DM Mono',monospace;">${d.equipments?.serial_number || '—'} · ${d.equipments?.terminal_type || ''}</div>
+            <div class="dep-icon"><span class="material-icons" style="color:#0369a1;font-size:16px;">local_shipping</span></div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.merchants?.dba_name || '—'}</div>
+                <div style="font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace;">${d.equipments?.serial_number || '—'} · ${d.equipments?.terminal_type || ''}</div>
             </div>
-            <div style="text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+            <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
                 <span class="badge ${statusClass(d.status)}">${d.status}</span>
-                <div style="font-size:10px; color:var(--text-muted);">${timeAgo(d.created_at)}</div>
-                <button onclick="openDepDetail('${d.id}')" style="font-size:10px; font-weight:700; color:var(--pp-blue); background:none; border:1px solid var(--border); padding:2px 8px; border-radius:5px; cursor:pointer;">View →</button>
+                <div style="font-size:10px;color:var(--text-muted);">${timeAgo(d.created_at)}</div>
+                <button onclick="openDepDetail('${d.id}')" class="view-btn">View →</button>
             </div>
         </div>`).join('');
 }
 
 async function openDepDetail(depId) {
     document.getElementById('dep-modal-title').textContent = 'Loading...';
-    document.getElementById('dep-modal-body').innerHTML = `<div style="padding:40px; text-align:center; color:var(--text-muted);">Loading...</div>`;
+    document.getElementById('dep-modal-body').innerHTML = `<div style="padding:40px;text-align:center;color:var(--text-muted);">Loading...</div>`;
     document.getElementById('dep-detail-modal').style.display = 'flex';
-
     const r = await api('get_deployment_detail', { deployment_id: depId });
-    if (!r.success) {
-        document.getElementById('dep-modal-body').innerHTML = `<div style="padding:20px; color:var(--red-text);">Error loading deployment.</div>`;
-        return;
-    }
+    if (!r.success) { document.getElementById('dep-modal-body').innerHTML = `<div style="padding:20px;color:var(--red-text);">Error loading deployment.</div>`; return; }
     const d = r.data;
-    document.getElementById('dep-modal-title').textContent = d.deployment_id || `Deployment #${depId}`;
-
+    document.getElementById('dep-modal-title').textContent = d.deployment_id || `Deployment`;
     const trackingHtml = d.tracking_id
-        ? `<a href="https://parcelsapp.com/en/tracking/${d.tracking_id}" target="_blank" rel="noopener noreferrer" style="color:var(--pp-blue); font-weight:600; font-family:'DM Mono',monospace;">${d.tracking_id} <span class="material-icons" style="font-size:12px; vertical-align:middle;">open_in_new</span></a>`
+        ? `<a href="https://parcelsapp.com/en/tracking/${d.tracking_id}" target="_blank" rel="noopener noreferrer" style="color:var(--pp-blue);font-weight:600;font-family:'DM Mono',monospace;">${d.tracking_id} <span class="material-icons" style="font-size:12px;vertical-align:middle;">open_in_new</span></a>`
         : '<span style="color:var(--text-muted);">Not yet assigned</span>';
-
     document.getElementById('dep-modal-body').innerHTML = `
         <div class="detail-section">
             <div class="detail-label">Deployment</div>
@@ -551,7 +659,7 @@ async function openDepDetail(depId) {
             <div class="detail-row"><span class="detail-key">Tracking #</span><span class="detail-val" style="max-width:100%;">${trackingHtml}</span></div>
             ${d.tid ? `<div class="detail-row"><span class="detail-key">TID</span><span class="detail-val" style="font-family:'DM Mono',monospace;">${d.tid}</span></div>` : ''}
             ${d.target_deployment_date ? `<div class="detail-row"><span class="detail-key">Target Date</span><span class="detail-val">${fmtDate(d.target_deployment_date)}</span></div>` : ''}
-            ${d.merchant_received_date ? `<div class="detail-row"><span class="detail-key">Received Date</span><span class="detail-val">${fmtDate(d.merchant_received_date)}</span></div>` : ''}
+            ${d.merchant_received_date ? `<div class="detail-row"><span class="detail-key">Received</span><span class="detail-val">${fmtDate(d.merchant_received_date)}</span></div>` : ''}
         </div>
         <div class="detail-section">
             <div class="detail-label">Merchant</div>
@@ -564,78 +672,149 @@ async function openDepDetail(depId) {
             <div class="detail-row"><span class="detail-key">Serial #</span><span class="detail-val" style="font-family:'DM Mono',monospace;">${d.equipments?.serial_number || '—'}</span></div>
             <div class="detail-row"><span class="detail-key">Type</span><span class="detail-val">${d.equipments?.terminal_type || '—'}</span></div>
         </div>
-        ${d.notes ? `<div class="detail-section"><div class="detail-label">Notes</div><div style="font-size:13px; color:var(--text-primary); line-height:1.5;">${d.notes}</div></div>` : ''}
-        <div class="detail-section" style="display:flex; justify-content:flex-end;">
-            <button onclick="closeDepModal()" style="background:none; border:1px solid var(--border); border-radius:8px; font-size:12px; font-weight:700; padding:8px 16px; cursor:pointer;">Close</button>
+        ${d.notes ? `<div class="detail-section"><div class="detail-label">Notes</div><div style="font-size:13px;color:var(--text-primary);line-height:1.5;">${d.notes}</div></div>` : ''}
+        <div class="detail-section" style="display:flex;justify-content:space-between;align-items:center;">
+            <a href="/deployments-dashboard" style="color:var(--pp-blue);font-size:12px;font-weight:700;text-decoration:none;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:14px;">open_in_new</span> Open Deployments</a>
+            <button onclick="closeDepModal()" style="background:none;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer;">Close</button>
         </div>`;
 }
+function closeDepModal() { document.getElementById('dep-detail-modal').style.display = 'none'; }
 
-function closeDepModal() {
-    document.getElementById('dep-detail-modal').style.display = 'none';
-}
-
-function renderActivity(data) {
-    if (!data.length) {
-        document.getElementById('activity-log').innerHTML = `<div class="empty-state">No recent activity.</div>`;
-        return;
-    }
-    document.getElementById('activity-log').innerHTML = `<div style="display:grid; grid-template-columns:repeat(2,1fr);">` +
-        data.map(a => `
-        <div class="activity-row">
-            <div class="activity-dot ${(a.status||'').toUpperCase()==='SUCCESS'?'dot-success':(a.status||'').toUpperCase()==='FAILURE'?'dot-failure':'dot-info'}"></div>
-            <div style="flex:1; min-width:0;">
-                <div style="font-weight:600; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${a.email || '—'}</div>
-                <div style="color:var(--text-muted);">${a.action || ''}</div>
+// ── Recent Returns ────────────────────────────────────────────────────────────
+function renderReturns(data) {
+    const el = document.getElementById('ret-list');
+    if (!data.length) { el.innerHTML = `<div class="empty-state">No recent returns.</div>`; return; }
+    const statusClass = s => (s || '').toLowerCase() === 'open' ? 'badge-open' : (s || '').toLowerCase() === 'in transit' ? 'badge-transit' : 'badge-closed';
+    el.innerHTML = data.map(r => `
+        <div class="list-row">
+            <div class="list-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#dc2626;font-size:16px;">assignment_return</span></div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.merchants?.dba_name || '—'}</div>
+                <div style="font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace;">
+                    ${r.return_id || '—'}
+                    ${r.is_bulk ? ' · <span style="background:#e0f2fe;color:#0369a1;padding:1px 5px;border-radius:4px;font-size:10px;">BULK</span>' : ''}
+                </div>
+                ${r.equipments?.serial_number ? `<div style="font-size:10px;color:var(--text-muted);font-family:'DM Mono',monospace;">${r.equipments.serial_number} · ${r.equipments.terminal_type || ''}</div>` : ''}
             </div>
-            <div style="font-size:10px; color:var(--text-muted); flex-shrink:0;">${timeAgo(a.created_at)}</div>
-        </div>`).join('') + `</div>`;
+            <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                <span class="badge ${statusClass(r.status)}">${r.status || '—'}</span>
+                <div style="font-size:10px;color:var(--text-muted);">${r.return_date_initiated ? fmtDate(r.return_date_initiated) : '—'}</div>
+                <a href="/returns-dashboard" class="view-btn">View →</a>
+            </div>
+        </div>`).join('');
 }
 
+// ── Open Tasks ────────────────────────────────────────────────────────────────
+function renderOpenTasks(data) {
+    const el = document.getElementById('tasks-list');
+    if (!data.length) { el.innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:28px;color:var(--green);display:block;margin-bottom:8px;">check_circle</span>No open tasks.</div>`; return; }
+    const statusColor = s => {
+        s = (s || '').toLowerCase();
+        if (s === 'open') return { bg: '#e0f2fe', text: '#0369a1' };
+        if (s === 'in_progress' || s === 'in progress') return { bg: '#fef3c7', text: '#92400e' };
+        return { bg: '#f1f5f9', text: '#64748b' };
+    };
+    const isDue = d => d && new Date(d) < new Date();
+    el.innerHTML = data.map(t => {
+        const sc = statusColor(t.status);
+        const overdue = isDue(t.due_date);
+        return `
+        <div class="list-row">
+            <div class="list-icon" style="background:#f3e8ff;"><span class="material-icons" style="color:#7c3aed;font-size:15px;">task_alt</span></div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${t.title || '—'}</div>
+                <div style="font-size:11px;color:var(--text-muted);">${t.merchants?.dba_name || '—'}</div>
+                ${t.due_date ? `<div style="font-size:10px;color:${overdue ? '#dc2626' : 'var(--text-muted)'};font-weight:${overdue ? '700' : '400'};">${overdue ? '⚠ Overdue · ' : ''}Due ${fmtDate(t.due_date)}</div>` : ''}
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                <span style="font-size:9px;font-weight:700;text-transform:uppercase;padding:2px 7px;border-radius:99px;background:${sc.bg};color:${sc.text};">${(t.status || '').replace('_', ' ')}</span>
+                <a href="/merchants-dashboard" class="view-btn">View →</a>
+            </div>
+        </div>`;
+    }).join('');
+}
 
+// ── New Merchants ─────────────────────────────────────────────────────────────
+function renderRecentMerchants(data) {
+    const el = document.getElementById('new-merchants-list');
+    if (!data.length) { el.innerHTML = `<div class="empty-state">No merchants found.</div>`; return; }
+    const statusClass = s => s === 'Approved' ? 'badge-approved' : s === 'Pending' ? 'badge-pending' : 'badge-closed';
+    el.innerHTML = data.map(m => `
+        <div class="list-row">
+            <div class="list-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1;font-size:15px;">storefront</span></div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${m.dba_name || '—'}</div>
+                <div style="font-size:11px;color:var(--text-muted);font-family:'DM Mono',monospace;">${m.merchant_id}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${m.agent_name || ''} ${[m.merchant_city, m.merchant_state].filter(Boolean).join(', ') ? '· ' + [m.merchant_city, m.merchant_state].filter(Boolean).join(', ') : ''}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                <span class="badge ${statusClass(m.account_status)}">${m.account_status || '—'}</span>
+                <div style="font-size:10px;color:var(--text-muted);">${m.enrollment_date ? fmtDate(m.enrollment_date) : '—'}</div>
+                <a href="/merchants-dashboard" class="view-btn">View →</a>
+            </div>
+        </div>`).join('');
+}
+
+// ── Recent Partners ───────────────────────────────────────────────────────────
+function renderRecentPartners(data) {
+    const el = document.getElementById('partners-list');
+    if (!data.length) { el.innerHTML = `<div class="empty-state">No partners found.</div>`; return; }
+    el.innerHTML = data.map(p => `
+        <div class="list-row">
+            <div class="list-icon" style="background:#e0f2fe;"><span class="material-icons" style="color:#0369a1;font-size:15px;">person</span></div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:12px;color:var(--text-primary);">${p.full_name || '—'}</div>
+                <div style="font-size:11px;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${p.email || '—'}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${p.phone_number || ''}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                <span class="badge ${p.is_portal_active ? 'badge-active' : 'badge-inactive'}">${p.is_portal_active ? 'Portal Active' : 'Inactive'}</span>
+                <div style="font-size:10px;color:var(--text-muted);">${p.enrolled_at ? fmtDate(p.enrolled_at) : '—'}</div>
+                <a href="/partners-dashboard" class="view-btn">View →</a>
+            </div>
+        </div>`).join('');
+}
+
+// ── Priority Tickets ──────────────────────────────────────────────────────────
 let currentTicketPriorityFilter = 'high_urgent';
-
 function renderPriorityTickets(data) {
     const el = document.getElementById('priority-tickets-list');
     if (!data.length) {
-        el.innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px; color:var(--green); display:block; margin-bottom:8px;">check_circle</span>No open priority tickets.</div>`;
+        el.innerHTML = `<div class="empty-state"><span class="material-icons" style="font-size:32px;color:var(--green);display:block;margin-bottom:8px;">check_circle</span>No open priority tickets.</div>`;
         return;
     }
-    const priorityColor = p => p === 'urgent' ? '#dc2626' : p === 'high' ? '#d97706' : p === 'normal' ? '#64748b' : '#94a3b8';
-    const priorityBg = p => p === 'urgent' ? '#fee2e2' : p === 'high' ? '#fef3c7' : '#f1f5f9';
-    const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'RMA' : 'General';
-    const statusColor = s => s === 'open' ? '#0369a1' : s === 'in_progress' ? '#d97706' : '#64748b';
-    const statusBg = s => s === 'open' ? '#e0f2fe' : s === 'in_progress' ? '#fef3c7' : '#f1f5f9';
-
-    el.innerHTML = `<div style="display:grid; grid-template-columns:repeat(2,1fr);">` +
-        data.map(t => `
-        <div style="display:flex; align-items:center; gap:12px; padding:12px 20px; border-bottom:1px solid var(--border); font-size:13px; cursor:pointer; transition:background 0.12s;" onclick="window.location='/tickets-dashboard'" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+    const priorityColor = p => p === 'urgent' ? '#dc2626' : p === 'high' ? '#d97706' : '#64748b';
+    const priorityBg   = p => p === 'urgent' ? '#fee2e2' : p === 'high' ? '#fef3c7' : '#f1f5f9';
+    const statusColor  = s => s === 'open' ? '#0369a1' : s === 'in_progress' ? '#d97706' : '#64748b';
+    const statusBg     = s => s === 'open' ? '#e0f2fe' : s === 'in_progress' ? '#fef3c7' : '#f1f5f9';
+    const typeLabel    = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'RMA' : 'General';
+    el.innerHTML = data.map(t => `
+        <div class="list-row" style="cursor:pointer;" onclick="window.location='/tickets-dashboard'" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
             <div style="flex-shrink:0;">
-                <span style="display:inline-block; padding:2px 8px; border-radius:99px; font-size:9px; font-weight:800; text-transform:uppercase; background:${priorityBg(t.priority)}; color:${priorityColor(t.priority)};">${t.priority}</span>
+                <span style="display:inline-block;padding:2px 8px;border-radius:99px;font-size:9px;font-weight:800;text-transform:uppercase;background:${priorityBg(t.priority)};color:${priorityColor(t.priority)};">${t.priority}</span>
             </div>
-            <div style="flex:1; min-width:0;">
-                <div style="font-weight:700; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${t.subject}</div>
-                <div style="font-size:11px; color:var(--text-muted); margin-top:2px;">
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:700;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:13px;">${t.subject}</div>
+                <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">
                     <span style="font-family:'DM Mono',monospace;">${t.ticket_number}</span>
                     ${t.merchants?.dba_name ? ` · ${t.merchants.dba_name}` : ''}
                     · ${typeLabel(t.type)}
                 </div>
             </div>
-            <div style="text-align:right; flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-                <span style="padding:2px 8px; border-radius:99px; font-size:9px; font-weight:700; text-transform:uppercase; background:${statusBg(t.status)}; color:${statusColor(t.status)};">${t.status.replace('_',' ')}</span>
-                <div style="font-size:10px; color:var(--text-muted);">${t.assigned_to || '<span style="color:#dc2626;">Unassigned</span>'}</div>
-                <div style="font-size:10px; color:var(--text-muted);">${timeAgo(t.created_at)}</div>
+            <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
+                <span style="padding:2px 8px;border-radius:99px;font-size:9px;font-weight:700;text-transform:uppercase;background:${statusBg(t.status)};color:${statusColor(t.status)};">${t.status.replace('_',' ')}</span>
+                <div style="font-size:10px;color:${t.assigned_to ? 'var(--text-muted)' : '#dc2626'};">${t.assigned_to || 'Unassigned'}</div>
+                <div style="font-size:10px;color:var(--text-muted);">${timeAgo(t.created_at)}</div>
             </div>
-        </div>`).join('') + `</div>`;
+        </div>`).join('');
 }
-
 async function loadPriorityTickets(priority) {
     const el = document.getElementById('priority-tickets-list');
-    el.innerHTML = `<div class="empty-state"><div class="skeleton" style="height:14px; width:220px; margin:0 auto;"></div></div>`;
+    el.innerHTML = `<div class="empty-state"><div class="skeleton" style="height:14px;width:220px;margin:0 auto;"></div></div>`;
     const r = await api('get_priority_tickets', { priority: priority === 'high_urgent' ? null : priority });
     if (r.success) renderPriorityTickets(r.data);
     else el.innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error loading tickets.</div>`;
 }
-
 function setTicketPriorityFilter(btn, val) {
     document.querySelectorAll('[data-tpriority]').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
@@ -643,9 +822,23 @@ function setTicketPriorityFilter(btn, val) {
     loadPriorityTickets(val);
 }
 
-let staffData = [];
-let pendingAccessChanges = {};
+// ── Activity Log ──────────────────────────────────────────────────────────────
+function renderActivity(data) {
+    const el = document.getElementById('activity-log');
+    if (!data.length) { el.innerHTML = `<div class="empty-state">No recent activity.</div>`; return; }
+    el.innerHTML = data.map(a => `
+        <div class="activity-row">
+            <div class="activity-dot ${(a.status||'').toUpperCase()==='SUCCESS'?'dot-success':(a.status||'').toUpperCase()==='FAILURE'?'dot-failure':'dot-info'}"></div>
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${a.email || '—'}</div>
+                <div style="color:var(--text-muted);">${a.action || ''}</div>
+            </div>
+            <div style="font-size:10px;color:var(--text-muted);flex-shrink:0;">${timeAgo(a.created_at)}</div>
+        </div>`).join('');
+}
 
+// ── Staff Access Control ──────────────────────────────────────────────────────
+let staffData = [], pendingAccessChanges = {};
 async function loadStaffAccess() {
     const container = document.getElementById('staff-access-table');
     try {
@@ -653,36 +846,29 @@ async function loadStaffAccess() {
         const result = await res.json();
         if (!result.success) throw new Error(result.message);
         staffData = result.data || [];
-
-        if (!staffData.length) {
-            container.innerHTML = `<div class="empty-state">No staff users found.</div>`;
-            return;
-        }
-
+        if (!staffData.length) { container.innerHTML = `<div class="empty-state">No staff users found.</div>`; return; }
         const ACCESS_COLS = [
-            { key: 'is_active', label: 'Active' },
-            { key: 'access_admin_dashboard', label: 'Admin Dash' },
-            { key: 'access_inventory', label: 'Inventory' },
-            { key: 'access_deployments', label: 'Deployments' },
-            { key: 'access_returns', label: 'Returns' },
-            { key: 'access_merchants', label: 'Merchants' },
-            { key: 'access_partners', label: 'Partners' },
-            { key: 'access_jarvis', label: 'Jarvis AI' },
-            { key: 'access_sending_reports', label: 'Reports' },
-            { key: 'can_delete_tickets', label: 'Del Tickets' },
+            { key: 'is_active',             label: 'Active'      },
+            { key: 'access_admin_dashboard', label: 'Admin Dash'  },
+            { key: 'access_inventory',       label: 'Inventory'   },
+            { key: 'access_deployments',     label: 'Deployments' },
+            { key: 'access_returns',         label: 'Returns'     },
+            { key: 'access_merchants',       label: 'Merchants'   },
+            { key: 'access_partners',        label: 'Partners'    },
+            { key: 'access_jarvis',          label: 'Jarvis AI'   },
+            { key: 'access_sending_reports', label: 'Reports'     },
+            { key: 'can_delete_tickets',     label: 'Del Tickets' },
         ];
-
         const headerHtml = `
-            <div style="display:flex; align-items:center; gap:16px; padding:10px 20px; border-bottom:2px solid var(--border); background:var(--surface-2);">
-                <div style="flex:1; font-size:10px; font-weight:700; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.5px;">Staff Member</div>
+            <div style="display:flex;align-items:center;gap:16px;padding:10px 20px;border-bottom:2px solid var(--border);background:var(--surface-2);">
+                <div style="flex:1;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Staff Member</div>
                 ${ACCESS_COLS.map(c => `<div class="access-col"><div class="access-col-label">${c.label}</div></div>`).join('')}
             </div>`;
-
         const rowsHtml = staffData.map(u => `
             <div class="access-row">
-                <div style="flex:1; min-width:140px;">
-                    <div style="font-weight:700; color:var(--text-primary);">${u.first_name || ''} ${u.last_name || ''}</div>
-                    <div style="font-size:11px; color:var(--text-muted);">${u.email || ''} &nbsp;·&nbsp; <span style="color:var(--pp-accent); font-weight:600;">${u.role || 'staff'}</span></div>
+                <div style="flex:1;min-width:140px;">
+                    <div style="font-weight:700;color:var(--text-primary);">${u.first_name || ''} ${u.last_name || ''}</div>
+                    <div style="font-size:11px;color:var(--text-muted);">${u.email || ''} &nbsp;·&nbsp; <span style="color:var(--pp-accent);font-weight:600;">${u.role || 'staff'}</span></div>
                 </div>
                 ${ACCESS_COLS.map(c => `
                     <div class="access-col">
@@ -692,90 +878,94 @@ async function loadStaffAccess() {
                         </label>
                     </div>`).join('')}
             </div>`).join('');
-
         container.innerHTML = headerHtml + rowsHtml;
     } catch (err) {
         container.innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error loading staff: ${err.message}</div>`;
     }
 }
-
 function markChange(input) {
-    const uid = input.dataset.uid;
-    const key = input.dataset.key;
+    const uid = input.dataset.uid, key = input.dataset.key;
     if (!pendingAccessChanges[uid]) pendingAccessChanges[uid] = {};
     pendingAccessChanges[uid][key] = input.checked;
     document.getElementById('save-access-btn').style.display = 'block';
 }
-
 async function saveAccessChanges() {
     if (!Object.keys(pendingAccessChanges).length) return;
     const btn = document.getElementById('save-access-btn');
-    btn.textContent = 'Saving...';
-    btn.disabled = true;
+    btn.textContent = 'Saving...'; btn.disabled = true;
     try {
-        const res = await fetch('/api/users', {
-            method: 'POST',
-            headers: authHeaders(),
-            body: JSON.stringify({ action: 'updateBatch', payload: pendingAccessChanges })
-        });
+        const res = await fetch('/api/users', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'updateBatch', payload: pendingAccessChanges }) });
         const result = await res.json();
         if (result.success) {
             pendingAccessChanges = {};
             btn.style.display = 'none';
             Swal.fire({ icon: 'success', title: 'Saved', timer: 1500, showConfirmButton: false });
             loadStaffAccess();
-        } else {
-            Swal.fire('Error', result.message || 'Save failed', 'error');
-        }
-    } catch (err) {
-        Swal.fire('Error', err.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Save Changes';
-    }
+        } else Swal.fire('Error', result.message || 'Save failed', 'error');
+    } catch (err) { Swal.fire('Error', err.message, 'error'); }
+    finally { btn.disabled = false; btn.textContent = 'Save Changes'; }
 }
 
+// ── Main Load ─────────────────────────────────────────────────────────────────
 async function loadAll() {
     document.getElementById('last-updated').textContent = 'Refreshing...';
-    const [kpiRes, riskRes, depRes] = await Promise.allSettled([
-        api('get_kpis'),
-        api('get_at_risk'),
-        api('get_recent_deployments')
-    ]);
 
-    const kpi = kpiRes.status === 'fulfilled' ? kpiRes.value : null;
-    const risk = riskRes.status === 'fulfilled' ? riskRes.value : null;
-    const dep = depRes.status === 'fulfilled' ? depRes.value : null;
+    const calls = [
+        api('get_kpis'),
+        api('get_recent_deployments'),
+        api('get_priority_tickets', { priority: null }),
+    ];
+    if (ppAccess.merchants) calls.push(api('get_at_risk'), api('get_recent_merchants'));
+    if (ppAccess.returns)   calls.push(api('get_recent_returns'));
+    if (ppAccess.partners)  calls.push(api('get_recent_partners'));
+    calls.push(api('get_open_tasks'));
+
+    const results = await Promise.allSettled(calls);
+    let idx = 0;
+    const get = () => { const r = results[idx++]; return r?.status === 'fulfilled' ? r.value : null; };
+
+    const kpi = get();
+    const dep = get();
+    const tkt = get();
+    const risk = ppAccess.merchants ? get() : null;
+    const newM  = ppAccess.merchants ? get() : null;
+    const ret  = ppAccess.returns   ? get() : null;
+    const prt  = ppAccess.partners  ? get() : null;
+    const tasks = get();
 
     if (kpi?.success) {
         renderKPIs(kpi.kpis);
         if (isAdminRole) renderActivity(kpi.recent_activity);
     }
-    if (risk?.success) renderAtRisk(risk.data);
-    else document.getElementById('risk-table').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error: ${risk?.message || 'Could not load at-risk data.'}</div>`;
+    if (dep?.success)  renderDeployments(dep.data);
+    else document.getElementById('dep-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load deployments.</div>`;
 
-    if (dep?.success) renderDeployments(dep.data);
-    else document.getElementById('dep-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error: ${dep?.message || 'Could not load deployments.'}</div>`;
+    if (tkt?.success)  renderPriorityTickets(tkt.data);
+    else document.getElementById('priority-tickets-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load tickets.</div>`;
 
-    loadPriorityTickets(currentTicketPriorityFilter);
+    if (ppAccess.merchants) {
+        if (risk?.success) renderAtRisk(risk.data);
+        else document.getElementById('risk-table').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load at-risk data.</div>`;
+        if (newM?.success) renderRecentMerchants(newM.data);
+        else document.getElementById('new-merchants-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load merchants.</div>`;
+    }
+    if (ppAccess.returns) {
+        if (ret?.success) renderReturns(ret.data);
+        else document.getElementById('ret-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load returns.</div>`;
+    }
+    if (ppAccess.partners) {
+        if (prt?.success) renderRecentPartners(prt.data);
+        else document.getElementById('partners-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load partners.</div>`;
+    }
+    if (tasks?.success) renderOpenTasks(tasks.data);
+    else document.getElementById('tasks-list').innerHTML = `<div class="empty-state" style="color:var(--red-text);">Could not load tasks.</div>`;
+
     document.getElementById('last-updated').textContent = 'Last updated: ' + fmtTime(new Date());
 }
 
-// Only admins and super_admins can see Staff Access Control and Activity Log
-const ppRole = (localStorage.getItem('pp_role') || '').toLowerCase().replace(/\s+/g, '_');
-const hasAdminDashAccess = localStorage.getItem('pp_access_admin_dashboard') === 'true';
-const isAdminRole = hasAdminDashAccess || ppRole === 'admin' || ppRole === 'operations_admin' || ppRole === 'super_admin';
-const canManageStaff = isAdminRole;
-const staffWidget = document.querySelector('[data-widget="staff-access"]');
-if (staffWidget) staffWidget.style.display = canManageStaff ? '' : 'none';
-const activityWidget = document.querySelector('[data-widget="activity-log"]');
-if (activityWidget) activityWidget.style.display = isAdminRole ? '' : 'none';
-
-// ── PER-USER DASHBOARD LAYOUT ─────────────────────────────
+// ── Drag-Drop Layout ──────────────────────────────────────────────────────────
 const _layoutKey = 'pp_dash_layout_' + (localStorage.getItem('pp_userid') || 'guest');
-let _arrangeMode = false;
-let _dragSrc = null;
-
+let _arrangeMode = false, _dragSrc = null;
 function applyLayout() {
     try {
         const saved = JSON.parse(localStorage.getItem(_layoutKey));
@@ -785,16 +975,14 @@ function applyLayout() {
         const widgets = {};
         Array.from(container.children).forEach(el => { if (el.dataset.widget) widgets[el.dataset.widget] = el; });
         saved.forEach(id => { if (widgets[id]) container.appendChild(widgets[id]); });
-    } catch(e) { console.warn('Could not restore dashboard layout:', e); }
+    } catch(e) { console.warn('Could not restore layout:', e); }
 }
-
 function saveLayout() {
     const container = document.getElementById('dashboard-widgets');
     if (!container) return;
     const order = Array.from(container.children).map(el => el.dataset.widget).filter(Boolean);
     localStorage.setItem(_layoutKey, JSON.stringify(order));
 }
-
 function toggleArrangeMode() {
     _arrangeMode = !_arrangeMode;
     const container = document.getElementById('dashboard-widgets');
@@ -815,7 +1003,7 @@ function toggleArrangeMode() {
     } else {
         container.classList.remove('arrange-mode');
         container.querySelectorAll('.drag-handle').forEach(h => h.remove());
-        container.querySelectorAll('[data-widget]').forEach(w => { w.draggable = false; w.classList.remove('widget-drag-over', 'widget-dragging'); });
+        container.querySelectorAll('[data-widget]').forEach(w => { w.draggable = false; w.classList.remove('widget-drag-over','widget-dragging'); });
         btn.innerHTML = '<span class="material-icons" style="font-size:15px;vertical-align:middle;">drag_indicator</span> Arrange';
         btn.style.cssText = 'border-radius:10px;font-weight:700;font-size:12px;padding:8px 16px;';
         saveLayout();
@@ -826,16 +1014,13 @@ function toggleArrangeMode() {
         setTimeout(() => toast.remove(), 2000);
     }
 }
-
 const _dw = document.getElementById('dashboard-widgets');
 if (_dw) {
     _dw.addEventListener('dragstart', e => {
         if (!_arrangeMode) return;
-        const widget = e.target.closest('[data-widget]');
-        const handle = e.target.closest('.drag-handle');
+        const widget = e.target.closest('[data-widget]'), handle = e.target.closest('.drag-handle');
         if (!widget || !handle) { e.preventDefault(); return; }
-        _dragSrc = widget;
-        e.dataTransfer.effectAllowed = 'move';
+        _dragSrc = widget; e.dataTransfer.effectAllowed = 'move';
         requestAnimationFrame(() => widget.classList.add('widget-dragging'));
     });
     _dw.addEventListener('dragend', e => {
@@ -848,8 +1033,7 @@ if (_dw) {
         if (!_arrangeMode || !_dragSrc) return;
         const widget = e.target.closest('[data-widget]');
         if (!widget || widget === _dragSrc) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
+        e.preventDefault(); e.dataTransfer.dropEffect = 'move';
         _dw.querySelectorAll('.widget-drag-over').forEach(el => el.classList.remove('widget-drag-over'));
         widget.classList.add('widget-drag-over');
     });
@@ -859,18 +1043,19 @@ if (_dw) {
         const target = e.target.closest('[data-widget]');
         if (!target || target === _dragSrc) return;
         const children = Array.from(_dw.children);
-        const srcIdx = children.indexOf(_dragSrc);
-        const tgtIdx = children.indexOf(target);
+        const srcIdx = children.indexOf(_dragSrc), tgtIdx = children.indexOf(target);
         if (srcIdx < tgtIdx) target.after(_dragSrc); else target.before(_dragSrc);
         _dw.querySelectorAll('.widget-drag-over').forEach(el => el.classList.remove('widget-drag-over'));
     });
 }
 
+// ── Init ──────────────────────────────────────────────────────────────────────
 applyLayout();
+applyAccessGating();
 
 window.addEventListener('load', function() {
     loadAll();
-    if (canManageStaff) loadStaffAccess();
+    if (isAdminRole) loadStaffAccess();
 });
 </script>
 <script src="/js/site-config.js"></script>

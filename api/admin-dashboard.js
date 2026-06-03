@@ -28,7 +28,7 @@ export default async function handler(req, res) {
             weekStart.setDate(weekStart.getDate() - weekStart.getDay());
             weekStart.setHours(0, 0, 0, 0);
 
-            const [merchantKpis, deploymentCount, openRmaCount, stockedCount, deployedCount, repairCount, newThisWeek, recentActivity] = await Promise.all([
+            const [merchantKpis, deploymentCount, openRmaCount, stockedCount, deployedCount, repairCount, newThisWeek, recentActivity, openTickets, openTasks] = await Promise.all([
                 supabase.rpc('get_merchant_kpis'),
                 supabase.from('deployments').select('*', { count: 'exact', head: true }).in('status', ['Open', 'In Transit']),
                 supabase.from('returns').select('*', { count: 'exact', head: true }).ilike('status', 'open'),
@@ -36,7 +36,9 @@ export default async function handler(req, res) {
                 supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'deployed'),
                 supabase.from('equipments').select('*', { count: 'exact', head: true }).eq('status', 'repairing'),
                 supabase.from('merchants').select('*', { count: 'exact', head: true }).gte('enrollment_date', weekStart.toISOString()),
-                supabase.from('activity_logs').select('email, action, status, created_at').order('created_at', { ascending: false }).limit(12)
+                supabase.from('activity_logs').select('email, action, status, created_at').order('created_at', { ascending: false }).limit(12),
+                supabase.from('support_tickets').select('*', { count: 'exact', head: true }).neq('status', 'closed'),
+                supabase.from('merchant_tasks').select('*', { count: 'exact', head: true }).not('status', 'in', '("done","closed","completed","cancelled")')
             ]);
 
             const mk = merchantKpis.data || {};
@@ -50,8 +52,10 @@ export default async function handler(req, res) {
                     total_mtd: parseFloat(mk.mtd_volume || 0),
                     total_90d: parseFloat(mk.vol_90d    || 0),
                     active_deployments: deploymentCount.count || 0,
-                    open_rmas: openRmaCount.count || 0,
-                    new_this_week: newThisWeek.count || 0,
+                    open_rmas:   openRmaCount.count    || 0,
+                    open_tickets: openTickets.count    || 0,
+                    open_tasks:   openTasks.count      || 0,
+                    new_this_week: newThisWeek.count   || 0,
                     equipment: {
                         stocked:  stockedCount.count  || 0,
                         deployed: deployedCount.count || 0,
@@ -235,6 +239,47 @@ export default async function handler(req, res) {
             }).then(() => {}).catch(() => {});
 
             return res.status(200).json({ success: true, partners_notified: emailsSent, merchant_count: merchants.length });
+        }
+
+        if (action === 'get_recent_returns') {
+            const { data, error } = await supabase
+                .from('returns')
+                .select('id, return_id, status, condition, destination, return_date_initiated, return_reason, is_bulk, merchants:merchant_id(dba_name, merchant_id), equipments:equipment_id(serial_number, terminal_type)')
+                .order('return_date_initiated', { ascending: false })
+                .limit(8);
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'get_recent_merchants') {
+            const { data, error } = await supabase
+                .from('merchants')
+                .select('merchant_id, dba_name, account_status, enrollment_date, agent_name, merchant_city, merchant_state')
+                .order('enrollment_date', { ascending: false })
+                .limit(8);
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'get_recent_partners') {
+            const { data, error } = await supabase
+                .from('persons')
+                .select('id, full_name, email, phone_number, enrolled_at, is_portal_active')
+                .order('enrolled_at', { ascending: false })
+                .limit(8);
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'get_open_tasks') {
+            const { data, error } = await supabase
+                .from('merchant_tasks')
+                .select('id, title, status, due_date, created_at, merchant_id, merchants:merchant_id(dba_name, merchant_id)')
+                .not('status', 'in', '("done","closed","completed","cancelled")')
+                .order('due_date', { ascending: true, nullsFirst: false })
+                .limit(10);
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });
