@@ -133,6 +133,37 @@
 .sort-icon { color:#cbd5e1; font-size:11px; margin-left:2px; }
 .staff-flag-btn { background:none; border:1px solid #e2e8f0; border-radius:6px; padding:3px 7px; cursor:pointer; font-size:12px; color:#94a3b8; transition:0.15s; }
 .staff-flag-btn.flagged { color:#d97706; border-color:#fde68a; background:#fef9c3; }
+/* ── Page tabs ── */
+.page-tab-bar { display:flex; gap:4px; background:white; border-radius:12px; padding:5px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.05); border:1px solid #e2e8f0; width:fit-content; }
+.page-tab-btn { padding:8px 18px; border:none; background:none; border-radius:8px; font-size:12px; font-weight:700; color:#64748b; cursor:pointer; display:flex; align-items:center; gap:6px; transition:0.15s; }
+.page-tab-btn:hover { background:#f1f5f9; color:#334155; }
+.page-tab-btn.active { background:#004990; color:white; }
+/* ── Pipeline styles ── */
+.pipeline-funnel { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:20px; }
+.funnel-stage { background:white; border-radius:14px; padding:18px; box-shadow:0 2px 12px rgba(0,0,0,0.06); border:2px solid transparent; position:relative; overflow:hidden; }
+.funnel-stage::after { content:''; position:absolute; right:-1px; top:50%; transform:translateY(-50%); width:0; height:0; border-top:14px solid transparent; border-bottom:14px solid transparent; z-index:2; }
+.funnel-stage.stage-enrollment { border-color:#e0f2fe; }
+.funnel-stage.stage-enrollment::after { border-left:12px solid #e0f2fe; }
+.funnel-stage.stage-pending { border-color:#fef3c7; }
+.funnel-stage.stage-pending::after { border-left:12px solid #fef3c7; }
+.funnel-stage.stage-approved { border-color:#dcfce7; }
+.funnel-stage.stage-declined { border-color:#fee2e2; }
+.funnel-stage.stage-declined::after { display:none; }
+.funnel-label { font-size:10px; font-weight:800; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; }
+.funnel-count { font-size:32px; font-weight:800; color:#0f172a; line-height:1; }
+.funnel-sub { font-size:11px; color:#64748b; margin-top:4px; }
+.funnel-badge { display:inline-block; font-size:10px; font-weight:700; padding:2px 7px; border-radius:99px; margin-top:6px; }
+.pipeline-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.pipeline-card { background:white; border-radius:14px; padding:18px; box-shadow:0 2px 12px rgba(0,0,0,0.06); }
+.pipeline-card-title { font-size:11px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:12px; display:flex; align-items:center; gap:6px; }
+.partner-bar-row { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.partner-bar-name { font-size:12px; font-weight:600; color:#334155; width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
+.partner-bar-track { flex:1; background:#f1f5f9; border-radius:99px; height:8px; overflow:hidden; }
+.partner-bar-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,#004990,#0369a1); }
+.partner-bar-count { font-size:11px; font-weight:700; color:#004990; width:24px; text-align:right; flex-shrink:0; }
+.recent-entry-row { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid #f1f5f9; }
+.recent-entry-row:last-child { border-bottom:none; }
+@media(max-width:768px){ .pipeline-funnel{grid-template-columns:1fr 1fr;} .pipeline-grid{grid-template-columns:1fr;} }
 .filter-toolbar { background:white; border-radius:16px; padding:14px 20px; margin-bottom:20px; box-shadow:0 4px 20px rgba(0,0,0,0.05); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .filter-toolbar label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; white-space:nowrap; }
 .filter-toolbar select { border:1px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:12px; color:#334155; background:#fff; outline:none; }
@@ -201,8 +232,27 @@
         </div>
     </div>
 
+    <!-- PAGE TAB BAR -->
+    <div class="page-tab-bar">
+        <button class="page-tab-btn active" id="ptab-portfolio" onclick="switchPageTab('portfolio')">
+            <span class="material-icons" style="font-size:15px;">table_rows</span> Portfolio
+        </button>
+        <button class="page-tab-btn" id="ptab-pipeline" onclick="switchPageTab('pipeline')">
+            <span class="material-icons" style="font-size:15px;">stacked_line_chart</span> Onboarding Pipeline
+        </button>
+    </div>
+
+    <!-- PIPELINE PANEL -->
+    <div id="tab-pipeline" style="display:none;">
+        <div id="pipeline-loading" style="text-align:center;padding:60px;color:#94a3b8;">
+            <span class="material-icons" style="font-size:32px;display:block;margin-bottom:10px;animation:spin 1s linear infinite;">autorenew</span>
+            Loading pipeline data…
+        </div>
+        <div id="pipeline-content" style="display:none;"></div>
+    </div>
+
     <!-- FILTER TOOLBAR -->
-    <div class="filter-toolbar">
+    <div id="tab-portfolio-filter" class="filter-toolbar">
         <label>Status</label>
         <select id="statusFilter" onchange="resetAndFetch()">
             <option value="">All Statuses</option>
@@ -234,7 +284,7 @@
     </div>
 
     <!-- KPI BAR -->
-    <div class="summary-bar">
+    <div class="summary-bar" id="tab-portfolio-kpi">
         <div class="kpi-card"><div><span class="kpi-label">Filtered MTD</span><span class="kpi-val" id="mtd-val">$0.00</span></div></div>
         <div class="kpi-card"><div><span class="kpi-label">Total 30D</span><span class="kpi-val" id="30d-val">$0.00</span></div></div>
         <div class="kpi-card"><div><span class="kpi-label">Total 90D</span><span class="kpi-val" id="90d-val">$0.00</span></div></div>
@@ -270,7 +320,7 @@
         </div>
     </div>
 
-    <article class="main-card">
+    <article class="main-card" id="tab-portfolio-content">
         <div class="health-filter-bar" id="healthFilterBar">
             <button class="health-chip active" onclick="setHealthFilter('All', this)">All</button>
             <button class="health-chip" onclick="setHealthFilter('Healthy', this)" style="border-color:#166534; color:#166534;">Healthy</button>
@@ -3122,6 +3172,166 @@ window.saveMerchant = async (uuid) => {
         }
     };
 })();
+</script>
+
+<script>
+// ── ONBOARDING PIPELINE TRACKER ──────────────────────────────────────────────
+let _pipelineLoaded = false;
+
+function switchPageTab(tab) {
+    const isPortfolio = tab === 'portfolio';
+    document.getElementById('ptab-portfolio').classList.toggle('active', isPortfolio);
+    document.getElementById('ptab-pipeline').classList.toggle('active', !isPortfolio);
+
+    const portfolioEls = ['tab-portfolio-filter','tab-portfolio-kpi','staffChartsPanel','tab-portfolio-content'];
+    portfolioEls.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isPortfolio ? '' : 'none';
+    });
+
+    document.getElementById('tab-pipeline').style.display = isPortfolio ? 'none' : '';
+
+    if (!isPortfolio && !_pipelineLoaded) {
+        _pipelineLoaded = true;
+        loadPipeline();
+    }
+}
+
+async function loadPipeline() {
+    const sessionToken = localStorage.getItem('pp_session_token');
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
+            body: JSON.stringify({ action: 'get_pipeline_stats' })
+        });
+        const d = await res.json();
+        if (!d.success) throw new Error(d.message || 'Failed to load pipeline data');
+        renderPipeline(d);
+    } catch(e) {
+        document.getElementById('pipeline-loading').innerHTML = `<span class="material-icons" style="font-size:28px;color:#ef4444;display:block;margin-bottom:8px;">error_outline</span><span style="color:#ef4444;font-size:13px;">${e.message}</span>`;
+    }
+}
+
+function renderPipeline(d) {
+    document.getElementById('pipeline-loading').style.display = 'none';
+    const content = document.getElementById('pipeline-content');
+    content.style.display = '';
+
+    const stageMap = {};
+    (d.stages || []).forEach(s => stageMap[s.status] = s);
+    const enrollment = stageMap['Enrollment'] || { count: 0, avg_days: null };
+    const pending    = stageMap['Pending']    || { count: 0, avg_days: null };
+    const approved   = stageMap['Approved']   || { count: 0, avg_days: null };
+    const declined   = stageMap['Declined']   || { count: 0, avg_days: null };
+
+    const fmtDays = v => v != null ? `avg ${Math.round(v)}d` : '';
+    const wc = d.week_counts || {};
+    const conv = d.conversion_rate != null ? `${d.conversion_rate}%` : '—';
+
+    // Funnel row
+    const funnelHtml = `
+    <div class="pipeline-funnel">
+        <div class="funnel-stage stage-enrollment">
+            <div class="funnel-label" style="color:#0369a1;">Enrollment</div>
+            <div class="funnel-count">${enrollment.count}</div>
+            <div class="funnel-sub">${fmtDays(enrollment.avg_days)}</div>
+            <div class="funnel-badge" style="background:#e0f2fe;color:#0369a1;">+${wc['Enrollment']||0} this week</div>
+        </div>
+        <div class="funnel-stage stage-pending">
+            <div class="funnel-label" style="color:#b45309;">Pending Review</div>
+            <div class="funnel-count">${pending.count}</div>
+            <div class="funnel-sub">${fmtDays(pending.avg_days)}</div>
+            <div class="funnel-badge" style="background:#fef3c7;color:#b45309;">+${wc['Pending']||0} this week</div>
+        </div>
+        <div class="funnel-stage stage-approved">
+            <div class="funnel-label" style="color:#166534;">Approved</div>
+            <div class="funnel-count">${d.approved_30d || 0}</div>
+            <div class="funnel-sub">last 30 days</div>
+            <div class="funnel-badge" style="background:#dcfce7;color:#166534;">+${wc['Approved']||0} this week</div>
+        </div>
+        <div class="funnel-stage stage-declined">
+            <div class="funnel-label" style="color:#991b1b;">Declined / Withdrawn</div>
+            <div class="funnel-count">${(d.declined_30d||0)}</div>
+            <div class="funnel-sub">last 30 days</div>
+            <div class="funnel-badge" style="background:#fee2e2;color:#991b1b;">+${(wc['Declined']||0)+(wc['Withdrawn']||0)} this week</div>
+        </div>
+    </div>`;
+
+    // Conversion rate banner
+    const convHtml = `
+    <div style="background:white;border-radius:14px;padding:14px 20px;margin-bottom:16px;box-shadow:0 2px 12px rgba(0,0,0,0.06);display:flex;align-items:center;gap:20px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="material-icons" style="color:#004990;font-size:22px;">trending_up</span>
+            <div>
+                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">30-Day Approval Rate</div>
+                <div style="font-size:28px;font-weight:800;color:#004990;">${conv}</div>
+            </div>
+        </div>
+        <div style="flex:1;min-width:200px;">
+            <div style="background:#f1f5f9;border-radius:99px;height:10px;overflow:hidden;">
+                <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#004990,#0369a1);width:${Math.min(parseFloat(conv)||0,100)}%;transition:width 0.8s ease;"></div>
+            </div>
+            <div style="font-size:11px;color:#64748b;margin-top:4px;">${d.approved_30d||0} approved out of ${(d.approved_30d||0)+(d.declined_30d||0)} outcomes in last 30 days</div>
+        </div>
+    </div>`;
+
+    // Top partners bar chart
+    const topPartners = d.top_partners || [];
+    const maxCount = topPartners.length ? topPartners[0].count : 1;
+    const partnerBarsHtml = topPartners.length
+        ? topPartners.map(p => `
+            <div class="partner-bar-row">
+                <div class="partner-bar-name" title="${p.agent_name}">${p.agent_name}</div>
+                <div class="partner-bar-track">
+                    <div class="partner-bar-fill" style="width:${Math.round((p.count/maxCount)*100)}%;"></div>
+                </div>
+                <div class="partner-bar-count">${p.count}</div>
+            </div>`).join('')
+        : '<div style="color:#94a3b8;font-size:12px;padding:12px 0;">No active pipeline entries</div>';
+
+    // Recent entries
+    const recent = d.recent || [];
+    const statusColors = { Enrollment:'#0369a1', Pending:'#b45309', Approved:'#166534', Declined:'#991b1b', Withdrawn:'#64748b' };
+    const statusBg     = { Enrollment:'#e0f2fe', Pending:'#fef3c7', Approved:'#dcfce7', Declined:'#fee2e2', Withdrawn:'#f1f5f9' };
+    const recentHtml = recent.length
+        ? recent.map(r => {
+            const color = statusColors[r.account_status] || '#64748b';
+            const bg    = statusBg[r.account_status]    || '#f1f5f9';
+            const dateStr = r.enrollment_date ? new Date(r.enrollment_date).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : '—';
+            return `<div class="recent-entry-row">
+                <div style="width:32px;height:32px;border-radius:8px;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                    <span class="material-icons" style="font-size:16px;color:${color};">storefront</span>
+                </div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-size:12px;font-weight:700;color:#0f172a;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.dba_name || '—'}</div>
+                    <div style="font-size:11px;color:#64748b;">${r.agent_name || 'No partner'} · ${dateStr}</div>
+                </div>
+                <span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;background:${bg};color:${color};white-space:nowrap;">${r.account_status}</span>
+            </div>`;
+        }).join('')
+        : '<div style="color:#94a3b8;font-size:12px;padding:12px 0;">No recent entries in last 14 days</div>';
+
+    const gridHtml = `
+    <div class="pipeline-grid">
+        <div class="pipeline-card">
+            <div class="pipeline-card-title">
+                <span class="material-icons" style="font-size:15px;color:#004990;">people</span>
+                Top Partners in Pipeline
+            </div>
+            ${partnerBarsHtml}
+        </div>
+        <div class="pipeline-card">
+            <div class="pipeline-card-title">
+                <span class="material-icons" style="font-size:15px;color:#004990;">schedule</span>
+                Recent Entries (Last 14 Days)
+            </div>
+            ${recentHtml}
+        </div>
+    </div>`;
+
+    content.innerHTML = funnelHtml + convHtml + gridHtml;
+}
 </script>
 
 <script src="/js/site-config.js"></script>

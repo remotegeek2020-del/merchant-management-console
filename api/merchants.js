@@ -1212,6 +1212,104 @@ if (action === 'get_notes') {
             return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: get_pipeline_stats ---
+        if (action === 'get_pipeline_stats') {
+            const weekAgo = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
+            const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+            const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+
+            const [stageRes, weekRes, outcomeRes, partnerRes, recentRes] = await Promise.all([
+                // Counts + avg days in pipeline for each active stage
+                supabase.from('merchants')
+                    .select('account_status, enrollment_date')
+                    .in('account_status', ['Enrollment', 'Pending']),
+
+                // New merchants this week by status
+                supabase.from('merchants')
+                    .select('account_status')
+                    .in('account_status', ['Enrollment', 'Pending', 'Approved', 'Declined', 'Withdrawn'])
+                    .gte('enrollment_date', weekAgo),
+
+                // 30-day outcomes: approved vs declined/withdrawn
+                supabase.from('merchants')
+                    .select('account_status')
+                    .in('account_status', ['Approved', 'Declined', 'Withdrawn'])
+                    .gte('account_status_change_date', monthAgo)
+                    .not('account_status_change_date', 'is', null),
+
+                // Top partners in active pipeline
+                supabase.from('merchants')
+                    .select('agent_name')
+                    .in('account_status', ['Enrollment', 'Pending'])
+                    .not('agent_name', 'is', null)
+                    .neq('agent_name', ''),
+
+                // Recent entries (last 14 days)
+                supabase.from('merchants')
+                    .select('dba_name, merchant_id, agent_name, account_status, enrollment_date')
+                    .gte('enrollment_date', twoWeeksAgo)
+                    .order('enrollment_date', { ascending: false })
+                    .limit(20)
+            ]);
+
+            // Compute avg days per stage
+            const now = Date.now();
+            const stageMap = {};
+            for (const m of (stageRes.data || [])) {
+                if (!stageMap[m.account_status]) stageMap[m.account_status] = { count: 0, totalDays: 0, validDays: 0 };
+                stageMap[m.account_status].count++;
+                if (m.enrollment_date) {
+                    const days = (now - new Date(m.enrollment_date).getTime()) / 86400000;
+                    if (days >= 0 && days < 3650) {
+                        stageMap[m.account_status].totalDays += days;
+                        stageMap[m.account_status].validDays++;
+                    }
+                }
+            }
+            const stages = Object.entries(stageMap).map(([status, d]) => ({
+                status,
+                count: d.count,
+                avg_days: d.validDays > 0 ? Math.round(d.totalDays / d.validDays) : null
+            }));
+
+            // This-week counts
+            const weekCounts = {};
+            for (const m of (weekRes.data || [])) {
+                weekCounts[m.account_status] = (weekCounts[m.account_status] || 0) + 1;
+            }
+
+            // 30-day outcomes
+            const outcomeCounts = {};
+            for (const m of (outcomeRes.data || [])) {
+                outcomeCounts[m.account_status] = (outcomeCounts[m.account_status] || 0) + 1;
+            }
+            const approved30d  = outcomeCounts['Approved']  || 0;
+            const declined30d  = (outcomeCounts['Declined'] || 0) + (outcomeCounts['Withdrawn'] || 0);
+            const conversionRate = (approved30d + declined30d) > 0
+                ? Math.round((approved30d / (approved30d + declined30d)) * 100) : null;
+
+            // Top partners
+            const partnerCounts = {};
+            for (const m of (partnerRes.data || [])) {
+                partnerCounts[m.agent_name] = (partnerCounts[m.agent_name] || 0) + 1;
+            }
+            const topPartners = Object.entries(partnerCounts)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .map(([name, count]) => ({ name, count }));
+
+            return res.status(200).json({
+                success: true,
+                stages,
+                week_counts: weekCounts,
+                approved_30d: approved30d,
+                declined_30d: declined30d,
+                conversion_rate: conversionRate,
+                top_partners: topPartners,
+                recent: recentRes.data || []
+            });
+        }
+
         return res.status(400).json({ success: false, message: "Unknown action" });
 
     } catch (err) {
