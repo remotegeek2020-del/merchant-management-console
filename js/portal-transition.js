@@ -109,4 +109,14 @@
     } else {
         addEntryFlash();
     }
+
+    // ── BFCACHE CLEANUP ───────────────────────────────────────────────────────
+    window.addEventListener('pageshow', function (e) {
+        if (!e.persisted) return;
+        ['pnt-overlay', 'pnt-entry'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        });
+        _busy = false;
+    });
 })();

@@ -319,4 +319,18 @@
             });
         });
     }
+
+    // ── BFCACHE CLEANUP ────────────────────────────────────────────────────────
+    // When the browser restores a page from the back-forward cache it freezes
+    // the DOM as-is, including any overlay that was mid-animation. Clean it up
+    // on pageshow so the user isn't stuck looking at a portal overlay.
+    window.addEventListener('pageshow', function (e) {
+        if (!e.persisted) return;
+        ['realm-enter', 'realm-exit', 'realm-confirm'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.remove();
+        });
+        _enterBusy = false;
+        _exitBusy  = false;
+    });
 })();
