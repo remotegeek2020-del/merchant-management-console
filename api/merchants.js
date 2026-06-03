@@ -1214,16 +1214,27 @@ if (action === 'get_notes') {
 
         // --- ACTION: get_pipeline_stats ---
         if (action === 'get_pipeline_stats') {
-            const periodDays = Math.min(Math.max(parseInt(req.body.period) || 7, 1), 365);
-            const periodAgo = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
-            const recentLimit = periodDays <= 7 ? 20 : periodDays <= 30 ? 40 : 80;
+            let periodAgo, periodTo, recentLimit;
+            if (req.body.date_from) {
+                // Custom date range
+                periodAgo = new Date(req.body.date_from).toISOString();
+                periodTo  = req.body.date_to ? new Date(req.body.date_to).toISOString() : new Date().toISOString();
+                const rangeDays = (new Date(periodTo) - new Date(periodAgo)) / 86400000;
+                recentLimit = rangeDays <= 14 ? 20 : rangeDays <= 60 ? 40 : 80;
+            } else {
+                const periodDays = Math.min(Math.max(parseInt(req.body.period) || 7, 1), 730);
+                periodAgo    = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
+                periodTo     = new Date().toISOString();
+                recentLimit  = periodDays <= 7 ? 20 : periodDays <= 30 ? 40 : 80;
+            }
 
             // Count queries (HEAD only — no row limit concerns, no data transferred)
-            const countByStatus = (statusFilter, dateField, dateFrom) => {
+            const countByStatus = (statusFilter, dateField) => {
                 let q = supabase.from('merchants')
                     .select('*', { count: 'exact', head: true })
-                    .eq('account_status', statusFilter);
-                if (dateField && dateFrom) q = q.gte(dateField, dateFrom);
+                    .eq('account_status', statusFilter)
+                    .gte(dateField, periodAgo)
+                    .lte(dateField, periodTo);
                 return q;
             };
 
@@ -1241,30 +1252,34 @@ if (action === 'get_notes') {
                     .limit(10000),
 
                 // Period entry counts per status (COUNT only, zero data transfer)
-                countByStatus('Enrollment', 'enrollment_date', periodAgo),
-                countByStatus('Pending',    'enrollment_date', periodAgo),
-                countByStatus('Approved',   'enrollment_date', periodAgo),
-                countByStatus('Declined',   'enrollment_date', periodAgo),
-                countByStatus('Withdrawn',  'enrollment_date', periodAgo),
+                countByStatus('Enrollment', 'enrollment_date'),
+                countByStatus('Pending',    'enrollment_date'),
+                countByStatus('Approved',   'enrollment_date'),
+                countByStatus('Declined',   'enrollment_date'),
+                countByStatus('Withdrawn',  'enrollment_date'),
 
-                // Outcome counts based on status_change_date
+                // Outcome counts based on status_change_date within range
                 supabase.from('merchants').select('*', { count: 'exact', head: true })
                     .eq('account_status', 'Approved')
                     .gte('account_status_change_date', periodAgo)
+                    .lte('account_status_change_date', periodTo)
                     .not('account_status_change_date', 'is', null),
                 supabase.from('merchants').select('*', { count: 'exact', head: true })
                     .eq('account_status', 'Declined')
                     .gte('account_status_change_date', periodAgo)
+                    .lte('account_status_change_date', periodTo)
                     .not('account_status_change_date', 'is', null),
                 supabase.from('merchants').select('*', { count: 'exact', head: true })
                     .eq('account_status', 'Withdrawn')
                     .gte('account_status_change_date', periodAgo)
+                    .lte('account_status_change_date', periodTo)
                     .not('account_status_change_date', 'is', null),
 
-                // Top partners — needs agent_name values; bounded by period date, so manageable
+                // Top partners — needs agent_name values; bounded by date range
                 supabase.from('merchants')
                     .select('agent_name')
                     .gte('enrollment_date', periodAgo)
+                    .lte('enrollment_date', periodTo)
                     .not('agent_name', 'is', null)
                     .neq('agent_name', '')
                     .limit(200000),
@@ -1273,6 +1288,7 @@ if (action === 'get_notes') {
                 supabase.from('merchants')
                     .select('dba_name, merchant_id, agent_name, account_status, enrollment_date')
                     .gte('enrollment_date', periodAgo)
+                    .lte('enrollment_date', periodTo)
                     .order('enrollment_date', { ascending: false })
                     .limit(recentLimit)
             ]);

@@ -249,11 +249,21 @@
 
     <!-- PIPELINE PANEL -->
     <div id="tab-pipeline" style="display:none;">
-        <div class="pipeline-period-bar" id="pipeline-period-bar">
-            <button class="pipeline-period-btn active" data-period="7"  onclick="setPipelinePeriod(7,this)">This Week</button>
-            <button class="pipeline-period-btn"         data-period="30" onclick="setPipelinePeriod(30,this)">Last 30 Days</button>
-            <button class="pipeline-period-btn"         data-period="90" onclick="setPipelinePeriod(90,this)">Last 90 Days</button>
-            <button class="pipeline-period-btn"         data-period="180" onclick="setPipelinePeriod(180,this)">Last 6 Months</button>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+            <div class="pipeline-period-bar" id="pipeline-period-bar" style="margin-bottom:0;">
+                <button class="pipeline-period-btn active" data-period="7"   onclick="setPipelinePeriod(7,this)">This Week</button>
+                <button class="pipeline-period-btn"        data-period="30"  onclick="setPipelinePeriod(30,this)">Last 30 Days</button>
+                <button class="pipeline-period-btn"        data-period="90"  onclick="setPipelinePeriod(90,this)">Last 90 Days</button>
+                <button class="pipeline-period-btn"        data-period="180" onclick="setPipelinePeriod(180,this)">Last 6 Months</button>
+                <button class="pipeline-period-btn"        data-period="365" onclick="setPipelinePeriod(365,this)">1 Year</button>
+                <button class="pipeline-period-btn"        data-period="custom" id="ptab-custom-btn" onclick="toggleCustomDatePicker(this)">Custom Range</button>
+            </div>
+            <div id="pipeline-custom-dates" style="display:none;align-items:center;gap:6px;background:white;border:1.5px solid #004990;border-radius:8px;padding:5px 10px;">
+                <span style="font-size:11px;font-weight:700;color:#64748b;">From</span>
+                <input type="date" id="pipeline-date-from" style="border:none;font-size:12px;color:#334155;outline:none;background:transparent;" onchange="applyCustomDateRange()">
+                <span style="font-size:11px;font-weight:700;color:#64748b;">To</span>
+                <input type="date" id="pipeline-date-to" style="border:none;font-size:12px;color:#334155;outline:none;background:transparent;" onchange="applyCustomDateRange()">
+            </div>
         </div>
         <div id="pipeline-loading" style="text-align:center;padding:60px;color:#94a3b8;">
             <span class="material-icons" style="font-size:32px;display:block;margin-bottom:10px;animation:spin 1s linear infinite;">autorenew</span>
@@ -3189,8 +3199,10 @@ window.saveMerchant = async (uuid) => {
 // ── ONBOARDING PIPELINE TRACKER ──────────────────────────────────────────────
 let _pipelineLoaded = false;
 let _pipelinePeriod = 7;
+let _pipelineCustomFrom = null;
+let _pipelineCustomTo   = null;
 
-const _periodLabels = { 7: 'This Week', 30: 'Last 30 Days', 90: 'Last 90 Days', 180: 'Last 6 Months' };
+const _periodLabels = { 7: 'This Week', 30: 'Last 30 Days', 90: 'Last 90 Days', 180: 'Last 6 Months', 365: '1 Year' };
 
 function switchPageTab(tab) {
     const isPortfolio = tab === 'portfolio';
@@ -3207,25 +3219,58 @@ function switchPageTab(tab) {
 
     if (!isPortfolio && !_pipelineLoaded) {
         _pipelineLoaded = true;
-        loadPipeline(_pipelinePeriod);
+        loadPipeline();
     }
 }
 
 function setPipelinePeriod(period, btn) {
-    if (period === _pipelinePeriod) return;
-    _pipelinePeriod = period;
+    _pipelineCustomFrom = null;
+    _pipelineCustomTo   = null;
+    document.getElementById('pipeline-custom-dates').style.display = 'none';
     document.querySelectorAll('.pipeline-period-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
-    loadPipeline(period);
+    _pipelinePeriod = period;
+    loadPipeline();
 }
 
-async function loadPipeline(period) {
-    period = period || _pipelinePeriod;
+function toggleCustomDatePicker(btn) {
+    const panel = document.getElementById('pipeline-custom-dates');
+    const isOpen = panel.style.display !== 'none';
+    if (isOpen) {
+        panel.style.display = 'none';
+        if (!_pipelineCustomFrom) {
+            btn.classList.remove('active');
+            const prevBtn = document.querySelector(`.pipeline-period-btn[data-period="${_pipelinePeriod}"]`);
+            if (prevBtn) prevBtn.classList.add('active');
+        }
+    } else {
+        const toEl   = document.getElementById('pipeline-date-to');
+        const fromEl = document.getElementById('pipeline-date-from');
+        if (!toEl.value)   toEl.value   = new Date().toISOString().slice(0,10);
+        if (!fromEl.value) {
+            const d = new Date(); d.setFullYear(d.getFullYear() - 1);
+            fromEl.value = d.toISOString().slice(0,10);
+        }
+        panel.style.display = 'flex';
+        document.querySelectorAll('.pipeline-period-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+    }
+}
+
+function applyCustomDateRange() {
+    const from = document.getElementById('pipeline-date-from').value;
+    const to   = document.getElementById('pipeline-date-to').value;
+    if (!from || !to || new Date(from) > new Date(to)) return;
+    _pipelineCustomFrom = from;
+    _pipelineCustomTo   = to;
+    loadPipeline();
+}
+
+async function loadPipeline() {
     const sessionToken = localStorage.getItem('pp_session_token');
     const content = document.getElementById('pipeline-content');
     const loading = document.getElementById('pipeline-loading');
 
-    // Show loading state — if content already rendered, dim it instead of blank flash
     if (content.style.display === 'none') {
         loading.style.display = '';
         loading.innerHTML = `<span class="material-icons" style="font-size:32px;display:block;margin-bottom:10px;animation:spin 1s linear infinite;">autorenew</span>Loading pipeline data…`;
@@ -3233,15 +3278,24 @@ async function loadPipeline(period) {
         content.classList.add('pipeline-refreshing');
     }
 
+    const body = { action: 'get_pipeline_stats' };
+    if (_pipelineCustomFrom && _pipelineCustomTo) {
+        body.date_from = _pipelineCustomFrom;
+        body.date_to   = _pipelineCustomTo + 'T23:59:59Z';
+    } else {
+        body.period = _pipelinePeriod;
+    }
+
     try {
         const res = await fetch('/api/merchants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-            body: JSON.stringify({ action: 'get_pipeline_stats', period })
+            body: JSON.stringify(body)
         });
         const d = await res.json();
         if (!d.success) throw new Error(d.message || 'Failed to load pipeline data');
-        renderPipeline(d, period);
+        const customLabel = _pipelineCustomFrom ? `${_pipelineCustomFrom} → ${_pipelineCustomTo}` : null;
+        renderPipeline(d, _pipelinePeriod, customLabel);
     } catch(e) {
         loading.style.display = '';
         loading.innerHTML = `<span class="material-icons" style="font-size:28px;color:#ef4444;display:block;margin-bottom:8px;">error_outline</span><span style="color:#ef4444;font-size:13px;">${e.message}</span>`;
@@ -3251,13 +3305,13 @@ async function loadPipeline(period) {
     }
 }
 
-function renderPipeline(d, period) {
+function renderPipeline(d, period, customLabel) {
     document.getElementById('pipeline-loading').style.display = 'none';
     const content = document.getElementById('pipeline-content');
     content.style.display = '';
 
-    const periodLabel = _periodLabels[period] || `Last ${period} Days`;
-    const periodShort = period === 7 ? 'this week' : periodLabel.toLowerCase();
+    const periodLabel = customLabel || _periodLabels[period] || `Last ${period} Days`;
+    const periodShort = customLabel ? 'in range' : (period === 7 ? 'this week' : periodLabel.toLowerCase());
 
     const stageMap = {};
     (d.stages || []).forEach(s => stageMap[s.status] = s);
