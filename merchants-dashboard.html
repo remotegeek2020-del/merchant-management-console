@@ -3282,7 +3282,7 @@ function renderPipeline(d) {
     const partnerBarsHtml = topPartners.length
         ? topPartners.map(p => `
             <div class="partner-bar-row">
-                <div class="partner-bar-name" title="${p.agent_name}">${p.agent_name}</div>
+                <div class="partner-bar-name" title="${p.name}">${p.name}</div>
                 <div class="partner-bar-track">
                     <div class="partner-bar-fill" style="width:${Math.round((p.count/maxCount)*100)}%;"></div>
                 </div>
