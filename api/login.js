@@ -30,7 +30,9 @@ export default async function handler(req, res) {
             const { data: resetUser } = await supabase.from('app_users').select('userid, first_name, email').eq('email', email).single();
             if (resetUser) {
                 const resetToken = crypto.randomUUID();
-                await supabase.from('app_users').update({ invitation_token: resetToken, is_active: false }).eq('userid', resetUser.userid);
+                // Only set the reset token — do NOT set is_active: false.
+                // Deactivating the account lets anyone with a known email lock a colleague out.
+                await supabase.from('app_users').update({ invitation_token: resetToken }).eq('userid', resetUser.userid);
                 if (process.env.POSTMARK_SERVER_TOKEN) {
                     const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
                     const setupUrl = `https://${req.headers.host}/setup-password.html?token=${resetToken}`;

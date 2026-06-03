@@ -9,29 +9,28 @@ export default async function handler(req, res) {
   const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
   try {
-    // 1. Find user with this token
+    // 1. Find user with this token (works for both new invites and password resets)
     const { data: user, error: findError } = await supabase
       .from('app_users')
-      .select('userid')
+      .select('userid, is_active')
       .eq('invitation_token', token)
-      .eq('is_active', false)
       .single();
 
     if (findError || !user) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired invitation token.' });
+      return res.status(400).json({ success: false, message: 'Invalid or expired reset link.' });
     }
 
     // 2. Hash the new password
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(password, salt);
 
-    // 3. Update user: set password, activate account, and clear token
+    // 3. Update password, always activate (covers new invites + existing users resetting password), clear token
     const { error: updateError } = await supabase
       .from('app_users')
       .update({
         password_hash: hash,
         is_active: true,
-        invitation_token: null // Token is one-time use
+        invitation_token: null
       })
       .eq('userid', user.userid);
 
