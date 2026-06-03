@@ -290,8 +290,20 @@
 
     // ── WIRE UP EXIT (on chat / staff-community pages) ─────────────────────────
     if (myRealm) {
+        // Push a sentinel history entry so the browser back button fires popstate
+        // instead of immediately leaving the page.
+        history.pushState({ realmGuard: true }, '');
+
+        // Browser back button → popstate
+        window.addEventListener('popstate', function (e) {
+            if (_exitBusy) return;
+            // Re-push so the next back press also gets intercepted
+            history.pushState({ realmGuard: true }, '');
+            showExitConfirm();
+        });
+
+        // Click-based home / back buttons
         document.addEventListener('click', function (e) {
-            // Link-based home/back buttons
             const link = e.target.closest('a[href]');
             if (link) {
                 const href = link.getAttribute('href');
