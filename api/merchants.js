@@ -1214,45 +1214,45 @@ if (action === 'get_notes') {
 
         // --- ACTION: get_pipeline_stats ---
         if (action === 'get_pipeline_stats') {
-            const weekAgo = new Date(Date.now() - 7  * 24 * 60 * 60 * 1000).toISOString();
-            const monthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-            const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+            const periodDays = Math.min(Math.max(parseInt(req.body.period) || 7, 1), 365);
+            const periodAgo = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
+            const recentLimit = periodDays <= 7 ? 20 : periodDays <= 30 ? 40 : 80;
 
-            const [stageRes, weekRes, outcomeRes, partnerRes, recentRes] = await Promise.all([
-                // Counts + avg days in pipeline for each active stage
+            const [stageRes, periodRes, outcomeRes, partnerRes, recentRes] = await Promise.all([
+                // Current active stage counts + avg days in stage
                 supabase.from('merchants')
                     .select('account_status, enrollment_date')
                     .in('account_status', ['Enrollment', 'Pending']),
 
-                // New merchants this week by status
+                // Merchants that entered (enrollment_date) within the selected period
                 supabase.from('merchants')
                     .select('account_status')
                     .in('account_status', ['Enrollment', 'Pending', 'Approved', 'Declined', 'Withdrawn'])
-                    .gte('enrollment_date', weekAgo),
+                    .gte('enrollment_date', periodAgo),
 
-                // 30-day outcomes: approved vs declined/withdrawn
+                // Outcomes (status change) within the selected period
                 supabase.from('merchants')
                     .select('account_status')
                     .in('account_status', ['Approved', 'Declined', 'Withdrawn'])
-                    .gte('account_status_change_date', monthAgo)
+                    .gte('account_status_change_date', periodAgo)
                     .not('account_status_change_date', 'is', null),
 
-                // Top partners in active pipeline
+                // Top partners by submissions within the selected period
                 supabase.from('merchants')
                     .select('agent_name')
-                    .in('account_status', ['Enrollment', 'Pending'])
+                    .gte('enrollment_date', periodAgo)
                     .not('agent_name', 'is', null)
                     .neq('agent_name', ''),
 
-                // Recent entries (last 14 days)
+                // Recent entries within the selected period
                 supabase.from('merchants')
                     .select('dba_name, merchant_id, agent_name, account_status, enrollment_date')
-                    .gte('enrollment_date', twoWeeksAgo)
+                    .gte('enrollment_date', periodAgo)
                     .order('enrollment_date', { ascending: false })
-                    .limit(20)
+                    .limit(recentLimit)
             ]);
 
-            // Compute avg days per stage
+            // Compute avg days per active stage
             const now = Date.now();
             const stageMap = {};
             for (const m of (stageRes.data || [])) {
@@ -1266,29 +1266,29 @@ if (action === 'get_notes') {
                     }
                 }
             }
-            const stages = Object.entries(stageMap).map(([status, d]) => ({
+            const stages = Object.entries(stageMap).map(([status, s]) => ({
                 status,
-                count: d.count,
-                avg_days: d.validDays > 0 ? Math.round(d.totalDays / d.validDays) : null
+                count: s.count,
+                avg_days: s.validDays > 0 ? Math.round(s.totalDays / s.validDays) : null
             }));
 
-            // This-week counts
-            const weekCounts = {};
-            for (const m of (weekRes.data || [])) {
-                weekCounts[m.account_status] = (weekCounts[m.account_status] || 0) + 1;
+            // Period entry counts by status
+            const periodCounts = {};
+            for (const m of (periodRes.data || [])) {
+                periodCounts[m.account_status] = (periodCounts[m.account_status] || 0) + 1;
             }
 
-            // 30-day outcomes
+            // Outcome counts for conversion rate
             const outcomeCounts = {};
             for (const m of (outcomeRes.data || [])) {
                 outcomeCounts[m.account_status] = (outcomeCounts[m.account_status] || 0) + 1;
             }
-            const approved30d  = outcomeCounts['Approved']  || 0;
-            const declined30d  = (outcomeCounts['Declined'] || 0) + (outcomeCounts['Withdrawn'] || 0);
-            const conversionRate = (approved30d + declined30d) > 0
-                ? Math.round((approved30d / (approved30d + declined30d)) * 100) : null;
+            const approvedPeriod  = outcomeCounts['Approved'] || 0;
+            const declinedPeriod  = (outcomeCounts['Declined'] || 0) + (outcomeCounts['Withdrawn'] || 0);
+            const conversionRate  = (approvedPeriod + declinedPeriod) > 0
+                ? Math.round((approvedPeriod / (approvedPeriod + declinedPeriod)) * 100) : null;
 
-            // Top partners
+            // Top partners by submission volume in period
             const partnerCounts = {};
             for (const m of (partnerRes.data || [])) {
                 partnerCounts[m.agent_name] = (partnerCounts[m.agent_name] || 0) + 1;
@@ -1301,9 +1301,9 @@ if (action === 'get_notes') {
             return res.status(200).json({
                 success: true,
                 stages,
-                week_counts: weekCounts,
-                approved_30d: approved30d,
-                declined_30d: declined30d,
+                period_counts: periodCounts,
+                approved_period: approvedPeriod,
+                declined_period: declinedPeriod,
                 conversion_rate: conversionRate,
                 top_partners: topPartners,
                 recent: recentRes.data || []

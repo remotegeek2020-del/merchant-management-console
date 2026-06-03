@@ -164,6 +164,11 @@
 .recent-entry-row { display:flex; align-items:flex-start; gap:10px; padding:8px 0; border-bottom:1px solid #f1f5f9; }
 .recent-entry-row:last-child { border-bottom:none; }
 @media(max-width:768px){ .pipeline-funnel{grid-template-columns:1fr 1fr;} .pipeline-grid{grid-template-columns:1fr;} }
+.pipeline-period-bar { display:flex; gap:4px; margin-bottom:16px; flex-wrap:wrap; }
+.pipeline-period-btn { padding:6px 14px; border:1.5px solid #e2e8f0; border-radius:8px; font-size:11px; font-weight:700; color:#64748b; background:white; cursor:pointer; transition:0.15s; }
+.pipeline-period-btn:hover { border-color:#004990; color:#004990; }
+.pipeline-period-btn.active { background:#004990; color:white; border-color:#004990; }
+.pipeline-refreshing { opacity:0.5; pointer-events:none; }
 .filter-toolbar { background:white; border-radius:16px; padding:14px 20px; margin-bottom:20px; box-shadow:0 4px 20px rgba(0,0,0,0.05); display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
 .filter-toolbar label { font-size:11px; font-weight:700; color:#64748b; text-transform:uppercase; white-space:nowrap; }
 .filter-toolbar select { border:1px solid #e2e8f0; border-radius:8px; padding:7px 10px; font-size:12px; color:#334155; background:#fff; outline:none; }
@@ -244,6 +249,12 @@
 
     <!-- PIPELINE PANEL -->
     <div id="tab-pipeline" style="display:none;">
+        <div class="pipeline-period-bar" id="pipeline-period-bar">
+            <button class="pipeline-period-btn active" data-period="7"  onclick="setPipelinePeriod(7,this)">This Week</button>
+            <button class="pipeline-period-btn"         data-period="30" onclick="setPipelinePeriod(30,this)">Last 30 Days</button>
+            <button class="pipeline-period-btn"         data-period="90" onclick="setPipelinePeriod(90,this)">Last 90 Days</button>
+            <button class="pipeline-period-btn"         data-period="180" onclick="setPipelinePeriod(180,this)">Last 6 Months</button>
+        </div>
         <div id="pipeline-loading" style="text-align:center;padding:60px;color:#94a3b8;">
             <span class="material-icons" style="font-size:32px;display:block;margin-bottom:10px;animation:spin 1s linear infinite;">autorenew</span>
             Loading pipeline data…
@@ -3177,6 +3188,9 @@ window.saveMerchant = async (uuid) => {
 <script>
 // ── ONBOARDING PIPELINE TRACKER ──────────────────────────────────────────────
 let _pipelineLoaded = false;
+let _pipelinePeriod = 7;
+
+const _periodLabels = { 7: 'This Week', 30: 'Last 30 Days', 90: 'Last 90 Days', 180: 'Last 6 Months' };
 
 function switchPageTab(tab) {
     const isPortfolio = tab === 'portfolio';
@@ -3193,41 +3207,67 @@ function switchPageTab(tab) {
 
     if (!isPortfolio && !_pipelineLoaded) {
         _pipelineLoaded = true;
-        loadPipeline();
+        loadPipeline(_pipelinePeriod);
     }
 }
 
-async function loadPipeline() {
+function setPipelinePeriod(period, btn) {
+    if (period === _pipelinePeriod) return;
+    _pipelinePeriod = period;
+    document.querySelectorAll('.pipeline-period-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    loadPipeline(period);
+}
+
+async function loadPipeline(period) {
+    period = period || _pipelinePeriod;
     const sessionToken = localStorage.getItem('pp_session_token');
+    const content = document.getElementById('pipeline-content');
+    const loading = document.getElementById('pipeline-loading');
+
+    // Show loading state — if content already rendered, dim it instead of blank flash
+    if (content.style.display === 'none') {
+        loading.style.display = '';
+        loading.innerHTML = `<span class="material-icons" style="font-size:32px;display:block;margin-bottom:10px;animation:spin 1s linear infinite;">autorenew</span>Loading pipeline data…`;
+    } else {
+        content.classList.add('pipeline-refreshing');
+    }
+
     try {
         const res = await fetch('/api/merchants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${sessionToken}` },
-            body: JSON.stringify({ action: 'get_pipeline_stats' })
+            body: JSON.stringify({ action: 'get_pipeline_stats', period })
         });
         const d = await res.json();
         if (!d.success) throw new Error(d.message || 'Failed to load pipeline data');
-        renderPipeline(d);
+        renderPipeline(d, period);
     } catch(e) {
-        document.getElementById('pipeline-loading').innerHTML = `<span class="material-icons" style="font-size:28px;color:#ef4444;display:block;margin-bottom:8px;">error_outline</span><span style="color:#ef4444;font-size:13px;">${e.message}</span>`;
+        loading.style.display = '';
+        loading.innerHTML = `<span class="material-icons" style="font-size:28px;color:#ef4444;display:block;margin-bottom:8px;">error_outline</span><span style="color:#ef4444;font-size:13px;">${e.message}</span>`;
+        content.style.display = 'none';
+    } finally {
+        content.classList.remove('pipeline-refreshing');
     }
 }
 
-function renderPipeline(d) {
+function renderPipeline(d, period) {
     document.getElementById('pipeline-loading').style.display = 'none';
     const content = document.getElementById('pipeline-content');
     content.style.display = '';
+
+    const periodLabel = _periodLabels[period] || `Last ${period} Days`;
+    const periodShort = period === 7 ? 'this week' : periodLabel.toLowerCase();
 
     const stageMap = {};
     (d.stages || []).forEach(s => stageMap[s.status] = s);
     const enrollment = stageMap['Enrollment'] || { count: 0, avg_days: null };
     const pending    = stageMap['Pending']    || { count: 0, avg_days: null };
-    const approved   = stageMap['Approved']   || { count: 0, avg_days: null };
-    const declined   = stageMap['Declined']   || { count: 0, avg_days: null };
 
-    const fmtDays = v => v != null ? `avg ${Math.round(v)}d` : '';
-    const wc = d.week_counts || {};
+    const fmtDays = v => v != null ? `avg ${Math.round(v)}d in stage` : '';
+    const pc = d.period_counts || {};
     const conv = d.conversion_rate != null ? `${d.conversion_rate}%` : '—';
+    const total = (d.approved_period || 0) + (d.declined_period || 0);
 
     // Funnel row
     const funnelHtml = `
@@ -3236,25 +3276,25 @@ function renderPipeline(d) {
             <div class="funnel-label" style="color:#0369a1;">Enrollment</div>
             <div class="funnel-count">${enrollment.count}</div>
             <div class="funnel-sub">${fmtDays(enrollment.avg_days)}</div>
-            <div class="funnel-badge" style="background:#e0f2fe;color:#0369a1;">+${wc['Enrollment']||0} this week</div>
+            <div class="funnel-badge" style="background:#e0f2fe;color:#0369a1;">+${pc['Enrollment']||0} ${periodShort}</div>
         </div>
         <div class="funnel-stage stage-pending">
             <div class="funnel-label" style="color:#b45309;">Pending Review</div>
             <div class="funnel-count">${pending.count}</div>
             <div class="funnel-sub">${fmtDays(pending.avg_days)}</div>
-            <div class="funnel-badge" style="background:#fef3c7;color:#b45309;">+${wc['Pending']||0} this week</div>
+            <div class="funnel-badge" style="background:#fef3c7;color:#b45309;">+${pc['Pending']||0} ${periodShort}</div>
         </div>
         <div class="funnel-stage stage-approved">
             <div class="funnel-label" style="color:#166534;">Approved</div>
-            <div class="funnel-count">${d.approved_30d || 0}</div>
-            <div class="funnel-sub">last 30 days</div>
-            <div class="funnel-badge" style="background:#dcfce7;color:#166534;">+${wc['Approved']||0} this week</div>
+            <div class="funnel-count">${d.approved_period || 0}</div>
+            <div class="funnel-sub">${periodLabel.toLowerCase()}</div>
+            <div class="funnel-badge" style="background:#dcfce7;color:#166534;">+${pc['Approved']||0} ${periodShort}</div>
         </div>
         <div class="funnel-stage stage-declined">
             <div class="funnel-label" style="color:#991b1b;">Declined / Withdrawn</div>
-            <div class="funnel-count">${(d.declined_30d||0)}</div>
-            <div class="funnel-sub">last 30 days</div>
-            <div class="funnel-badge" style="background:#fee2e2;color:#991b1b;">+${(wc['Declined']||0)+(wc['Withdrawn']||0)} this week</div>
+            <div class="funnel-count">${d.declined_period || 0}</div>
+            <div class="funnel-sub">${periodLabel.toLowerCase()}</div>
+            <div class="funnel-badge" style="background:#fee2e2;color:#991b1b;">+${(pc['Declined']||0)+(pc['Withdrawn']||0)} ${periodShort}</div>
         </div>
     </div>`;
 
@@ -3264,7 +3304,7 @@ function renderPipeline(d) {
         <div style="display:flex;align-items:center;gap:10px;">
             <span class="material-icons" style="color:#004990;font-size:22px;">trending_up</span>
             <div>
-                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">30-Day Approval Rate</div>
+                <div style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Approval Rate — ${periodLabel}</div>
                 <div style="font-size:28px;font-weight:800;color:#004990;">${conv}</div>
             </div>
         </div>
@@ -3272,7 +3312,7 @@ function renderPipeline(d) {
             <div style="background:#f1f5f9;border-radius:99px;height:10px;overflow:hidden;">
                 <div style="height:100%;border-radius:99px;background:linear-gradient(90deg,#004990,#0369a1);width:${Math.min(parseFloat(conv)||0,100)}%;transition:width 0.8s ease;"></div>
             </div>
-            <div style="font-size:11px;color:#64748b;margin-top:4px;">${d.approved_30d||0} approved out of ${(d.approved_30d||0)+(d.declined_30d||0)} outcomes in last 30 days</div>
+            <div style="font-size:11px;color:#64748b;margin-top:4px;">${d.approved_period||0} approved out of ${total} outcomes — ${periodLabel.toLowerCase()}</div>
         </div>
     </div>`;
 
@@ -3288,7 +3328,7 @@ function renderPipeline(d) {
                 </div>
                 <div class="partner-bar-count">${p.count}</div>
             </div>`).join('')
-        : '<div style="color:#94a3b8;font-size:12px;padding:12px 0;">No active pipeline entries</div>';
+        : '<div style="color:#94a3b8;font-size:12px;padding:12px 0;">No entries in this period</div>';
 
     // Recent entries
     const recent = d.recent || [];
@@ -3310,21 +3350,21 @@ function renderPipeline(d) {
                 <span style="font-size:9px;font-weight:800;padding:2px 8px;border-radius:99px;background:${bg};color:${color};white-space:nowrap;">${r.account_status}</span>
             </div>`;
         }).join('')
-        : '<div style="color:#94a3b8;font-size:12px;padding:12px 0;">No recent entries in last 14 days</div>';
+        : `<div style="color:#94a3b8;font-size:12px;padding:12px 0;">No entries in ${periodLabel.toLowerCase()}</div>`;
 
     const gridHtml = `
     <div class="pipeline-grid">
         <div class="pipeline-card">
             <div class="pipeline-card-title">
                 <span class="material-icons" style="font-size:15px;color:#004990;">people</span>
-                Top Partners in Pipeline
+                Top Partners — ${periodLabel}
             </div>
             ${partnerBarsHtml}
         </div>
         <div class="pipeline-card">
             <div class="pipeline-card-title">
                 <span class="material-icons" style="font-size:15px;color:#004990;">schedule</span>
-                Recent Entries (Last 14 Days)
+                Recent Entries — ${periodLabel}
             </div>
             ${recentHtml}
         </div>
