@@ -284,36 +284,62 @@ async function buildPartnersData() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Sequential — get_merchant_aggregate_stats and get_weekly_report_activity share the same
-    // cache row; running them in parallel causes lock contention when the cache is cold.
-    const statsRes = await supabase.rpc('get_merchant_aggregate_stats');
-    if (statsRes.error) throw statsRes.error;
-    const activityRes = await supabase.rpc('get_weekly_report_activity');
-    if (activityRes.error) throw activityRes.error;
-    // Use RPC wrapper so this query also bypasses statement/lock timeouts
+    // Read directly from the cache table — one fast indexed row read.
+    // Calling get_merchant_aggregate_stats() via RPC triggers a full cache rebuild
+    // when the cache is cold, which exceeds PostgREST's HTTP-level timeout and kills
+    // the report. Instead we read stale-ok data here and fire a background refresh.
+    const { data: cache, error: cacheErr } = await supabase
+        .from('merchant_aggregate_stats_cache')
+        .select('*')
+        .eq('id', 1)
+        .maybeSingle();
+
+    if (cacheErr) throw cacheErr;
+
+    if (!cache) {
+        // No cache row at all — do a one-time blocking warm-up (first ever run only).
+        const warmup = await supabase.rpc('get_merchant_aggregate_stats');
+        if (warmup.error) throw new Error('Cache empty and warm-up failed: ' + warmup.error.message);
+        const { data: fresh } = await supabase
+            .from('merchant_aggregate_stats_cache').select('*').eq('id', 1).maybeSingle();
+        if (!fresh) throw new Error('Cache still empty after warm-up.');
+        Object.assign(cache ?? {}, fresh);
+        // Use fresh as cache below
+        return buildPartnersDataFromCache(fresh, dateStr);
+    }
+
+    // If stale (> 4 h), trigger background refresh without blocking the send.
+    const staleMs = 4 * 60 * 60 * 1000;
+    if (!cache.computed_at || Date.now() - new Date(cache.computed_at).getTime() > staleMs) {
+        supabase.rpc('get_merchant_aggregate_stats').then(() => {}).catch(() => {});
+    }
+
+    // Leaderboard is a separate fast query with no cache rebuild side-effect.
     const leaderboardRes = await supabase.rpc('get_partner_leaderboard', { lim: 10 });
 
-    const s = statsRes.data;
-    const a = activityRes.data;
-    const sortedBreakdown = Object.fromEntries(
-        Object.entries(s.status_breakdown || {}).sort(([, a], [, b]) => b - a)
-    );
+    return buildPartnersDataFromCache(cache, dateStr, leaderboardRes.data);
+}
 
+function buildPartnersDataFromCache(cache, dateStr, leaderboard = []) {
+    const sortedBreakdown = Object.fromEntries(
+        Object.entries(cache.status_breakdown || {}).sort(([, a], [, b]) => b - a)
+    );
     return {
-        date: dateStr,
-        totalMerchants:        Number(s.total || 0),
-        approvedMerchants:     Number(s.approved || 0),
-        totalVolume30d:        Number(s.vol30 || 0),
-        totalVolume90d:        Number(s.vol90 || 0),
-        newMerchantsYesterday: Number(s.new_yesterday || 0),
-        newMerchantsThisWeek:  Number(s.new_this_week || 0),
-        approvedThisWeek:      Number(s.approved_this_week || 0),
-        newAgentsThisWeek:     Number(a.new_agents_this_week || 0),
-        topPartners:           Array.isArray(leaderboardRes.data) ? leaderboardRes.data : [],
-        topSubmittingPartners: a.top_submitting_partners || [],
+        date:                  dateStr,
+        totalMerchants:        Number(cache.total            || 0),
+        approvedMerchants:     Number(cache.approved         || 0),
+        totalVolume30d:        Number(cache.vol30            || 0),
+        totalVolume90d:        Number(cache.vol90            || 0),
+        newMerchantsYesterday: Number(cache.new_yesterday    || 0),
+        newMerchantsThisWeek:  Number(cache.new_this_week    || 0),
+        approvedThisWeek:      Number(cache.approved_this_week || 0),
+        newAgentsThisWeek:     Number(cache.new_agents_this_week || 0),
+        topPartners:           Array.isArray(leaderboard) ? leaderboard : [],
+        topSubmittingPartners: Array.isArray(cache.top_submitting_partners) ? cache.top_submitting_partners : [],
         statusBreakdown:       sortedBreakdown
     };
 }
+
 
 async function buildOpsData() {
     const today = new Date();
@@ -489,6 +515,16 @@ export default async function handler(req, res) {
         if (action === 'send_manual') {
             const result = await sendReport(report_type, 'manual');
             return res.status(200).json({ success: true, ...result });
+        }
+
+        if (action === 'refresh_cache') {
+            // Explicitly rebuild the merchant aggregate cache — call this before sending
+            // or from a cron that runs a few minutes before the report schedule.
+            const warmup = await supabase.rpc('get_merchant_aggregate_stats');
+            if (warmup.error) throw warmup.error;
+            const { data: row } = await supabase
+                .from('merchant_aggregate_stats_cache').select('computed_at').eq('id', 1).maybeSingle();
+            return res.status(200).json({ success: true, computed_at: row?.computed_at });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

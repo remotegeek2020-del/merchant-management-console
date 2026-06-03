@@ -846,6 +846,15 @@ function initSendingReportsTab() {
                             <span class="material-icons" style="font-size:16px;">send</span>
                             Send ${rt.label} Now
                         </button>
+                        ${reportType === 'partners_merchants' ? `
+                        <div style="margin-top:10px;padding-top:10px;border-top:1px solid #f1f5f9;">
+                            <div style="font-size:11px;color:#94a3b8;margin-bottom:6px;">Data is cached every 4 hours. Refresh before sending if the numbers look stale.</div>
+                            <button id="sr-refresh-btn-${reportType}" onclick="srRefreshCache('${reportType}')"
+                                style="width:100%;padding:8px;border:1px solid #e2e8f0;border-radius:8px;background:white;font-size:12px;font-weight:700;color:#64748b;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">
+                                <span class="material-icons" style="font-size:14px;">refresh</span>
+                                Refresh Data Cache
+                            </button>
+                        </div>` : ''}
                     </div>
                 </div>
 
@@ -979,6 +988,22 @@ function initSendingReportsTab() {
     window.srSetTime = async function(reportType) {
         const hour = parseInt(document.getElementById(`sr-hour-${reportType}`).value, 10);
         await srApi({ action: 'set_time', report_type: reportType, preferred_hour: hour });
+    };
+
+    window.srRefreshCache = async function(reportType) {
+        const btn = document.getElementById(`sr-refresh-btn-${reportType}`);
+        if (!btn) return;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-icons" style="font-size:14px;animation:spin 1s linear infinite;">autorenew</span> Refreshing…';
+        const r = await srApi({ action: 'refresh_cache', report_type: reportType });
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-icons" style="font-size:14px;">refresh</span> Refresh Data Cache';
+        if (r.success) {
+            const ts = r.computed_at ? new Date(r.computed_at).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : '';
+            Swal.fire({ icon: 'success', title: 'Cache refreshed', text: `Data updated${ts ? ' at ' + ts : ''}.`, timer: 2500, showConfirmButton: false });
+        } else {
+            Swal.fire({ icon: 'error', title: 'Refresh failed', text: r.message || 'Unknown error' });
+        }
     };
 
     srInit();
