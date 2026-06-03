@@ -1218,33 +1218,58 @@ if (action === 'get_notes') {
             const periodAgo = new Date(Date.now() - periodDays * 24 * 60 * 60 * 1000).toISOString();
             const recentLimit = periodDays <= 7 ? 20 : periodDays <= 30 ? 40 : 80;
 
-            const [stageRes, periodRes, outcomeRes, partnerRes, recentRes] = await Promise.all([
-                // Current active stage counts + avg days in stage
+            // Count queries (HEAD only — no row limit concerns, no data transferred)
+            const countByStatus = (statusFilter, dateField, dateFrom) => {
+                let q = supabase.from('merchants')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('account_status', statusFilter);
+                if (dateField && dateFrom) q = q.gte(dateField, dateFrom);
+                return q;
+            };
+
+            const [
+                stageRes,           // needs enrollment_date for avg_days — fetch rows, but small set
+                cntEnrollPeriod, cntPendingPeriod, cntApprovedPeriod, cntDeclinedPeriod, cntWithdrawnPeriod,
+                cntApprovedOutcome, cntDeclinedOutcome, cntWithdrawnOutcome,
+                partnerRes,         // needs agent_name values to group — bounded by date filter
+                recentRes
+            ] = await Promise.all([
+                // Active stage rows (Enrollment+Pending are always small — hundreds, not thousands)
                 supabase.from('merchants')
                     .select('account_status, enrollment_date')
-                    .in('account_status', ['Enrollment', 'Pending']),
+                    .in('account_status', ['Enrollment', 'Pending'])
+                    .limit(10000),
 
-                // Merchants that entered (enrollment_date) within the selected period
-                supabase.from('merchants')
-                    .select('account_status')
-                    .in('account_status', ['Enrollment', 'Pending', 'Approved', 'Declined', 'Withdrawn'])
-                    .gte('enrollment_date', periodAgo),
+                // Period entry counts per status (COUNT only, zero data transfer)
+                countByStatus('Enrollment', 'enrollment_date', periodAgo),
+                countByStatus('Pending',    'enrollment_date', periodAgo),
+                countByStatus('Approved',   'enrollment_date', periodAgo),
+                countByStatus('Declined',   'enrollment_date', periodAgo),
+                countByStatus('Withdrawn',  'enrollment_date', periodAgo),
 
-                // Outcomes (status change) within the selected period
-                supabase.from('merchants')
-                    .select('account_status')
-                    .in('account_status', ['Approved', 'Declined', 'Withdrawn'])
+                // Outcome counts based on status_change_date
+                supabase.from('merchants').select('*', { count: 'exact', head: true })
+                    .eq('account_status', 'Approved')
+                    .gte('account_status_change_date', periodAgo)
+                    .not('account_status_change_date', 'is', null),
+                supabase.from('merchants').select('*', { count: 'exact', head: true })
+                    .eq('account_status', 'Declined')
+                    .gte('account_status_change_date', periodAgo)
+                    .not('account_status_change_date', 'is', null),
+                supabase.from('merchants').select('*', { count: 'exact', head: true })
+                    .eq('account_status', 'Withdrawn')
                     .gte('account_status_change_date', periodAgo)
                     .not('account_status_change_date', 'is', null),
 
-                // Top partners by submissions within the selected period
+                // Top partners — needs agent_name values; bounded by period date, so manageable
                 supabase.from('merchants')
                     .select('agent_name')
                     .gte('enrollment_date', periodAgo)
                     .not('agent_name', 'is', null)
-                    .neq('agent_name', ''),
+                    .neq('agent_name', '')
+                    .limit(200000),
 
-                // Recent entries within the selected period
+                // Recent entries display list
                 supabase.from('merchants')
                     .select('dba_name, merchant_id, agent_name, account_status, enrollment_date')
                     .gte('enrollment_date', periodAgo)
@@ -1252,7 +1277,7 @@ if (action === 'get_notes') {
                     .limit(recentLimit)
             ]);
 
-            // Compute avg days per active stage
+            // Compute avg days per active stage from fetched rows
             const now = Date.now();
             const stageMap = {};
             for (const m of (stageRes.data || [])) {
@@ -1272,23 +1297,22 @@ if (action === 'get_notes') {
                 avg_days: s.validDays > 0 ? Math.round(s.totalDays / s.validDays) : null
             }));
 
-            // Period entry counts by status
-            const periodCounts = {};
-            for (const m of (periodRes.data || [])) {
-                periodCounts[m.account_status] = (periodCounts[m.account_status] || 0) + 1;
-            }
+            // Period entry counts (from COUNT queries)
+            const periodCounts = {
+                Enrollment: cntEnrollPeriod.count  || 0,
+                Pending:    cntPendingPeriod.count  || 0,
+                Approved:   cntApprovedPeriod.count || 0,
+                Declined:   cntDeclinedPeriod.count || 0,
+                Withdrawn:  cntWithdrawnPeriod.count|| 0,
+            };
 
-            // Outcome counts for conversion rate
-            const outcomeCounts = {};
-            for (const m of (outcomeRes.data || [])) {
-                outcomeCounts[m.account_status] = (outcomeCounts[m.account_status] || 0) + 1;
-            }
-            const approvedPeriod  = outcomeCounts['Approved'] || 0;
-            const declinedPeriod  = (outcomeCounts['Declined'] || 0) + (outcomeCounts['Withdrawn'] || 0);
-            const conversionRate  = (approvedPeriod + declinedPeriod) > 0
+            // Outcome counts & conversion rate
+            const approvedPeriod = cntApprovedOutcome.count || 0;
+            const declinedPeriod = (cntDeclinedOutcome.count || 0) + (cntWithdrawnOutcome.count || 0);
+            const conversionRate = (approvedPeriod + declinedPeriod) > 0
                 ? Math.round((approvedPeriod / (approvedPeriod + declinedPeriod)) * 100) : null;
 
-            // Top partners by submission volume in period
+            // Top partners by submission volume
             const partnerCounts = {};
             for (const m of (partnerRes.data || [])) {
                 partnerCounts[m.agent_name] = (partnerCounts[m.agent_name] || 0) + 1;
