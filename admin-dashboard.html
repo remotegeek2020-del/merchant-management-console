@@ -621,7 +621,7 @@ function renderDeployments(data) {
     if (!data.length) { el.innerHTML = `<div class="empty-state">No recent deployments.</div>`; return; }
     const statusClass = s => s === 'Open' ? 'badge-open' : s === 'In Transit' ? 'badge-transit' : 'badge-closed';
     el.innerHTML = data.map(d => `
-        <div class="dep-row">
+        <div class="dep-row" style="cursor:pointer;" onclick="window.location.href='/deployments-dashboard?q=${encodeURIComponent(d.deployment_id || '')}'">
             <div class="dep-icon"><span class="material-icons" style="color:#0369a1;font-size:16px;">local_shipping</span></div>
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${d.merchants?.dba_name || '—'}</div>
@@ -630,7 +630,7 @@ function renderDeployments(data) {
             <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
                 <span class="badge ${statusClass(d.status)}">${d.status}</span>
                 <div style="font-size:10px;color:var(--text-muted);">${timeAgo(d.created_at)}</div>
-                <button onclick="openDepDetail('${d.id}')" class="view-btn">View →</button>
+                <span class="view-btn">View →</span>
             </div>
         </div>`).join('');
 }
@@ -686,7 +686,7 @@ function renderReturns(data) {
     if (!data.length) { el.innerHTML = `<div class="empty-state">No recent returns.</div>`; return; }
     const statusClass = s => (s || '').toLowerCase() === 'open' ? 'badge-open' : (s || '').toLowerCase() === 'in transit' ? 'badge-transit' : 'badge-closed';
     el.innerHTML = data.map(r => `
-        <div class="list-row">
+        <div class="list-row" style="cursor:pointer;" onclick="window.location.href='/returns-dashboard?q=${encodeURIComponent(r.return_id || '')}'">
             <div class="list-icon" style="background:#fee2e2;"><span class="material-icons" style="color:#dc2626;font-size:16px;">assignment_return</span></div>
             <div style="flex:1;min-width:0;">
                 <div style="font-weight:600;font-size:12px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${r.merchants?.dba_name || '—'}</div>
@@ -699,7 +699,7 @@ function renderReturns(data) {
             <div style="text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:4px;">
                 <span class="badge ${statusClass(r.status)}">${r.status || '—'}</span>
                 <div style="font-size:10px;color:var(--text-muted);">${r.return_date_initiated ? fmtDate(r.return_date_initiated) : '—'}</div>
-                <a href="/returns-dashboard" class="view-btn">View →</a>
+                <span class="view-btn">View →</span>
             </div>
         </div>`).join('');
 }
