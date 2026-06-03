@@ -385,6 +385,17 @@ if (action === 'getMonthlyReport') {
                 throw updateError;
             }
 
+            // Sync terminal_type on legacy_deployments when it changes on this equipment
+            if (patch.terminal_type && oldEquip?.terminal_type !== patch.terminal_type) {
+                const serialForSync = patch.serial_number || oldEquip?.serial_number;
+                if (serialForSync) {
+                    supabase.from('legacy_deployments')
+                        .update({ terminal_type: patch.terminal_type })
+                        .eq('serial_number', serialForSync)
+                        .then(() => {}).catch(() => {});
+                }
+            }
+
             // Sync open returns record if equipment moved out of repair
             const newStatus = payload.status;
             if (newStatus === 'stocked' || newStatus === 'decommissioned') {
@@ -818,6 +829,10 @@ if (action === 'getMonthlyReport') {
             // Rewrite terminal_type text on all equipment records
             const { error: updErr } = await supabase.from('equipments').update({ terminal_type: tgt.name }).eq('terminal_type', src.name);
             if (updErr) throw updErr;
+
+            // Propagate rename to legacy_deployments
+            supabase.from('legacy_deployments').update({ terminal_type: tgt.name }).eq('terminal_type', src.name)
+                .then(() => {}).catch(() => {});
 
             // Delete the source type
             const { error: delErr } = await supabase.from('terminal_types').delete().eq('id', source_id);
