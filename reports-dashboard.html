@@ -321,7 +321,16 @@ async function runReport() {
 
             const typeLabel = document.getElementById('reportType').options[document.getElementById('reportType').selectedIndex].text;
             document.getElementById('previewTitle').innerText = typeLabel;
-            document.getElementById('previewSub').innerText = `Showing ${result.rawData.length} of ${totalRecordsAvailable.toLocaleString()} total records`;
+            const _shownRows = result.rawData.length;
+            const _totalRecs = totalRecordsAvailable;
+            const _reportType = document.getElementById('reportType').value;
+            let _subText;
+            if (_shownRows > _totalRecs && _reportType === 'returns') {
+                _subText = `Showing ${_shownRows} rows from ${_totalRecs} returns (some returns have multiple items)`;
+            } else {
+                _subText = `Showing ${_shownRows} of ${_totalRecs.toLocaleString()} total records`;
+            }
+            document.getElementById('previewSub').innerText = _subText;
 
             Swal.close();
         } else {
