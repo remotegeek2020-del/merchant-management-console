@@ -267,6 +267,88 @@ body {
     }
 }
 
+/* ── WORMHOLE EXIT TRANSITION ────────────────────────────────────── */
+
+/* Card gets sucked into the portal center */
+#login-ui.portal-exit .login-card {
+    animation: card-suck-in .55s cubic-bezier(.6,0,1,.45) 0s forwards !important;
+    will-change: transform, opacity, filter;
+}
+@keyframes card-suck-in {
+    0%   { opacity:1; transform:translate(-50%,-50%) scale(1) rotate(0deg); filter:blur(0) brightness(1); }
+    55%  { filter:blur(2px) brightness(2); }
+    100% { opacity:0; transform:translate(-50%,-50%) scale(.02) rotate(8deg); filter:blur(18px) brightness(5); }
+}
+
+/* Portal rings contract inward — outer rings first */
+#login-ui.portal-exit .portal-ring {
+    animation: portal-ring-close .38s ease-in forwards !important;
+}
+#login-ui.portal-exit .portal-ring.r5 { animation-delay: 0s !important; }
+#login-ui.portal-exit .portal-ring.r4 { animation-delay: .04s !important; }
+#login-ui.portal-exit .portal-ring.r3 { animation-delay: .08s !important; }
+#login-ui.portal-exit .portal-ring.r2 { animation-delay: .12s !important; }
+#login-ui.portal-exit .portal-ring.r1 { animation-delay: .16s !important; }
+@keyframes portal-ring-close {
+    to { transform: translate(-50%,-50%) scale(0); opacity: 0; }
+}
+
+/* Glow and sweep fade on exit */
+#login-ui.portal-exit .portal-glow,
+#login-ui.portal-exit .portal-sweep { animation: quick-fade .3s ease-in forwards !important; }
+@keyframes quick-fade { to { opacity: 0; } }
+
+/* Wormhole tunnel — hidden by default, appears on exit */
+.wormhole-tunnel {
+    position: absolute; inset: 0; pointer-events: none; opacity: 0;
+}
+#login-ui.portal-exit .wormhole-tunnel { opacity: 1; }
+
+/* 12 rings stream from wide → center, blue → white: flying into the tunnel */
+.wormhole-ring {
+    position: absolute; top: 50%; left: 50%;
+    width: 700px; height: 700px;
+    border-radius: 50%;
+    animation: wormhole-rush .72s linear infinite;
+}
+.wormhole-ring:nth-child(1)  { animation-delay:  0s; }
+.wormhole-ring:nth-child(2)  { animation-delay: -.06s; }
+.wormhole-ring:nth-child(3)  { animation-delay: -.12s; }
+.wormhole-ring:nth-child(4)  { animation-delay: -.18s; }
+.wormhole-ring:nth-child(5)  { animation-delay: -.24s; }
+.wormhole-ring:nth-child(6)  { animation-delay: -.30s; }
+.wormhole-ring:nth-child(7)  { animation-delay: -.36s; }
+.wormhole-ring:nth-child(8)  { animation-delay: -.42s; }
+.wormhole-ring:nth-child(9)  { animation-delay: -.48s; }
+.wormhole-ring:nth-child(10) { animation-delay: -.54s; }
+.wormhole-ring:nth-child(11) { animation-delay: -.60s; }
+.wormhole-ring:nth-child(12) { animation-delay: -.66s; }
+
+@keyframes wormhole-rush {
+    0%   { transform:translate(-50%,-50%) scale(5); opacity:0; border: 2px solid rgba(0,30,100,0); }
+    8%   { opacity:.5; border-color: rgba(0,90,200,.5); }
+    50%  { opacity:1;  border-color: rgba(0,161,224,.9); box-shadow:0 0 12px rgba(0,161,224,.45); }
+    82%  { border-color: rgba(160,230,255,1); box-shadow:0 0 22px rgba(160,230,255,.7); }
+    100% { transform:translate(-50%,-50%) scale(0); opacity:0; border-color: rgba(255,255,255,1); }
+}
+
+/* Light at the end of the tunnel — tiny dot that expands to fill the screen */
+.wormhole-light {
+    position: absolute; top: 50%; left: 50%;
+    width: 6px; height: 6px; border-radius: 50%;
+    background: white; transform: translate(-50%,-50%);
+    pointer-events: none; opacity: 0;
+}
+#login-ui.portal-exit .wormhole-light {
+    animation: tunnel-end-light .95s ease-in .62s forwards;
+}
+@keyframes tunnel-end-light {
+    0%   { transform:translate(-50%,-50%) scale(1); opacity:.9; box-shadow:0 0 30px 15px rgba(0,161,224,.85); }
+    35%  { box-shadow:0 0 60px 30px rgba(120,210,255,.9); }
+    70%  { box-shadow:0 0 80px 40px rgba(220,245,255,1); }
+    100% { transform:translate(-50%,-50%) scale(650); opacity:1; }
+}
+
 /* ── END PORTAL ANIMATION ─────────────────────────────────────────── */
 
 .tfa-input-wrapper { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }

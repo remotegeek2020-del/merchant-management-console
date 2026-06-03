@@ -114,6 +114,46 @@ function showLoginUI() {
     if (loginUI) loginUI.style.display = 'block';
 }
 
+function playWormholeTransition(loginUI, curtain) {
+    // Close any Swal loading dialog
+    if (typeof Swal !== 'undefined') Swal.close();
+
+    // Auto-login (session token) — loginUI was never shown, skip animation
+    if (!loginUI || loginUI.style.display !== 'block') {
+        if (curtain) curtain.style.display = 'block';
+        return;
+    }
+
+    // Trigger CSS exit animations on the login UI
+    loginUI.classList.add('portal-exit');
+
+    const flash = document.getElementById('wormhole-flash');
+
+    // At 1.5s: show white flash overlay (seamlessly covers the expanding light)
+    setTimeout(() => {
+        if (flash) { flash.style.display = 'block'; flash.style.opacity = '1'; }
+    }, 1500);
+
+    // At 1.6s: swap screens (hidden behind the white flash)
+    setTimeout(() => {
+        loginUI.style.display = 'none';
+        loginUI.classList.remove('portal-exit');
+        if (curtain) curtain.style.display = 'block';
+    }, 1600);
+
+    // At 1.75s: fade out the white flash to reveal the portal home
+    setTimeout(() => {
+        if (flash) {
+            flash.style.transition = 'opacity 0.55s ease-out';
+            flash.style.opacity = '0';
+            setTimeout(() => {
+                flash.style.display = 'none';
+                flash.style.transition = '';
+            }, 560);
+        }
+    }, 1750);
+}
+
 async function authorizeUser(user, sessionToken) {
     if (!user) return;
     try {
@@ -168,8 +208,7 @@ async function authorizeUser(user, sessionToken) {
     };
 
     if (elements.loader) elements.loader.style.display = 'none';
-    if (elements.loginUI) elements.loginUI.style.display = 'none';
-    if (elements.curtain) elements.curtain.style.display = 'block';
+    // Pre-configure greeting and curtain content while still hidden (user can't see it yet)
     if (user.first_name && elements.greeting) elements.greeting.innerText = `WELCOME, ${user.first_name.toUpperCase()}`;
     if (elements.logoutBtn) elements.logoutBtn.style.display = 'inline-block';
 
@@ -214,7 +253,10 @@ async function authorizeUser(user, sessionToken) {
         if (el) el.style.display = permMap[id] ? 'flex' : 'none';
     });
     
-    if (window.Swal) Swal.close();
+    // All curtain content is now configured (cards, permissions, greeting).
+    // Trigger wormhole transition — hides loginUI and reveals curtain after animation.
+    playWormholeTransition(elements.loginUI, elements.curtain);
+
     if (typeof checkGlobalNotifications === 'function') checkGlobalNotifications();
 }
 

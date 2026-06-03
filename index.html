@@ -227,7 +227,7 @@
     </div>
 
     <div id="login-ui" style="display: none;">
-        <!-- Portal scene -->
+        <!-- Portal entrance scene -->
         <div class="portal-stars"></div>
         <div class="portal-ring r1"></div>
         <div class="portal-ring r2"></div>
@@ -237,6 +237,22 @@
         <div class="portal-glow"></div>
         <div class="portal-sweep"></div>
         <div class="portal-core"></div>
+        <!-- Wormhole exit tunnel -->
+        <div class="wormhole-tunnel">
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-ring"></div>
+            <div class="wormhole-light"></div>
+        </div>
         <div class="login-card">
             <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="login-logo" alt="PayProTec">
             <h2 class="login-title">PayProTec Portal</h2>
@@ -1046,5 +1062,7 @@
 })();
 </script>
 <script src="/bug-report.js"></script>
+<!-- White flash overlay for wormhole exit transition -->
+<div id="wormhole-flash" style="display:none;position:fixed;inset:0;background:white;z-index:99999;pointer-events:none;opacity:1;"></div>
 </body>
 </html>
