@@ -97,6 +97,178 @@ body {
 .login-forgot { display: block; text-align: center; margin-top: 16px; font-size: 12px; color: var(--text-muted); text-decoration: none; font-weight: 600; cursor: pointer; }
 .login-forgot:hover { color: var(--pp-blue); }
 
+/* ── PORTAL ENTRANCE ANIMATION ─────────────────────────────────────── */
+
+#login-ui {
+    background: radial-gradient(ellipse 80% 70% at 50% 48%,
+        #001e45 0%, #000c22 55%, #000408 100%);
+    overflow: hidden;
+}
+
+/* Starfield — two layers of box-shadow dots that twinkle asynchronously */
+.portal-stars { position: absolute; inset: 0; pointer-events: none; }
+.portal-stars::before, .portal-stars::after {
+    content: ''; position: absolute; top: 0; left: 0;
+    width: 1px; height: 1px; background: white; border-radius: 50%;
+}
+.portal-stars::before {
+    box-shadow:
+        80px 120px 0 1px rgba(255,255,255,.8), 170px 60px 0 1.5px rgba(0,161,224,.9),
+        280px 190px 0 1px rgba(255,255,255,.6), 420px 90px 0 1px rgba(255,255,255,.7),
+        560px 250px 0 1.5px rgba(0,161,224,.7), 680px 40px 0 1px rgba(255,255,255,.8),
+        800px 310px 0 1px rgba(255,255,255,.5), 940px 160px 0 1px rgba(0,161,224,.8),
+        1080px 380px 0 1.5px rgba(255,255,255,.7), 1220px 90px 0 1px rgba(255,255,255,.6),
+        1340px 270px 0 1px rgba(0,161,224,.6), 60px 420px 0 1px rgba(255,255,255,.7),
+        190px 500px 0 1.5px rgba(255,255,255,.5), 320px 460px 0 1px rgba(0,161,224,.7),
+        480px 530px 0 1px rgba(255,255,255,.8), 620px 480px 0 1px rgba(255,255,255,.6),
+        770px 600px 0 1.5px rgba(0,161,224,.7), 900px 540px 0 1px rgba(255,255,255,.5),
+        1050px 650px 0 1px rgba(255,255,255,.7), 1200px 580px 0 1.5px rgba(0,161,224,.8),
+        30px 680px 0 1px rgba(255,255,255,.6), 160px 720px 0 1px rgba(255,255,255,.4),
+        310px 760px 0 1.5px rgba(0,161,224,.6), 500px 700px 0 1px rgba(255,255,255,.7),
+        750px 780px 0 1px rgba(255,255,255,.5), 1000px 740px 0 1px rgba(0,161,224,.5),
+        1250px 700px 0 1.5px rgba(255,255,255,.6), 1400px 150px 0 1px rgba(255,255,255,.5);
+    animation: stars-twinkle 5s ease-in-out infinite alternate;
+}
+.portal-stars::after {
+    box-shadow:
+        140px 200px 0 1px rgba(255,255,255,.5), 260px 350px 0 1.5px rgba(0,161,224,.6),
+        390px 280px 0 1px rgba(255,255,255,.7), 530px 400px 0 1px rgba(255,255,255,.6),
+        660px 180px 0 1.5px rgba(255,255,255,.8), 810px 450px 0 1px rgba(0,161,224,.7),
+        950px 280px 0 1px rgba(255,255,255,.6), 1110px 510px 0 1.5px rgba(255,255,255,.5),
+        1270px 190px 0 1px rgba(0,161,224,.7), 100px 600px 0 1px rgba(255,255,255,.6),
+        440px 640px 0 1.5px rgba(255,255,255,.7), 700px 680px 0 1px rgba(0,161,224,.6),
+        900px 720px 0 1px rgba(255,255,255,.5), 1150px 760px 0 1.5px rgba(255,255,255,.7),
+        1380px 420px 0 1px rgba(0,161,224,.5), 50px 350px 0 1px rgba(255,255,255,.6),
+        1300px 600px 0 1px rgba(255,255,255,.4), 600px 140px 0 1.5px rgba(0,161,224,.6);
+    animation: stars-twinkle 7s ease-in-out infinite alternate-reverse;
+}
+@keyframes stars-twinkle {
+    0%   { opacity: 0.5; }
+    50%  { opacity: 1; }
+    100% { opacity: 0.3; }
+}
+
+/* Portal rings — expand from center, then rotate slowly */
+.portal-ring {
+    position: absolute; top: 50%; left: 50%;
+    border-radius: 50%; pointer-events: none;
+    will-change: transform, opacity;
+    transform: translate(-50%,-50%) scale(0);
+}
+.portal-ring.r1 {
+    width: 160px; height: 160px;
+    border: 2px solid rgba(0,161,224,.9);
+    box-shadow: 0 0 22px rgba(0,161,224,.5), 0 0 44px rgba(0,161,224,.2), inset 0 0 18px rgba(0,161,224,.2);
+    animation: portal-ring-open .5s cubic-bezier(.16,1,.3,1) 0s both,
+               ring-spin-cw 7s linear .5s infinite;
+}
+.portal-ring.r2 {
+    width: 280px; height: 280px;
+    border: 1.5px dashed rgba(0,161,224,.55);
+    animation: portal-ring-open .55s cubic-bezier(.16,1,.3,1) .05s both,
+               ring-spin-ccw 11s linear .55s infinite;
+}
+.portal-ring.r3 {
+    width: 420px; height: 420px;
+    border: 1.5px solid rgba(0,100,200,.4);
+    box-shadow: 0 0 12px rgba(0,100,200,.15);
+    animation: portal-ring-open .6s cubic-bezier(.16,1,.3,1) .1s both,
+               ring-spin-cw 16s linear .6s infinite;
+}
+.portal-ring.r4 {
+    width: 580px; height: 580px;
+    border: 1px dashed rgba(0,73,144,.25);
+    animation: portal-ring-open .65s cubic-bezier(.16,1,.3,1) .15s both,
+               ring-spin-ccw 22s linear .65s infinite;
+}
+.portal-ring.r5 {
+    width: 760px; height: 760px;
+    border: 1px solid rgba(0,50,120,.15);
+    animation: portal-ring-open .7s cubic-bezier(.16,1,.3,1) .2s both;
+}
+@keyframes portal-ring-open {
+    from { transform: translate(-50%,-50%) scale(0); opacity: 0; }
+    to   { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+}
+@keyframes ring-spin-cw  { to { transform: translate(-50%,-50%) rotate(360deg);  } }
+@keyframes ring-spin-ccw { to { transform: translate(-50%,-50%) rotate(-360deg); } }
+
+/* Central glow that breathes */
+.portal-glow {
+    position: absolute; top: 50%; left: 50%;
+    width: 420px; height: 420px;
+    border-radius: 50%; pointer-events: none;
+    background: radial-gradient(ellipse,
+        rgba(0,161,224,.28) 0%, rgba(0,100,200,.12) 45%, transparent 70%);
+    will-change: transform, opacity;
+    animation: glow-appear .5s ease-out .15s both,
+               glow-breathe 3.5s ease-in-out .65s infinite;
+}
+@keyframes glow-appear {
+    from { opacity: 0; transform: translate(-50%,-50%) scale(.4); }
+    to   { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+}
+@keyframes glow-breathe {
+    0%,100% { transform: translate(-50%,-50%) scale(1);    opacity: .7; }
+    50%      { transform: translate(-50%,-50%) scale(1.12); opacity: 1; }
+}
+
+/* Rotating energy sweep */
+.portal-sweep {
+    position: absolute; top: 50%; left: 50%;
+    width: 540px; height: 540px;
+    border-radius: 50%; pointer-events: none;
+    background: conic-gradient(from 0deg,
+        transparent 0%, rgba(0,161,224,.1) 12%,
+        rgba(0,161,224,.03) 25%, transparent 40%);
+    will-change: transform;
+    animation: sweep-rotate 4.5s linear .25s infinite;
+    opacity: 0; animation-fill-mode: forwards;
+}
+@keyframes sweep-rotate {
+    0%   { transform: translate(-50%,-50%) rotate(0deg);   opacity: .85; }
+    100% { transform: translate(-50%,-50%) rotate(360deg); opacity: .85; }
+}
+
+/* Core burst — bright flash that explodes outward as the card appears */
+.portal-core {
+    position: absolute; top: 50%; left: 50%;
+    width: 90px; height: 90px; border-radius: 50%; pointer-events: none;
+    background: radial-gradient(circle,
+        rgba(220,245,255,.95) 0%, rgba(0,161,224,.65) 35%,
+        rgba(0,73,144,.2) 70%, transparent 100%);
+    will-change: transform, opacity;
+    animation: core-burst .45s ease-out 0s both, core-exit .35s ease-in .48s forwards;
+}
+@keyframes core-burst {
+    from { transform: translate(-50%,-50%) scale(0); opacity: 1; }
+    to   { transform: translate(-50%,-50%) scale(1); opacity: .9; }
+}
+@keyframes core-exit {
+    to   { transform: translate(-50%,-50%) scale(4); opacity: 0; }
+}
+
+/* Login card materialises through the portal */
+.login-card {
+    animation: card-emerge .75s cubic-bezier(.34,1.56,.64,1) .5s both;
+    will-change: transform, opacity, filter;
+}
+@keyframes card-emerge {
+    0% {
+        opacity: 0;
+        transform: translate(-50%,-50%) scale(.05);
+        filter: blur(14px) brightness(2.5);
+    }
+    55% { filter: blur(0) brightness(1.04); }
+    100% {
+        opacity: 1;
+        transform: translate(-50%,-50%) scale(1);
+        filter: blur(0) brightness(1);
+    }
+}
+
+/* ── END PORTAL ANIMATION ─────────────────────────────────────────── */
+
 .tfa-input-wrapper { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
 .tfa-box { width: 44px; height: 52px; text-align: center; font-size: 22px; font-weight: 700; border: 1.5px solid var(--border); border-radius: 8px; color: var(--pp-blue); outline: none; transition: all 0.2s; }
 .tfa-box:focus { border-color: var(--pp-blue); box-shadow: 0 0 0 3px rgba(0,73,144,0.1); }
