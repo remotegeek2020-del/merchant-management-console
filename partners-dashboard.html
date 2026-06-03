@@ -1493,7 +1493,8 @@ async function submitOnboarding() {
 
         const companyOptions = (_companiesRaw || []).slice().sort((a, b) => a.company_name.localeCompare(b.company_name));
 
-        let selectedParentId  = currentIdData?.parent_config_id || null;
+        let selectedParentId    = currentIdData?.parent_config_id || null;
+        let selectedParentLabel = parentIdRecord ? parentIdRecord.label || parentIdString : null;
         let selectedCompanyId = null;
         let selectedDirectAgentId = null;
         let selectedMoveName  = '';
@@ -1538,10 +1539,10 @@ async function submitOnboarding() {
                             <input type="checkbox" id="swal-prime" ${isPrime ? 'checked' : ''} style="width:15px;height:15px;"> Prime49
                         </label>
                     </div>
-                    <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">PARENT ID</label>
+                    <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">MAKE A SUB PARTNER OF</label>
                     ${buildParentChip()}
                     <div style="position:relative;margin-top:6px;">
-                        <input id="swal-parent-search" class="swal2-input" placeholder="Search to change parent…"
+                        <input id="swal-parent-search" class="swal2-input" placeholder="Search partner to set as parent…"
                                style="width:100%;margin:0;border-radius:8px;" autoComplete="off">
                         <div id="search-results-box" style="display:none;position:absolute;top:48px;left:0;right:0;background:white;border:1px solid #e2e8f0;border-radius:8px;max-height:180px;overflow-y:auto;z-index:10000;box-shadow:0 10px 15px -3px rgba(0,0,0,.1);"></div>
                     </div>
@@ -1652,7 +1653,8 @@ async function submitOnboarding() {
                 parentResults.addEventListener('click', (e) => {
                     const item = e.target.closest('.search-item');
                     if (!item) return;
-                    selectedParentId = item.dataset.id;
+                    selectedParentId    = item.dataset.id;
+                    selectedParentLabel = item.dataset.label;
                     parentInput.value = '';
                     parentResults.style.display = 'none';
                     // Show chip
@@ -1661,7 +1663,8 @@ async function submitOnboarding() {
                         <button id="clear-parent-btn" type="button" style="background:none;border:none;color:#94a3b8;cursor:pointer;font-size:16px;line-height:1;padding:0;">✕</button>`;
                     chip.style.display = 'flex';
                     document.getElementById('clear-parent-btn').addEventListener('click', () => {
-                        selectedParentId = null;
+                        selectedParentId    = null;
+                        selectedParentLabel = null;
                         chip.style.display = 'none';
                     });
                 });
@@ -1796,7 +1799,7 @@ async function submitOnboarding() {
             preConfirm: () => {
                 if (activeTab === 'settings') {
                     const v = document.getElementById('swal-rev').value.replace(/%+$/, '').trim();
-                    return { tab: 'settings', rev_share: v ? v+'%' : '0%', prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId };
+                    return { tab: 'settings', rev_share: v ? v+'%' : '0%', prime49: document.getElementById('swal-prime').checked, new_parent_id: selectedParentId, new_parent_label: selectedParentLabel };
                 } else {
                     if (moveMode === 'company' && !selectedCompanyId) {
                         Swal.showValidationMessage('Please select a destination company.'); return false;
@@ -1813,6 +1816,41 @@ async function submitOnboarding() {
         if (!result) return;
 
         if (result.tab === 'settings') {
+            const parentChanged = result.new_parent_id !== (currentIdData?.parent_config_id || null);
+
+            // ── 2-step warning when parent relationship is being changed ──
+            if (parentChanged) {
+                const oldParentLabel = parentIdString || '(none)';
+                const newParentLabel = result.new_parent_id ? (result.new_parent_label || result.new_parent_id) : '(none — remove sub-partner link)';
+                const isRemoving     = !result.new_parent_id;
+                const confirm2 = await Swal.fire({
+                    icon: isRemoving ? 'warning' : 'question',
+                    title: isRemoving ? 'Remove Sub-Partner Link?' : 'Confirm Sub-Partner Change',
+                    html: isRemoving
+                        ? `<div style="text-align:left;font-size:13px;line-height:1.7;">
+                                You are about to <strong>remove</strong> the sub-partner relationship for<br>
+                                <span style="font-family:monospace;font-weight:700;color:#004990;">${name}</span>.<br><br>
+                                <span style="color:#64748b;">Current parent:</span> <strong>${oldParentLabel}</strong><br>
+                                <span style="color:#64748b;">After this change:</span> <strong>No parent (standalone ID)</strong><br><br>
+                                <span style="color:#dc2626;font-weight:700;">This will break any revenue-share hierarchy tied to this link.</span>
+                           </div>`
+                        : `<div style="text-align:left;font-size:13px;line-height:1.7;">
+                                You are about to change the parent of<br>
+                                <span style="font-family:monospace;font-weight:700;color:#004990;">${name}</span>.<br><br>
+                                <table style="width:100%;border-collapse:collapse;margin-top:8px;">
+                                    <tr><td style="color:#64748b;padding:4px 0;width:110px;">Current parent:</td><td style="font-weight:700;">${oldParentLabel}</td></tr>
+                                    <tr><td style="color:#64748b;padding:4px 0;">New parent:</td><td style="font-weight:700;color:#004990;">${newParentLabel}</td></tr>
+                                </table><br>
+                                <span style="color:#92400e;font-weight:700;">⚠ This affects the sub-partner hierarchy and revenue-share routing. Make sure this is intentional.</span>
+                           </div>`,
+                    showCancelButton: true,
+                    confirmButtonColor: isRemoving ? '#dc2626' : '#004990',
+                    confirmButtonText: isRemoving ? 'Yes, Remove Link' : 'Yes, Change Parent',
+                    cancelButtonText: 'Go Back'
+                });
+                if (!confirm2.isConfirmed) return;
+            }
+
             Swal.fire({ title: 'Saving…', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
             try {
                 const res = await fetch('/api/partners', {
@@ -1821,10 +1859,27 @@ async function submitOnboarding() {
                 });
                 const data = await res.json();
                 if (data.success) {
-                    await logAuditAction('Partner ID Updated', 'success', {
+                    const changes = [];
+                    if (result.rev_share !== (currentIdData?.rev_share || '0%')) changes.push(`Revenue share: ${currentIdData?.rev_share || '0%'} → ${result.rev_share}`);
+                    if (result.prime49 !== !!currentIdData?.prime49) changes.push(`Prime49: ${currentIdData?.prime49 ? 'Yes' : 'No'} → ${result.prime49 ? 'Yes' : 'No'}`);
+                    if (parentChanged) {
+                        const oldLbl = parentIdString || 'None';
+                        const newLbl = result.new_parent_id ? (result.new_parent_label || result.new_parent_id) : 'None (removed)';
+                        changes.push(`Sub-partner of: ${oldLbl} → ${newLbl}`);
+                    }
+                    await logAuditAction('Partner ID Settings Updated', 'success', {
                         target_id: name, target_type: 'agent_identifier',
-                        old_value: { rev_share: currentIdData?.rev_share, prime49: currentIdData?.prime49, parent_config_id: currentIdData?.parent_config_id },
-                        new_value: { rev_share: result.rev_share, prime49: result.prime49, parent_config_id: result.new_parent_id }
+                        old_value: {
+                            rev_share: currentIdData?.rev_share,
+                            prime49: currentIdData?.prime49,
+                            parent_id_string: parentIdString || null
+                        },
+                        new_value: {
+                            rev_share: result.rev_share,
+                            prime49: result.prime49,
+                            parent_id_string: result.new_parent_id ? (result.new_parent_label || result.new_parent_id) : null,
+                            changes_summary: changes.join(' | ') || 'No changes'
+                        }
                     });
                     await loadPartners();
                     Swal.fire({ icon: 'success', title: 'Updated!', showConfirmButton: false, timer: 1500 });
