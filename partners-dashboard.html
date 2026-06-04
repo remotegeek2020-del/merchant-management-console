@@ -1674,11 +1674,15 @@ async function submitOnboarding() {
                 tabSettings.addEventListener('click', () => setTab('settings'));
                 tabMove.addEventListener('click',     () => setTab('move'));
 
+                // ── Prime49 → auto-set 50% rev share ──
+                document.getElementById('swal-prime').addEventListener('change', function() {
+                    if (this.checked) document.getElementById('swal-rev').value = '50';
+                });
+
                 // ── Settings: parent chip clear ──
                 const clearBtn = document.getElementById('clear-parent-btn');
                 const chip     = document.getElementById('parent-chip');
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', () => {
+                if (clearBtn) {                    clearBtn.addEventListener('click', () => {
                         selectedParentId = null;
                         chip.style.display = 'none';
                     });
@@ -2386,6 +2390,11 @@ window.quickAddId = async function(personId, name) {
         confirmButtonColor: '#004990',
         confirmButtonText: 'Add ID',
         didOpen: function() {
+            // Prime49 → auto-set 50% rev share
+            document.getElementById('qa-prime').addEventListener('change', function() {
+                if (this.checked) document.getElementById('qa-rev').value = '50';
+            });
+
             // Unassigned ID search
             var searchTimeout;
             document.getElementById('qa-id-search').addEventListener('input', function(){
