@@ -1356,7 +1356,8 @@ if (action === 'get_notes') {
                 .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name')
                 .eq('is_prime49', true)
                 .eq('account_status', 'Approved')
-                .order('dba_name', { ascending: true });
+                .order('dba_name', { ascending: true })
+                .limit(10000);
 
             if (error) throw error;
 
