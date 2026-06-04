@@ -336,8 +336,8 @@
             <button onclick="loadPrime49Residuals()" id="p49-load-btn" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;background:#004990;color:white;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
                 <span class="material-icons" style="font-size:15px;">refresh</span> Load
             </button>
-            <button onclick="exportPrime49CSV()" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid #e2e8f0;background:white;color:#475569;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
-                <span class="material-icons" style="font-size:15px;">download</span> Export CSV
+            <button onclick="exportPrime49Excel()" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+                <span class="material-icons" style="font-size:15px;">table_view</span> Export Excel
             </button>
             <button onclick="toggleP49Guide()" id="p49-guide-btn" style="display:flex;align-items:center;gap:6px;padding:8px 14px;border-radius:8px;border:1px solid #fde68a;background:#fffbeb;color:#92400e;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
                 <span class="material-icons" style="font-size:15px;">help_outline</span> How it's computed
@@ -3524,32 +3524,98 @@ function _updateP49Summary(count, vol, net, ppt, agent) {
     </div>`).join('');
 }
 
-function exportPrime49CSV() {
+function exportPrime49Excel() {
     if (!_prime49Data.length) return alert('No data to export. Please load first.');
+    if (typeof XLSX === 'undefined') return alert('Excel library not loaded. Please refresh the page and try again.');
+
     const runDate       = document.getElementById('p49-run-date').value || '';
     const filterPartner = document.getElementById('p49-partner-filter').value;
     const data = filterPartner ? _prime49Data.filter(r => r.agent_name === filterPartner) : _prime49Data;
-    const header = ['Merchant DBA','Merchant ID','30d Volume','Residual Run','Net Residual','PPT Residual','Agent Residual','Agent ID','Agent Name','Agent Company'];
-    const rows   = data.map(r => [
-        `"${(r.dba_name||'').replace(/"/g,'""')}"`,
-        r.merchant_id || '',
-        r.volume_30_day.toFixed(2),
-        runDate,
-        r.net_residual.toFixed(2),
-        r.ppt_residual.toFixed(2),
-        r.agent_residual.toFixed(2),
-        r.agent_id || '',
-        `"${(r.agent_name||'').replace(/"/g,'""')}"`,
-        `"${(r.agent_company||'').replace(/"/g,'""')}"`,
-    ]);
-    const csv  = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `prime49-residuals${filterPartner ? '-' + filterPartner.replace(/\s+/g,'-') : ''}-${runDate || 'export'}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+
+    const wb = XLSX.utils.book_new();
+
+    // ── Sheet 1: Residuals (with live formulas) ──────────────────────────────
+    const headers = [
+        'Merchant DBA', 'Merchant ID', '30-Day Volume', 'Residual Run Date',
+        'Net Residual (3%)', 'PPT Residual (50%)', 'Agent Residual (50%)',
+        'Agent ID', 'Agent Name', 'Agent Company'
+    ];
+    // C = volume (col 3), E = net (col 5), F = ppt (col 6), G = agent (col 7)
+    const aoa = [headers];
+    data.forEach(r => {
+        aoa.push([
+            r.dba_name   || '',
+            r.merchant_id || '',
+            r.volume_30_day,   // col C — editable
+            runDate,
+            null, null, null,  // E, F, G — will be replaced with formulas below
+            r.agent_id    || '',
+            r.agent_name  || '',
+            r.agent_company || '',
+        ]);
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+
+    // Inject formulas for each data row (Excel row 2 onward)
+    data.forEach((_, i) => {
+        const r = i + 2;
+        ws[`E${r}`] = { t: 'n', f: `C${r}*0.03`,  z: '"$"#,##0.00' };  // Net = vol × 3%
+        ws[`F${r}`] = { t: 'n', f: `E${r}*0.5`,   z: '"$"#,##0.00' };  // PPT = Net × 50%
+        ws[`G${r}`] = { t: 'n', f: `E${r}*0.5`,   z: '"$"#,##0.00' };  // Agent = Net × 50%
+        if (ws[`C${r}`]) ws[`C${r}`].z = '"$"#,##0.00';                  // Format volume too
+    });
+
+    // Totals row
+    const totalRow = data.length + 2;
+    ws[`A${totalRow}`] = { t: 's', v: `TOTAL (${data.length} merchants)` };
+    ws[`C${totalRow}`] = { t: 'n', f: `SUM(C2:C${totalRow - 1})`, z: '"$"#,##0.00' };
+    ws[`E${totalRow}`] = { t: 'n', f: `SUM(E2:E${totalRow - 1})`, z: '"$"#,##0.00' };
+    ws[`F${totalRow}`] = { t: 'n', f: `SUM(F2:F${totalRow - 1})`, z: '"$"#,##0.00' };
+    ws[`G${totalRow}`] = { t: 'n', f: `SUM(G2:G${totalRow - 1})`, z: '"$"#,##0.00' };
+
+    // Set the sheet range so Excel knows about all cells including the totals row
+    ws['!ref'] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: totalRow - 1, c: 9 } });
+
+    // Column widths
+    ws['!cols'] = [
+        { wch: 32 }, // A: DBA
+        { wch: 14 }, // B: Merchant ID
+        { wch: 16 }, // C: Volume
+        { wch: 18 }, // D: Run Date
+        { wch: 18 }, // E: Net Residual
+        { wch: 18 }, // F: PPT Residual
+        { wch: 18 }, // G: Agent Residual
+        { wch: 12 }, // H: Agent ID
+        { wch: 26 }, // I: Agent Name
+        { wch: 30 }, // J: Agent Company
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws, 'Residuals');
+
+    // ── Sheet 2: Guide ────────────────────────────────────────────────────────
+    const guideData = [
+        ['Prime49 Residuals — Computation Guide', '', ''],
+        ['', '', ''],
+        ['STEP', 'FORMULA', 'EXAMPLE  (Volume = $23,456.78)'],
+        ['① Agent Residual',  '30-Day Volume × 1.5%',     '=23456.78 × 0.015 = $351.85'],
+        ['② Net Residual',    'Agent Residual × 2  (= Volume × 3%)', '=351.85 × 2 = $703.70'],
+        ['③ PPT Residual',    'Net Residual × 50%  (Payprotec share)',  '=703.70 × 0.50 = $351.85'],
+        ['④ Agent Residual',  'Net Residual × 50%  (Partner payout)',   '=703.70 × 0.50 = $351.85'],
+        ['', '', ''],
+        ['KEY NOTES', '', ''],
+        ['• Prime49 IDs carry a standard 50% revenue share. PPT and Agent Residual are always equal under this split.', '', ''],
+        ['• Volume column (C) in the Residuals sheet is editable. All residual columns recalculate automatically when you change a volume figure.', '', ''],
+        ['• A partner may hold more than one Prime49 ID. All their IDs\' merchants are listed separately with their own rows.', '', ''],
+        ['• Volume is based on the last 30 days of processing as of the Residual Run Date.', '', ''],
+    ];
+    const wsGuide = XLSX.utils.aoa_to_sheet(guideData);
+    wsGuide['!cols'] = [{ wch: 30 }, { wch: 40 }, { wch: 42 }];
+    XLSX.utils.book_append_sheet(wb, wsGuide, 'Guide');
+
+    // ── Write file ────────────────────────────────────────────────────────────
+    const safeName = filterPartner ? '-' + filterPartner.replace(/[^a-z0-9]/gi, '-').replace(/-+/g, '-') : '';
+    XLSX.writeFile(wb, `prime49-residuals${safeName}-${runDate || 'export'}.xlsx`);
 }
 
 function setPipelinePeriod(period, btn) {
@@ -3757,6 +3823,7 @@ function renderPipeline(d, period, customLabel) {
 }
 </script>
 
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="/js/site-config.js"></script>
 <script>window.NAV_SHORTCUT_PAGE = 'merchants';</script>
 <script src="/js/nav-shortcuts.js"></script>
