@@ -132,7 +132,47 @@
     /* Inline search results panel */
     #gsr-panel {
         background: #f1f5f9;
-        border-top: 3px solid rgba(255,255,255,0.2);
+    }
+
+    /* Search-active state — collapse header and fix card overlap */
+    #page-curtain.search-active .brand-header {
+        padding-bottom: 28px !important;
+    }
+    #page-curtain.search-active .logo-img,
+    #page-curtain.search-active .brand-title,
+    #page-curtain.search-active .brand-sub {
+        display: none !important;
+    }
+    #page-curtain.search-active .main-container {
+        margin-top: 0 !important;
+    }
+
+    /* Divider between results and cards */
+    #gsr-cards-divider {
+        display: none;
+        background: #f1f5f9;
+        padding: 0 32px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+    #page-curtain.search-active #gsr-cards-divider { display: block; }
+    .gsr-cards-label {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 20px 0 14px;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 11px;
+        font-weight: 700;
+        color: #94a3b8;
+        letter-spacing: 1.2px;
+        text-transform: uppercase;
+    }
+    .gsr-cards-label::before, .gsr-cards-label::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: #e2e8f0;
     }
     .gsr-clear-btn {
         margin-left: auto;
@@ -449,6 +489,10 @@
             <div class="gsr-results-body" id="gsr-results-body"></div>
         </div>
 
+        <div id="gsr-cards-divider">
+            <div class="gsr-cards-label">Dashboard</div>
+        </div>
+
         <div class="main-container">
             <div class="card-grid">
                 <!-- Row 1: Admin Dashboard, Partners, Merchants -->
@@ -751,6 +795,7 @@
 (function() {
     const mainInput   = document.getElementById('global-search-input');
     const panel       = document.getElementById('gsr-panel');
+    const pageCurtain = document.getElementById('page-curtain');
     const summaryBar  = document.getElementById('gsr-summary-bar');
     const summaryTxt  = document.getElementById('gsr-summary-text');
     const resultsBody = document.getElementById('gsr-results-body');
@@ -783,18 +828,20 @@
         const q = mainInput.value.trim();
         if (q.length < 2) { mainInput.focus(); return; }
         panel.style.display = 'block';
+        pageCurtain.classList.add('search-active');
         summaryBar.style.display = 'none';
         resultsBody.innerHTML = `
             <div class="gsr-loading-overlay">
                 <span class="material-icons">sync</span>
                 Searching for "<strong>${esc(q)}</strong>"…
             </div>`;
-        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         doSearch(q);
     };
 
     window.closeGlobalSearch = function() {
         panel.style.display = 'none';
+        pageCurtain.classList.remove('search-active');
         mainInput.value = '';
         resultsBody.innerHTML = '';
     };
