@@ -972,15 +972,17 @@
         if (partners.length) {
             const rows = partners.map(p => {
                 const url = `partners-dashboard.html?q=${encodeURIComponent(p.full_name)}`;
+                const ids = (p.agent_ids || []).length ? p.agent_ids.map(esc).join(', ') : '—';
                 return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell">${esc(p.full_name)}</td>
                     <td>${esc(p.email || '—')}</td>
                     <td>${esc(p.phone_number || '—')}</td>
+                    <td><span class="gsr-mono" style="font-size:11px;">${ids}</span></td>
                     <td>${badge(p.is_portal_active ? 'Active' : 'Inactive')}</td>
                 </tr>`;
             }).join('');
             const table = `<table class="gsr-table">
-                <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Portal Access</th></tr></thead>
+                <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Agent IDs</th><th>Portal Access</th></tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
             html += makeSection('Partners', 'handshake', '#8b5cf6', partners.length,
