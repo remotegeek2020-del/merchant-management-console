@@ -265,31 +265,35 @@ input[type=number] {
         </span>
     </div>
 
-    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-        <div class="search-wrapper" style="flex:1;min-width:220px;">
-            <span class="material-icons">search</span>
-            <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or MID..."
-                   onkeydown="if(event.key==='Enter')runPartnerSearch()">
+    <div style="display:flex;flex-direction:column;gap:8px;">
+        <div style="display:flex;align-items:center;gap:8px;">
+            <div class="search-wrapper" style="flex:1;min-width:220px;">
+                <span class="material-icons">search</span>
+                <input type="text" id="partnerSearchInput" placeholder="Search name, agent ID, or MID..."
+                       onkeydown="if(event.key==='Enter')runPartnerSearch()">
+            </div>
+            <button id="partnerSearchBtn" onclick="runPartnerSearch()"
+                    style="flex-shrink:0;padding:10px 18px;border-radius:10px;border:none;background:var(--pp-blue,#0f4c81);color:white;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:opacity 0.15s;">
+                <span class="material-icons" style="font-size:16px;">search</span> Search
+            </button>
+            <button id="partnerSearchClear" onclick="clearPartnerSearch()"
+                    style="flex-shrink:0;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;align-items:center;gap:4px;transition:all 0.15s;display:none;">
+                <span class="material-icons" style="font-size:15px;">close</span> Clear
+            </button>
         </div>
-        <button id="partnerSearchBtn" onclick="runPartnerSearch()"
-                style="flex-shrink:0;padding:10px 18px;border-radius:10px;border:none;background:var(--pp-blue,#0f4c81);color:white;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:opacity 0.15s;">
-            <span class="material-icons" style="font-size:16px;">search</span> Search
-        </button>
-        <button id="partnerSearchClear" onclick="clearPartnerSearch()"
-                style="display:none;flex-shrink:0;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:none;align-items:center;gap:4px;transition:all 0.15s;">
-            <span class="material-icons" style="font-size:15px;">close</span> Clear
-        </button>
-        <div id="searchStats" style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Showing all</div>
-        <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
-            <button onclick="filterByTrend('growth')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f0fdf4;color:#166534;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_up</span></button>
-            <button onclick="filterByTrend('stable')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f8fafc;color:#475569;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_flat</span></button>
-            <button onclick="filterByTrend('risk')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#fef2f2;color:#991b1b;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_down</span></button>
-            <button onclick="filterByTrend('all')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:white;color:#64748b;border-radius:6px;">ALL</button>
+        <div id="trendFilterRow" style="display:flex;align-items:center;gap:8px;">
+            <div id="searchStats" style="font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;white-space:nowrap;">Showing all</div>
+            <div style="display:flex;background:#f1f5f9;border-radius:8px;padding:2px;gap:2px;">
+                <button onclick="filterByTrend('growth')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f0fdf4;color:#166534;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_up</span></button>
+                <button onclick="filterByTrend('stable')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#f8fafc;color:#475569;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_flat</span></button>
+                <button onclick="filterByTrend('risk')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:#fef2f2;color:#991b1b;border-radius:6px;display:flex;align-items:center;gap:4px;"><span class="material-icons" style="font-size:13px;">trending_down</span></button>
+                <button onclick="filterByTrend('all')" class="pagination-btn" style="padding:5px 10px;font-size:10px;font-weight:800;border:none;background:white;color:#64748b;border-radius:6px;">ALL</button>
+            </div>
         </div>
     </div>
 </div>
     <!-- LEADERBOARD + ENROLLMENTS SIDE BY SIDE -->
-    <div class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+    <div id="dashboardPanels1" class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
 
         <!-- LEFT: PARTNER LEADERBOARD -->
         <div id="leaderboardCard" style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);display:flex;flex-direction:column;min-height:0;">
@@ -350,7 +354,7 @@ input[type=number] {
     </div><!-- /side-by-side -->
 
     <!-- NEW PARTNERS THIS WEEK + FIRST PRODUCTION -->
-    <div class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
+    <div id="dashboardPanels2" class="side-by-side-panels" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px;">
 
         <!-- NEW PARTNERS THIS WEEK -->
         <div style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;box-shadow:0 2px 8px rgba(0,0,0,0.04);display:flex;flex-direction:column;">
@@ -390,6 +394,17 @@ input[type=number] {
         </div>
 
     </div><!-- /new row -->
+
+    <!-- Search results banner — shown only during active search -->
+    <div id="searchResultsBanner" style="display:none;align-items:center;justify-content:space-between;gap:12px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:12px;padding:12px 16px;margin-bottom:12px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+            <span class="material-icons" style="font-size:18px;color:#2563eb;">manage_search</span>
+            <span id="searchResultsLabel" style="font-size:13px;font-weight:700;color:#1e40af;"></span>
+        </div>
+        <button onclick="clearPartnerSearch()" style="display:flex;align-items:center;gap:5px;padding:7px 14px;border-radius:8px;border:1px solid #bfdbfe;background:white;color:#2563eb;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+            <span class="material-icons" style="font-size:14px;">arrow_back</span> Back to dashboard
+        </button>
+    </div>
 
     <div id="partnerGrid" class="partner-grid"></div>
     <div id="paginationControls" style="display:flex;justify-content:center;align-items:center;gap:12px;margin-top:16px;padding-bottom:30px;flex-wrap:wrap;">
@@ -1458,11 +1473,27 @@ async function submitOnboarding() {
         btn.innerHTML = '<span class="material-icons" style="font-size:16px;">search</span> Search';
         btn.disabled = false;
         clearBtn.style.display = 'flex';
+
+        // Hide dashboard panels, show results banner, scroll to results
+        document.getElementById('dashboardPanels1').style.display = 'none';
+        document.getElementById('dashboardPanels2').style.display = 'none';
+        document.getElementById('trendFilterRow').style.display = 'none';
+        const banner = document.getElementById('searchResultsBanner');
+        const rawTerm = document.getElementById('partnerSearchInput').value.trim();
+        document.getElementById('searchResultsLabel').textContent =
+            `${filtered.length} partner${filtered.length !== 1 ? 's' : ''} found for "${rawTerm}"`;
+        banner.style.display = 'flex';
+        banner.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
 
     window.clearPartnerSearch = function() {
         document.getElementById('partnerSearchInput').value = '';
         document.getElementById('partnerSearchClear').style.display = 'none';
+        document.getElementById('searchResultsBanner').style.display = 'none';
+        document.getElementById('dashboardPanels1').style.display = 'grid';
+        document.getElementById('dashboardPanels2').style.display = 'grid';
+        document.getElementById('trendFilterRow').style.display = 'flex';
+        document.getElementById('searchStats').innerText = 'Showing all';
         currentPage = 1;
         renderGrid(allPartners);
     };
