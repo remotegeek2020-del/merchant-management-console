@@ -245,6 +245,9 @@
         <button class="page-tab-btn" id="ptab-pipeline" onclick="switchPageTab('pipeline')">
             <span class="material-icons" style="font-size:15px;">stacked_line_chart</span> Onboarding Pipeline
         </button>
+        <button class="page-tab-btn" id="ptab-prime49" onclick="switchPageTab('prime49')">
+            <span style="font-size:13px;">⭐</span> Prime49 Residuals
+        </button>
     </div>
 
     <!-- PIPELINE PANEL -->
@@ -270,6 +273,56 @@
             Loading pipeline data…
         </div>
         <div id="pipeline-content" style="display:none;"></div>
+    </div>
+
+    <!-- PRIME49 RESIDUALS PANEL -->
+    <div id="tab-prime49" style="display:none;">
+        <!-- Controls bar -->
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;background:white;border-radius:12px;padding:14px 18px;margin-bottom:14px;box-shadow:0 2px 8px rgba(0,0,0,0.05);border:1px solid #e2e8f0;">
+            <span class="material-icons" style="font-size:18px;color:#d97706;">star</span>
+            <span style="font-size:14px;font-weight:800;color:#002d5a;">Prime49 Residuals</span>
+            <div style="display:flex;align-items:center;gap:8px;margin-left:8px;">
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">Residual Run Date</label>
+                <input type="date" id="p49-run-date" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:6px 10px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;color:#334155;">
+            </div>
+            <button onclick="loadPrime49Residuals()" id="p49-load-btn" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:none;background:#004990;color:white;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+                <span class="material-icons" style="font-size:15px;">refresh</span> Load / Refresh
+            </button>
+            <button onclick="exportPrime49CSV()" style="display:flex;align-items:center;gap:6px;padding:8px 16px;border-radius:8px;border:1px solid #e2e8f0;background:white;color:#475569;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+                <span class="material-icons" style="font-size:15px;">download</span> Export CSV
+            </button>
+            <div id="p49-summary" style="margin-left:auto;display:none;display:flex;gap:16px;flex-wrap:wrap;"></div>
+        </div>
+
+        <!-- Table -->
+        <div class="main-card" style="overflow-x:auto;">
+            <div id="p49-loading" style="display:none;text-align:center;padding:60px;color:#94a3b8;">
+                <span class="material-icons" style="font-size:32px;display:block;margin-bottom:10px;animation:spin 1s linear infinite;">autorenew</span>
+                Loading Prime49 residuals…
+            </div>
+            <div id="p49-empty" style="display:none;text-align:center;padding:60px;color:#94a3b8;">
+                <span class="material-icons" style="font-size:40px;display:block;margin-bottom:10px;color:#e2e8f0;">star_border</span>
+                No Prime49 merchants found.
+            </div>
+            <table class="slds-table slds-table_cell-buffer slds-table_bordered" id="p49-table" style="width:100%;display:none;">
+                <thead>
+                    <tr>
+                        <th style="white-space:nowrap;">Merchant DBA</th>
+                        <th style="white-space:nowrap;">Merchant ID</th>
+                        <th style="white-space:nowrap;text-align:right;">30d Volume</th>
+                        <th style="white-space:nowrap;">Residual Run</th>
+                        <th style="white-space:nowrap;text-align:right;">Net Residual</th>
+                        <th style="white-space:nowrap;text-align:right;color:#004990;">PPT Residual</th>
+                        <th style="white-space:nowrap;text-align:right;color:#059669;">Agent Residual</th>
+                        <th style="white-space:nowrap;">Agent ID</th>
+                        <th style="white-space:nowrap;">Agent Name</th>
+                        <th style="white-space:nowrap;">Agent Company</th>
+                    </tr>
+                </thead>
+                <tbody id="p49-tbody"></tbody>
+                <tfoot id="p49-tfoot"></tfoot>
+            </table>
+        </div>
     </div>
 
     <!-- FILTER TOOLBAR -->
@@ -3206,8 +3259,12 @@ const _periodLabels = { 7: 'This Week', 30: 'Last 30 Days', 90: 'Last 90 Days', 
 
 function switchPageTab(tab) {
     const isPortfolio = tab === 'portfolio';
+    const isPipeline  = tab === 'pipeline';
+    const isPrime49   = tab === 'prime49';
+
     document.getElementById('ptab-portfolio').classList.toggle('active', isPortfolio);
-    document.getElementById('ptab-pipeline').classList.toggle('active', !isPortfolio);
+    document.getElementById('ptab-pipeline').classList.toggle('active', isPipeline);
+    document.getElementById('ptab-prime49').classList.toggle('active', isPrime49);
 
     const portfolioEls = ['tab-portfolio-filter','tab-portfolio-kpi','staffChartsPanel','tab-portfolio-content'];
     portfolioEls.forEach(id => {
@@ -3215,12 +3272,146 @@ function switchPageTab(tab) {
         if (el) el.style.display = isPortfolio ? '' : 'none';
     });
 
-    document.getElementById('tab-pipeline').style.display = isPortfolio ? 'none' : '';
+    document.getElementById('tab-pipeline').style.display = isPipeline ? '' : 'none';
+    document.getElementById('tab-prime49').style.display  = isPrime49  ? '' : 'none';
 
-    if (!isPortfolio && !_pipelineLoaded) {
+    if (isPipeline && !_pipelineLoaded) {
         _pipelineLoaded = true;
         loadPipeline();
     }
+    if (isPrime49 && !_prime49Loaded) {
+        _prime49Loaded = true;
+        // Default run date to today
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('p49-run-date').value = today;
+        loadPrime49Residuals();
+    }
+}
+
+// ── PRIME49 RESIDUALS ────────────────────────────────────────────
+let _prime49Loaded = false;
+let _prime49Data   = [];
+
+async function loadPrime49Residuals() {
+    const btn = document.getElementById('p49-load-btn');
+    btn.innerHTML = '<span class="material-icons" style="font-size:15px;animation:spin 1s linear infinite;">autorenew</span> Loading…';
+    btn.disabled = true;
+
+    document.getElementById('p49-loading').style.display = 'block';
+    document.getElementById('p49-table').style.display   = 'none';
+    document.getElementById('p49-empty').style.display   = 'none';
+
+    try {
+        const userid = localStorage.getItem('pp_user_id') || '';
+        const res  = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_prime49_residuals', userid })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+
+        _prime49Data = json.data || [];
+        renderPrime49Table();
+    } catch (e) {
+        console.error('Prime49 load error:', e);
+        document.getElementById('p49-loading').style.display = 'none';
+        document.getElementById('p49-empty').style.display   = 'block';
+        document.getElementById('p49-empty').innerHTML = `<span class="material-icons" style="font-size:40px;display:block;margin-bottom:10px;color:#e2e8f0;">error_outline</span>${e.message}`;
+    } finally {
+        btn.innerHTML = '<span class="material-icons" style="font-size:15px;">refresh</span> Load / Refresh';
+        btn.disabled  = false;
+    }
+}
+
+function renderPrime49Table() {
+    const runDate = document.getElementById('p49-run-date').value || '—';
+    const data    = _prime49Data;
+
+    document.getElementById('p49-loading').style.display = 'none';
+
+    if (!data.length) {
+        document.getElementById('p49-empty').style.display = 'block';
+        document.getElementById('p49-table').style.display = 'none';
+        return;
+    }
+
+    const fmt  = n => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtV = n => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    let totVol = 0, totNet = 0, totPpt = 0, totAgent = 0;
+
+    const rows = data.map(r => {
+        totVol   += r.volume_30_day;
+        totNet   += r.net_residual;
+        totPpt   += r.ppt_residual;
+        totAgent += r.agent_residual;
+        return `<tr style="cursor:pointer;" onclick="openMerchantModal('${r.merchant_id}')">
+            <td style="font-weight:700;color:#002d5a;">${r.dba_name || '—'}</td>
+            <td style="font-family:monospace;font-size:12px;">${r.merchant_id || '—'}</td>
+            <td style="text-align:right;font-weight:700;">${fmtV(r.volume_30_day)}</td>
+            <td style="font-size:12px;color:#64748b;">${runDate}</td>
+            <td style="text-align:right;font-weight:700;">${fmt(r.net_residual)}</td>
+            <td style="text-align:right;font-weight:700;color:#004990;">${fmt(r.ppt_residual)}</td>
+            <td style="text-align:right;font-weight:700;color:#059669;">${fmt(r.agent_residual)}</td>
+            <td style="font-family:monospace;font-size:12px;">${r.agent_id || '—'}</td>
+            <td>${r.agent_name || '—'}</td>
+            <td style="font-size:12px;color:#64748b;">${r.agent_company || '—'}</td>
+        </tr>`;
+    }).join('');
+
+    document.getElementById('p49-tbody').innerHTML = rows;
+    document.getElementById('p49-tfoot').innerHTML = `
+        <tr style="background:#f8fafc;font-weight:800;border-top:2px solid #e2e8f0;">
+            <td colspan="2" style="font-size:12px;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Totals (${data.length} merchants)</td>
+            <td style="text-align:right;font-weight:800;">${fmtV(totVol)}</td>
+            <td></td>
+            <td style="text-align:right;font-weight:800;">${fmt(totNet)}</td>
+            <td style="text-align:right;font-weight:800;color:#004990;">${fmt(totPpt)}</td>
+            <td style="text-align:right;font-weight:800;color:#059669;">${fmt(totAgent)}</td>
+            <td colspan="3"></td>
+        </tr>`;
+
+    document.getElementById('p49-table').style.display = '';
+
+    // Summary chips
+    const sumEl = document.getElementById('p49-summary');
+    sumEl.style.display = 'flex';
+    sumEl.innerHTML = [
+        { label: 'Merchants', val: data.length, color: '#475569' },
+        { label: 'Net Residual', val: fmt(totNet), color: '#334155' },
+        { label: 'PPT', val: fmt(totPpt), color: '#004990' },
+        { label: 'Agent Payout', val: fmt(totAgent), color: '#059669' },
+    ].map(c => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:5px 12px;text-align:center;">
+        <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;">${c.label}</div>
+        <div style="font-size:13px;font-weight:800;color:${c.color};">${c.val}</div>
+    </div>`).join('');
+}
+
+function exportPrime49CSV() {
+    if (!_prime49Data.length) return alert('No data to export. Please load first.');
+    const runDate = document.getElementById('p49-run-date').value || '';
+    const header  = ['Merchant DBA','Merchant ID','30d Volume','Residual Run','Net Residual','PPT Residual','Agent Residual','Agent ID','Agent Name','Agent Company'];
+    const rows    = _prime49Data.map(r => [
+        `"${(r.dba_name||'').replace(/"/g,'""')}"`,
+        r.merchant_id || '',
+        r.volume_30_day.toFixed(2),
+        runDate,
+        r.net_residual.toFixed(2),
+        r.ppt_residual.toFixed(2),
+        r.agent_residual.toFixed(2),
+        r.agent_id || '',
+        `"${(r.agent_name||'').replace(/"/g,'""')}"`,
+        `"${(r.agent_company||'').replace(/"/g,'""')}"`,
+    ]);
+    const csv  = [header.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `prime49-residuals-${runDate || 'export'}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
 }
 
 function setPipelinePeriod(period, btn) {

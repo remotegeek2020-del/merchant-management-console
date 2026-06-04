@@ -1350,8 +1350,53 @@ if (action === 'get_notes') {
             });
         }
 
-        return res.status(400).json({ success: false, message: "Unknown action" });
+        if (action === 'get_prime49_residuals') {
+            const { data, error } = await supabase
+                .from('merchant_portfolio_view')
+                .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name')
+                .eq('is_prime49', true)
+                .eq('account_status', 'Approved')
+                .order('dba_name', { ascending: true });
 
+            if (error) throw error;
+
+            // Enrich with rev_share from agent_identifiers
+            const agentIds = [...new Set((data || []).map(m => m.agent_id).filter(Boolean))];
+            let revShareMap = {};
+            if (agentIds.length) {
+                const { data: aiData } = await supabase
+                    .from('agent_identifiers')
+                    .select('id_string, rev_share')
+                    .in('id_string', agentIds);
+                (aiData || []).forEach(ai => { revShareMap[ai.id_string] = ai.rev_share; });
+            }
+
+            const rows = (data || []).map(m => {
+                const vol = parseFloat(m.volume_30_day) || 0;
+                const rawRev = revShareMap[m.agent_id];
+                const revPct = rawRev ? parseFloat(String(rawRev).replace(/%/g, '')) : 50;
+                const agentResidual = vol * 0.015;
+                const netResidual   = agentResidual * 2;
+                const pptResidual   = netResidual * (1 - revPct / 100);
+                const agentActual   = netResidual * (revPct / 100);
+                return {
+                    dba_name:        m.dba_name,
+                    merchant_id:     m.merchant_id,
+                    volume_30_day:   vol,
+                    agent_id:        m.agent_id,
+                    agent_name:      m.partner_full_name || '—',
+                    agent_company:   m.company_display_name || '—',
+                    rev_share:       revPct,
+                    net_residual:    netResidual,
+                    ppt_residual:    pptResidual,
+                    agent_residual:  agentActual,
+                };
+            });
+
+            return res.status(200).json({ success: true, data: rows });
+        }
+
+        return res.status(400).json({ success: false, message: "Unknown action" });
     } catch (err) {
         console.error('[API Error]', err.message);
         return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
