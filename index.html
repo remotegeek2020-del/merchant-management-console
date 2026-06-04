@@ -73,8 +73,15 @@
     /* Global Search */
     .global-search-wrap {
         position: relative;
-        max-width: 520px;
+        max-width: 560px;
         margin: 18px auto 0;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .global-search-input-wrap {
+        position: relative;
+        flex: 1;
     }
     .global-search-input {
         width: 100%;
@@ -83,11 +90,12 @@
         border: none;
         background: rgba(255,255,255,0.15);
         color: white;
-        font-family: 'Inter', sans-serif;
+        font-family: 'DM Sans', sans-serif;
         font-size: 14px;
         outline: none;
         backdrop-filter: blur(8px);
         transition: background 0.2s;
+        box-sizing: border-box;
     }
     .global-search-input::placeholder { color: rgba(255,255,255,0.6); }
     .global-search-input:focus { background: rgba(255,255,255,0.22); }
@@ -100,57 +108,226 @@
         font-size: 20px;
         pointer-events: none;
     }
-    .global-search-kbd {
-        position: absolute;
-        right: 12px;
-        top: 50%;
-        transform: translateY(-50%);
-        background: rgba(255,255,255,0.2);
-        border-radius: 4px;
-        padding: 2px 6px;
-        font-size: 10px;
-        color: rgba(255,255,255,0.7);
-        font-family: 'Inter', sans-serif;
-        pointer-events: none;
-    }
-    .global-search-results {
-        position: fixed;
-        background: #1e293b;
-        border: 1px solid #334155;
-        border-radius: 14px;
-        box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-        z-index: 99999;
-        overflow-y: auto;
-        max-height: 65vh;
-        display: none;
-    }
-    .gsr-section-label {
-        padding: 8px 14px 4px;
-        font-size: 10px;
+    .global-search-btn {
+        flex-shrink: 0;
+        padding: 11px 20px;
+        border-radius: 12px;
+        border: none;
+        background: white;
+        color: #1e293b;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 13px;
         font-weight: 700;
-        letter-spacing: 0.8px;
-        color: #64748b;
-        text-transform: uppercase;
-    }
-    .gsr-item {
+        cursor: pointer;
         display: flex;
         align-items: center;
-        gap: 10px;
-        padding: 9px 14px;
-        cursor: pointer;
-        text-decoration: none;
-        transition: background 0.12s;
-        color: #e2e8f0;
+        gap: 6px;
+        transition: all 0.2s;
+        white-space: nowrap;
     }
-    .gsr-item:hover, .gsr-item.focused { background: #0f172a; color: #e2e8f0; }
-    .gsr-icon { color: #64748b; font-size: 18px; flex-shrink: 0; }
-    .gsr-main { flex: 1; min-width: 0; }
-    .gsr-title { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gsr-sub { font-size: 11px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .gsr-tag { font-size: 10px; font-weight: 700; padding: 2px 7px; border-radius: 20px; flex-shrink: 0; }
-    .gsr-divider { border: none; border-top: 1px solid #1e293b; margin: 0; }
-    .gsr-empty { padding: 20px; text-align: center; color: #475569; font-size: 13px; }
-    .gsr-loading { padding: 16px; text-align: center; color: #64748b; font-size: 12px; }
+    .global-search-btn:hover { background: #f0f9ff; transform: translateY(-1px); }
+    .global-search-btn:active { transform: translateY(0); }
+    .global-search-btn .material-icons { font-size: 16px; }
+
+    /* Full-page results overlay */
+    #gsr-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 9000;
+        background: #f1f5f9;
+        overflow-y: auto;
+    }
+    #gsr-overlay.active { display: block; }
+    .gsr-overlay-header {
+        background: linear-gradient(135deg, var(--pp-navy, #1e293b), var(--pp-blue, #0f4c81));
+        padding: 20px 32px;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        box-shadow: 0 2px 12px rgba(0,0,0,0.2);
+    }
+    .gsr-overlay-search-wrap {
+        flex: 1;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        max-width: 600px;
+    }
+    .gsr-overlay-input-wrap { position: relative; flex: 1; }
+    .gsr-overlay-input {
+        width: 100%;
+        padding: 11px 16px 11px 42px;
+        border-radius: 12px;
+        border: none;
+        background: rgba(255,255,255,0.18);
+        color: white;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 14px;
+        outline: none;
+        box-sizing: border-box;
+    }
+    .gsr-overlay-input::placeholder { color: rgba(255,255,255,0.55); }
+    .gsr-overlay-input:focus { background: rgba(255,255,255,0.25); }
+    .gsr-overlay-icon {
+        position: absolute; left: 12px; top: 50%;
+        transform: translateY(-50%);
+        color: rgba(255,255,255,0.65); font-size: 20px; pointer-events: none;
+    }
+    .gsr-close-btn {
+        background: rgba(255,255,255,0.12);
+        border: 1px solid rgba(255,255,255,0.2);
+        border-radius: 10px;
+        color: white;
+        padding: 10px 16px;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 13px;
+        font-weight: 700;
+        cursor: pointer;
+        display: flex; align-items: center; gap: 6px;
+        transition: background 0.2s;
+        white-space: nowrap;
+        flex-shrink: 0;
+    }
+    .gsr-close-btn:hover { background: rgba(255,255,255,0.22); }
+    .gsr-close-btn .material-icons { font-size: 16px; }
+    .gsr-summary-bar {
+        background: white;
+        border-bottom: 1px solid #e2e8f0;
+        padding: 10px 32px;
+        font-size: 13px;
+        color: #64748b;
+        font-family: 'DM Sans', sans-serif;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .gsr-summary-bar strong { color: #1e293b; }
+    .gsr-results-body {
+        padding: 24px 32px;
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    /* Result section tables */
+    .gsr-section {
+        background: white;
+        border-radius: 14px;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        margin-bottom: 20px;
+        overflow: hidden;
+    }
+    .gsr-section-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 14px 20px;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .gsr-section-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-family: 'DM Sans', sans-serif;
+        font-size: 14px;
+        font-weight: 800;
+        color: #1e293b;
+    }
+    .gsr-section-title .material-icons { font-size: 18px; }
+    .gsr-section-count {
+        background: #f1f5f9;
+        color: #64748b;
+        font-size: 11px;
+        font-weight: 700;
+        padding: 2px 8px;
+        border-radius: 20px;
+        font-family: 'DM Sans', sans-serif;
+    }
+    .gsr-view-all {
+        font-size: 12px;
+        font-weight: 700;
+        color: #0ea5e9;
+        text-decoration: none;
+        font-family: 'DM Sans', sans-serif;
+        display: flex; align-items: center; gap: 3px;
+        transition: color 0.15s;
+    }
+    .gsr-view-all:hover { color: #0284c7; }
+    .gsr-view-all .material-icons { font-size: 14px; }
+    .gsr-table { width: 100%; border-collapse: collapse; }
+    .gsr-table th {
+        padding: 8px 16px;
+        font-size: 10px;
+        font-weight: 700;
+        color: #94a3b8;
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+        text-align: left;
+        background: #f8fafc;
+        border-bottom: 1px solid #f1f5f9;
+        font-family: 'DM Sans', sans-serif;
+    }
+    .gsr-table td {
+        padding: 11px 16px;
+        font-size: 13px;
+        color: #334155;
+        border-bottom: 1px solid #f8fafc;
+        font-family: 'DM Sans', sans-serif;
+        vertical-align: middle;
+    }
+    .gsr-table tr:last-child td { border-bottom: none; }
+    .gsr-table tr:hover td { background: #f8fafc; }
+    .gsr-table a.gsr-row-link {
+        display: contents;
+        color: inherit;
+        text-decoration: none;
+    }
+    .gsr-table tbody tr { cursor: pointer; transition: background 0.1s; }
+    .gsr-name-cell { font-weight: 600; color: #1e293b; }
+    .gsr-name-cell:hover { color: #0ea5e9; }
+    .gsr-mono { font-family: monospace; font-size: 12px; color: #475569; }
+    .gsr-status-badge {
+        display: inline-block;
+        padding: 2px 9px;
+        border-radius: 20px;
+        font-size: 11px;
+        font-weight: 700;
+        white-space: nowrap;
+        font-family: 'DM Sans', sans-serif;
+    }
+    .gsr-empty-section {
+        padding: 24px;
+        text-align: center;
+        color: #94a3b8;
+        font-size: 13px;
+        font-family: 'DM Sans', sans-serif;
+    }
+    .gsr-loading-overlay {
+        padding: 60px 24px;
+        text-align: center;
+        color: #64748b;
+        font-size: 14px;
+        font-family: 'DM Sans', sans-serif;
+    }
+    .gsr-loading-overlay .material-icons {
+        font-size: 40px;
+        color: #cbd5e1;
+        display: block;
+        margin-bottom: 12px;
+        animation: gsr-spin 1s linear infinite;
+    }
+    @keyframes gsr-spin { to { transform: rotate(360deg); } }
+    .gsr-zero-state {
+        padding: 80px 24px;
+        text-align: center;
+        font-family: 'DM Sans', sans-serif;
+    }
+    .gsr-zero-state .material-icons { font-size: 48px; color: #cbd5e1; display: block; margin-bottom: 16px; }
+    .gsr-zero-state h3 { font-size: 18px; font-weight: 700; color: #475569; margin: 0 0 8px; }
+    .gsr-zero-state p { font-size: 14px; color: #94a3b8; margin: 0; }
 
     /* Card Arrange Mode */
     #home-arrange-btn {
@@ -291,12 +468,15 @@
                 <h1 class="brand-title">PayProTec Portal</h1>
                 <p class="brand-sub">Central Operations Console</p>
                 <div class="global-search-wrap" id="global-search-wrap">
-                    <span class="material-icons global-search-icon">search</span>
-                    <input type="text" id="global-search-input" class="global-search-input"
-                           placeholder="Search merchants, tickets, equipment…"
-                           autocomplete="off" autocorrect="off" spellcheck="false">
-                    <span class="global-search-kbd" id="gsr-kbd">⌘K</span>
-                    <div class="global-search-results" id="global-search-results"></div>
+                    <div class="global-search-input-wrap">
+                        <span class="material-icons global-search-icon">search</span>
+                        <input type="text" id="global-search-input" class="global-search-input"
+                               placeholder="Search merchants, partners, tickets…"
+                               autocomplete="off" autocorrect="off" spellcheck="false">
+                    </div>
+                    <button class="global-search-btn" id="global-search-btn" onclick="runGlobalSearch()">
+                        <span class="material-icons">search</span> Search
+                    </button>
                 </div>
             </div>
         </div>
@@ -424,6 +604,33 @@
                     <p class="card-desc">System hacks, database bypasses, and bulk administrative tools.</p>
                     <div style="font-size: 9px; font-weight: 800; color: #6366f1; margin-top: 10px; letter-spacing: 1px;">SUPER ADMIN ONLY</div>
                 </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Global Search Results Overlay -->
+    <div id="gsr-overlay">
+        <div class="gsr-overlay-header">
+            <div class="gsr-overlay-search-wrap">
+                <div class="gsr-overlay-input-wrap">
+                    <span class="material-icons gsr-overlay-icon">search</span>
+                    <input type="text" id="gsr-overlay-input" class="gsr-overlay-input"
+                           placeholder="Search merchants, partners, tickets…"
+                           autocomplete="off">
+                </div>
+                <button class="global-search-btn" onclick="runGlobalSearchFrom('overlay')">
+                    <span class="material-icons">search</span> Search
+                </button>
+            </div>
+            <button class="gsr-close-btn" onclick="closeGlobalSearch()">
+                <span class="material-icons">arrow_back</span> Back to Home
+            </button>
+        </div>
+        <div class="gsr-summary-bar" id="gsr-summary-bar" style="display:none;"></div>
+        <div class="gsr-results-body" id="gsr-results-body">
+            <div class="gsr-loading-overlay">
+                <span class="material-icons">sync</span>
+                Searching…
             </div>
         </div>
     </div>
@@ -598,80 +805,68 @@
 </script>
 
 <script>
+// ── GLOBAL SEARCH ────────────────────────────────────────────────────────────
 (function() {
-    const input   = document.getElementById('global-search-input');
-    const panel   = document.getElementById('global-search-results');
-    const kbd     = document.getElementById('gsr-kbd');
-    let debounce  = null;
-    let lastQuery = '';
-    let focusIdx  = -1;
-    let items     = [];
+    const mainInput    = document.getElementById('global-search-input');
+    const overlayInput = document.getElementById('gsr-overlay-input');
+    const overlay      = document.getElementById('gsr-overlay');
+    const summaryBar   = document.getElementById('gsr-summary-bar');
+    const resultsBody  = document.getElementById('gsr-results-body');
 
-    // ⌘K / Ctrl+K shortcut
-    const isMac = navigator.platform.toUpperCase().includes('MAC');
-    kbd.textContent = isMac ? '⌘K' : 'Ctrl+K';
+    // Enter key on main input triggers search
+    mainInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runGlobalSearch(); }
+    });
+    overlayInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); runGlobalSearchFrom('overlay'); }
+    });
+
+    // ⌘K / Ctrl+K focuses the main input
     document.addEventListener('keydown', e => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
             e.preventDefault();
-            input.focus();
-            input.select();
+            if (overlay.classList.contains('active')) {
+                overlayInput.focus(); overlayInput.select();
+            } else {
+                mainInput.focus(); mainInput.select();
+            }
         }
-        if (e.key === 'Escape') closeResults();
+        if (e.key === 'Escape' && overlay.classList.contains('active')) closeGlobalSearch();
     });
 
-    input.addEventListener('input', () => {
-        clearTimeout(debounce);
-        const q = input.value.trim();
-        if (q.length < 2) { closeResults(); return; }
-        if (q === lastQuery) return;
-        showLoading();
-        debounce = setTimeout(() => doSearch(q), 300);
-    });
+    window.runGlobalSearch = function() {
+        const q = mainInput.value.trim();
+        if (q.length < 2) { mainInput.focus(); return; }
+        openOverlay(q);
+        doSearch(q);
+    };
 
-    input.addEventListener('keydown', e => {
-        if (!panel.style.display || panel.style.display === 'none') return;
-        if (e.key === 'ArrowDown') { e.preventDefault(); moveFocus(1); }
-        if (e.key === 'ArrowUp')   { e.preventDefault(); moveFocus(-1); }
-        if (e.key === 'Enter' && focusIdx >= 0 && items[focusIdx]) {
-            e.preventDefault();
-            items[focusIdx].click();
-        }
-    });
+    window.runGlobalSearchFrom = function(source) {
+        const q = (source === 'overlay' ? overlayInput : mainInput).value.trim();
+        if (q.length < 2) return;
+        if (source === 'overlay') mainInput.value = q;
+        else overlayInput.value = q;
+        doSearch(q);
+    };
 
-    document.addEventListener('click', e => {
-        if (!document.getElementById('global-search-wrap').contains(e.target)) closeResults();
-    });
+    window.closeGlobalSearch = function() {
+        overlay.classList.remove('active');
+        summaryBar.style.display = 'none';
+        mainInput.value = '';
+        overlayInput.value = '';
+    };
 
-    function moveFocus(dir) {
-        items = Array.from(panel.querySelectorAll('.gsr-item'));
-        items.forEach(i => i.classList.remove('focused'));
-        focusIdx = Math.max(0, Math.min(items.length - 1, focusIdx + dir));
-        if (items[focusIdx]) items[focusIdx].classList.add('focused');
+    function openOverlay(q) {
+        overlayInput.value = q;
+        overlay.classList.add('active');
+        overlay.scrollTop = 0;
+        summaryBar.style.display = 'none';
+        resultsBody.innerHTML = `
+            <div class="gsr-loading-overlay">
+                <span class="material-icons">sync</span>
+                Searching for "<strong>${esc(q)}</strong>"…
+            </div>`;
     }
-
-    function positionPanel() {
-        const wrap = document.getElementById('global-search-wrap');
-        const rect = wrap.getBoundingClientRect();
-        panel.style.top   = (rect.bottom + 8) + 'px';
-        panel.style.left  = rect.left + 'px';
-        panel.style.width = rect.width + 'px';
-    }
-
-    function showLoading() {
-        positionPanel();
-        panel.style.display = 'block';
-        panel.innerHTML = '<div class="gsr-loading">Searching…</div>';
-        focusIdx = -1;
-    }
-
-    function closeResults() {
-        panel.style.display = 'none';
-        panel.innerHTML = '';
-        focusIdx = -1;
-        lastQuery = '';
-    }
-
-    window.addEventListener('resize', () => { if (panel.style.display === 'block') positionPanel(); });
 
     function esc(s) {
         if (!s) return '';
@@ -682,18 +877,52 @@
         const map = {
             active: '#22c55e', enrolled: '#22c55e', open: '#3b82f6', pending: '#f59e0b',
             closed: '#64748b', resolved: '#22c55e', stocked: '#22c55e', deployed: '#3b82f6',
-            decommissioned: '#64748b', in_repair: '#f59e0b', open_ticket: '#3b82f6',
+            decommissioned: '#64748b', in_repair: '#f59e0b', 'open ticket': '#3b82f6',
+            completed: '#22c55e', cancelled: '#64748b', 'in progress': '#f59e0b',
         };
         return map[(s||'').toLowerCase()] || '#94a3b8';
     }
 
+    function badge(status) {
+        if (!status) return '';
+        const col = statusColor(status);
+        return `<span class="gsr-status-badge" style="background:${col}20;color:${col};">${esc(status)}</span>`;
+    }
+
+    function fmtD(d) {
+        if (!d) return '—';
+        return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+
+    function navigateTo(url) {
+        if (typeof portalNavigate === 'function') portalNavigate(url);
+        else window.location.href = url;
+    }
+
+    function makeSection(title, icon, color, count, viewAllUrl, tableHtml) {
+        return `
+        <div class="gsr-section">
+            <div class="gsr-section-head">
+                <div class="gsr-section-title">
+                    <span class="material-icons" style="color:${color};">${icon}</span>
+                    ${esc(title)}
+                    <span class="gsr-section-count">${count}</span>
+                </div>
+                <a class="gsr-view-all" href="${viewAllUrl}">
+                    View all in ${esc(title)} <span class="material-icons">arrow_forward</span>
+                </a>
+            </div>
+            ${tableHtml}
+        </div>`;
+    }
+
     async function doSearch(q) {
-        lastQuery = q;
         const userid = localStorage.getItem('pp_userid');
-        if (!userid) { closeResults(); return; }
+        if (!userid) return;
 
         fetch('/api/logs', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: userid, action: `Global Search: "${q}"`, status: 'success', category: 'general', target_type: 'search', new_value: { query: q, context: 'Global' }, severity: 'info' })
+            body: JSON.stringify({ email: userid, action: `Global Search: "${q}"`, status: 'success',
+                category: 'general', target_type: 'search', new_value: { query: q }, severity: 'info' })
         }).catch(() => {});
 
         let data;
@@ -705,140 +934,206 @@
             });
             data = await r.json();
         } catch {
-            panel.innerHTML = '<div class="gsr-empty">Search unavailable — check connection.</div>';
+            resultsBody.innerHTML = `<div class="gsr-zero-state">
+                <span class="material-icons">wifi_off</span>
+                <h3>Search unavailable</h3><p>Check your connection and try again.</p>
+            </div>`;
             return;
         }
 
         if (!data.success) {
-            panel.innerHTML = '<div class="gsr-empty">Search unavailable.</div>';
+            resultsBody.innerHTML = `<div class="gsr-zero-state">
+                <span class="material-icons">error_outline</span>
+                <h3>Search failed</h3><p>${esc(data.message || 'Unknown error')}</p>
+            </div>`;
             return;
         }
 
-        const { merchants, partners, agent_ids, tickets, equipment, deployments, returns } = data.results;
-        const total = merchants.length + partners.length + (agent_ids||[]).length + tickets.length + equipment.length + (deployments||[]).length + (returns||[]).length;
+        const { merchants=[], partners=[], agent_ids=[], tickets=[],
+                equipment=[], deployments=[], returns=[], tasks=[] } = data.results;
+
+        const total = merchants.length + partners.length + agent_ids.length +
+                      tickets.length + equipment.length + deployments.length +
+                      returns.length + tasks.length;
+
+        // Summary bar
+        summaryBar.style.display = 'flex';
+        summaryBar.innerHTML = total === 0
+            ? `No results for <strong>"${esc(q)}"</strong>`
+            : `<strong>${total}</strong>&nbsp;result${total !== 1 ? 's' : ''} for&nbsp;<strong>"${esc(q)}"</strong>`;
 
         if (total === 0) {
-            panel.innerHTML = `<div class="gsr-empty">No results for "<strong>${esc(q)}</strong>"</div>`;
+            resultsBody.innerHTML = `<div class="gsr-zero-state">
+                <span class="material-icons">search_off</span>
+                <h3>No results found</h3>
+                <p>Try a different search term — merchant name, MID, serial number, ticket number…</p>
+            </div>`;
             return;
         }
 
         let html = '';
 
-        // Helper to build a section
-        function section(label, items, rowFn) {
-            if (!items || !items.length) return '';
-            return (html ? '<hr class="gsr-divider">' : '') +
-                `<div class="gsr-section-label">${label}</div>` +
-                items.map(rowFn).join('<hr class="gsr-divider">');
+        // ── MERCHANTS ──
+        if (merchants.length) {
+            const rows = merchants.map(m => {
+                const url = `merchants-dashboard.html?q=${encodeURIComponent(m.dba_name)}&filterBy=dba_name`;
+                const location = [m.merchant_city, m.merchant_state].filter(Boolean).join(', ');
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell">${esc(m.dba_name)}</td>
+                    <td><span class="gsr-mono">${esc(m.merchant_id || '—')}</span></td>
+                    <td>${esc(m.partner_full_name || m.agent_name || '—')}</td>
+                    <td>${esc(location || '—')}</td>
+                    <td>${badge(m.account_status)}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Merchant Name</th><th>MID</th><th>Partner / Agent</th><th>Location</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Merchants', 'storefront', '#0ea5e9', merchants.length,
+                `merchants-dashboard.html?q=${encodeURIComponent(q)}`, table);
         }
 
-        // Merchants — show what matched (DBA, MID, agent, partner)
-        html += section('Merchants', merchants, m => {
-            const col = statusColor(m.account_status);
-            const url = `merchants-dashboard.html?q=${encodeURIComponent(['merchant_id','dba_name'].includes(m._matchedBy) ? (m._matchedBy === 'merchant_id' ? m.merchant_id : m.dba_name) : m.dba_name)}&filterBy=${encodeURIComponent(m._matchedBy === 'merchant_id' ? 'merchant_id' : 'dba_name')}`;
-            const matchHint = {
-                agent_name:       `Agent: ${m.agent_name}`,
-                partner_full_name:`Partner: ${m.partner_full_name}`,
-                merchant_id:      m.merchant_id,
-                dba_name:         m.merchant_id,
-            }[m._matchedBy] || m.merchant_id;
-            return `<a class="gsr-item" href="${url}">
-                <span class="material-icons gsr-icon" style="color:#0ea5e9;">storefront</span>
-                <div class="gsr-main">
-                    <div class="gsr-title">${esc(m.dba_name)}</div>
-                    <div class="gsr-sub">${esc(matchHint)}</div>
-                </div>
-                ${m.account_status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(m.account_status)}</span>` : ''}
-            </a>`;
-        });
+        // ── PARTNERS ──
+        if (partners.length) {
+            const rows = partners.map(p => {
+                const url = `partners-dashboard.html?q=${encodeURIComponent(p.full_name)}`;
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell">${esc(p.full_name)}</td>
+                    <td>${esc(p.email || '—')}</td>
+                    <td>${esc(p.phone_number || '—')}</td>
+                    <td>${badge(p.is_portal_active ? 'Active' : 'Inactive')}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Name</th><th>Email</th><th>Phone</th><th>Portal Access</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Partners', 'handshake', '#8b5cf6', partners.length,
+                `partners-dashboard.html?q=${encodeURIComponent(q)}`, table);
+        }
 
-        // Partners
-        html += section('Partners', partners, p => {
-            const col = p.is_portal_active ? '#22c55e' : '#64748b';
-            return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(p.full_name)}">
-                <span class="material-icons gsr-icon" style="color:#8b5cf6;">handshake</span>
-                <div class="gsr-main">
-                    <div class="gsr-title">${esc(p.full_name)}</div>
-                    <div class="gsr-sub">${esc(p.email || '')}</div>
-                </div>
-                <span class="gsr-tag" style="background:${col}22; color:${col};">${p.is_portal_active ? 'Active' : 'Inactive'}</span>
-            </a>`;
-        });
+        // ── AGENT IDs ──
+        if (agent_ids.length) {
+            const rows = agent_ids.map(a => {
+                const url = `partners-dashboard.html?q=${encodeURIComponent(a.id_string)}`;
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell gsr-mono">${esc(a.id_string)}</td>
+                    <td>${esc(a.partner_name || '—')}</td>
+                    <td>${esc(a.partner_email || '—')}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Agent ID</th><th>Partner Name</th><th>Email</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Agent IDs', 'badge', '#a78bfa', agent_ids.length,
+                `partners-dashboard.html?q=${encodeURIComponent(q)}`, table);
+        }
 
-        // Agent IDs
-        html += section('Agent IDs', agent_ids, a => {
-            const sub = [a.partner_name, a.partner_email].filter(Boolean).join(' · ');
-            return `<a class="gsr-item" href="partners-dashboard.html?q=${encodeURIComponent(a.id_string)}">
-                <span class="material-icons gsr-icon" style="color:#a78bfa;">badge</span>
-                <div class="gsr-main">
-                    <div class="gsr-title" style="font-family:monospace;">${esc(a.id_string)}</div>
-                    ${sub ? `<div class="gsr-sub">${esc(sub)}</div>` : ''}
-                </div>
-                <span class="gsr-tag" style="background:#7c3aed22; color:#a78bfa;">Agent ID</span>
-            </a>`;
-        });
+        // ── DEPLOYMENTS ──
+        if (deployments.length) {
+            const rows = deployments.map(d => {
+                const url = `deployments-dashboard.html?q=${encodeURIComponent(d.deployment_id || d.tracking_id || '')}`;
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell gsr-mono">${esc(d.deployment_id || '—')}</td>
+                    <td>${esc(d.merchant_name || '—')}</td>
+                    <td><span class="gsr-mono">${esc(d.tracking_id || '—')}</span></td>
+                    <td>${esc(d.tid || '—')}</td>
+                    <td>${fmtD(d.created_at)}</td>
+                    <td>${badge(d.status)}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Deployment ID</th><th>Merchant</th><th>Tracking #</th><th>TID</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Deployments', 'local_shipping', '#0284c7', deployments.length,
+                `deployments-dashboard.html?q=${encodeURIComponent(q)}`, table);
+        }
 
-        // Tickets
-        html += section('Tickets', tickets, t => {
-            const col = statusColor(t.status);
-            const prioColor = { high: '#ef4444', medium: '#f59e0b', low: '#64748b' }[t.priority] || '#64748b';
-            return `<a class="gsr-item" href="tickets-dashboard.html?q=${encodeURIComponent(t.ticket_number)}">
-                <span class="material-icons gsr-icon" style="color:#0d9488;">confirmation_number</span>
-                <div class="gsr-main">
-                    <div class="gsr-title">${esc(t.subject)}</div>
-                    <div class="gsr-sub">${esc(t.ticket_number)}${t.priority ? ` · <span style="color:${prioColor};">${esc(t.priority)}</span>` : ''}</div>
-                </div>
-                ${t.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(t.status)}</span>` : ''}
-            </a>`;
-        });
+        // ── RETURNS ──
+        if (returns.length) {
+            const rows = returns.map(r => {
+                const url = `returns-dashboard.html?q=${encodeURIComponent(r.return_id)}`;
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell gsr-mono">${esc(r.return_id)}</td>
+                    <td>${esc(r.merchant_name || '—')}</td>
+                    <td>${esc(r.return_reason || '—')}</td>
+                    <td>${fmtD(r.return_date_initiated)}</td>
+                    <td>${badge(r.status)}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Return ID</th><th>Merchant</th><th>Reason</th><th>Date</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Returns', 'assignment_return', '#dc2626', returns.length,
+                `returns-dashboard.html?q=${encodeURIComponent(q)}`, table);
+        }
 
-        // Equipment
-        html += section('Equipment', equipment, eq => {
-            const col = statusColor(eq.status);
-            return `<a class="gsr-item" href="equipments-dashboard.html?q=${encodeURIComponent(eq.serial_number)}">
-                <span class="material-icons gsr-icon" style="color:#f59e0b;">inventory_2</span>
-                <div class="gsr-main">
-                    <div class="gsr-title">${esc(eq.serial_number)}</div>
-                    <div class="gsr-sub">${esc(eq.terminal_type)}${eq.current_location ? ` · ${esc(eq.current_location)}` : ''}</div>
-                </div>
-                ${eq.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(eq.status)}</span>` : ''}
-            </a>`;
-        });
+        // ── TICKETS ──
+        if (tickets.length) {
+            const prioColor = { high:'#ef4444', medium:'#f59e0b', low:'#64748b' };
+            const rows = tickets.map(t => {
+                const url = `tickets-dashboard.html?q=${encodeURIComponent(t.ticket_number)}`;
+                const pc = prioColor[t.priority] || '#94a3b8';
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell">${esc(t.subject)}</td>
+                    <td><span class="gsr-mono">${esc(t.ticket_number)}</span></td>
+                    <td>${t.priority ? `<span class="gsr-status-badge" style="background:${pc}20;color:${pc};">${esc(t.priority)}</span>` : '—'}</td>
+                    <td>${fmtD(t.created_at)}</td>
+                    <td>${badge(t.status)}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Subject</th><th>Ticket #</th><th>Priority</th><th>Created</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Tickets', 'confirmation_number', '#0d9488', tickets.length,
+                `tickets-dashboard.html?q=${encodeURIComponent(q)}`, table);
+        }
 
-        // Deployments
-        html += section('Deployments', deployments, d => {
-            const col = statusColor(d.status);
-            const date = d.created_at ? fmtDate(d.created_at) : '';
-            const titleParts = [d.deployment_id, d.tracking_id].filter(Boolean);
-            const sub = [titleParts[1], date].filter(Boolean).join(' · ');
-            return `<a class="gsr-item" href="deployments-dashboard.html?q=${encodeURIComponent(d.deployment_id || d.tracking_id)}">
-                <span class="material-icons gsr-icon" style="color:#0284c7;">local_shipping</span>
-                <div class="gsr-main">
-                    <div class="gsr-title">${esc(titleParts[0] || '—')}</div>
-                    <div class="gsr-sub">${esc(sub)}</div>
-                </div>
-                ${d.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(d.status)}</span>` : ''}
-            </a>`;
-        });
+        // ── TASKS ──
+        if (tasks.length) {
+            const rows = tasks.map(t => {
+                const url = `tasks-dashboard.html?q=${encodeURIComponent(t.title)}`;
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell">${esc(t.title)}</td>
+                    <td>${esc(t.merchant_name || '—')}</td>
+                    <td>${esc(t.assigned_to || '—')}</td>
+                    <td>${fmtD(t.due_date)}</td>
+                    <td>${badge(t.status)}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Task</th><th>Merchant</th><th>Assigned To</th><th>Due Date</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Tasks', 'assignment', '#f59e0b', tasks.length,
+                `tasks-dashboard.html`, table);
+        }
 
-        // Returns
-        html += section('Returns', returns, r => {
-            const col = statusColor(r.status);
-            return `<a class="gsr-item" href="returns-dashboard.html?q=${encodeURIComponent(r.return_id)}">
-                <span class="material-icons gsr-icon" style="color:#dc2626;">undo</span>
-                <div class="gsr-main">
-                    <div class="gsr-title">${esc(r.return_id)}</div>
-                    <div class="gsr-sub">${esc(r.return_reason || '')}${r.return_date_initiated ? ` · ${r.return_date_initiated}` : ''}</div>
-                </div>
-                ${r.status ? `<span class="gsr-tag" style="background:${col}22; color:${col};">${esc(r.status)}</span>` : ''}
-            </a>`;
-        });
+        // ── EQUIPMENT ──
+        if (equipment.length) {
+            const rows = equipment.map(eq => {
+                const url = `equipments-dashboard.html?q=${encodeURIComponent(eq.serial_number)}`;
+                return `<tr onclick="navigateTo('${url}')">
+                    <td class="gsr-name-cell gsr-mono">${esc(eq.serial_number)}</td>
+                    <td>${esc(eq.terminal_type || '—')}</td>
+                    <td>${esc(eq.current_location || '—')}</td>
+                    <td>${badge(eq.status)}</td>
+                </tr>`;
+            }).join('');
+            const table = `<table class="gsr-table">
+                <thead><tr><th>Serial Number</th><th>Type</th><th>Location</th><th>Status</th></tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+            html += makeSection('Equipment', 'inventory_2', '#f59e0b', equipment.length,
+                `equipments-dashboard.html?q=${encodeURIComponent(q)}`, table);
+        }
 
-        positionPanel();
-        panel.style.display = 'block';
-        panel.innerHTML = html;
-        focusIdx = -1;
-        items = Array.from(panel.querySelectorAll('.gsr-item'));
+        resultsBody.innerHTML = html;
     }
 })();
 </script>
