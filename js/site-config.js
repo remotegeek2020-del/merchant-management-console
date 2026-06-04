@@ -75,15 +75,8 @@
             const isLogoClass = el.classList.contains('login-logo') || el.classList.contains('logo-img') ||
                                 el.classList.contains('topbar-logo') || el.classList.contains('nav-logo') ||
                                 el.classList.contains('sidebar-logo');
-            const isLogoCdn  = el.src && (el.src.includes('filesafe.space') || el.src.includes('website-files.com'));
-            if (isLogoClass || isLogoCdn) {
-                el.src = cfg.logo_url;
-                // login-logo starts hidden (no fallback src) — reveal once the CMS logo loads
-                if (el.classList.contains('login-logo')) {
-                    el.onload  = () => { el.style.display = 'block'; };
-                    el.onerror = () => { el.style.display = 'none'; };
-                }
-            }
+            const isLogoCdn  = el.src && (el.src.includes('filesafe.space') || el.src.includes('website-files.com') || el.src.includes('supabase.co'));
+            if ((isLogoClass || isLogoCdn) && el.src !== cfg.logo_url) el.src = cfg.logo_url;
         });
     }
 
