@@ -129,71 +129,28 @@
     .global-search-btn:active { transform: translateY(0); }
     .global-search-btn .material-icons { font-size: 16px; }
 
-    /* Full-page results overlay */
-    #gsr-overlay {
-        display: none;
-        position: fixed;
-        inset: 0;
-        z-index: 9000;
+    /* Inline search results panel */
+    #gsr-panel {
         background: #f1f5f9;
-        overflow-y: auto;
+        border-top: 3px solid rgba(255,255,255,0.2);
     }
-    #gsr-overlay.active { display: block; }
-    .gsr-overlay-header {
-        background: linear-gradient(135deg, var(--pp-navy, #1e293b), var(--pp-blue, #0f4c81));
-        padding: 20px 32px;
-        display: flex;
-        align-items: center;
-        gap: 16px;
-        position: sticky;
-        top: 0;
-        z-index: 10;
-        box-shadow: 0 2px 12px rgba(0,0,0,0.2);
-    }
-    .gsr-overlay-search-wrap {
-        flex: 1;
-        display: flex;
-        gap: 8px;
-        align-items: center;
-        max-width: 600px;
-    }
-    .gsr-overlay-input-wrap { position: relative; flex: 1; }
-    .gsr-overlay-input {
-        width: 100%;
-        padding: 11px 16px 11px 42px;
-        border-radius: 12px;
-        border: none;
-        background: rgba(255,255,255,0.18);
-        color: white;
+    .gsr-clear-btn {
+        margin-left: auto;
+        flex-shrink: 0;
+        background: none;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        color: #64748b;
+        padding: 5px 12px;
         font-family: 'DM Sans', sans-serif;
-        font-size: 14px;
-        outline: none;
-        box-sizing: border-box;
-    }
-    .gsr-overlay-input::placeholder { color: rgba(255,255,255,0.55); }
-    .gsr-overlay-input:focus { background: rgba(255,255,255,0.25); }
-    .gsr-overlay-icon {
-        position: absolute; left: 12px; top: 50%;
-        transform: translateY(-50%);
-        color: rgba(255,255,255,0.65); font-size: 20px; pointer-events: none;
-    }
-    .gsr-close-btn {
-        background: rgba(255,255,255,0.12);
-        border: 1px solid rgba(255,255,255,0.2);
-        border-radius: 10px;
-        color: white;
-        padding: 10px 16px;
-        font-family: 'DM Sans', sans-serif;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 700;
         cursor: pointer;
-        display: flex; align-items: center; gap: 6px;
-        transition: background 0.2s;
-        white-space: nowrap;
-        flex-shrink: 0;
+        display: flex; align-items: center; gap: 4px;
+        transition: all 0.15s;
     }
-    .gsr-close-btn:hover { background: rgba(255,255,255,0.22); }
-    .gsr-close-btn .material-icons { font-size: 16px; }
+    .gsr-clear-btn:hover { background: #fee2e2; color: #dc2626; border-color: #fca5a5; }
+    .gsr-clear-btn .material-icons { font-size: 14px; }
     .gsr-summary-bar {
         background: white;
         border-bottom: 1px solid #e2e8f0;
@@ -481,6 +438,17 @@
             </div>
         </div>
 
+        <!-- Search results panel — inline between header and cards -->
+        <div id="gsr-panel" style="display:none;">
+            <div class="gsr-summary-bar" id="gsr-summary-bar">
+                <span id="gsr-summary-text"></span>
+                <button class="gsr-clear-btn" onclick="closeGlobalSearch()">
+                    <span class="material-icons">close</span> Clear search
+                </button>
+            </div>
+            <div class="gsr-results-body" id="gsr-results-body"></div>
+        </div>
+
         <div class="main-container">
             <div class="card-grid">
                 <!-- Row 1: Admin Dashboard, Partners, Merchants -->
@@ -608,32 +576,6 @@
         </div>
     </div>
 
-    <!-- Global Search Results Overlay -->
-    <div id="gsr-overlay">
-        <div class="gsr-overlay-header">
-            <div class="gsr-overlay-search-wrap">
-                <div class="gsr-overlay-input-wrap">
-                    <span class="material-icons gsr-overlay-icon">search</span>
-                    <input type="text" id="gsr-overlay-input" class="gsr-overlay-input"
-                           placeholder="Search merchants, partners, tickets…"
-                           autocomplete="off">
-                </div>
-                <button class="global-search-btn" onclick="runGlobalSearchFrom('overlay')">
-                    <span class="material-icons">search</span> Search
-                </button>
-            </div>
-            <button class="gsr-close-btn" onclick="closeGlobalSearch()">
-                <span class="material-icons">arrow_back</span> Back to Home
-            </button>
-        </div>
-        <div class="gsr-summary-bar" id="gsr-summary-bar" style="display:none;"></div>
-        <div class="gsr-results-body" id="gsr-results-body">
-            <div class="gsr-loading-overlay">
-                <span class="material-icons">sync</span>
-                Searching…
-            </div>
-        </div>
-    </div>
 
     <script src="js/script.js"></script>
 <div id="jarvis-sidebar" class="oracle-sidebar" style="display: none;">
@@ -807,66 +749,55 @@
 <script>
 // ── GLOBAL SEARCH ────────────────────────────────────────────────────────────
 (function() {
-    const mainInput    = document.getElementById('global-search-input');
-    const overlayInput = document.getElementById('gsr-overlay-input');
-    const overlay      = document.getElementById('gsr-overlay');
-    const summaryBar   = document.getElementById('gsr-summary-bar');
-    const resultsBody  = document.getElementById('gsr-results-body');
+    const mainInput   = document.getElementById('global-search-input');
+    const panel       = document.getElementById('gsr-panel');
+    const summaryBar  = document.getElementById('gsr-summary-bar');
+    const summaryTxt  = document.getElementById('gsr-summary-text');
+    const resultsBody = document.getElementById('gsr-results-body');
 
     // Enter key on main input triggers search
     mainInput.addEventListener('keydown', e => {
         if (e.key === 'Enter') { e.preventDefault(); runGlobalSearch(); }
-    });
-    overlayInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); runGlobalSearchFrom('overlay'); }
+        if (e.key === 'Escape') closeGlobalSearch();
     });
 
     // ⌘K / Ctrl+K focuses the main input
     document.addEventListener('keydown', e => {
         if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
             e.preventDefault();
-            if (overlay.classList.contains('active')) {
-                overlayInput.focus(); overlayInput.select();
-            } else {
-                mainInput.focus(); mainInput.select();
-            }
+            mainInput.focus(); mainInput.select();
         }
-        if (e.key === 'Escape' && overlay.classList.contains('active')) closeGlobalSearch();
+    });
+
+    // Delegated click handler — rows use data-href instead of onclick
+    resultsBody.addEventListener('click', function(e) {
+        const row = e.target.closest('tr[data-href]');
+        if (!row) return;
+        const url = row.dataset.href;
+        if (!url) return;
+        if (typeof portalNavigate === 'function') portalNavigate(url);
+        else window.location.href = url;
     });
 
     window.runGlobalSearch = function() {
         const q = mainInput.value.trim();
         if (q.length < 2) { mainInput.focus(); return; }
-        openOverlay(q);
-        doSearch(q);
-    };
-
-    window.runGlobalSearchFrom = function(source) {
-        const q = (source === 'overlay' ? overlayInput : mainInput).value.trim();
-        if (q.length < 2) return;
-        if (source === 'overlay') mainInput.value = q;
-        else overlayInput.value = q;
-        doSearch(q);
-    };
-
-    window.closeGlobalSearch = function() {
-        overlay.classList.remove('active');
-        summaryBar.style.display = 'none';
-        mainInput.value = '';
-        overlayInput.value = '';
-    };
-
-    function openOverlay(q) {
-        overlayInput.value = q;
-        overlay.classList.add('active');
-        overlay.scrollTop = 0;
+        panel.style.display = 'block';
         summaryBar.style.display = 'none';
         resultsBody.innerHTML = `
             <div class="gsr-loading-overlay">
                 <span class="material-icons">sync</span>
                 Searching for "<strong>${esc(q)}</strong>"…
             </div>`;
-    }
+        panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        doSearch(q);
+    };
+
+    window.closeGlobalSearch = function() {
+        panel.style.display = 'none';
+        mainInput.value = '';
+        resultsBody.innerHTML = '';
+    };
 
     function esc(s) {
         if (!s) return '';
@@ -894,10 +825,7 @@
         return new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
     }
 
-    function navigateTo(url) {
-        if (typeof portalNavigate === 'function') portalNavigate(url);
-        else window.location.href = url;
-    }
+
 
     function makeSection(title, icon, color, count, viewAllUrl, tableHtml) {
         return `
@@ -956,9 +884,8 @@
                       tickets.length + equipment.length + deployments.length +
                       returns.length + tasks.length;
 
-        // Summary bar
         summaryBar.style.display = 'flex';
-        summaryBar.innerHTML = total === 0
+        summaryTxt.innerHTML = total === 0
             ? `No results for <strong>"${esc(q)}"</strong>`
             : `<strong>${total}</strong>&nbsp;result${total !== 1 ? 's' : ''} for&nbsp;<strong>"${esc(q)}"</strong>`;
 
@@ -978,7 +905,7 @@
             const rows = merchants.map(m => {
                 const url = `merchants-dashboard.html?q=${encodeURIComponent(m.dba_name)}&filterBy=dba_name`;
                 const location = [m.merchant_city, m.merchant_state].filter(Boolean).join(', ');
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell">${esc(m.dba_name)}</td>
                     <td><span class="gsr-mono">${esc(m.merchant_id || '—')}</span></td>
                     <td>${esc(m.partner_full_name || m.agent_name || '—')}</td>
@@ -998,7 +925,7 @@
         if (partners.length) {
             const rows = partners.map(p => {
                 const url = `partners-dashboard.html?q=${encodeURIComponent(p.full_name)}`;
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell">${esc(p.full_name)}</td>
                     <td>${esc(p.email || '—')}</td>
                     <td>${esc(p.phone_number || '—')}</td>
@@ -1017,7 +944,7 @@
         if (agent_ids.length) {
             const rows = agent_ids.map(a => {
                 const url = `partners-dashboard.html?q=${encodeURIComponent(a.id_string)}`;
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell gsr-mono">${esc(a.id_string)}</td>
                     <td>${esc(a.partner_name || '—')}</td>
                     <td>${esc(a.partner_email || '—')}</td>
@@ -1035,7 +962,7 @@
         if (deployments.length) {
             const rows = deployments.map(d => {
                 const url = `deployments-dashboard.html?q=${encodeURIComponent(d.deployment_id || d.tracking_id || '')}`;
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell gsr-mono">${esc(d.deployment_id || '—')}</td>
                     <td>${esc(d.merchant_name || '—')}</td>
                     <td><span class="gsr-mono">${esc(d.tracking_id || '—')}</span></td>
@@ -1056,7 +983,7 @@
         if (returns.length) {
             const rows = returns.map(r => {
                 const url = `returns-dashboard.html?q=${encodeURIComponent(r.return_id)}`;
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell gsr-mono">${esc(r.return_id)}</td>
                     <td>${esc(r.merchant_name || '—')}</td>
                     <td>${esc(r.return_reason || '—')}</td>
@@ -1078,7 +1005,7 @@
             const rows = tickets.map(t => {
                 const url = `tickets-dashboard.html?q=${encodeURIComponent(t.ticket_number)}`;
                 const pc = prioColor[t.priority] || '#94a3b8';
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell">${esc(t.subject)}</td>
                     <td><span class="gsr-mono">${esc(t.ticket_number)}</span></td>
                     <td>${t.priority ? `<span class="gsr-status-badge" style="background:${pc}20;color:${pc};">${esc(t.priority)}</span>` : '—'}</td>
@@ -1098,7 +1025,7 @@
         if (tasks.length) {
             const rows = tasks.map(t => {
                 const url = `tasks-dashboard.html?q=${encodeURIComponent(t.title)}`;
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell">${esc(t.title)}</td>
                     <td>${esc(t.merchant_name || '—')}</td>
                     <td>${esc(t.assigned_to || '—')}</td>
@@ -1118,7 +1045,7 @@
         if (equipment.length) {
             const rows = equipment.map(eq => {
                 const url = `equipments-dashboard.html?q=${encodeURIComponent(eq.serial_number)}`;
-                return `<tr onclick="navigateTo('${url}')">
+                return `<tr data-href="${esc(url)}" style="cursor:pointer;">
                     <td class="gsr-name-cell gsr-mono">${esc(eq.serial_number)}</td>
                     <td>${esc(eq.terminal_type || '—')}</td>
                     <td>${esc(eq.current_location || '—')}</td>
