@@ -250,7 +250,7 @@ body {
 
 /* Login card materialises through the portal */
 .login-card {
-    animation: card-emerge .75s cubic-bezier(.34,1.56,.64,1) .5s both;
+    animation: card-emerge .75s cubic-bezier(.34,1.56,.64,1) .5s backwards;
     will-change: transform, opacity, filter;
 }
 @keyframes card-emerge {
