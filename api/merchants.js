@@ -1412,6 +1412,123 @@ if (action === 'get_notes') {
             return res.status(200).json({ success: true, data: rows });
         }
 
+        // ── MERCHANT MERGE ────────────────────────────────────────────────────────
+        if (action === 'search_for_merge') {
+            const { q } = req.body;
+            if (!q || q.trim().length < 2) return res.status(400).json({ success: false, message: 'Query too short.' });
+            const safe = q.trim();
+            const { data, error: searchErr } = await supabase
+                .from('merchants')
+                .select('id, merchant_id, dba_name, account_status, agent_name')
+                .or(`dba_name.ilike.%${safe}%,merchant_id.ilike.%${safe}%`)
+                .order('dba_name')
+                .limit(10);
+            if (searchErr) throw searchErr;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        if (action === 'get_merge_preview') {
+            const { source_id, target_id } = req.body;
+            if (!source_id || !target_id) return res.status(400).json({ success: false, message: 'source_id and target_id required.' });
+            if (source_id === target_id) return res.status(400).json({ success: false, message: 'Source and target must be different merchants.' });
+
+            const { data: mergeActor } = await supabase.from('app_users').select('role').eq('userid', session.userid).single();
+            if (mergeActor?.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super Admin only.' });
+
+            const [srcRes, tgtRes] = await Promise.all([
+                supabase.from('merchants').select('id, merchant_id, dba_name, account_status, agent_name').eq('id', source_id).single(),
+                supabase.from('merchants').select('id, merchant_id, dba_name, account_status, agent_name').eq('id', target_id).single()
+            ]);
+            if (!srcRes.data) return res.status(404).json({ success: false, message: 'Source merchant not found.' });
+            if (!tgtRes.data) return res.status(404).json({ success: false, message: 'Target merchant not found.' });
+
+            const [notes, tasks, attachments, deps, rets, eqLogs, rmaReqs, tickets] = await Promise.all([
+                supabase.from('merchant_notes').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('merchant_tasks').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('merchant_attachments').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('deployments').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('returns').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('equipment_logs').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('partner_rma_requests').select('id', { count: 'exact', head: true }).eq('merchant_id', source_id),
+                supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('merchant_id', srcRes.data.merchant_id),
+            ]);
+
+            return res.status(200).json({
+                success: true,
+                source: srcRes.data,
+                target: tgtRes.data,
+                preview: {
+                    notes: notes.count || 0,
+                    tasks: tasks.count || 0,
+                    attachments: attachments.count || 0,
+                    deployments: deps.count || 0,
+                    returns: rets.count || 0,
+                    equipment_logs: eqLogs.count || 0,
+                    rma_requests: rmaReqs.count || 0,
+                    support_tickets: tickets.count || 0,
+                }
+            });
+        }
+
+        if (action === 'merge_merchants') {
+            const { source_id, target_id } = req.body;
+            if (!source_id || !target_id) return res.status(400).json({ success: false, message: 'source_id and target_id required.' });
+            if (source_id === target_id) return res.status(400).json({ success: false, message: 'Cannot merge a merchant with itself.' });
+
+            const { data: mergeActor2 } = await supabase.from('app_users').select('role, email, first_name, last_name').eq('userid', session.userid).single();
+            if (mergeActor2?.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super Admin only.' });
+
+            const [srcRes2, tgtRes2] = await Promise.all([
+                supabase.from('merchants').select('id, merchant_id, dba_name, account_status, agent_name').eq('id', source_id).single(),
+                supabase.from('merchants').select('id, merchant_id, dba_name, account_status, agent_name').eq('id', target_id).single()
+            ]);
+            if (!srcRes2.data) return res.status(404).json({ success: false, message: 'Source merchant not found.' });
+            if (!tgtRes2.data) return res.status(404).json({ success: false, message: 'Target merchant not found.' });
+
+            const src2 = srcRes2.data, tgt2 = tgtRes2.data;
+            const transferred = {};
+
+            // Re-point all UUID FK tables
+            const uuidTables = ['merchant_notes', 'merchant_tasks', 'merchant_attachments', 'deployments', 'returns', 'equipment_logs', 'partner_rma_requests', 'equipments', 'legacy_deployments'];
+            for (const tbl of uuidTables) {
+                const { count } = await supabase.from(tbl).select('id', { count: 'exact', head: true }).eq('merchant_id', source_id);
+                if (count > 0) await supabase.from(tbl).update({ merchant_id: target_id }).eq('merchant_id', source_id);
+                transferred[tbl] = count || 0;
+            }
+
+            // Re-point support_tickets (FK → merchants.merchant_id string MID)
+            const { count: ticketCount } = await supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('merchant_id', src2.merchant_id);
+            if (ticketCount > 0) await supabase.from('support_tickets').update({ merchant_id: tgt2.merchant_id }).eq('merchant_id', src2.merchant_id);
+            transferred.support_tickets = ticketCount || 0;
+
+            // Add merge system note to target
+            const actorName2 = `${mergeActor2.first_name || ''} ${mergeActor2.last_name || ''}`.trim() || mergeActor2.email;
+            await supabase.from('merchant_notes').insert({
+                merchant_id: target_id,
+                title: 'Merchant Merge — System Record',
+                body: `Merged from duplicate record.\n\nSource: ${src2.dba_name} (MID: ${src2.merchant_id})\nMerged by: ${actorName2}\nDate: ${new Date().toISOString().split('T')[0]}\n\nAll notes, tasks, attachments, deployments, returns, equipment logs, and tickets from the duplicate have been transferred to this record.`,
+                created_by: session.userid
+            });
+
+            // Delete source merchant
+            await supabase.from('merchants').delete().eq('id', source_id);
+
+            // Activity log
+            await supabase.from('activity_logs').insert([{
+                email: mergeActor2.email,
+                action: `Merchant Merge: "${src2.dba_name}" (${src2.merchant_id}) → "${tgt2.dba_name}" (${tgt2.merchant_id})`,
+                status: 'success', category: 'merchants', severity: 'warning',
+                target_id: target_id, target_type: 'merchant',
+                new_value: {
+                    source: { id: source_id, merchant_id: src2.merchant_id, dba_name: src2.dba_name },
+                    target: { id: target_id, merchant_id: tgt2.merchant_id, dba_name: tgt2.dba_name },
+                    records_transferred: transferred, merged_by: actorName2
+                }
+            }]);
+
+            return res.status(200).json({ success: true, records_transferred: transferred, target: tgt2 });
+        }
+
         return res.status(400).json({ success: false, message: "Unknown action" });
     } catch (err) {
         console.error('[API Error]', err.message);
