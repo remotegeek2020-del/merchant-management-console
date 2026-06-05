@@ -215,9 +215,8 @@ export default async function handler(req, res) {
 
                 return res.status(200).json({ success: true });
             }
-        }
 
-        if (action === 'set_temp_password') {
+            if (action === 'set_temp_password') {
             const { target_userid, temp_password } = req.body;
             if (!target_userid || !temp_password) return res.status(400).json({ success: false, message: 'Missing fields.' });
             if (temp_password.length < 6) return res.status(400).json({ success: false, message: 'Temp password must be at least 6 characters.' });
@@ -255,6 +254,7 @@ export default async function handler(req, res) {
             }]);
 
             return res.status(200).json({ success: true, message: `Temp password set. ${targetName} will be prompted to change it on next login.` });
+            }
         }
 
     } catch (err) {
