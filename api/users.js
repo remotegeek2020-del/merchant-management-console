@@ -216,6 +216,47 @@ export default async function handler(req, res) {
                 return res.status(200).json({ success: true });
             }
         }
+
+        if (action === 'set_temp_password') {
+            const { target_userid, temp_password } = req.body;
+            if (!target_userid || !temp_password) return res.status(400).json({ success: false, message: 'Missing fields.' });
+            if (temp_password.length < 6) return res.status(400).json({ success: false, message: 'Temp password must be at least 6 characters.' });
+
+            // Only admins can set temp passwords
+            const { data: actor } = await supabase.from('app_users').select('role, email, first_name, last_name').eq('userid', session.userid).single();
+            const actorRole = (actor?.role || '').toLowerCase();
+            if (!['super_admin', 'admin', 'operations admin'].includes(actorRole)) {
+                return res.status(403).json({ success: false, message: 'Access denied.' });
+            }
+
+            const { data: target } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', target_userid).single();
+            if (!target) return res.status(404).json({ success: false, message: 'User not found.' });
+
+            const hashed = bcrypt.hashSync(temp_password, 12);
+            const { error } = await supabase.from('app_users').update({
+                password_hash: hashed,
+                passkey: hashed,
+                needs_password_change: true
+            }).eq('userid', target_userid);
+
+            if (error) return res.status(500).json({ success: false, message: error.message });
+
+            // Invalidate all active sessions for that user
+            await supabase.from('staff_sessions').delete().eq('userid', target_userid);
+
+            const actorName = `${actor.first_name || ''} ${actor.last_name || ''}`.trim() || actor.email;
+            const targetName = `${target.first_name || ''} ${target.last_name || ''}`.trim() || target.email;
+            await supabase.from('activity_logs').insert([{
+                email: actor.email,
+                action: `Temp password set for ${targetName} (${target.email}) by ${actorName}`,
+                status: 'success', category: 'auth', severity: 'warning',
+                target_id: target_userid, target_type: 'app_user',
+                new_value: { target_email: target.email, target_name: targetName, needs_password_change: true }
+            }]);
+
+            return res.status(200).json({ success: true, message: `Temp password set. ${targetName} will be prompted to change it on next login.` });
+        }
+
     } catch (err) {
         return res.status(500).json({ success: false, message: err.message });
     }

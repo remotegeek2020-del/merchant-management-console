@@ -264,7 +264,10 @@ function renderUsers(data) {
                 <div style="display:flex;align-items:center;gap:10px;">
                     <div class="user-avatar" style="background:${bg};color:white;">${initials||'?'}</div>
                     <div>
-                        <div style="font-weight:700;font-size:13px;">${fullName || '—'}</div>
+                        <div style="font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px;">
+                            ${fullName || '—'}
+                            ${user.needs_password_change ? `<span style="font-size:9px;font-weight:800;background:#fef9c3;color:#92400e;border:1px solid #fbbf24;border-radius:4px;padding:1px 5px;letter-spacing:0.3px;">🔑 TEMP PW</span>` : ''}
+                        </div>
                         <div style="font-size:10px;color:${lastSeenColor};margin-top:1px;">${lastSeen}</div>
                     </div>
                 </div>
@@ -290,6 +293,10 @@ function renderUsers(data) {
                     <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#e0f2fe;border-color:#7dd3fc;color:#0369a1;" title="Manage permissions"
                         onclick="editPermissions('${user.userid}','${fullName.replace(/'/g,"\\'")}')">
                         <span class="material-icons" style="font-size:13px;">tune</span>
+                    </button>
+                    <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#fef9c3;border-color:#fbbf24;color:#92400e;" title="Set temporary password"
+                        onclick="setTempPassword('${user.userid}','${fullName.replace(/'/g,"\\'")}')">
+                        <span class="material-icons" style="font-size:13px;">key</span>
                     </button>
                     ${!isActive ? `
                     <button class="pp-btn pp-btn-secondary" style="padding:5px 10px;font-size:11px;background:#fef9c3;border-color:#fbbf24;color:#92400e;" title="Resend invite"
@@ -514,6 +521,49 @@ async function deleteUser(uid, name) {
         await logAction(`Deleted user: ${name}`, 'users');
         await loadUsers();
         Swal.fire({ icon: 'success', title: 'Deleted', timer: 1200, showConfirmButton: false });
+    } else {
+        Swal.fire('Error', result.message, 'error');
+    }
+}
+
+// ── SET TEMP PASSWORD ─────────────────────────────────────
+async function setTempPassword(uid, name) {
+    const { value, isConfirmed } = await Swal.fire({
+        title: `Set Temp Password`,
+        html: `
+            <p style="color:#64748b;margin-bottom:16px;">Set a temporary password for <b>${name}</b>.<br>They will be required to change it on next login.</p>
+            <div style="text-align:left;margin-bottom:10px;">
+                <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">TEMP PASSWORD *</label>
+                <div style="position:relative;">
+                    <input id="tmp-pw" type="password" class="swal2-input" style="margin:0;width:100%;padding-right:42px;" placeholder="Min 6 characters" autocomplete="new-password">
+                    <button type="button" onclick="const i=document.getElementById('tmp-pw');i.type=i.type==='password'?'text':'password';"
+                        style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;">
+                        <span class="material-icons" style="font-size:18px;">visibility</span>
+                    </button>
+                </div>
+            </div>
+            <div style="background:#fef9c3;border:1px solid #fbbf24;border-radius:8px;padding:10px 14px;font-size:12px;color:#92400e;text-align:left;">
+                <span class="material-icons" style="font-size:14px;vertical-align:middle;margin-right:4px;">info</span>
+                The user's current sessions will be invalidated and they must log in with this temp password first.
+            </div>`,
+        confirmButtonText: 'Set Temp Password',
+        confirmButtonColor: '#d97706',
+        showCancelButton: true,
+        focusConfirm: false,
+        preConfirm: () => {
+            const pw = document.getElementById('tmp-pw').value.trim();
+            if (!pw || pw.length < 6) { Swal.showValidationMessage('Minimum 6 characters required'); return false; }
+            return pw;
+        }
+    });
+    if (!isConfirmed || !value) return;
+
+    Swal.fire({ title: 'Setting temp password…', didOpen: () => Swal.showLoading(), allowOutsideClick: false });
+    const result = await apiPost({ action: 'set_temp_password', target_userid: uid, temp_password: value });
+    if (result.success) {
+        await logAction(`Set temp password for ${name}`, 'users');
+        await loadUsers();
+        Swal.fire({ icon: 'success', title: 'Temp Password Set', text: result.message, confirmButtonColor: '#004990' });
     } else {
         Swal.fire('Error', result.message, 'error');
     }

@@ -114,6 +114,67 @@ function showLoginUI() {
     if (loginUI) loginUI.style.display = 'block';
 }
 
+// ── FORCED PASSWORD CHANGE (temp password flow) ───────────
+function showForcedPasswordChange(userid, changeToken) {
+    Swal.fire({
+        title: '🔑 Set Your New Password',
+        html: `
+            <p style="color:#64748b;margin-bottom:18px;">Your account has a temporary password. You must set a new password before continuing.</p>
+            <div style="text-align:left;margin-bottom:12px;">
+                <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">NEW PASSWORD *</label>
+                <div style="position:relative;">
+                    <input id="fcp-new" type="password" placeholder="Min 8 characters" autocomplete="new-password"
+                        style="width:100%;padding:10px 42px 10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;">
+                    <button type="button" onclick="const i=document.getElementById('fcp-new');i.type=i.type==='password'?'text':'password';"
+                        style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;">
+                        <span class="material-icons" style="font-size:18px;">visibility</span>
+                    </button>
+                </div>
+            </div>
+            <div style="text-align:left;margin-bottom:16px;">
+                <label style="font-size:11px;font-weight:700;color:#64748b;display:block;margin-bottom:5px;">CONFIRM PASSWORD *</label>
+                <div style="position:relative;">
+                    <input id="fcp-confirm" type="password" placeholder="Re-enter new password" autocomplete="new-password"
+                        style="width:100%;padding:10px 42px 10px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:inherit;outline:none;box-sizing:border-box;">
+                    <button type="button" onclick="const i=document.getElementById('fcp-confirm');i.type=i.type==='password'?'text':'password';"
+                        style="position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;">
+                        <span class="material-icons" style="font-size:18px;">visibility</span>
+                    </button>
+                </div>
+            </div>
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;font-size:11px;color:#166534;text-align:left;">
+                <b>Requirements:</b> At least 8 characters. Must be different from your temporary password.
+            </div>`,
+        confirmButtonText: 'Set New Password & Continue',
+        confirmButtonColor: '#004990',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+        showCloseButton: false,
+        showCancelButton: false,
+        focusConfirm: false,
+        preConfirm: async () => {
+            const pw      = document.getElementById('fcp-new').value;
+            const confirm = document.getElementById('fcp-confirm').value;
+            if (!pw || pw.length < 8) { Swal.showValidationMessage('Password must be at least 8 characters.'); return false; }
+            if (pw !== confirm) { Swal.showValidationMessage('Passwords do not match.'); return false; }
+
+            Swal.showLoading();
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ action: 'force_change_password', userid, change_token: changeToken, new_password: pw })
+            });
+            const data = await res.json();
+            if (!data.success) { Swal.showValidationMessage(data.message || 'Failed. Please try logging in again.'); return false; }
+            return data;
+        }
+    }).then(result => {
+        if (result.isConfirmed && result.value?.user) {
+            authorizeUser(result.value.user, result.value.session_token);
+        }
+    });
+}
+
 function playWormholeTransition(loginUI, curtain) {
     // Close any Swal loading dialog
     if (typeof Swal !== 'undefined') Swal.close();
@@ -389,6 +450,11 @@ async function handleManualLogin() {
         const result = await response.json();
 
         if (result.success) {
+            if (result.needs_password_change) {
+                Swal.close();
+                showForcedPasswordChange(result.userid, result.change_token);
+                return;
+            }
             if (result.needs2FA) {
                 Swal.close();
                 

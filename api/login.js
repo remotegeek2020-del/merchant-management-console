@@ -45,6 +45,40 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true });
         }
 
+        // --- FORCE CHANGE PASSWORD (temp password flow — no session required) ---
+        if (action === 'force_change_password') {
+            const { userid, change_token, new_password } = req.body;
+            if (!userid || !change_token || !new_password) return res.status(400).json({ success: false, message: 'Missing required fields.' });
+            if (new_password.length < 8) return res.status(400).json({ success: false, message: 'Password must be at least 8 characters.' });
+
+            // Verify change token matches and flag is still set
+            const { data: targetUser } = await supabase.from('app_users')
+                .select('*').eq('userid', userid).eq('needs_password_change', true).eq('invitation_token', change_token).single();
+            if (!targetUser) return res.status(401).json({ success: false, message: 'Invalid or expired token. Please log in again.' });
+
+            const hashed = bcrypt.hashSync(new_password, 12);
+            await supabase.from('app_users').update({
+                password_hash: hashed,
+                passkey: hashed,
+                needs_password_change: false,
+                invitation_token: null,
+                is_active: true,
+                last_seen: new Date().toISOString()
+            }).eq('userid', userid);
+
+            // Create real session now
+            const sessionToken = await createStaffSession(supabase, userid, req);
+            const { data: freshUser } = await supabase.from('app_users').select('*').eq('userid', userid).single();
+
+            await supabase.from('activity_logs').insert([{
+                email: targetUser.email, action: 'Forced password change completed — new session created',
+                status: 'SUCCESS', category: 'auth', severity: 'info',
+                user_agent: req.headers['user-agent'], ip_address: req.headers['x-forwarded-for'] || 'Internal'
+            }]);
+
+            return res.status(200).json({ success: true, user: freshUser, session_token: sessionToken });
+        }
+
         // --- LOGOUT (invalidate session token) ---
         else if (action === 'logout') {
             const authHeader = req.headers['authorization'];
@@ -71,6 +105,11 @@ export default async function handler(req, res) {
             // Refresh last_used (fire-and-forget)
             supabase.from('staff_sessions').update({ last_used: new Date().toISOString() }).eq('session_token', token);
             const { data, error: valError } = await supabase.from('app_users').select('*').eq('userid', session.userid).single();
+            // If admin set a temp password while user was already logged in, force them back to login
+            if (data?.needs_password_change) {
+                await supabase.from('staff_sessions').delete().eq('session_token', token);
+                return res.status(401).json({ success: false, reason: 'password_change_required', message: 'Your password has been reset. Please log in again.' });
+            }
             user = data;
             error = valError;
         }
@@ -130,6 +169,18 @@ export default async function handler(req, res) {
             } else {
                 if (!dbUser.is_active) return res.status(401).json({ success: false, message: 'Account not activated.' });
                 if (bcrypt.compareSync(passkey, dbUser.password_hash)) {
+
+                    // ── Force password change if admin set a temp password ──
+                    if (dbUser.needs_password_change) {
+                        const changeToken = crypto.randomUUID();
+                        await supabase.from('app_users').update({ invitation_token: changeToken }).eq('userid', dbUser.userid);
+                        await supabase.from('activity_logs').insert([{
+                            email: dbUser.email, action: 'Login with temp password — password change required',
+                            status: 'SUCCESS', category: 'auth', severity: 'warning',
+                            user_agent: req.headers['user-agent'], ip_address: req.headers['x-forwarded-for'] || 'Internal'
+                        }]);
+                        return res.status(200).json({ success: true, needs_password_change: true, change_token: changeToken, userid: dbUser.userid });
+                    }
 
                     const sentToken = (deviceToken && deviceToken !== "null") ? deviceToken : null;
                     let trusted = null;
