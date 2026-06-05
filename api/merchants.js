@@ -1413,6 +1413,18 @@ if (action === 'get_notes') {
         }
 
         // ── MERCHANT MERGE ────────────────────────────────────────────────────────
+        if (action === 'scan_scientific_mids') {
+            const { data: scanActor } = await supabase.from('app_users').select('role').eq('userid', session.userid).single();
+            if (scanActor?.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super Admin only.' });
+            const { data: sciData, error: sciErr } = await supabase
+                .from('merchants')
+                .select('id, merchant_id, dba_name, account_status, agent_name, created_at')
+                .or('merchant_id.ilike.%E+%,merchant_id.ilike.%e+%')
+                .order('created_at', { ascending: false });
+            if (sciErr) throw sciErr;
+            return res.status(200).json({ success: true, data: sciData || [] });
+        }
+
         if (action === 'search_for_merge') {
             const { q } = req.body;
             if (!q || q.trim().length < 2) return res.status(400).json({ success: false, message: 'Query too short.' });
