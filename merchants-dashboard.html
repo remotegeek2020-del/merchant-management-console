@@ -3372,6 +3372,10 @@ async function loadPrime49Residuals() {
         _prime49Data = json.data || [];
         _populateP49PartnerFilter();
         renderPrime49Table();
+        logAuditAction('Prime49 Residuals Report Viewed', 'success', {
+            category: 'merchants', target_type: 'report', severity: 'info',
+            new_value: { merchant_count: _prime49Data.length, run_date: document.getElementById('p49-run-date').value }
+        });
     } catch (e) {
         console.error('Prime49 load error:', e);
         document.getElementById('p49-loading').style.display = 'none';
@@ -3531,6 +3535,11 @@ function exportPrime49Excel() {
     const runDate       = document.getElementById('p49-run-date').value || '';
     const filterPartner = document.getElementById('p49-partner-filter').value;
     const data = filterPartner ? _prime49Data.filter(r => r.agent_name === filterPartner) : _prime49Data;
+
+    logAuditAction('Prime49 Residuals Exported to Excel', 'success', {
+        category: 'merchants', target_type: 'export', severity: 'warning',
+        new_value: { format: 'xlsx', merchant_count: data.length, partner_filter: filterPartner || 'all_partners', run_date: runDate }
+    });
 
     const wb = XLSX.utils.book_new();
 

@@ -1394,6 +1394,21 @@ if (action === 'get_notes') {
                 };
             });
 
+            // Fire-and-forget audit log — don't delay the response
+            supabase.from('app_users').select('email').eq('userid', session.userid).single().then(({ data: actor }) => {
+                supabase.from('activity_logs').insert([{
+                    email: actor?.email || session.userid,
+                    action: 'Prime49 Residuals Report Loaded',
+                    status: 'success',
+                    category: 'merchants',
+                    target_type: 'report',
+                    severity: 'info',
+                    new_value: { merchant_count: rows.length, partner_count: [...new Set(rows.map(r => r.agent_name))].length, generated_at: new Date().toISOString() },
+                    user_agent: req.headers['user-agent'],
+                    ip_address: req.headers['x-forwarded-for'] || 'Internal'
+                }]);
+            });
+
             return res.status(200).json({ success: true, data: rows });
         }
 

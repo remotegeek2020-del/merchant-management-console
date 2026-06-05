@@ -214,6 +214,30 @@ if (action === 'complete_onboarding') {
 
     const { error: finalErr } = await supabase.from('agent_identifiers').upsert(idInserts, { onConflict: 'id_string' });
 
+    // Audit log — record partner creation with all ID details
+    const actor = await resolveActor();
+    const prime49Ids = idInserts.filter(i => i.prime49).map(i => i.id_string);
+    await supabase.from('activity_logs').insert([{
+        email: actor.email,
+        action: `Partner Onboarded: ${person?.name || personName || 'Unknown'}`,
+        status: finalErr ? 'failure' : 'success',
+        category: 'partners',
+        target_id: finalAgentId,
+        target_type: 'agent',
+        severity: 'info',
+        new_value: {
+            partner_name: person?.name || personName,
+            company: company?.name || (company?.isIndependent ? 'Independent' : null),
+            identifiers: idInserts.map(i => ({ id_string: i.id_string, rev_share: i.rev_share, prime49: i.prime49 })),
+            prime49_count: prime49Ids.length,
+            prime49_ids: prime49Ids,
+            is_quick_add: !!isQuickAdd,
+            error: finalErr?.message || null
+        },
+        user_agent: req.headers['user-agent'],
+        ip_address: req.headers['x-forwarded-for'] || 'Internal'
+    }]);
+
     return res.status(200).json({ success: !finalErr, message: finalErr?.message });
 }
         // --- ACTION: GET ALL AGENTS FOR DIRECT TRANSFER (includes limbo agents) ---
@@ -1173,14 +1197,40 @@ if (action === 'get_merchant_data') {
         }
         if (action === 'update_identifier_all') {
     const { id, rev_share, prime49, new_parent_id } = body;
+
+    // Fetch old values for audit trail before updating
+    const { data: oldData } = await supabase
+        .from('agent_identifiers')
+        .select('id_string, rev_share, prime49, parent_config_id')
+        .eq('id', id)
+        .single();
+
     const { error } = await supabase
         .from('agent_identifiers')
-        .update({
-            rev_share,
-            prime49,
-            parent_config_id: new_parent_id
-        })
+        .update({ rev_share, prime49, parent_config_id: new_parent_id })
         .eq('id', id);
+
+    // Build human-readable change summary
+    const changes = [];
+    if (String(oldData?.rev_share) !== String(rev_share)) changes.push(`rev_share: ${oldData?.rev_share} → ${rev_share}`);
+    if (oldData?.prime49 !== prime49) changes.push(`prime49: ${oldData?.prime49} → ${prime49}`);
+    if (oldData?.parent_config_id !== new_parent_id) changes.push(`parent: ${oldData?.parent_config_id || 'none'} → ${new_parent_id || 'none'}`);
+
+    const actor = await resolveActor();
+    await supabase.from('activity_logs').insert([{
+        email: actor.email,
+        action: `Agent ID Updated: ${oldData?.id_string || id}`,
+        status: error ? 'failure' : 'success',
+        category: 'partners',
+        target_id: id,
+        target_type: 'agent_identifier',
+        severity: (oldData?.prime49 !== prime49 || String(oldData?.rev_share) !== String(rev_share)) ? 'warning' : 'info',
+        old_value: { id_string: oldData?.id_string, rev_share: oldData?.rev_share, prime49: oldData?.prime49, parent_config_id: oldData?.parent_config_id },
+        new_value: { rev_share, prime49, parent_config_id: new_parent_id, changes: changes.join(' | ') || 'no changes', error: error?.message || null },
+        user_agent: req.headers['user-agent'],
+        ip_address: req.headers['x-forwarded-for'] || 'Internal'
+    }]);
+
     return res.status(200).json({ success: !error, message: error?.message });
 }
 
