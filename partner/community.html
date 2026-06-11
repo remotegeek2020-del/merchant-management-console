@@ -497,19 +497,26 @@ function renderPost(post) {
 async function submitPost() {
     const body = document.getElementById('postInput').value.trim();
     const channelId = document.getElementById('postChannel').value || null;
-    if (!body) return;
+    if (!body && !pendingImageUrl) return;
+    if (imageUploading) { Swal.fire('One moment', 'Your photo is still uploading…', 'info'); return; }
 
     const btn = document.getElementById('postBtn');
     btn.disabled = true; btn.innerHTML = '<span class="material-icons" style="animation:spin 0.8s linear infinite;font-size:14px;">sync</span>';
 
-    await api('community', { action:'create_post', token, body, channel_id: channelId, image_url: pendingImageUrl });
-    
+    const result = await api('community', { action:'create_post', token, body, channel_id: channelId, image_url: pendingImageUrl });
+
+    btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span> Post';
+
+    if (!result.success) {
+        Swal.fire('Error', result.message || 'Could not publish your post. Please try again.', 'error');
+        return;
+    }
+
     document.getElementById('postInput').value = '';
     updateCharCount();
     document.getElementById('feedSearch').value = '';
     filterFeed('');
     clearImage();
-    btn.disabled = false; btn.innerHTML = '<span class="material-icons" style="font-size:14px;">send</span> Post';
     feedPage = 0; loadFeed();
 }
 
@@ -603,6 +610,8 @@ async function deletePost(postId) {
 }
 
 // ── IMAGE UPLOAD ──────────────────────────────────────────
+let imageUploading = false;
+
 function triggerImageUpload() { document.getElementById('imageUpload').click(); }
 
 async function handleImageUpload(input) {
@@ -616,11 +625,23 @@ async function handleImageUpload(input) {
     };
     reader.readAsDataURL(file);
 
-    // Get signed upload URL
-    const urlRes = await api('community', { action:'get_avatar_upload_url', token, file_type: file.type });
-    if (urlRes.success) {
-        await fetch(urlRes.upload_url, { method:'PUT', body: file, headers:{ 'Content-Type': file.type } });
+    imageUploading = true;
+    const btn = document.getElementById('postBtn');
+    btn.disabled = true;
+
+    try {
+        // Post images use a unique path per upload — never the shared avatar slot
+        const urlRes = await api('community', { action:'get_post_image_upload_url', token, file_type: file.type });
+        if (!urlRes.success) throw new Error(urlRes.message || 'Could not get upload URL');
+        const upRes = await fetch(urlRes.upload_url, { method:'PUT', body: file, headers:{ 'Content-Type': file.type } });
+        if (!upRes.ok) throw new Error('Upload failed (' + upRes.status + ')');
         pendingImageUrl = urlRes.public_url;
+    } catch (err) {
+        clearImage();
+        Swal.fire('Photo Upload Failed', err.message + '. Please try again.', 'error');
+    } finally {
+        imageUploading = false;
+        btn.disabled = false;
     }
 }
 
@@ -704,7 +725,12 @@ async function sendDM() {
     const body = input.value.trim();
     if (!body || !dmOtherId) return;
     input.value = '';
-    await api('community', { action:'send_dm', token, recipient_id: dmOtherId, recipient_type: dmOtherType, body });
+    const result = await api('community', { action:'send_dm', token, recipient_id: dmOtherId, recipient_type: dmOtherType, body });
+    if (!result.success) {
+        input.value = body; // restore so the message isn't lost
+        Swal.fire('Error', result.message || 'Message failed to send. Please try again.', 'error');
+        return;
+    }
     loadDMThread();
 }
 

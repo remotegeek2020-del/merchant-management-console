@@ -107,7 +107,8 @@ export default async function handler(req, res) {
         // ── CREATE POST ───────────────────────────────────
         if (action === 'create_post') {
             const { body, channel_id, image_url } = req.body;
-            if (!body?.trim()) return res.status(400).json({ success: false, message: 'Post body required' });
+            // Facebook-style: a post can be text, photo, or both
+            if (!body?.trim() && !image_url) return res.status(400).json({ success: false, message: 'Post needs text or a photo' });
 
             // Check announcement channel permissions
             if (channel_id) {
@@ -123,7 +124,7 @@ export default async function handler(req, res) {
                 author_id: user.id,
                 author_type: user.type,
                 channel_id: channel_id || null,
-                body: body.trim(),
+                body: (body || '').trim(),
                 image_url: image_url || null
             }).select().single();
 
@@ -139,7 +140,7 @@ export default async function handler(req, res) {
                         recipient_type: p.user_type,
                         type: 'post',
                         title: `${user.name} posted something new`,
-                        body: body.trim().slice(0, 100),
+                        body: (body || '').trim().slice(0, 100) || '📷 Photo',
                         actor_id: user.id,
                         actor_name: user.name,
                         reference_id: post.id,
@@ -243,7 +244,8 @@ export default async function handler(req, res) {
             if (channel?.is_announcement && user.type !== 'staff') return res.status(403).json({ success: false, message: 'Only staff can post in Announcements.' });
             
             await getOrCreateProfile(user);
-            await supabase.from('channel_messages').insert({ channel_id, author_id: user.id, author_type: user.type, body: body.trim() });
+            const { error: chMsgErr } = await supabase.from('channel_messages').insert({ channel_id, author_id: user.id, author_type: user.type, body: body.trim() });
+            if (chMsgErr) throw chMsgErr;
             return res.status(200).json({ success: true });
         }
 
@@ -298,17 +300,21 @@ export default async function handler(req, res) {
         // ── SEND DM ───────────────────────────────────────
         if (action === 'send_dm') {
             const { recipient_id, recipient_type, body } = req.body;
-            if (!body?.trim() || !recipient_id) return res.status(400).json({ success: false });
+            if (!body?.trim() || !recipient_id) return res.status(400).json({ success: false, message: 'Message and recipient required.' });
+            if (body.trim().length > 2000) return res.status(400).json({ success: false, message: 'Message too long (max 2000 characters).' });
             await getOrCreateProfile(user);
-            await supabase.from('direct_messages').insert({ sender_id: user.id, sender_type: user.type, recipient_id, recipient_type: recipient_type || 'partner', body: body.trim() });
-            // Notify recipient
-            await supabase.from('notifications').insert({
+            const { data: dmMsg, error: dmErr } = await supabase.from('direct_messages')
+                .insert({ sender_id: user.id, sender_type: user.type, recipient_id, recipient_type: recipient_type || 'partner', body: body.trim() })
+                .select().single();
+            if (dmErr) throw dmErr;
+            // Notify recipient (fire-and-forget — DM already saved)
+            supabase.from('notifications').insert({
                 recipient_id, recipient_type: recipient_type || 'partner',
                 type: 'dm', title: `New message from ${user.name}`,
                 body: body.trim().slice(0, 80), actor_id: user.id, actor_name: user.name,
                 reference_id: user.id, link: '/partner/messages'
-            });
-            return res.status(200).json({ success: true });
+            }).then(() => {});
+            return res.status(200).json({ success: true, data: dmMsg });
         }
 
         // ── GET ALL USERS (for DM search) ─────────────────
@@ -377,7 +383,22 @@ export default async function handler(req, res) {
         if (action === 'get_avatar_upload_url') {
             const { file_type } = req.body;
             const ext = file_type === 'image/png' ? 'png' : file_type === 'image/webp' ? 'webp' : 'jpg';
+            // upsert:true — signed upload URLs fail on existing objects otherwise,
+            // which broke every avatar re-upload after the first one
             const path = `${user.id}/avatar.${ext}`;
+            const { data, error } = await supabase.storage.from('avatars').createSignedUploadUrl(path, { upsert: true });
+            if (error) throw error;
+            const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;
+            return res.status(200).json({ success: true, upload_url: data.signedUrl, public_url: publicUrl });
+        }
+
+        // ── UPLOAD POST IMAGE (unique path per upload) ────
+        if (action === 'get_post_image_upload_url') {
+            const { file_type } = req.body;
+            const ALLOWED = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/gif': 'gif' };
+            const ext = ALLOWED[file_type];
+            if (!ext) return res.status(400).json({ success: false, message: 'Only PNG, JPG, WEBP, or GIF images are allowed.' });
+            const path = `posts/${user.id}/${Date.now()}-${crypto.randomBytes(4).toString('hex')}.${ext}`;
             const { data, error } = await supabase.storage.from('avatars').createSignedUploadUrl(path);
             if (error) throw error;
             const publicUrl = `${process.env.SUPABASE_URL}/storage/v1/object/public/avatars/${path}`;

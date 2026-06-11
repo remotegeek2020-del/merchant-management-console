@@ -125,6 +125,34 @@
         /* PINNED BANNER */
         .pin-banner{background:linear-gradient(90deg,var(--teal-bg),white);padding:5px 14px;display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--teal);border-bottom:1px solid #ccfbf1;}
         .pin-banner .material-icons{font-size:13px;}
+
+        /* MESSAGES (DM) */
+        .nav-badge{background:#ef4444;color:white;border-radius:99px;font-size:9px;font-weight:800;padding:1px 6px;margin-left:2px;display:none;}
+        .dm-panel{position:fixed;bottom:20px;right:20px;width:340px;background:white;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,0.18);border:1px solid var(--border);z-index:300;display:none;flex-direction:column;height:460px;}
+        .dm-panel.open{display:flex;}
+        .dm-header{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;background:var(--navy);border-radius:16px 16px 0 0;}
+        .dm-other-name{font-weight:700;font-size:13px;color:white;flex:1;}
+        .dm-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;}
+        .dm-msg{max-width:75%;padding:8px 12px;border-radius:12px;font-size:12px;line-height:1.5;word-break:break-word;}
+        .dm-msg.sent{background:var(--teal);color:white;border-radius:12px 12px 0 12px;align-self:flex-end;}
+        .dm-msg.recv{background:#f1f5f9;color:var(--text);border-radius:12px 12px 12px 0;align-self:flex-start;}
+        .dm-msg-time{font-size:10px;opacity:0.6;margin-top:3px;}
+        .dm-input-row{padding:10px;border-top:1px solid var(--border);display:flex;gap:8px;}
+        .dm-input{flex:1;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;}
+        .dm-input:focus{border-color:var(--teal);}
+        .dm-send{background:var(--teal);color:white;border:none;border-radius:8px;padding:8px 12px;cursor:pointer;display:flex;align-items:center;}
+        .conv-panel{position:fixed;bottom:20px;right:20px;width:320px;background:white;border-radius:16px;box-shadow:0 20px 40px rgba(0,0,0,0.18);border:1px solid var(--border);z-index:299;display:none;flex-direction:column;max-height:480px;}
+        .conv-panel.open{display:flex;}
+        .conv-header{padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--navy);border-radius:16px 16px 0 0;}
+        .conv-title{font-weight:800;font-size:13px;color:white;}
+        .conv-list{flex:1;overflow-y:auto;}
+        .conv-item{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid #f8fafc;cursor:pointer;transition:background 0.15s;}
+        .conv-item:hover{background:#f8fafc;}
+        .conv-name{font-size:12px;font-weight:700;color:var(--text);}
+        .conv-preview{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:180px;}
+        .conv-unread{background:#ef4444;color:white;border-radius:99px;font-size:9px;font-weight:800;padding:1px 6px;margin-left:auto;flex-shrink:0;}
+        .msg-member-btn{margin-left:auto;background:none;border:none;color:var(--muted);cursor:pointer;padding:3px;border-radius:6px;display:flex;align-items:center;}
+        .msg-member-btn:hover{color:var(--teal);background:var(--teal-bg);}
     </style>
 </head>
 <body>
@@ -133,6 +161,10 @@
     <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="nav-logo">
     <span class="nav-title">Partner Community</span>
     <div class="nav-right">
+        <button class="nav-btn" onclick="toggleConvPanel()">
+            <span class="material-icons" style="font-size:14px;">forum</span> Messages
+            <span class="nav-badge" id="dmBadge">0</span>
+        </button>
         <span class="staff-chip" id="staffChip">Staff</span>
         <a href="/" class="nav-btn"><span class="material-icons" style="font-size:14px;">arrow_back</span> Back</a>
     </div>
@@ -195,6 +227,29 @@
     </div>
 </div>
 
+<!-- CONVERSATIONS PANEL -->
+<div class="conv-panel" id="convPanel">
+    <div class="conv-header">
+        <span class="conv-title">Messages</span>
+        <button onclick="toggleConvPanel()" style="background:none;border:none;color:rgba(255,255,255,0.6);cursor:pointer;display:flex;"><span class="material-icons" style="font-size:18px;">close</span></button>
+    </div>
+    <div class="conv-list" id="convList"><div class="spinner"></div></div>
+</div>
+
+<!-- DM THREAD PANEL -->
+<div class="dm-panel" id="dmPanel">
+    <div class="dm-header">
+        <button onclick="backToConvs()" style="background:none;border:none;color:rgba(255,255,255,0.6);cursor:pointer;display:flex;padding:0;" title="Back to conversations"><span class="material-icons" style="font-size:18px;">arrow_back</span></button>
+        <div class="dm-other-name" id="dmOtherName">—</div>
+        <button onclick="closeDM()" style="background:none;border:none;color:rgba(255,255,255,0.6);cursor:pointer;display:flex;"><span class="material-icons" style="font-size:18px;">close</span></button>
+    </div>
+    <div class="dm-messages" id="dmMessages"></div>
+    <div class="dm-input-row">
+        <input class="dm-input" id="dmInput" placeholder="Type a message..." maxlength="2000" onkeypress="if(event.key==='Enter')sendDM()">
+        <button class="dm-send" onclick="sendDM()"><span class="material-icons" style="font-size:15px;">send</span></button>
+    </div>
+</div>
+
 <script>
 var staffId = localStorage.getItem('pp_userid') || '';
 var staffName = localStorage.getItem('pp_user_first_name') || 'Staff';
@@ -210,7 +265,12 @@ var channels = [];
 function api(body) {
     return fetch('/api/community', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+            'Content-Type': 'application/json',
+            // Staff requests are gated by validateSession() server-side — without
+            // this header every call returns 401
+            'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '')
+        },
         body: JSON.stringify(Object.assign({ staff_userid: staffId }, body))
     }).then(function(r) {
         return r.json().catch(function() {
@@ -260,11 +320,7 @@ function avatarEl(profile, size) {
 async function init() {
     // Get staff name from app_users
     try {
-        var r = await fetch('/api/community', {
-            method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({ staff_userid: staffId, action: 'get_profile' })
-        });
-        var d = await r.json();
+        var d = await api({ action: 'get_profile' });
         if (d.success && d.profile) {
             staffName = d.profile.display_name || staffName;
             staffAvatar = d.profile.avatar_url || null;
@@ -279,6 +335,12 @@ async function init() {
     await loadChannels();
     loadFeed(false);
     loadMembers();
+
+    // Presence + unread badge polling
+    api({ action: 'heartbeat' });
+    setInterval(function(){ api({ action: 'heartbeat' }); }, 60000);
+    pollUnreadCounts();
+    setInterval(pollUnreadCounts, 15000);
 }
 
 // ── CHANNELS ─────────────────────────────────────────────
@@ -370,6 +432,13 @@ function buildPostCard(p) {
     meta.appendChild(authorLine); meta.appendChild(timeLine);
 
     var btnWrap = document.createElement('div'); btnWrap.style.cssText='display:flex;gap:4px;margin-left:auto;';
+    if (!isOwn) {
+        var msgBtn2 = document.createElement('button');
+        msgBtn2.className='action-btn'; msgBtn2.title='Message ' + (author.display_name || '');
+        msgBtn2.innerHTML='<span class="material-icons" style="font-size:16px;">chat_bubble_outline</span>';
+        msgBtn2.onclick = (function(id, name, type){ return function(){ openDM(id, name, type); }; })(p.author_id, author.display_name || 'Unknown', p.author_type);
+        btnWrap.appendChild(msgBtn2);
+    }
     if (isOwn) {
         var pinBtn2 = document.createElement('button');
         pinBtn2.className='action-btn'; pinBtn2.title = p.is_pinned ? 'Unpin' : 'Pin';
@@ -449,7 +518,7 @@ async function sendReaction(postId, emoji, event) {
         var btn = document.getElementById('react-btn-'+postId);
         var cnt = document.getElementById('rc-'+postId);
         var cur = parseInt((cnt ? cnt.textContent : '0') || '0');
-        if (result.reacted) {
+        if (result.action === 'added') {
             btn.classList.add('reacted');
             btn.innerHTML = emoji + ' <span id="rc-'+postId+'">' + (cur+1) + '</span>';
         } else {
@@ -566,16 +635,17 @@ async function submitPost() {
         var imageUrl = null;
 
         if (pendingImage) {
-            // Upload via signed URL
-            var urlRes = await api({ action: 'get_avatar_upload_url', file_type: 'image/jpeg' });
-            if (!urlRes.success) throw new Error(urlRes.message);
+            // Post images get a unique path each time — never reuse the avatar slot
+            var urlRes = await api({ action: 'get_post_image_upload_url', file_type: 'image/jpeg' });
+            if (!urlRes.success) throw new Error(urlRes.message || 'Could not get upload URL');
             // Convert base64 to blob
             var b64 = pendingImage.dataUrl.split(',')[1];
             var bytes = atob(b64);
             var arr = new Uint8Array(bytes.length);
             for(var i=0;i<bytes.length;i++) arr[i]=bytes.charCodeAt(i);
             var blob = new Blob([arr], { type:'image/jpeg' });
-            await fetch(urlRes.upload_url, { method:'PUT', body:blob, headers:{'Content-Type':'image/jpeg'} });
+            var upRes = await fetch(urlRes.upload_url, { method:'PUT', body:blob, headers:{'Content-Type':'image/jpeg'} });
+            if (!upRes.ok) throw new Error('Photo upload failed (' + upRes.status + '). Please try again.');
             imageUrl = urlRes.public_url;
         }
 
@@ -583,11 +653,12 @@ async function submitPost() {
         var result = await api({ action:'create_post', body:text, image_url:imageUrl, channel_id:channelId });
 
         if (result.success) {
+            // Pin BEFORE resetting state — the old order cleared pinPost first, so pin never fired
+            if (pinPost && result.data) await api({ action:'toggle_pin', post_id:result.data.id });
             document.getElementById('postText').value='';
+            updateCharCount();
             pendingImage=null; document.getElementById('mediaPreview').innerHTML='';
             pinPost=false; document.getElementById('pinToggle').classList.remove('active');
-            // Pin if needed
-            if (pinPost && result.data) await api({ action:'toggle_pin', post_id:result.data.id });
             loadFeed(false);
         } else { Swal.fire('Error', result.message, 'error'); }
     } catch(e) { Swal.fire('Error', e.message, 'error'); }
@@ -608,10 +679,113 @@ async function loadMembers() {
         var info = document.createElement('div');
         info.innerHTML='<div class="m-name">'+escHtml(u.display_name||'')+'</div><div class="m-type">'+(u.user_type==='staff'?'Staff':'Partner')+'</div>';
         row.appendChild(av); row.appendChild(info);
-        if (u.is_online) { var dot = document.createElement('div'); dot.className='online-dot'; row.appendChild(dot); }
+        if (u.is_online) { var dot = document.createElement('div'); dot.className='online-dot'; dot.style.marginLeft='0'; row.appendChild(dot); }
+        var msgBtn = document.createElement('button'); msgBtn.className='msg-member-btn'; msgBtn.title='Send message';
+        msgBtn.innerHTML='<span class="material-icons" style="font-size:16px;">chat_bubble_outline</span>';
+        msgBtn.onclick = (function(id, name, type){ return function(){ openDM(id, name, type); }; })(u.user_id, u.display_name || 'Unknown', u.user_type);
+        row.appendChild(msgBtn);
         el.appendChild(row);
     });
     if (!users.length) el.innerHTML='<div style="font-size:12px;color:var(--muted);padding:8px 0;">No members yet.</div>';
+}
+
+// ── MESSAGING (DMs) ──────────────────────────────────────
+var dmOtherId = null, dmOtherType = null, dmPollInterval = null;
+
+function toggleConvPanel() {
+    var panel = document.getElementById('convPanel');
+    var isOpen = panel.classList.contains('open');
+    closeDM();
+    panel.classList.toggle('open', !isOpen);
+    if (!isOpen) loadConversations();
+}
+
+async function loadConversations() {
+    var el = document.getElementById('convList');
+    el.innerHTML = '<div class="spinner"></div>';
+    var result = await api({ action: 'get_conversations' });
+    var convs = result.data || [];
+    if (!convs.length) {
+        el.innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted);font-size:12px;">No conversations yet.<br>Click the chat icon next to any member to start one.</div>';
+        return;
+    }
+    el.innerHTML = '';
+    convs.forEach(function(c) {
+        var p = c.other_profile || {};
+        var row = document.createElement('div'); row.className = 'conv-item';
+        var av = avatarEl(p, 32);
+        var info = document.createElement('div'); info.style.cssText = 'flex:1;min-width:0;';
+        info.innerHTML = '<div class="conv-name">' + escHtml(p.display_name || 'Unknown') + (p.is_online ? ' 🟢' : '') + '</div>'
+            + '<div class="conv-preview">' + escHtml(c.last_message || '') + '</div>';
+        row.appendChild(av); row.appendChild(info);
+        if (c.unread > 0) { var b = document.createElement('span'); b.className = 'conv-unread'; b.textContent = c.unread; row.appendChild(b); }
+        row.onclick = (function(id, name, type) { return function() { openDM(id, name, type); }; })(c.other_id, p.display_name || 'Unknown', c.other_type || p.user_type || 'partner');
+        el.appendChild(row);
+    });
+}
+
+function openDM(otherId, otherName, otherType) {
+    if (otherId === staffId) return;
+    dmOtherId = otherId; dmOtherType = otherType || 'partner';
+    document.getElementById('convPanel').classList.remove('open');
+    document.getElementById('dmOtherName').textContent = otherName;
+    document.getElementById('dmMessages').innerHTML = '<div class="spinner"></div>';
+    document.getElementById('dmPanel').classList.add('open');
+    loadDMThread();
+    if (dmPollInterval) clearInterval(dmPollInterval);
+    dmPollInterval = setInterval(loadDMThread, 5000);
+    setTimeout(function(){ var i = document.getElementById('dmInput'); if (i) i.focus(); }, 100);
+}
+
+function backToConvs() {
+    closeDM();
+    document.getElementById('convPanel').classList.add('open');
+    loadConversations();
+}
+
+function closeDM() {
+    document.getElementById('dmPanel').classList.remove('open');
+    if (dmPollInterval) { clearInterval(dmPollInterval); dmPollInterval = null; }
+    dmOtherId = null;
+}
+
+async function loadDMThread() {
+    if (!dmOtherId) return;
+    var result = await api({ action: 'get_dm_thread', other_id: dmOtherId });
+    if (!result.success) return;
+    var msgs = document.getElementById('dmMessages');
+    var wasAtBottom = msgs.scrollTop + msgs.clientHeight >= msgs.scrollHeight - 10 || !msgs.children.length || msgs.querySelector('.spinner');
+    msgs.innerHTML = (result.data || []).map(function(m) {
+        var isSent = m.sender_id === staffId;
+        return '<div class="dm-msg ' + (isSent ? 'sent' : 'recv') + '">' + escHtml(m.body)
+            + '<div class="dm-msg-time">' + timeAgo(m.created_at) + '</div></div>';
+    }).join('') || '<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px;">No messages yet — say hi!</div>';
+    if (wasAtBottom) msgs.scrollTop = msgs.scrollHeight;
+    pollUnreadCounts();
+}
+
+async function sendDM() {
+    var input = document.getElementById('dmInput');
+    var body = input.value.trim();
+    if (!body || !dmOtherId) return;
+    input.value = '';
+    var result = await api({ action: 'send_dm', recipient_id: dmOtherId, recipient_type: dmOtherType, body: body });
+    if (!result.success) {
+        input.value = body; // restore so they don't lose the message
+        Swal.fire('Error', result.message || 'Message failed to send. Please try again.', 'error');
+        return;
+    }
+    loadDMThread();
+}
+
+async function pollUnreadCounts() {
+    var result = await api({ action: 'get_unread_counts' });
+    if (!result.success) return;
+    var badge = document.getElementById('dmBadge');
+    if (badge) {
+        if (result.dms > 0) { badge.textContent = result.dms; badge.style.display = 'inline'; }
+        else badge.style.display = 'none';
+    }
 }
 
 // ── SEARCH ────────────────────────────────────────────────
