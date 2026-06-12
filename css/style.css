@@ -349,6 +349,51 @@ body {
     100% { transform:translate(-50%,-50%) scale(650); opacity:1; }
 }
 
+/* ── SPACE SCENE EXIT — synced with wormhole (portal-exit timing) ── */
+
+/* Nebulae fade out early — they're the furthest from the action */
+#login-ui.portal-exit .snl {
+    animation: space-fade-out .55s ease-in forwards !important;
+}
+
+/* Starfield canvas rushes toward center like a warp effect */
+#login-ui.portal-exit #star-canvas {
+    animation: canvas-warp .90s ease-in forwards !important;
+}
+@keyframes canvas-warp {
+    0%   { opacity: 1; transform: scale(1); filter: blur(0); }
+    60%  { opacity: .6; transform: scale(1.06); filter: blur(1px); }
+    100% { opacity: 0; transform: scale(0.1); filter: blur(12px); }
+}
+
+/* Planets get sucked toward wormhole center */
+#login-ui.portal-exit .ps-main {
+    animation: planet-warp-main .65s cubic-bezier(.6,0,1,.45) .05s forwards !important;
+}
+#login-ui.portal-exit .ps-small {
+    animation: planet-warp-small .60s cubic-bezier(.6,0,1,.45) 0s forwards !important;
+}
+@keyframes planet-warp-main {
+    0%   { opacity:1; transform: translateY(0) scale(1); filter: blur(0); }
+    50%  { filter: blur(2px) brightness(1.8); }
+    100% { opacity:0; transform: translate(calc(50vw - 100%), calc(40vh)) scale(.04); filter: blur(16px) brightness(4); }
+}
+@keyframes planet-warp-small {
+    0%   { opacity:1; transform: translateY(0) scale(1); filter: blur(0); }
+    50%  { filter: blur(2px) brightness(1.6); }
+    100% { opacity:0; transform: translate(calc(50vw), calc(-35vh)) scale(.04); filter: blur(14px) brightness(3); }
+}
+
+/* Asteroids and shooting stars just fade quickly */
+#login-ui.portal-exit .asteroid-track,
+#login-ui.portal-exit .shooting-star {
+    animation: space-fade-out .35s ease-in forwards !important;
+}
+@keyframes space-fade-out {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+}
+
 /* ── END PORTAL ANIMATION ─────────────────────────────────────────── */
 
 .tfa-input-wrapper { display: flex; gap: 8px; justify-content: center; margin-top: 16px; }
