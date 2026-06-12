@@ -378,95 +378,144 @@
 
     /* Home view modes are applied via dynamic <style id="home-view-css"> injected in <head> */
 
-    /* ── SPACE SCENE (login screen) ───────────────────────────────────── */
+    /* ── DEEP SPACE SCENE (login screen) ──────────────────────────────── */
+    #login-ui {
+        background:
+            radial-gradient(ellipse 160% 120% at 42% 52%,
+                #0d1e3a 0%, #08142a 28%, #050d1e 52%, #030810 72%, #010508 100%) !important;
+    }
     #star-canvas {
         position: absolute; inset: 0; width: 100%; height: 100%;
         z-index: 0; pointer-events: none;
     }
 
-    /* Nebulae */
-    .space-nebula {
-        position: absolute; border-radius: 50%; pointer-events: none;
-        mix-blend-mode: screen;
-        animation: nebula-drift 28s ease-in-out infinite alternate;
+    /* ── NEBULAE LAYERS ── */
+    .snl { position: absolute; pointer-events: none; border-radius: 50%; }
+
+    /* Wide blue nebula — covers most of the screen */
+    .snl-blue {
+        width: 130%; height: 130%; top: -15%; left: -15%;
+        background:
+            radial-gradient(ellipse 65% 55% at 38% 44%,
+                rgba(60,130,210,.32) 0%, rgba(30,95,175,.18) 32%, rgba(12,55,130,.07) 60%, transparent 80%),
+            radial-gradient(ellipse 45% 55% at 72% 62%,
+                rgba(40,110,195,.26) 0%, rgba(20,80,160,.14) 38%, transparent 68%);
+        filter: blur(28px);
+        animation: snl-drift 50s ease-in-out infinite alternate;
     }
-    .sn-1 {
-        width: 520px; height: 360px;
-        background: radial-gradient(ellipse, rgba(139,92,246,.20) 0%, rgba(109,40,217,.07) 45%, transparent 70%);
-        filter: blur(55px); top: 3%; left: -10%; animation-duration: 30s;
+
+    /* Warm amber/gold dust — creates the golden regions */
+    .snl-gold {
+        width: 110%; height: 80%; top: 18%; left: -5%;
+        background:
+            radial-gradient(ellipse 75% 65% at 52% 48%,
+                rgba(190,120,45,.26) 0%, rgba(155,90,30,.16) 28%, rgba(100,60,18,.07) 55%, transparent 75%),
+            radial-gradient(ellipse 35% 45% at 18% 65%,
+                rgba(210,140,55,.20) 0%, rgba(170,105,35,.11) 35%, transparent 62%);
+        filter: blur(38px);
+        animation: snl-drift 65s ease-in-out infinite alternate-reverse;
     }
-    .sn-2 {
-        width: 420px; height: 280px;
-        background: radial-gradient(ellipse, rgba(236,72,153,.16) 0%, rgba(190,24,93,.06) 45%, transparent 70%);
-        filter: blur(48px); bottom: 8%; right: -6%;
-        animation-duration: 38s; animation-direction: alternate-reverse;
+
+    /* Dark dust lane — opaque dark band crossing the middle */
+    .snl-dust {
+        width: 110%; height: 50%; top: 26%; left: -5%;
+        background: linear-gradient(180deg,
+            transparent 0%,
+            rgba(4,3,1,.72) 30%, rgba(6,4,2,.80) 50%, rgba(4,3,1,.65) 72%,
+            transparent 100%);
+        filter: blur(22px);
+        animation: snl-dust-drift 80s ease-in-out infinite alternate;
     }
-    .sn-3 {
-        width: 320px; height: 220px;
-        background: radial-gradient(ellipse, rgba(14,165,233,.13) 0%, rgba(3,105,161,.05) 45%, transparent 70%);
-        filter: blur(42px); top: 48%; left: 52%; animation-duration: 24s;
+
+    /* Bright blue star-forming region — hot, intense top-right */
+    .snl-hotblue {
+        width: 35%; height: 45%; top: 2%; right: 0%;
+        background:
+            radial-gradient(ellipse,
+                rgba(160,210,255,.38) 0%, rgba(100,175,245,.22) 28%,
+                rgba(50,130,220,.10) 55%, transparent 75%);
+        filter: blur(22px);
+        animation: snl-drift 30s ease-in-out infinite alternate;
+        animation-delay: -8s;
     }
-    @keyframes nebula-drift {
-        0%   { transform: translate(0,0) scale(1); }
-        40%  { transform: translate(18px,-12px) scale(1.04); }
-        100% { transform: translate(-12px,22px) scale(.97); }
+
+    /* Teal wisps — bottom-left corner */
+    .snl-teal {
+        width: 55%; height: 55%; bottom: -5%; left: -5%;
+        background:
+            radial-gradient(ellipse 80% 70% at 38% 58%,
+                rgba(14,155,165,.24) 0%, rgba(8,120,130,.13) 38%, transparent 68%);
+        filter: blur(42px);
+        animation: snl-drift 44s ease-in-out infinite alternate-reverse;
+        animation-delay: -15s;
+    }
+
+    /* Faint magenta star-forming blob */
+    .snl-pink {
+        width: 22%; height: 28%; top: 52%; right: 12%;
+        background: radial-gradient(ellipse,
+            rgba(210,75,155,.22) 0%, rgba(170,45,120,.11) 40%, transparent 70%);
+        filter: blur(28px);
+        animation: snl-drift 36s ease-in-out infinite alternate;
+        animation-delay: -22s;
+    }
+
+    /* Extra deep blue cloud — upper left */
+    .snl-deep {
+        width: 40%; height: 50%; top: -5%; left: 5%;
+        background: radial-gradient(ellipse 70% 80% at 45% 42%,
+            rgba(25,80,180,.20) 0%, rgba(10,50,140,.10) 45%, transparent 72%);
+        filter: blur(50px);
+        animation: snl-drift 58s ease-in-out infinite alternate;
+        animation-delay: -30s;
+    }
+
+    @keyframes snl-drift {
+        0%   { transform: translate(0,0) scale(1) rotate(0deg); }
+        33%  { transform: translate(12px,-8px) scale(1.025) rotate(.6deg); }
+        66%  { transform: translate(-8px,14px) scale(.982) rotate(-.5deg); }
+        100% { transform: translate(16px,-4px) scale(1.03) rotate(.3deg); }
+    }
+    @keyframes snl-dust-drift {
+        0%   { transform: translateX(0) scaleY(1); }
+        100% { transform: translateX(22px) scaleY(1.04); }
     }
 
     /* Planets */
     .planet-system { position: absolute; pointer-events: none; }
     .ps-main  { top: 9%; right: 7%; animation: planet-float 9s ease-in-out infinite alternate; }
     .ps-small { bottom: 12%; left: 6%; animation: planet-float 13s ease-in-out infinite alternate-reverse; }
-
     .space-planet { border-radius: 50%; position: relative; overflow: hidden; }
     .sp-blue {
         width: 88px; height: 88px;
         background: radial-gradient(circle at 34% 30%, #bae6fd 0%, #38bdf8 18%, #0369a1 52%, #082f49 83%, #020617 100%);
-        box-shadow: inset -17px -9px 32px rgba(0,0,0,.65),
-                    inset 4px 4px 18px rgba(186,230,253,.14),
-                    0 0 38px rgba(56,189,248,.22);
+        box-shadow: inset -17px -9px 32px rgba(0,0,0,.65), inset 4px 4px 18px rgba(186,230,253,.14), 0 0 40px rgba(56,189,248,.28);
     }
     .sp-blue::before {
         content: ''; position: absolute; inset: 0; border-radius: 50%;
-        background: repeating-linear-gradient(12deg, transparent 0, transparent 8px,
-                    rgba(255,255,255,.04) 8px, rgba(255,255,255,.04) 10px);
+        background: repeating-linear-gradient(12deg, transparent 0, transparent 8px, rgba(255,255,255,.04) 8px, rgba(255,255,255,.04) 10px);
     }
     .sp-red {
         width: 52px; height: 52px;
         background: radial-gradient(circle at 37% 31%, #fca5a5 0%, #ef4444 24%, #991b1b 58%, #3f0808 92%);
-        box-shadow: inset -10px -5px 18px rgba(0,0,0,.6),
-                    inset 3px 2px 10px rgba(252,165,165,.14),
-                    0 0 22px rgba(239,68,68,.18);
+        box-shadow: inset -10px -5px 18px rgba(0,0,0,.6), inset 3px 2px 10px rgba(252,165,165,.14), 0 0 22px rgba(239,68,68,.22);
     }
     .sp-red::before {
         content: ''; position: absolute; inset: 0; border-radius: 50%;
-        background: repeating-linear-gradient(15deg, transparent 0, transparent 6px,
-                    rgba(255,255,255,.03) 6px, rgba(255,255,255,.03) 7px);
+        background: repeating-linear-gradient(15deg, transparent 0, transparent 6px, rgba(255,255,255,.03) 6px, rgba(255,255,255,.03) 7px);
     }
-
-    /* Saturn ring */
     .planet-ring-wrap {
         position: absolute; top: 50%; left: 50%;
-        width: 142px; height: 26px;
-        margin-top: -13px; margin-left: -71px;
+        width: 142px; height: 26px; margin-top: -13px; margin-left: -71px;
         border: 2.5px solid rgba(186,230,253,.28); border-radius: 50%;
         box-shadow: 0 0 10px rgba(186,230,253,.1); transform: rotateX(70deg);
     }
-    .planet-ring-wrap::before {
-        content: ''; position: absolute; inset: 5px;
-        border: 1px solid rgba(186,230,253,.14); border-radius: 50%;
-    }
-
-    /* Moon orbit */
-    .moon-track {
-        position: absolute; top: 44px; left: 44px;
-        width: 0; height: 0;
-        animation: moon-orbit 8s linear infinite;
-    }
+    .planet-ring-wrap::before { content: ''; position: absolute; inset: 5px; border: 1px solid rgba(186,230,253,.14); border-radius: 50%; }
+    .moon-track { position: absolute; top: 44px; left: 44px; width: 0; height: 0; animation: moon-orbit 8s linear infinite; }
     .space-moon {
         position: absolute; width: 15px; height: 15px; border-radius: 50%;
         background: radial-gradient(circle at 35% 35%, #f1f5f9 0%, #94a3b8 48%, #334155 90%);
-        box-shadow: inset -3px -2px 6px rgba(0,0,0,.55);
-        top: -56px; left: -7px;
+        box-shadow: inset -3px -2px 6px rgba(0,0,0,.55); top: -56px; left: -7px;
     }
     @keyframes moon-orbit { to { transform: rotate(360deg); } }
     @keyframes planet-float {
@@ -476,10 +525,7 @@
 
     /* Asteroids */
     .asteroid-track { position: absolute; pointer-events: none; }
-    .asteroid {
-        width: 6px; height: 3px; background: rgba(148,163,184,.65);
-        border-radius: 50%; box-shadow: 4px 0 0 1px rgba(148,163,184,.3);
-    }
+    .asteroid { width: 6px; height: 3px; background: rgba(148,163,184,.65); border-radius: 50%; box-shadow: 4px 0 0 1px rgba(148,163,184,.3); }
     .at-1 { top: 22%; left: -40px; animation: ast-1 48s linear infinite; }
     .at-2 { top: 68%; left: -40px; animation: ast-2 62s linear infinite 12s; }
     .at-3 { top: 38%; left: -40px; animation: ast-3 80s linear infinite 30s; }
@@ -488,24 +534,18 @@
     @keyframes ast-2 { from{transform:translate(0,0) rotate(0deg)} to{transform:translate(115vw,-28px) rotate(-18deg)} }
     @keyframes ast-3 { from{transform:translate(0,0) rotate(0deg)} to{transform:translate(115vw,35px) rotate(40deg)} }
 
-    /* Shooting star */
-    .shooting-star {
-        position: absolute; pointer-events: none;
-        width: 120px; height: 1.5px;
-        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.9) 50%, rgba(255,255,255,0));
-        border-radius: 50%;
-        animation: shoot linear infinite;
-        opacity: 0;
-    }
-    .ss-1 { top: 18%; left: 20%; animation-duration: 6s; animation-delay: 3s; transform: rotate(-30deg); }
-    .ss-2 { top: 35%; left: 60%; animation-duration: 5s; animation-delay: 11s; transform: rotate(-25deg); }
-    .ss-3 { top: 10%; left: 45%; animation-duration: 7s; animation-delay: 20s; transform: rotate(-35deg); }
+    /* Shooting stars */
+    .shooting-star { position: absolute; pointer-events: none; height: 1.5px; border-radius: 50%; animation: shoot linear infinite; opacity: 0; }
+    .ss-1 { top: 18%; left: 15%; width: 140px; background: linear-gradient(90deg,transparent,rgba(255,255,255,.92) 50%,transparent); animation-duration: 6s; animation-delay: 4s; transform: rotate(-28deg); }
+    .ss-2 { top: 32%; left: 58%; width: 110px; background: linear-gradient(90deg,transparent,rgba(200,220,255,.85) 50%,transparent); animation-duration: 5s; animation-delay: 13s; transform: rotate(-32deg); }
+    .ss-3 { top: 12%; left: 42%; width: 160px; background: linear-gradient(90deg,transparent,rgba(255,248,200,.88) 50%,transparent); animation-duration: 7s; animation-delay: 22s; transform: rotate(-25deg); }
+    .ss-4 { top: 62%; left: 25%; width: 100px; background: linear-gradient(90deg,transparent,rgba(255,255,255,.78) 50%,transparent); animation-duration: 5.5s; animation-delay: 35s; transform: rotate(-30deg); }
     @keyframes shoot {
-        0%   { opacity: 0; transform: translateX(-80px) rotate(-30deg); }
-        10%  { opacity: 1; }
-        50%  { opacity: 1; }
-        70%  { opacity: 0; transform: translateX(200px) rotate(-30deg); }
-        100% { opacity: 0; transform: translateX(200px) rotate(-30deg); }
+        0%   { opacity:0; transform:translateX(-60px) rotate(-28deg); }
+        8%   { opacity:1; }
+        55%  { opacity:1; }
+        75%  { opacity:0; transform:translateX(220px) rotate(-28deg); }
+        100% { opacity:0; transform:translateX(220px) rotate(-28deg); }
     }
 </style>
     
@@ -534,10 +574,14 @@
         <!-- Moving starfield canvas -->
         <canvas id="star-canvas"></canvas>
 
-        <!-- Nebula clouds -->
-        <div class="space-nebula sn-1"></div>
-        <div class="space-nebula sn-2"></div>
-        <div class="space-nebula sn-3"></div>
+        <!-- Hubble-grade nebula layers -->
+        <div class="snl snl-blue"></div>
+        <div class="snl snl-gold"></div>
+        <div class="snl snl-dust"></div>
+        <div class="snl snl-hotblue"></div>
+        <div class="snl snl-teal"></div>
+        <div class="snl snl-pink"></div>
+        <div class="snl snl-deep"></div>
 
         <!-- Saturn-like blue planet (top right) -->
         <div class="planet-system ps-main">
@@ -1528,35 +1572,56 @@
     if (!canvas || !loginUi) return;
 
     const ctx = canvas.getContext('2d');
-    const N = 300;
+    const N = 1000;
     let W, H, CX, CY;
     const stars = [];
     let raf = null;
     let lastT = 0;
 
-    function resize() {
-        W  = canvas.width  = loginUi.offsetWidth  || window.innerWidth;
-        H  = canvas.height = loginUi.offsetHeight || window.innerHeight;
-        CX = W / 2; CY = H / 2;
+    /* Hubble-weighted colour palette: [r,g,b, weight] */
+    const PALETTE = [
+        [210, 230, 255, 40],  // blue-white (hot O/B class)
+        [240, 245, 255, 30],  // white
+        [255, 255, 240, 15],  // warm white
+        [255, 230, 140, 15],  // gold (G class)
+        [255, 185,  70,  8],  // amber (K class)
+        [255, 115,  60,  4],  // orange-red (M class)
+        [180, 215, 255,  3],  // icy blue
+        [255,  90,  90,  2],  // red giant
+        [160, 255, 220,  2],  // teal (emission nebula star)
+        [255, 210, 255,  1],  // pale violet
+    ];
+    const PALETTE_TOTAL = PALETTE.reduce((s, p) => s + p[3], 0);
+
+    function pickColor() {
+        let roll = Math.random() * PALETTE_TOTAL;
+        for (const p of PALETTE) { roll -= p[3]; if (roll <= 0) return p; }
+        return PALETTE[0];
     }
 
     function mkStar(spread) {
         const angle = Math.random() * Math.PI * 2;
         const r = spread
-            ? Math.random() * Math.min(W, H) * 0.48   // initial: spread across screen
-            : Math.random() * 5;                        // reset: born near center
+            ? Math.random() * Math.min(W, H) * 0.52
+            : Math.random() * 6;
         const z = Math.random();
-        const tint = Math.random();
+        const [cr, cg, cb] = pickColor();
+        /* brightness tier drives size/alpha/spike behaviour */
+        const bright = Math.random();
+        const size = bright < 0.005 ? (Math.random() * 1.8 + 2.2)   // ultra-bright: top 0.5%
+                   : bright < 0.03  ? (Math.random() * 1.2 + 1.4)   // bright: top 3%
+                   : bright < 0.15  ? (Math.random() * 0.8 + 0.7)   // medium
+                   :                  (Math.random() * 0.5 + 0.15);  // faint
         return {
             x: CX + Math.cos(angle) * r,
             y: CY + Math.sin(angle) * r,
             z,
-            size:   Math.random() * 1.3 + 0.2,
-            alpha:  Math.random() * 0.45 + 0.45,
-            twink:  Math.random() * Math.PI * 2,
-            r: tint < 0.1 ? 180 : 255,
-            g: tint < 0.1 ? 210 : 255,
-            b: tint < 0.1 ? 255 : (tint < 0.2 ? 210 : 255),
+            size,
+            alpha: Math.random() * 0.35 + 0.55,
+            twink: Math.random() * Math.PI * 2,
+            twinkSpeed: 0.5 + Math.random() * 1.8,
+            r: cr, g: cg, b: cb,
+            bright,
         };
     }
 
@@ -1565,44 +1630,78 @@
         for (let i = 0; i < N; i++) stars.push(mkStar(true));
     }
 
+    function drawSpike(sx, sy, len, angle, color, a) {
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(angle);
+        const grad = ctx.createLinearGradient(-len, 0, len, 0);
+        grad.addColorStop(0,   `rgba(${color},0)`);
+        grad.addColorStop(0.4, `rgba(${color},${(a * 0.55).toFixed(3)})`);
+        grad.addColorStop(0.5, `rgba(${color},${(a * 0.85).toFixed(3)})`);
+        grad.addColorStop(0.6, `rgba(${color},${(a * 0.55).toFixed(3)})`);
+        grad.addColorStop(1,   `rgba(${color},0)`);
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = 0.8;
+        ctx.beginPath();
+        ctx.moveTo(-len, 0); ctx.lineTo(len, 0);
+        ctx.stroke();
+        ctx.restore();
+    }
+
     function draw(t) {
         const dt = Math.min((t - lastT) / 16.67, 3);
         lastT = t;
-
         ctx.clearRect(0, 0, W, H);
-
         const now = t / 1000;
 
         for (const s of stars) {
-            /* drift outward from center — like drifting forward through space */
+            /* very slow drift outward — deep space travel feel */
             const dx = s.x - CX, dy = s.y - CY;
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
-            const spd  = (0.08 + s.z * 0.22) * dt;
+            const spd  = (0.025 + s.z * 0.06) * dt;
             s.x += (dx / dist) * spd;
             s.y += (dy / dist) * spd;
 
-            /* twinkle */
-            const twinkle = 0.72 + 0.28 * Math.sin(now * (1.4 + s.z * 0.8) + s.twink);
+            const twinkle = 0.75 + 0.25 * Math.sin(now * s.twinkSpeed + s.twink);
             const alpha   = s.alpha * twinkle;
-            const sz      = s.size * (0.35 + s.z * 0.65);
+            const sz      = s.size * (0.4 + s.z * 0.6);
+            const rgb     = `${s.r},${s.g},${s.b}`;
 
-            ctx.beginPath();
-            ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
-            ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},${alpha})`;
-            ctx.fill();
-
-            /* tiny cross-sparkle on bright close stars */
-            if (s.z > 0.82 && s.size > 0.95) {
-                ctx.strokeStyle = `rgba(${s.r},${s.g},${s.b},${alpha * 0.35})`;
-                ctx.lineWidth = 0.5;
+            /* soft glow halo on medium+ stars */
+            if (sz > 0.65) {
+                const grd = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, sz * 3.5);
+                grd.addColorStop(0,   `rgba(${rgb},${(alpha * 0.30).toFixed(3)})`);
+                grd.addColorStop(0.4, `rgba(${rgb},${(alpha * 0.10).toFixed(3)})`);
+                grd.addColorStop(1,   `rgba(${rgb},0)`);
                 ctx.beginPath();
-                ctx.moveTo(s.x - sz * 2.8, s.y); ctx.lineTo(s.x + sz * 2.8, s.y);
-                ctx.moveTo(s.x, s.y - sz * 2.8); ctx.lineTo(s.x, s.y + sz * 2.8);
-                ctx.stroke();
+                ctx.arc(s.x, s.y, sz * 3.5, 0, Math.PI * 2);
+                ctx.fillStyle = grd;
+                ctx.fill();
             }
 
-            /* reset when star flies off screen */
-            if (s.x < -25 || s.x > W + 25 || s.y < -25 || s.y > H + 25) {
+            /* star core */
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${rgb},${alpha.toFixed(3)})`;
+            ctx.fill();
+
+            /* 4-point diffraction spikes on bright stars (top ~3%) */
+            if (s.bright < 0.03 && sz > 1.0) {
+                const spikeLen = sz * 10;
+                drawSpike(s.x, s.y, spikeLen, 0,            rgb, alpha);
+                drawSpike(s.x, s.y, spikeLen, Math.PI / 2,  rgb, alpha);
+            }
+
+            /* 6-point spikes on ultra-bright stars (top 0.5%) */
+            if (s.bright < 0.005 && sz > 2.0) {
+                const spikeLen = sz * 14;
+                drawSpike(s.x, s.y, spikeLen, 0,              rgb, alpha);
+                drawSpike(s.x, s.y, spikeLen, Math.PI / 3,    rgb, alpha);
+                drawSpike(s.x, s.y, spikeLen, Math.PI * 2/3,  rgb, alpha);
+            }
+
+            /* reset when star drifts off screen */
+            if (s.x < -30 || s.x > W + 30 || s.y < -30 || s.y > H + 30) {
                 Object.assign(s, mkStar(false));
             }
         }
