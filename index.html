@@ -380,62 +380,63 @@
 
     /* ── DEEP SPACE SCENE (login screen) ──────────────────────────────── */
     #login-ui {
+        /* Richer background — suggests a galactic core brightening toward center */
         background:
-            radial-gradient(ellipse 160% 120% at 42% 52%,
-                #0d1e3a 0%, #08142a 28%, #050d1e 52%, #030810 72%, #010508 100%) !important;
+            radial-gradient(ellipse 80% 60% at 55% 45%,
+                #0e2244 0%, #081630 35%, #040d1c 60%, #020810 82%, #010408 100%) !important;
     }
-    /* Canvas holds the stars — sits ABOVE nebulae */
     #star-canvas {
         position: absolute; inset: 0; width: 100%; height: 100%;
         z-index: 2; pointer-events: none;
     }
 
-    /* ── NEBULAE LAYERS — subtle, behind stars (z=1) ── */
+    /* ── NEBULAE LAYERS — visible but natural, z=1 (behind stars) ── */
     .snl { position: absolute; pointer-events: none; z-index: 1; }
 
-    /* Faint blue-indigo wash — barely-there background tint */
+    /* Primary blue nebula — rich Hubble-blue cloud, upper-left sweep */
     .snl-blue {
-        width: 140%; height: 140%; top: -20%; left: -20%;
+        width: 120%; height: 110%; top: -10%; left: -10%;
         background:
-            radial-gradient(ellipse 60% 50% at 35% 42%,
-                rgba(30,70,160,.22) 0%, rgba(15,45,110,.10) 45%, transparent 72%),
-            radial-gradient(ellipse 40% 50% at 70% 60%,
-                rgba(20,55,140,.16) 0%, rgba(10,35,100,.08) 40%, transparent 68%);
-        filter: blur(55px);
-        animation: snl-drift 60s ease-in-out infinite alternate;
+            radial-gradient(ellipse 55% 48% at 30% 38%,
+                rgba(25,90,195,.55) 0%, rgba(15,60,155,.32) 35%, rgba(8,35,100,.12) 60%, transparent 80%),
+            radial-gradient(ellipse 38% 45% at 65% 58%,
+                rgba(18,70,170,.38) 0%, rgba(10,45,130,.18) 42%, transparent 68%);
+        filter: blur(48px);
+        animation: snl-drift 55s ease-in-out infinite alternate;
     }
 
-    /* Warm dust — very faint amber tint lower-center */
+    /* Warm amber cloud — mid-lower area, like dust in star-forming region */
     .snl-gold {
-        width: 80%; height: 60%; top: 30%; left: 10%;
+        width: 75%; height: 65%; top: 28%; left: 5%;
         background:
-            radial-gradient(ellipse 80% 70% at 50% 55%,
-                rgba(140,85,28,.14) 0%, rgba(100,60,18,.07) 40%, transparent 70%);
-        filter: blur(60px);
-        animation: snl-drift 70s ease-in-out infinite alternate-reverse;
+            radial-gradient(ellipse 70% 60% at 48% 52%,
+                rgba(185,105,32,.42) 0%, rgba(145,78,22,.22) 35%, rgba(90,50,12,.08) 58%, transparent 76%);
+        filter: blur(55px);
+        animation: snl-drift 68s ease-in-out infinite alternate-reverse;
+        animation-delay: -20s;
     }
 
-    /* Subtle dark dust lane — barely perceptible depth */
+    /* Dark dust lane — adds depth without being black, slightly diagonal */
     .snl-dust {
-        width: 100%; height: 35%; top: 32%; left: 0%;
-        background: linear-gradient(180deg,
-            transparent 0%, rgba(0,0,0,.30) 40%, rgba(0,0,0,.35) 55%, transparent 100%);
-        filter: blur(40px);
-        animation: snl-dust-drift 90s ease-in-out infinite alternate;
+        width: 110%; height: 30%; top: 36%; left: -5%;
+        background: linear-gradient(175deg,
+            transparent 0%, rgba(0,0,0,.42) 35%, rgba(0,0,0,.48) 55%, transparent 100%);
+        filter: blur(35px);
+        animation: snl-dust-drift 85s ease-in-out infinite alternate;
     }
 
-    /* Cool blue tint — upper right corner only */
+    /* Blue-violet upper right — like light from a nearby star cluster */
     .snl-hotblue {
-        width: 35%; height: 40%; top: 0%; right: 0%;
+        width: 42%; height: 48%; top: -5%; right: -2%;
         background:
-            radial-gradient(ellipse 70% 65% at 65% 35%,
-                rgba(60,120,210,.18) 0%, rgba(30,80,170,.09) 45%, transparent 72%);
-        filter: blur(45px);
-        animation: snl-drift 40s ease-in-out infinite alternate;
-        animation-delay: -10s;
+            radial-gradient(ellipse 65% 60% at 60% 38%,
+                rgba(55,110,220,.38) 0%, rgba(35,75,185,.20) 40%, rgba(20,45,140,.08) 65%, transparent 80%);
+        filter: blur(42px);
+        animation: snl-drift 38s ease-in-out infinite alternate;
+        animation-delay: -12s;
     }
 
-    /* These layers intentionally blank — scene is less busy without them */
+    /* Disabled — keep DOM for future use */
     .snl-teal, .snl-pink, .snl-deep { display: none; }
 
     @keyframes snl-drift {
@@ -1659,7 +1660,7 @@
     if (!canvas || !loginUi) return;
 
     const ctx = canvas.getContext('2d');
-    const N = 1000;
+    const N = 1400;
     let W, H, CX, CY;
     const stars = [];
     let raf = null;
@@ -1704,7 +1705,7 @@
             y: CY + Math.sin(angle) * r,
             z,
             size,
-            alpha: Math.random() * 0.35 + 0.55,
+            alpha: Math.random() * 0.30 + 0.65,
             twink: Math.random() * Math.PI * 2,
             twinkSpeed: 0.5 + Math.random() * 1.8,
             r: cr, g: cg, b: cb,
