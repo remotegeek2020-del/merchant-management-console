@@ -416,21 +416,37 @@ async function openCreateTask() {
 }
 
 let merchantSearchTimeout;
+let merchantSearchAbort = null;
 window.searchMerchant = function(q) {
     clearTimeout(merchantSearchTimeout);
+    if (merchantSearchAbort) { merchantSearchAbort.abort(); merchantSearchAbort = null; }
     const results = document.getElementById('merchantResults');
-    if (!q || q.length < 2) { results.style.display='none'; return; }
+    if (!q || q.length < 2) { results.style.display = 'none'; return; }
+    results.style.display = 'block';
+    results.innerHTML = '<div style="padding:12px;color:#94a3b8;text-align:center;font-size:12px;">Searching…</div>';
     merchantSearchTimeout = setTimeout(async () => {
-        const res = await fetch('/api/merchants', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ action:'list', query:q, filterBy:'dba_name', page:0, limit:8 }) });
-        const data = await res.json();
-        results.style.display = 'block';
-        results.innerHTML = (data.data||[]).map(m => `
-            <div onclick="selectMerchant('${m.id}','${m.dba_name.replace(/'/g,"\\'")}','${m.merchant_id}')" 
-                 style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;font-size:12px;display:flex;justify-content:space-between;">
-                <b>${m.dba_name}</b>
-                <span style="color:#94a3b8;font-family:'DM Mono',monospace;">${m.merchant_id}</span>
-            </div>`).join('') || '<div style="padding:12px;color:#94a3b8;text-align:center;font-size:12px;">No merchants found</div>';
-    }, 300);
+        const controller = new AbortController();
+        merchantSearchAbort = controller;
+        try {
+            const tok = localStorage.getItem('pp_session_token') || '';
+            const res = await fetch('/api/merchants', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+                body: JSON.stringify({ action: 'list', query: q, filterBy: 'dba_name', page: 0, limit: 8 }),
+                signal: controller.signal
+            });
+            const data = await res.json();
+            if (controller.signal.aborted) return;
+            results.innerHTML = (data.data || []).map(m => `
+                <div onclick="selectMerchant('${m.id}','${m.dba_name.replace(/'/g,"\\'")}','${m.merchant_id}')"
+                     style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f8fafc;font-size:12px;display:flex;justify-content:space-between;">
+                    <b>${m.dba_name}</b>
+                    <span style="color:#94a3b8;font-family:'DM Mono',monospace;">${m.merchant_id}</span>
+                </div>`).join('') || '<div style="padding:12px;color:#94a3b8;text-align:center;font-size:12px;">No merchants found</div>';
+        } catch(e) {
+            if (e.name !== 'AbortError') results.innerHTML = '<div style="padding:12px;color:#94a3b8;text-align:center;font-size:12px;">Search failed</div>';
+        }
+    }, 350);
 };
 
 window.selectMerchant = function(id, name, mid) {
