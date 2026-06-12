@@ -52,10 +52,10 @@ body {
 .login-card {
     width: 100%;
     max-width: 400px;
-    background: white;
+    background: #ffffff;
     border-radius: var(--radius-xl);
     padding: 40px;
-    box-shadow: 0 40px 80px rgba(0,0,0,0.3);
+    box-shadow: 0 8px 40px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
     position: absolute;
     top: 50%; left: 50%;
     transform: translate(-50%, -50%);
