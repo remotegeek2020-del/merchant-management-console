@@ -66,7 +66,7 @@ export default async function handler(req, res) {
             } catch { return 0; }
         }
 
-        const [tickets, returns_, deployments, tasks, ideas] = await Promise.all([
+        const [tickets, returns_, deployments, tasks, ideas, partners, merchants, inventory] = await Promise.all([
             // Tickets: any ticket activity (created or updated) since last visit
             countNew('support_tickets', 'updated_at', since('tickets')),
             // Returns: new returns submitted since last visit
@@ -77,11 +77,17 @@ export default async function handler(req, res) {
             countNew('merchant_tasks', 'created_at', since('tasks'), q => q.eq('assigned_to', userid)),
             // Ideas: new ideas since last visit
             countNew('feature_ideas', 'created_at', since('ideas')),
+            // Partners: new partner records since last visit
+            countNew('persons', 'created_at', since('partners')),
+            // Merchants: new merchant records since last visit
+            countNew('merchants', 'created_at', since('merchants')),
+            // Inventory: new equipment records since last visit
+            countNew('equipments', 'created_at', since('inventory')),
         ]);
 
         return res.status(200).json({
             success: true,
-            counts: { partners: 0, merchants: 0, inventory: 0, deployments, returns: returns_, tickets, tasks, ideas }
+            counts: { partners, merchants, inventory, deployments, returns: returns_, tickets, tasks, ideas }
         });
     }
 
