@@ -738,26 +738,21 @@
         } catch (e) { /* silent fallback to polling */ }
     }
 
-    function markSeen(section) {
+    async function markSeen(section) {
         const userid = localStorage.getItem('pp_userid');
         const token  = localStorage.getItem('pp_session_token') || '';
         if (!userid) return;
-        // Clear badge instantly in UI
         showBadge(section, 0);
-        // Use sendBeacon so the request survives page navigation (fetch gets aborted on unload)
-        const payload = JSON.stringify({ action: 'mark_seen', userid, section, token });
-        if (navigator.sendBeacon) {
-            navigator.sendBeacon('/api/notifications', new Blob([payload], { type: 'application/json' }));
-        } else {
-            fetch('/api/notifications', {
+        try {
+            await fetch('/api/notifications', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': 'Bearer ' + token
                 },
-                body: payload
-            }).catch(() => {});
-        }
+                body: JSON.stringify({ action: 'mark_seen', userid, section })
+            });
+        } catch(e) {}
     }
 
     function wireCardClicks() {
@@ -770,12 +765,31 @@
         };
         Object.entries(map).forEach(([cardId, section]) => {
             const el = document.getElementById(cardId);
-            if (el) el.addEventListener('click', () => markSeen(section), { capture: true });
+            if (!el) return;
+            el.addEventListener('click', () => {
+                // Don't fetch during navigation — browser aborts in-flight requests.
+                // Store the section in sessionStorage; process it when we return home.
+                showBadge(section, 0);
+                sessionStorage.setItem('pp_pending_seen', section);
+            }, { capture: true });
         });
     }
 
-    function init() {
+    // Called on fresh load and on bfcache restore (pageshow).
+    // Processes any pending mark-seen BEFORE refreshing counts so the
+    // DB is up-to-date before we query it.
+    async function processAndLoadBadges() {
+        const pending = sessionStorage.getItem('pp_pending_seen');
+        if (pending) {
+            sessionStorage.removeItem('pp_pending_seen');
+            await markSeen(pending);
+        }
         loadNotifBadges();
+    }
+    window.processAndLoadBadges = processAndLoadBadges;
+
+    function init() {
+        processAndLoadBadges();
         startRealtime();
         wireCardClicks();
         // Fallback poll every 30s in case websocket drops
@@ -1169,7 +1183,11 @@
 
     // Re-apply on bfcache restore (browser back button)
     window.addEventListener('pageshow', function(e) {
-        if (e.persisted) applyHomeView();
+        if (e.persisted) {
+            applyHomeView();
+            // Process any pending mark-seen and refresh badge counts
+            if (typeof processAndLoadBadges === 'function') processAndLoadBadges();
+        }
     });
 
     function getAllCards() {
