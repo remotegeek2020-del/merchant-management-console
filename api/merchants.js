@@ -248,10 +248,10 @@ if (action === 'add_task') {
     }
 
     // In-app notification for the assignee
-    if (assigned_to && assigned_to !== validCreator) {
+    if (assigned_to && assigned_to !== session.userid) {
         try {
             const { data: creatorUser } = await supabase
-                .from('app_users').select('first_name, last_name').eq('userid', validCreator).maybeSingle();
+                .from('app_users').select('first_name, last_name').eq('userid', session.userid).maybeSingle();
             const fromName = creatorUser ? `${creatorUser.first_name} ${creatorUser.last_name || ''}`.trim() : 'Someone';
             const { data: merchantRow } = await supabase
                 .from('merchants').select('dba_name').eq('id', merchant_uuid).maybeSingle();
@@ -271,9 +271,11 @@ if (action === 'add_task') {
         }
     }
 
+    const { data: actorRow } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+    const actorLabel = actorRow ? `${actorRow.first_name || ''} ${actorRow.last_name || ''}`.trim() || actorRow.email : session.userid;
     supabase.from('activity_logs').insert({
-        email: dtActorEmail,
-        action: `Task Created by ${dtActorRow ? `${dtActorRow.first_name || ''} ${dtActorRow.last_name || ''}`.trim() || dtActorEmail : 'Staff'} — ${title}`,
+        email: actorRow?.email || session.userid,
+        action: `Task Created by ${actorLabel} — ${title}`,
         status: 'success', category: 'tasks', target_id: data?.[0]?.id || null, target_type: 'task', severity: 'info',
         old_value: null,
         new_value: { title, body: body || null, due_date: due_date || null, assigned_to: assigned_to || null, merchant_id: merchant_uuid, status: 'Pending' }
