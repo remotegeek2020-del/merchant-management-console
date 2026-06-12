@@ -390,102 +390,62 @@
         z-index: 2; pointer-events: none;
     }
 
-    /* ── NEBULAE LAYERS — behind the stars, z-index 1 ── */
-    .snl {
-        position: absolute; pointer-events: none;
-        /* no border-radius: gradients define their own soft edges */
-        z-index: 1;
-        mix-blend-mode: screen;
-    }
+    /* ── NEBULAE LAYERS — subtle, behind stars (z=1) ── */
+    .snl { position: absolute; pointer-events: none; z-index: 1; }
 
-    /* Wide blue nebula */
+    /* Faint blue-indigo wash — barely-there background tint */
     .snl-blue {
-        width: 130%; height: 130%; top: -15%; left: -15%;
+        width: 140%; height: 140%; top: -20%; left: -20%;
         background:
-            radial-gradient(ellipse 65% 55% at 38% 44%,
-                rgba(60,140,225,.72) 0%, rgba(30,100,185,.44) 30%, rgba(12,55,140,.18) 58%, transparent 80%),
-            radial-gradient(ellipse 45% 55% at 72% 62%,
-                rgba(40,120,205,.55) 0%, rgba(20,85,170,.28) 38%, transparent 68%);
-        filter: blur(32px);
-        animation: snl-drift 50s ease-in-out infinite alternate;
-    }
-
-    /* Warm amber/gold dust */
-    .snl-gold {
-        width: 110%; height: 80%; top: 18%; left: -5%;
-        background:
-            radial-gradient(ellipse 75% 65% at 52% 48%,
-                rgba(210,140,55,.58) 0%, rgba(170,100,30,.34) 28%, rgba(110,65,18,.14) 55%, transparent 75%),
-            radial-gradient(ellipse 35% 45% at 18% 65%,
-                rgba(230,155,60,.45) 0%, rgba(185,115,35,.24) 35%, transparent 62%);
-        filter: blur(42px);
-        animation: snl-drift 65s ease-in-out infinite alternate-reverse;
-    }
-
-    /* Dark dust lane */
-    .snl-dust {
-        width: 110%; height: 45%; top: 28%; left: -5%;
-        mix-blend-mode: multiply;
-        background: linear-gradient(180deg,
-            transparent 0%,
-            rgba(2,1,0,.88) 30%, rgba(3,2,0,.92) 52%, rgba(2,1,0,.82) 72%,
-            transparent 100%);
-        filter: blur(28px);
-        animation: snl-dust-drift 80s ease-in-out infinite alternate;
-    }
-
-    /* Hot blue star-forming region — top-right */
-    .snl-hotblue {
-        width: 40%; height: 50%; top: 0%; right: -2%;
-        background:
-            radial-gradient(ellipse 70% 65% at 55% 40%,
-                rgba(170,220,255,.75) 0%, rgba(110,185,250,.48) 28%,
-                rgba(55,140,230,.22) 55%, transparent 75%);
-        filter: blur(20px);
-        animation: snl-drift 30s ease-in-out infinite alternate;
-        animation-delay: -8s;
-    }
-
-    /* Teal wisps — bottom-left */
-    .snl-teal {
-        width: 60%; height: 60%; bottom: -8%; left: -8%;
-        background:
-            radial-gradient(ellipse 80% 70% at 38% 58%,
-                rgba(14,185,185,.50) 0%, rgba(8,140,145,.28) 38%, transparent 68%);
-        filter: blur(45px);
-        animation: snl-drift 44s ease-in-out infinite alternate-reverse;
-        animation-delay: -15s;
-    }
-
-    /* Magenta star-forming blob */
-    .snl-pink {
-        width: 28%; height: 34%; top: 50%; right: 10%;
-        background: radial-gradient(ellipse 70% 80% at 50% 50%,
-            rgba(230,85,175,.50) 0%, rgba(185,50,135,.28) 40%, transparent 70%);
-        filter: blur(26px);
-        animation: snl-drift 36s ease-in-out infinite alternate;
-        animation-delay: -22s;
-    }
-
-    /* Deep blue cloud — upper left */
-    .snl-deep {
-        width: 45%; height: 55%; top: -8%; left: 3%;
-        background: radial-gradient(ellipse 70% 80% at 45% 42%,
-            rgba(30,90,200,.48) 0%, rgba(12,55,155,.26) 45%, transparent 72%);
+            radial-gradient(ellipse 60% 50% at 35% 42%,
+                rgba(30,70,160,.22) 0%, rgba(15,45,110,.10) 45%, transparent 72%),
+            radial-gradient(ellipse 40% 50% at 70% 60%,
+                rgba(20,55,140,.16) 0%, rgba(10,35,100,.08) 40%, transparent 68%);
         filter: blur(55px);
-        animation: snl-drift 58s ease-in-out infinite alternate;
-        animation-delay: -30s;
+        animation: snl-drift 60s ease-in-out infinite alternate;
     }
+
+    /* Warm dust — very faint amber tint lower-center */
+    .snl-gold {
+        width: 80%; height: 60%; top: 30%; left: 10%;
+        background:
+            radial-gradient(ellipse 80% 70% at 50% 55%,
+                rgba(140,85,28,.14) 0%, rgba(100,60,18,.07) 40%, transparent 70%);
+        filter: blur(60px);
+        animation: snl-drift 70s ease-in-out infinite alternate-reverse;
+    }
+
+    /* Subtle dark dust lane — barely perceptible depth */
+    .snl-dust {
+        width: 100%; height: 35%; top: 32%; left: 0%;
+        background: linear-gradient(180deg,
+            transparent 0%, rgba(0,0,0,.30) 40%, rgba(0,0,0,.35) 55%, transparent 100%);
+        filter: blur(40px);
+        animation: snl-dust-drift 90s ease-in-out infinite alternate;
+    }
+
+    /* Cool blue tint — upper right corner only */
+    .snl-hotblue {
+        width: 35%; height: 40%; top: 0%; right: 0%;
+        background:
+            radial-gradient(ellipse 70% 65% at 65% 35%,
+                rgba(60,120,210,.18) 0%, rgba(30,80,170,.09) 45%, transparent 72%);
+        filter: blur(45px);
+        animation: snl-drift 40s ease-in-out infinite alternate;
+        animation-delay: -10s;
+    }
+
+    /* These layers intentionally blank — scene is less busy without them */
+    .snl-teal, .snl-pink, .snl-deep { display: none; }
 
     @keyframes snl-drift {
-        0%   { transform: translate(0,0) scale(1) rotate(0deg); }
-        33%  { transform: translate(14px,-10px) scale(1.025) rotate(.6deg); }
-        66%  { transform: translate(-10px,16px) scale(.982) rotate(-.5deg); }
-        100% { transform: translate(18px,-5px) scale(1.03) rotate(.3deg); }
+        0%   { transform: translate(0,0) scale(1); }
+        50%  { transform: translate(10px,-8px) scale(1.015); }
+        100% { transform: translate(-6px,12px) scale(0.990); }
     }
     @keyframes snl-dust-drift {
-        0%   { transform: translateX(0) scaleY(1); }
-        100% { transform: translateX(24px) scaleY(1.05); }
+        0%   { transform: translateX(0); }
+        100% { transform: translateX(18px); }
     }
 
     /* ── PLANETS — 3D look with layered gradients + CSS perspective ── */
