@@ -384,147 +384,274 @@
             radial-gradient(ellipse 160% 120% at 42% 52%,
                 #0d1e3a 0%, #08142a 28%, #050d1e 52%, #030810 72%, #010508 100%) !important;
     }
+    /* Canvas holds the stars — sits ABOVE nebulae */
     #star-canvas {
         position: absolute; inset: 0; width: 100%; height: 100%;
-        z-index: 0; pointer-events: none;
+        z-index: 2; pointer-events: none;
     }
 
-    /* ── NEBULAE LAYERS ── */
-    .snl { position: absolute; pointer-events: none; border-radius: 50%; }
+    /* ── NEBULAE LAYERS — behind the stars, z-index 1 ── */
+    .snl {
+        position: absolute; pointer-events: none;
+        /* no border-radius: gradients define their own soft edges */
+        z-index: 1;
+        mix-blend-mode: screen;
+    }
 
-    /* Wide blue nebula — covers most of the screen */
+    /* Wide blue nebula */
     .snl-blue {
         width: 130%; height: 130%; top: -15%; left: -15%;
         background:
             radial-gradient(ellipse 65% 55% at 38% 44%,
-                rgba(60,130,210,.32) 0%, rgba(30,95,175,.18) 32%, rgba(12,55,130,.07) 60%, transparent 80%),
+                rgba(60,140,225,.72) 0%, rgba(30,100,185,.44) 30%, rgba(12,55,140,.18) 58%, transparent 80%),
             radial-gradient(ellipse 45% 55% at 72% 62%,
-                rgba(40,110,195,.26) 0%, rgba(20,80,160,.14) 38%, transparent 68%);
-        filter: blur(28px);
+                rgba(40,120,205,.55) 0%, rgba(20,85,170,.28) 38%, transparent 68%);
+        filter: blur(32px);
         animation: snl-drift 50s ease-in-out infinite alternate;
     }
 
-    /* Warm amber/gold dust — creates the golden regions */
+    /* Warm amber/gold dust */
     .snl-gold {
         width: 110%; height: 80%; top: 18%; left: -5%;
         background:
             radial-gradient(ellipse 75% 65% at 52% 48%,
-                rgba(190,120,45,.26) 0%, rgba(155,90,30,.16) 28%, rgba(100,60,18,.07) 55%, transparent 75%),
+                rgba(210,140,55,.58) 0%, rgba(170,100,30,.34) 28%, rgba(110,65,18,.14) 55%, transparent 75%),
             radial-gradient(ellipse 35% 45% at 18% 65%,
-                rgba(210,140,55,.20) 0%, rgba(170,105,35,.11) 35%, transparent 62%);
-        filter: blur(38px);
+                rgba(230,155,60,.45) 0%, rgba(185,115,35,.24) 35%, transparent 62%);
+        filter: blur(42px);
         animation: snl-drift 65s ease-in-out infinite alternate-reverse;
     }
 
-    /* Dark dust lane — opaque dark band crossing the middle */
+    /* Dark dust lane */
     .snl-dust {
-        width: 110%; height: 50%; top: 26%; left: -5%;
+        width: 110%; height: 45%; top: 28%; left: -5%;
+        mix-blend-mode: multiply;
         background: linear-gradient(180deg,
             transparent 0%,
-            rgba(4,3,1,.72) 30%, rgba(6,4,2,.80) 50%, rgba(4,3,1,.65) 72%,
+            rgba(2,1,0,.88) 30%, rgba(3,2,0,.92) 52%, rgba(2,1,0,.82) 72%,
             transparent 100%);
-        filter: blur(22px);
+        filter: blur(28px);
         animation: snl-dust-drift 80s ease-in-out infinite alternate;
     }
 
-    /* Bright blue star-forming region — hot, intense top-right */
+    /* Hot blue star-forming region — top-right */
     .snl-hotblue {
-        width: 35%; height: 45%; top: 2%; right: 0%;
+        width: 40%; height: 50%; top: 0%; right: -2%;
         background:
-            radial-gradient(ellipse,
-                rgba(160,210,255,.38) 0%, rgba(100,175,245,.22) 28%,
-                rgba(50,130,220,.10) 55%, transparent 75%);
-        filter: blur(22px);
+            radial-gradient(ellipse 70% 65% at 55% 40%,
+                rgba(170,220,255,.75) 0%, rgba(110,185,250,.48) 28%,
+                rgba(55,140,230,.22) 55%, transparent 75%);
+        filter: blur(20px);
         animation: snl-drift 30s ease-in-out infinite alternate;
         animation-delay: -8s;
     }
 
-    /* Teal wisps — bottom-left corner */
+    /* Teal wisps — bottom-left */
     .snl-teal {
-        width: 55%; height: 55%; bottom: -5%; left: -5%;
+        width: 60%; height: 60%; bottom: -8%; left: -8%;
         background:
             radial-gradient(ellipse 80% 70% at 38% 58%,
-                rgba(14,155,165,.24) 0%, rgba(8,120,130,.13) 38%, transparent 68%);
-        filter: blur(42px);
+                rgba(14,185,185,.50) 0%, rgba(8,140,145,.28) 38%, transparent 68%);
+        filter: blur(45px);
         animation: snl-drift 44s ease-in-out infinite alternate-reverse;
         animation-delay: -15s;
     }
 
-    /* Faint magenta star-forming blob */
+    /* Magenta star-forming blob */
     .snl-pink {
-        width: 22%; height: 28%; top: 52%; right: 12%;
-        background: radial-gradient(ellipse,
-            rgba(210,75,155,.22) 0%, rgba(170,45,120,.11) 40%, transparent 70%);
-        filter: blur(28px);
+        width: 28%; height: 34%; top: 50%; right: 10%;
+        background: radial-gradient(ellipse 70% 80% at 50% 50%,
+            rgba(230,85,175,.50) 0%, rgba(185,50,135,.28) 40%, transparent 70%);
+        filter: blur(26px);
         animation: snl-drift 36s ease-in-out infinite alternate;
         animation-delay: -22s;
     }
 
-    /* Extra deep blue cloud — upper left */
+    /* Deep blue cloud — upper left */
     .snl-deep {
-        width: 40%; height: 50%; top: -5%; left: 5%;
+        width: 45%; height: 55%; top: -8%; left: 3%;
         background: radial-gradient(ellipse 70% 80% at 45% 42%,
-            rgba(25,80,180,.20) 0%, rgba(10,50,140,.10) 45%, transparent 72%);
-        filter: blur(50px);
+            rgba(30,90,200,.48) 0%, rgba(12,55,155,.26) 45%, transparent 72%);
+        filter: blur(55px);
         animation: snl-drift 58s ease-in-out infinite alternate;
         animation-delay: -30s;
     }
 
     @keyframes snl-drift {
         0%   { transform: translate(0,0) scale(1) rotate(0deg); }
-        33%  { transform: translate(12px,-8px) scale(1.025) rotate(.6deg); }
-        66%  { transform: translate(-8px,14px) scale(.982) rotate(-.5deg); }
-        100% { transform: translate(16px,-4px) scale(1.03) rotate(.3deg); }
+        33%  { transform: translate(14px,-10px) scale(1.025) rotate(.6deg); }
+        66%  { transform: translate(-10px,16px) scale(.982) rotate(-.5deg); }
+        100% { transform: translate(18px,-5px) scale(1.03) rotate(.3deg); }
     }
     @keyframes snl-dust-drift {
         0%   { transform: translateX(0) scaleY(1); }
-        100% { transform: translateX(22px) scaleY(1.04); }
+        100% { transform: translateX(24px) scaleY(1.05); }
     }
 
-    /* Planets */
-    .planet-system { position: absolute; pointer-events: none; }
-    .ps-main  { top: 9%; right: 7%; animation: planet-float 9s ease-in-out infinite alternate; }
-    .ps-small { bottom: 12%; left: 6%; animation: planet-float 13s ease-in-out infinite alternate-reverse; }
-    .space-planet { border-radius: 50%; position: relative; overflow: hidden; }
-    .sp-blue {
-        width: 88px; height: 88px;
-        background: radial-gradient(circle at 34% 30%, #bae6fd 0%, #38bdf8 18%, #0369a1 52%, #082f49 83%, #020617 100%);
-        box-shadow: inset -17px -9px 32px rgba(0,0,0,.65), inset 4px 4px 18px rgba(186,230,253,.14), 0 0 40px rgba(56,189,248,.28);
+    /* ── PLANETS — 3D look with layered gradients + CSS perspective ── */
+    .planet-system {
+        position: absolute; pointer-events: none;
+        z-index: 3;
+        perspective: 400px;
     }
+    .ps-main  { top: 8%; right: 6%; animation: planet-float 9s ease-in-out infinite alternate; }
+    .ps-small { bottom: 10%; left: 5%; animation: planet-float 13s ease-in-out infinite alternate-reverse; }
+
+    /* Blue gas giant */
+    .space-planet { border-radius: 50%; position: relative; }
+    .sp-blue {
+        width: 120px; height: 120px;
+        background:
+            /* Specular highlight — bright glint at top-left */
+            radial-gradient(circle 20px at 32% 26%, rgba(255,255,255,.65) 0%, rgba(210,240,255,.20) 55%, transparent 100%),
+            /* Atmosphere bands */
+            repeating-linear-gradient(
+                8deg,
+                transparent 0%,
+                rgba(80,170,240,.10) 4%,
+                rgba(30,120,210,.14) 8%,
+                rgba(10,80,180,.08) 12%,
+                transparent 16%
+            ),
+            /* Spherical shading — lit from top-left */
+            radial-gradient(circle at 35% 30%,
+                #d8f0ff 0%,
+                #62c4f8 10%,
+                #1a92e8 24%,
+                #0c6cc8 40%,
+                #074898 56%,
+                #022460 72%,
+                #010e30 88%,
+                #000612 100%
+            );
+        box-shadow:
+            /* Terminator shadow on dark side */
+            inset -30px -14px 50px rgba(0,0,0,.80),
+            /* Lit-side atmospheric scatter */
+            inset 6px 6px 24px rgba(200,238,255,.16),
+            /* Outer atmospheric limb glow */
+            0 0 0 4px rgba(30,130,235,.12),
+            0 0 28px 8px rgba(40,140,245,.22),
+            0 0 70px 25px rgba(20,90,210,.12);
+        overflow: hidden;
+    }
+    /* Cloud wisps overlay — inside the sphere */
     .sp-blue::before {
         content: ''; position: absolute; inset: 0; border-radius: 50%;
-        background: repeating-linear-gradient(12deg, transparent 0, transparent 8px, rgba(255,255,255,.04) 8px, rgba(255,255,255,.04) 10px);
+        background:
+            radial-gradient(ellipse 80% 14% at 50% 38%, rgba(180,225,255,.18) 0%, transparent 100%),
+            radial-gradient(ellipse 60% 10% at 42% 55%, rgba(140,200,250,.12) 0%, transparent 100%),
+            radial-gradient(ellipse 40% 8%  at 62% 70%, rgba(100,170,240,.10) 0%, transparent 100%);
     }
+    /* Terminator edge glow — subtle rim light on dark side */
+    .sp-blue::after {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        background: radial-gradient(ellipse 30% 80% at 88% 50%,
+            rgba(30,80,200,.22) 0%, rgba(15,50,160,.10) 40%, transparent 70%);
+    }
+
+    /* Saturn-like ring system */
+    .planet-ring-wrap {
+        position: absolute; top: 50%; left: 50%;
+        width: 200px; height: 42px;
+        margin-top: -21px; margin-left: -100px;
+        transform-style: preserve-3d;
+        transform: rotateX(72deg);
+        pointer-events: none;
+    }
+    /* Outer ring band */
+    .planet-ring-wrap::before {
+        content: '';
+        position: absolute; inset: 0;
+        border-radius: 50%;
+        background: radial-gradient(ellipse 100% 100% at 50% 50%,
+            transparent 22%,
+            rgba(186,230,253,.08) 26%,
+            rgba(210,240,255,.32) 32%,
+            rgba(180,220,250,.22) 40%,
+            rgba(150,200,240,.35) 50%,
+            rgba(186,230,253,.18) 60%,
+            rgba(120,180,220,.10) 68%,
+            transparent 75%);
+        filter: blur(0.8px);
+    }
+    /* Inner ring gap — Cassini-division-like dark gap */
+    .planet-ring-wrap::after {
+        content: '';
+        position: absolute; inset: 6px;
+        border-radius: 50%;
+        background: radial-gradient(ellipse 100% 100% at 50% 50%,
+            transparent 30%,
+            rgba(0,0,0,.50) 38%,
+            transparent 44%);
+    }
+
+    /* Moon */
+    .moon-track {
+        position: absolute; top: 60px; left: 60px;
+        width: 0; height: 0;
+        animation: moon-orbit 8s linear infinite;
+        z-index: 4;
+    }
+    .space-moon {
+        position: absolute; width: 18px; height: 18px; border-radius: 50%;
+        background:
+            radial-gradient(circle 4px at 33% 30%, rgba(255,255,255,.60) 0%, transparent 100%),
+            radial-gradient(circle at 38% 34%, #eef2f7 0%, #a8b8cc 38%, #5a6e85 70%, #1e2d3f 100%);
+        box-shadow:
+            inset -4px -3px 8px rgba(0,0,0,.60),
+            0 0 10px rgba(180,210,240,.20);
+        top: -72px; left: -9px;
+    }
+    @keyframes moon-orbit { to { transform: rotate(360deg); } }
+
+    /* Red/rocky planet */
     .sp-red {
-        width: 52px; height: 52px;
-        background: radial-gradient(circle at 37% 31%, #fca5a5 0%, #ef4444 24%, #991b1b 58%, #3f0808 92%);
-        box-shadow: inset -10px -5px 18px rgba(0,0,0,.6), inset 3px 2px 10px rgba(252,165,165,.14), 0 0 22px rgba(239,68,68,.22);
+        width: 70px; height: 70px;
+        background:
+            /* Specular highlight */
+            radial-gradient(circle 10px at 35% 28%, rgba(255,220,200,.55) 0%, transparent 100%),
+            /* Surface terrain variation */
+            radial-gradient(ellipse 60% 30% at 45% 60%, rgba(140,40,20,.20) 0%, transparent 60%),
+            radial-gradient(ellipse 40% 20% at 65% 35%, rgba(160,60,30,.15) 0%, transparent 50%),
+            /* Spherical shading */
+            radial-gradient(circle at 36% 30%,
+                #ffcfb8 0%,
+                #f08060 12%,
+                #c04828 28%,
+                #8a2010 48%,
+                #4a0e08 68%,
+                #200408 88%
+            );
+        box-shadow:
+            inset -14px -7px 24px rgba(0,0,0,.72),
+            inset 4px 3px 14px rgba(255,180,140,.14),
+            0 0 0 2px rgba(200,60,30,.10),
+            0 0 20px 6px rgba(210,70,40,.18),
+            0 0 50px 16px rgba(180,50,25,.10);
+        overflow: hidden;
     }
     .sp-red::before {
         content: ''; position: absolute; inset: 0; border-radius: 50%;
-        background: repeating-linear-gradient(15deg, transparent 0, transparent 6px, rgba(255,255,255,.03) 6px, rgba(255,255,255,.03) 7px);
+        /* Polar ice cap */
+        background:
+            radial-gradient(ellipse 55% 18% at 50% 8%, rgba(255,245,240,.28) 0%, transparent 100%),
+            /* Canyon-like dark region */
+            radial-gradient(ellipse 70% 15% at 50% 52%, rgba(60,10,5,.35) 0%, transparent 100%);
     }
-    .planet-ring-wrap {
-        position: absolute; top: 50%; left: 50%;
-        width: 142px; height: 26px; margin-top: -13px; margin-left: -71px;
-        border: 2.5px solid rgba(186,230,253,.28); border-radius: 50%;
-        box-shadow: 0 0 10px rgba(186,230,253,.1); transform: rotateX(70deg);
+    .sp-red::after {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        background: radial-gradient(ellipse 28% 80% at 86% 50%,
+            rgba(180,60,30,.20) 0%, rgba(120,30,15,.08) 40%, transparent 70%);
     }
-    .planet-ring-wrap::before { content: ''; position: absolute; inset: 5px; border: 1px solid rgba(186,230,253,.14); border-radius: 50%; }
-    .moon-track { position: absolute; top: 44px; left: 44px; width: 0; height: 0; animation: moon-orbit 8s linear infinite; }
-    .space-moon {
-        position: absolute; width: 15px; height: 15px; border-radius: 50%;
-        background: radial-gradient(circle at 35% 35%, #f1f5f9 0%, #94a3b8 48%, #334155 90%);
-        box-shadow: inset -3px -2px 6px rgba(0,0,0,.55); top: -56px; left: -7px;
-    }
-    @keyframes moon-orbit { to { transform: rotate(360deg); } }
+
     @keyframes planet-float {
         0%   { transform: translateY(0) rotate(0deg); }
-        100% { transform: translateY(13px) rotate(1.5deg); }
+        100% { transform: translateY(14px) rotate(1.8deg); }
     }
 
     /* Asteroids */
-    .asteroid-track { position: absolute; pointer-events: none; }
+    .asteroid-track { position: absolute; pointer-events: none; z-index: 3; }
     .asteroid { width: 6px; height: 3px; background: rgba(148,163,184,.65); border-radius: 50%; box-shadow: 4px 0 0 1px rgba(148,163,184,.3); }
     .at-1 { top: 22%; left: -40px; animation: ast-1 48s linear infinite; }
     .at-2 { top: 68%; left: -40px; animation: ast-2 62s linear infinite 12s; }
@@ -535,7 +662,7 @@
     @keyframes ast-3 { from{transform:translate(0,0) rotate(0deg)} to{transform:translate(115vw,35px) rotate(40deg)} }
 
     /* Shooting stars */
-    .shooting-star { position: absolute; pointer-events: none; height: 1.5px; border-radius: 50%; animation: shoot linear infinite; opacity: 0; }
+    .shooting-star { position: absolute; pointer-events: none; z-index: 3; height: 1.5px; border-radius: 50%; animation: shoot linear infinite; opacity: 0; }
     .ss-1 { top: 18%; left: 15%; width: 140px; background: linear-gradient(90deg,transparent,rgba(255,255,255,.92) 50%,transparent); animation-duration: 6s; animation-delay: 4s; transform: rotate(-28deg); }
     .ss-2 { top: 32%; left: 58%; width: 110px; background: linear-gradient(90deg,transparent,rgba(200,220,255,.85) 50%,transparent); animation-duration: 5s; animation-delay: 13s; transform: rotate(-32deg); }
     .ss-3 { top: 12%; left: 42%; width: 160px; background: linear-gradient(90deg,transparent,rgba(255,248,200,.88) 50%,transparent); animation-duration: 7s; animation-delay: 22s; transform: rotate(-25deg); }
