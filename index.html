@@ -380,10 +380,10 @@
 
     /* ── DEEP SPACE SCENE (login screen) ──────────────────────────────── */
     #login-ui {
-        /* Richer background — suggests a galactic core brightening toward center */
+        /* Background brightens in the center (behind the card), darkens at edges */
         background:
-            radial-gradient(ellipse 80% 60% at 55% 45%,
-                #0e2244 0%, #081630 35%, #040d1c 60%, #020810 82%, #010408 100%) !important;
+            radial-gradient(ellipse 60% 55% at 52% 48%,
+                #112650 0%, #0a1a38 25%, #060f24 50%, #030a18 70%, #010408 100%) !important;
     }
     #star-canvas {
         position: absolute; inset: 0; width: 100%; height: 100%;
@@ -405,22 +405,22 @@
         animation: snl-drift 55s ease-in-out infinite alternate;
     }
 
-    /* Warm amber cloud — mid-lower area, like dust in star-forming region */
+    /* Warm amber cloud — bottom-left, away from card center */
     .snl-gold {
-        width: 75%; height: 65%; top: 28%; left: 5%;
+        width: 65%; height: 55%; top: 52%; left: -5%;
         background:
-            radial-gradient(ellipse 70% 60% at 48% 52%,
-                rgba(185,105,32,.42) 0%, rgba(145,78,22,.22) 35%, rgba(90,50,12,.08) 58%, transparent 76%);
-        filter: blur(55px);
+            radial-gradient(ellipse 70% 60% at 38% 58%,
+                rgba(185,105,32,.36) 0%, rgba(145,78,22,.18) 40%, rgba(90,50,12,.06) 62%, transparent 80%);
+        filter: blur(60px);
         animation: snl-drift 68s ease-in-out infinite alternate-reverse;
         animation-delay: -20s;
     }
 
-    /* Dark dust lane — adds depth without being black, slightly diagonal */
+    /* Dark dust lane — pushed to lower third, away from the login card */
     .snl-dust {
-        width: 110%; height: 30%; top: 36%; left: -5%;
+        width: 110%; height: 28%; top: 68%; left: -5%;
         background: linear-gradient(175deg,
-            transparent 0%, rgba(0,0,0,.42) 35%, rgba(0,0,0,.48) 55%, transparent 100%);
+            transparent 0%, rgba(0,0,0,.38) 35%, rgba(0,0,0,.44) 55%, transparent 100%);
         filter: blur(35px);
         animation: snl-dust-drift 85s ease-in-out infinite alternate;
     }
