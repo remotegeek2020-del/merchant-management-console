@@ -378,6 +378,135 @@
 
     /* Home view modes are applied via dynamic <style id="home-view-css"> injected in <head> */
 
+    /* ── SPACE SCENE (login screen) ───────────────────────────────────── */
+    #star-canvas {
+        position: absolute; inset: 0; width: 100%; height: 100%;
+        z-index: 0; pointer-events: none;
+    }
+
+    /* Nebulae */
+    .space-nebula {
+        position: absolute; border-radius: 50%; pointer-events: none;
+        mix-blend-mode: screen;
+        animation: nebula-drift 28s ease-in-out infinite alternate;
+    }
+    .sn-1 {
+        width: 520px; height: 360px;
+        background: radial-gradient(ellipse, rgba(139,92,246,.20) 0%, rgba(109,40,217,.07) 45%, transparent 70%);
+        filter: blur(55px); top: 3%; left: -10%; animation-duration: 30s;
+    }
+    .sn-2 {
+        width: 420px; height: 280px;
+        background: radial-gradient(ellipse, rgba(236,72,153,.16) 0%, rgba(190,24,93,.06) 45%, transparent 70%);
+        filter: blur(48px); bottom: 8%; right: -6%;
+        animation-duration: 38s; animation-direction: alternate-reverse;
+    }
+    .sn-3 {
+        width: 320px; height: 220px;
+        background: radial-gradient(ellipse, rgba(14,165,233,.13) 0%, rgba(3,105,161,.05) 45%, transparent 70%);
+        filter: blur(42px); top: 48%; left: 52%; animation-duration: 24s;
+    }
+    @keyframes nebula-drift {
+        0%   { transform: translate(0,0) scale(1); }
+        40%  { transform: translate(18px,-12px) scale(1.04); }
+        100% { transform: translate(-12px,22px) scale(.97); }
+    }
+
+    /* Planets */
+    .planet-system { position: absolute; pointer-events: none; }
+    .ps-main  { top: 9%; right: 7%; animation: planet-float 9s ease-in-out infinite alternate; }
+    .ps-small { bottom: 12%; left: 6%; animation: planet-float 13s ease-in-out infinite alternate-reverse; }
+
+    .space-planet { border-radius: 50%; position: relative; overflow: hidden; }
+    .sp-blue {
+        width: 88px; height: 88px;
+        background: radial-gradient(circle at 34% 30%, #bae6fd 0%, #38bdf8 18%, #0369a1 52%, #082f49 83%, #020617 100%);
+        box-shadow: inset -17px -9px 32px rgba(0,0,0,.65),
+                    inset 4px 4px 18px rgba(186,230,253,.14),
+                    0 0 38px rgba(56,189,248,.22);
+    }
+    .sp-blue::before {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        background: repeating-linear-gradient(12deg, transparent 0, transparent 8px,
+                    rgba(255,255,255,.04) 8px, rgba(255,255,255,.04) 10px);
+    }
+    .sp-red {
+        width: 52px; height: 52px;
+        background: radial-gradient(circle at 37% 31%, #fca5a5 0%, #ef4444 24%, #991b1b 58%, #3f0808 92%);
+        box-shadow: inset -10px -5px 18px rgba(0,0,0,.6),
+                    inset 3px 2px 10px rgba(252,165,165,.14),
+                    0 0 22px rgba(239,68,68,.18);
+    }
+    .sp-red::before {
+        content: ''; position: absolute; inset: 0; border-radius: 50%;
+        background: repeating-linear-gradient(15deg, transparent 0, transparent 6px,
+                    rgba(255,255,255,.03) 6px, rgba(255,255,255,.03) 7px);
+    }
+
+    /* Saturn ring */
+    .planet-ring-wrap {
+        position: absolute; top: 50%; left: 50%;
+        width: 142px; height: 26px;
+        margin-top: -13px; margin-left: -71px;
+        border: 2.5px solid rgba(186,230,253,.28); border-radius: 50%;
+        box-shadow: 0 0 10px rgba(186,230,253,.1); transform: rotateX(70deg);
+    }
+    .planet-ring-wrap::before {
+        content: ''; position: absolute; inset: 5px;
+        border: 1px solid rgba(186,230,253,.14); border-radius: 50%;
+    }
+
+    /* Moon orbit */
+    .moon-track {
+        position: absolute; top: 44px; left: 44px;
+        width: 0; height: 0;
+        animation: moon-orbit 8s linear infinite;
+    }
+    .space-moon {
+        position: absolute; width: 15px; height: 15px; border-radius: 50%;
+        background: radial-gradient(circle at 35% 35%, #f1f5f9 0%, #94a3b8 48%, #334155 90%);
+        box-shadow: inset -3px -2px 6px rgba(0,0,0,.55);
+        top: -56px; left: -7px;
+    }
+    @keyframes moon-orbit { to { transform: rotate(360deg); } }
+    @keyframes planet-float {
+        0%   { transform: translateY(0) rotate(0deg); }
+        100% { transform: translateY(13px) rotate(1.5deg); }
+    }
+
+    /* Asteroids */
+    .asteroid-track { position: absolute; pointer-events: none; }
+    .asteroid {
+        width: 6px; height: 3px; background: rgba(148,163,184,.65);
+        border-radius: 50%; box-shadow: 4px 0 0 1px rgba(148,163,184,.3);
+    }
+    .at-1 { top: 22%; left: -40px; animation: ast-1 48s linear infinite; }
+    .at-2 { top: 68%; left: -40px; animation: ast-2 62s linear infinite 12s; }
+    .at-3 { top: 38%; left: -40px; animation: ast-3 80s linear infinite 30s; }
+    .at-4 { top: 55%; left: -40px; animation: ast-1 55s linear infinite 20s; }
+    @keyframes ast-1 { from{transform:translate(0,0) rotate(0deg)} to{transform:translate(115vw,18px) rotate(25deg)} }
+    @keyframes ast-2 { from{transform:translate(0,0) rotate(0deg)} to{transform:translate(115vw,-28px) rotate(-18deg)} }
+    @keyframes ast-3 { from{transform:translate(0,0) rotate(0deg)} to{transform:translate(115vw,35px) rotate(40deg)} }
+
+    /* Shooting star */
+    .shooting-star {
+        position: absolute; pointer-events: none;
+        width: 120px; height: 1.5px;
+        background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,255,255,.9) 50%, rgba(255,255,255,0));
+        border-radius: 50%;
+        animation: shoot linear infinite;
+        opacity: 0;
+    }
+    .ss-1 { top: 18%; left: 20%; animation-duration: 6s; animation-delay: 3s; transform: rotate(-30deg); }
+    .ss-2 { top: 35%; left: 60%; animation-duration: 5s; animation-delay: 11s; transform: rotate(-25deg); }
+    .ss-3 { top: 10%; left: 45%; animation-duration: 7s; animation-delay: 20s; transform: rotate(-35deg); }
+    @keyframes shoot {
+        0%   { opacity: 0; transform: translateX(-80px) rotate(-30deg); }
+        10%  { opacity: 1; }
+        50%  { opacity: 1; }
+        70%  { opacity: 0; transform: translateX(200px) rotate(-30deg); }
+        100% { opacity: 0; transform: translateX(200px) rotate(-30deg); }
+    }
 </style>
     
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -402,6 +531,37 @@
     </div>
 
     <div id="login-ui" style="display: none;">
+        <!-- Moving starfield canvas -->
+        <canvas id="star-canvas"></canvas>
+
+        <!-- Nebula clouds -->
+        <div class="space-nebula sn-1"></div>
+        <div class="space-nebula sn-2"></div>
+        <div class="space-nebula sn-3"></div>
+
+        <!-- Saturn-like blue planet (top right) -->
+        <div class="planet-system ps-main">
+            <div class="space-planet sp-blue"></div>
+            <div class="planet-ring-wrap"></div>
+            <div class="moon-track"><div class="space-moon"></div></div>
+        </div>
+
+        <!-- Small red planet (bottom left) -->
+        <div class="planet-system ps-small">
+            <div class="space-planet sp-red"></div>
+        </div>
+
+        <!-- Drifting asteroids -->
+        <div class="asteroid-track at-1"><div class="asteroid"></div></div>
+        <div class="asteroid-track at-2"><div class="asteroid"></div></div>
+        <div class="asteroid-track at-3"><div class="asteroid"></div></div>
+        <div class="asteroid-track at-4"><div class="asteroid"></div></div>
+
+        <!-- Shooting stars -->
+        <div class="shooting-star ss-1"></div>
+        <div class="shooting-star ss-2"></div>
+        <div class="shooting-star ss-3"></div>
+
         <!-- Portal entrance scene -->
         <div class="portal-stars"></div>
         <div class="portal-ring r1"></div>
@@ -1359,5 +1519,118 @@
 <div id="wormhole-flash" style="display:none;position:fixed;inset:0;background:white;z-index:99999;pointer-events:none;opacity:1;"></div>
 <script src="/js/realm-transition.js"></script>
 <script src="/js/portal-transition.js"></script>
+
+<script>
+/* ── SPACE STARFIELD CANVAS ──────────────────────────────────────────── */
+(function () {
+    const canvas  = document.getElementById('star-canvas');
+    const loginUi = document.getElementById('login-ui');
+    if (!canvas || !loginUi) return;
+
+    const ctx = canvas.getContext('2d');
+    const N = 300;
+    let W, H, CX, CY;
+    const stars = [];
+    let raf = null;
+    let lastT = 0;
+
+    function resize() {
+        W  = canvas.width  = loginUi.offsetWidth  || window.innerWidth;
+        H  = canvas.height = loginUi.offsetHeight || window.innerHeight;
+        CX = W / 2; CY = H / 2;
+    }
+
+    function mkStar(spread) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = spread
+            ? Math.random() * Math.min(W, H) * 0.48   // initial: spread across screen
+            : Math.random() * 5;                        // reset: born near center
+        const z = Math.random();
+        const tint = Math.random();
+        return {
+            x: CX + Math.cos(angle) * r,
+            y: CY + Math.sin(angle) * r,
+            z,
+            size:   Math.random() * 1.3 + 0.2,
+            alpha:  Math.random() * 0.45 + 0.45,
+            twink:  Math.random() * Math.PI * 2,
+            r: tint < 0.1 ? 180 : 255,
+            g: tint < 0.1 ? 210 : 255,
+            b: tint < 0.1 ? 255 : (tint < 0.2 ? 210 : 255),
+        };
+    }
+
+    function init() {
+        stars.length = 0;
+        for (let i = 0; i < N; i++) stars.push(mkStar(true));
+    }
+
+    function draw(t) {
+        const dt = Math.min((t - lastT) / 16.67, 3);
+        lastT = t;
+
+        ctx.clearRect(0, 0, W, H);
+
+        const now = t / 1000;
+
+        for (const s of stars) {
+            /* drift outward from center — like drifting forward through space */
+            const dx = s.x - CX, dy = s.y - CY;
+            const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+            const spd  = (0.08 + s.z * 0.22) * dt;
+            s.x += (dx / dist) * spd;
+            s.y += (dy / dist) * spd;
+
+            /* twinkle */
+            const twinkle = 0.72 + 0.28 * Math.sin(now * (1.4 + s.z * 0.8) + s.twink);
+            const alpha   = s.alpha * twinkle;
+            const sz      = s.size * (0.35 + s.z * 0.65);
+
+            ctx.beginPath();
+            ctx.arc(s.x, s.y, sz, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(${s.r},${s.g},${s.b},${alpha})`;
+            ctx.fill();
+
+            /* tiny cross-sparkle on bright close stars */
+            if (s.z > 0.82 && s.size > 0.95) {
+                ctx.strokeStyle = `rgba(${s.r},${s.g},${s.b},${alpha * 0.35})`;
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(s.x - sz * 2.8, s.y); ctx.lineTo(s.x + sz * 2.8, s.y);
+                ctx.moveTo(s.x, s.y - sz * 2.8); ctx.lineTo(s.x, s.y + sz * 2.8);
+                ctx.stroke();
+            }
+
+            /* reset when star flies off screen */
+            if (s.x < -25 || s.x > W + 25 || s.y < -25 || s.y > H + 25) {
+                Object.assign(s, mkStar(false));
+            }
+        }
+
+        raf = requestAnimationFrame(draw);
+    }
+
+    function start() {
+        if (raf) return;
+        resize(); init(); lastT = performance.now();
+        raf = requestAnimationFrame(draw);
+    }
+
+    function stop() {
+        if (raf) { cancelAnimationFrame(raf); raf = null; }
+    }
+
+    /* Start/stop with login-ui visibility */
+    new MutationObserver(() => {
+        const visible = loginUi.style.display !== 'none' && loginUi.style.display !== '';
+        visible ? start() : stop();
+    }).observe(loginUi, { attributes: true, attributeFilter: ['style'] });
+
+    /* If login-ui is already visible on load */
+    if (loginUi.style.display !== 'none' && loginUi.style.display !== '') start();
+
+    window.addEventListener('resize', () => { if (raf) { resize(); init(); } });
+})();
+</script>
 </body>
 </html>
