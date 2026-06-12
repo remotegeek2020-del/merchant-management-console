@@ -738,20 +738,26 @@
         } catch (e) { /* silent fallback to polling */ }
     }
 
-    async function markSeen(section) {
+    function markSeen(section) {
         const userid = localStorage.getItem('pp_userid');
+        const token  = localStorage.getItem('pp_session_token') || '';
         if (!userid) return;
         // Clear badge instantly in UI
         showBadge(section, 0);
-        // Persist to DB (fire-and-forget)
-        fetch('/api/notifications', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '')
-            },
-            body: JSON.stringify({ action: 'mark_seen', userid, section })
-        }).catch(() => {});
+        // Use sendBeacon so the request survives page navigation (fetch gets aborted on unload)
+        const payload = JSON.stringify({ action: 'mark_seen', userid, section, token });
+        if (navigator.sendBeacon) {
+            navigator.sendBeacon('/api/notifications', new Blob([payload], { type: 'application/json' }));
+        } else {
+            fetch('/api/notifications', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: payload
+            }).catch(() => {});
+        }
     }
 
     function wireCardClicks() {

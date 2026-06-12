@@ -6,12 +6,26 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const VALID_SECTIONS = ['returns', 'deployments', 'tickets', 'tasks', 'ideas', 'partners', 'merchants', 'inventory'];
 
 export default async function handler(req, res) {
-    const session = await validateSession(req);
-    if (!session) return sessionErrorResponse(res);
-
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
-    const { action, userid, section } = req.body;
+    const { action, userid, section, token: bodyToken } = req.body;
+
+    // Primary auth: Authorization header
+    let session = await validateSession(req);
+
+    // Fallback: token in body — used by sendBeacon (cannot set headers)
+    if (!session && bodyToken) {
+        const { data: sess } = await supabase
+            .from('staff_sessions')
+            .select('userid, expires_at')
+            .eq('session_token', bodyToken)
+            .maybeSingle();
+        if (sess && new Date(sess.expires_at) > new Date()) {
+            session = { userid: sess.userid };
+        }
+    }
+
+    if (!session) return sessionErrorResponse(res);
     if (!userid) return res.status(400).json({ success: false, message: 'userid required' });
 
     // ── MARK SECTION SEEN ────────────────────────────────────────────────────
