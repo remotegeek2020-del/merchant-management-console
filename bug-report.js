@@ -6,7 +6,7 @@
             position: fixed; bottom: 48px; left: 20px; z-index: 99998;
             background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50px;
             padding: 5px 11px 5px 8px; font-size: 10px; font-weight: 600; cursor: pointer;
-            display: flex; align-items: center; gap: 4px;
+            display: none; align-items: center; gap: 4px;
             box-shadow: 0 2px 8px rgba(220,38,38,0.25);
             transition: opacity 0.15s, transform 0.15s;
             font-family: 'Inter', Arial, sans-serif;
@@ -165,4 +165,27 @@
     $('brm-close').addEventListener('click', closeModal);
     $('brm-cancel').addEventListener('click', closeModal);
     overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+
+    // Only show the FAB when authenticated
+    function isAuthed() {
+        return (localStorage.getItem('pp_verified') === 'true' && !!localStorage.getItem('pp_session_token'))
+            || !!localStorage.getItem('pp_partner_token');
+    }
+    function showFab() { fab.style.display = 'flex'; }
+
+    if (isAuthed()) {
+        showFab();
+    } else {
+        // On index.html: watch #page-curtain becoming visible after login
+        const curtain = document.getElementById('page-curtain');
+        if (curtain) {
+            const obs = new MutationObserver(() => {
+                if (curtain.style.display && curtain.style.display !== 'none') {
+                    obs.disconnect();
+                    showFab();
+                }
+            });
+            obs.observe(curtain, { attributes: true, attributeFilter: ['style'] });
+        }
+    }
 })();
