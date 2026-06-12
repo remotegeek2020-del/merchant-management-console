@@ -998,15 +998,14 @@ async function addTask(merchantUuid) {
     try {
         const res = await fetch('/api/merchants', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                action: 'add_task', 
-                merchant_uuid: merchantUuid, 
-                title: title, 
-                body: body, 
-                due_date: due || null, 
-                assigned_to: assigned || null, 
-                created_by: currentAdminEmail 
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') },
+            body: JSON.stringify({
+                action: 'add_task',
+                merchant_uuid: merchantUuid,
+                title: title,
+                body: body,
+                due_date: due || null,
+                assigned_to: assigned || null
             })
         });
 
