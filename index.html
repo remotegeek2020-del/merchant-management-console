@@ -48,26 +48,27 @@
     <script src="js/tz.js"></script>
     <style>
     /* Notification Badges */
-    .console-card { position: relative; }
+    .card-icon-header { position: relative; overflow: visible !important; }
     .msg-badge, .notif-badge {
         position: absolute;
-        top: -10px;
-        right: -10px;
+        top: -8px;
+        right: -8px;
         background: #ff3b30;
         color: white;
         border-radius: 50%;
-        min-width: 24px;
-        height: 24px;
+        min-width: 20px;
+        height: 20px;
         padding: 0 5px;
         display: none;
         align-items: center;
         justify-content: center;
-        font-size: 11px;
+        font-size: 10px;
         font-weight: 800;
-        box-shadow: 0 4px 8px rgba(0,0,0,0.3);
-        z-index: 100;
+        box-shadow: 0 2px 6px rgba(255,59,48,0.5);
+        z-index: 10;
         border: 2px solid white;
         line-height: 1;
+        pointer-events: none;
     }
 
     /* Global Search */
@@ -503,45 +504,39 @@
                 </a>
 
                 <a href="partners-dashboard.html" class="console-card" id="card-partners">
-                    <span class="notif-badge" id="badge-partners"></span>
-                    <div class="card-icon-header" style="background: #e0f2fe; color: #0369a1;"><span class="material-icons">handshake</span></div>
+                    <div class="card-icon-header" style="background: #e0f2fe; color: #0369a1;"><span class="material-icons">handshake</span><span class="notif-badge" id="badge-partners"></span></div>
                     <div class="card-title">Partners</div>
                     <p class="card-desc">Manage person-to-company mappings, Agent ID hierarchies, and Prime49 portfolios.</p>
                 </a>
 
                 <a href="merchants-dashboard.html" class="console-card" id="card-merchants">
-                    <span class="notif-badge" id="badge-merchants"></span>
-                    <div class="card-icon-header"><span class="material-icons">storefront</span></div>
+                    <div class="card-icon-header"><span class="material-icons">storefront</span><span class="notif-badge" id="badge-merchants"></span></div>
                     <div class="card-title">Merchants</div>
                     <p class="card-desc">View and manage your merchant portfolio, Agent IDs, and enrollment history.</p>
                 </a>
 
                 <!-- Row 2: Inventory, Deployments, Returns -->
                 <a href="equipments-dashboard.html" class="console-card" id="card-inventory">
-                    <span class="notif-badge" id="badge-inventory"></span>
-                    <div class="card-icon-header"><span class="material-icons">inventory_2</span></div>
+                    <div class="card-icon-header"><span class="material-icons">inventory_2</span><span class="notif-badge" id="badge-inventory"></span></div>
                     <div class="card-title">Inventory</div>
                     <p class="card-desc">Manage warehouse stock, terminal models, and available serials.</p>
                 </a>
 
                 <a href="deployments-dashboard.html" class="console-card" id="card-deployments">
-                    <span class="notif-badge" id="badge-deployments"></span>
-                    <div class="card-icon-header"><span class="material-icons">local_shipping</span></div>
+                    <div class="card-icon-header"><span class="material-icons">local_shipping</span><span class="notif-badge" id="badge-deployments"></span></div>
                     <div class="card-title">Deployments</div>
                     <p class="card-desc">Track merchant installs, TIDs, and live shipping status.</p>
                 </a>
 
                 <a href="returns-dashboard.html" class="console-card" id="card-returns">
-                    <span class="notif-badge" id="badge-returns"></span>
-                    <div class="card-icon-header"><span class="material-icons">assignment_return</span></div>
+                    <div class="card-icon-header"><span class="material-icons">assignment_return</span><span class="notif-badge" id="badge-returns"></span></div>
                     <div class="card-title">Returns</div>
                     <p class="card-desc">Monitor RMAs, damage assessments, and stock reintegration.</p>
                 </a>
 
                 <!-- Remaining rows -->
                 <a href="tickets-dashboard.html" class="console-card" id="card-tickets" style="border-bottom: 4px solid #0d9488;">
-                    <span class="notif-badge" id="badge-tickets"></span>
-                    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">confirmation_number</span></div>
+                    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">confirmation_number</span><span class="notif-badge" id="badge-tickets"></span></div>
                     <div class="card-title">Partner Tickets</div>
                     <p class="card-desc">View and manage partner support tickets — deployments, returns, and general support requests.</p>
                 </a>
@@ -565,8 +560,7 @@
                 </a>
 
                 <a href="chat.html" class="console-card" id="card-chat" style="border-bottom: 4px solid #0084ff;">
-                    <span id="nav-msg-badge" class="msg-badge">0</span>
-                    <div class="card-icon-header" style="background: #e7f3ff; color: #0084ff;"><span class="material-icons">forum</span></div>
+                    <div class="card-icon-header" style="background: #e7f3ff; color: #0084ff;"><span class="material-icons">forum</span><span id="nav-msg-badge" class="msg-badge"></span></div>
                     <div class="card-title">Direct Messages</div>
                     <p class="card-desc">Messenger-style chat with other staff members and internal operations teams.</p>
                 </a>
@@ -578,16 +572,14 @@
                 </a>
 
                 <a href="tasks-dashboard.html" class="console-card" id="card-tasks">
-                    <span class="notif-badge" id="badge-tasks"></span>
-                    <div class="card-icon-header" style="background: #fff9e6; color: #ffcc00;"><span class="material-icons">assignment</span></div>
+                    <div class="card-icon-header" style="background: #fff9e6; color: #ffcc00;"><span class="material-icons">assignment</span><span class="notif-badge" id="badge-tasks"></span></div>
                     <div class="card-title">My Tasks</div>
                     <p class="card-desc">View and manage tasks assigned specifically to you across all merchants.</p>
                     <div id="task-count-badge" style="font-size: 10px; font-weight: 800; margin-top: 10px; color: #ffcc00; display:none;">LOADING PENDING...</div>
                 </a>
 
                 <a href="ideas-dashboard.html" class="console-card" id="card-ideas" style="border-bottom: 4px solid #0d9488;">
-                    <span class="notif-badge" id="badge-ideas"></span>
-                    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">lightbulb</span></div>
+                    <div class="card-icon-header" style="background: #f0fdfa; color: #0d9488;"><span class="material-icons">lightbulb</span><span class="notif-badge" id="badge-ideas"></span></div>
                     <div class="card-title">Ideas & Suggestions</div>
                     <p class="card-desc">Submit feature requests and ideas to improve the platform. Admins track progress and mark items done.</p>
                 </a>
@@ -711,7 +703,10 @@
         try {
             const r = await fetch('/api/notifications', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '')
+                },
                 body: JSON.stringify({ action: 'get_counts', userid })
             });
             const data = await r.json();
@@ -751,7 +746,10 @@
         // Persist to DB (fire-and-forget)
         fetch('/api/notifications', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '')
+            },
             body: JSON.stringify({ action: 'mark_seen', userid, section })
         }).catch(() => {});
     }
