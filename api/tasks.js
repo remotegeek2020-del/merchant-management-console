@@ -74,7 +74,7 @@ export default async function handler(req, res) {
 
             const { data, error } = await supabase.from('merchant_tasks').insert({
                 title, body, merchant_id, assigned_to, due_date, priority, notes,
-                created_by: userid,
+                created_by: session.userid,
                 status: 'Pending'
             }).select().single();
 

@@ -227,14 +227,7 @@ if (action === 'delete_task') {
 }
         // --- ACTION: add_task (api/merchants.js) ---
 if (action === 'add_task') {
-    const { merchant_uuid, title, body, due_date, assigned_to, created_by } = req.body;
-
-    // --- CRITICAL FIX ---
-    // If created_by is missing, 'System', or 'undefined', set it to null.
-    // A null value bypasses the Foreign Key check, whereas 'System' triggers a violation.
-    const validCreator = (created_by && created_by !== 'System' && created_by !== 'undefined') 
-        ? created_by 
-        : null;
+    const { merchant_uuid, title, body, due_date, assigned_to } = req.body;
 
     const { data, error } = await supabase
         .from('merchant_tasks')
@@ -244,7 +237,7 @@ if (action === 'add_task') {
             body: body,
             due_date: due_date || null,
             assigned_to: assigned_to || null,
-            created_by: validCreator, // Use the sanitized variable
+            created_by: session.userid,
             status: 'Pending'
         }])
         .select();
