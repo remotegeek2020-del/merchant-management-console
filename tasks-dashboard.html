@@ -145,7 +145,8 @@ let staffList = [];
 let currentTasks = [];
 
 function api(body) {
-    return fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, userid: myId, staff_name: myName }) }).then(r=>r.json());
+    const tok = localStorage.getItem('pp_session_token') || '';
+    return fetch('/api/tasks', { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok}, body: JSON.stringify({ ...body, userid: myId, staff_name: myName }) }).then(r=>r.json());
 }
 
 // Scroll to and flash-highlight the task row matching the given id
