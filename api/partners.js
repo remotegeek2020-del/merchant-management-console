@@ -2579,20 +2579,23 @@ if (action === 'get_merchant_data_raw') {
                 person_id: target_id,
                 title: 'System: Partner Merge',
                 body: `Contact merged from: ${srcPerson?.full_name || source_id} (${srcPerson?.email || ''}).\nPerformed by: ${session.userid}`,
-                note_type: 'system',
+                note_type: 'general',
+                source: 'app',
                 created_at: new Date().toISOString(),
             });
             // Delete source
             await supabase.from('persons').delete().eq('id', source_id);
-            // Activity log
-            await supabase.from('activity_logs').insert({
-                actor_email: session.email || session.userid,
-                actor_name: session.userid,
-                action: 'partner_merge',
-                entity_type: 'partner',
-                entity_id: target_id,
-                details: JSON.stringify({ merged_from: source_id, src_name: srcPerson?.full_name, tgt_name: tgtPerson?.full_name }),
-            }).catch(() => {});
+            // Activity log (best-effort — don't fail the merge if this errors)
+            try {
+                await supabase.from('activity_logs').insert({
+                    actor_email: session.email || session.userid,
+                    actor_name: session.userid,
+                    action: 'partner_merge',
+                    entity_type: 'partner',
+                    entity_id: target_id,
+                    details: JSON.stringify({ merged_from: source_id, src_name: srcPerson?.full_name, tgt_name: tgtPerson?.full_name }),
+                });
+            } catch (e) { /* non-critical */ }
             return res.status(200).json({ success: true, message: `"${srcPerson?.full_name}" merged into "${tgtPerson?.full_name}" successfully.` });
         }
 
