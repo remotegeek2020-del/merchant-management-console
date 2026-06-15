@@ -2482,7 +2482,8 @@ if (action === 'get_merchant_data_raw') {
 
         // --- ACTION: SEARCH PARTNER FOR MERGE ---
         if (action === 'search_partner_for_merge') {
-            if (session.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only' });
+            const { data: _mergeActor1 } = await supabase.from('app_users').select('role, is_active').eq('userid', session.userid).single();
+            if (!_mergeActor1 || _mergeActor1.role !== 'super_admin' || !_mergeActor1.is_active) return res.status(403).json({ success: false, message: 'Super admin only.' });
             const { q } = body;
             if (!q || q.length < 2) return res.status(400).json({ success: false, message: 'Query too short' });
             const { data: persons } = await supabase.from('persons')
@@ -2506,7 +2507,8 @@ if (action === 'get_merchant_data_raw') {
 
         // --- ACTION: GET PARTNER MERGE PREVIEW ---
         if (action === 'get_partner_merge_preview') {
-            if (session.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only' });
+            const { data: _mergeActor2 } = await supabase.from('app_users').select('role, is_active').eq('userid', session.userid).single();
+            if (!_mergeActor2 || _mergeActor2.role !== 'super_admin' || !_mergeActor2.is_active) return res.status(403).json({ success: false, message: 'Super admin only.' });
             const { source_id, target_id } = body;
             if (!source_id || !target_id || source_id === target_id)
                 return res.status(400).json({ success: false, message: 'Invalid IDs' });
@@ -2545,7 +2547,8 @@ if (action === 'get_merchant_data_raw') {
 
         // --- ACTION: MERGE PARTNERS ---
         if (action === 'merge_partners') {
-            if (session.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only' });
+            const { data: _mergeActor3 } = await supabase.from('app_users').select('role, is_active').eq('userid', session.userid).single();
+            if (!_mergeActor3 || _mergeActor3.role !== 'super_admin' || !_mergeActor3.is_active) return res.status(403).json({ success: false, message: 'Super admin only.' });
             const { source_id, target_id } = body;
             if (!source_id || !target_id || source_id === target_id)
                 return res.status(400).json({ success: false, message: 'Invalid IDs' });
