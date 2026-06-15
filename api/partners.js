@@ -2480,6 +2480,119 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true });
         }
 
+        // --- ACTION: SEARCH PARTNER FOR MERGE ---
+        if (action === 'search_partner_for_merge') {
+            if (session.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only' });
+            const { q } = body;
+            if (!q || q.length < 2) return res.status(400).json({ success: false, message: 'Query too short' });
+            const { data: persons } = await supabase.from('persons')
+                .select('id, full_name, email, phone_number, enrolled_at')
+                .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`)
+                .order('full_name').limit(10);
+            const ids = (persons || []).map(p => p.id);
+            if (ids.length === 0) return res.status(200).json({ success: true, data: [] });
+            const { data: agentRows } = await supabase.from('agents')
+                .select('parent_agent_id, companies:company_id(company_name)')
+                .in('parent_agent_id', ids);
+            const companyMap = {};
+            (agentRows || []).forEach(a => {
+                if (!companyMap[a.parent_agent_id]) companyMap[a.parent_agent_id] = [];
+                const name = a.companies?.company_name;
+                if (name) companyMap[a.parent_agent_id].push(name);
+            });
+            const result = (persons || []).map(p => ({ ...p, companies: companyMap[p.id] || [] }));
+            return res.status(200).json({ success: true, data: result });
+        }
+
+        // --- ACTION: GET PARTNER MERGE PREVIEW ---
+        if (action === 'get_partner_merge_preview') {
+            if (session.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only' });
+            const { source_id, target_id } = body;
+            if (!source_id || !target_id || source_id === target_id)
+                return res.status(400).json({ success: false, message: 'Invalid IDs' });
+            const { data: srcAgents } = await supabase.from('agents')
+                .select('id, company_id, companies:company_id(company_name)')
+                .eq('parent_agent_id', source_id);
+            const { data: tgtAgents } = await supabase.from('agents')
+                .select('id, company_id')
+                .eq('parent_agent_id', target_id);
+            const tgtCompanyIds = new Set((tgtAgents || []).map(a => a.company_id));
+            const conflicts = [];
+            const transfers = [];
+            for (const a of (srcAgents || [])) {
+                const companyName = a.companies?.company_name || 'Unknown';
+                if (tgtCompanyIds.has(a.company_id)) {
+                    const { count } = await supabase.from('agent_identifiers')
+                        .select('id', { count: 'exact', head: true }).eq('agent_id', a.id);
+                    conflicts.push({ company: companyName, identifiers: count || 0 });
+                } else {
+                    transfers.push({ company: companyName });
+                }
+            }
+            const [notesRes, ticketsRes, sessionsRes] = await Promise.all([
+                supabase.from('partner_notes').select('id', { count: 'exact', head: true }).eq('person_id', source_id),
+                supabase.from('support_tickets').select('id', { count: 'exact', head: true }).eq('person_id', source_id),
+                supabase.from('partner_sessions').select('id', { count: 'exact', head: true }).eq('person_id', source_id),
+            ]);
+            return res.status(200).json({ success: true, preview: {
+                notes: notesRes.count || 0,
+                support_tickets: ticketsRes.count || 0,
+                sessions_cleared: sessionsRes.count || 0,
+                agent_transfers: transfers,
+                agent_conflicts: conflicts,
+            }});
+        }
+
+        // --- ACTION: MERGE PARTNERS ---
+        if (action === 'merge_partners') {
+            if (session.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only' });
+            const { source_id, target_id } = body;
+            if (!source_id || !target_id || source_id === target_id)
+                return res.status(400).json({ success: false, message: 'Invalid IDs' });
+            const [{ data: srcPerson }, { data: tgtPerson }] = await Promise.all([
+                supabase.from('persons').select('full_name, email').eq('id', source_id).single(),
+                supabase.from('persons').select('full_name, email').eq('id', target_id).single(),
+            ]);
+            // Handle agents — merge conflicts, transfer clean ones
+            const { data: srcAgents } = await supabase.from('agents').select('id, company_id').eq('parent_agent_id', source_id);
+            const { data: tgtAgents } = await supabase.from('agents').select('id, company_id').eq('parent_agent_id', target_id);
+            const tgtByCompany = Object.fromEntries((tgtAgents || []).map(a => [a.company_id, a.id]));
+            for (const srcAgent of (srcAgents || [])) {
+                if (tgtByCompany[srcAgent.company_id]) {
+                    await supabase.from('agent_identifiers').update({ agent_id: tgtByCompany[srcAgent.company_id] }).eq('agent_id', srcAgent.id);
+                    await supabase.from('agents').delete().eq('id', srcAgent.id);
+                } else {
+                    await supabase.from('agents').update({ parent_agent_id: target_id, agent_name: tgtPerson?.full_name || '' }).eq('id', srcAgent.id);
+                }
+            }
+            // Transfer related records
+            await supabase.from('partner_notes').update({ person_id: target_id }).eq('person_id', source_id);
+            await supabase.from('support_tickets').update({ person_id: target_id }).eq('person_id', source_id);
+            await supabase.from('partner_email_connections').update({ person_id: target_id }).eq('person_id', source_id);
+            // Clear source portal sessions
+            await supabase.from('partner_sessions').delete().eq('person_id', source_id);
+            // Add system note to target
+            await supabase.from('partner_notes').insert({
+                person_id: target_id,
+                title: 'System: Partner Merge',
+                body: `Contact merged from: ${srcPerson?.full_name || source_id} (${srcPerson?.email || ''}).\nPerformed by: ${session.userid}`,
+                note_type: 'system',
+                created_at: new Date().toISOString(),
+            });
+            // Delete source
+            await supabase.from('persons').delete().eq('id', source_id);
+            // Activity log
+            await supabase.from('activity_logs').insert({
+                actor_email: session.email || session.userid,
+                actor_name: session.userid,
+                action: 'partner_merge',
+                entity_type: 'partner',
+                entity_id: target_id,
+                details: JSON.stringify({ merged_from: source_id, src_name: srcPerson?.full_name, tgt_name: tgtPerson?.full_name }),
+            }).catch(() => {});
+            return res.status(200).json({ success: true, message: `"${srcPerson?.full_name}" merged into "${tgtPerson?.full_name}" successfully.` });
+        }
+
     } catch (err) {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
