@@ -1276,7 +1276,7 @@ async function submitOnboarding() {
         return `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                    <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '⭐' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
+                    <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '💎' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
                     <div style="display:flex; align-items:center; gap:10px;"><span style="font-size:10px; opacity:0.7;">${id.rev}</span>${id.merchantCount > 0 ? `<span style="font-size:10px; background:#e0f2fe; color:#0369a1; border-radius:10px; padding:1px 6px; white-space:nowrap;">${id.merchantCount} merchant${id.merchantCount !== 1 ? 's' : ''}</span>` : ''}<button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none; border:none; color:#64748b; cursor:pointer; display:flex; align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
                 </div>
                 ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
