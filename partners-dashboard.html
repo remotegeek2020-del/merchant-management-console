@@ -276,6 +276,11 @@ input[type=number] {
                     style="flex-shrink:0;padding:10px 18px;border-radius:10px;border:none;background:var(--pp-blue,#0f4c81);color:white;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:opacity 0.15s;">
                 <span class="material-icons" style="font-size:16px;">search</span> Search
             </button>
+            <button onclick="openMissingPartnerReport()"
+                    style="flex-shrink:0;padding:10px 16px;border-radius:10px;border:1.5px solid #f97316;background:white;color:#c2410c;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:all 0.15s;"
+                    onmouseover="this.style.background='#fff7ed'" onmouseout="this.style.background='white'">
+                <span class="material-icons" style="font-size:15px;">help_outline</span> Can't see the partner? Report to us
+            </button>
             <button id="partnerSearchClear" onclick="clearPartnerSearch()"
                     style="flex-shrink:0;padding:10px 14px;border-radius:10px;border:1px solid #e2e8f0;background:white;color:#64748b;font-family:'DM Sans',sans-serif;font-size:13px;font-weight:700;cursor:pointer;align-items:center;gap:4px;transition:all 0.15s;display:none;">
                 <span class="material-icons" style="font-size:15px;">close</span> Clear
@@ -4151,6 +4156,69 @@ window.toggleSinglePortal = async function(personId, name, currentlyActive, ev) 
         loadPartners();
     } catch (err) { Swal.fire({ icon: 'error', title: 'Failed', text: err.message }); }
 };
+</script>
+<script>
+function openMissingPartnerReport() {
+    Swal.fire({
+        title: '<span style="font-size:16px;font-weight:800;color:#c2410c;">Can\'t Find a Partner?</span>',
+        html: `
+            <div style="text-align:left;font-size:13px;color:#475569;margin-bottom:14px;line-height:1.5;">
+                Tell us who you're looking for and we'll look into it.
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Partner Name <span style="color:#dc2626;">*</span></label>
+                <input id="rpt-name" type="text" placeholder="Full name of the partner"
+                    style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
+                    onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'">
+            </div>
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Known Agent / Partner ID <span style="color:#94a3b8;font-weight:400;text-transform:none;font-size:10px;">(optional)</span></label>
+                <input id="rpt-pid" type="text" placeholder="e.g. 12345678"
+                    style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
+                    onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'">
+            </div>
+            <div>
+                <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Your Email <span style="color:#94a3b8;font-weight:400;text-transform:none;font-size:10px;">(optional — for follow-up)</span></label>
+                <input id="rpt-email" type="email" placeholder="you@example.com"
+                    style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
+                    onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'">
+            </div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Send Report',
+        confirmButtonColor: '#f97316',
+        cancelButtonText: 'Cancel',
+        focusConfirm: false,
+        preConfirm: async () => {
+            const name  = document.getElementById('rpt-name').value.trim();
+            const pid   = document.getElementById('rpt-pid').value.trim();
+            const email = document.getElementById('rpt-email').value.trim();
+            if (!name) {
+                document.getElementById('rpt-name').style.borderColor = '#dc2626';
+                Swal.showValidationMessage('Partner name is required.');
+                return false;
+            }
+            Swal.showLoading();
+            const tok = localStorage.getItem('pp_session_token') || '';
+            const reporter = (localStorage.getItem('pp_user_first_name') || '') + ' ' + (localStorage.getItem('pp_user_last_name') || '');
+            try {
+                const res = await fetch('/api/partners', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
+                    body: JSON.stringify({ action: 'report_missing_partner', partner_name: name, partner_id: pid, reporter_email: email, reporter_name: reporter.trim() })
+                });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message || 'Failed to send report');
+            } catch (e) {
+                Swal.showValidationMessage(e.message);
+                return false;
+            }
+        }
+    }).then(r => {
+        if (r.isConfirmed) {
+            Swal.fire({ icon: 'success', title: 'Report Sent!', text: 'Our team has been notified and will look into it.', timer: 2500, showConfirmButton: false });
+        }
+    });
+}
 </script>
 <script>window.NAV_SHORTCUT_PAGE = 'partners';</script>
 <script src="/js/nav-shortcuts.js"></script>

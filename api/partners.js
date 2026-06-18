@@ -2599,6 +2599,82 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, message: `"${srcPerson?.full_name}" merged into "${tgtPerson?.full_name}" successfully.` });
         }
 
+        // --- ACTION: GET SUPPORT EMAILS ---
+        if (action === 'get_support_emails') {
+            const { data: _actor } = await supabase.from('app_users').select('role, is_active').eq('userid', session.userid).single();
+            if (!_actor || _actor.role !== 'super_admin' || !_actor.is_active) return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const raw = await getConfigValue('SUPPORT_EMAILS');
+            let emails = [];
+            if (raw) {
+                try { emails = JSON.parse(raw); } catch { emails = raw.split(',').map(e => e.trim()).filter(Boolean); }
+            }
+            return res.status(200).json({ success: true, emails });
+        }
+
+        // --- ACTION: SET SUPPORT EMAILS ---
+        if (action === 'set_support_emails') {
+            const { data: _actor } = await supabase.from('app_users').select('role, is_active').eq('userid', session.userid).single();
+            if (!_actor || _actor.role !== 'super_admin' || !_actor.is_active) return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const { emails } = body;
+            if (!Array.isArray(emails)) return res.status(400).json({ success: false, message: 'emails must be an array' });
+            const cleaned = emails.map(e => e.trim()).filter(e => e && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
+
+            // Encrypt and store via same pattern as other config values
+            const crypto = await import('crypto');
+            const keyRaw = crypto.createHash('sha256').update(process.env.SUPABASE_SERVICE_ROLE_KEY).digest();
+            const iv = crypto.randomBytes(12);
+            const cipher = crypto.createCipheriv('aes-256-gcm', keyRaw, iv);
+            const plaintext = JSON.stringify(cleaned);
+            const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+            const tag = cipher.getAuthTag();
+            const stored = `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+
+            const { error } = await supabase.from('app_config').upsert({ key: 'SUPPORT_EMAILS', value: stored }, { onConflict: 'key' });
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, count: cleaned.length });
+        }
+
+        // --- ACTION: REPORT MISSING PARTNER ---
+        if (action === 'report_missing_partner') {
+            const { partner_name, partner_id, reporter_email } = body;
+            if (!partner_name?.trim()) return res.status(400).json({ success: false, message: 'Partner name is required.' });
+
+            // Load support email list
+            const raw = await getConfigValue('SUPPORT_EMAILS');
+            let supportEmails = [];
+            if (raw) {
+                try { supportEmails = JSON.parse(raw); } catch { supportEmails = raw.split(',').map(e => e.trim()).filter(Boolean); }
+            }
+            if (!supportEmails.length) return res.status(200).json({ success: true, message: 'Report noted (no support emails configured yet).' });
+
+            const actor = await resolveActor();
+            const now = new Date().toLocaleString('en-US', { timeZone: 'America/New_York', dateStyle: 'medium', timeStyle: 'short' });
+
+            const htmlBody = `
+<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#f9fafb;padding:24px;border-radius:10px;">
+  <div style="background:#f97316;color:white;padding:16px 20px;border-radius:8px 8px 0 0;">
+    <h2 style="margin:0;font-size:18px;">⚠️ Missing Partner Report</h2>
+    <p style="margin:4px 0 0;font-size:13px;opacity:0.9;">A staff member couldn't find a partner in the system</p>
+  </div>
+  <div style="background:white;padding:20px;border-radius:0 0 8px 8px;border:1px solid #e5e7eb;">
+    <table style="width:100%;border-collapse:collapse;">
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;width:140px;"><strong>Partner Name:</strong></td><td style="padding:8px 0;font-size:13px;">${partner_name}</td></tr>
+      ${partner_id ? `<tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Known Partner ID:</strong></td><td style="padding:8px 0;font-size:13px;font-family:monospace;">${partner_id}</td></tr>` : ''}
+      ${reporter_email ? `<tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Reporter Email:</strong></td><td style="padding:8px 0;font-size:13px;">${reporter_email}</td></tr>` : ''}
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Reported By:</strong></td><td style="padding:8px 0;font-size:13px;">${actor.name} (${actor.email})</td></tr>
+      <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Date/Time:</strong></td><td style="padding:8px 0;font-size:13px;">${now} ET</td></tr>
+    </table>
+    <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">Sent automatically from the Merchant Management Console — Partners Dashboard.</p>
+  </div>
+</div>`;
+            const textBody = `Missing Partner Report\n\nPartner Name: ${partner_name}\n${partner_id ? `Known Partner ID: ${partner_id}\n` : ''}${reporter_email ? `Reporter Email: ${reporter_email}\n` : ''}Reported By: ${actor.name} (${actor.email})\nDate/Time: ${now} ET`;
+
+            for (const toEmail of supportEmails) {
+                await sendEmail(toEmail, `⚠️ Missing Partner Report: ${partner_name}`, htmlBody, textBody);
+            }
+            return res.status(200).json({ success: true, message: `Report sent to ${supportEmails.length} support recipient(s).` });
+        }
+
     } catch (err) {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
