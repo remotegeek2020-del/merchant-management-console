@@ -2641,7 +2641,7 @@ if (action === 'get_merchant_data_raw') {
 
         // --- ACTION: REPORT MISSING PARTNER ---
         if (action === 'report_missing_partner') {
-            const { partner_name, partner_id, reporter_email } = body;
+            const { partner_name, partner_id, partner_email, notes } = body;
             if (!partner_name?.trim()) return res.status(400).json({ success: false, message: 'Partner name is required.' });
 
             // Load support email list
@@ -2665,14 +2665,15 @@ if (action === 'get_merchant_data_raw') {
     <table style="width:100%;border-collapse:collapse;">
       <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;width:140px;"><strong>Partner Name:</strong></td><td style="padding:8px 0;font-size:13px;">${partner_name}</td></tr>
       ${partner_id ? `<tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Known Partner ID:</strong></td><td style="padding:8px 0;font-size:13px;font-family:monospace;">${partner_id}</td></tr>` : ''}
-      ${reporter_email ? `<tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Reporter Email:</strong></td><td style="padding:8px 0;font-size:13px;">${reporter_email}</td></tr>` : ''}
+      ${partner_email ? `<tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Partner Email:</strong></td><td style="padding:8px 0;font-size:13px;">${partner_email}</td></tr>` : ''}
       <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Reported By:</strong></td><td style="padding:8px 0;font-size:13px;">${actor.name} (${actor.email})</td></tr>
       <tr><td style="padding:8px 0;color:#6b7280;font-size:13px;"><strong>Date/Time:</strong></td><td style="padding:8px 0;font-size:13px;">${now} ET</td></tr>
     </table>
+    ${notes ? `<div style="margin-top:14px;padding:12px;background:#fff7ed;border-radius:8px;border-left:3px solid #f97316;"><p style="margin:0 0 4px;font-size:11px;font-weight:700;color:#c2410c;text-transform:uppercase;letter-spacing:0.5px;">Notes</p><p style="margin:0;font-size:13px;color:#374151;line-height:1.6;">${notes.replace(/\n/g, '<br>')}</p></div>` : ''}
     <p style="margin:16px 0 0;font-size:12px;color:#9ca3af;">Sent automatically from the Merchant Management Console — Partners Dashboard.</p>
   </div>
 </div>`;
-            const textBody = `Missing Partner Report\n\nPartner Name: ${partner_name}\n${partner_id ? `Known Partner ID: ${partner_id}\n` : ''}${reporter_email ? `Reporter Email: ${reporter_email}\n` : ''}Reported By: ${actor.name} (${actor.email})\nDate/Time: ${now} ET`;
+            const textBody = `Missing Partner Report\n\nPartner Name: ${partner_name}\n${partner_id ? `Known Partner ID: ${partner_id}\n` : ''}${partner_email ? `Partner Email: ${partner_email}\n` : ''}Reported By: ${actor.name} (${actor.email})\nDate/Time: ${now} ET${notes ? `\n\nNotes:\n${notes}` : ''}`;
 
             for (const toEmail of supportEmails) {
                 await sendEmail(toEmail, `⚠️ Missing Partner Report: ${partner_name}`, htmlBody, textBody);

@@ -4177,11 +4177,17 @@ function openMissingPartnerReport() {
                     style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
                     onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'">
             </div>
-            <div>
-                <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Your Email <span style="color:#94a3b8;font-weight:400;text-transform:none;font-size:10px;">(optional — for follow-up)</span></label>
-                <input id="rpt-email" type="email" placeholder="you@example.com"
+            <div style="margin-bottom:12px;">
+                <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Partner Email <span style="color:#94a3b8;font-weight:400;text-transform:none;font-size:10px;">(optional)</span></label>
+                <input id="rpt-email" type="email" placeholder="partner@example.com"
                     style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
                     onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'">
+            </div>
+            <div>
+                <label style="display:block;font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:5px;">Notes <span style="color:#94a3b8;font-weight:400;text-transform:none;font-size:10px;">(optional)</span></label>
+                <textarea id="rpt-notes" placeholder="Any additional context — company, phone, region, etc."
+                    style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;resize:vertical;min-height:72px;line-height:1.5;"
+                    onfocus="this.style.borderColor='#f97316'" onblur="this.style.borderColor='#e2e8f0'"></textarea>
             </div>`,
         showCancelButton: true,
         confirmButtonText: 'Send Report',
@@ -4192,6 +4198,7 @@ function openMissingPartnerReport() {
             const name  = document.getElementById('rpt-name').value.trim();
             const pid   = document.getElementById('rpt-pid').value.trim();
             const email = document.getElementById('rpt-email').value.trim();
+            const notes = document.getElementById('rpt-notes').value.trim();
             if (!name) {
                 document.getElementById('rpt-name').style.borderColor = '#dc2626';
                 Swal.showValidationMessage('Partner name is required.');
@@ -4204,7 +4211,7 @@ function openMissingPartnerReport() {
                 const res = await fetch('/api/partners', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tok },
-                    body: JSON.stringify({ action: 'report_missing_partner', partner_name: name, partner_id: pid, reporter_email: email, reporter_name: reporter.trim() })
+                    body: JSON.stringify({ action: 'report_missing_partner', partner_name: name, partner_id: pid, partner_email: email, notes, reporter_name: reporter.trim() })
                 });
                 const data = await res.json();
                 if (!data.success) throw new Error(data.message || 'Failed to send report');
