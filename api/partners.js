@@ -2619,17 +2619,22 @@ if (action === 'get_merchant_data_raw') {
             if (!Array.isArray(emails)) return res.status(400).json({ success: false, message: 'emails must be an array' });
             const cleaned = emails.map(e => e.trim()).filter(e => e && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e));
 
-            // Encrypt and store via same pattern as other config values
-            const crypto = await import('crypto');
-            const keyRaw = crypto.createHash('sha256').update(process.env.SUPABASE_SERVICE_ROLE_KEY).digest();
-            const iv = crypto.randomBytes(12);
-            const cipher = crypto.createCipheriv('aes-256-gcm', keyRaw, iv);
+            const { createCipheriv, createHash, randomBytes } = await import('crypto');
+            const keyRaw = createHash('sha256').update(process.env.SUPABASE_SERVICE_ROLE_KEY).digest();
+            const iv = randomBytes(16);
+            const cipher = createCipheriv('aes-256-gcm', keyRaw, iv);
             const plaintext = JSON.stringify(cleaned);
             const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
-            const tag = cipher.getAuthTag();
-            const stored = `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
+            const auth_tag = cipher.getAuthTag();
 
-            const { error } = await supabase.from('app_config').upsert({ key: 'SUPPORT_EMAILS', value: stored }, { onConflict: 'key' });
+            const { error } = await supabase.from('app_config').upsert({
+                key: 'SUPPORT_EMAILS',
+                encrypted_value: encrypted.toString('hex'),
+                iv: iv.toString('hex'),
+                auth_tag: auth_tag.toString('hex'),
+                updated_at: new Date().toISOString(),
+                updated_by: session.userid,
+            }, { onConflict: 'key' });
             if (error) return res.status(500).json({ success: false, message: error.message });
             return res.status(200).json({ success: true, count: cleaned.length });
         }
