@@ -397,6 +397,14 @@
             </div>
 
             <div style="display:flex;align-items:center;gap:6px;">
+                <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;white-space:nowrap;">Company</label>
+                <select id="p49-company-filter" onchange="p49OnCompanyChange()"
+                        style="border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;color:#334155;min-width:180px;">
+                    <option value="">All Companies</option>
+                </select>
+            </div>
+
+            <div style="display:flex;align-items:center;gap:6px;">
                 <label style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;white-space:nowrap;">Partner</label>
                 <select id="p49-partner-filter" onchange="renderPrime49Table()"
                         style="border:1.5px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;color:#334155;min-width:200px;">
@@ -3952,16 +3960,45 @@ async function loadPrime49Residuals() {
 function _populateP49PartnerFilter() {
     // Build map: agent_name → { ids: Set, company }
     const partnerMap = {};
+    const companySet = new Set();
     _prime49Data.forEach(r => {
         const name = r.agent_name || '—';
         if (!partnerMap[name]) partnerMap[name] = { ids: new Set(), company: r.agent_company || '' };
         if (r.agent_id) partnerMap[name].ids.add(r.agent_id);
+        if (r.agent_company) companySet.add(r.agent_company);
     });
 
+    // Populate company dropdown
+    const cSel = document.getElementById('p49-company-filter');
+    const prevC = cSel.value;
+    cSel.innerHTML = '<option value="">All Companies</option>';
+    [...companySet].sort().forEach(co => {
+        const opt = document.createElement('option');
+        opt.value = co;
+        opt.textContent = co;
+        cSel.appendChild(opt);
+    });
+    if (prevC) cSel.value = prevC;
+
+    // Populate partner dropdown (scoped to selected company if any)
+    _repopulateP49PartnerDropdown(partnerMap, prevC);
+}
+
+function _repopulateP49PartnerDropdown(partnerMap, companyFilter) {
+    if (!partnerMap) {
+        // Rebuild from data
+        partnerMap = {};
+        _prime49Data.forEach(r => {
+            const name = r.agent_name || '—';
+            if (!partnerMap[name]) partnerMap[name] = { ids: new Set(), company: r.agent_company || '' };
+            if (r.agent_id) partnerMap[name].ids.add(r.agent_id);
+        });
+    }
     const sel = document.getElementById('p49-partner-filter');
     const prev = sel.value;
     sel.innerHTML = '<option value="">All Partners</option>';
     Object.keys(partnerMap).sort().forEach(name => {
+        if (companyFilter && partnerMap[name].company !== companyFilter) return;
         const ids   = [...partnerMap[name].ids].join(', ');
         const label = ids ? `${name} (${ids})` : name;
         const opt   = document.createElement('option');
@@ -3969,20 +4006,31 @@ function _populateP49PartnerFilter() {
         opt.textContent = label;
         sel.appendChild(opt);
     });
-    if (prev) sel.value = prev;
+    // Restore selection only if it still exists in the new list
+    if (prev && [...sel.options].some(o => o.value === prev)) sel.value = prev;
+    else sel.value = '';
+}
+
+function p49OnCompanyChange() {
+    const co = document.getElementById('p49-company-filter').value;
+    _repopulateP49PartnerDropdown(null, co);
+    renderPrime49Table();
 }
 
 function renderPrime49Table() {
-    const runDate      = document.getElementById('p49-run-date').value || '—';
-    const filterPartner = document.getElementById('p49-partner-filter').value;
+    const runDate        = document.getElementById('p49-run-date').value || '—';
+    const filterPartner  = document.getElementById('p49-partner-filter').value;
+    const filterCompany  = document.getElementById('p49-company-filter').value;
     const fmt = n => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
     document.getElementById('p49-loading').style.display = 'none';
 
-    // Apply partner filter
-    const data = filterPartner
-        ? _prime49Data.filter(r => r.agent_name === filterPartner)
-        : _prime49Data;
+    // Apply company + partner filters (AND logic)
+    const data = _prime49Data.filter(r => {
+        if (filterCompany && r.agent_company !== filterCompany) return false;
+        if (filterPartner && r.agent_name    !== filterPartner) return false;
+        return true;
+    });
 
     if (!data.length) {
         document.getElementById('p49-empty').style.display = 'block';
@@ -4096,11 +4144,16 @@ function exportPrime49Excel() {
 
     const runDate       = document.getElementById('p49-run-date').value || '';
     const filterPartner = document.getElementById('p49-partner-filter').value;
-    const data = filterPartner ? _prime49Data.filter(r => r.agent_name === filterPartner) : _prime49Data;
+    const filterCompany = document.getElementById('p49-company-filter').value;
+    const data = _prime49Data.filter(r => {
+        if (filterCompany && r.agent_company !== filterCompany) return false;
+        if (filterPartner && r.agent_name    !== filterPartner) return false;
+        return true;
+    });
 
     logAuditAction('Prime49 Residuals Exported to Excel', 'success', {
         category: 'merchants', target_type: 'export', severity: 'warning',
-        new_value: { format: 'xlsx', merchant_count: data.length, partner_filter: filterPartner || 'all_partners', run_date: runDate }
+        new_value: { format: 'xlsx', merchant_count: data.length, company_filter: filterCompany || 'all', partner_filter: filterPartner || 'all', run_date: runDate }
     });
 
     const wb = XLSX.utils.book_new();
