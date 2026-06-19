@@ -1608,7 +1608,7 @@ if (action === 'get_notes') {
 
         return res.status(400).json({ success: false, message: "Unknown action" });
     } catch (err) {
-        console.error('[API Error]', err.message);
-        return res.status(500).json({ success: false, message: 'An unexpected error occurred. Please try again.' });
+        console.error('[API Error]', err.message, err.details || '', err.hint || '');
+        return res.status(500).json({ success: false, message: err.message || 'An unexpected error occurred. Please try again.' });
     }
 } // End of handler function
