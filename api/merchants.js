@@ -1549,7 +1549,7 @@ if (action === 'get_notes') {
         }
 
         if (action === 'add_legacy_attachment') {
-            const { file_name, file_path, file_type, file_size } = body;
+            const { file_name, file_path, file_type, file_size } = req.body;
             if (!file_name || !file_path) return res.status(400).json({ success: false, message: 'file_name and file_path required' });
             const actor = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
             const { data, error } = await supabase.from('legacy_attachments').insert({
@@ -1561,7 +1561,7 @@ if (action === 'get_notes') {
         }
 
         if (action === 'delete_legacy_attachment') {
-            const { file_id, file_path } = body;
+            const { file_id, file_path } = req.body;
             if (!file_id) return res.status(400).json({ success: false, message: 'file_id required' });
             if (file_path) {
                 await supabase.storage.from('merchant-files').remove([file_path]);
@@ -1572,9 +1572,8 @@ if (action === 'get_notes') {
         }
 
         if (action === 'search_merchants_for_legacy') {
-            const { query } = body;
-            if (!query?.trim()) return res.status(200).json({ success: true, merchants: [] });
-            const q = query.trim();
+            const q = (req.body.query || '').trim();
+            if (!q) return res.status(200).json({ success: true, merchants: [] });
             const { data, error } = await supabase
                 .from('merchants')
                 .select('id, merchant_id, dba_name, account_status')
@@ -1585,7 +1584,7 @@ if (action === 'get_notes') {
         }
 
         if (action === 'assign_legacy_attachment') {
-            const { file_id, merchant_uuid } = body;
+            const { file_id, merchant_uuid } = req.body;
             if (!file_id || !merchant_uuid) return res.status(400).json({ success: false, message: 'file_id and merchant_uuid required' });
             const { data: legRow, error: e1 } = await supabase.from('legacy_attachments').select('*').eq('id', file_id).single();
             if (e1 || !legRow) return res.status(404).json({ success: false, message: 'Legacy attachment not found' });
