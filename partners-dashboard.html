@@ -1959,7 +1959,7 @@ async function submitOnboarding() {
                     payload = { action: 'move_identifier_to_company', identifier_id: db_id, target_company_id: selectedCompanyId };
                     destination = selectedMoveName;
                 }
-                const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') }, body: JSON.stringify(payload) });
                 const data = await res.json();
                 if (data.success) {
                     await logAuditAction('Agent ID Moved', 'success', {
