@@ -248,6 +248,61 @@
         <button class="page-tab-btn" id="ptab-prime49" onclick="switchPageTab('prime49')">
             <span style="font-size:13px;">⭐</span> Prime49 Residuals
         </button>
+        <button class="page-tab-btn" id="ptab-legacy" onclick="switchPageTab('legacy')">
+            <span class="material-icons" style="font-size:15px;">folder_open</span> Legacy Attachments
+        </button>
+    </div>
+
+    <!-- LEGACY ATTACHMENTS PANEL -->
+    <div id="tab-legacy" style="display:none;">
+        <div style="background:white;border-radius:16px;padding:24px;box-shadow:0 4px 20px rgba(0,0,0,0.05);">
+
+            <!-- Header row -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+                <div>
+                    <div style="font-size:16px;font-weight:800;color:#002d5a;">Legacy Attachments</div>
+                    <div style="font-size:12px;color:#64748b;margin-top:2px;">Upload files and assign them to a specific merchant record.</div>
+                </div>
+                <label for="legacyFileInput" style="display:inline-flex;align-items:center;gap:7px;padding:10px 20px;background:#004990;color:white;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;transition:opacity 0.15s;" onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">
+                    <span class="material-icons" style="font-size:16px;">upload_file</span> Bulk Upload Files
+                    <input type="file" id="legacyFileInput" multiple style="display:none;" onchange="legacyHandleUpload(this.files)">
+                </label>
+            </div>
+
+            <!-- Upload progress area (hidden until upload starts) -->
+            <div id="legacy-upload-progress" style="display:none;background:#f8fafc;border:1.5px dashed #cbd5e1;border-radius:12px;padding:16px;margin-bottom:20px;">
+                <div style="font-size:12px;font-weight:700;color:#475569;margin-bottom:10px;">Uploading files…</div>
+                <div id="legacy-progress-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+
+            <!-- Unassigned file list -->
+            <div id="legacy-list-wrap">
+                <div id="legacy-loading" style="text-align:center;padding:40px;color:#94a3b8;">
+                    <span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>
+                    Loading files…
+                </div>
+                <div id="legacy-empty" style="display:none;text-align:center;padding:50px 20px;">
+                    <span class="material-icons" style="font-size:40px;color:#cbd5e1;display:block;margin-bottom:10px;">folder_open</span>
+                    <div style="font-size:14px;font-weight:700;color:#94a3b8;">No unassigned files</div>
+                    <div style="font-size:12px;color:#cbd5e1;margin-top:4px;">Upload files above to get started.</div>
+                </div>
+                <div id="legacy-table-wrap" style="display:none;overflow-x:auto;">
+                    <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                        <thead>
+                            <tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#475569;white-space:nowrap;">File Name</th>
+                                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#475569;">Type</th>
+                                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#475569;">Size</th>
+                                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#475569;white-space:nowrap;">Uploaded By</th>
+                                <th style="padding:10px 12px;text-align:left;font-weight:700;color:#475569;white-space:nowrap;">Date</th>
+                                <th style="padding:10px 12px;text-align:right;font-weight:700;color:#475569;">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="legacy-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- PIPELINE PANEL -->
@@ -3311,10 +3366,12 @@ function switchPageTab(tab) {
     const isPortfolio = tab === 'portfolio';
     const isPipeline  = tab === 'pipeline';
     const isPrime49   = tab === 'prime49';
+    const isLegacy    = tab === 'legacy';
 
     document.getElementById('ptab-portfolio').classList.toggle('active', isPortfolio);
     document.getElementById('ptab-pipeline').classList.toggle('active', isPipeline);
     document.getElementById('ptab-prime49').classList.toggle('active', isPrime49);
+    document.getElementById('ptab-legacy').classList.toggle('active', isLegacy);
 
     const portfolioEls = ['tab-portfolio-filter','tab-portfolio-kpi','staffChartsPanel','tab-portfolio-content'];
     portfolioEls.forEach(id => {
@@ -3324,6 +3381,7 @@ function switchPageTab(tab) {
 
     document.getElementById('tab-pipeline').style.display = isPipeline ? '' : 'none';
     document.getElementById('tab-prime49').style.display  = isPrime49  ? '' : 'none';
+    document.getElementById('tab-legacy').style.display   = isLegacy   ? '' : 'none';
 
     if (isPipeline && !_pipelineLoaded) {
         _pipelineLoaded = true;
@@ -3331,11 +3389,253 @@ function switchPageTab(tab) {
     }
     if (isPrime49 && !_prime49Loaded) {
         _prime49Loaded = true;
-        // Default run date to today
         const today = new Date().toISOString().split('T')[0];
         document.getElementById('p49-run-date').value = today;
         loadPrime49Residuals();
     }
+    if (isLegacy && !_legacyLoaded) {
+        _legacyLoaded = true;
+        legacyLoadFiles();
+    }
+}
+
+// ── LEGACY ATTACHMENTS ────────────────────────────────────────────────────────
+let _legacyLoaded = false;
+const SUPABASE_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow';
+
+function legacyAuthHdr() {
+    return { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') };
+}
+
+function legacyFmtSize(bytes) {
+    if (!bytes) return '—';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / 1048576).toFixed(1) + ' MB';
+}
+
+function legacyFmtDate(iso) {
+    if (!iso) return '—';
+    return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function legacyFileIcon(type) {
+    if (!type) return 'insert_drive_file';
+    if (type.includes('pdf')) return 'picture_as_pdf';
+    if (type.includes('image')) return 'image';
+    if (type.includes('csv') || type.includes('spreadsheet') || type.includes('excel')) return 'table_chart';
+    if (type.includes('word') || type.includes('document')) return 'description';
+    return 'insert_drive_file';
+}
+
+async function legacyLoadFiles() {
+    try {
+        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(), body: JSON.stringify({ action: 'get_legacy_attachments' }) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        legacyRenderFiles(data.attachments || []);
+    } catch (e) {
+        document.getElementById('legacy-loading').innerHTML = `<span style="color:#dc2626;">Error: ${e.message}</span>`;
+    }
+}
+
+function legacyRenderFiles(files) {
+    document.getElementById('legacy-loading').style.display = 'none';
+    if (!files.length) {
+        document.getElementById('legacy-empty').style.display = '';
+        document.getElementById('legacy-table-wrap').style.display = 'none';
+        return;
+    }
+    document.getElementById('legacy-empty').style.display = 'none';
+    document.getElementById('legacy-table-wrap').style.display = '';
+    const tbody = document.getElementById('legacy-tbody');
+    tbody.innerHTML = files.map(f => `
+        <tr style="border-bottom:1px solid #f1f5f9;" id="legacy-row-${f.id}">
+            <td style="padding:10px 12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
+                <div style="display:flex;align-items:center;gap:7px;">
+                    <span class="material-icons" style="font-size:18px;color:#64748b;flex-shrink:0;">${legacyFileIcon(f.file_type)}</span>
+                    <a href="${SUPABASE_URL}/storage/v1/object/public/merchant-files/${f.file_path}" target="_blank"
+                       style="color:#004990;font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;" title="${f.file_name}">${f.file_name}</a>
+                </div>
+            </td>
+            <td style="padding:10px 12px;color:#64748b;">${f.file_type ? f.file_type.split('/').pop().toUpperCase() : '—'}</td>
+            <td style="padding:10px 12px;color:#64748b;white-space:nowrap;">${legacyFmtSize(f.file_size)}</td>
+            <td style="padding:10px 12px;color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.uploaded_by||''}">${f.uploaded_by || '—'}</td>
+            <td style="padding:10px 12px;color:#64748b;white-space:nowrap;">${legacyFmtDate(f.created_at)}</td>
+            <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
+                <button onclick="legacyAssign('${f.id}','${f.file_name.replace(/'/g,'\\\'')}')"
+                    style="padding:5px 12px;background:#004990;color:white;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:6px;">
+                    <span class="material-icons" style="font-size:13px;vertical-align:middle;">link</span> Assign
+                </button>
+                <button onclick="legacyDelete('${f.id}','${f.file_path.replace(/'/g,'\\\'')}')"
+                    style="padding:5px 10px;background:white;color:#dc2626;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">
+                    <span class="material-icons" style="font-size:13px;vertical-align:middle;">delete</span>
+                </button>
+            </td>
+        </tr>`).join('');
+}
+
+async function legacyHandleUpload(files) {
+    if (!files || !files.length) return;
+    const progressWrap = document.getElementById('legacy-upload-progress');
+    const progressList = document.getElementById('legacy-progress-list');
+    progressWrap.style.display = '';
+    progressList.innerHTML = '';
+
+    const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
+    const results = [];
+
+    for (const file of Array.from(files)) {
+        const rowId = 'lpu-' + Math.random().toString(36).slice(2);
+        progressList.insertAdjacentHTML('beforeend', `
+            <div id="${rowId}" style="display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;">
+                <span class="material-icons" style="font-size:16px;animation:spin 1s linear infinite;color:#64748b;">autorenew</span>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+                <span id="${rowId}-status" style="font-size:11px;color:#94a3b8;">Uploading…</span>
+            </div>`);
+
+        const ext = file.name.split('.').pop();
+        const uid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+        const filePath = `legacy/${uid}.${ext}`;
+
+        try {
+            const { error: storErr } = await sbClient.storage.from('merchant-files').upload(filePath, file);
+            if (storErr) throw storErr;
+
+            const apiRes = await fetch('/api/merchants', {
+                method: 'POST', headers: legacyAuthHdr(),
+                body: JSON.stringify({ action: 'add_legacy_attachment', file_name: file.name, file_path: filePath, file_type: file.type, file_size: file.size })
+            });
+            const apiData = await apiRes.json();
+            if (!apiData.success) throw new Error(apiData.message);
+
+            document.getElementById(rowId).innerHTML = `
+                <span class="material-icons" style="font-size:16px;color:#16a34a;">check_circle</span>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+                <span style="font-size:11px;color:#16a34a;">Done</span>`;
+            results.push(apiData.attachment);
+        } catch (e) {
+            document.getElementById(rowId).innerHTML = `
+                <span class="material-icons" style="font-size:16px;color:#dc2626;">error</span>
+                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+                <span style="font-size:11px;color:#dc2626;">${e.message}</span>`;
+        }
+    }
+
+    // Reset file input
+    document.getElementById('legacyFileInput').value = '';
+
+    // After a moment, hide progress and refresh list
+    setTimeout(() => {
+        progressWrap.style.display = 'none';
+        _legacyLoaded = false;
+        document.getElementById('legacy-loading').style.display = '';
+        document.getElementById('legacy-loading').innerHTML = `<span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading files…`;
+        document.getElementById('legacy-table-wrap').style.display = 'none';
+        document.getElementById('legacy-empty').style.display = 'none';
+        _legacyLoaded = true;
+        legacyLoadFiles();
+    }, 1500);
+}
+
+async function legacyDelete(fileId, filePath) {
+    const confirmed = await Swal.fire({
+        title: 'Delete file?', text: 'This will permanently remove the file from storage.',
+        icon: 'warning', showCancelButton: true, confirmButtonColor: '#dc2626',
+        confirmButtonText: 'Delete', cancelButtonText: 'Cancel'
+    });
+    if (!confirmed.isConfirmed) return;
+    try {
+        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(), body: JSON.stringify({ action: 'delete_legacy_attachment', file_id: fileId, file_path: filePath }) });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const row = document.getElementById('legacy-row-' + fileId);
+        if (row) row.remove();
+        // Show empty state if no rows left
+        if (!document.getElementById('legacy-tbody').querySelector('tr')) {
+            document.getElementById('legacy-table-wrap').style.display = 'none';
+            document.getElementById('legacy-empty').style.display = '';
+        }
+    } catch (e) { Swal.fire('Error', e.message, 'error'); }
+}
+
+let _legacyAssignTimer = null;
+async function legacyAssign(fileId, fileName) {
+    const { value } = await Swal.fire({
+        title: `<span style="font-size:15px;font-weight:800;color:#002d5a;">Assign to Merchant</span>`,
+        html: `
+            <div style="font-size:12px;color:#64748b;margin-bottom:12px;">File: <strong>${fileName}</strong></div>
+            <input id="la-search" type="text" placeholder="Search by MID or DBA name…"
+                style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
+                oninput="legacySearchMerchants(this.value)" onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0'">
+            <div id="la-results" style="margin-top:8px;max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;display:none;"></div>
+            <div id="la-selected" style="display:none;margin-top:10px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;">
+                <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Selected Merchant</div>
+                <div id="la-selected-name" style="font-size:13px;font-weight:700;color:#002d5a;"></div>
+                <div id="la-selected-mid" style="font-size:11px;color:#64748b;"></div>
+            </div>`,
+        showCancelButton: true,
+        confirmButtonText: 'Assign',
+        confirmButtonColor: '#004990',
+        focusConfirm: false,
+        preConfirm: async () => {
+            const mid = document.getElementById('la-search').dataset.selectedId;
+            if (!mid) { Swal.showValidationMessage('Please select a merchant from the search results.'); return false; }
+            Swal.showLoading();
+            try {
+                const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(), body: JSON.stringify({ action: 'assign_legacy_attachment', file_id: fileId, merchant_uuid: mid }) });
+                const data = await res.json();
+                if (!data.success) throw new Error(data.message);
+            } catch (e) { Swal.showValidationMessage(e.message); return false; }
+        }
+    });
+
+    if (value !== undefined) {
+        const row = document.getElementById('legacy-row-' + fileId);
+        if (row) row.remove();
+        if (!document.getElementById('legacy-tbody').querySelector('tr')) {
+            document.getElementById('legacy-table-wrap').style.display = 'none';
+            document.getElementById('legacy-empty').style.display = '';
+        }
+        Swal.fire({ icon: 'success', title: 'Assigned!', text: `"${fileName}" has been added to the merchant's attachments.`, timer: 2000, showConfirmButton: false });
+    }
+}
+
+async function legacySearchMerchants(q) {
+    const resultsDiv = document.getElementById('la-results');
+    const searchInput = document.getElementById('la-search');
+    if (!q || q.length < 2) { resultsDiv.style.display = 'none'; return; }
+    resultsDiv.style.display = '';
+    resultsDiv.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">Searching…</div>';
+    try {
+        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(), body: JSON.stringify({ action: 'search_merchants_for_legacy', query: q }) });
+        const data = await res.json();
+        if (!data.merchants?.length) {
+            resultsDiv.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">No results found.</div>';
+            return;
+        }
+        resultsDiv.innerHTML = data.merchants.map(m => `
+            <div onclick="legacySelectMerchant('${m.id}','${(m.dba_name||'').replace(/'/g,'\\\'')}',' ${m.merchant_id||''}')"
+                style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background 0.1s;"
+                onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
+                <div style="font-size:13px;font-weight:700;color:#002d5a;">${m.dba_name || '—'}</div>
+                <div style="font-size:11px;color:#64748b;">MID: ${m.merchant_id || '—'} · <span style="color:${m.account_status==='Approved'?'#16a34a':'#dc2626'}">${m.account_status||''}</span></div>
+            </div>`).join('');
+    } catch(e) {
+        resultsDiv.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:#dc2626;">Error: ${e.message}</div>`;
+    }
+}
+
+function legacySelectMerchant(id, name, mid) {
+    const searchInput = document.getElementById('la-search');
+    searchInput.dataset.selectedId = id;
+    searchInput.value = name.trim();
+    document.getElementById('la-results').style.display = 'none';
+    const sel = document.getElementById('la-selected');
+    sel.style.display = '';
+    document.getElementById('la-selected-name').textContent = name.trim();
+    document.getElementById('la-selected-mid').textContent = 'MID: ' + mid.trim();
 }
 
 // ── PRIME49 RESIDUALS ────────────────────────────────────────────

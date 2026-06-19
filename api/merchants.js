@@ -1536,6 +1536,76 @@ if (action === 'get_notes') {
             return res.status(200).json({ success: true, records_transferred: transferred, target: tgt2 });
         }
 
+        // ── LEGACY ATTACHMENTS ────────────────────────────────────────────────
+
+        if (action === 'get_legacy_attachments') {
+            const { data, error } = await supabase
+                .from('legacy_attachments')
+                .select('*')
+                .is('merchant_id', null)
+                .order('created_at', { ascending: false });
+            if (error) throw error;
+            return res.status(200).json({ success: true, attachments: data || [] });
+        }
+
+        if (action === 'add_legacy_attachment') {
+            const { file_name, file_path, file_type, file_size } = body;
+            if (!file_name || !file_path) return res.status(400).json({ success: false, message: 'file_name and file_path required' });
+            const actor = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+            const { data, error } = await supabase.from('legacy_attachments').insert({
+                file_name, file_path, file_type, file_size,
+                uploaded_by: actor.data?.email || session.userid,
+            }).select().single();
+            if (error) throw error;
+            return res.status(200).json({ success: true, attachment: data });
+        }
+
+        if (action === 'delete_legacy_attachment') {
+            const { file_id, file_path } = body;
+            if (!file_id) return res.status(400).json({ success: false, message: 'file_id required' });
+            if (file_path) {
+                await supabase.storage.from('merchant-files').remove([file_path]);
+            }
+            const { error } = await supabase.from('legacy_attachments').delete().eq('id', file_id);
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
+        if (action === 'search_merchants_for_legacy') {
+            const { query } = body;
+            if (!query?.trim()) return res.status(200).json({ success: true, merchants: [] });
+            const q = query.trim();
+            const { data, error } = await supabase
+                .from('merchants')
+                .select('id, merchant_id, dba_name, account_status')
+                .or(`merchant_id.ilike.%${q}%,dba_name.ilike.%${q}%`)
+                .limit(10);
+            if (error) throw error;
+            return res.status(200).json({ success: true, merchants: data || [] });
+        }
+
+        if (action === 'assign_legacy_attachment') {
+            const { file_id, merchant_uuid } = body;
+            if (!file_id || !merchant_uuid) return res.status(400).json({ success: false, message: 'file_id and merchant_uuid required' });
+            const { data: legRow, error: e1 } = await supabase.from('legacy_attachments').select('*').eq('id', file_id).single();
+            if (e1 || !legRow) return res.status(404).json({ success: false, message: 'Legacy attachment not found' });
+            const actor = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+            const actorEmail = actor.data?.email || session.userid;
+            // Copy into merchant_attachments
+            const { error: e2 } = await supabase.from('merchant_attachments').insert({
+                merchant_id: merchant_uuid,
+                file_name: legRow.file_name,
+                file_path: legRow.file_path,
+                file_type: legRow.file_type,
+                file_size: legRow.file_size,
+                uploaded_by: legRow.uploaded_by,
+            });
+            if (e2) throw e2;
+            // Remove from legacy_attachments
+            await supabase.from('legacy_attachments').delete().eq('id', file_id);
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: "Unknown action" });
     } catch (err) {
         console.error('[API Error]', err.message);
