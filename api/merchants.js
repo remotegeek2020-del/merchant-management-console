@@ -1556,22 +1556,47 @@ if (action === 'get_notes') {
             const { file_name, file_path, file_type, file_size } = req.body;
             if (!file_name || !file_path) return res.status(400).json({ success: false, message: 'file_name and file_path required' });
             const actor = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+            const actorEmail = actor.data?.email || session.userid;
             const { data, error } = await supabase.from('legacy_attachments').insert({
                 file_name, file_path, file_type, file_size,
-                uploaded_by: actor.data?.email || session.userid,
+                uploaded_by: actorEmail,
             }).select().single();
             if (error) throw error;
+            const fileSizeMB = file_size ? (file_size / 1048576).toFixed(2) + ' MB' : 'unknown size';
+            supabase.from('activity_logs').insert({
+                email: actorEmail,
+                action: `Legacy file uploaded: "${file_name}" (${file_type || 'unknown type'}, ${fileSizeMB}) — unassigned, pending merchant assignment`,
+                status: 'success',
+                category: 'merchants',
+                target_id: data?.id,
+                target_type: 'legacy_attachment',
+                severity: 'info',
+                new_value: { file_name, file_path, file_type, file_size, uploaded_by: actorEmail, attachment_id: data?.id }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true, attachment: data });
         }
 
         if (action === 'delete_legacy_attachment') {
             const { file_id, file_path } = req.body;
             if (!file_id) return res.status(400).json({ success: false, message: 'file_id required' });
+            const { data: delRow } = await supabase.from('legacy_attachments').select('file_name, file_type, file_size, uploaded_by').eq('id', file_id).maybeSingle();
+            const delActor = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+            const delActorEmail = delActor.data?.email || session.userid;
             if (file_path) {
                 await supabase.storage.from('merchant-files').remove([file_path]);
             }
             const { error } = await supabase.from('legacy_attachments').delete().eq('id', file_id);
             if (error) throw error;
+            supabase.from('activity_logs').insert({
+                email: delActorEmail,
+                action: `Legacy file deleted: "${delRow?.file_name || file_id}" — permanently removed from storage and legacy queue`,
+                status: 'success',
+                category: 'merchants',
+                target_id: file_id,
+                target_type: 'legacy_attachment',
+                severity: 'warning',
+                old_value: { file_id, file_name: delRow?.file_name, file_path, file_type: delRow?.file_type, file_size: delRow?.file_size, originally_uploaded_by: delRow?.uploaded_by }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 
@@ -1592,8 +1617,14 @@ if (action === 'get_notes') {
             if (!file_id || !merchant_uuid) return res.status(400).json({ success: false, message: 'file_id and merchant_uuid required' });
             const { data: legRow, error: e1 } = await supabase.from('legacy_attachments').select('*').eq('id', file_id).single();
             if (e1 || !legRow) return res.status(404).json({ success: false, message: 'Legacy attachment not found' });
-            const actor = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
-            const actorEmail = actor.data?.email || session.userid;
+            const [actorRes, merchantRes] = await Promise.all([
+                supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle(),
+                supabase.from('merchants').select('merchant_id, dba_name').eq('id', merchant_uuid).maybeSingle(),
+            ]);
+            const actorEmail = actorRes.data?.email || session.userid;
+            const merchantLabel = merchantRes.data
+                ? `${merchantRes.data.dba_name} (${merchantRes.data.merchant_id})`
+                : merchant_uuid;
             // Copy into merchant_attachments
             const { error: e2 } = await supabase.from('merchant_attachments').insert({
                 merchant_id: merchant_uuid,
@@ -1606,6 +1637,29 @@ if (action === 'get_notes') {
             if (e2) throw e2;
             // Remove from legacy_attachments
             await supabase.from('legacy_attachments').delete().eq('id', file_id);
+            const fileSizeMB = legRow.file_size ? (legRow.file_size / 1048576).toFixed(2) + ' MB' : 'unknown size';
+            supabase.from('activity_logs').insert({
+                email: actorEmail,
+                action: `Legacy file assigned to merchant: "${legRow.file_name}" → ${merchantLabel} — originally uploaded by ${legRow.uploaded_by || 'unknown'}, moved from legacy queue to merchant attachments`,
+                status: 'success',
+                category: 'merchants',
+                target_id: merchantRes.data?.merchant_id || merchant_uuid,
+                target_type: 'merchant',
+                severity: 'info',
+                new_value: {
+                    file_name: legRow.file_name,
+                    file_path: legRow.file_path,
+                    file_type: legRow.file_type,
+                    file_size: legRow.file_size,
+                    file_size_readable: fileSizeMB,
+                    assigned_to_merchant_uuid: merchant_uuid,
+                    assigned_to_merchant_id: merchantRes.data?.merchant_id,
+                    assigned_to_dba_name: merchantRes.data?.dba_name,
+                    originally_uploaded_by: legRow.uploaded_by,
+                    assigned_by: actorEmail,
+                    legacy_attachment_id: file_id,
+                }
+            }).then(() => {}).catch(() => {});
             return res.status(200).json({ success: true });
         }
 
