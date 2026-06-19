@@ -275,6 +275,17 @@
                 <div id="legacy-progress-list" style="display:flex;flex-direction:column;gap:6px;"></div>
             </div>
 
+            <!-- Filter + count row -->
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
+                <span id="legacy-file-count" style="font-size:12px;color:#64748b;font-weight:600;"></span>
+                <div style="flex:1;min-width:200px;max-width:340px;position:relative;">
+                    <span class="material-icons" style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:16px;color:#94a3b8;pointer-events:none;">search</span>
+                    <input type="text" placeholder="Filter by filename…" oninput="legacyFilterFiles(this.value)"
+                        style="width:100%;padding:7px 10px 7px 32px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-family:inherit;outline:none;box-sizing:border-box;"
+                        onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0'">
+                </div>
+            </div>
+
             <!-- Unassigned file list -->
             <div id="legacy-list-wrap">
                 <div id="legacy-loading" style="text-align:center;padding:40px;color:#94a3b8;">
@@ -300,6 +311,11 @@
                         </thead>
                         <tbody id="legacy-tbody"></tbody>
                     </table>
+                    <div style="text-align:center;padding:16px;">
+                        <button id="legacy-load-more" onclick="legacyLoadFiles(true)" style="display:none;padding:8px 24px;background:#f1f5f9;color:#334155;border:1.5px solid #e2e8f0;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">
+                            Load more
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -3429,34 +3445,75 @@ function legacyFileIcon(type) {
     return 'insert_drive_file';
 }
 
-async function legacyLoadFiles() {
+// ── Pagination state ─────────────────────────────────────────────────────────
+let _legacyOffset = 0, _legacyTotal = 0, _legacySearchFilter = '';
+const LEGACY_PAGE = 50;
+
+async function legacyLoadFiles(append = false) {
+    if (!append) {
+        _legacyOffset = 0;
+        document.getElementById('legacy-loading').style.display = '';
+        document.getElementById('legacy-loading').innerHTML = `<span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading files…`;
+        document.getElementById('legacy-table-wrap').style.display = 'none';
+        document.getElementById('legacy-empty').style.display = 'none';
+    }
     try {
-        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(), body: JSON.stringify({ action: 'get_legacy_attachments' }) });
+        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(),
+            body: JSON.stringify({ action: 'get_legacy_attachments', offset: _legacyOffset, limit: LEGACY_PAGE, search: _legacySearchFilter }) });
         const data = await res.json();
         if (!data.success) throw new Error(data.message);
-        legacyRenderFiles(data.attachments || []);
+        _legacyTotal = data.total || 0;
+        _legacyOffset += (data.attachments || []).length;
+        legacyRenderFiles(data.attachments || [], append);
     } catch (e) {
         document.getElementById('legacy-loading').innerHTML = `<span style="color:#dc2626;">Error: ${e.message}</span>`;
     }
 }
 
-function legacyRenderFiles(files) {
+let _legacyFilterTimer = null;
+function legacyFilterFiles(val) {
+    clearTimeout(_legacyFilterTimer);
+    _legacyFilterTimer = setTimeout(() => {
+        _legacySearchFilter = val.trim();
+        _legacyLoaded = true;
+        legacyLoadFiles(false);
+    }, 300);
+}
+
+function legacyRenderFiles(files, append = false) {
     document.getElementById('legacy-loading').style.display = 'none';
-    if (!files.length) {
+    const tbody = document.getElementById('legacy-tbody');
+
+    if (!append) tbody.innerHTML = '';
+
+    if (!append && !files.length) {
         document.getElementById('legacy-empty').style.display = '';
         document.getElementById('legacy-table-wrap').style.display = 'none';
+        document.getElementById('legacy-load-more').style.display = 'none';
         return;
     }
+
     document.getElementById('legacy-empty').style.display = 'none';
     document.getElementById('legacy-table-wrap').style.display = '';
-    const tbody = document.getElementById('legacy-tbody');
-    tbody.innerHTML = files.map(f => `
-        <tr style="border-bottom:1px solid #f1f5f9;" id="legacy-row-${f.id}">
+
+    // Update counter
+    const countEl = document.getElementById('legacy-file-count');
+    if (countEl) countEl.textContent = `${_legacyTotal.toLocaleString()} file${_legacyTotal !== 1 ? 's' : ''} unassigned`;
+
+    const fragment = document.createDocumentFragment();
+    files.forEach(f => {
+        const tr = document.createElement('tr');
+        tr.id = 'legacy-row-' + f.id;
+        tr.style.borderBottom = '1px solid #f1f5f9';
+        const safeName = (f.file_name || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        const safePath = (f.file_path || '').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        const fileUrl = `${SUPABASE_URL}/storage/v1/object/public/merchant-files/${f.file_path}`;
+        tr.innerHTML = `
             <td style="padding:10px 12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                 <div style="display:flex;align-items:center;gap:7px;">
                     <span class="material-icons" style="font-size:18px;color:#64748b;flex-shrink:0;">${legacyFileIcon(f.file_type)}</span>
-                    <a href="${SUPABASE_URL}/storage/v1/object/public/merchant-files/${f.file_path}" target="_blank"
-                       style="color:#004990;font-weight:600;text-decoration:none;overflow:hidden;text-overflow:ellipsis;" title="${f.file_name}">${f.file_name}</a>
+                    <span onclick="legacyPreview('${fileUrl.replace(/'/g,"\\'")}','${safeName}','${(f.file_type||'').replace(/'/g,"\\'")}' )"
+                        style="color:#004990;font-weight:600;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.file_name}">${f.file_name}</span>
                 </div>
             </td>
             <td style="padding:10px 12px;color:#64748b;">${f.file_type ? f.file_type.split('/').pop().toUpperCase() : '—'}</td>
@@ -3464,79 +3521,128 @@ function legacyRenderFiles(files) {
             <td style="padding:10px 12px;color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.uploaded_by||''}">${f.uploaded_by || '—'}</td>
             <td style="padding:10px 12px;color:#64748b;white-space:nowrap;">${legacyFmtDate(f.created_at)}</td>
             <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
-                <button onclick="legacyAssign('${f.id}','${f.file_name.replace(/'/g,'\\\'')}')"
-                    style="padding:5px 12px;background:#004990;color:white;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:6px;">
+                <button onclick="legacyPreview('${fileUrl.replace(/'/g,"\\'")}','${safeName}','${(f.file_type||'').replace(/'/g,"\\'")}' )"
+                    style="padding:5px 10px;background:white;color:#004990;border:1.5px solid #bfdbfe;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px;">
+                    <span class="material-icons" style="font-size:13px;vertical-align:middle;">visibility</span>
+                </button>
+                <button onclick="legacyAssign('${f.id}','${safeName}')"
+                    style="padding:5px 12px;background:#004990;color:white;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px;">
                     <span class="material-icons" style="font-size:13px;vertical-align:middle;">link</span> Assign
                 </button>
-                <button onclick="legacyDelete('${f.id}','${f.file_path.replace(/'/g,'\\\'')}')"
+                <button onclick="legacyDelete('${f.id}','${safePath}')"
                     style="padding:5px 10px;background:white;color:#dc2626;border:1.5px solid #fca5a5;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;">
                     <span class="material-icons" style="font-size:13px;vertical-align:middle;">delete</span>
                 </button>
-            </td>
-        </tr>`).join('');
+            </td>`;
+        fragment.appendChild(tr);
+    });
+    tbody.appendChild(fragment);
+
+    // Load more button
+    const loadMoreBtn = document.getElementById('legacy-load-more');
+    if (_legacyOffset < _legacyTotal) {
+        loadMoreBtn.style.display = '';
+        loadMoreBtn.textContent = `Load more (${(_legacyTotal - _legacyOffset).toLocaleString()} remaining)`;
+    } else {
+        loadMoreBtn.style.display = 'none';
+    }
 }
 
-async function legacyHandleUpload(files) {
-    if (!files || !files.length) return;
+// ── CONCURRENT UPLOADER (5 parallel workers) ─────────────────────────────────
+async function legacyHandleUpload(fileList) {
+    if (!fileList || !fileList.length) return;
+    const files = Array.from(fileList);
+    const total = files.length;
+    let done = 0, failed = 0;
+
     const progressWrap = document.getElementById('legacy-upload-progress');
     const progressList = document.getElementById('legacy-progress-list');
     progressWrap.style.display = '';
-    progressList.innerHTML = '';
+
+    // For small batches show per-file rows; large batches show a summary bar
+    const showRows = total <= 20;
+    if (showRows) {
+        progressList.innerHTML = '';
+    } else {
+        progressList.innerHTML = `
+            <div style="font-size:12px;color:#475569;margin-bottom:6px;" id="lpu-summary">Uploading 0 / ${total}…</div>
+            <div style="background:#e2e8f0;border-radius:99px;height:8px;overflow:hidden;">
+                <div id="lpu-bar" style="height:100%;background:linear-gradient(90deg,#004990,#0ea5e9);width:0%;transition:width 0.3s;"></div>
+            </div>
+            <div id="lpu-errors" style="margin-top:8px;"></div>`;
+    }
 
     const sbClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON);
-    const results = [];
 
-    for (const file of Array.from(files)) {
-        const rowId = 'lpu-' + Math.random().toString(36).slice(2);
-        progressList.insertAdjacentHTML('beforeend', `
-            <div id="${rowId}" style="display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;">
-                <span class="material-icons" style="font-size:16px;animation:spin 1s linear infinite;color:#64748b;">autorenew</span>
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
-                <span id="${rowId}-status" style="font-size:11px;color:#94a3b8;">Uploading…</span>
-            </div>`);
-
-        const ext = file.name.split('.').pop();
-        const uid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).slice(2);
+    const uploadOne = async (file) => {
+        let rowId;
+        if (showRows) {
+            rowId = 'lpu-' + Math.random().toString(36).slice(2);
+            progressList.insertAdjacentHTML('beforeend', `
+                <div id="${rowId}" style="display:flex;align-items:center;gap:8px;font-size:12px;color:#475569;">
+                    <span class="material-icons" style="font-size:16px;animation:spin 1s linear infinite;color:#64748b;">autorenew</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+                    <span style="font-size:11px;color:#94a3b8;">Uploading…</span>
+                </div>`);
+        }
+        const ext = file.name.includes('.') ? file.name.split('.').pop() : 'bin';
+        const uid = (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2) + Date.now();
         const filePath = `legacy/${uid}.${ext}`;
-
         try {
             const { error: storErr } = await sbClient.storage.from('merchant-files').upload(filePath, file);
             if (storErr) throw storErr;
-
             const apiRes = await fetch('/api/merchants', {
                 method: 'POST', headers: legacyAuthHdr(),
-                body: JSON.stringify({ action: 'add_legacy_attachment', file_name: file.name, file_path: filePath, file_type: file.type, file_size: file.size })
+                body: JSON.stringify({ action: 'add_legacy_attachment', file_name: file.name, file_path: filePath, file_type: file.type || '', file_size: file.size })
             });
             const apiData = await apiRes.json();
             if (!apiData.success) throw new Error(apiData.message);
-
-            document.getElementById(rowId).innerHTML = `
-                <span class="material-icons" style="font-size:16px;color:#16a34a;">check_circle</span>
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
-                <span style="font-size:11px;color:#16a34a;">Done</span>`;
-            results.push(apiData.attachment);
+            done++;
+            if (showRows && rowId) {
+                document.getElementById(rowId).innerHTML = `
+                    <span class="material-icons" style="font-size:16px;color:#16a34a;">check_circle</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+                    <span style="font-size:11px;color:#16a34a;">Done</span>`;
+            }
         } catch (e) {
-            document.getElementById(rowId).innerHTML = `
-                <span class="material-icons" style="font-size:16px;color:#dc2626;">error</span>
-                <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
-                <span style="font-size:11px;color:#dc2626;">${e.message}</span>`;
+            failed++;
+            if (showRows && rowId) {
+                document.getElementById(rowId).innerHTML = `
+                    <span class="material-icons" style="font-size:16px;color:#dc2626;">error</span>
+                    <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${file.name}</span>
+                    <span style="font-size:11px;color:#dc2626;">${e.message}</span>`;
+            } else {
+                document.getElementById('lpu-errors')?.insertAdjacentHTML('beforeend',
+                    `<div style="font-size:11px;color:#dc2626;margin-top:3px;">✗ ${file.name}: ${e.message}</div>`);
+            }
         }
-    }
+        if (!showRows) {
+            const pct = Math.round(((done + failed) / total) * 100);
+            const barEl = document.getElementById('lpu-bar');
+            const sumEl = document.getElementById('lpu-summary');
+            if (barEl) barEl.style.width = pct + '%';
+            if (sumEl) sumEl.textContent = `Uploading ${done + failed} / ${total}… (${failed} failed)`;
+        }
+    };
 
-    // Reset file input
+    // Concurrency pool — 5 workers
+    const CONCURRENCY = 5;
+    let idx = 0;
+    const worker = async () => {
+        while (idx < files.length) {
+            const file = files[idx++];
+            await uploadOne(file);
+        }
+    };
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, files.length) }, worker));
+
     document.getElementById('legacyFileInput').value = '';
 
-    // After a moment, hide progress and refresh list
     setTimeout(() => {
         progressWrap.style.display = 'none';
-        _legacyLoaded = false;
-        document.getElementById('legacy-loading').style.display = '';
-        document.getElementById('legacy-loading').innerHTML = `<span class="material-icons" style="font-size:28px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Loading files…`;
-        document.getElementById('legacy-table-wrap').style.display = 'none';
-        document.getElementById('legacy-empty').style.display = 'none';
         _legacyLoaded = true;
-        legacyLoadFiles();
-    }, 1500);
+        legacyLoadFiles(false);
+    }, showRows ? 1500 : 800);
 }
 
 async function legacyDelete(fileId, filePath) {
@@ -3552,7 +3658,10 @@ async function legacyDelete(fileId, filePath) {
         if (!data.success) throw new Error(data.message);
         const row = document.getElementById('legacy-row-' + fileId);
         if (row) row.remove();
-        // Show empty state if no rows left
+        _legacyTotal = Math.max(0, _legacyTotal - 1);
+        _legacyOffset = Math.max(0, _legacyOffset - 1);
+        const countEl = document.getElementById('legacy-file-count');
+        if (countEl) countEl.textContent = `${_legacyTotal.toLocaleString()} file${_legacyTotal !== 1 ? 's' : ''} unassigned`;
         if (!document.getElementById('legacy-tbody').querySelector('tr')) {
             document.getElementById('legacy-table-wrap').style.display = 'none';
             document.getElementById('legacy-empty').style.display = '';
@@ -3560,7 +3669,39 @@ async function legacyDelete(fileId, filePath) {
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
 }
 
-let _legacyAssignTimer = null;
+// ── FILE PREVIEW POPUP ────────────────────────────────────────────────────────
+function legacyPreview(url, name, type) {
+    const isImage = type && type.startsWith('image/');
+    const isPdf   = type === 'application/pdf' || name.toLowerCase().endsWith('.pdf');
+    const isCsv   = type === 'text/csv' || name.toLowerCase().endsWith('.csv');
+
+    let bodyHtml;
+    if (isImage) {
+        bodyHtml = `<img src="${url}" style="max-width:100%;max-height:70vh;border-radius:8px;display:block;margin:0 auto;" onerror="this.outerHTML='<p style=color:#dc2626>Failed to load image.</p>'">`;
+    } else if (isPdf) {
+        bodyHtml = `<iframe src="${url}" style="width:100%;height:72vh;border:none;border-radius:8px;" title="${name}"></iframe>`;
+    } else {
+        bodyHtml = `
+            <div style="padding:30px;text-align:center;">
+                <span class="material-icons" style="font-size:48px;color:#94a3b8;display:block;margin-bottom:12px;">${legacyFileIcon(type)}</span>
+                <div style="font-size:13px;color:#475569;margin-bottom:16px;">Preview not available for this file type.</div>
+                <a href="${url}" download="${name}" style="display:inline-flex;align-items:center;gap:6px;padding:9px 20px;background:#004990;color:white;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
+                    <span class="material-icons" style="font-size:15px;">download</span> Download File
+                </a>
+            </div>`;
+    }
+
+    Swal.fire({
+        title: `<span style="font-size:13px;font-weight:700;color:#64748b;word-break:break-all;">${name}</span>`,
+        html: bodyHtml,
+        width: isPdf ? '90vw' : (isImage ? 'auto' : '480px'),
+        showConfirmButton: false,
+        showCloseButton: true,
+        padding: isPdf ? '10px' : '20px',
+        customClass: { popup: 'legacy-preview-popup' },
+    });
+}
+
 async function legacyAssign(fileId, fileName) {
     const { value } = await Swal.fire({
         title: `<span style="font-size:15px;font-weight:800;color:#002d5a;">Assign to Merchant</span>`,
@@ -3568,7 +3709,7 @@ async function legacyAssign(fileId, fileName) {
             <div style="font-size:12px;color:#64748b;margin-bottom:12px;">File: <strong>${fileName}</strong></div>
             <input id="la-search" type="text" placeholder="Search by MID or DBA name…"
                 style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:inherit;box-sizing:border-box;outline:none;"
-                oninput="legacySearchMerchants(this.value)" onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0'">
+                oninput="legacyDebounceSearch(this.value)" onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0'">
             <div id="la-results" style="margin-top:8px;max-height:220px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;display:none;"></div>
             <div id="la-selected" style="display:none;margin-top:10px;padding:10px 12px;background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;">
                 <div style="font-size:11px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Selected Merchant</div>
@@ -3580,7 +3721,8 @@ async function legacyAssign(fileId, fileName) {
         confirmButtonColor: '#004990',
         focusConfirm: false,
         preConfirm: async () => {
-            const mid = document.getElementById('la-search').dataset.selectedId;
+            const searchEl = document.getElementById('la-search');
+            const mid = searchEl?.dataset.selectedId;
             if (!mid) { Swal.showValidationMessage('Please select a merchant from the search results.'); return false; }
             Swal.showLoading();
             try {
@@ -3594,6 +3736,10 @@ async function legacyAssign(fileId, fileName) {
     if (value !== undefined) {
         const row = document.getElementById('legacy-row-' + fileId);
         if (row) row.remove();
+        _legacyTotal = Math.max(0, _legacyTotal - 1);
+        _legacyOffset = Math.max(0, _legacyOffset - 1);
+        const countEl = document.getElementById('legacy-file-count');
+        if (countEl) countEl.textContent = `${_legacyTotal.toLocaleString()} file${_legacyTotal !== 1 ? 's' : ''} unassigned`;
         if (!document.getElementById('legacy-tbody').querySelector('tr')) {
             document.getElementById('legacy-table-wrap').style.display = 'none';
             document.getElementById('legacy-empty').style.display = '';
@@ -3602,33 +3748,48 @@ async function legacyAssign(fileId, fileName) {
     }
 }
 
+let _legacySearchTimer = null, _legacySearchAbort = null;
+function legacyDebounceSearch(val) {
+    clearTimeout(_legacySearchTimer);
+    if (!val || val.length < 2) { const d = document.getElementById('la-results'); if(d) d.style.display='none'; return; }
+    _legacySearchTimer = setTimeout(() => legacySearchMerchants(val), 300);
+}
+
 async function legacySearchMerchants(q) {
     const resultsDiv = document.getElementById('la-results');
-    const searchInput = document.getElementById('la-search');
-    if (!q || q.length < 2) { resultsDiv.style.display = 'none'; return; }
+    if (!resultsDiv) return;
+    if (_legacySearchAbort) _legacySearchAbort.abort();
+    _legacySearchAbort = new AbortController();
     resultsDiv.style.display = '';
     resultsDiv.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">Searching…</div>';
     try {
-        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(), body: JSON.stringify({ action: 'search_merchants_for_legacy', query: q }) });
+        const res = await fetch('/api/merchants', { method: 'POST', headers: legacyAuthHdr(),
+            body: JSON.stringify({ action: 'search_merchants_for_legacy', query: q }),
+            signal: _legacySearchAbort.signal });
         const data = await res.json();
         if (!data.merchants?.length) {
             resultsDiv.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">No results found.</div>';
             return;
         }
-        resultsDiv.innerHTML = data.merchants.map(m => `
-            <div onclick="legacySelectMerchant('${m.id}','${(m.dba_name||'').replace(/'/g,'\\\'')}',' ${m.merchant_id||''}')"
-                style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;transition:background 0.1s;"
+        resultsDiv.innerHTML = data.merchants.map(m => {
+            const safeName = (m.dba_name||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            const safeMid  = (m.merchant_id||'').replace(/'/g,"\\'");
+            return `<div onclick="legacySelectMerchant('${m.id}','${safeName}','${safeMid}')"
+                style="padding:10px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;"
                 onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='white'">
                 <div style="font-size:13px;font-weight:700;color:#002d5a;">${m.dba_name || '—'}</div>
                 <div style="font-size:11px;color:#64748b;">MID: ${m.merchant_id || '—'} · <span style="color:${m.account_status==='Approved'?'#16a34a':'#dc2626'}">${m.account_status||''}</span></div>
-            </div>`).join('');
+            </div>`;
+        }).join('');
     } catch(e) {
+        if (e.name === 'AbortError') return;
         resultsDiv.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:#dc2626;">Error: ${e.message}</div>`;
     }
 }
 
 function legacySelectMerchant(id, name, mid) {
     const searchInput = document.getElementById('la-search');
+    if (!searchInput) return;
     searchInput.dataset.selectedId = id;
     searchInput.value = name.trim();
     document.getElementById('la-results').style.display = 'none';

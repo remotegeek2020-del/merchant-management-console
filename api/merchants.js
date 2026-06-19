@@ -1539,13 +1539,17 @@ if (action === 'get_notes') {
         // ── LEGACY ATTACHMENTS ────────────────────────────────────────────────
 
         if (action === 'get_legacy_attachments') {
-            const { data, error } = await supabase
-                .from('legacy_attachments')
-                .select('*')
+            const { offset = 0, limit: reqLimit = 50, search: fileSearch = '' } = req.body;
+            const PAGE = Math.min(parseInt(reqLimit) || 50, 100);
+            const OFF  = parseInt(offset) || 0;
+            let q = supabase.from('legacy_attachments').select('*', { count: 'exact' })
                 .is('merchant_id', null)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .range(OFF, OFF + PAGE - 1);
+            if (fileSearch) q = q.ilike('file_name', `%${fileSearch}%`);
+            const { data, error, count } = await q;
             if (error) throw error;
-            return res.status(200).json({ success: true, attachments: data || [] });
+            return res.status(200).json({ success: true, attachments: data || [], total: count || 0, offset: OFF, limit: PAGE });
         }
 
         if (action === 'add_legacy_attachment') {
@@ -1578,7 +1582,7 @@ if (action === 'get_notes') {
                 .from('merchants')
                 .select('id, merchant_id, dba_name, account_status')
                 .or(`merchant_id.ilike.%${q}%,dba_name.ilike.%${q}%`)
-                .limit(10);
+                .limit(25);
             if (error) throw error;
             return res.status(200).json({ success: true, merchants: data || [] });
         }
