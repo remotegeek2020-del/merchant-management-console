@@ -3512,7 +3512,7 @@ function legacyRenderFiles(files, append = false) {
             <td style="padding:10px 12px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">
                 <div style="display:flex;align-items:center;gap:7px;">
                     <span class="material-icons" style="font-size:18px;color:#64748b;flex-shrink:0;">${legacyFileIcon(f.file_type)}</span>
-                    <span onclick="legacyPreview('${fileUrl.replace(/'/g,"\\'")}','${safeName}','${(f.file_type||'').replace(/'/g,"\\'")}' )"
+                    <span onclick="legacyPreview('${fileUrl.replace(/'/g,"\\'")}','${safeName}','${(f.file_type||'').replace(/'/g,"\\'")}','${f.id}')"
                         style="color:#004990;font-weight:600;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.file_name}">${f.file_name}</span>
                 </div>
             </td>
@@ -3521,7 +3521,7 @@ function legacyRenderFiles(files, append = false) {
             <td style="padding:10px 12px;color:#64748b;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${f.uploaded_by||''}">${f.uploaded_by || '—'}</td>
             <td style="padding:10px 12px;color:#64748b;white-space:nowrap;">${legacyFmtDate(f.created_at)}</td>
             <td style="padding:10px 12px;text-align:right;white-space:nowrap;">
-                <button onclick="legacyPreview('${fileUrl.replace(/'/g,"\\'")}','${safeName}','${(f.file_type||'').replace(/'/g,"\\'")}' )"
+                <button onclick="legacyPreview('${fileUrl.replace(/'/g,"\\'")}','${safeName}','${(f.file_type||'').replace(/'/g,"\\'")}','${f.id}')"
                     style="padding:5px 10px;background:white;color:#004990;border:1.5px solid #bfdbfe;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;margin-right:4px;">
                     <span class="material-icons" style="font-size:13px;vertical-align:middle;">visibility</span>
                 </button>
@@ -3670,7 +3670,7 @@ async function legacyDelete(fileId, filePath) {
 }
 
 // ── FILE PREVIEW POPUP ────────────────────────────────────────────────────────
-async function legacyPreview(url, name, type) {
+async function legacyPreview(url, name, type, fileId) {
     const lname  = name.toLowerCase();
     const isImage  = (type && type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|bmp|svg|ico|tiff?)$/i.test(lname);
     const isPdf    = type === 'application/pdf' || lname.endsWith('.pdf');
@@ -3784,6 +3784,7 @@ async function legacyPreview(url, name, type) {
             </div>`;
     }
 
+    const safeNameForFooter = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     Swal.fire({
         title: `<span style="font-size:12px;font-weight:600;color:#64748b;word-break:break-all;max-width:90%;">${name}</span>`,
         html: bodyHtml,
@@ -3792,6 +3793,14 @@ async function legacyPreview(url, name, type) {
         showCloseButton: true,
         padding,
         customClass: { popup: 'legacy-preview-popup' },
+        footer: fileId ? `
+            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;flex-wrap:wrap;">
+                <span style="font-size:11px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;" title="${name}">${name}</span>
+                <button onclick="Swal.close();legacyAssign('${fileId}','${safeNameForFooter}')"
+                    style="flex-shrink:0;padding:7px 18px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
+                    <span class="material-icons" style="font-size:14px;">link</span> Assign to Merchant
+                </button>
+            </div>` : '',
     });
 }
 
