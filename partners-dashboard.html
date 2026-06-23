@@ -2022,7 +2022,7 @@ async function submitOnboarding() {
     };
 
     window.openPartnerDetails = async function(personId) {
-        _ppMerchantsAll = []; // reset merchant cache for new modal
+        _ppMerchantsAll = []; _ppPrimeIdStrings = new Set(); // reset merchant cache for new modal
         const p = allPartners.find(ptr => ptr.id === personId);
         if (!p) return;
         let branchIdStrings = [];
@@ -4029,6 +4029,7 @@ window.bulkTogglePortal = async function(active) {
 
 // Merchants tab — load all merchants for the current partner across all their agent IDs
 let _ppMerchantsAll = [];
+let _ppPrimeIdStrings = new Set();
 window.ppLoadMerchants = async function() {
     var el = document.getElementById('pp-merchants-content');
     var countEl = document.getElementById('pp-merchants-count');
@@ -4046,7 +4047,13 @@ window.ppLoadMerchants = async function() {
     if (!partner) { el.innerHTML = '<div style="text-align:center;color:#ef4444;padding:30px;">Partner not found.</div>'; return; }
 
     var idStrings = [];
-    partner.companies.forEach(co => { co.ids.forEach(id => { idStrings = getAllBranchIds(id, idStrings); }); });
+    _ppPrimeIdStrings = new Set();
+    function _collectIdDetails(idObj) {
+        idStrings.push(idObj.string);
+        if (idObj.isPrime) _ppPrimeIdStrings.add(idObj.string);
+        if (idObj.sub_ids?.length) idObj.sub_ids.forEach(_collectIdDetails);
+    }
+    partner.companies.forEach(co => { co.ids.forEach(id => _collectIdDetails(id)); });
     idStrings = [...new Set(idStrings)];
 
     try {
@@ -4099,10 +4106,14 @@ window.ppFilterMerchants = function() {
 
     const rows = list.map(m => {
         const url = `merchants-dashboard.html?q=${encodeURIComponent(m.merchant_id)}&filterBy=merchant_id`;
-        return `<tr style="border-bottom:1px solid #f1f5f9;">
+        const isPrime49 = _ppPrimeIdStrings.has(m._agent_id_str);
+        const diamondBadge = isPrime49
+            ? `<span title="Prime49" style="display:inline-flex;align-items:center;gap:2px;background:linear-gradient(135deg,#dbeafe,#ede9fe);border:1px solid #bfdbfe;border-radius:99px;padding:1px 6px;font-size:9px;font-weight:800;color:#3730a3;margin-left:5px;vertical-align:middle;line-height:1.4;">💎 Prime49</span>`
+            : '';
+        return `<tr style="border-bottom:1px solid #f1f5f9;${isPrime49 ? 'background:linear-gradient(90deg,#f8faff,#ffffff);' : ''}">
             <td style="padding:8px 10px;font-size:12px;color:#94a3b8;">${m.merchant_id || '—'}</td>
             <td style="padding:8px 10px;font-size:13px;font-weight:700;color:#002d5a;">
-                <a href="${url}" target="_blank" style="color:#004990;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.dba_name || '—'}</a>
+                <a href="${url}" target="_blank" style="color:#004990;text-decoration:none;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">${m.dba_name || '—'}</a>${diamondBadge}
             </td>
             <td style="padding:8px 10px;">${statusBadge(m.account_status)}</td>
             <td style="padding:8px 10px;font-size:11px;color:#475569;font-family:monospace;font-weight:600;">${m._agent_id_str || '—'}</td>
