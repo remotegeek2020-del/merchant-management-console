@@ -2704,9 +2704,32 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, partners: noIds });
         }
 
+        if (action === 'lookup_identifier') {
+            const { id_string } = body;
+            if (!id_string?.trim()) return res.status(400).json({ success: false, message: 'id_string is required.' });
+
+            const { data: existing } = await supabase
+                .from('agent_identifiers')
+                .select('id, agent_id, agents(id, parent_agent_id, persons:parent_agent_id(id, full_name, email))')
+                .eq('id_string', id_string.trim())
+                .maybeSingle();
+
+            if (!existing) return res.status(200).json({ success: true, status: 'not_found' });
+
+            const person = existing.agents?.persons;
+            if (person?.id) {
+                return res.status(200).json({
+                    success: true, status: 'assigned',
+                    assigned_to: person.full_name || person.email || 'Unknown partner',
+                });
+            }
+            // Exists in DB but no real person linked — can be reassigned
+            return res.status(200).json({ success: true, status: 'unassigned', identifier_id: existing.id });
+        }
+
         if (action === 'assign_identifier_to_partner') {
             const { person_id, id_string, rev_share, prime49: isPrime } = body;
-            if (!person_id)       return res.status(400).json({ success: false, message: 'person_id is required.' });
+            if (!person_id)         return res.status(400).json({ success: false, message: 'person_id is required.' });
             if (!id_string?.trim()) return res.status(400).json({ success: false, message: 'ID string is required.' });
 
             // Verify person exists
@@ -2714,7 +2737,52 @@ if (action === 'get_merchant_data_raw') {
                 .from('persons').select('id, full_name').eq('id', person_id).single();
             if (pErr || !person) return res.status(404).json({ success: false, message: 'Partner not found.' });
 
-            // Find or create an agent record for this person (independent — no company)
+            // Check what state the ID is in
+            const { data: existing } = await supabase
+                .from('agent_identifiers')
+                .select('id, agent_id, agents(id, parent_agent_id, persons:parent_agent_id(id))')
+                .eq('id_string', id_string.trim())
+                .maybeSingle();
+
+            const revNum = parseFloat(String(rev_share || '0').replace(/%/g, '')) || 0;
+
+            if (existing) {
+                // Already assigned to a real person — hands off
+                if (existing.agents?.persons?.id) {
+                    return res.status(409).json({ success: false, message: `ID "${id_string.trim()}" is already assigned to another partner.` });
+                }
+                // Exists but unassigned — find/create agent for target person, then reassign
+                let { data: agent } = await supabase
+                    .from('agents').select('id').eq('parent_agent_id', person_id).maybeSingle();
+                if (!agent) {
+                    const { data: newAgent, error: aErr } = await supabase
+                        .from('agents').insert({ parent_agent_id: person_id, agent_name: person.full_name || '' })
+                        .select('id').single();
+                    if (aErr) throw aErr;
+                    agent = newAgent;
+                }
+                const { error: uErr } = await supabase.from('agent_identifiers').update({
+                    agent_id:  agent.id,
+                    rev_share: revNum + '%',
+                    prime49:   !!isPrime,
+                    status:    'active',
+                }).eq('id', existing.id);
+                if (uErr) throw uErr;
+
+                const actorRes = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+                const actorEmail = actorRes.data?.email || session.userid;
+                supabase.from('activity_logs').insert({
+                    email: actorEmail,
+                    action: `Agent ID reassigned: "${id_string.trim()}" (was unassigned) → ${person.full_name} (rev share ${revNum}%, prime49: ${!!isPrime})`,
+                    status: 'success', category: 'partners', target_id: person_id,
+                    target_type: 'partner', severity: 'info',
+                    new_value: { id_string: id_string.trim(), rev_share: revNum + '%', prime49: !!isPrime, person_id, assigned_by: actorEmail, action: 'reassigned' }
+                }).then(() => {}).catch(() => {});
+
+                return res.status(200).json({ success: true, action_taken: 'reassigned' });
+            }
+
+            // Not in DB — create fresh and assign
             let { data: agent } = await supabase
                 .from('agents').select('id').eq('parent_agent_id', person_id).maybeSingle();
             if (!agent) {
@@ -2724,14 +2792,6 @@ if (action === 'get_merchant_data_raw') {
                 if (aErr) throw aErr;
                 agent = newAgent;
             }
-
-            // Check the ID string isn't already taken
-            const { data: existing } = await supabase
-                .from('agent_identifiers').select('id, agent_id').eq('id_string', id_string.trim()).maybeSingle();
-            if (existing) return res.status(409).json({ success: false, message: `ID "${id_string.trim()}" is already assigned to another agent.` });
-
-            // Insert identifier
-            const revNum = parseFloat(String(rev_share || '0').replace(/%/g, '')) || 0;
             const { error: iErr } = await supabase.from('agent_identifiers').insert({
                 agent_id:  agent.id,
                 id_string: id_string.trim(),
@@ -2741,18 +2801,17 @@ if (action === 'get_merchant_data_raw') {
             });
             if (iErr) throw iErr;
 
-            // Activity log
             const actorRes = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
             const actorEmail = actorRes.data?.email || session.userid;
             supabase.from('activity_logs').insert({
                 email: actorEmail,
-                action: `Agent ID assigned: "${id_string.trim()}" → ${person.full_name} (rev share ${revNum}%, prime49: ${!!isPrime})`,
+                action: `Agent ID assigned (new): "${id_string.trim()}" → ${person.full_name} (rev share ${revNum}%, prime49: ${!!isPrime})`,
                 status: 'success', category: 'partners', target_id: person_id,
                 target_type: 'partner', severity: 'info',
-                new_value: { id_string: id_string.trim(), rev_share: revNum + '%', prime49: !!isPrime, person_id, assigned_by: actorEmail }
+                new_value: { id_string: id_string.trim(), rev_share: revNum + '%', prime49: !!isPrime, person_id, assigned_by: actorEmail, action: 'created' }
             }).then(() => {}).catch(() => {});
 
-            return res.status(200).json({ success: true });
+            return res.status(200).json({ success: true, action_taken: 'created' });
         }
 
     } catch (err) {
