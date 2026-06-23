@@ -3677,9 +3677,102 @@ async function legacyDelete(fileId, filePath) {
     } catch (e) { Swal.fire('Error', e.message, 'error'); }
 }
 
-// ── FILE PREVIEW POPUP ────────────────────────────────────────────────────────
+// ── FILE PREVIEW OVERLAY ────────────────────────────────────────────────────────
+
+let _lpoCurrentFileId    = null;
+let _lpoCurrentFileName  = null;
+let _lpoSelectedMerchant = null;
+let _lpoPanelTimer       = null;
+let _lpoPanelAbort       = null;
+
+function _lpoEnsureOverlay() {
+    if (document.getElementById('lpo')) return;
+    const el = document.createElement('div');
+    el.id = 'lpo';
+    el.style.cssText = 'position:fixed;inset:0;z-index:99999;display:none;';
+    el.innerHTML = `
+        <!-- Header bar -->
+        <div style="position:absolute;top:0;left:0;right:0;height:48px;background:#1e293b;border-bottom:1px solid #334155;display:flex;align-items:center;padding:0 14px;gap:10px;z-index:3;box-sizing:border-box;">
+            <span class="material-icons" style="font-size:16px;color:#64748b;flex-shrink:0;">attachment</span>
+            <span id="lpo-title" style="flex:1;font-size:12px;color:#cbd5e1;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></span>
+            <a id="lpo-open-link" href="#" target="_blank" style="display:flex;align-items:center;gap:4px;font-size:11px;color:#94a3b8;text-decoration:none;flex-shrink:0;white-space:nowrap;" onmouseover="this.style.color='#e2e8f0'" onmouseout="this.style.color='#94a3b8'">
+                <span class="material-icons" style="font-size:13px;">open_in_new</span> Open in tab
+            </a>
+            <button id="lpo-assign-toggle" onclick="legacyToggleAssignPanel()"
+                style="flex-shrink:0;display:flex;align-items:center;gap:6px;padding:6px 14px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">
+                <span class="material-icons" style="font-size:14px;">link</span> Assign to Merchant
+            </button>
+            <button onclick="closeLegacyPreview()"
+                style="flex-shrink:0;width:32px;height:32px;background:#334155;color:#cbd5e1;border:none;border-radius:6px;cursor:pointer;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;">&times;</button>
+        </div>
+        <!-- File content area -->
+        <div id="lpo-content" style="position:absolute;top:48px;bottom:0;left:0;right:0;transition:right 0.25s ease;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,0.97);overflow:auto;"></div>
+        <!-- Assign side panel -->
+        <div id="lpo-panel" style="position:absolute;top:48px;bottom:0;right:-340px;width:320px;background:white;z-index:3;transition:right 0.25s ease;display:flex;flex-direction:column;box-shadow:-6px 0 32px rgba(0,0,0,0.35);">
+            <div style="padding:16px 16px 12px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+                    <div style="font-size:14px;font-weight:800;color:#002d5a;">Assign to Merchant</div>
+                    <button onclick="legacyToggleAssignPanel()" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:18px;line-height:1;padding:0;">&times;</button>
+                </div>
+                <div id="lpo-panel-file" style="font-size:11px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"></div>
+            </div>
+            <div style="padding:12px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+                <input id="lpo-search" type="text" placeholder="Search by MID or DBA name…"
+                    style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;box-sizing:border-box;outline:none;"
+                    oninput="legacyPanelSearch(this.value)"
+                    onfocus="this.style.borderColor='#004990'" onblur="this.style.borderColor='#e2e8f0'">
+                <div id="lpo-results" style="margin-top:8px;max-height:200px;overflow-y:auto;border:1px solid #e2e8f0;border-radius:8px;display:none;"></div>
+            </div>
+            <div id="lpo-selected-wrap" style="display:none;padding:12px;border-bottom:1px solid #f1f5f9;flex-shrink:0;">
+                <div style="background:#f0fdf4;border:1.5px solid #86efac;border-radius:8px;padding:10px 12px;">
+                    <div style="font-size:10px;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;">Selected</div>
+                    <div id="lpo-sel-name" style="font-size:13px;font-weight:700;color:#002d5a;"></div>
+                    <div id="lpo-sel-mid" style="font-size:11px;color:#64748b;font-family:monospace;"></div>
+                </div>
+            </div>
+            <div style="padding:14px;margin-top:auto;flex-shrink:0;">
+                <button id="lpo-confirm-btn" onclick="legacyDoAssign()" disabled
+                    style="width:100%;padding:11px;background:#94a3b8;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:not-allowed;display:flex;align-items:center;justify-content:center;gap:6px;">
+                    <span class="material-icons" style="font-size:15px;">link</span> Confirm Assign
+                </button>
+                <div id="lpo-assign-status" style="margin-top:8px;font-size:12px;text-align:center;min-height:18px;"></div>
+            </div>
+        </div>`;
+    document.body.appendChild(el);
+}
+
 async function legacyPreview(url, name, type, fileId) {
-    const lname  = name.toLowerCase();
+    _lpoEnsureOverlay();
+    _lpoCurrentFileId    = fileId || null;
+    _lpoCurrentFileName  = name;
+    _lpoSelectedMerchant = null;
+
+    // Reset assign panel state
+    const panel   = document.getElementById('lpo-panel');
+    const content = document.getElementById('lpo-content');
+    panel.style.right   = '-340px';
+    content.style.right = '0';
+    document.getElementById('lpo-panel-file').textContent = name;
+    const searchEl = document.getElementById('lpo-search');
+    if (searchEl) searchEl.value = '';
+    const resEl = document.getElementById('lpo-results');
+    if (resEl) { resEl.style.display = 'none'; resEl.innerHTML = ''; }
+    document.getElementById('lpo-selected-wrap').style.display = 'none';
+    document.getElementById('lpo-assign-status').textContent = '';
+    const confirmBtn = document.getElementById('lpo-confirm-btn');
+    confirmBtn.disabled = true;
+    confirmBtn.style.background = '#94a3b8';
+    confirmBtn.style.cursor = 'not-allowed';
+    confirmBtn.innerHTML = '<span class="material-icons" style="font-size:15px;">link</span> Confirm Assign';
+
+    // Show/hide assign button based on fileId
+    document.getElementById('lpo-assign-toggle').style.display = fileId ? 'flex' : 'none';
+    document.getElementById('lpo-title').textContent = name;
+    const openLink = document.getElementById('lpo-open-link');
+    openLink.href = url;
+
+    // Build file content
+    const lname = name.toLowerCase();
     const isImage  = (type && type.startsWith('image/')) || /\.(png|jpg|jpeg|gif|webp|bmp|svg|ico|tiff?)$/i.test(lname);
     const isPdf    = type === 'application/pdf' || lname.endsWith('.pdf');
     const isVideo  = (type && type.startsWith('video/')) || /\.(mp4|webm|mov|avi|mkv|m4v)$/i.test(lname);
@@ -3688,128 +3781,206 @@ async function legacyPreview(url, name, type, fileId) {
     const isOffice = /\.(xlsx|xls|xlsm|xlsb|doc|docx|docm|ppt|pptx|pptm)$/i.test(lname)
                   || /\/(vnd\.ms-excel|vnd\.openxmlformats-officedocument|msword|vnd\.ms-powerpoint)/.test(type||'');
 
-    let bodyHtml, width = 'auto', padding = '16px';
+    content.style.overflow = 'auto';
 
     if (isImage) {
-        width = 'min(92vw, 1000px)'; padding = '0';
-        bodyHtml = `
-            <div style="background:#0f172a;border-radius:10px;overflow:hidden;">
-                <!-- Zoom toolbar -->
-                <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:#1e293b;border-bottom:1px solid #334155;">
-                    <button onclick="lpZoom(-0.25)" title="Zoom out" style="padding:4px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;">−</button>
+        content.innerHTML = `
+            <div style="width:100%;height:100%;display:flex;flex-direction:column;background:#0f172a;">
+                <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;background:#1e293b;border-bottom:1px solid #334155;flex-shrink:0;">
+                    <button onclick="lpZoom(-0.25)" style="padding:4px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:16px;">−</button>
                     <span id="lp-zoom-pct" style="font-size:12px;color:#94a3b8;min-width:42px;text-align:center;">100%</span>
-                    <button onclick="lpZoom(0.25)" title="Zoom in" style="padding:4px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:16px;line-height:1;">+</button>
+                    <button onclick="lpZoom(0.25)" style="padding:4px 10px;background:#334155;color:#e2e8f0;border:none;border-radius:6px;cursor:pointer;font-size:16px;">+</button>
                     <div style="width:1px;height:18px;background:#334155;margin:0 4px;"></div>
-                    <button onclick="lpZoomReset()" title="Reset" style="padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">FIT</button>
+                    <button onclick="lpZoomReset()" style="padding:4px 10px;background:#334155;color:#94a3b8;border:none;border-radius:6px;cursor:pointer;font-size:11px;font-weight:700;">FIT</button>
                 </div>
-                <!-- Image pan+zoom container -->
-                <div id="lp-img-container" style="overflow:hidden;cursor:grab;height:calc(74vh - 65px);display:flex;align-items:center;justify-content:center;position:relative;"
+                <div id="lp-img-container" style="flex:1;overflow:hidden;cursor:grab;display:flex;align-items:center;justify-content:center;"
                     onmousedown="lpDragStart(event)" onmousemove="lpDragMove(event)" onmouseup="lpDragEnd()" onmouseleave="lpDragEnd()"
                     onwheel="lpWheelZoom(event)">
-                    <img id="lp-img" src="${url}" style="max-width:100%;max-height:100%;border-radius:4px;display:block;object-fit:contain;transform-origin:center;transition:transform 0.15s;user-select:none;pointer-events:none;"
+                    <img id="lp-img" src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;transform-origin:center;transition:transform 0.15s;user-select:none;pointer-events:none;"
                         onerror="this.outerHTML='<p style=color:#ef4444;padding:20px>Failed to load image.</p>'">
                 </div>
             </div>`;
-
-        // Zoom state — attached after modal renders
+        content.style.overflow = 'hidden';
         setTimeout(() => {
             let _scale = 1, _tx = 0, _ty = 0, _dragging = false, _sx = 0, _sy = 0;
             const img = document.getElementById('lp-img');
             const pct = document.getElementById('lp-zoom-pct');
-            const applyTransform = () => {
-                if (img) img.style.transform = `translate(${_tx}px,${_ty}px) scale(${_scale})`;
-                if (pct) pct.textContent = Math.round(_scale * 100) + '%';
-            };
-            window.lpZoom = (delta) => { _scale = Math.min(10, Math.max(0.1, _scale + delta)); applyTransform(); };
-            window.lpZoomReset = () => { _scale = 1; _tx = 0; _ty = 0; applyTransform(); };
-            window.lpWheelZoom = (e) => { e.preventDefault(); _scale = Math.min(10, Math.max(0.1, _scale - e.deltaY * 0.001)); applyTransform(); };
-            window.lpDragStart = (e) => { _dragging = true; _sx = e.clientX - _tx; _sy = e.clientY - _ty; document.getElementById('lp-img-container').style.cursor='grabbing'; };
-            window.lpDragMove  = (e) => { if (!_dragging) return; _tx = e.clientX - _sx; _ty = e.clientY - _sy; if(img) img.style.transform=`translate(${_tx}px,${_ty}px) scale(${_scale})`; };
-            window.lpDragEnd   = () => { _dragging = false; const c=document.getElementById('lp-img-container'); if(c) c.style.cursor='grab'; };
+            const applyT = () => { if(img) img.style.transform=`translate(${_tx}px,${_ty}px) scale(${_scale})`; if(pct) pct.textContent=Math.round(_scale*100)+'%'; };
+            window.lpZoom      = d => { _scale = Math.min(10, Math.max(0.1, _scale + d)); applyT(); };
+            window.lpZoomReset = () => { _scale = 1; _tx = 0; _ty = 0; applyT(); };
+            window.lpWheelZoom = e => { e.preventDefault(); _scale = Math.min(10, Math.max(0.1, _scale - e.deltaY * 0.001)); applyT(); };
+            window.lpDragStart = e => { _dragging=true; _sx=e.clientX-_tx; _sy=e.clientY-_ty; const c=document.getElementById('lp-img-container'); if(c) c.style.cursor='grabbing'; };
+            window.lpDragMove  = e => { if(!_dragging) return; _tx=e.clientX-_sx; _ty=e.clientY-_sy; if(img) img.style.transform=`translate(${_tx}px,${_ty}px) scale(${_scale})`; };
+            window.lpDragEnd   = () => { _dragging=false; const c=document.getElementById('lp-img-container'); if(c) c.style.cursor='grab'; };
         }, 80);
 
     } else if (isPdf) {
-        width = '92vw'; padding = '8px';
-        bodyHtml = `<iframe src="${url}" style="width:100%;height:calc(78vh - 65px);border:none;border-radius:8px;" title="${name}"></iframe>`;
+        content.innerHTML = `<iframe src="${url}" style="width:100%;height:100%;border:none;" title="${name}"></iframe>`;
+        content.style.overflow = 'hidden';
 
     } else if (isVideo) {
-        width = '80vw';
-        bodyHtml = `
-            <video controls style="width:100%;max-height:calc(70vh - 65px);border-radius:8px;background:#000;" preload="metadata">
+        content.innerHTML = `
+            <video controls style="max-width:90%;max-height:90%;border-radius:8px;background:#000;" preload="metadata">
                 <source src="${url}">
                 <p style="color:#dc2626;padding:16px;">Your browser does not support this video format.</p>
             </video>`;
 
     } else if (isAudio) {
-        width = '480px';
-        bodyHtml = `
-            <div style="padding:24px;text-align:center;">
-                <span class="material-icons" style="font-size:48px;color:#6366f1;display:block;margin-bottom:16px;">headphones</span>
-                <audio controls style="width:100%;margin-bottom:12px;">
-                    <source src="${url}">
-                    <p style="color:#dc2626;">Your browser does not support this audio format.</p>
-                </audio>
+        content.innerHTML = `
+            <div style="text-align:center;color:white;padding:40px;">
+                <span class="material-icons" style="font-size:56px;color:#6366f1;display:block;margin-bottom:16px;">headphones</span>
+                <audio controls style="width:360px;max-width:90vw;margin-bottom:12px;"><source src="${url}"></audio>
                 <div style="font-size:12px;color:#94a3b8;">${name}</div>
             </div>`;
 
     } else if (isText) {
-        width = '80vw'; padding = '0';
-        bodyHtml = `<div id="lp-text-wrap" style="background:#0f172a;border-radius:10px;padding:16px;max-height:calc(72vh - 65px);overflow:auto;text-align:left;">
+        content.innerHTML = `<div id="lp-text-wrap" style="width:100%;height:100%;background:#0f172a;overflow:auto;padding:16px;box-sizing:border-box;text-align:left;">
             <div style="color:#94a3b8;font-size:12px;font-family:monospace;">Loading…</div></div>`;
-        // Fetch text content after modal opens
-        setTimeout(async () => {
-            const el = document.getElementById('lp-text-wrap');
-            if (!el) return;
-            try {
-                const r = await fetch(url);
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                const text = await r.text();
-                const safe = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-                const lines = safe.split('\n');
-                const preview = lines.slice(0, 2000).join('\n');
-                el.innerHTML = `<pre style="margin:0;font-size:11px;color:#e2e8f0;font-family:'DM Mono',monospace;white-space:pre-wrap;word-break:break-all;">${preview}</pre>`
-                    + (lines.length > 2000 ? `<div style="padding:10px;font-size:11px;color:#64748b;border-top:1px solid #1e293b;">Showing first 2,000 lines of ${lines.length.toLocaleString()} total.</div>` : '');
-            } catch(e) {
-                el.innerHTML = `<p style="color:#ef4444;padding:8px;">Failed to load: ${e.message}</p>`;
-            }
-        }, 100);
+        content.style.overflow = 'hidden';
+        fetch(url).then(r => r.ok ? r.text() : Promise.reject('HTTP ' + r.status)).then(text => {
+            const el = document.getElementById('lp-text-wrap'); if (!el) return;
+            const safe  = text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+            const lines = safe.split('\n');
+            el.innerHTML = `<pre style="margin:0;font-size:11px;color:#e2e8f0;font-family:'DM Mono',monospace;white-space:pre-wrap;word-break:break-all;">${lines.slice(0,2000).join('\n')}</pre>`
+                + (lines.length > 2000 ? `<div style="padding:10px;font-size:11px;color:#64748b;">Showing first 2,000 of ${lines.length.toLocaleString()} lines.</div>` : '');
+        }).catch(e => { const el=document.getElementById('lp-text-wrap'); if(el) el.innerHTML=`<p style="color:#ef4444;padding:8px;">Failed: ${e}</p>`; });
 
     } else if (isOffice) {
-        width = '92vw'; padding = '8px';
-        const officeViewerUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
-        bodyHtml = `<iframe src="${officeViewerUrl}" style="width:100%;height:calc(78vh - 65px);border:none;border-radius:8px;" title="${name}"></iframe>`;
+        const officeUrl = `https://view.officeapps.live.com/op/view.aspx?src=${encodeURIComponent(url)}`;
+        content.innerHTML = `<iframe src="${officeUrl}" style="width:100%;height:100%;border:none;" title="${name}"></iframe>`;
+        content.style.overflow = 'hidden';
 
     } else {
-        width = '420px';
-        bodyHtml = `
-            <div style="padding:32px;text-align:center;">
-                <span class="material-icons" style="font-size:52px;color:#94a3b8;display:block;margin-bottom:12px;">${legacyFileIcon(type)}</span>
-                <div style="font-size:13px;font-weight:600;color:#374151;margin-bottom:6px;">${name}</div>
-                <div style="font-size:12px;color:#94a3b8;margin-bottom:20px;">No preview available for this file type.</div>
+        content.innerHTML = `
+            <div style="text-align:center;color:white;padding:40px;">
+                <span class="material-icons" style="font-size:64px;color:#64748b;display:block;margin-bottom:16px;">${legacyFileIcon(type)}</span>
+                <div style="font-size:14px;font-weight:600;margin-bottom:8px;">${name}</div>
+                <div style="font-size:12px;color:#94a3b8;margin-bottom:24px;">No preview available for this file type.</div>
                 <a href="${url}" download="${name}" style="display:inline-flex;align-items:center;gap:6px;padding:10px 22px;background:#004990;color:white;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;">
-                    <span class="material-icons" style="font-size:15px;">download</span> Download File
+                    <span class="material-icons" style="font-size:15px;">download</span> Download
                 </a>
             </div>`;
     }
 
-    const safeNameForFooter = name.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-    Swal.fire({
-        title: `<span style="font-size:12px;font-weight:600;color:#64748b;word-break:break-all;max-width:90%;">${name}</span>`,
-        html: bodyHtml,
-        width,
-        showConfirmButton: false,
-        showCloseButton: true,
-        padding,
-        customClass: { popup: 'legacy-preview-popup' },
-        footer: fileId ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;flex-wrap:wrap;">
-                <span style="font-size:11px;color:#94a3b8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:60%;" title="${name}">${name}</span>
-                <button onclick="Swal.close();legacyAssign('${fileId}','${safeNameForFooter}')"
-                    style="flex-shrink:0;padding:7px 18px;background:#004990;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px;">
-                    <span class="material-icons" style="font-size:14px;">link</span> Assign to Merchant
-                </button>
-            </div>` : '',
-    });
+    // Show overlay
+    const overlay = document.getElementById('lpo');
+    overlay.style.display = 'block';
+    document.addEventListener('keydown', _lpoKeyClose);
+}
+
+function _lpoKeyClose(e) { if (e.key === 'Escape') closeLegacyPreview(); }
+
+function closeLegacyPreview() {
+    const overlay = document.getElementById('lpo');
+    if (overlay) overlay.style.display = 'none';
+    document.removeEventListener('keydown', _lpoKeyClose);
+}
+
+function legacyToggleAssignPanel() {
+    const panel   = document.getElementById('lpo-panel');
+    const content = document.getElementById('lpo-content');
+    const isOpen  = panel.style.right === '0px';
+    if (isOpen) {
+        panel.style.right   = '-340px';
+        content.style.right = '0';
+    } else {
+        panel.style.right   = '0px';
+        content.style.right = '320px';
+        setTimeout(() => document.getElementById('lpo-search')?.focus(), 260);
+    }
+}
+
+function legacyPanelSearch(q) {
+    clearTimeout(_lpoPanelTimer);
+    _lpoPanelTimer = setTimeout(() => _lpoPanelDoSearch(q), 280);
+}
+
+async function _lpoPanelDoSearch(q) {
+    const results = document.getElementById('lpo-results');
+    if (!results) return;
+    if (!q.trim()) { results.style.display = 'none'; return; }
+    if (_lpoPanelAbort) _lpoPanelAbort.abort();
+    _lpoPanelAbort = new AbortController();
+    results.style.display = 'block';
+    results.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">Searching…</div>';
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST', headers: legacyAuthHdr(),
+            body: JSON.stringify({ action: 'search_merchants_for_legacy', query: q }),
+            signal: _lpoPanelAbort.signal,
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+        const list = data.merchants || [];
+        if (!list.length) { results.innerHTML = '<div style="padding:10px 12px;font-size:12px;color:#94a3b8;">No merchants found.</div>'; return; }
+        results.innerHTML = list.map(m => `
+            <div onclick="legacyPanelSelect('${m.id}','${(m.dba_name||'').replace(/'/g,"\\'")}','${m.merchant_id||''}')"
+                style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;"
+                onmouseover="this.style.background='#f0f7ff'" onmouseout="this.style.background=''">
+                <div style="font-size:13px;font-weight:700;color:#002d5a;">${m.dba_name || '—'}</div>
+                <div style="font-size:11px;color:#64748b;font-family:monospace;">${m.merchant_id || ''}</div>
+            </div>`).join('');
+    } catch (e) {
+        if (e.name !== 'AbortError') results.innerHTML = `<div style="padding:10px 12px;font-size:12px;color:#ef4444;">${e.message}</div>`;
+    }
+}
+
+function legacyPanelSelect(uuid, dbaName, mid) {
+    _lpoSelectedMerchant = { uuid, dbaName, mid };
+    const searchEl = document.getElementById('lpo-search');
+    if (searchEl) searchEl.value = `${dbaName} — ${mid}`;
+    document.getElementById('lpo-results').style.display = 'none';
+    document.getElementById('lpo-selected-wrap').style.display = 'block';
+    document.getElementById('lpo-sel-name').textContent = dbaName;
+    document.getElementById('lpo-sel-mid').textContent  = mid;
+    const btn = document.getElementById('lpo-confirm-btn');
+    btn.disabled = false;
+    btn.style.background = '#004990';
+    btn.style.cursor = 'pointer';
+}
+
+async function legacyDoAssign() {
+    if (!_lpoSelectedMerchant || !_lpoCurrentFileId) return;
+    const btn    = document.getElementById('lpo-confirm-btn');
+    const status = document.getElementById('lpo-assign-status');
+    btn.disabled = true;
+    btn.style.cursor = 'not-allowed';
+    btn.innerHTML = '<span class="material-icons" style="font-size:14px;animation:spin 1s linear infinite;">autorenew</span> Assigning…';
+    status.style.color = '#64748b';
+    status.textContent = '';
+    try {
+        const res = await fetch('/api/merchants', {
+            method: 'POST', headers: legacyAuthHdr(),
+            body: JSON.stringify({ action: 'assign_legacy_attachment', file_id: _lpoCurrentFileId, merchant_uuid: _lpoSelectedMerchant.uuid })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message);
+
+        // Remove row from table
+        const row = document.getElementById('legacy-row-' + _lpoCurrentFileId);
+        if (row) row.remove();
+        _legacyTotal  = Math.max(0, _legacyTotal - 1);
+        _legacyOffset = Math.max(0, _legacyOffset - 1);
+        const countEl = document.getElementById('legacy-file-count');
+        if (countEl) countEl.textContent = `${_legacyTotal.toLocaleString()} file${_legacyTotal !== 1 ? 's' : ''} unassigned`;
+        if (!document.getElementById('legacy-tbody')?.querySelector('tr')) {
+            document.getElementById('legacy-table-wrap').style.display = 'none';
+            document.getElementById('legacy-empty').style.display = '';
+        }
+
+        btn.innerHTML = '<span class="material-icons" style="font-size:14px;">check_circle</span> Assigned!';
+        btn.style.background = '#059669';
+        status.style.color   = '#15803d';
+        status.textContent   = `✓ Moved to ${_lpoSelectedMerchant.dbaName}`;
+        setTimeout(() => closeLegacyPreview(), 1400);
+    } catch (e) {
+        status.style.color = '#dc2626';
+        status.textContent = e.message;
+        btn.disabled = false;
+        btn.style.background = '#004990';
+        btn.style.cursor = 'pointer';
+        btn.innerHTML = '<span class="material-icons" style="font-size:14px;">link</span> Confirm Assign';
+    }
 }
 
 async function legacyAssign(fileId, fileName) {
