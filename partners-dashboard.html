@@ -2019,10 +2019,11 @@ async function submitOnboarding() {
         if (tab === 'ghlinfo') ppLoadGHLInfo();
         if (tab === 'documents') ppLoadDocuments();
         if (tab === 'merchants') ppLoadMerchants();
+        if (tab === 'prime49') ppInitPrime49Tab();
     };
 
     window.openPartnerDetails = async function(personId) {
-        _ppMerchantsAll = []; _ppPrimeIdStrings = new Set(); // reset merchant cache for new modal
+        _ppMerchantsAll = []; _ppPrimeIdStrings = new Set(); _ppP49Data = null; // reset caches for new modal
         const p = allPartners.find(ptr => ptr.id === personId);
         if (!p) return;
         let branchIdStrings = [];
@@ -2092,6 +2093,7 @@ async function submitOnboarding() {
                         <button onclick="ppSwitchTab('ghlinfo')" id="pptab-ghlinfo" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">GHL Info</button>
                         <button onclick="ppSwitchTab('documents')" id="pptab-documents" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Documents</button>
                         <button onclick="ppSwitchTab('merchants')" id="pptab-merchants" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">Merchants</button>
+                        <button onclick="ppSwitchTab('prime49')" id="pptab-prime49" style="flex:1;padding:7px 4px;border:none;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#64748b;">⭐ Prime49</button>
                     </div>
 
                     <!-- IDS PANEL -->
@@ -2156,6 +2158,26 @@ async function submitOnboarding() {
                             <div id="pp-merchants-count" style="display:flex;align-items:center;font-size:11px;color:#94a3b8;white-space:nowrap;padding:0 4px;"></div>
                         </div>
                         <div id="pp-merchants-content" style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;">Loading merchants...</div>
+                    </div>
+
+                    <!-- PRIME49 RESIDUALS PANEL -->
+                    <div id="pppanel-prime49" style="display:none;">
+                        <!-- Summary chips -->
+                        <div id="pp-p49-summary" style="display:none;gap:8px;flex-wrap:wrap;margin-bottom:12px;"></div>
+                        <!-- Controls -->
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
+                            <span style="font-size:11px;font-weight:700;color:#64748b;text-transform:uppercase;">Run Date</span>
+                            <input type="date" id="pp-p49-date" style="border:1.5px solid #e2e8f0;border-radius:8px;padding:5px 8px;font-size:12px;font-family:'DM Sans',sans-serif;outline:none;color:#334155;">
+                            <button onclick="ppLoadPrime49()" id="pp-p49-load-btn" style="display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;border:none;background:#004990;color:white;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+                                <span class="material-icons" style="font-size:14px;">refresh</span> Load
+                            </button>
+                            <button onclick="ppExportPrime49Excel()" style="display:flex;align-items:center;gap:5px;padding:6px 14px;border-radius:8px;border:1px solid #bbf7d0;background:#f0fdf4;color:#166534;font-family:'DM Sans',sans-serif;font-size:12px;font-weight:700;cursor:pointer;">
+                                <span class="material-icons" style="font-size:14px;">table_view</span> Export Excel
+                            </button>
+                        </div>
+                        <div id="pp-p49-content" style="min-height:160px;display:flex;align-items:center;justify-content:center;color:#94a3b8;font-size:13px;">
+                            Select a date and click Load.
+                        </div>
                     </div>
                 </div>`
         });
@@ -3175,7 +3197,7 @@ function pAPI(body) {
 
 // Tab switcher - scoped to Swal modal to avoid duplicate ID issues
 window.ppSwitchTab = function(tab) {
-    ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents','merchants'].forEach(function(t) {
+    ['ids','scorecard','notes','tickets','subpartners','ghlinfo','documents','merchants','prime49'].forEach(function(t) {
         var btn = document.getElementById('pptab-' + t);
         var panel = document.getElementById('pppanel-' + t);
         if (btn) {
@@ -3190,6 +3212,7 @@ window.ppSwitchTab = function(tab) {
     if (tab === 'ghlinfo') ppLoadGHLInfo();
     if (tab === 'documents') ppLoadDocuments();
     if (tab === 'merchants') ppLoadMerchants();
+    if (tab === 'prime49') ppInitPrime49Tab();
 };
 
 window.ppLoadPartnerTickets = async function() {
@@ -4144,6 +4167,202 @@ window.ppFilterMerchants = function() {
         </div>`;
 };
 
+// ── PRIME49 RESIDUALS — per-partner card ──────────────────────────────────────
+
+let _ppP49Data = null; // null = never loaded, [] = loaded but empty
+
+window.ppInitPrime49Tab = function() {
+    const dateEl = document.getElementById('pp-p49-date');
+    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+    // Don't auto-load — wait for user to press Load (data can be large)
+};
+
+window.ppLoadPrime49 = async function() {
+    const btn     = document.getElementById('pp-p49-load-btn');
+    const content = document.getElementById('pp-p49-content');
+    if (!btn || !content) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-icons" style="font-size:14px;animation:spin 1s linear infinite;">autorenew</span> Loading…';
+    content.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;"><span class="material-icons" style="font-size:32px;display:block;margin-bottom:8px;animation:spin 1s linear infinite;">autorenew</span>Fetching residuals…</div>';
+
+    try {
+        const userid = localStorage.getItem('pp_user_id') || '';
+        const res  = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') },
+            body: JSON.stringify({ action: 'get_prime49_residuals', userid })
+        });
+        const json = await res.json();
+        if (!json.success) throw new Error(json.message);
+        _ppP49Data = json.data || [];
+        ppRenderPrime49();
+    } catch (e) {
+        content.innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;">${e.message}</div>`;
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-icons" style="font-size:14px;">refresh</span> Load';
+    }
+};
+
+window.ppRenderPrime49 = function() {
+    const content  = document.getElementById('pp-p49-content');
+    const summaryEl = document.getElementById('pp-p49-summary');
+    const runDate  = document.getElementById('pp-p49-date')?.value || '—';
+    if (!content || !_ppP49Data) return;
+
+    const fmt = n => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    // Filter to this partner's Prime49 agent IDs only
+    const myPrimeIds = _ppPrimeIdStrings; // populated by ppLoadMerchants ID walk
+    // If merchant tab was never opened, collect prime IDs from partner data now
+    if (!myPrimeIds.size) {
+        var ctxEl = document.getElementById('pp-ctx');
+        var personId = ctxEl ? ctxEl.getAttribute('data-person-id') : null;
+        var partner  = personId ? allPartners.find(p => p.id === personId) : null;
+        if (partner) {
+            function _walkForPrime(idObj) {
+                if (idObj.isPrime) myPrimeIds.add(idObj.string);
+                if (idObj.sub_ids?.length) idObj.sub_ids.forEach(_walkForPrime);
+            }
+            partner.companies.forEach(co => co.ids.forEach(_walkForPrime));
+        }
+    }
+
+    const data = myPrimeIds.size
+        ? _ppP49Data.filter(r => myPrimeIds.has(r.agent_id))
+        : [];
+
+    if (!data.length) {
+        if (summaryEl) summaryEl.style.display = 'none';
+        content.innerHTML = '<div style="text-align:center;padding:40px;color:#94a3b8;">No Prime49 merchants found for this partner.</div>';
+        return;
+    }
+
+    // Compute totals
+    let grandVol = 0, grandNet = 0, grandPpt = 0, grandAgent = 0;
+    // Group by agent_id for sub-breakdown
+    const groups = {};
+    data.forEach(r => {
+        const key = r.agent_id || '—';
+        if (!groups[key]) groups[key] = { rows: [], vol: 0, net: 0, ppt: 0, agent: 0 };
+        groups[key].rows.push(r);
+        groups[key].vol   += r.volume_30_day;
+        groups[key].net   += r.net_residual;
+        groups[key].ppt   += r.ppt_residual;
+        groups[key].agent += r.agent_residual;
+        grandVol   += r.volume_30_day;
+        grandNet   += r.net_residual;
+        grandPpt   += r.ppt_residual;
+        grandAgent += r.agent_residual;
+    });
+
+    // Summary chips
+    if (summaryEl) {
+        summaryEl.style.display = 'flex';
+        summaryEl.innerHTML = [
+            { label: 'Merchants',    val: data.length,    color: '#475569' },
+            { label: '30D Volume',   val: fmt(grandVol),  color: '#334155' },
+            { label: 'Net Residual', val: fmt(grandNet),  color: '#334155' },
+            { label: 'PPT Share',    val: fmt(grandPpt),  color: '#004990' },
+            { label: 'Agent Payout', val: fmt(grandAgent),color: '#059669' },
+        ].map(c => `<div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:5px 12px;text-align:center;flex:1;min-width:90px;">
+            <div style="font-size:9px;font-weight:800;color:#94a3b8;text-transform:uppercase;">${c.label}</div>
+            <div style="font-size:12px;font-weight:800;color:${c.color};">${c.val}</div>
+        </div>`).join('');
+    }
+
+    // Table rows grouped by agent ID
+    const tbodyRows = Object.entries(groups).map(([agentId, g]) => {
+        const revPct = g.rows[0]?.rev_share ?? 50;
+        const headerRow = `<tr style="background:#f0f7ff;">
+            <td colspan="6" style="padding:7px 10px;">
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <span style="font-family:monospace;font-size:11px;font-weight:800;background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:99px;">💎 ${agentId}</span>
+                    <span style="font-size:10px;color:#64748b;">${revPct}% rev share</span>
+                    <span style="font-size:10px;font-weight:700;color:#94a3b8;margin-left:auto;">${g.rows.length} merchant${g.rows.length !== 1 ? 's' : ''}</span>
+                </div>
+            </td>
+        </tr>`;
+        const merchantRows = g.rows.map(r => `<tr style="border-bottom:1px solid #f1f5f9;cursor:pointer;" onclick="window.open('merchants-dashboard.html?q=${encodeURIComponent(r.merchant_id)}&filterBy=merchant_id','_blank')">
+            <td style="padding:7px 10px;font-size:12px;font-weight:700;color:#002d5a;padding-left:20px;">${r.dba_name || '—'}</td>
+            <td style="padding:7px 10px;font-size:11px;color:#94a3b8;font-family:monospace;">${r.merchant_id || '—'}</td>
+            <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;">${fmt(r.volume_30_day)}</td>
+            <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;">${fmt(r.net_residual)}</td>
+            <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:#004990;">${fmt(r.ppt_residual)}</td>
+            <td style="padding:7px 10px;text-align:right;font-size:12px;font-weight:600;color:#059669;">${fmt(r.agent_residual)}</td>
+        </tr>`).join('');
+        const subtotalRow = `<tr style="background:#f8fafc;border-top:1.5px solid #e2e8f0;">
+            <td colspan="2" style="padding:6px 10px;padding-left:20px;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;">${agentId} Total</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:800;font-size:12px;">${fmt(g.vol)}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:800;font-size:12px;">${fmt(g.net)}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:800;font-size:12px;color:#004990;">${fmt(g.ppt)}</td>
+            <td style="padding:6px 10px;text-align:right;font-weight:800;font-size:12px;color:#059669;">${fmt(g.agent)}</td>
+        </tr><tr><td colspan="6" style="height:5px;background:#f1f5f9;padding:0;"></td></tr>`;
+        return headerRow + merchantRows + subtotalRow;
+    }).join('');
+
+    content.innerHTML = `
+        <div style="overflow-x:auto;max-height:400px;overflow-y:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:12px;">
+                <thead style="position:sticky;top:0;background:#f8fafc;z-index:1;">
+                    <tr style="border-bottom:2px solid #e2e8f0;">
+                        <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Merchant</th>
+                        <th style="padding:7px 10px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">MID</th>
+                        <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">30D Volume</th>
+                        <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Net Residual</th>
+                        <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:800;color:#004990;text-transform:uppercase;">PPT Share</th>
+                        <th style="padding:7px 10px;text-align:right;font-size:10px;font-weight:800;color:#059669;text-transform:uppercase;">Agent Payout</th>
+                    </tr>
+                </thead>
+                <tbody>${tbodyRows}</tbody>
+                <tfoot>
+                    <tr style="background:#1e293b;color:white;font-weight:800;">
+                        <td colspan="2" style="padding:8px 10px;font-size:11px;text-transform:uppercase;letter-spacing:0.5px;color:#94a3b8;">
+                            Grand Total · ${data.length} merchants · Run: ${runDate}
+                        </td>
+                        <td style="padding:8px 10px;text-align:right;">${fmt(grandVol)}</td>
+                        <td style="padding:8px 10px;text-align:right;">${fmt(grandNet)}</td>
+                        <td style="padding:8px 10px;text-align:right;color:#93c5fd;">${fmt(grandPpt)}</td>
+                        <td style="padding:8px 10px;text-align:right;color:#6ee7b7;">${fmt(grandAgent)}</td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>`;
+};
+
+window.ppExportPrime49Excel = function() {
+    if (!_ppP49Data) return alert('Please load residuals first.');
+    if (typeof XLSX === 'undefined') return alert('Excel library not loaded.');
+
+    const myPrimeIds = _ppPrimeIdStrings;
+    const data = myPrimeIds.size ? _ppP49Data.filter(r => myPrimeIds.has(r.agent_id)) : [];
+    if (!data.length) return alert('No Prime49 data for this partner.');
+
+    const runDate = document.getElementById('pp-p49-date')?.value || '';
+    const rows = data.map(r => ({
+        'Agent ID':      r.agent_id,
+        'Merchant':      r.dba_name,
+        'MID':           r.merchant_id,
+        '30D Volume':    r.volume_30_day,
+        'Rev Share %':   r.rev_share,
+        'Net Residual':  r.net_residual,
+        'PPT Share':     r.ppt_residual,
+        'Agent Payout':  r.agent_residual,
+        'Run Date':      runDate,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Prime49 Residuals');
+
+    // Get partner name for filename
+    var ctxEl = document.getElementById('pp-ctx');
+    var personId = ctxEl ? ctxEl.getAttribute('data-person-id') : null;
+    var partner  = personId ? allPartners.find(p => p.id === personId) : null;
+    const fname = (partner?.name || 'Partner').replace(/\s+/g, '_');
+    XLSX.writeFile(wb, `${fname}_Prime49_${runDate || 'Residuals'}.xlsx`);
+};
+
 // Single card portal toggle
 window.toggleSinglePortal = async function(personId, name, currentlyActive, ev) {
     if (ev) ev.stopPropagation();
@@ -4239,6 +4458,7 @@ function openMissingPartnerReport() {
 }
 </script>
 <script>window.NAV_SHORTCUT_PAGE = 'partners';</script>
+<script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="/js/nav-shortcuts.js"></script>
 <script src="/bug-report.js"></script>
 <script src="/js/portal-transition.js"></script>
