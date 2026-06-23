@@ -2681,7 +2681,79 @@ if (action === 'get_merchant_data_raw') {
             return res.status(200).json({ success: true, message: `Report sent to ${supportEmails.length} support recipient(s).` });
         }
 
-    } catch (err) {
+        if (action === 'get_partners_no_ids') {
+            // Fetch all persons with their agent chain, filter to those with no identifiers
+            const { data: persons, error } = await supabase
+                .from('persons')
+                .select('id, full_name, email, phone_number, enrolled_at, agents(id, agent_identifiers(id))')
+                .order('full_name', { ascending: true });
+            if (error) throw error;
+
+            const noIds = (persons || []).filter(p => {
+                const totalIds = (p.agents || []).reduce((sum, a) => sum + (a.agent_identifiers?.length || 0), 0);
+                return totalIds === 0;
+            }).map(p => ({
+                id:           p.id,
+                full_name:    p.full_name || '—',
+                email:        p.email || '',
+                phone_number: p.phone_number || '',
+                enrolled_at:  p.enrolled_at,
+                has_agents:   (p.agents || []).length > 0,
+            }));
+
+            return res.status(200).json({ success: true, partners: noIds });
+        }
+
+        if (action === 'assign_identifier_to_partner') {
+            const { person_id, id_string, rev_share, prime49: isPrime } = body;
+            if (!person_id)       return res.status(400).json({ success: false, message: 'person_id is required.' });
+            if (!id_string?.trim()) return res.status(400).json({ success: false, message: 'ID string is required.' });
+
+            // Verify person exists
+            const { data: person, error: pErr } = await supabase
+                .from('persons').select('id, full_name').eq('id', person_id).single();
+            if (pErr || !person) return res.status(404).json({ success: false, message: 'Partner not found.' });
+
+            // Find or create an agent record for this person (independent — no company)
+            let { data: agent } = await supabase
+                .from('agents').select('id').eq('parent_agent_id', person_id).maybeSingle();
+            if (!agent) {
+                const { data: newAgent, error: aErr } = await supabase
+                    .from('agents').insert({ parent_agent_id: person_id, agent_name: person.full_name || '' })
+                    .select('id').single();
+                if (aErr) throw aErr;
+                agent = newAgent;
+            }
+
+            // Check the ID string isn't already taken
+            const { data: existing } = await supabase
+                .from('agent_identifiers').select('id, agent_id').eq('id_string', id_string.trim()).maybeSingle();
+            if (existing) return res.status(409).json({ success: false, message: `ID "${id_string.trim()}" is already assigned to another agent.` });
+
+            // Insert identifier
+            const revNum = parseFloat(String(rev_share || '0').replace(/%/g, '')) || 0;
+            const { error: iErr } = await supabase.from('agent_identifiers').insert({
+                agent_id:  agent.id,
+                id_string: id_string.trim(),
+                rev_share: revNum + '%',
+                prime49:   !!isPrime,
+                status:    'active',
+            });
+            if (iErr) throw iErr;
+
+            // Activity log
+            const actorRes = await supabase.from('app_users').select('email').eq('userid', session.userid).maybeSingle();
+            const actorEmail = actorRes.data?.email || session.userid;
+            supabase.from('activity_logs').insert({
+                email: actorEmail,
+                action: `Agent ID assigned: "${id_string.trim()}" → ${person.full_name} (rev share ${revNum}%, prime49: ${!!isPrime})`,
+                status: 'success', category: 'partners', target_id: person_id,
+                target_type: 'partner', severity: 'info',
+                new_value: { id_string: id_string.trim(), rev_share: revNum + '%', prime49: !!isPrime, person_id, assigned_by: actorEmail }
+            }).then(() => {}).catch(() => {});
+
+            return res.status(200).json({ success: true });
+        }
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
