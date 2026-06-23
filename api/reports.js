@@ -290,17 +290,19 @@ export default async function handler(req, res) {
                 const { data, error } = await query.order('enrollment_date', { ascending: false }).limit(20000);
                 if (error) throw error;
 
-                // Resolve partner emails: agent_id_string → agent_identifiers → agents → persons.email
+                // Resolve partner emails + GHL contact IDs via agent_identifiers → agents → persons
                 const uniqueAgentIds = [...new Set((data || []).map(m => m.agent_id).filter(Boolean))];
                 let emailByAgentId = {};
+                let ghlByAgentId   = {};
                 if (uniqueAgentIds.length) {
                     const { data: idRows } = await supabase
                         .from('agent_identifiers')
-                        .select('id_string, agents:agent_id(parent_agent_id, persons:parent_agent_id(email))')
+                        .select('id_string, agents:agent_id(parent_agent_id, persons:parent_agent_id(email, hl_contact_id))')
                         .in('id_string', uniqueAgentIds);
                     (idRows || []).forEach(row => {
-                        const email = row.agents?.persons?.email;
-                        if (email) emailByAgentId[row.id_string] = email;
+                        const p = row.agents?.persons;
+                        if (p?.email)          emailByAgentId[row.id_string] = p.email;
+                        if (p?.hl_contact_id)  ghlByAgentId[row.id_string]  = p.hl_contact_id;
                     });
                 }
 
@@ -313,6 +315,7 @@ export default async function handler(req, res) {
                             name:     m.partner_full_name || '—',
                             company:  m.company_display_name || '—',
                             email:    emailByAgentId[m.agent_id] || '—',
+                            ghlId:    ghlByAgentId[m.agent_id]   || '—',
                             agentIds: new Set(),
                             count:    0,
                             earliest: null,
@@ -322,8 +325,9 @@ export default async function handler(req, res) {
                     const g = partnerMap[key];
                     g.count++;
                     if (m.agent_id) g.agentIds.add(m.agent_id);
-                    // Fill email if we found one for this agent ID
-                    if (g.email === '—' && emailByAgentId[m.agent_id]) g.email = emailByAgentId[m.agent_id];
+                    // Fill email / GHL ID if we found one for this agent ID
+                    if (g.email  === '—' && emailByAgentId[m.agent_id]) g.email  = emailByAgentId[m.agent_id];
+                    if (g.ghlId  === '—' && ghlByAgentId[m.agent_id])   g.ghlId  = ghlByAgentId[m.agent_id];
                     if (m.enrollment_date) {
                         if (!g.earliest || m.enrollment_date < g.earliest) g.earliest = m.enrollment_date;
                         if (!g.latest   || m.enrollment_date > g.latest)   g.latest   = m.enrollment_date;
@@ -336,6 +340,7 @@ export default async function handler(req, res) {
                         'Partner Name':              p.name,
                         'Email':                     p.email,
                         'Company':                   p.company,
+                        'GHL Contact ID':            p.ghlId,
                         'Agent IDs':                 [...p.agentIds].join(', ') || '—',
                         'Merchants Submitted':        p.count,
                         'First Enrollment in Range': p.earliest ? new Date(p.earliest).toLocaleDateString() : '—',
