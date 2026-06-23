@@ -279,16 +279,15 @@ export default async function handler(req, res) {
             }
 
             if (reportType === 'partner_approvals') {
-                // Fetch approved merchants with partner info, filtered by approval date range
+                // Fetch merchants enrolled within the date range — all statuses, grouped by partner
                 let query = supabase
                     .from('merchant_portfolio_view')
-                    .select('merchant_id, dba_name, agent_id, partner_full_name, company_display_name, approved_date, account_status')
-                    .eq('account_status', 'Approved');
+                    .select('merchant_id, dba_name, agent_id, partner_full_name, company_display_name, enrollment_date, account_status');
 
-                if (startDate) query = query.gte('approved_date', startDate + 'T00:00:00');
-                if (endDate)   query = query.lte('approved_date', endDate   + 'T23:59:59');
+                if (startDate) query = query.gte('enrollment_date', startDate + 'T00:00:00');
+                if (endDate)   query = query.lte('enrollment_date', endDate   + 'T23:59:59');
 
-                const { data, error } = await query.order('approved_date', { ascending: false }).limit(20000);
+                const { data, error } = await query.order('enrollment_date', { ascending: false }).limit(20000);
                 if (error) throw error;
 
                 // Resolve partner emails: agent_id_string → agent_identifiers → agents → persons.email
@@ -325,9 +324,9 @@ export default async function handler(req, res) {
                     if (m.agent_id) g.agentIds.add(m.agent_id);
                     // Fill email if we found one for this agent ID
                     if (g.email === '—' && emailByAgentId[m.agent_id]) g.email = emailByAgentId[m.agent_id];
-                    if (m.approved_date) {
-                        if (!g.earliest || m.approved_date < g.earliest) g.earliest = m.approved_date;
-                        if (!g.latest   || m.approved_date > g.latest)   g.latest   = m.approved_date;
+                    if (m.enrollment_date) {
+                        if (!g.earliest || m.enrollment_date < g.earliest) g.earliest = m.enrollment_date;
+                        if (!g.latest   || m.enrollment_date > g.latest)   g.latest   = m.enrollment_date;
                     }
                 });
 
@@ -338,9 +337,9 @@ export default async function handler(req, res) {
                         'Email':                     p.email,
                         'Company':                   p.company,
                         'Agent IDs':                 [...p.agentIds].join(', ') || '—',
-                        'Approved Merchant Count':   p.count,
-                        'First Approval in Range':   p.earliest ? new Date(p.earliest).toLocaleDateString() : '—',
-                        'Last Approval in Range':    p.latest   ? new Date(p.latest).toLocaleDateString()   : '—',
+                        'Merchants Submitted':        p.count,
+                        'First Enrollment in Range': p.earliest ? new Date(p.earliest).toLocaleDateString() : '—',
+                        'Last Enrollment in Range':  p.latest   ? new Date(p.latest).toLocaleDateString()   : '—',
                     }));
 
                 return res.status(200).json({ success: true, rawData, totalCount: rawData.length });

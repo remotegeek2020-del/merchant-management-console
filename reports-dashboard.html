@@ -271,7 +271,7 @@
         if (dateHint) {
             const optional = ['inventory','merchants','prime49','partners'].includes(type);
             const required = type === 'partner_approvals';
-            dateHint.innerText = required ? '(required — approval date range)' : optional ? '(optional — leave blank for all dates)' : '';
+            dateHint.innerText = required ? '(required — merchant enrollment date range)' : optional ? '(optional — leave blank for all dates)' : '';
             dateHint.style.color = required ? '#d97706' : '#94a3b8';
         }
     }
