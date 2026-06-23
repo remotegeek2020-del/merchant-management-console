@@ -282,7 +282,7 @@ export default async function handler(req, res) {
                 // Fetch approved merchants with partner info, filtered by approval date range
                 let query = supabase
                     .from('merchant_portfolio_view')
-                    .select('merchant_id, dba_name, agent_id, partner_full_name, company_display_name, approved_date, enrollment_date, account_status')
+                    .select('merchant_id, dba_name, agent_id, partner_full_name, company_display_name, approved_date, account_status')
                     .eq('account_status', 'Approved');
 
                 if (startDate) query = query.gte('approved_date', startDate + 'T00:00:00');
@@ -290,6 +290,20 @@ export default async function handler(req, res) {
 
                 const { data, error } = await query.order('approved_date', { ascending: false }).limit(20000);
                 if (error) throw error;
+
+                // Resolve partner emails: agent_id_string → agent_identifiers → agents → persons.email
+                const uniqueAgentIds = [...new Set((data || []).map(m => m.agent_id).filter(Boolean))];
+                let emailByAgentId = {};
+                if (uniqueAgentIds.length) {
+                    const { data: idRows } = await supabase
+                        .from('agent_identifiers')
+                        .select('id_string, agents:agent_id(parent_agent_id, persons:parent_agent_id(email))')
+                        .in('id_string', uniqueAgentIds);
+                    (idRows || []).forEach(row => {
+                        const email = row.agents?.persons?.email;
+                        if (email) emailByAgentId[row.id_string] = email;
+                    });
+                }
 
                 // Group by partner
                 const partnerMap = {};
@@ -299,6 +313,7 @@ export default async function handler(req, res) {
                         partnerMap[key] = {
                             name:     m.partner_full_name || '—',
                             company:  m.company_display_name || '—',
+                            email:    emailByAgentId[m.agent_id] || '—',
                             agentIds: new Set(),
                             count:    0,
                             earliest: null,
@@ -308,6 +323,8 @@ export default async function handler(req, res) {
                     const g = partnerMap[key];
                     g.count++;
                     if (m.agent_id) g.agentIds.add(m.agent_id);
+                    // Fill email if we found one for this agent ID
+                    if (g.email === '—' && emailByAgentId[m.agent_id]) g.email = emailByAgentId[m.agent_id];
                     if (m.approved_date) {
                         if (!g.earliest || m.approved_date < g.earliest) g.earliest = m.approved_date;
                         if (!g.latest   || m.approved_date > g.latest)   g.latest   = m.approved_date;
@@ -318,6 +335,7 @@ export default async function handler(req, res) {
                     .sort((a, b) => b.count - a.count)
                     .map(p => ({
                         'Partner Name':              p.name,
+                        'Email':                     p.email,
                         'Company':                   p.company,
                         'Agent IDs':                 [...p.agentIds].join(', ') || '—',
                         'Approved Merchant Count':   p.count,
