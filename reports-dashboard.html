@@ -182,6 +182,7 @@
                     <option value="merchants">🏪 Merchant Portfolio</option>
                     <option value="prime49">⭐ Prime49 Merchants</option>
                     <option value="partners">🤝 Partner Agent IDs</option>
+                    <option value="partner_approvals">📋 Partner Approval Report</option>
                 </select>
             </div>
             <div id="subFilterContainer">
@@ -269,7 +270,9 @@
         const dateHint = document.getElementById('dateHint');
         if (dateHint) {
             const optional = ['inventory','merchants','prime49','partners'].includes(type);
-            dateHint.innerText = optional ? '(optional — leave blank for all dates)' : '';
+            const required = type === 'partner_approvals';
+            dateHint.innerText = required ? '(required — approval date range)' : optional ? '(optional — leave blank for all dates)' : '';
+            dateHint.style.color = required ? '#d97706' : '#94a3b8';
         }
     }
 
@@ -281,7 +284,7 @@ async function runReport() {
     const subFilter = document.getElementById('subFilter').value;
 
     // Only require dates for reports that need them
-    const requiresDates = ['deployments','returns'].includes(type);
+    const requiresDates = ['deployments','returns','partner_approvals'].includes(type);
     if (requiresDates && (!start || !end)) {
         Swal.fire('Missing Dates', 'Please select a start and end date for this report type.', 'warning');
         return;

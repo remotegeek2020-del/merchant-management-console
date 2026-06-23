@@ -278,6 +278,56 @@ export default async function handler(req, res) {
                 return res.status(200).json({ success: true, rawData, totalCount: count });
             }
 
+            if (reportType === 'partner_approvals') {
+                // Fetch approved merchants with partner info, filtered by approval date range
+                let query = supabase
+                    .from('merchant_portfolio_view')
+                    .select('merchant_id, dba_name, agent_id, partner_full_name, company_display_name, approved_date, enrollment_date, account_status')
+                    .eq('account_status', 'Approved');
+
+                if (startDate) query = query.gte('approved_date', startDate + 'T00:00:00');
+                if (endDate)   query = query.lte('approved_date', endDate   + 'T23:59:59');
+
+                const { data, error } = await query.order('approved_date', { ascending: false }).limit(20000);
+                if (error) throw error;
+
+                // Group by partner
+                const partnerMap = {};
+                (data || []).forEach(m => {
+                    const key = m.partner_full_name || m.agent_id || 'Unknown';
+                    if (!partnerMap[key]) {
+                        partnerMap[key] = {
+                            name:     m.partner_full_name || '—',
+                            company:  m.company_display_name || '—',
+                            agentIds: new Set(),
+                            count:    0,
+                            earliest: null,
+                            latest:   null,
+                        };
+                    }
+                    const g = partnerMap[key];
+                    g.count++;
+                    if (m.agent_id) g.agentIds.add(m.agent_id);
+                    if (m.approved_date) {
+                        if (!g.earliest || m.approved_date < g.earliest) g.earliest = m.approved_date;
+                        if (!g.latest   || m.approved_date > g.latest)   g.latest   = m.approved_date;
+                    }
+                });
+
+                const rawData = Object.values(partnerMap)
+                    .sort((a, b) => b.count - a.count)
+                    .map(p => ({
+                        'Partner Name':              p.name,
+                        'Company':                   p.company,
+                        'Agent IDs':                 [...p.agentIds].join(', ') || '—',
+                        'Approved Merchant Count':   p.count,
+                        'First Approval in Range':   p.earliest ? new Date(p.earliest).toLocaleDateString() : '—',
+                        'Last Approval in Range':    p.latest   ? new Date(p.latest).toLocaleDateString()   : '—',
+                    }));
+
+                return res.status(200).json({ success: true, rawData, totalCount: rawData.length });
+            }
+
             return res.status(400).json({ success: false, message: `Unknown report type: ${reportType}` });
         }
 
