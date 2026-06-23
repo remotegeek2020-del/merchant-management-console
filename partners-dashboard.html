@@ -735,18 +735,26 @@ window.filterByTrend = function(trend) {
             const result = await res.json();
             const container = document.getElementById('ghlResults');
             container.style.display = 'block';
-            container.innerHTML = result.contacts.map(c => `
-                <div class="ghl-result-item" onclick="selectGHLContact('${c.id}', '${c.firstName} ${c.lastName}', '${c.email}', '${c.phone}')">
-                    <b>${c.firstName} ${c.lastName}</b><br>
+            // Store contacts on container to avoid special-char issues in onclick attributes
+            container._ghlContacts = result.contacts;
+            container.innerHTML = result.contacts.map((c, i) => `
+                <div class="ghl-result-item" data-ghl-idx="${i}">
+                    <b>${(c.firstName || '') + ' ' + (c.lastName || '')}</b><br>
                     <small>${c.email || 'No Email'}</small>
                 </div>
             `).join('');
+            container.querySelectorAll('.ghl-result-item[data-ghl-idx]').forEach(el => {
+                el.addEventListener('click', () => {
+                    const c = container._ghlContacts[+el.dataset.ghlIdx];
+                    if (c) selectGHLContact(c.id, (c.firstName || '') + ' ' + (c.lastName || ''), c.email || '', c.phone || '');
+                });
+            });
         }, 500);
     });
 
     function selectGHLContact(id, name, email, phone) {
-        // Stop duplicates based on HL ID or Email
-        const exists = personsRaw.find(p => p.hl_contact_id === id || (email && p.email === email));
+        // Check for duplicates by HL contact ID only — email match is too broad and causes false positives
+        const exists = personsRaw.find(p => p.hl_contact_id === id);
         if (exists) {
             Swal.fire({
                 icon: 'warning',
