@@ -2754,6 +2754,8 @@ if (action === 'get_merchant_data_raw') {
 
             return res.status(200).json({ success: true });
         }
+
+    } catch (err) {
         console.error("API Error:", err.message);
         return res.status(500).json({ success: false, message: err.message });
     }
