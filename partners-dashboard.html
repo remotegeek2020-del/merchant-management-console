@@ -492,7 +492,7 @@ input[type=number] {
     </div>
     <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <div style="position: relative;">
-            <input type="text" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs or enter new ID..." oninput="searchIdentifierStrings(); document.getElementById('repCodeHint').style.display='none';">
+            <input type="text" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs or enter new ID..." oninput="searchIdentifierStrings();">
             <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
         </div>
         
