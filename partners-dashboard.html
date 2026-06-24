@@ -1331,17 +1331,27 @@ async function submitOnboarding() {
     // 6. DASHBOARD RENDERING & STATS
     // ==========================================
 
+    function _fmt(n) { return n >= 1000 ? (n/1000).toFixed(1).replace(/\.0$/,'') + 'k' : String(n); }
+
     function _makeBadgeCountHtml(approved, pipeline, risk, closed) {
         const total = approved + pipeline + risk + closed;
         if (!total) return '';
-        const tooltip = `Total: ${total} merchant${total !== 1 ? 's' : ''} — Active: ${approved}, Pipeline: ${pipeline}, At-risk: ${risk}, Closed: ${closed}`;
-        const parts = [
-            approved > 0 ? `<span style="color:#15803d;font-size:10px;font-weight:800;" title="${tooltip}">&#x2713;${approved}</span>` : '',
-            pipeline > 0 ? `<span style="color:#92400e;font-size:10px;font-weight:800;" title="${tooltip}">&#x23F3;${pipeline}</span>` : '',
-            risk     > 0 ? `<span style="color:#c2410c;font-size:10px;font-weight:800;" title="${tooltip}">&#x26A0;${risk}</span>`     : '',
-            closed   > 0 ? `<span style="color:#64748b;font-size:10px;font-weight:800;" title="${tooltip}">&#x2717;${closed}</span>`   : ''
-        ].filter(Boolean).join('<span style="color:#cbd5e1;font-size:9px;margin:0 1px;">|</span>');
-        return `<div class="badge-count-pills" style="display:flex;gap:1px;align-items:center;white-space:nowrap;" title="${tooltip}">${parts}</div>`;
+        const tooltip = `Total: ${total.toLocaleString()} merchants — Active: ${approved.toLocaleString()}, Pipeline: ${pipeline.toLocaleString()}, At-risk: ${risk.toLocaleString()}, Closed: ${closed.toLocaleString()}`;
+        return `<span style="font-size:10px;background:#f1f5f9;color:#475569;border-radius:8px;padding:1px 7px;font-weight:700;white-space:nowrap;cursor:default;" title="${tooltip}">${_fmt(total)} mchts</span>`;
+    }
+
+    function _makeBreakdownRowHtml(approved, pipeline, risk, closed) {
+        const total = approved + pipeline + risk + closed;
+        if (!total) return '';
+        const items = [
+            { icon: '&#x2713;', color: '#15803d', bg: '#dcfce7', val: approved,  label: 'Active'    },
+            { icon: '&#x23F3;', color: '#92400e', bg: '#fef9c3', val: pipeline,  label: 'Pipeline'  },
+            { icon: '&#x26A0;', color: '#c2410c', bg: '#fff7ed', val: risk,      label: 'At-risk'   },
+            { icon: '&#x2717;', color: '#64748b', bg: '#f1f5f9', val: closed,    label: 'Closed'    }
+        ].filter(i => i.val > 0);
+        return `<div style="display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;padding-top:6px;border-top:1px dotted #e2e8f0;">${
+            items.map(i => `<span style="display:inline-flex;align-items:center;gap:3px;background:${i.bg};color:${i.color};border-radius:6px;padding:2px 7px;font-size:10px;font-weight:800;" title="${i.label}">${i.icon} ${i.val.toLocaleString()}</span>`).join('')
+        }</div>`;
     }
 
     function renderBadge(id, isRootOfCard = false) {
@@ -1390,14 +1400,13 @@ async function submitOnboarding() {
                     <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 10px; margin-top: 8px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;"><span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Current (30d)</span><span style="font-size: 11px; font-weight: 800; color: #059669;">$${current30.toLocaleString(undefined, {maximumFractionDigits:0})}</span></div>
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px dotted #cbd5e1;"><span style="font-size: 9px; font-weight: 800; color: #64748b; text-transform: uppercase;">Baseline</span><span style="font-size: 11px; font-weight: 600; color: #475569;">$${avgMonthly90.toLocaleString(undefined, {maximumFractionDigits:0})}</span></div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;"><div onclick="drillDownTrend('${idStr}')" 
-     style="display: flex; align-items: center; gap: 4px; background: white; padding: 2px 6px; border-radius: 6px; border: 1px solid #e2e8f0; cursor: pointer; transition: 0.2s;"
-     onmouseover="this.style.borderColor='var(--pp-blue)'; this.style.background='#f0f9ff';"
-     onmouseout="this.style.borderColor='#e2e8f0'; this.style.background='white';"
-     title="Click to see top contributors to this trend">
-    <span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span>
-    <span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
-</div><span class="material-icons" style="font-size: 14px; color: ${trendColor};">${trendIcon}</span><span style="font-size: 10px; font-weight: 900; color: ${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span></div><div style="text-align: right; cursor: help;" title="${tooltipText}"><div style="font-size: 10px; font-weight: 800; color: #1e293b;">${approved.toLocaleString()}</div><div style="font-size: 8px; font-weight: 700; color: #94a3b8; text-transform: uppercase; line-height: 1; border-bottom: 1px dashed #cbd5e1;">Approved</div></div></div>
+                        <div style="display:flex;justify-content:space-between;align-items:center;">
+                            <div onclick="drillDownTrend('${idStr}')" style="display:flex;align-items:center;gap:4px;background:white;padding:2px 6px;border-radius:6px;border:1px solid #e2e8f0;cursor:pointer;transition:0.2s;" onmouseover="this.style.borderColor='var(--pp-blue)';this.style.background='#f0f9ff';" onmouseout="this.style.borderColor='#e2e8f0';this.style.background='white';" title="Click to see top contributors">
+                                <span class="material-icons" style="font-size:14px;color:${trendColor};">${trendIcon}</span>
+                                <span style="font-size:10px;font-weight:900;color:${trendColor};">${percentChange > 0 ? '+' : ''}${diff}%</span>
+                            </div>
+                        </div>
+                        ${_makeBreakdownRowHtml(approved, pipeline, risk, lost)}
                     </div>`;
             } else {
                  div.innerHTML = `<div style="padding: 10px; background: #f1f5f9; border-radius: 8px; border: 1px dashed #cbd5e1; text-align: center;"><span style="color:#64748b; font-size:10px; font-weight:700; text-transform: uppercase;">No Production</span></div>`;
