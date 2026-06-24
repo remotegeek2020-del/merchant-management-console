@@ -1377,10 +1377,9 @@ if (action === 'get_merchant_data') {
         // --- ACTION: GET ALL STATS (for page-level trend calculation) ---
 if (action === 'get_all_stats') {
     try {
-        // Single fast query - only 2 columns needed for trend calc
         const { data, error } = await supabase
             .from('merchant_stats_by_id')
-            .select('agent_id, total_volume_sum, total_volume_90d_sum')
+            .select('agent_id, total_volume_sum, total_volume_90d_sum, merchant_count, pending_count, closed_count, risk_count')
             .limit(5000);
         if (error) throw error;
         return res.status(200).json({ success: true, data: data || [] });
