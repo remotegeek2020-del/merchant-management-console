@@ -505,7 +505,14 @@ if (action === 'complete_onboarding') {
 
         // --- ACTION: RENAME COMPANY ---
         if (action === 'rename_company') {
-            const { company_id, name } = body;
+            const { company_id, name, create } = body;
+            if (create || !company_id) {
+                // Create new company
+                const { data: newCo, error: insErr } = await supabase
+                    .from('companies').insert({ company_name: name.trim() }).select('id').single();
+                if (insErr) throw insErr;
+                return res.status(200).json({ success: true, id: newCo.id });
+            }
             await supabase.from('companies').update({ company_name: name }).eq('id', company_id);
             return res.status(200).json({ success: true });
         }

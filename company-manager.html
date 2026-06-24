@@ -191,9 +191,10 @@
                 <div style="font-size:1.4rem;font-weight:800;color:#ef4444;" id="unusedCount">—</div>
                 <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Unused (0 agents)</div>
             </div>
-            <div style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;">
+            <div onclick="toggleDupFilter()" style="background:white;border:1px solid #e2e8f0;border-radius:10px;padding:12px 16px;flex:1;text-align:center;cursor:pointer;transition:background 0.15s;" id="dupChip"
+                 onmouseover="this.style.background='#fffbeb'" onmouseout="this.style.background=document.getElementById('dupChip').dataset.active==='1'?'#fffbeb':'white'">
                 <div style="font-size:1.4rem;font-weight:800;color:#f59e0b;" id="dupCount">—</div>
-                <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Possible Duplicates</div>
+                <div style="font-size:10px;color:#94a3b8;font-weight:700;text-transform:uppercase;">Possible Duplicates <span style="font-size:9px;">▼</span></div>
             </div>
         </div>
         <div id="companyGrid" style="display:flex;flex-direction:column;gap:8px;">
@@ -224,6 +225,7 @@
 
 <script>
 var allCompanies = [];
+var dupCompanies = [];
 var currentCompany = null;
 var currentDetailTab = 'merchants';
 var selectedLinkMerchant = null;
@@ -260,22 +262,31 @@ async function loadCompanies() {
 
     var unused = allCompanies.filter(function(c){ return c.agent_count === 0; });
     var names = allCompanies.map(function(c){ return c.company_name.toLowerCase().trim(); });
-    var dups = allCompanies.filter(function(c, i) {
-        return names.indexOf(c.company_name.toLowerCase().trim()) !== i ||
-               names.filter(function(n){ return n === c.company_name.toLowerCase().trim(); }).length > 1;
+    dupCompanies = allCompanies.filter(function(c) {
+        return names.filter(function(n){ return n === c.company_name.toLowerCase().trim(); }).length > 1;
     });
 
     document.getElementById('totalCount').textContent = allCompanies.length;
     document.getElementById('unusedCount').textContent = unused.length;
-    document.getElementById('dupCount').textContent = Math.floor(dups.length / 2);
+    document.getElementById('dupCount').textContent = Math.floor(dupCompanies.length / 2);
 
     renderCompanies(allCompanies);
 }
 
 function filterCompanies() {
     var q = document.getElementById('searchInput').value.toLowerCase();
-    var filtered = q ? allCompanies.filter(function(c){ return c.company_name.toLowerCase().includes(q); }) : allCompanies;
+    var base = document.getElementById('dupChip').dataset.active === '1' ? dupCompanies : allCompanies;
+    var filtered = q ? base.filter(function(c){ return c.company_name.toLowerCase().includes(q); }) : base;
     renderCompanies(filtered);
+}
+
+function toggleDupFilter() {
+    var chip = document.getElementById('dupChip');
+    var isActive = chip.dataset.active === '1';
+    chip.dataset.active = isActive ? '0' : '1';
+    chip.style.background = isActive ? 'white' : '#fffbeb';
+    chip.style.border = isActive ? '1px solid #e2e8f0' : '1px solid #fde047';
+    filterCompanies();
 }
 
 function renderCompanies(data) {
