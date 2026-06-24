@@ -2595,6 +2595,7 @@ window.quickAddId = async function(personId, name) {
         // Create new agent for existing person
         submitPayload.isQuickAdd = false;
         submitPayload.isQuickAddNewAgent = true;
+        submitPayload.personId = personId;
         submitPayload.personName = name;
         submitPayload.company = coChoice.type === 'independent'
             ? { isIndependent:true }

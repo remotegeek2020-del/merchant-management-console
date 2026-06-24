@@ -149,16 +149,16 @@ if (action === 'get_orphan_ids') {
     return res.status(200).json({ success: true, contacts: data.contacts || [] });
 }
 if (action === 'complete_onboarding') {
-    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId, personName, allowNoEmail } = body;
+    const { person, company, identifiers, isQuickAdd, isQuickAddNewAgent, existingAgentId, personName, personId: quickPersonId, allowNoEmail } = body;
     let finalAgentId = existingAgentId;
 
     // Quick add to a NEW company for an existing person
     if (isQuickAddNewAgent) {
-        // Find existing person by name
-        const { data: existingPerson } = await supabase
-            .from('persons').select('id')
-            .ilike('full_name', (personName || '').trim())
-            .single();
+        // Prefer lookup by UUID (reliable); fall back to name match for older clients
+        let personQuery = quickPersonId
+            ? supabase.from('persons').select('id').eq('id', quickPersonId)
+            : supabase.from('persons').select('id').ilike('full_name', (personName || '').trim());
+        const { data: existingPerson } = await personQuery.maybeSingle();
 
         if (!existingPerson) return res.status(400).json({ success: false, message: 'Could not find partner: ' + personName });
 
