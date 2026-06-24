@@ -76,6 +76,53 @@ if (action === 'get_orphan_ids') {
             });
         }
 
+        if (action === 'get_ghl_rep_code') {
+            const { hl_contact_id } = body;
+            if (!hl_contact_id) return res.status(400).json({ success: false, message: 'hl_contact_id required.' });
+            const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;
+            const ghlApiKey     = (await getConfigValue('GHL_API_KEY'))     || process.env.GHL_API_KEY;
+            if (!ghlLocationId || !ghlApiKey) return res.status(200).json({ success: true, rep_code: null });
+            const ghlHeaders = { 'Authorization': `Bearer ${ghlApiKey}`, 'Version': '2021-07-28' };
+
+            // Fetch contact and location fields in parallel
+            const [contactRes, fieldsRes] = await Promise.all([
+                fetch(`https://services.leadconnectorhq.com/contacts/${hl_contact_id}`, { headers: ghlHeaders }),
+                fetch(`https://services.leadconnectorhq.com/locations/${ghlLocationId}/customFields`, { headers: ghlHeaders }),
+            ]);
+            if (!contactRes.ok) return res.status(200).json({ success: true, rep_code: null });
+            const contactData = await contactRes.json();
+            const contact = contactData.contact || {};
+            const contactFields = contact.customFields || [];
+
+            // First try to find rep_code directly from the field key/fieldKey on the contact
+            const directMatch = contactFields.find(f =>
+                (f.key && (f.key === 'rep_code' || f.key === 'contact.rep_code')) ||
+                (f.fieldKey && (f.fieldKey === 'rep_code' || f.fieldKey === 'contact.rep_code'))
+            );
+            if (directMatch) {
+                const val = directMatch.value ?? directMatch.fieldValue ?? null;
+                return res.status(200).json({ success: true, rep_code: val || null });
+            }
+
+            // Fall back: match via location field definitions
+            if (fieldsRes.ok) {
+                const fieldsData = await fieldsRes.json();
+                const locationFields = fieldsData.customFields || [];
+                const repField = locationFields.find(f =>
+                    f.key === 'rep_code' || f.key === 'contact.rep_code' ||
+                    (f.name || '').toLowerCase().replace(/\s+/g, '_') === 'rep_code'
+                );
+                if (repField) {
+                    const match = contactFields.find(f => f.id === repField.id);
+                    if (match) {
+                        const val = match.value ?? match.fieldValue ?? null;
+                        return res.status(200).json({ success: true, rep_code: val || null });
+                    }
+                }
+            }
+            return res.status(200).json({ success: true, rep_code: null });
+        }
+
         if (action === 'search_ghl') {
     const { query } = body;
     const ghlLocationId = (await getConfigValue('GHL_LOCATION_ID')) || process.env.GHL_LOCATION_ID;

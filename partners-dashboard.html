@@ -485,9 +485,14 @@ input[type=number] {
 <div class="step-container" id="step3">
     <label class="search-label">Assign Agent Identifiers</label>
     
+    <div id="repCodeHint" style="display:none;background:#fefce8;border:1px solid #fde047;border-radius:8px;padding:8px 12px;margin-bottom:8px;font-size:12px;color:#854d0e;display:none;align-items:center;gap:8px;">
+        <span class="material-icons" style="font-size:15px;color:#ca8a04;">auto_fix_high</span>
+        <span id="repCodeHintText">Rep Code pre-filled from GoHighLevel — edit if needed before adding.</span>
+        <button onclick="document.getElementById('repCodeHint').style.display='none'" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#ca8a04;font-size:16px;line-height:1;padding:0;">✕</button>
+    </div>
     <div style="display: flex; flex-direction: column; gap: 8px; background: #f8fafc; padding: 12px; border-radius: 12px; border: 1px solid #e2e8f0;">
         <div style="position: relative;">
-            <input type="number" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs..." oninput="searchIdentifierStrings()">
+            <input type="text" id="idLookupInput" class="wizard-input" placeholder="Search unassigned IDs or enter new ID..." oninput="searchIdentifierStrings(); document.getElementById('repCodeHint').style.display='none';">
             <div id="idLookupResults" style="position: absolute; top: 100%; left: 0; right: 0; background: white; border: 1px solid #e2e8f0; z-index: 100; display: none; max-height: 150px; overflow-y: auto; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-radius: 0 0 8px 8px;"></div>
         </div>
         
@@ -765,11 +770,12 @@ window.filterByTrend = function(trend) {
             return;
         }
 
-        selectedGHLContact = { 
-            id, 
-            name: toTitleCase(name), 
-            email: email ? email.toLowerCase() : '', 
-            phone 
+        selectedGHLContact = {
+            id,
+            name: toTitleCase(name),
+            email: email ? email.toLowerCase() : '',
+            phone,
+            repCode: null, // populated when step 3 is entered
         };
         
         document.getElementById('ghlResults').style.display = 'none';
@@ -1278,6 +1284,44 @@ async function submitOnboarding() {
         document.querySelectorAll('.dot').forEach(d => d.classList.remove('active'));
         document.getElementById('step' + step).classList.add('active');
         document.getElementById('dot' + step).classList.add('active');
+
+        if (step === 3 && selectedGHLContact?.id) {
+            _prefillRepCode(selectedGHLContact.id);
+        }
+    }
+
+    async function _prefillRepCode(hlContactId) {
+        // Skip if already fetched or if there's already content in the field
+        const input = document.getElementById('idLookupInput');
+        const hint  = document.getElementById('repCodeHint');
+        if (!input || !hint) return;
+        if (input.value.trim()) return; // user already typed something
+
+        // If we cached it from a prior visit to this step, just reapply
+        if (selectedGHLContact?.repCode) {
+            input.value = selectedGHLContact.repCode;
+            document.getElementById('repCodeHintText').textContent =
+                `Rep Code "${selectedGHLContact.repCode}" pre-filled from GoHighLevel — edit if needed before adding.`;
+            hint.style.display = 'flex';
+            return;
+        }
+
+        try {
+            const token = localStorage.getItem('pp_session_token') || '';
+            const res  = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                body: JSON.stringify({ action: 'get_ghl_rep_code', hl_contact_id: hlContactId }),
+            });
+            const data = await res.json();
+            if (data.success && data.rep_code) {
+                selectedGHLContact.repCode = data.rep_code;
+                input.value = data.rep_code;
+                document.getElementById('repCodeHintText').textContent =
+                    `Rep Code "${data.rep_code}" pre-filled from GoHighLevel — edit if needed before adding.`;
+                hint.style.display = 'flex';
+            }
+        } catch (_) { /* silently skip if GHL is unavailable */ }
     }
 
     // ==========================================
