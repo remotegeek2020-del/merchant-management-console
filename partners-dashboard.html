@@ -2415,63 +2415,120 @@ window.quickAddId = async function(personId, name) {
     if (!step1.isConfirmed) return;
     var coChoice = step1.value;
 
-    // ── STEP 2: ID LOOKUP + ENTRY ──────────────────────────
-    // Get existing IDs for this agent (for parent dropdown)
-    var agentIdForParent = coChoice.type === 'existing' ? coChoice.agentId : null;
-    var existingIdsForParent = agentIdForParent
-        ? identifiersRaw.filter(function(i){ return i.agent_id === agentIdForParent; })
-        : [];
+    // ── STEP 2: ID ENTRY (supports adding multiple IDs) ────
+    var qaIds = []; // pending list for this session
 
-    // Build parent opts from ALL identifiers (network lookup)
-    var parentOptsAll = identifiersRaw.slice(0, 200).map(function(id){
-        var ownerAgent = agentsRaw.find(function(a){ return a.id === id.agent_id; });
-        var ownerPerson = personsRaw.find(function(p){ return p.id === (ownerAgent ? ownerAgent.parent_agent_id : null); });
-        var label = id.id_string + (ownerPerson ? ' (' + ownerPerson.full_name + ')' : '');
-        return '<option value="' + id.id_string + '">' + label + '</option>';
-    }).join('');
+    function _renderQaQueue() {
+        var el = document.getElementById('qa-queue-list');
+        var btn = Swal.getConfirmButton();
+        if (!el) return;
+        if (!qaIds.length) {
+            el.innerHTML = '<div style="color:#94a3b8;font-size:11px;text-align:center;padding:6px;">No IDs queued yet — fill the form above and click + Add</div>';
+            if (btn) btn.textContent = 'Submit';
+            return;
+        }
+        el.innerHTML = qaIds.map(function(id, i) {
+            return '<div style="display:flex;align-items:center;gap:8px;background:white;border:1px solid #e2e8f0;border-radius:6px;padding:6px 10px;margin-bottom:4px;">'
+                + '<span style="font-family:monospace;font-size:13px;font-weight:700;color:#004990;flex:1;">' + id.id_string + '</span>'
+                + '<span style="font-size:11px;color:#64748b;">' + id.rev_share + (id.prime49 ? ' ⭐' : '') + '</span>'
+                + (id.parent_id_string ? '<span style="font-size:10px;color:#94a3b8;">↑' + id.parent_id_string + '</span>' : '')
+                + '<button type="button" data-idx="' + i + '" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:15px;line-height:1;padding:0 2px;">✕</button>'
+                + '</div>';
+        }).join('');
+        el.querySelectorAll('button[data-idx]').forEach(function(btn) {
+            btn.addEventListener('click', function() {
+                qaIds.splice(parseInt(this.dataset.idx), 1);
+                _renderQaQueue();
+            });
+        });
+        if (btn) btn.textContent = 'Submit ' + qaIds.length + ' ID' + (qaIds.length !== 1 ? 's' : '');
+    }
+
+    function _qaAddCurrent() {
+        var idStr = document.getElementById('qa-id-manual').value.trim();
+        if (!idStr) { Swal.showValidationMessage('Enter an Agent ID first'); return false; }
+        if (qaIds.some(function(i){ return i.id_string === idStr; })) { Swal.showValidationMessage('That ID is already in your list'); return false; }
+        var revRaw = document.getElementById('qa-rev').value.trim();
+        qaIds.push({
+            id_string: idStr,
+            rev_share: revRaw ? revRaw.replace(/%+$/, '') + '%' : '0%',
+            prime49: document.getElementById('qa-prime').checked,
+            parent_id_string: document.getElementById('qa-parent-val').value || null
+        });
+        // Clear entry fields
+        document.getElementById('qa-id-manual').value = '';
+        document.getElementById('qa-id-search').value = '';
+        document.getElementById('qa-rev').value = '';
+        document.getElementById('qa-prime').checked = false;
+        document.getElementById('qa-parent-val').value = '';
+        document.getElementById('qa-parent-selected').style.display = 'none';
+        document.getElementById('qa-id-check').innerHTML = '';
+        _renderQaQueue();
+        return true;
+    }
 
     var step2 = await Swal.fire({
-        title: 'Add Agent ID',
-        width: 520,
+        title: 'Add Agent IDs to ' + name,
+        width: 540,
         html: '<div style="text-align:left;">'
-            + '<div style="background:#f0f7ff;border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:12px;color:#0369a1;"><b>Company:</b> ' + coChoice.name + '</div>'
+            + '<div style="background:#f0f7ff;border-radius:10px;padding:8px 14px;margin-bottom:12px;font-size:12px;color:#0369a1;"><b>Company:</b> ' + (coChoice.name || 'Independent') + '</div>'
 
             // ID search
-            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Search Unassigned IDs</label>'
-            + '<div style="position:relative;margin-bottom:6px;">'
-            + '<input id="qa-id-search" type="number" placeholder="Type to search unassigned IDs..." style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">'
-            + '</div>'
-            + '<div id="qa-id-results" style="border:1px solid #e2e8f0;border-radius:8px;max-height:120px;overflow-y:auto;display:none;margin-bottom:6px;"></div>'
-            + '<div style="font-size:11px;color:#94a3b8;margin-bottom:12px;">Or enter manually if not in the list</div>'
+            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Search Unassigned IDs</label>'
+            + '<input id="qa-id-search" type="text" placeholder="Type to search unassigned IDs..." style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:4px;">'
+            + '<div id="qa-id-results" style="border:1px solid #e2e8f0;border-radius:8px;max-height:100px;overflow-y:auto;display:none;margin-bottom:4px;"></div>'
 
-            + '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">'
-            + '<div><label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Agent ID *</label>'
-            + '<input id="qa-id-manual" type="number" placeholder="e.g. 33343" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:14px;font-family:monospace;outline:none;">'
-            + '<div id="qa-id-check" style="font-size:11px;min-height:16px;margin-top:4px;"></div></div>'
-            + '<div><label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Rev Share %</label>'
-            + '<input id="qa-rev" type="number" placeholder="e.g. 50" style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;"></div>'
+            // Entry row: ID + Rev + Add button
+            + '<div style="display:grid;grid-template-columns:1fr 90px auto;gap:6px;margin-bottom:4px;">'
+            + '<div>'
+            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:3px;">Agent ID *</label>'
+            + '<input id="qa-id-manual" type="text" placeholder="e.g. 33343" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:monospace;outline:none;">'
             + '</div>'
+            + '<div>'
+            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:3px;">Rev %</label>'
+            + '<input id="qa-rev" type="number" placeholder="50" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;">'
+            + '</div>'
+            + '<div style="display:flex;align-items:flex-end;">'
+            + '<button id="qa-add-btn" type="button" style="padding:9px 14px;background:#004990;color:white;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;">+ Add</button>'
+            + '</div>'
+            + '</div>'
+            + '<div id="qa-id-check" style="font-size:11px;min-height:14px;margin-bottom:8px;"></div>'
 
-            // Parent ID - network-wide lookup
-            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:5px;">Parent / Upline ID (sub-tier)</label>'
-            + '<input id="qa-parent-search" type="text" placeholder="Search any partner ID..." style="width:100%;padding:10px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:4px;">'
-            + '<div id="qa-parent-results" style="border:1px solid #e2e8f0;border-radius:8px;max-height:100px;overflow-y:auto;display:none;margin-bottom:10px;"></div>'
+            // Parent ID
+            + '<label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:3px;">Parent / Upline ID (optional)</label>'
+            + '<input id="qa-parent-search" type="text" placeholder="Search any partner ID..." style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;outline:none;margin-bottom:4px;">'
+            + '<div id="qa-parent-results" style="border:1px solid #e2e8f0;border-radius:8px;max-height:90px;overflow-y:auto;display:none;margin-bottom:4px;"></div>'
             + '<input type="hidden" id="qa-parent-val">'
-            + '<div id="qa-parent-selected" style="display:none;background:#f0f7ff;border-radius:8px;padding:6px 10px;font-size:12px;color:#004990;margin-bottom:10px;display:flex;justify-content:space-between;">'
+            + '<div id="qa-parent-selected" style="display:none;background:#f0f7ff;border-radius:8px;padding:6px 10px;font-size:12px;color:#004990;margin-bottom:8px;justify-content:space-between;align-items:center;">'
             + '<span id="qa-parent-label"></span><span onclick="ppClearParent()" style="cursor:pointer;color:#94a3b8;">✕</span>'
             + '</div>'
 
-            + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;background:#fef3c7;padding:10px 12px;border-radius:8px;">'
+            // Prime49
+            + '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;background:#fef3c7;padding:9px 12px;border-radius:8px;margin-bottom:12px;">'
             + '<input type="checkbox" id="qa-prime" style="accent-color:#d97706;width:16px;height:16px;"> ⭐ Mark as Prime49</label>'
+
+            // Queued IDs list
+            + '<div style="border-top:1px solid #e2e8f0;padding-top:10px;">'
+            + '<div style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;margin-bottom:6px;">IDs Queued to Add</div>'
+            + '<div id="qa-queue-list" style="max-height:150px;overflow-y:auto;"></div>'
+            + '</div>'
             + '</div>',
         showCancelButton: true,
         cancelButtonText: '← Back',
         confirmButtonColor: '#004990',
-        confirmButtonText: 'Add ID',
+        confirmButtonText: 'Submit',
         didOpen: function() {
-            // Prime49 → auto-set 50% rev share
+            _renderQaQueue();
+
             document.getElementById('qa-prime').addEventListener('change', function() {
                 if (this.checked) document.getElementById('qa-rev').value = '50';
+            });
+
+            document.getElementById('qa-add-btn').addEventListener('click', function() { _qaAddCurrent(); });
+
+            // Allow Enter key in ID field to add to list
+            document.getElementById('qa-id-manual').addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') { e.preventDefault(); _qaAddCurrent(); }
             });
 
             // Unassigned ID search
@@ -2486,17 +2543,19 @@ window.quickAddId = async function(personId, name) {
                         body:JSON.stringify({action:'get_orphan_ids', query:q, placeholder_uuid:'f1ed4ff6-a7ee-4658-9684-a1ae7cc275be'})
                     }).then(function(r){return r.json();}).then(function(res){
                         if (!res.data || !res.data.length) {
-                            resultsEl.innerHTML='<div style="padding:10px;color:#94a3b8;font-size:12px;">No unassigned IDs found — enter manually below</div>';
+                            resultsEl.innerHTML='<div style="padding:10px;color:#94a3b8;font-size:12px;">No unassigned IDs found — enter manually</div>';
                             resultsEl.style.display='block'; return;
                         }
                         resultsEl.innerHTML = '';
                         res.data.forEach(function(id) {
                             var div = document.createElement('div');
-                            div.style.cssText = 'padding:10px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-family:monospace;';
+                            div.style.cssText = 'padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f5f9;font-size:13px;font-family:monospace;';
                             div.textContent = id.id_string;
                             div.onclick = (function(idStr) { return function() {
                                 document.getElementById('qa-id-manual').value = idStr;
-                                document.getElementById('qa-id-results').style.display = 'none';
+                                document.getElementById('qa-id-search').value = '';
+                                resultsEl.style.display = 'none';
+                                document.getElementById('qa-id-manual').dispatchEvent(new Event('input'));
                             }; })(id.id_string);
                             resultsEl.appendChild(div);
                         });
@@ -2505,16 +2564,20 @@ window.quickAddId = async function(personId, name) {
                 }, 300);
             });
 
-            // ID duplicate check
+            // ID availability check
             document.getElementById('qa-id-manual').addEventListener('input', function(){
                 var idStr = this.value.trim();
                 var el = document.getElementById('qa-id-check');
                 if (!idStr) { el.innerHTML=''; return; }
+                if (qaIds.some(function(i){ return i.id_string === idStr; })) {
+                    el.innerHTML = '<span style="color:#f59e0b;font-weight:700;">⚠ Already in your queue</span>';
+                    return;
+                }
                 var exists = identifiersRaw.find(function(i){ return i.id_string === idStr; });
                 if (exists) {
                     var owner = agentsRaw.find(function(a){ return a.id === exists.agent_id; });
                     var person = personsRaw.find(function(p){ return p.id === (owner ? owner.parent_agent_id : null); });
-                    el.innerHTML = '<span style="color:#ef4444;font-weight:700;">⚠️ Already assigned' + (person ? ' to ' + person.full_name : '') + '</span>';
+                    el.innerHTML = '<span style="color:#ef4444;font-weight:700;">⚠ Already assigned' + (person ? ' to ' + person.full_name : '') + '</span>';
                 } else {
                     el.innerHTML = '<span style="color:#10b981;font-weight:700;">✓ Available</span>';
                 }
@@ -2528,9 +2591,7 @@ window.quickAddId = async function(personId, name) {
                 var resultsEl = document.getElementById('qa-parent-results');
                 if (!q || q.length < 2) { resultsEl.style.display='none'; return; }
                 parentTimeout = setTimeout(function(){
-                    var matches = identifiersRaw.filter(function(i){
-                        return i.id_string.includes(q);
-                    }).slice(0, 15);
+                    var matches = identifiersRaw.filter(function(i){ return i.id_string.includes(q); }).slice(0, 15);
                     if (!matches.length) { resultsEl.style.display='none'; return; }
                     resultsEl.innerHTML = '';
                     matches.forEach(function(id) {
@@ -2552,47 +2613,44 @@ window.quickAddId = async function(personId, name) {
             });
         },
         preConfirm: function() {
+            // Auto-add whatever is in the manual field if not empty
             var idStr = document.getElementById('qa-id-manual').value.trim();
-            if (!idStr) { Swal.showValidationMessage('Please enter or select an agent ID'); return false; }
-            var revRaw = document.getElementById('qa-rev').value.trim();
-            return {
-                id_string: idStr,
-                rev_share: revRaw ? revRaw.replace(/%+$/, '') + '%' : '0%',
-                prime49: document.getElementById('qa-prime').checked,
-                parent_id_string: document.getElementById('qa-parent-val').value || null
-            };
+            if (idStr && !qaIds.some(function(i){ return i.id_string === idStr; })) {
+                _qaAddCurrent();
+            }
+            if (!qaIds.length) { Swal.showValidationMessage('Please add at least one Agent ID to the list'); return false; }
+            return qaIds;
         }
     });
 
     // Handle Back button
     if (!step2.isConfirmed) {
         if (step2.dismiss === Swal.DismissReason.cancel) {
-            // Back — restart from step 1
             window.quickAddId(personId, name);
         }
         return;
     }
-    var idForm = step2.value;
+    var idForms = step2.value; // array of {id_string, rev_share, prime49, parent_id_string}
 
     // ── SUBMIT ─────────────────────────────────────────────
-    Swal.fire({ title:'Adding ID...', didOpen:function(){ Swal.showLoading(); } });
+    Swal.fire({ title:'Adding IDs...', didOpen:function(){ Swal.showLoading(); } });
 
-    var parentConfigId = null;
-    if (idForm.parent_id_string) {
-        var parentRecord = identifiersRaw.find(function(i){ return i.id_string === idForm.parent_id_string; });
-        parentConfigId = parentRecord ? parentRecord.id : null;
-    }
+    var identifiers = idForms.map(function(idForm) {
+        var parentRecord = idForm.parent_id_string
+            ? identifiersRaw.find(function(i){ return i.id_string === idForm.parent_id_string; })
+            : null;
+        return { string: idForm.id_string, rev: idForm.rev_share, prime: idForm.prime49, parent_config_id: parentRecord ? parentRecord.id : null };
+    });
 
     var submitPayload = {
         action: 'complete_onboarding',
-        identifiers: [{ string:idForm.id_string, rev:idForm.rev_share, prime:idForm.prime49, parent_config_id:parentConfigId }]
+        identifiers: identifiers
     };
 
     if (coChoice.type === 'existing') {
         submitPayload.isQuickAdd = true;
         submitPayload.existingAgentId = coChoice.agentId;
     } else {
-        // Create new agent for existing person
         submitPayload.isQuickAdd = false;
         submitPayload.isQuickAddNewAgent = true;
         submitPayload.personId = personId;
@@ -2611,14 +2669,15 @@ window.quickAddId = async function(personId, name) {
     var result = await res.json();
 
     if (result.success) {
-        await logAuditAction('ID Added', 'success', {
-            target_id: idForm.id_string, target_type: 'agent_identifier',
-            new_value: { id_string: idForm.id_string, rev_share: idForm.rev_share, prime49: idForm.prime49, partner: name }
+        var idsList = idForms.map(function(f){ return f.id_string; }).join(', ');
+        await logAuditAction('IDs Added', 'success', {
+            target_id: idsList, target_type: 'agent_identifier',
+            new_value: { ids: idForms, partner: name }
         });
         await loadPartners();
-        Swal.fire({ icon:'success', title:'ID Added!', text:idForm.id_string + ' added to ' + name, timer:2000, showConfirmButton:false });
+        Swal.fire({ icon:'success', title: idForms.length + ' ID' + (idForms.length !== 1 ? 's' : '') + ' Added!', text: idsList + ' added to ' + name, timer:2500, showConfirmButton:false });
     } else {
-        Swal.fire({ icon:'error', title:'Failed', text:result.message || 'Could not add ID', confirmButtonColor:'#004990' });
+        Swal.fire({ icon:'error', title:'Failed', text:result.message || 'Could not add IDs', confirmButtonColor:'#004990' });
     }
 };
 
