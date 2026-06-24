@@ -1360,9 +1360,8 @@ async function submitOnboarding() {
         return `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
-                    <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '<span style="font-size:16px;vertical-align:middle;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.18));">&#x1F48E;</span>' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
-                    <div style="display:flex;align-items:center;gap:8px;">
-                        <span style="font-size:10px;opacity:0.7;">${id.rev}</span>
+                    <div style="text-align:left;">${label}<span>${id.string} <span style="font-size:9px;color:#94a3b8;font-weight:600;">${id.rev}</span>${id.isPrime ? ' <span style="font-size:16px;vertical-align:middle;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.18));">&#x1F48E;</span>' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
+                    <div style="display:flex;align-items:center;gap:6px;">
                         <div data-counts-id="${id.string}">${_bCountHtml}</div>
                         <button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button>
                     </div>
