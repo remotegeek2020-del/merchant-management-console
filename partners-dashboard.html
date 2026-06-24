@@ -64,12 +64,20 @@
             pointer-events: none;
             line-height: 1;
         }
-        @keyframes cardFlipOpen {
+        @keyframes cardFlipOut {
             0%   { transform: perspective(1000px) rotateY(0deg) scale(1); opacity:1; }
             45%  { transform: perspective(1000px) rotateY(-22deg) scale(1.04); box-shadow:0 28px 56px rgba(0,73,144,.22); opacity:1; }
             100% { transform: perspective(1000px) rotateY(-90deg) scale(0.85); opacity:0; }
         }
-        .partner-card.flipping { animation: cardFlipOpen 0.3s ease-in forwards; pointer-events:none; z-index:50; }
+        @keyframes cardFlipIn {
+            0%   { transform: perspective(1000px) rotateY(90deg) scale(0.85); opacity:0; }
+            55%  { transform: perspective(1000px) rotateY(-8deg) scale(1.03); box-shadow:0 20px 48px rgba(0,73,144,.16); opacity:1; }
+            80%  { transform: perspective(1000px) rotateY(3deg) scale(1.01); }
+            100% { transform: perspective(1000px) rotateY(0deg) scale(1); opacity:1; }
+        }
+        .partner-card.flipping-out { animation: cardFlipOut 0.3s ease-in forwards; pointer-events:none; z-index:50; }
+        .partner-card.card-gone    { opacity:0; pointer-events:none; }
+        .partner-card.flipping-in  { animation: cardFlipIn 0.4s ease-out forwards; pointer-events:none; z-index:50; }
         .card-checkbox { position: absolute; top: 14px; left: 14px; width: 18px; height: 18px; cursor: pointer; display: none; accent-color: #0d9488; z-index: 10; }
         body.bulk-mode .card-checkbox { display: block; }
         body.bulk-mode .partner-card { padding-left: 40px; }
@@ -1406,11 +1414,24 @@ async function submitOnboarding() {
         }</div>`;
     }
 
+    let _activeCardEl = null;
     function _flipOpen(pid, cardEl) {
         if (typeof _bulkMode !== 'undefined' && _bulkMode) { toggleCardSelect(pid, null); return; }
-        cardEl.classList.add('flipping');
-        cardEl.addEventListener('animationend', () => cardEl.classList.remove('flipping'), { once: true });
+        _activeCardEl = cardEl;
+        cardEl.classList.add('flipping-out');
+        cardEl.addEventListener('animationend', () => {
+            cardEl.classList.remove('flipping-out');
+            cardEl.classList.add('card-gone');
+        }, { once: true });
         setTimeout(() => openPartnerDetails(pid), 280);
+    }
+    function _flipBack() {
+        if (!_activeCardEl) return;
+        const el = _activeCardEl;
+        _activeCardEl = null;
+        el.classList.remove('card-gone');
+        el.classList.add('flipping-in');
+        el.addEventListener('animationend', () => el.classList.remove('flipping-in'), { once: true });
     }
 
     function renderBadge(id, isRootOfCard = false) {
@@ -2197,6 +2218,7 @@ async function submitOnboarding() {
         Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '900px', showConfirmButton: false, showCloseButton: true,
+            didClose: _flipBack,
             didOpen: function() {
                 // Attach tab click handlers after modal renders
                 var tabBar = document.getElementById('pp-tab-bar');
