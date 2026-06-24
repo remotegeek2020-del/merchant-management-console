@@ -1331,29 +1331,44 @@ async function submitOnboarding() {
     // 6. DASHBOARD RENDERING & STATS
     // ==========================================
 
+    function _makeBadgeCountHtml(approved, pipeline, risk, closed) {
+        const total = approved + pipeline + risk + closed;
+        if (!total) return '';
+        const tooltip = `Total: ${total} merchant${total !== 1 ? 's' : ''} — Active: ${approved}, Pipeline: ${pipeline}, At-risk: ${risk}, Closed: ${closed}`;
+        const parts = [
+            approved > 0 ? `<span style="color:#15803d;font-size:10px;font-weight:800;" title="${tooltip}">&#x2713;${approved}</span>` : '',
+            pipeline > 0 ? `<span style="color:#92400e;font-size:10px;font-weight:800;" title="${tooltip}">&#x23F3;${pipeline}</span>` : '',
+            risk     > 0 ? `<span style="color:#c2410c;font-size:10px;font-weight:800;" title="${tooltip}">&#x26A0;${risk}</span>`     : '',
+            closed   > 0 ? `<span style="color:#64748b;font-size:10px;font-weight:800;" title="${tooltip}">&#x2717;${closed}</span>`   : ''
+        ].filter(Boolean).join('<span style="color:#cbd5e1;font-size:9px;margin:0 1px;">|</span>');
+        return `<div class="badge-count-pills" style="display:flex;gap:1px;align-items:center;white-space:nowrap;" title="${tooltip}">${parts}</div>`;
+    }
+
     function renderBadge(id, isRootOfCard = false) {
         let label = isRootOfCard && id.upline_name ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Sub-partner of ${id.upline_string} owner ${id.upline_name}</span>` : (!isRootOfCard ? `<span style="font-size:8px; color:#94a3b8; display:block; line-height:1; margin-bottom:2px;">Owner: ${id.owner_name}</span>` : '');
-        const _bTotal = (id.merchantCount||0) + (id.pendingCount||0) + (id.closedCount||0) + (id.riskCount||0);
-        const _bPills = [
-            id.merchantCount > 0 ? `<span style="font-size:9px;background:#dcfce7;color:#15803d;border-radius:6px;padding:0 5px;white-space:nowrap;">&#x2713; ${id.merchantCount}</span>` : '',
-            id.pendingCount  > 0 ? `<span style="font-size:9px;background:#fef9c3;color:#854d0e;border-radius:6px;padding:0 5px;white-space:nowrap;">&#x23F3; ${id.pendingCount}</span>`  : '',
-            id.riskCount     > 0 ? `<span style="font-size:9px;background:#fff7ed;color:#c2410c;border-radius:6px;padding:0 5px;white-space:nowrap;">&#x26A0; ${id.riskCount}</span>`      : '',
-            id.closedCount   > 0 ? `<span style="font-size:9px;background:#f1f5f9;color:#64748b;border-radius:6px;padding:0 5px;white-space:nowrap;">&#x2717; ${id.closedCount}</span>`   : ''
-        ].filter(Boolean).join('');
-        const _bCountHtml = _bTotal > 0
-            ? `<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;"><span style="font-size:10px;background:#e0f2fe;color:#0369a1;border-radius:10px;padding:1px 6px;white-space:nowrap;font-weight:800;">${_bTotal} total</span>${_bPills ? `<div style="display:flex;gap:2px;flex-wrap:wrap;justify-content:flex-end;">${_bPills}</div>` : ''}</div>`
-            : '';
+        const _bCountHtml = _makeBadgeCountHtml(id.merchantCount||0, id.pendingCount||0, id.riskCount||0, id.closedCount||0);
         return `
             <div class="id-badge-container" style="margin-top:4px; width: 100%;">
                 <div class="id-badge ${id.isPrime ? 'prime' : ''}" style="display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="event.stopPropagation(); editIdentifier('${id.db_id}', '${id.string}', '${id.rev}', ${id.isPrime})">
                     <div style="text-align:left;">${label}<span>${id.string} ${id.isPrime ? '<span style="font-size:16px;vertical-align:middle;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.18));">&#x1F48E;</span>' : ''}</span><div class="badge-stats-area" data-id="${id.string}" style="margin-top:2px; display:none;"></div></div>
-                    <div style="display:flex;align-items:center;gap:10px;"><span style="font-size:10px;opacity:0.7;">${id.rev}</span>${_bCountHtml}<button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button></div>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="font-size:10px;opacity:0.7;">${id.rev}</span>
+                        <div data-counts-id="${id.string}">${_bCountHtml}</div>
+                        <button onclick="event.stopPropagation(); downloadSingleIdExport('${id.string}')" style="background:none;border:none;color:#64748b;cursor:pointer;display:flex;align-items:center;"><span class="material-icons" style="font-size:16px;">file_download</span></button>
+                    </div>
                 </div>
                 ${id.sub_ids.length > 0 ? `<div style="margin-left:20px; border-left:2px solid #cbd5e1; padding-left:10px;">${id.sub_ids.map(sub => renderBadge(sub, false)).join('')}</div>` : ''}
             </div>`;
     }
 
     function updateAllBadgeStats(idStr, s) {
+        // Refresh the compact count pills in the badge header using the freshest data
+        document.querySelectorAll(`[data-counts-id="${idStr}"]`).forEach(el => {
+            el.innerHTML = s
+                ? _makeBadgeCountHtml(parseInt(s.merchant_count||0), parseInt(s.pending_count||0), parseInt(s.risk_count||0), parseInt(s.closed_count||0))
+                : '';
+        });
+
         const statDivs = document.querySelectorAll(`.badge-stats-area[data-id="${idStr}"]`);
         statDivs.forEach(div => {
             div.style.display = 'block';
