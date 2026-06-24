@@ -25,13 +25,58 @@
         body { background: #f1f5f9; padding: 14px; font-family: 'DM Sans', sans-serif; }
         .dashboard-container { max-width: 1400px; margin: 0 auto; }
         .modern-header { background: white; border-radius: 14px; padding: 12px 18px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 8px; }
-        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 14px; }
-        .partner-card { background: white; border-radius: 16px; padding: 16px; border: 1px solid #e2e8f0; transition: transform 0.2s ease, box-shadow 0.2s ease; cursor: pointer; position: relative; box-shadow: 0 1px 4px rgba(0,0,0,0.05), 0 8px 20px rgba(0,0,0,0.06); }
-        .partner-card:hover { transform: translateY(-5px); box-shadow: 0 16px 36px rgba(0,0,0,0.11); }
-        .partner-card.selected { box-shadow: 0 0 0 3px rgba(13,148,136,.25); transform: none; }
+        .partner-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 18px; }
+        .partner-card {
+            background: white;
+            border-radius: 16px;
+            padding: 16px;
+            border: 1px solid rgba(0,73,144,0.18);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 2px 6px rgba(0,73,144,0.07), 0 10px 28px rgba(0,73,144,0.1);
+        }
+        /* Playing card watermark logo */
+        .partner-card::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: url('https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png') center center / 65% auto no-repeat;
+            opacity: 0.04;
+            pointer-events: none;
+            z-index: 0;
+        }
+        /* Card corner suit marks (top-left / bottom-right like a real playing card) */
+        .partner-card::after {
+            content: '♦';
+            position: absolute;
+            bottom: 10px;
+            right: 12px;
+            font-size: 22px;
+            color: rgba(0,73,144,0.08);
+            pointer-events: none;
+            z-index: 0;
+            transform: rotate(180deg);
+        }
+        .partner-card > * { position: relative; z-index: 1; }
+        .partner-card:hover { transform: translateY(-6px) rotate(-0.5deg); box-shadow: 0 20px 48px rgba(0,73,144,0.18); }
+        .partner-card.selected { box-shadow: 0 0 0 3px rgba(13,148,136,.35); transform: none; }
+        /* Top-left corner suit */
+        .card-corner-suit {
+            position: absolute;
+            top: 8px;
+            left: 10px;
+            font-size: 14px;
+            font-weight: 900;
+            color: rgba(0,73,144,0.15);
+            z-index: 1;
+            pointer-events: none;
+            line-height: 1;
+        }
         @keyframes cardFlipOpen {
             0%   { transform: perspective(1000px) rotateY(0deg) scale(1); opacity:1; }
-            45%  { transform: perspective(1000px) rotateY(-22deg) scale(1.04); box-shadow:0 28px 56px rgba(0,73,144,.18); opacity:1; }
+            45%  { transform: perspective(1000px) rotateY(-22deg) scale(1.04); box-shadow:0 28px 56px rgba(0,73,144,.22); opacity:1; }
             100% { transform: perspective(1000px) rotateY(-90deg) scale(0.85); opacity:0; }
         }
         .partner-card.flipping { animation: cardFlipOpen 0.3s ease-in forwards; pointer-events:none; z-index:50; }
@@ -1480,8 +1525,14 @@ async function submitOnboarding() {
         const _toggleBtn = _pActive
             ? `<button onclick="event.stopPropagation();toggleSinglePortal('${p.id}','${_safeName}',true,event)" title="Disable portal access" style="background:#fef2f2;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:2px;"><span class="material-icons" style="font-size:14px;">block</span></button>`
             : `<button onclick="event.stopPropagation();toggleSinglePortal('${p.id}','${_safeName}',false,event)" title="Enable portal access" style="background:#f0fdf4;border:1px solid #bbf7d0;color:#16a34a;border-radius:8px;padding:7px 10px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;gap:2px;"><span class="material-icons" style="font-size:14px;">lock_open</span></button>`;
+        const _cardBg = p.is_branded
+            ? 'linear-gradient(160deg,#f0f6ff 0%,#e8f0fb 100%)'
+            : (_pActive ? 'linear-gradient(160deg,#f0fdf8 0%,#f8fffe 100%)' : 'white');
+        const _cardSuit = p.is_branded ? '♠' : (_pActive ? '♣' : '♦');
         return `
-            <div class="partner-card" data-pid="${p.id}" style="position:relative;padding-top:0;overflow:hidden;" onclick="_flipOpen('${p.id}', this)">
+            <div class="partner-card" data-pid="${p.id}" style="padding-top:0;background:${_cardBg};" onclick="_flipOpen('${p.id}', this)">
+                <!-- Playing card corner suit (top-left) -->
+                <span class="card-corner-suit">${_cardSuit}</span>
                 <!-- Colored top accent bar -->
                 <div style="height:4px;background:${p.is_branded ? 'linear-gradient(90deg,#004990,#0369a1)' : (_pActive ? 'linear-gradient(90deg,#10b981,#059669)' : '#e2e8f0')};margin:0 -16px 14px -16px;border-radius:16px 16px 0 0;"></div>
                 ${_rankBadge}
