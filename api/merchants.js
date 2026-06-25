@@ -1346,24 +1346,26 @@ if (action === 'get_notes') {
         }
 
         if (action === 'get_prime49_residuals') {
+            // Include both Approved and Approved - Collections (still actively processing)
             const { data, error } = await supabase
                 .from('merchant_portfolio_view')
-                .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name')
+                .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name, account_status')
                 .eq('is_prime49', true)
-                .eq('account_status', 'Approved')
+                .in('account_status', ['Approved', 'Approved - Collections'])
                 .order('dba_name', { ascending: true })
                 .limit(10000);
 
             if (error) throw error;
 
-            // Enrich with rev_share from agent_identifiers
+            // Enrich with rev_share from agent_identifiers (explicit limit to avoid default 1000 cap)
             const agentIds = [...new Set((data || []).map(m => m.agent_id).filter(Boolean))];
             let revShareMap = {};
             if (agentIds.length) {
                 const { data: aiData } = await supabase
                     .from('agent_identifiers')
                     .select('id_string, rev_share')
-                    .in('id_string', agentIds);
+                    .in('id_string', agentIds)
+                    .limit(10000);
                 (aiData || []).forEach(ai => { revShareMap[ai.id_string] = ai.rev_share; });
             }
 
@@ -1378,6 +1380,7 @@ if (action === 'get_notes') {
                 return {
                     dba_name:        m.dba_name,
                     merchant_id:     m.merchant_id,
+                    account_status:  m.account_status,
                     volume_30_day:   vol,
                     agent_id:        m.agent_id,
                     agent_name:      m.partner_full_name || '—',
@@ -1408,7 +1411,8 @@ if (action === 'get_notes') {
             const { data: allP49Ids } = await supabase
                 .from('agent_identifiers')
                 .select('id_string, rev_share, agent_id')
-                .eq('prime49', true);
+                .eq('prime49', true)
+                .limit(10000);
 
             const allAgentIdSet = [...new Set((allP49Ids || []).map(r => r.agent_id).filter(Boolean))];
             let agentInfoMap = {};
@@ -1416,7 +1420,8 @@ if (action === 'get_notes') {
                 const { data: agentRows } = await supabase
                     .from('agents')
                     .select('id, agent_name, company_id')
-                    .in('id', allAgentIdSet);
+                    .in('id', allAgentIdSet)
+                    .limit(10000);
                 (agentRows || []).forEach(a => { agentInfoMap[a.id] = a; });
             }
             const companyIdSet = [...new Set(Object.values(agentInfoMap).map(a => a.company_id).filter(Boolean))];

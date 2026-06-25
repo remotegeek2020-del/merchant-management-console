@@ -4137,6 +4137,7 @@ function showP49Calc(r, runDate) {
             ${row('Agent ID', `<span style="font-family:monospace;">${r.agent_id || '—'}</span>`)}
             ${row('Company', r.agent_company || '—')}
             ${row('Rev Share', `${revPct}%`)}
+            ${row('Status', r.account_status || 'Approved')}
             ${row('Run Date', runDate)}
 
             ${divider('Calculation')}
