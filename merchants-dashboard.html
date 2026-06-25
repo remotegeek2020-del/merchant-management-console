@@ -486,6 +486,9 @@
             <input type="text" id="searchInput" placeholder="Search merchants…" onkeydown="if(event.key==='Enter') resetAndFetch()">
             <button onclick="resetAndFetch()">Search</button>
         </div>
+        <button id="clearSearchBtn" onclick="clearMerchantSearch()" style="display:none;align-items:center;gap:4px;background:#fff0f0;border:1px solid #fecaca;color:#dc2626;border-radius:8px;padding:6px 12px;font-size:11px;font-weight:800;cursor:pointer;">
+            <span class="material-icons" style="font-size:14px;">close</span> Clear Search
+        </button>
         <div id="filterResultCount" style="margin-left:auto; font-size:11px; color:#94a3b8;"></div>
     </div>
 
@@ -2806,7 +2809,16 @@ window.saveMerchant = async (uuid) => {
         const hasFilter = query.length > 0 || status.length > 0;
         const panel = document.getElementById('staffChartsPanel');
         if (panel) panel.classList.toggle('search-hidden', hasFilter);
+        const clearBtn = document.getElementById('clearSearchBtn');
+        if (clearBtn) clearBtn.style.display = hasFilter ? 'flex' : 'none';
         fetchMerchants();
+    }
+    function clearMerchantSearch() {
+        const si = document.getElementById('searchInput');
+        const sf = document.getElementById('statusFilter');
+        if (si) si.value = '';
+        if (sf) sf.value = '';
+        resetAndFetch();
     }
 
     // ── STAFF SORT ──────────────────────────────────────
