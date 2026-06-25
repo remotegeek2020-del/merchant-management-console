@@ -1404,7 +1404,41 @@ if (action === 'get_notes') {
                 }]);
             });
 
-            return res.status(200).json({ success: true, data: rows });
+            // Fetch ALL prime49 identifiers (including those with no approved merchants)
+            const { data: allP49Ids } = await supabase
+                .from('agent_identifiers')
+                .select('id_string, rev_share, agent_id')
+                .eq('prime49', true);
+
+            const allAgentIdSet = [...new Set((allP49Ids || []).map(r => r.agent_id).filter(Boolean))];
+            let agentInfoMap = {};
+            if (allAgentIdSet.length) {
+                const { data: agentRows } = await supabase
+                    .from('agents')
+                    .select('id, agent_name, company_id')
+                    .in('id', allAgentIdSet);
+                (agentRows || []).forEach(a => { agentInfoMap[a.id] = a; });
+            }
+            const companyIdSet = [...new Set(Object.values(agentInfoMap).map(a => a.company_id).filter(Boolean))];
+            let companyNameMap = {};
+            if (companyIdSet.length) {
+                const { data: companyRows } = await supabase
+                    .from('companies')
+                    .select('id, company_name')
+                    .in('id', companyIdSet);
+                (companyRows || []).forEach(c => { companyNameMap[c.id] = c.company_name; });
+            }
+            const allPrime49Partners = (allP49Ids || []).map(p => {
+                const ag = agentInfoMap[p.agent_id] || {};
+                return {
+                    id_string:     p.id_string,
+                    rev_share:     parseFloat(String(p.rev_share || '50').replace(/%/g, '')) || 50,
+                    agent_name:    ag.agent_name || '—',
+                    agent_company: companyNameMap[ag.company_id] || '—'
+                };
+            });
+
+            return res.status(200).json({ success: true, data: rows, all_prime49_partners: allPrime49Partners });
         }
 
         // ── MERCHANT MERGE ────────────────────────────────────────────────────────

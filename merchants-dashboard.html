@@ -4105,6 +4105,7 @@ function legacySelectMerchant(id, name, mid) {
 // ── PRIME49 RESIDUALS ────────────────────────────────────────────
 let _prime49Loaded = false;
 let _prime49Data   = [];
+let _prime49AllPartners = []; // all prime49 IDs including those with no merchants
 
 function toggleP49Guide() {
     const guide = document.getElementById('p49-guide');
@@ -4133,6 +4134,7 @@ async function loadPrime49Residuals() {
         if (!json.success) throw new Error(json.message);
 
         _prime49Data = json.data || [];
+        _prime49AllPartners = json.all_prime49_partners || [];
         _populateP49PartnerFilter();
         renderPrime49Table();
         logAuditAction('Prime49 Residuals Report Viewed', 'success', {
@@ -4151,7 +4153,7 @@ async function loadPrime49Residuals() {
 }
 
 function _populateP49PartnerFilter() {
-    // Build map: agent_name → { ids: Set, company }
+    // Build map: agent_name → { ids: Set, company } — merge merchant rows + all prime49 partners
     const partnerMap = {};
     const companySet = new Set();
     _prime49Data.forEach(r => {
@@ -4159,6 +4161,13 @@ function _populateP49PartnerFilter() {
         if (!partnerMap[name]) partnerMap[name] = { ids: new Set(), company: r.agent_company || '' };
         if (r.agent_id) partnerMap[name].ids.add(r.agent_id);
         if (r.agent_company) companySet.add(r.agent_company);
+    });
+    // Add partners that have prime49 IDs but no merchants
+    _prime49AllPartners.forEach(p => {
+        const name = p.agent_name || '—';
+        if (!partnerMap[name]) partnerMap[name] = { ids: new Set(), company: p.agent_company || '' };
+        if (p.id_string) partnerMap[name].ids.add(p.id_string);
+        if (p.agent_company) companySet.add(p.agent_company);
     });
 
     // Populate company dropdown
@@ -4225,7 +4234,13 @@ function renderPrime49Table() {
         return true;
     });
 
-    if (!data.length) {
+    // Only show empty state if both merchant rows and zero-partner list are empty
+    const hasZeroPartners = _prime49AllPartners.some(p => {
+        if (filterPartner && (p.agent_name || '—') !== filterPartner) return false;
+        if (filterCompany && p.agent_company !== filterCompany) return false;
+        return true;
+    });
+    if (!data.length && !hasZeroPartners) {
         document.getElementById('p49-empty').style.display = 'block';
         document.getElementById('p49-table').style.display = 'none';
         _updateP49Summary(0, 0, 0, 0, 0);
@@ -4297,11 +4312,39 @@ function renderPrime49Table() {
         return headerRow + merchantRows + subtotalRow;
     }).join('');
 
-    document.getElementById('p49-tbody').innerHTML = tbodyHtml;
+    // Build zero-merchant partner rows from _prime49AllPartners
+    const partnersWithMerchants = new Set(Object.keys(groups));
+    const zeroPartnerMap = {};
+    _prime49AllPartners.forEach(p => {
+        const name = p.agent_name || '—';
+        if (partnersWithMerchants.has(name)) return; // already shown above
+        if (filterPartner && name !== filterPartner) return;
+        if (filterCompany && p.agent_company !== filterCompany) return;
+        if (!zeroPartnerMap[name]) zeroPartnerMap[name] = { ids: new Set(), company: p.agent_company || '—' };
+        if (p.id_string) zeroPartnerMap[name].ids.add(p.id_string);
+    });
+
+    const zeroRowsHtml = Object.entries(zeroPartnerMap).map(([partnerName, g]) => {
+        const idList = [...g.ids].join(' · ');
+        return `<tr style="background:#fafafa;opacity:0.75;">
+            <td colspan="10" style="padding:8px 12px;">
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+                    <span style="font-size:13px;font-weight:800;color:#64748b;">${partnerName}</span>
+                    ${idList ? `<span style="font-family:monospace;font-size:11px;background:#f1f5f9;color:#64748b;padding:2px 8px;border-radius:99px;">${idList}</span>` : ''}
+                    <span style="font-size:11px;color:#94a3b8;">${g.company}</span>
+                    <span style="font-size:10px;font-weight:700;background:#fef3c7;color:#92400e;padding:1px 8px;border-radius:99px;margin-left:auto;">No merchants yet</span>
+                </div>
+            </td>
+        </tr><tr><td colspan="10" style="height:4px;background:#f1f5f9;padding:0;"></td></tr>`;
+    }).join('');
+
+    const totalPartnerCount = Object.keys(groups).length + Object.keys(zeroPartnerMap).length;
+
+    document.getElementById('p49-tbody').innerHTML = tbodyHtml + zeroRowsHtml;
     document.getElementById('p49-tfoot').innerHTML = `
         <tr style="background:#1e293b;color:white;font-weight:800;">
             <td colspan="2" style="font-size:12px;text-transform:uppercase;letter-spacing:0.5px;color:#94a3b8;">
-                Grand Total · ${grandCount} merchants · ${Object.keys(groups).length} partners
+                Grand Total · ${grandCount} merchants · ${totalPartnerCount} partners (${Object.keys(zeroPartnerMap).length} no merchants)
             </td>
             <td style="text-align:right;font-weight:800;color:white;">${fmt(grandVol)}</td>
             <td></td>
