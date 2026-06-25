@@ -4293,7 +4293,7 @@ function renderPrime49Table() {
     if (!data.length && !hasZeroPartners) {
         document.getElementById('p49-empty').style.display = 'block';
         document.getElementById('p49-table').style.display = 'none';
-        _updateP49Summary(0, 0, 0, 0, 0);
+        _updateP49Summary(0, 0, 0, 0, 0, 0);
         return;
     }
 
@@ -4408,14 +4408,15 @@ function renderPrime49Table() {
 
     document.getElementById('p49-table').style.display = '';
     document.getElementById('p49-empty').style.display = 'none';
-    _updateP49Summary(grandCount, grandVol, grandNet, grandPpt, grandAgent);
+    _updateP49Summary(grandCount, totalPartnerCount, grandVol, grandNet, grandPpt, grandAgent);
 }
 
-function _updateP49Summary(count, vol, net, ppt, agent) {
+function _updateP49Summary(count, partnerCount, vol, net, ppt, agent) {
     const fmt   = n => '$' + (n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const sumEl = document.getElementById('p49-summary');
-    sumEl.style.display = count ? 'flex' : 'none';
+    sumEl.style.display = (count || partnerCount) ? 'flex' : 'none';
     sumEl.innerHTML = [
+        { label: 'Partners', val: partnerCount, color: '#0369a1' },
         { label: 'Merchants', val: count, color: '#475569' },
         { label: 'Net Residual', val: fmt(net), color: '#334155' },
         { label: 'PPT', val: fmt(ppt), color: '#004990' },
