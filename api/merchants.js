@@ -476,6 +476,16 @@ if (action === 'bulk_upsert') {
             }
         }
 
+        // ── PRE-STEP 2: Snapshot existing merchant_ids for new-merchant detection
+        const allUploadedMids = dataToUpsert.map(r => r.merchant_id).filter(Boolean);
+        const priorExistingMids = new Set();
+        for (let i = 0; i < allUploadedMids.length; i += CHUNK_SIZE) {
+            const chunk = allUploadedMids.slice(i, i + CHUNK_SIZE);
+            const { data: existingRows } = await supabase
+                .from('merchants').select('merchant_id').in('merchant_id', chunk);
+            (existingRows || []).forEach(r => priorExistingMids.add(r.merchant_id));
+        }
+
         // ── STEP 2: UPSERT MERCHANTS IN CHUNKS ─────────────────────────────
         for (let i = 0; i < dataToUpsert.length; i += CHUNK_SIZE) {
             const chunk = dataToUpsert.slice(i, i + CHUNK_SIZE);
@@ -521,6 +531,70 @@ if (action === 'bulk_upsert') {
             });
         } catch (logErr) {
             console.warn('Activity log failed:', logErr.message);
+        }
+
+        // ── STEP 3: PRIME49 TASK AUTOMATION (fire-and-forget, never blocks) ──
+        const _autoSession = session;
+        const _newMerchants = dataToUpsert.filter(r => r.merchant_id && !priorExistingMids.has(r.merchant_id));
+        if (_newMerchants.length > 0) {
+            (async () => {
+                try {
+                    const { data: cfg } = await supabase
+                        .from('prime49_task_automation_config')
+                        .select('*').eq('id', 1).maybeSingle();
+                    if (!cfg || !cfg.enabled) return;
+
+                    // Which new merchants have a prime49 agent_id?
+                    const newAgentIds = [...new Set(_newMerchants.map(r => r.agent_id).filter(Boolean))];
+                    if (!newAgentIds.length) return;
+
+                    const { data: p49Ids } = await supabase
+                        .from('agent_identifiers')
+                        .select('id_string')
+                        .in('id_string', newAgentIds)
+                        .eq('prime49', true);
+                    if (!p49Ids || !p49Ids.length) return;
+
+                    const p49Set = new Set(p49Ids.map(r => r.id_string));
+                    const p49New = _newMerchants.filter(r => p49Set.has(r.agent_id));
+                    if (!p49New.length) return;
+
+                    // Fetch merchant UUIDs (merchant_tasks.merchant_id is FK to merchants.id)
+                    const { data: mRows } = await supabase
+                        .from('merchants')
+                        .select('id, merchant_id, dba_name, agent_id, enrollment_date, account_status')
+                        .in('merchant_id', p49New.map(r => r.merchant_id));
+                    if (!mRows || !mRows.length) return;
+
+                    const resolveTpl = (tpl, csv, m) => (tpl || '')
+                        .replace(/\{\{dba_name\}\}/gi,        m.dba_name       || csv.dba_name       || '—')
+                        .replace(/\{\{mid\}\}/gi,             m.merchant_id    || '—')
+                        .replace(/\{\{agent_id\}\}/gi,        m.agent_id       || csv.agent_id       || '—')
+                        .replace(/\{\{partner_name\}\}/gi,    csv.partner_name || csv.agent_name     || '—')
+                        .replace(/\{\{enrollment_date\}\}/gi, m.enrollment_date || csv.enrollment_date || '—')
+                        .replace(/\{\{account_status\}\}/gi,  m.account_status || csv.status         || '—');
+
+                    const tasks = mRows.map(m => {
+                        const csv = p49New.find(r => r.merchant_id === m.merchant_id) || {};
+                        return {
+                            title:       resolveTpl(cfg.task_title_template, csv, m),
+                            body:        resolveTpl(cfg.task_description_template, csv, m),
+                            priority:    cfg.priority || 'Normal',
+                            status:      'Pending',
+                            merchant_id: m.id,
+                            assigned_to: cfg.assignee_id || null,
+                            created_by:  _autoSession.userid,
+                            source:      'prime49_auto'
+                        };
+                    });
+
+                    const { error: taskErr } = await supabase.from('merchant_tasks').insert(tasks);
+                    if (taskErr) console.warn('[prime49-auto] Task insert failed:', taskErr.message);
+                    else console.log(`[prime49-auto] Created ${tasks.length} task(s) for new Prime49 merchants`);
+                } catch (autoErr) {
+                    console.warn('[prime49-auto] Error:', autoErr.message);
+                }
+            })();
         }
 
         return res.status(200).json({
