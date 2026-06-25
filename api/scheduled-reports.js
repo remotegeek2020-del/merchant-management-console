@@ -278,6 +278,176 @@ function buildOpsEmail(data) {
 </div></body></html>`;
 }
 
+// ── PRIME49 EMAIL ─────────────────────────────────────────────────────────────
+
+function buildPrime49Email(data) {
+    const {
+        date, totalPartners, totalMerchants, totalVolume30d,
+        totalNetResidual, totalPptResidual, totalAgentResidual,
+        newIdsThisWeek, newMerchantsThisWeek,
+        partnerBreakdown, newIdDetails, newMerchantDetails
+    } = data;
+
+    const fmt2 = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
+
+    const partnerRows = (partnerBreakdown || []).map((p, i) => `
+        <tr style="border-bottom:1px solid #f1f5f9;${i % 2 === 0 ? '' : 'background:#fafafa;'}">
+            <td style="padding:9px 12px;font-weight:700;color:#002d5a;font-size:13px;">${p.partner_name}</td>
+            <td style="padding:9px 12px;font-size:11px;color:#64748b;font-family:monospace;">${p.id_strings}</td>
+            <td style="padding:9px 12px;text-align:center;font-weight:700;color:#475569;font-size:12px;">${p.merchant_count}</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:700;color:#002d5a;font-size:12px;">${fmt2(p.volume_30d)}</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:700;color:#059669;font-size:13px;">${fmt2(p.agent_payout)}</td>
+            <td style="padding:9px 12px;text-align:right;font-weight:600;color:#004990;font-size:12px;">${fmt2(p.ppt_share)}</td>
+            <td style="padding:9px 12px;text-align:center;font-size:11px;color:#64748b;">${p.rev_share}%</td>
+        </tr>`).join('');
+
+    const newIdRows = (newIdDetails || []).map(r => `
+        <tr style="border-bottom:1px solid #fef3c7;">
+            <td style="padding:7px 12px;font-family:monospace;font-size:12px;color:#92400e;font-weight:700;">${r.id_string}</td>
+            <td style="padding:7px 12px;color:#475569;font-size:12px;">${r.agent_name || '—'}</td>
+            <td style="padding:7px 12px;color:#64748b;font-size:11px;">${r.agent_company || '—'}</td>
+            <td style="padding:7px 12px;color:#64748b;font-size:11px;">${r.rev_share}%</td>
+            <td style="padding:7px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.created_at)}</td>
+        </tr>`).join('');
+
+    const newMerchantRows = (newMerchantDetails || []).map(r => `
+        <tr style="border-bottom:1px solid #f0fdf4;">
+            <td style="padding:7px 12px;font-weight:700;color:#002d5a;font-size:12px;">${r.dba_name}</td>
+            <td style="padding:7px 12px;font-family:monospace;font-size:11px;color:#64748b;">${r.merchant_id}</td>
+            <td style="padding:7px 12px;font-family:monospace;font-size:11px;color:#0369a1;">${r.agent_id}</td>
+            <td style="padding:7px 12px;color:#475569;font-size:12px;">${r.partner_name || '—'}</td>
+            <td style="padding:7px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.enrollment_date)}</td>
+        </tr>`).join('');
+
+    const kpi = (label, val, sub, accent) => `
+        <div style="padding:18px 14px;border-right:1px solid #e2e8f0;text-align:center;">
+            <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${label}</div>
+            <div style="font-size:18px;font-weight:800;color:${accent || '#002d5a'};">${val}</div>
+            ${sub ? `<div style="font-size:10px;color:#64748b;font-weight:600;margin-top:2px;">${sub}</div>` : ''}
+        </div>`;
+
+    return `<!DOCTYPE html><html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+<div style="max-width:720px;margin:32px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+    <!-- HEADER -->
+    <div style="background:linear-gradient(135deg,#92400e 0%,#d97706 100%);padding:32px 40px;">
+        <div style="color:rgba(255,255,255,0.75);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">💎 Prime49 Program</div>
+        <div style="color:white;font-size:26px;font-weight:800;letter-spacing:-0.5px;">Residuals Report</div>
+        <div style="color:rgba(255,255,255,0.75);font-size:13px;margin-top:4px;">${date}</div>
+    </div>
+
+    <!-- KPI STRIP -->
+    <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:0;border-bottom:1px solid #e2e8f0;">
+        ${kpi('Partners', num(totalPartners), null, '#0369a1')}
+        ${kpi('Merchants', num(totalMerchants), 'approved/collections', '#002d5a')}
+        ${kpi('30-Day Volume', fmt(totalVolume30d), null, '#002d5a')}
+        ${kpi('Net Residual Pool', fmt(totalNetResidual), null, '#334155')}
+        ${kpi('PPT Share', fmt2(totalPptResidual), '50/50 split', '#004990')}
+        ${kpi('Partner Payouts', fmt2(totalAgentResidual), 'total owed', '#059669')}
+    </div>
+
+    <!-- THIS WEEK BADGES -->
+    <div style="padding:16px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
+        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">This Week</div>
+        <div style="display:flex;gap:12px;flex-wrap:wrap;">
+            <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#92400e;">${newIdsThisWeek}</span>
+                <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 IDs</span>
+            </div>
+            <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#059669;">${newMerchantsThisWeek}</span>
+                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- PARTNER BREAKDOWN TABLE -->
+    <div style="padding:24px 24px 0;">
+        <div style="font-size:14px;font-weight:800;color:#002d5a;margin-bottom:14px;">Partner Residual Breakdown</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+            <thead>
+                <tr style="background:#f8fafc;">
+                    <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Partner</th>
+                    <th style="padding:9px 12px;text-align:left;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Agent ID(s)</th>
+                    <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Merchants</th>
+                    <th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">30D Volume</th>
+                    <th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#059669;text-transform:uppercase;letter-spacing:0.5px;">Partner Payout</th>
+                    <th style="padding:9px 12px;text-align:right;font-size:10px;font-weight:700;color:#004990;text-transform:uppercase;letter-spacing:0.5px;">PPT Share</th>
+                    <th style="padding:9px 12px;text-align:center;font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;">Rev%</th>
+                </tr>
+            </thead>
+            <tbody>${partnerRows || '<tr><td colspan="7" style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No active prime49 merchants</td></tr>'}</tbody>
+            <tfoot>
+                <tr style="background:#1e293b;">
+                    <td colspan="2" style="padding:10px 12px;font-size:11px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;">Grand Total</td>
+                    <td style="padding:10px 12px;text-align:center;font-weight:800;color:white;font-size:13px;">${num(totalMerchants)}</td>
+                    <td style="padding:10px 12px;text-align:right;font-weight:800;color:white;font-size:13px;">${fmt(totalVolume30d)}</td>
+                    <td style="padding:10px 12px;text-align:right;font-weight:800;color:#6ee7b7;font-size:13px;">${fmt2(totalAgentResidual)}</td>
+                    <td style="padding:10px 12px;text-align:right;font-weight:800;color:#93c5fd;font-size:13px;">${fmt2(totalPptResidual)}</td>
+                    <td></td>
+                </tr>
+            </tfoot>
+        </table>
+    </div>
+
+    ${newIdsThisWeek > 0 ? `
+    <!-- NEW IDs THIS WEEK -->
+    <div style="padding:24px 24px 0;">
+        <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:10px;">💎 New Prime49 IDs This Week (${newIdsThisWeek})</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #fde68a;border-radius:10px;overflow:hidden;">
+            <thead>
+                <tr style="background:#fffbeb;">
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Agent ID</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Partner</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Company</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Rev%</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#92400e;text-transform:uppercase;">Added</th>
+                </tr>
+            </thead>
+            <tbody>${newIdRows}</tbody>
+        </table>
+    </div>` : ''}
+
+    ${newMerchantsThisWeek > 0 ? `
+    <!-- NEW MERCHANTS THIS WEEK -->
+    <div style="padding:24px 24px 0;">
+        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:10px;">🏪 New Merchants on Prime49 This Week (${newMerchantsThisWeek})</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #bbf7d0;border-radius:10px;overflow:hidden;">
+            <thead>
+                <tr style="background:#f0fdf4;">
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">DBA Name</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">MID</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Agent ID</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Partner</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Enrolled</th>
+                </tr>
+            </thead>
+            <tbody>${newMerchantRows}</tbody>
+        </table>
+    </div>` : ''}
+
+    <!-- CALCULATION METHODOLOGY -->
+    <div style="margin:24px 24px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
+        <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:8px;">How Residuals Are Calculated</div>
+        <div style="font-size:11px;color:#475569;line-height:1.7;">
+            <b>Step 1:</b> Agent Share = 30-Day Volume × <b>1.5%</b> (Prime49 rate)<br>
+            <b>Step 2:</b> Net Residual Pool = Agent Share ÷ Partner Rev% (grossed up)<br>
+            <b>Step 3:</b> Partner Payout = Net Residual × Partner Rev% &nbsp;|&nbsp; PPT Share = Net Residual × (100% − Rev%)<br>
+            <b>Standard split:</b> 50/50 unless a custom rev share is set on the ID.
+        </div>
+    </div>
+
+    <!-- FOOTER -->
+    <div style="padding:24px 40px;margin-top:24px;border-top:1px solid #f1f5f9;text-align:center;">
+        <div style="font-size:11px;color:#94a3b8;">PayProTec Internal Report · Prime49 Residuals · ${date}</div>
+        <div style="font-size:10px;color:#cbd5e1;margin-top:4px;">This is an automated report from the PayProTec Console.</div>
+    </div>
+
+</div></body></html>`;
+}
+
 // ── DATA BUILDERS ────────────────────────────────────────────────────────────
 
 async function buildPartnersData() {
@@ -341,6 +511,120 @@ function buildPartnersDataFromCache(cache, dateStr, leaderboard = []) {
 }
 
 
+async function buildPrime49Data() {
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Week start (Monday 00:00 UTC)
+    const weekStart = new Date(today);
+    weekStart.setUTCHours(0, 0, 0, 0);
+    weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
+    const weekStartIso = weekStart.toISOString();
+
+    // 1. Fetch all approved prime49 merchants with volume
+    const { data: merchants, error: mErr } = await supabase
+        .from('merchant_portfolio_view')
+        .select('merchant_id, dba_name, volume_30_day, agent_id, partner_full_name, company_display_name, enrollment_date, account_status')
+        .eq('is_prime49', true)
+        .in('account_status', ['Approved', 'Approved - Collections'])
+        .limit(10000);
+    if (mErr) throw mErr;
+
+    // 2. Fetch rev_share for all agent IDs in the result
+    const agentIds = [...new Set((merchants || []).map(m => m.agent_id).filter(Boolean))];
+    let revShareMap = {};
+    if (agentIds.length) {
+        const { data: aiData } = await supabase
+            .from('agent_identifiers').select('id_string, rev_share').in('id_string', agentIds).limit(10000);
+        (aiData || []).forEach(ai => { revShareMap[ai.id_string] = ai.rev_share; });
+    }
+
+    // 3. New Prime49 IDs added this week
+    const { data: newIds } = await supabase
+        .from('agent_identifiers')
+        .select('id_string, rev_share, agent_id, created_at')
+        .eq('prime49', true)
+        .gte('created_at', weekStartIso)
+        .limit(500);
+
+    // Enrich new IDs with agent/company names
+    const newIdAgentIds = [...new Set((newIds || []).map(r => r.agent_id).filter(Boolean))];
+    let newIdAgentMap = {};
+    if (newIdAgentIds.length) {
+        const { data: agRows } = await supabase.from('agents').select('id, agent_name, company_id').in('id', newIdAgentIds);
+        const coIds = [...new Set((agRows || []).map(a => a.company_id).filter(Boolean))];
+        let coMap = {};
+        if (coIds.length) {
+            const { data: coRows } = await supabase.from('companies').select('id, company_name').in('id', coIds);
+            (coRows || []).forEach(c => { coMap[c.id] = c.company_name; });
+        }
+        (agRows || []).forEach(a => { newIdAgentMap[a.id] = { agent_name: a.agent_name, agent_company: coMap[a.company_id] || '—' }; });
+    }
+
+    const newIdDetails = (newIds || []).map(r => {
+        const ag = newIdAgentMap[r.agent_id] || {};
+        const revPct = parseFloat(String(r.rev_share || '50').replace(/%/g, '')) || 50;
+        return { id_string: r.id_string, agent_name: ag.agent_name || '—', agent_company: ag.agent_company || '—', rev_share: revPct, created_at: r.created_at };
+    });
+
+    // 4. New merchants enrolled this week on prime49 IDs
+    const newMerchantDetails = (merchants || [])
+        .filter(m => m.enrollment_date && m.enrollment_date >= weekStartIso.slice(0, 10))
+        .map(m => ({ dba_name: m.dba_name, merchant_id: m.merchant_id, agent_id: m.agent_id, partner_name: m.partner_full_name, enrollment_date: m.enrollment_date }));
+
+    // 5. Build per-partner aggregates
+    const partnerMap = {};
+    (merchants || []).forEach(m => {
+        const key = m.partner_full_name || '—';
+        if (!partnerMap[key]) partnerMap[key] = { partner_name: key, ids: new Set(), merchant_count: 0, volume_30d: 0, agent_payout: 0, ppt_share: 0, rev_shares: [] };
+        const g = partnerMap[key];
+        if (m.agent_id) g.ids.add(m.agent_id);
+        const vol = parseFloat(m.volume_30_day) || 0;
+        const rawRev = revShareMap[m.agent_id];
+        const revPct = rawRev ? parseFloat(String(rawRev).replace(/%/g, '')) : 50;
+        const agentShare = vol * 0.015;
+        const netResid = agentShare * 2;
+        g.merchant_count++;
+        g.volume_30d   += vol;
+        g.agent_payout += netResid * (revPct / 100);
+        g.ppt_share    += netResid * (1 - revPct / 100);
+        g.rev_shares.push(revPct);
+    });
+
+    const partnerBreakdown = Object.values(partnerMap)
+        .sort((a, b) => b.agent_payout - a.agent_payout)
+        .map(g => ({
+            partner_name:  g.partner_name,
+            id_strings:    [...g.ids].join(', '),
+            merchant_count: g.merchant_count,
+            volume_30d:    g.volume_30d,
+            agent_payout:  g.agent_payout,
+            ppt_share:     g.ppt_share,
+            rev_share:     g.rev_shares.length ? Math.round(g.rev_shares.reduce((a, b) => a + b, 0) / g.rev_shares.length) : 50
+        }));
+
+    // 6. Totals
+    const totalVolume30d    = partnerBreakdown.reduce((s, p) => s + p.volume_30d, 0);
+    const totalAgentResidual = partnerBreakdown.reduce((s, p) => s + p.agent_payout, 0);
+    const totalPptResidual  = partnerBreakdown.reduce((s, p) => s + p.ppt_share, 0);
+    const totalNetResidual  = totalAgentResidual + totalPptResidual;
+
+    return {
+        date: dateStr,
+        totalPartners:       partnerBreakdown.length,
+        totalMerchants:      (merchants || []).length,
+        totalVolume30d,
+        totalNetResidual,
+        totalPptResidual,
+        totalAgentResidual,
+        newIdsThisWeek:      (newIds || []).length,
+        newMerchantsThisWeek: newMerchantDetails.length,
+        partnerBreakdown,
+        newIdDetails,
+        newMerchantDetails
+    };
+}
+
 async function buildOpsData() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
@@ -365,6 +649,10 @@ async function sendReport(reportType, trigger = 'cron') {
             reportData = await buildOpsData();
             html = buildOpsEmail(reportData);
             subject = `📦 Operations Report — ${reportData.date}`;
+        } else if (reportType === 'prime49') {
+            reportData = await buildPrime49Data();
+            html = buildPrime49Email(reportData);
+            subject = `💎 Prime49 Residuals Report — ${reportData.date}`;
         } else {
             reportData = await buildPartnersData();
             html = buildPartnersEmail(reportData);
