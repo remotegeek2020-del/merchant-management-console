@@ -339,14 +339,18 @@ function buildPrime49Email(data) {
             <td style="padding:7px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.created_at)}</td>
         </tr>`).join('');
 
-    const newMerchantRows = (newMerchantDetails || []).map(r => `
+    const newMerchantRows = (newMerchantDetails || []).map(r => {
+        const stColor = r.account_status === 'Approved' ? '#16a34a' : r.account_status === 'Approved - Collections' ? '#d97706' : '#64748b';
+        return `
         <tr style="border-bottom:1px solid #f0fdf4;">
-            <td style="padding:7px 12px;font-weight:700;color:#002d5a;font-size:12px;">${r.dba_name}</td>
-            <td style="padding:7px 12px;font-family:monospace;font-size:11px;color:#64748b;">${r.merchant_id}</td>
-            <td style="padding:7px 12px;font-family:monospace;font-size:11px;color:#0369a1;">${r.agent_id}</td>
-            <td style="padding:7px 12px;color:#475569;font-size:12px;">${r.partner_name || '—'}</td>
-            <td style="padding:7px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.enrollment_date)}</td>
-        </tr>`).join('');
+            <td style="padding:8px 12px;font-weight:700;color:#002d5a;font-size:13px;">${r.dba_name || '—'}</td>
+            <td style="padding:8px 12px;font-family:monospace;font-size:12px;color:#0369a1;font-weight:700;">${r.merchant_id || '—'}</td>
+            <td style="padding:8px 12px;font-family:monospace;font-size:11px;color:#64748b;">${r.agent_id || '—'}</td>
+            <td style="padding:8px 12px;color:#475569;font-size:12px;">${r.partner_name || '—'}</td>
+            <td style="padding:8px 12px;font-size:11px;font-weight:700;color:${stColor};">${r.account_status || '—'}</td>
+            <td style="padding:8px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.enrollment_date)}</td>
+        </tr>`;
+    }).join('');
 
     const kpi = (label, val, sub, accent) => `
         <div style="padding:18px 14px;border-right:1px solid #e2e8f0;text-align:center;">
@@ -377,9 +381,9 @@ function buildPrime49Email(data) {
         ${kpi('Partner Payouts', fmt2(totalAgentResidual), 'total owed', '#059669')}
     </div>
 
-    <!-- THIS WEEK BADGES -->
+    <!-- DAILY ACTIVITY BADGES -->
     <div style="padding:16px 24px;background:#fffbeb;border-bottom:1px solid #fde68a;display:flex;gap:20px;align-items:center;flex-wrap:wrap;">
-        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">This Week</div>
+        <div style="font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:0.5px;">Since Yesterday</div>
         <div style="display:flex;gap:12px;flex-wrap:wrap;">
             <div style="background:white;border:1px solid #fde68a;border-radius:8px;padding:6px 14px;">
                 <span style="font-size:18px;font-weight:900;color:#92400e;">${newIdsThisWeek}</span>
@@ -387,7 +391,7 @@ function buildPrime49Email(data) {
             </div>
             <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
                 <span style="font-size:18px;font-weight:900;color:#059669;">${newMerchantsThisWeek}</span>
-                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants</span>
+                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants Enrolled</span>
             </div>
         </div>
     </div>
@@ -422,9 +426,10 @@ function buildPrime49Email(data) {
     </div>
 
     ${newIdsThisWeek > 0 ? `
-    <!-- NEW IDs THIS WEEK -->
+    <!-- NEW IDs SINCE YESTERDAY -->
     <div style="padding:24px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:10px;">💎 New Prime49 IDs This Week (${newIdsThisWeek})</div>
+        <div style="font-size:14px;font-weight:800;color:#92400e;margin-bottom:4px;">💎 New Prime49 IDs Since Yesterday (${newIdsThisWeek})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Agent identifiers flagged as Prime49 added in the last 24 hours</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #fde68a;border-radius:10px;overflow:hidden;">
             <thead>
                 <tr style="background:#fffbeb;">
@@ -440,9 +445,10 @@ function buildPrime49Email(data) {
     </div>` : ''}
 
     ${newMerchantsThisWeek > 0 ? `
-    <!-- NEW MERCHANTS THIS WEEK -->
+    <!-- NEW MERCHANTS SINCE YESTERDAY -->
     <div style="padding:24px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:10px;">🏪 New Merchants on Prime49 This Week (${newMerchantsThisWeek})</div>
+        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:4px;">🏪 Newly Enrolled Merchants (${newMerchantsThisWeek})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Prime49 merchants enrolled since yesterday — existing partners only</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #bbf7d0;border-radius:10px;overflow:hidden;">
             <thead>
                 <tr style="background:#f0fdf4;">
@@ -450,12 +456,18 @@ function buildPrime49Email(data) {
                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">MID</th>
                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Agent ID</th>
                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Partner</th>
+                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Status</th>
                     <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Enrolled</th>
                 </tr>
             </thead>
             <tbody>${newMerchantRows}</tbody>
         </table>
-    </div>` : ''}
+    </div>` : `
+    <div style="padding:24px 24px 0;">
+        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 20px;text-align:center;">
+            <div style="font-size:13px;color:#16a34a;font-weight:700;">✓ No new merchant enrollments since yesterday</div>
+        </div>
+    </div>`}
 
     <!-- CALCULATION METHODOLOGY -->
     <div style="margin:24px 24px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
@@ -585,11 +597,12 @@ async function buildPrime49Data() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Week start (Monday 00:00 UTC)
-    const weekStart = new Date(today);
-    weekStart.setUTCHours(0, 0, 0, 0);
-    weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
-    const weekStartIso = weekStart.toISOString();
+    // Daily cutoff: yesterday midnight UTC — captures a full prior day regardless of send time
+    const yesterday = new Date(today);
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    yesterday.setUTCHours(0, 0, 0, 0);
+    const sinceIso = yesterday.toISOString();
+    const sinceDate = sinceIso.slice(0, 10); // 'YYYY-MM-DD' for date-field comparison
 
     // 1. Fetch all approved prime49 merchants with volume
     const { data: merchants, error: mErr } = await supabase
@@ -609,12 +622,12 @@ async function buildPrime49Data() {
         (aiData || []).forEach(ai => { revShareMap[ai.id_string] = ai.rev_share; });
     }
 
-    // 3. New Prime49 IDs added this week
+    // 3. New Prime49 IDs added since yesterday (daily window)
     const { data: newIds } = await supabase
         .from('agent_identifiers')
         .select('id_string, rev_share, agent_id, created_at')
         .eq('prime49', true)
-        .gte('created_at', weekStartIso)
+        .gte('created_at', sinceIso)
         .limit(500);
 
     // Enrich new IDs with agent/company names
@@ -637,10 +650,18 @@ async function buildPrime49Data() {
         return { id_string: r.id_string, agent_name: ag.agent_name || '—', agent_company: ag.agent_company || '—', rev_share: revPct, created_at: r.created_at };
     });
 
-    // 4. New merchants enrolled this week on prime49 IDs
+    // 4. New merchants enrolled since yesterday on prime49 IDs (for existing partners)
     const newMerchantDetails = (merchants || [])
-        .filter(m => m.enrollment_date && m.enrollment_date >= weekStartIso.slice(0, 10))
-        .map(m => ({ dba_name: m.dba_name, merchant_id: m.merchant_id, agent_id: m.agent_id, partner_name: m.partner_full_name, enrollment_date: m.enrollment_date }));
+        .filter(m => m.enrollment_date && m.enrollment_date >= sinceDate)
+        .sort((a, b) => (b.enrollment_date || '').localeCompare(a.enrollment_date || ''))
+        .map(m => ({
+            dba_name:       m.dba_name,
+            merchant_id:    m.merchant_id,
+            agent_id:       m.agent_id,
+            partner_name:   m.partner_full_name,
+            account_status: m.account_status,
+            enrollment_date: m.enrollment_date
+        }));
 
     // 5. Build per-partner aggregates
     const partnerMap = {};
@@ -722,7 +743,7 @@ async function sendReport(reportType, trigger = 'cron') {
         } else if (reportType === 'prime49') {
             reportData = await buildPrime49Data();
             html = buildPrime49Email(reportData);
-            subject = `💎 Prime49 Residuals Report — ${reportData.date}`;
+            subject = `💎 Prime49 Daily Update — ${reportData.date}`;
         } else {
             reportData = await buildPartnersData();
             html = buildPartnersEmail(reportData);
