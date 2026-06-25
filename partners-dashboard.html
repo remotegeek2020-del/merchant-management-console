@@ -1414,21 +1414,26 @@ async function submitOnboarding() {
         }</div>`;
     }
 
-    let _activeCardEl = null;
+    let _activeCardPid = null;
     function _flipOpen(pid, cardEl) {
         if (typeof _bulkMode !== 'undefined' && _bulkMode) { toggleCardSelect(pid, null); return; }
-        _activeCardEl = cardEl;
+        _activeCardPid = pid;
         cardEl.classList.add('flipping-out');
         cardEl.addEventListener('animationend', () => {
             cardEl.classList.remove('flipping-out');
-            cardEl.classList.add('card-gone');
+            // Mark by pid so re-renders don't lose the reference
+            const live = document.querySelector(`.partner-card[data-pid="${pid}"]`);
+            if (live) live.classList.add('card-gone');
         }, { once: true });
         setTimeout(() => openPartnerDetails(pid), 280);
     }
     function _flipBack() {
-        if (!_activeCardEl) return;
-        const el = _activeCardEl;
-        _activeCardEl = null;
+        if (!_activeCardPid) return;
+        const pid = _activeCardPid;
+        _activeCardPid = null;
+        // Always look up the live DOM node — handles grid re-renders
+        const el = document.querySelector(`.partner-card[data-pid="${pid}"]`);
+        if (!el) return;
         el.classList.remove('card-gone');
         el.classList.add('flipping-in');
         el.addEventListener('animationend', () => el.classList.remove('flipping-in'), { once: true });
@@ -2215,10 +2220,9 @@ async function submitOnboarding() {
         branchIdStrings = [...new Set(branchIdStrings)];
         const hlLink = p.hl_id ? `https://app.mypayprotec.com/v2/location/dfg08aPdtlQ1RhIKkCnN/contacts/detail/${p.hl_id}` : null;
 
-        Swal.fire({
+        const _partnerSwal = Swal.fire({
             title: `<div style="text-align:left; font-weight:800; color:#002d5a;">${p.name}</div>`,
             width: '900px', showConfirmButton: false, showCloseButton: true,
-            didClose: _flipBack,
             didOpen: function() {
                 // Attach tab click handlers after modal renders
                 var tabBar = document.getElementById('pp-tab-bar');
@@ -2437,6 +2441,9 @@ async function submitOnboarding() {
                 });
             }
         } catch (err) { console.error("Error loading partner stats:", err); }
+
+        // Flip card back when THIS specific modal closes (not sub-dialogs like trend/edit)
+        _partnerSwal.then(() => _flipBack());
 
     };
 
