@@ -1285,6 +1285,84 @@ if (action === 'get_merchant_data') {
         ip_address: req.headers['x-forwarded-for'] || 'Internal'
     }]);
 
+    // ── PRIME49 TASK AUTOMATION: fire-and-forget on prime49 flag change ────────
+    if (!error && oldData && oldData.prime49 !== prime49 && oldData.id_string) {
+        const _idString = oldData.id_string;
+        const _session  = session;
+
+        if (prime49 === true) {
+            // Converted TO prime49 → create tasks for ALL merchants on this ID
+            (async () => {
+                try {
+                    const { data: cfg } = await supabase
+                        .from('prime49_task_automation_config')
+                        .select('*').eq('id', 1).maybeSingle();
+                    if (!cfg || !cfg.enabled) return;
+
+                    const { data: mRows } = await supabase
+                        .from('merchants')
+                        .select('id, merchant_id, dba_name, agent_id, agent_name, enrollment_date, account_status')
+                        .eq('agent_id', _idString)
+                        .limit(5000);
+                    if (!mRows || !mRows.length) return;
+
+                    const tpl = (t, m) => (t || '')
+                        .replace(/\{\{dba_name\}\}/gi,        m.dba_name        || '—')
+                        .replace(/\{\{mid\}\}/gi,             m.merchant_id     || '—')
+                        .replace(/\{\{agent_id\}\}/gi,        m.agent_id        || '—')
+                        .replace(/\{\{partner_name\}\}/gi,    m.agent_name      || '—')
+                        .replace(/\{\{enrollment_date\}\}/gi, m.enrollment_date || '—')
+                        .replace(/\{\{account_status\}\}/gi,  m.account_status  || '—');
+
+                    const tasks = mRows.map(m => ({
+                        title:       tpl(cfg.task_title_template, m),
+                        body:        tpl(cfg.task_description_template, m),
+                        priority:    cfg.priority || 'Normal',
+                        status:      'Pending',
+                        merchant_id: m.id,
+                        assigned_to: cfg.assignee_id || null,
+                        created_by:  _session.userid,
+                        source:      'prime49_auto'
+                    }));
+
+                    const CHUNK = 500;
+                    for (let i = 0; i < tasks.length; i += CHUNK) {
+                        const { error: tErr } = await supabase.from('merchant_tasks').insert(tasks.slice(i, i + CHUNK));
+                        if (tErr) console.warn('[prime49-auto] Task insert error:', tErr.message);
+                    }
+                    console.log(`[prime49-auto] ID ${_idString} → prime49: created ${tasks.length} task(s)`);
+                } catch (e) { console.warn('[prime49-auto] Conversion error:', e.message); }
+            })();
+
+        } else {
+            // Reverted FROM prime49 → delete all Pending auto-created tasks for this ID's merchants
+            (async () => {
+                try {
+                    const { data: mRows } = await supabase
+                        .from('merchants')
+                        .select('id')
+                        .eq('agent_id', _idString)
+                        .limit(5000);
+                    if (!mRows || !mRows.length) return;
+
+                    const uuids = mRows.map(m => m.id);
+                    const CHUNK = 500;
+                    let deleted = 0;
+                    for (let i = 0; i < uuids.length; i += CHUNK) {
+                        const { count } = await supabase
+                            .from('merchant_tasks')
+                            .delete({ count: 'exact' })
+                            .in('merchant_id', uuids.slice(i, i + CHUNK))
+                            .eq('source', 'prime49_auto')
+                            .eq('status', 'Pending');
+                        deleted += (count || 0);
+                    }
+                    console.log(`[prime49-auto] ID ${_idString} → normal: deleted ${deleted} pending task(s)`);
+                } catch (e) { console.warn('[prime49-auto] Revert error:', e.message); }
+            })();
+        }
+    }
+
     return res.status(200).json({ success: !error, message: error?.message });
 }
 
