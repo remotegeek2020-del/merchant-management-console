@@ -19,7 +19,8 @@ function buildPartnersEmail(data) {
     const {
         date, totalMerchants, approvedMerchants, totalVolume30d, totalVolume90d,
         newMerchantsYesterday, newMerchantsThisWeek, approvedThisWeek,
-        newAgentsThisWeek, topPartners, topSubmittingPartners, statusBreakdown
+        newAgentsThisWeek, topPartners, topSubmittingPartners, statusBreakdown,
+        newMerchantsDetail
     } = data;
 
     const topPartnersRows = (topPartners || []).slice(0, 10).map((p, i) => `
@@ -40,6 +41,18 @@ function buildPartnersEmail(data) {
             <td style="padding:8px 12px;color:#334155;font-size:12px;text-align:right;">${num(p.submitted)}</td>
             <td style="padding:8px 12px;color:#16a34a;font-weight:700;font-size:12px;text-align:right;">${num(p.approved)}</td>
             <td style="padding:8px 12px;font-weight:700;font-size:12px;text-align:right;color:${rateColor};">${rate}%</td>
+        </tr>`;
+    }).join('');
+
+    const newMerchantDetailRows = (newMerchantsDetail || []).map(m => {
+        const statusColor = m.account_status === 'Approved' ? '#16a34a' : m.account_status === 'Pipeline' ? '#0369a1' : '#94a3b8';
+        return `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:7px 12px;font-size:12px;font-weight:600;color:#002d5a;">${m.dba_name || '—'}</td>
+            <td style="padding:7px 12px;font-size:11px;font-family:monospace;color:#0369a1;">${m.merchant_id || '—'}</td>
+            <td style="padding:7px 12px;font-size:11px;color:#475569;">${m.agent_name || '—'}</td>
+            <td style="padding:7px 12px;font-size:11px;font-weight:700;color:${statusColor};">${m.account_status || '—'}</td>
+            <td style="padding:7px 12px;font-size:11px;color:#94a3b8;">${dtFmt(m.enrollment_date)}</td>
         </tr>`;
     }).join('');
 
@@ -97,7 +110,7 @@ function buildPartnersEmail(data) {
 
     <div style="padding:24px 32px 0;">
         <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">Partner Activity This Week — Merchant Submissions</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Partners who submitted the most merchants in the last 7 days</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Partners who enrolled the most merchants since Monday (live data)</div>
         <table style="width:100%;border-collapse:collapse;">
             <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
                 <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">#</th>
@@ -109,6 +122,22 @@ function buildPartnersEmail(data) {
             <tbody>${weeklyPartnerRows || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No submissions this week</td></tr>'}</tbody>
         </table>
     </div>
+
+    ${(newMerchantsDetail || []).length > 0 ? `
+    <div style="padding:20px 32px 0;">
+        <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">🏪 New Merchants This Week (${(newMerchantsDetail || []).length})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Merchants enrolled since Monday — most recent first</div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">DBA Name</th>
+                <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">MID</th>
+                <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Agent</th>
+                <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Status</th>
+                <th style="padding:7px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Enrolled</th>
+            </tr></thead>
+            <tbody>${newMerchantDetailRows}</tbody>
+        </table>
+    </div>` : ''}
 
     <div style="padding:24px 32px 0;">
         <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">Top Partners — 30-Day Volume</div>
@@ -159,7 +188,7 @@ function buildOpsEmail(data) {
     const depRows = (dep.recent || []).map(d => `
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:8px 12px;font-size:11px;color:#64748b;">${d.deployment_id || '—'}</td>
-            <td style="padding:8px 12px;font-size:12px;font-weight:600;color:#002d5a;">${d.dba_name || '—'}</td>
+            <td style="padding:8px 12px;font-size:12px;font-weight:600;color:#002d5a;">${d.dba_name || '—'}<br><span style="font-size:10px;font-family:monospace;color:#64748b;font-weight:400;">MID: ${d.merchant_id || '—'}</span></td>
             <td style="padding:8px 12px;font-size:11px;color:#334155;">${d.terminal_type || '—'}</td>
             <td style="padding:8px 12px;font-size:11px;color:#64748b;">${d.purchase_type || '—'}</td>
             <td style="padding:8px 12px;font-size:11px;">${statusDot(d.status)}${d.status}</td>
@@ -168,7 +197,7 @@ function buildOpsEmail(data) {
     const retRows = (ret.recent || []).map(r => `
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:8px 12px;font-size:11px;color:#64748b;">${r.return_id || '—'}</td>
-            <td style="padding:8px 12px;font-size:12px;font-weight:600;color:#002d5a;">${r.dba_name || '—'}</td>
+            <td style="padding:8px 12px;font-size:12px;font-weight:600;color:#002d5a;">${r.dba_name || '—'}<br><span style="font-size:10px;font-family:monospace;color:#64748b;font-weight:400;">MID: ${r.merchant_id || '—'}</span></td>
             <td style="padding:8px 12px;font-size:11px;color:#334155;">${r.terminal_type || '—'}</td>
             <td style="padding:8px 12px;font-size:11px;color:#64748b;">${r.return_reason || '—'}</td>
             <td style="padding:8px 12px;font-size:11px;">${statusDot(r.status)}${r.status}</td>
@@ -454,6 +483,12 @@ async function buildPartnersData() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
+    // Week start = Monday 00:00 UTC
+    const weekStart = new Date(today);
+    weekStart.setUTCHours(0, 0, 0, 0);
+    weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
+    const weekStartDate = weekStart.toISOString().slice(0, 10); // 'YYYY-MM-DD'
+
     // Read directly from the cache table — one fast indexed row read.
     // Calling get_merchant_aggregate_stats() via RPC triggers a full cache rebuild
     // when the cache is cold, which exceeds PostgREST's HTTP-level timeout and kills
@@ -473,9 +508,7 @@ async function buildPartnersData() {
         const { data: fresh } = await supabase
             .from('merchant_aggregate_stats_cache').select('*').eq('id', 1).maybeSingle();
         if (!fresh) throw new Error('Cache still empty after warm-up.');
-        Object.assign(cache ?? {}, fresh);
-        // Use fresh as cache below
-        return buildPartnersDataFromCache(fresh, dateStr);
+        return buildPartnersDataFromCache(fresh, dateStr, [], null, []);
     }
 
     // If stale (> 4 h), trigger background refresh without blocking the send.
@@ -484,16 +517,52 @@ async function buildPartnersData() {
         supabase.rpc('get_merchant_aggregate_stats').then(() => {}).catch(() => {});
     }
 
+    // Fresh live query for this week's merchant enrollments (Monday-based, not rolling 7d).
+    // Used for partner activity accuracy and the new merchants detail table.
+    const { data: weeklyMerchants } = await supabase
+        .from('merchants')
+        .select('merchant_id, dba_name, account_status, agent_name, enrollment_date')
+        .gte('enrollment_date', weekStartDate)
+        .not('agent_name', 'is', null)
+        .neq('agent_name', '')
+        .limit(1000);
+
+    // Build topSubmittingPartners from live data grouped by agent_name
+    const agentWeekMap = {};
+    (weeklyMerchants || []).forEach(m => {
+        if (!agentWeekMap[m.agent_name]) agentWeekMap[m.agent_name] = { agent_name: m.agent_name, submitted: 0, approved: 0 };
+        agentWeekMap[m.agent_name].submitted++;
+        if (m.account_status === 'Approved') agentWeekMap[m.agent_name].approved++;
+    });
+    const freshTopSubmitting = Object.values(agentWeekMap)
+        .sort((a, b) => b.submitted - a.submitted)
+        .slice(0, 10);
+
+    // New merchants detail with MIDs (most recent first, capped at 30 for email length)
+    const newMerchantsDetail = (weeklyMerchants || [])
+        .sort((a, b) => (b.enrollment_date || '').localeCompare(a.enrollment_date || ''))
+        .slice(0, 30)
+        .map(m => ({
+            merchant_id:    m.merchant_id,
+            dba_name:       m.dba_name,
+            agent_name:     m.agent_name,
+            account_status: m.account_status,
+            enrollment_date: m.enrollment_date
+        }));
+
     // Leaderboard is a separate fast query with no cache rebuild side-effect.
     const leaderboardRes = await supabase.rpc('get_partner_leaderboard', { lim: 10 });
 
-    return buildPartnersDataFromCache(cache, dateStr, leaderboardRes.data);
+    return buildPartnersDataFromCache(cache, dateStr, leaderboardRes.data, freshTopSubmitting, newMerchantsDetail);
 }
 
-function buildPartnersDataFromCache(cache, dateStr, leaderboard = []) {
+function buildPartnersDataFromCache(cache, dateStr, leaderboard = [], topSubmittingOverride = null, newMerchantsDetail = []) {
     const sortedBreakdown = Object.fromEntries(
         Object.entries(cache.status_breakdown || {}).sort(([, a], [, b]) => b - a)
     );
+    const topSubmittingPartners = topSubmittingOverride !== null
+        ? topSubmittingOverride
+        : (Array.isArray(cache.top_submitting_partners) ? cache.top_submitting_partners : []);
     return {
         date:                  dateStr,
         totalMerchants:        Number(cache.total            || 0),
@@ -505,8 +574,9 @@ function buildPartnersDataFromCache(cache, dateStr, leaderboard = []) {
         approvedThisWeek:      Number(cache.approved_this_week || 0),
         newAgentsThisWeek:     Number(cache.new_agents_this_week || 0),
         topPartners:           Array.isArray(leaderboard) ? leaderboard : [],
-        topSubmittingPartners: Array.isArray(cache.top_submitting_partners) ? cache.top_submitting_partners : [],
-        statusBreakdown:       sortedBreakdown
+        topSubmittingPartners,
+        statusBreakdown:       sortedBreakdown,
+        newMerchantsDetail
     };
 }
 
