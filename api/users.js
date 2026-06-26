@@ -99,8 +99,10 @@ export default async function handler(req, res) {
             if (action === 'updateBatch') {
                 // Verify caller's role from DB — never trust client-sent performerRole
                 const { data: batchPerformer } = await supabase.from('app_users')
-                    .select('role').eq('userid', session.userid).maybeSingle();
+                    .select('role, email, first_name, last_name').eq('userid', session.userid).maybeSingle();
                 const callerRole = batchPerformer?.role;
+                const performerName = batchPerformer ? `${batchPerformer.first_name || ''} ${batchPerformer.last_name || ''}`.trim() || batchPerformer.email : 'Staff';
+                const performerEmail = batchPerformer?.email || session.userid;
 
                 const ALLOWED_BATCH_FIELDS = [
                     'first_name','last_name','email','role','is_active',
@@ -112,7 +114,16 @@ export default async function handler(req, res) {
                 // Only super_admin can change roles or grant privileged permissions
                 const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets', 'can_manage_retired_units', 'can_edit_legacy_terminal_type'];
 
-                for (const uid of Object.keys(payload)) {
+                // Fetch current values for all target users in one query (for old_value logging)
+                const targetUids = Object.keys(payload);
+                const { data: targetUsers } = await supabase.from('app_users')
+                    .select('userid,email,first_name,last_name,role,is_active,access_admin_dashboard,access_merchants,access_deployments,access_returns,access_inventory,access_partners,access_jarvis,can_delete_tickets,access_sending_reports,can_manage_retired_units,can_edit_legacy_terminal_type')
+                    .in('userid', targetUids);
+                const targetMap = Object.fromEntries((targetUsers || []).map(u => [u.userid, u]));
+
+                const logEntries = [];
+
+                for (const uid of targetUids) {
                     let safePayload = Object.fromEntries(
                         Object.entries(payload[uid]).filter(([k]) => ALLOWED_BATCH_FIELDS.includes(k))
                     );
@@ -133,8 +144,28 @@ export default async function handler(req, res) {
 
                     if (Object.keys(safePayload).length > 0) {
                         await supabase.from('app_users').update(safePayload).eq('userid', uid);
+                        const targetUser = targetMap[uid];
+                        const targetName = targetUser ? `${targetUser.first_name || ''} ${targetUser.last_name || ''}`.trim() || targetUser.email : uid;
+                        const oldValues = {}, newValues = {};
+                        for (const k of Object.keys(safePayload)) {
+                            oldValues[k] = targetUser?.[k] ?? null;
+                            newValues[k] = safePayload[k];
+                        }
+                        logEntries.push({
+                            email: performerEmail,
+                            action: `Staff Permissions Updated by ${performerName} — ${targetName} (${targetUser?.email || uid})`,
+                            status: 'success', category: 'users',
+                            target_id: uid, target_type: 'app_user', severity: 'info',
+                            old_value: oldValues,
+                            new_value: newValues
+                        });
                     }
                 }
+
+                if (logEntries.length > 0) {
+                    supabase.from('activity_logs').insert(logEntries).then(() => {}).catch(() => {});
+                }
+
                 return res.status(200).json({ success: true });
             }
 
