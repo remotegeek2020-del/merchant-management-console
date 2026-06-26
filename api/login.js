@@ -251,7 +251,9 @@ export default async function handler(req, res) {
                 access_jarvis: user.access_jarvis,
                 access_admin_dashboard: user.access_admin_dashboard,
                 access_sending_reports: user.access_sending_reports,
-                can_delete_tickets: user.can_delete_tickets
+                can_delete_tickets: user.can_delete_tickets,
+                can_manage_retired_units: user.can_manage_retired_units,
+                can_edit_legacy_terminal_type: user.can_edit_legacy_terminal_type
             },
             newDeviceToken: generatedDeviceToken
         });
