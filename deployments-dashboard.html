@@ -2611,7 +2611,7 @@ async function renderLegacy() {
                 </td>
                 <td style="font-size:12px;">
                     ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}
-                    ${canEditLegacyTermType ? `<button onclick="legEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,'\\\')}',this)" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>` : ''}
+                    ${canEditLegacyTermType ? `<button data-lid="${r.id}" data-ltype="${(r.terminal_type||'').replace(/"/g,'&quot;')}" onclick="legEditType(this.dataset.lid,this.dataset.ltype,this)" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>` : ''}
                 </td>
                 <td class="hide-mobile" style="font-size:12px;">${vendorMap[r.terminal_type] ? `<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:2px 8px;border-radius:10px;">${vendorMap[r.terminal_type]}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>
                 <td style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
@@ -2670,8 +2670,8 @@ async function legEditType(id, currentType, btnEl) {
         if (btnEl) {
             const typeTd = btnEl.closest('td');
             if (typeTd) {
-                const safeType = (newType || '').replace(/'/g, "\\'");
-                typeTd.innerHTML = `${newType || '<span style="color:#94a3b8;">Unknown</span>'} <button onclick="legEditType('${id}','${safeType}',this)" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>`;
+                const typeLabel = newType || '<span style="color:#94a3b8;">Unknown</span>';
+                typeTd.innerHTML = `${typeLabel} <button data-lid="${id}" data-ltype="${(newType||'').replace(/"/g,'&quot;')}" onclick="legEditType(this.dataset.lid,this.dataset.ltype,this)" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>`;
                 // Update vendor cell (next sibling td with hide-mobile)
                 const vendorTd = typeTd.nextElementSibling;
                 if (vendorTd) {
