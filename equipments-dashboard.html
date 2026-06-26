@@ -259,6 +259,7 @@
                 <tr>
                     <th>Serial Number</th>
                     <th>Terminal Type</th>
+                    <th class="hide-mobile">Vendor</th>
                     <th class="hide-mobile">Received Date</th>
                     <th class="hide-mobile">Current Location</th>
                     <th>Current Holder (Merchant)</th>
@@ -1282,7 +1283,7 @@ async function saveNote() {
     const _invQ = (document.getElementById('invSearch')?.value || '').trim();
     if (_invQ && _invQ !== _lastInvSearchLogged) { _lastInvSearchLogged = _invQ; _logSearch('Inventory', _invQ, 'equipments'); }
 
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; padding:40px;"><span class="material-icons" style="animation: spin 2s linear infinite;">sync</span></td></tr>`;
 
     try {
         const res = await fetch('/api/equipments', {
@@ -1300,7 +1301,7 @@ async function saveNote() {
         
         const result = await res.json();
         if (!result.success) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Error: ${result.message}</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:red;">Error: ${result.message}</td></tr>`;
             return;
         }
 
@@ -1408,6 +1409,7 @@ async function saveNote() {
                     ${isStaleRepair ? `<span class="material-icons" style="font-size:14px; color:#e11d48; vertical-align:middle; margin-left:4px;" title="Stale: ${diffDays} days in repair">warning</span>` : ''}
                 </td>
                 <td>${item.terminal_type || '---'}</td>
+                <td class="hide-mobile">${vendorMap[item.terminal_type] ? `<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:2px 8px;border-radius:10px;">${vendorMap[item.terminal_type]}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>
                 <td class="hide-mobile">${item.received_date ? fmtDate(item.received_date) : '---'}</td>
                 <td class="hide-mobile">
                     <span class="badge ${locClass}">${item.current_location || 'Merchant Site'}</span>
@@ -1422,7 +1424,7 @@ async function saveNote() {
         });
     } catch (err) { 
         console.error("Fetch Inventory Error:", err);
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color:red;">Critical Error: Check Console</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:red;">Critical Error: Check Console</td></tr>`;
     }
 }
 
@@ -1738,14 +1740,21 @@ function rqInvExportCSV() {
     function nextPage() { currentPage++; fetchInventory(); }
     function prevPage() { if(currentPage > 0) { currentPage--; fetchInventory(); } }
 
-    window.onload = () => {
+    let vendorMap = {};
+
+    window.onload = async () => {
         const urlQ = new URLSearchParams(window.location.search).get('q');
         if (urlQ) {
             document.getElementById('invSearch').value = urlQ;
-            // Clear all tab filters so a deployed/retired serial isn't hidden
             currentFilter = null;
             document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
         }
+        // Load vendor map in background (non-blocking)
+        fetch('/api/terminal-manager', {
+            method: 'POST',
+            headers: equipHeaders(),
+            body: JSON.stringify({ action: 'get_vendor_map' })
+        }).then(r => r.json()).then(d => { if (d.success) vendorMap = d.data || {}; }).catch(() => {});
         fetchInventory();
     };
 </script>
