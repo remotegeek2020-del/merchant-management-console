@@ -745,21 +745,23 @@ if (action === 'getMonthlyReport') {
         if (action === 'list_terminal_types') {
             const { data, error } = await supabase
                 .from('terminal_types')
-                .select('id, name, sort_order, is_active')
+                .select('id, name, sort_order, is_active, vendor_id, vendors(id, name)')
                 .order('sort_order', { ascending: true })
                 .order('name', { ascending: true });
             if (error) throw error;
-            return res.status(200).json({ success: true, terminal_types: data });
+            // Also return vendors list for dropdowns
+            const { data: vendors } = await supabase.from('vendors').select('id, name').order('name');
+            return res.status(200).json({ success: true, terminal_types: data, vendors: vendors || [] });
         }
 
         if (action === 'add_terminal_type') {
-            const { name } = req.body;
+            const { name, vendor_id } = req.body;
             if (!name?.trim()) return res.status(400).json({ success: false, message: 'Name is required.' });
             const { data: maxRow } = await supabase
                 .from('terminal_types').select('sort_order').order('sort_order', { ascending: false }).limit(1).single();
             const nextOrder = ((maxRow?.sort_order || 0) + 10);
             const { error } = await supabase
-                .from('terminal_types').insert({ name: name.trim(), sort_order: nextOrder });
+                .from('terminal_types').insert({ name: name.trim(), sort_order: nextOrder, vendor_id: vendor_id || null });
             if (error) {
                 if (error.code === '23505') return res.status(409).json({ success: false, message: 'Terminal type already exists.' });
                 throw error;
@@ -773,13 +775,14 @@ if (action === 'getMonthlyReport') {
         }
 
         if (action === 'update_terminal_type') {
-            const { type_id, name, sort_order, is_active } = req.body;
+            const { type_id, name, sort_order, is_active, vendor_id } = req.body;
             if (!type_id) return res.status(400).json({ success: false, message: 'type_id required.' });
-            const { data: ttOld } = await supabase.from('terminal_types').select('name, sort_order, is_active').eq('id', type_id).maybeSingle();
+            const { data: ttOld } = await supabase.from('terminal_types').select('name, sort_order, is_active, vendor_id').eq('id', type_id).maybeSingle();
             const patch = {};
             if (name !== undefined)       patch.name       = name.trim();
             if (sort_order !== undefined)  patch.sort_order  = sort_order;
             if (is_active !== undefined)   patch.is_active   = is_active;
+            if (vendor_id !== undefined)   patch.vendor_id   = vendor_id || null;
             const { error } = await supabase.from('terminal_types').update(patch).eq('id', type_id);
             if (error) throw error;
             supabase.from('activity_logs').insert({
