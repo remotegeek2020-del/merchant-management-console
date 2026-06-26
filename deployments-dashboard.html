@@ -47,6 +47,11 @@
             .kpi-container { grid-template-columns: 1fr !important; }
         }
         @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* Shipping destination toggle (ShipStation Phase 2) */
+        .ship-toggle-btn { flex:1; border-radius:8px; border:1px solid #cbd5e1; background:white; color:#64748b; font-weight:700; font-size:11px; padding:8px; cursor:pointer; transition:all .15s; }
+        .ship-toggle-active { background:var(--pp-blue); color:white; border-color:var(--pp-blue); }
+        .ship-lbl { display:block; font-weight:700; font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
+        .ship-in { font-size:12px !important; padding:6px 10px !important; }
         /* Repair queue embedded styles */
         .rq-pipeline { display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm); }
         .rq-pipeline-stage { display:flex;align-items:center;padding:0 6px; }
@@ -408,6 +413,54 @@
                 <input type="text" id="mSearch" class="slds-input" placeholder="Search DBA or ID..." onkeyup="handleMerchantSearch(this.value)" autocomplete="off">
                 <input type="hidden" id="selectedMerchantId" required>
                 <div id="mSuggestions" class="suggestions-list"></div>
+            </div>
+
+            <!-- SHIPPING DESTINATION (ShipStation Phase 2) — appears after merchant is selected -->
+            <div id="shipDestSection" style="display:none; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; margin-bottom:15px; background:#f8fafc;">
+                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:8px;">SHIPPING DESTINATION</label>
+                <div style="display:flex; gap:8px; margin-bottom:10px;">
+                    <button type="button" id="shipMerchantBtn" onclick="setShipTo('merchant')" class="ship-toggle-btn ship-toggle-active">🏪 Ship to Merchant</button>
+                    <button type="button" id="shipPartnerBtn" onclick="setShipTo('partner')" class="ship-toggle-btn">🤝 Ship to Partner First</button>
+                </div>
+                <div id="shipPartnerNotice" style="display:none; font-size:11px; color:#b45309; background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:6px 10px; margin-bottom:10px;"></div>
+                <div id="shipAddrFields" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <div style="grid-column:1 / -1;">
+                        <label class="ship-lbl">Ship-to Name</label>
+                        <input type="text" id="ship_name" class="slds-input ship-in" placeholder="Recipient / business name">
+                    </div>
+                    <div>
+                        <label class="ship-lbl">Phone</label>
+                        <input type="text" id="ship_phone" class="slds-input ship-in" placeholder="Phone">
+                    </div>
+                    <div>
+                        <label class="ship-lbl">Email</label>
+                        <input type="text" id="ship_email" class="slds-input ship-in" placeholder="Email">
+                    </div>
+                    <div style="grid-column:1 / -1;">
+                        <label class="ship-lbl">Street Address</label>
+                        <input type="text" id="ship_address" class="slds-input ship-in" placeholder="Street address">
+                    </div>
+                    <div>
+                        <label class="ship-lbl">City</label>
+                        <input type="text" id="ship_city" class="slds-input ship-in" placeholder="City">
+                    </div>
+                    <div>
+                        <label class="ship-lbl">State</label>
+                        <input type="text" id="ship_state" class="slds-input ship-in" placeholder="State">
+                    </div>
+                    <div>
+                        <label class="ship-lbl">ZIP</label>
+                        <input type="text" id="ship_zip" class="slds-input ship-in" placeholder="ZIP">
+                    </div>
+                    <div>
+                        <label class="ship-lbl">Country</label>
+                        <input type="text" id="ship_country" class="slds-input ship-in" placeholder="US">
+                    </div>
+                </div>
+                <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:10px; cursor:pointer;">
+                    <input type="checkbox" id="shipSaveBack" checked>
+                    Save any added / edited details back to the <span id="shipSaveBackTarget" style="font-weight:700;">merchant</span> record
+                </label>
             </div>
 
             <!-- JARVIS Suggests panel — appears after merchant is selected -->
@@ -1675,6 +1728,102 @@ async function processReturn() {
         document.getElementById('mSearch').value = name;
         document.getElementById('mSuggestions').style.display = 'none';
         triggerJarvisSuggestions(id);
+        loadShipInfo(id);
+    }
+
+    // ── SHIPPING DESTINATION (ShipStation Phase 2) ────────────────────────────
+    let _shipTo = 'merchant';
+    let _shipMerchant = null;
+    let _shipPartner = null;
+
+    async function loadShipInfo(merchantId) {
+        _shipTo = 'merchant';
+        _shipMerchant = null;
+        _shipPartner = null;
+        const section = document.getElementById('shipDestSection');
+        section.style.display = 'block';
+        // reset toggles to merchant default
+        document.getElementById('shipMerchantBtn').classList.add('ship-toggle-active');
+        document.getElementById('shipPartnerBtn').classList.remove('ship-toggle-active');
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST',
+                headers: authHeaders(),
+                body: JSON.stringify({ action: 'getShipInfo', merchant_id: merchantId })
+            });
+            const result = await res.json();
+            if (result.success) {
+                _shipMerchant = result.merchant || null;
+                _shipPartner = result.partner || null;
+            }
+        } catch (e) { console.error('[getShipInfo]', e); }
+        renderShipFields();
+    }
+
+    function setShipTo(type) {
+        _shipTo = type;
+        document.getElementById('shipMerchantBtn').classList.toggle('ship-toggle-active', type === 'merchant');
+        document.getElementById('shipPartnerBtn').classList.toggle('ship-toggle-active', type === 'partner');
+        document.getElementById('shipSaveBackTarget').innerText = type === 'partner' ? 'partner' : 'merchant';
+        renderShipFields();
+    }
+
+    function renderShipFields() {
+        const notice = document.getElementById('shipPartnerNotice');
+        const set = (id, v) => { document.getElementById(id).value = v || ''; };
+        if (_shipTo === 'partner') {
+            if (!_shipPartner) {
+                notice.style.display = 'block';
+                notice.innerText = '⚠ No partner is linked to this merchant. Enter the partner address manually, or switch back to Ship to Merchant.';
+            } else {
+                notice.style.display = 'block';
+                notice.style.color = '#15803d'; notice.style.background = '#f0fdf4'; notice.style.borderColor = '#bbf7d0';
+                notice.innerText = '🤝 Partner: ' + (_shipPartner.full_name || '—') + ' — tied to this merchant';
+            }
+            const p = _shipPartner || {};
+            set('ship_name', p.full_name);
+            set('ship_phone', p.phone_number);
+            set('ship_email', p.email);
+            set('ship_address', p.address);
+            set('ship_city', p.city);
+            set('ship_state', p.state);
+            set('ship_zip', p.zip);
+            set('ship_country', p.country || 'US');
+        } else {
+            notice.style.display = 'none';
+            notice.style.color = '#b45309'; notice.style.background = '#fff7ed'; notice.style.borderColor = '#fed7aa';
+            const m = _shipMerchant || {};
+            set('ship_name', m.dba_name);
+            set('ship_phone', m.merchant_phone);
+            set('ship_email', m.email);
+            set('ship_address', m.merchant_address);
+            set('ship_city', m.merchant_city);
+            set('ship_state', m.merchant_state);
+            set('ship_zip', m.merchant_zip);
+            set('ship_country', m.merchant_country || 'US');
+        }
+    }
+
+    // Builds the ship fields + save-back payload for saveDeployment
+    function collectShipPayload() {
+        const v = id => (document.getElementById(id).value || '').trim();
+        const out = { ship_to_type: _shipTo, ship_to_partner_id: _shipTo === 'partner' ? (_shipPartner?.id || null) : null };
+        if (document.getElementById('shipSaveBack')?.checked) {
+            if (_shipTo === 'partner' && _shipPartner?.id) {
+                out.partner_updates = {
+                    full_name: v('ship_name'), phone_number: v('ship_phone'), email: v('ship_email'),
+                    address: v('ship_address'), city: v('ship_city'), state: v('ship_state'),
+                    zip: v('ship_zip'), country: v('ship_country')
+                };
+            } else if (_shipTo === 'merchant') {
+                out.merchant_updates = {
+                    dba_name: v('ship_name'), merchant_phone: v('ship_phone'), email: v('ship_email'),
+                    merchant_address: v('ship_address'), merchant_city: v('ship_city'), merchant_state: v('ship_state'),
+                    merchant_zip: v('ship_zip'), merchant_country: v('ship_country')
+                };
+            }
+        }
+        return out;
     }
 
     async function handleEquipSearch(val) {
@@ -2145,6 +2294,8 @@ async function saveDeployment(event) {
 
     let payload;
 
+    const shipPayload = collectShipPayload();
+
     if (currentDepMode === 'bulk') {
         if (bulkItems.length === 0) return Swal.fire('Error', 'Please add at least one unit', 'warning');
         payload = {
@@ -2154,7 +2305,8 @@ async function saveDeployment(event) {
             tracking_id: document.getElementById('trackingInput').value,
             target_date: document.getElementById('dateInput').value,
             purchase_type: document.getElementById('purchaseType').value,
-            notes: document.getElementById('notesInput').value
+            notes: document.getElementById('notesInput').value,
+            ...shipPayload
         };
     } else {
         const equipId = document.getElementById('equipSelect').value;
@@ -2166,7 +2318,8 @@ async function saveDeployment(event) {
             tracking_id: document.getElementById('trackingInput').value,
             target_date: document.getElementById('dateInput').value,
             purchase_type: document.getElementById('purchaseType').value,
-            notes: document.getElementById('notesInput').value
+            notes: document.getElementById('notesInput').value,
+            ...shipPayload
         };
     }
 
@@ -2475,6 +2628,10 @@ async function executeBulk(validData) {
     _jarvisStockCache = null;
     const jarvisPanel = document.getElementById('jarvisSuggestPanel');
     if (jarvisPanel) jarvisPanel.style.display = 'none';
+    // Reset shipping destination section
+    _shipTo = 'merchant'; _shipMerchant = null; _shipPartner = null;
+    const shipSec = document.getElementById('shipDestSection');
+    if (shipSec) shipSec.style.display = 'none';
 }
 
     let vendorMap = {};

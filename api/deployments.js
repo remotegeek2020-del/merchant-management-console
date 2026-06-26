@@ -509,8 +509,35 @@ if (action === 'create') {
         notes,
         purchase_type,
         is_bulk,
-        items
+        items,
+        ship_to_type,
+        ship_to_partner_id,
+        merchant_updates,
+        partner_updates
     } = payload;
+
+    // Shipping destination distinction (additive — defaults to 'merchant')
+    const shipType = ship_to_type === 'partner' ? 'partner' : 'merchant';
+    const shipPartnerId = shipType === 'partner' ? (ship_to_partner_id || null) : null;
+
+    // Save-back: persist any newly-entered contact/address to the merchant/partner
+    // record. Server-side whitelist so only contact fields can be written.
+    const MERCHANT_SAVE_FIELDS = ['dba_name','email','merchant_primary_contact','merchant_phone','merchant_address','merchant_city','merchant_state','merchant_zip','merchant_country'];
+    const PARTNER_SAVE_FIELDS  = ['full_name','email','phone_number','address','city','state','zip','country'];
+    const doShipSaveback = async () => {
+        try {
+            if (merchant_updates && typeof merchant_updates === 'object') {
+                const safe = Object.fromEntries(Object.entries(merchant_updates)
+                    .filter(([k, v]) => MERCHANT_SAVE_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
+                if (Object.keys(safe).length) await supabase.from('merchants').update(safe).eq('id', merchant_id);
+            }
+            if (partner_updates && shipPartnerId && typeof partner_updates === 'object') {
+                const safe = Object.fromEntries(Object.entries(partner_updates)
+                    .filter(([k, v]) => PARTNER_SAVE_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
+                if (Object.keys(safe).length) await supabase.from('persons').update(safe).eq('id', shipPartnerId);
+            }
+        } catch (e) { console.warn('[ShipSaveback]', e.message); }
+    };
 
     // --- BULK MODE ---
     if (is_bulk && Array.isArray(items) && items.length > 0) {
@@ -536,6 +563,8 @@ if (action === 'create') {
             notes,
             purchase_type,
             status: 'Open',
+            ship_to_type: shipType,
+            ship_to_partner_id: shipPartnerId,
             created_by: session.userid
         }).select().single();
         if (depErr) throw depErr;
@@ -574,10 +603,12 @@ if (action === 'create') {
                 mode: 'bulk', unit_count: items.length,
                 units: items.map(i => ({ serial_number: equipMap[i.equipment_id]?.serial_number, terminal_type: equipMap[i.equipment_id]?.terminal_type, tid: i.tid || null })),
                 tracking_id: tracking_id || null, purchase_type: purchase_type || null,
-                target_date: target_date || null, notes: notes || null
+                target_date: target_date || null, notes: notes || null,
+                ship_to_type: shipType, ship_to_partner_id: shipPartnerId
             }
         }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
+        await doShipSaveback();
         return res.status(200).json({ success: true, data: [dep] });
     }
 
@@ -616,6 +647,8 @@ if (action === 'create') {
             notes,
             purchase_type,
             status: 'Open',
+            ship_to_type: shipType,
+            ship_to_partner_id: shipPartnerId,
             created_by: session.userid
         }])
         .select();
@@ -653,10 +686,12 @@ if (action === 'create') {
             serial_number: checkEquip.serial_number,
             equipment_id, tid: tid || null,
             tracking_id: tracking_id || null, purchase_type: purchase_type || null,
-            target_date: target_date || null, notes: notes || null
+            target_date: target_date || null, notes: notes || null,
+            ship_to_type: shipType, ship_to_partner_id: shipPartnerId
         }
     }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
+    await doShipSaveback();
     return res.status(200).json({ success: true, data: newDep });
 }
 
@@ -985,6 +1020,40 @@ if (action === 'bulk_create') {
     }
 
     return res.status(200).json({ success: true, count: totalCreated });
+}
+
+// ── SHIP INFO ─────────────────────────────────────────────────────────────
+// Returns merchant contact/address + the merchant's partner (auto-resolved via
+// agent_id chain). Powers auto-fill of the shipping destination in the modal.
+if (action === 'getShipInfo') {
+    const { merchant_id } = body;
+    if (!merchant_id) return res.status(400).json({ success: false, message: 'merchant_id required' });
+
+    const { data: m } = await supabase
+        .from('merchants')
+        .select('id, dba_name, merchant_id, agent_id, agent_name, email, merchant_primary_contact, merchant_phone, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_country')
+        .eq('id', merchant_id)
+        .maybeSingle();
+
+    // Resolve partner: merchants.agent_id → agent_identifiers.id_string →
+    // agents.id → agents.parent_agent_id → persons.id  (sequential = robust)
+    let partner = null;
+    if (m?.agent_id) {
+        const { data: ai } = await supabase.from('agent_identifiers')
+            .select('agent_id').eq('id_string', m.agent_id).maybeSingle();
+        if (ai?.agent_id) {
+            const { data: ag } = await supabase.from('agents')
+                .select('parent_agent_id').eq('id', ai.agent_id).maybeSingle();
+            if (ag?.parent_agent_id) {
+                const { data: p } = await supabase.from('persons')
+                    .select('id, full_name, email, phone_number, address, city, state, zip, country')
+                    .eq('id', ag.parent_agent_id).maybeSingle();
+                if (p) partner = p;
+            }
+        }
+    }
+
+    return res.status(200).json({ success: true, merchant: m, partner });
 }
 
 if (action === 'getLookups') {

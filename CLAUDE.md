@@ -23,7 +23,14 @@
 
 ## Planned Feature: ShipStation Integration
 
-**Status**: Phase 1 (DB migration) COMPLETE as of 2026-06-26. Design locked in with user. Phases 2-5 pending.
+**Status**: Phases 1-2 COMPLETE as of 2026-06-26. Phases 3-5 pending.
+- Phase 1: DB migration (additive columns + shipstation_shipments table + order seq)
+- Phase 2: Deployment modal ship-to toggle + auto-fill + save-back (DONE)
+  - `api/deployments.js`: new `getShipInfo` action (merchant + partner auto-resolve via agent_id chain); `create` extended with `ship_to_type`/`ship_to_partner_id` + whitelisted save-back (`merchant_updates`/`partner_updates`) for both single & bulk
+  - `deployments-dashboard.html`: shipping destination section in New Deployment modal (toggle, auto-fill, editable blanks, save-back checkbox)
+- Phase 3 (next): dashboard badges (🏪 Direct / 🤝 Via Partner) + two-leg partner_received_date milestone in edit modal
+- Phase 4: returns modal (single-leg ship_from_type)
+- Phase 5: ShipStation API (order create, label, webhook). Backtrack/reconcile existing deployments by matching ShipStation tracking number ↔ `deployments.tracking_id`.
 
 ### Locked-in Design Decisions (user-confirmed 2026-06-26)
 - **Everything stays tied to `merchant_id`** — the deployment/return ownership never changes. We only add a *shipping destination distinction*.
