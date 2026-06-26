@@ -135,6 +135,9 @@
 .sort-icon { color:#cbd5e1; font-size:11px; margin-left:2px; }
 .staff-flag-btn { background:none; border:1px solid #e2e8f0; border-radius:6px; padding:3px 7px; cursor:pointer; font-size:12px; color:#94a3b8; transition:0.15s; }
 .staff-flag-btn.flagged { color:#d97706; border-color:#fde68a; background:#fef9c3; }
+.upgrade-vol-chip { font-size:11px;font-weight:700;padding:4px 14px;border-radius:99px;border:1.5px solid #e2e8f0;background:white;color:#475569;cursor:pointer;transition:0.15s; }
+.upgrade-vol-chip:hover { border-color:#1d4ed8;color:#1d4ed8; }
+.upgrade-chip-active { border-color:#1d4ed8 !important;color:#1d4ed8 !important;background:#eff6ff !important; }
 /* ── Page tabs ── */
 .page-tab-bar { display:flex; gap:4px; background:white; border-radius:12px; padding:5px; margin-bottom:16px; box-shadow:0 2px 8px rgba(0,0,0,0.05); border:1px solid #e2e8f0; width:fit-content; }
 .page-tab-btn { padding:8px 18px; border:none; background:none; border-radius:8px; font-size:12px; font-weight:700; color:#64748b; cursor:pointer; display:flex; align-items:center; gap:6px; transition:0.15s; }
@@ -253,6 +256,78 @@
         <button class="page-tab-btn" id="ptab-legacy" onclick="switchPageTab('legacy')">
             <span class="material-icons" style="font-size:15px;">folder_open</span> Legacy Attachments
         </button>
+    </div>
+
+    <!-- PORTFOLIO SUB-TAB BAR -->
+    <div id="portfolio-subtab-bar" style="display:none; background:white; border-bottom:2px solid #e2e8f0; padding:0 20px;">
+        <div style="display:flex; gap:0;">
+            <button onclick="portfolioSubTab('all')" id="pstab-all" style="padding:10px 22px;font-size:12px;font-weight:700;color:#004990;background:none;border:none;border-bottom:3px solid #004990;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;">
+                <span class="material-icons" style="font-size:15px;">table_rows</span> All Merchants
+            </button>
+            <button onclick="portfolioSubTab('upgrade')" id="pstab-upgrade" style="padding:10px 22px;font-size:12px;font-weight:700;color:#64748b;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;">
+                <span class="material-icons" style="font-size:15px;">trending_up</span> Upgrade Eligible
+            </button>
+        </div>
+    </div>
+
+    <!-- UPGRADE ELIGIBLE PANEL -->
+    <div id="tab-upgrade-eligible" style="display:none; padding:20px 0;">
+
+        <!-- Header card -->
+        <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
+            <div>
+                <div style="font-size:18px;font-weight:800;color:white;display:flex;align-items:center;gap:10px;">
+                    <span class="material-icons" style="font-size:22px;">trending_up</span> Upgrade Eligible Merchants
+                </div>
+                <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:4px;">Merchants with equipment (current or legacy) not yet enrolled in Prime49 — candidates for upgrade.</div>
+            </div>
+            <button onclick="upgradeExportCSV()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:10px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
+                <span class="material-icons" style="font-size:15px;">download</span> Export CSV
+            </button>
+        </div>
+
+        <!-- Volume filter + stats -->
+        <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+            <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">Min Volume:</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;" id="upgrade-vol-chips">
+                <button onclick="upgradeSetVol(0,this)"       class="upgrade-vol-chip">All</button>
+                <button onclick="upgradeSetVol(10000,this)"   class="upgrade-vol-chip">10k+</button>
+                <button onclick="upgradeSetVol(20000,this)"   class="upgrade-vol-chip">20k+</button>
+                <button onclick="upgradeSetVol(30000,this)"   class="upgrade-vol-chip upgrade-chip-active">30k+</button>
+                <button onclick="upgradeSetVol(50000,this)"   class="upgrade-vol-chip">50k+</button>
+                <button onclick="upgradeSetVol(100000,this)"  class="upgrade-vol-chip">100k+</button>
+            </div>
+            <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+                <span id="upgrade-count-badge" style="font-size:12px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:4px 12px;border-radius:99px;">0 merchants</span>
+                <button onclick="loadUpgradeEligible(true)" style="display:flex;align-items:center;gap:4px;background:white;border:1px solid #e2e8f0;border-radius:8px;padding:5px 10px;font-size:11px;color:#64748b;cursor:pointer;" title="Refresh">
+                    <span class="material-icons" id="upgrade-refresh-icon" style="font-size:14px;">refresh</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Table -->
+        <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;overflow:hidden;">
+            <div style="overflow-x:auto;">
+                <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover" style="width:100%;">
+                    <thead>
+                        <tr>
+                            <th onclick="upgradeSort('dba_name')" style="cursor:pointer;white-space:nowrap;">DBA Name <span id="upgSort-dba_name" style="color:#94a3b8;">↕</span></th>
+                            <th>MID</th>
+                            <th class="hide-mobile">Partner ID</th>
+                            <th class="hide-mobile">Partner</th>
+                            <th onclick="upgradeSort('volume')" style="cursor:pointer;white-space:nowrap;">Total Volume <span id="upgSort-volume" style="color:#94a3b8;">↕</span></th>
+                            <th class="hide-mobile">Vol 30D</th>
+                            <th>Current Equipment</th>
+                            <th>Legacy Equipment</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="upgrade-table-body">
+                        <tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;">Loading…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <!-- LEGACY ATTACHMENTS PANEL -->
@@ -3414,6 +3489,14 @@ let _pipelinePeriod = 7;
 let _pipelineCustomFrom = null;
 let _pipelineCustomTo   = null;
 
+// ── UPGRADE ELIGIBLE STATE ────────────────────────────────────────────────────
+let _portfolioSubTab = 'all';
+let _upgradeLoaded   = false;
+let _upgradeData     = [];
+let _upgradeVolMin   = 30000;
+let _upgradeSortKey  = 'volume';
+let _upgradeSortDir  = -1;
+
 const _periodLabels = { 7: 'This Week', 30: 'Last 30 Days', 90: 'Last 90 Days', 180: 'Last 6 Months', 365: '1 Year' };
 
 function switchPageTab(tab) {
@@ -3427,11 +3510,19 @@ function switchPageTab(tab) {
     document.getElementById('ptab-prime49').classList.toggle('active', isPrime49);
     document.getElementById('ptab-legacy').classList.toggle('active', isLegacy);
 
+    // Sub-tab bar always visible when portfolio active
+    const subtabBar = document.getElementById('portfolio-subtab-bar');
+    if (subtabBar) subtabBar.style.display = isPortfolio ? '' : 'none';
+
+    // Portfolio "All Merchants" elements — only show if sub-tab is 'all'
+    const isUpgradeActive = isPortfolio && _portfolioSubTab === 'upgrade';
     const portfolioEls = ['tab-portfolio-filter','tab-portfolio-kpi','staffChartsPanel','tab-portfolio-content'];
     portfolioEls.forEach(id => {
         const el = document.getElementById(id);
-        if (el) el.style.display = isPortfolio ? '' : 'none';
+        if (el) el.style.display = (isPortfolio && !isUpgradeActive) ? '' : 'none';
     });
+    const upgradeEl = document.getElementById('tab-upgrade-eligible');
+    if (upgradeEl) upgradeEl.style.display = isUpgradeActive ? '' : 'none';
 
     document.getElementById('tab-pipeline').style.display = isPipeline ? '' : 'none';
     document.getElementById('tab-prime49').style.display  = isPrime49  ? '' : 'none';
@@ -3450,6 +3541,138 @@ function switchPageTab(tab) {
     if (isLegacy && !_legacyLoaded) {
         _legacyLoaded = true;
         legacyLoadFiles();
+    }
+}
+
+// ── PORTFOLIO SUB-TABS ────────────────────────────────────────────────────────
+function portfolioSubTab(tab) {
+    _portfolioSubTab = tab;
+    const isUpgrade = tab === 'upgrade';
+
+    document.getElementById('pstab-all').style.cssText    = isUpgrade
+        ? 'padding:10px 22px;font-size:12px;font-weight:700;color:#64748b;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;'
+        : 'padding:10px 22px;font-size:12px;font-weight:700;color:#004990;background:none;border:none;border-bottom:3px solid #004990;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;';
+    document.getElementById('pstab-upgrade').style.cssText = isUpgrade
+        ? 'padding:10px 22px;font-size:12px;font-weight:700;color:#1d4ed8;background:none;border:none;border-bottom:3px solid #1d4ed8;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;'
+        : 'padding:10px 22px;font-size:12px;font-weight:700;color:#64748b;background:none;border:none;border-bottom:3px solid transparent;cursor:pointer;font-family:inherit;display:flex;align-items:center;gap:6px;';
+
+    ['tab-portfolio-filter','tab-portfolio-kpi','staffChartsPanel','tab-portfolio-content'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.style.display = isUpgrade ? 'none' : '';
+    });
+    const upgradeEl = document.getElementById('tab-upgrade-eligible');
+    if (upgradeEl) upgradeEl.style.display = isUpgrade ? '' : 'none';
+
+    if (isUpgrade && !_upgradeLoaded) loadUpgradeEligible();
+}
+
+async function loadUpgradeEligible(forceRefresh = false) {
+    if (_upgradeLoaded && !forceRefresh) { upgradeRender(); return; }
+    const token = localStorage.getItem('pp_session_token') || '';
+    const icon  = document.getElementById('upgrade-refresh-icon');
+    if (icon) icon.style.animation = 'spin 1s linear infinite';
+    document.getElementById('upgrade-table-body').innerHTML =
+        `<tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;"><span class="material-icons" style="font-size:28px;animation:spin 1s linear infinite;display:block;margin-bottom:8px;">sync</span>Scanning portfolio for upgrade candidates…</td></tr>`;
+    try {
+        const res  = await fetch('/api/merchants', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'get_upgrade_eligible' })
+        });
+        const data = await res.json();
+        if (!data.success) throw new Error(data.message || 'API error');
+        _upgradeData   = data.data || [];
+        _upgradeLoaded = true;
+        upgradeRender();
+    } catch (e) {
+        document.getElementById('upgrade-table-body').innerHTML =
+            `<tr><td colspan="9" style="padding:30px;text-align:center;color:#ef4444;">Error: ${e.message}</td></tr>`;
+    } finally {
+        if (icon) icon.style.animation = '';
+    }
+}
+
+function upgradeSetVol(val, btn) {
+    _upgradeVolMin = val;
+    document.querySelectorAll('.upgrade-vol-chip').forEach(c => c.classList.remove('upgrade-chip-active'));
+    btn.classList.add('upgrade-chip-active');
+    upgradeRender();
+}
+
+function upgradeSort(key) {
+    if (_upgradeSortKey === key) _upgradeSortDir *= -1;
+    else { _upgradeSortKey = key; _upgradeSortDir = -1; }
+    upgradeRender();
+}
+
+function upgradeRender() {
+    const fmt = v => v != null ? '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—';
+    let rows = _upgradeData.filter(m => (m.volume || 0) >= _upgradeVolMin);
+    rows = [...rows].sort((a, b) => {
+        const av = _upgradeSortKey === 'dba_name' ? (a.dba_name || '') : (a[_upgradeSortKey] || 0);
+        const bv = _upgradeSortKey === 'dba_name' ? (b.dba_name || '') : (b[_upgradeSortKey] || 0);
+        if (typeof av === 'string') return _upgradeSortDir * av.localeCompare(bv);
+        return _upgradeSortDir * (av - bv);
+    });
+    ['dba_name','volume'].forEach(k => {
+        const el = document.getElementById('upgSort-' + k);
+        if (el) el.textContent = _upgradeSortKey === k ? (_upgradeSortDir === -1 ? '↓' : '↑') : '↕';
+    });
+    document.getElementById('upgrade-count-badge').textContent = rows.length + ' merchant' + (rows.length !== 1 ? 's' : '');
+    if (!rows.length) {
+        document.getElementById('upgrade-table-body').innerHTML =
+            `<tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;"><span class="material-icons" style="font-size:36px;display:block;margin-bottom:8px;color:#cbd5e1;">trending_up</span>No upgrade-eligible merchants at this volume threshold.</td></tr>`;
+        return;
+    }
+    const equipChips = (items, type) => {
+        if (!items || !items.length) return '<span style="color:#cbd5e1;font-size:11px;">None</span>';
+        const types = [...new Set(items.map(e => e.terminal_type).filter(Boolean))];
+        const color = type === 'current' ? '#166534' : '#92400e';
+        const bg    = type === 'current' ? '#dcfce7'  : '#fef3c7';
+        return types.map(t => `<span style="font-size:10px;font-weight:700;color:${color};background:${bg};padding:2px 7px;border-radius:99px;white-space:nowrap;">${t}</span>`).join(' ') +
+               `<span style="font-size:10px;color:#94a3b8;margin-left:4px;">(${items.length})</span>`;
+    };
+    document.getElementById('upgrade-table-body').innerHTML = rows.map(m => `
+        <tr style="cursor:pointer;" onclick="showMerchantBrief('${m.id}')">
+            <td style="font-weight:700;color:#004990;">${m.dba_name || '—'}</td>
+            <td style="font-family:monospace;font-size:11px;">${m.merchant_id || '—'}</td>
+            <td class="hide-mobile" style="font-size:11px;color:#64748b;">${m.agent_id || '—'}</td>
+            <td class="hide-mobile" style="font-size:12px;font-weight:600;">${m.partner_name || '<span style="color:#94a3b8;">—</span>'}</td>
+            <td style="font-weight:700;color:#1e293b;">${fmt(m.volume)}</td>
+            <td class="hide-mobile" style="font-size:12px;color:#64748b;">${fmt(m.volume_30_day)}</td>
+            <td>${equipChips(m.current_equipment, 'current')}</td>
+            <td>${equipChips(m.legacy_equipment, 'legacy')}</td>
+            <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:#f1f5f9;color:#475569;">${m.account_status || '—'}</span></td>
+        </tr>`).join('');
+}
+
+function upgradeExportCSV() {
+    const fmt = v => v != null ? Number(v).toFixed(2) : '';
+    const equipList = items => (items || []).map(e => e.terminal_type || e.serial_number).filter(Boolean).join('; ');
+    const rows = _upgradeData.filter(m => (m.volume || 0) >= _upgradeVolMin);
+    if (!rows.length) { Swal.fire('No data', 'No eligible merchants to export.', 'info'); return; }
+    const header = ['DBA Name','MID','Partner ID','Partner Name','Status','Total Volume','Volume 30D','Volume MTD','Current Equipment','Legacy Equipment'];
+    const csv = [header, ...rows.map(m => [
+        m.dba_name, m.merchant_id, m.agent_id, m.partner_name || '',
+        m.account_status, fmt(m.volume), fmt(m.volume_30_day), fmt(m.volume_mtd),
+        equipList(m.current_equipment), equipList(m.legacy_equipment)
+    ])].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href = url; a.download = `upgrade-eligible-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click(); URL.revokeObjectURL(url);
+}
+
+function showMerchantBrief(id) {
+    const m = _upgradeData.find(x => x.id === id);
+    if (!m) return;
+    switchPageTab('portfolio');
+    portfolioSubTab('all');
+    if (m.merchant_id) {
+        document.getElementById('searchInput').value = m.merchant_id;
+        document.getElementById('filterBy').value = 'merchant_id';
+        resetAndFetch();
     }
 }
 

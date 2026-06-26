@@ -691,6 +691,121 @@ if (action === 'get_merchant_equipment') {
 
     return res.status(200).json({ success: true, current: current || [], past });
 }
+
+// ── UPGRADE ELIGIBLE ─────────────────────────────────────────────────────────
+if (action === 'get_upgrade_eligible') {
+    const CHUNK = 400;
+
+    // 1. All prime49 agent IDs (already enrolled — exclude these)
+    const { data: p49Rows } = await supabase
+        .from('agent_identifiers').select('id_string').eq('prime49', true);
+    const prime49Set = new Set((p49Rows || []).map(r => r.id_string).filter(Boolean));
+
+    // 2. All merchants with volume > 0, ordered by volume desc
+    const { data: merchants, error: mErr } = await supabase
+        .from('merchants')
+        .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
+        .gt('volume', 0)
+        .order('volume', { ascending: false })
+        .limit(5000);
+    if (mErr) return res.json({ success: false, message: mErr.message });
+
+    // 3. Exclude already-prime49 merchants
+    const candidates = (merchants || []).filter(m => !prime49Set.has(m.agent_id));
+    if (!candidates.length) return res.json({ success: true, data: [] });
+
+    const candidateIds = candidates.map(m => m.id);
+
+    // 4. Find which have equipment
+    const depMids = new Set();
+    const legMids = new Set();
+    for (let i = 0; i < candidateIds.length; i += CHUNK) {
+        const chunk = candidateIds.slice(i, i + CHUNK);
+        const { data: deps } = await supabase.from('deployments').select('merchant_id').in('merchant_id', chunk).eq('status', 'Open');
+        (deps || []).forEach(d => depMids.add(d.merchant_id));
+        const { data: legs } = await supabase.from('legacy_deployments').select('merchant_id').in('merchant_id', chunk);
+        (legs || []).forEach(l => legMids.add(l.merchant_id));
+    }
+
+    const eligible = candidates.filter(m => depMids.has(m.id) || legMids.has(m.id));
+    if (!eligible.length) return res.json({ success: true, data: [] });
+
+    const eligibleIds = eligible.map(m => m.id);
+
+    // 5. Gather equipment for eligible merchants
+    const currentByMerchant = {};
+    const legacyByMerchant  = {};
+
+    for (let i = 0; i < eligibleIds.length; i += CHUNK) {
+        const chunk = eligibleIds.slice(i, i + CHUNK);
+
+        // Single-unit open deployments
+        const { data: singles } = await supabase
+            .from('deployments')
+            .select('merchant_id, equipments:equipment_id(serial_number, terminal_type)')
+            .in('merchant_id', chunk).eq('status', 'Open').eq('is_bulk', false);
+        (singles || []).forEach(d => {
+            if (!d.equipments) return;
+            (currentByMerchant[d.merchant_id] = currentByMerchant[d.merchant_id] || [])
+                .push({ serial_number: d.equipments.serial_number, terminal_type: d.equipments.terminal_type });
+        });
+
+        // Bulk open deployments
+        const { data: bulks } = await supabase
+            .from('deployments')
+            .select('merchant_id, deployment_items(equip:equipment_id(serial_number, terminal_type))')
+            .in('merchant_id', chunk).eq('status', 'Open').eq('is_bulk', true);
+        (bulks || []).forEach(d => {
+            (d.deployment_items || []).forEach(item => {
+                if (!item.equip) return;
+                (currentByMerchant[d.merchant_id] = currentByMerchant[d.merchant_id] || [])
+                    .push({ serial_number: item.equip.serial_number, terminal_type: item.equip.terminal_type });
+            });
+        });
+
+        // Legacy deployments
+        const { data: legs } = await supabase
+            .from('legacy_deployments')
+            .select('merchant_id, serial_number, terminal_type, status')
+            .in('merchant_id', chunk).neq('status', 'converted');
+        (legs || []).forEach(l => {
+            (legacyByMerchant[l.merchant_id] = legacyByMerchant[l.merchant_id] || [])
+                .push({ serial_number: l.serial_number, terminal_type: l.terminal_type, status: l.status });
+        });
+    }
+
+    // 6. Partner info
+    const agentIds = [...new Set(eligible.map(m => m.agent_id).filter(Boolean))];
+    const partnerMap = {};
+    for (let i = 0; i < agentIds.length; i += CHUNK) {
+        const chunk = agentIds.slice(i, i + CHUNK);
+        const { data: idents } = await supabase
+            .from('agent_identifiers')
+            .select('id_string, persons(first_name, last_name)')
+            .in('id_string', chunk);
+        (idents || []).forEach(ai => {
+            if (ai.persons) partnerMap[ai.id_string] = `${ai.persons.first_name || ''} ${ai.persons.last_name || ''}`.trim();
+        });
+    }
+
+    // 7. Build response
+    const result = eligible.map(m => ({
+        id: m.id,
+        dba_name: m.dba_name,
+        merchant_id: m.merchant_id,
+        agent_id: m.agent_id,
+        account_status: m.account_status,
+        volume: m.volume,
+        volume_30_day: m.volume_30_day,
+        volume_mtd: m.volume_mtd,
+        partner_name: partnerMap[m.agent_id] || null,
+        current_equipment: currentByMerchant[m.id] || [],
+        legacy_equipment:  legacyByMerchant[m.id]  || []
+    }));
+
+    return res.json({ success: true, data: result, total: result.length });
+}
+
         // --- ACTION: ADD ATTACHMENT RECORD ---
         if (action === 'add_attachment') {
             const { merchant_id, file_name, file_path, file_type, file_size, uploaded_by } = req.body;
