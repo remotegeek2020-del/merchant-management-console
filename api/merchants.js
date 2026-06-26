@@ -701,21 +701,19 @@ if (action === 'get_upgrade_eligible') {
         .from('agent_identifiers').select('id_string').eq('prime49', true);
     const prime49Set = new Set((p49Rows || []).map(r => r.id_string).filter(Boolean));
 
-    // 2. Paginate merchants in the requested volume range (server-side for performance)
-    const vol_min = parseFloat(req.body.vol_min) ?? 0;
+    // volume is stored as text so gte/lte would be lexicographic — fetch all and range-filter in JS
+    const vol_min = parseFloat(req.body.vol_min) || 0;
     const vol_max = req.body.vol_max != null ? parseFloat(req.body.vol_max) : null;
     const allMerchants = [];
     let _from = 0;
     const _PAGE = 1000;
     while (true) {
-        let q = supabase
+        const { data: page, error: mErr } = await supabase
             .from('merchants')
             .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
-            .gte('volume', vol_min > 0 ? vol_min : 1)
-            .order('volume', { ascending: false })
+            .gt('volume', '0')
+            .order('created_at', { ascending: false })
             .range(_from, _from + _PAGE - 1);
-        if (vol_max != null) q = q.lte('volume', vol_max);
-        const { data: page, error: mErr } = await q;
         if (mErr) return res.json({ success: false, message: mErr.message });
         if (!page?.length) break;
         allMerchants.push(...page);
@@ -723,8 +721,14 @@ if (action === 'get_upgrade_eligible') {
         _from += _PAGE;
     }
 
-    // 3. Eligibility = NOT prime49 + volume > 0 (equipment records are informational only)
-    const eligible = allMerchants.filter(m => !prime49Set.has(m.agent_id));
+    // 3. Apply numeric range filter in JS (volume is text in DB — string gte/lte is unreliable)
+    //    Then exclude prime49 merchants
+    const eligible = allMerchants.filter(m => {
+        const v = parseFloat(m.volume) || 0;
+        if (v < vol_min) return false;
+        if (vol_max != null && v > vol_max) return false;
+        return !prime49Set.has(m.agent_id);
+    });
     if (!eligible.length) return res.json({ success: true, data: [], total: 0 });
 
     const eligibleIds = eligible.map(m => m.id);
@@ -792,7 +796,7 @@ if (action === 'get_upgrade_eligible') {
         volume: m.volume,
         volume_30_day: m.volume_30_day,
         volume_mtd: m.volume_mtd,
-        is_eligible: (parseFloat(m.volume) || 0) >= 30000,
+        is_eligible: (parseFloat(m.volume) || 0) >= 30000, // volume >= $30k threshold
         partner_name: partnerMap[m.agent_id] || null,
         current_equipment: currentByMerchant[m.id] || [],
         legacy_equipment:  legacyByMerchant[m.id]  || []
