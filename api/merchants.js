@@ -710,8 +710,9 @@ if (action === 'get_upgrade_eligible') {
     while (true) {
         const { data: page, error: mErr } = await supabase
             .from('merchants')
-            .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
+            .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd, is_prime49')
             .gt('volume', '0')
+            .eq('is_prime49', false)
             .order('created_at', { ascending: false })
             .range(_from, _from + _PAGE - 1);
         if (mErr) return res.json({ success: false, message: mErr.message });
@@ -722,12 +723,15 @@ if (action === 'get_upgrade_eligible') {
     }
 
     // 3. Apply numeric range filter in JS (volume is text in DB — string gte/lte is unreliable)
-    //    Then exclude prime49 merchants
+    //    Dual prime49 check: merchant's own is_prime49 flag (already filtered in query above)
+    //    + agent_identifiers.prime49 set (catches agent-level enrollment)
     const eligible = allMerchants.filter(m => {
+        if (m.is_prime49) return false;                  // direct merchant flag
+        if (prime49Set.has(m.agent_id)) return false;    // agent-level flag
         const v = parseFloat(m.volume) || 0;
         if (v < vol_min) return false;
         if (vol_max != null && v > vol_max) return false;
-        return !prime49Set.has(m.agent_id);
+        return true;
     });
     if (!eligible.length) return res.json({ success: true, data: [], total: 0 });
 
