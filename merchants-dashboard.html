@@ -271,34 +271,27 @@
     </div>
 
     <!-- UPGRADE ELIGIBLE PANEL -->
-    <div id="tab-upgrade-eligible" style="display:none; padding:20px 0;">
+    <div id="tab-upgrade-eligible" style="display:none; padding:16px 0 0;">
 
-        <!-- Header card -->
-        <div style="background:linear-gradient(135deg,#1e3a5f,#2563eb);border-radius:16px;padding:24px 28px;margin-bottom:20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;">
-            <div>
-                <div style="font-size:18px;font-weight:800;color:white;display:flex;align-items:center;gap:10px;">
-                    <span class="material-icons" style="font-size:22px;">trending_up</span> Upgrade Eligible Merchants
-                </div>
-                <div style="font-size:12px;color:rgba(255,255,255,0.75);margin-top:4px;">Merchants with equipment (current or legacy) not yet enrolled in Prime49 — candidates for upgrade.</div>
-            </div>
-            <button onclick="upgradeExportCSV()" style="display:flex;align-items:center;gap:6px;background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.35);color:white;border-radius:10px;padding:9px 18px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;" onmouseover="this.style.background='rgba(255,255,255,0.25)'" onmouseout="this.style.background='rgba(255,255,255,0.15)'">
-                <span class="material-icons" style="font-size:15px;">download</span> Export CSV
-            </button>
-        </div>
-
-        <!-- Volume filter + stats -->
-        <div style="background:white;border-radius:14px;border:1px solid #e2e8f0;padding:16px 20px;margin-bottom:16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-            <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">Min Volume:</div>
-            <div style="display:flex;gap:6px;flex-wrap:wrap;" id="upgrade-vol-chips">
-                <button onclick="upgradeSetVol(30000,this)"   class="upgrade-vol-chip upgrade-chip-active">All Eligible (30k+)</button>
+        <!-- Toolbar: filter chips + count + actions all in one row -->
+        <div style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <span style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">Min Volume</span>
+            <div style="display:flex;gap:5px;flex-wrap:wrap;" id="upgrade-vol-chips">
+                <button onclick="upgradeSetVol(0,this)"       class="upgrade-vol-chip upgrade-chip-active">All</button>
+                <button onclick="upgradeSetVol(5000,this)"    class="upgrade-vol-chip">5k+</button>
+                <button onclick="upgradeSetVol(10000,this)"   class="upgrade-vol-chip">10k+</button>
+                <button onclick="upgradeSetVol(20000,this)"   class="upgrade-vol-chip">20k+</button>
+                <button onclick="upgradeSetVol(30000,this)"   class="upgrade-vol-chip" style="border-color:#16a34a;color:#15803d;">30k+ ✅</button>
                 <button onclick="upgradeSetVol(50000,this)"   class="upgrade-vol-chip">50k+</button>
-                <button onclick="upgradeSetVol(75000,this)"   class="upgrade-vol-chip">75k+</button>
                 <button onclick="upgradeSetVol(100000,this)"  class="upgrade-vol-chip">100k+</button>
             </div>
             <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-                <span id="upgrade-count-badge" style="font-size:12px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:4px 12px;border-radius:99px;">0 merchants</span>
-                <button onclick="loadUpgradeEligible(true)" style="display:flex;align-items:center;gap:4px;background:white;border:1px solid #e2e8f0;border-radius:8px;padding:5px 10px;font-size:11px;color:#64748b;cursor:pointer;" title="Refresh">
+                <span id="upgrade-count-badge" style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:3px 10px;border-radius:99px;white-space:nowrap;">0 merchants</span>
+                <button onclick="loadUpgradeEligible(true)" title="Refresh" style="display:flex;align-items:center;background:white;border:1px solid #e2e8f0;border-radius:7px;padding:5px 7px;color:#64748b;cursor:pointer;">
                     <span class="material-icons" id="upgrade-refresh-icon" style="font-size:14px;">refresh</span>
+                </button>
+                <button onclick="upgradeExportCSV()" style="display:flex;align-items:center;gap:5px;background:#004990;border:none;color:white;border-radius:7px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">
+                    <span class="material-icons" style="font-size:13px;">download</span> CSV
                 </button>
             </div>
         </div>
@@ -317,7 +310,7 @@
                             <th class="hide-mobile">Vol 30D</th>
                             <th>Current Equipment</th>
                             <th>Legacy Equipment</th>
-                            <th>Status</th>
+                            <th>Eligibility</th>
                         </tr>
                     </thead>
                     <tbody id="upgrade-table-body">
@@ -3684,7 +3677,7 @@ let _pipelineCustomTo   = null;
 let _portfolioSubTab = 'all';
 let _upgradeLoaded   = false;
 let _upgradeData     = [];
-let _upgradeVolMin   = 30000;
+let _upgradeVolMin   = 0;
 let _upgradeSortKey  = 'volume';
 let _upgradeSortDir  = -1;
 
@@ -3763,7 +3756,7 @@ async function loadUpgradeEligible(forceRefresh = false) {
     const icon  = document.getElementById('upgrade-refresh-icon');
     if (icon) icon.style.animation = 'spin 1s linear infinite';
     document.getElementById('upgrade-table-body').innerHTML =
-        `<tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;"><span class="material-icons" style="font-size:28px;animation:spin 1s linear infinite;display:block;margin-bottom:8px;">sync</span>Scanning portfolio for upgrade candidates…</td></tr>`;
+        `<tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;"><span class="material-icons" style="font-size:28px;animation:spin 1s linear infinite;display:block;margin-bottom:8px;">sync</span>Scanning portfolio…</td></tr>`;
     try {
         const res  = await fetch('/api/merchants', {
             method: 'POST',
@@ -3809,10 +3802,12 @@ function upgradeRender() {
         const el = document.getElementById('upgSort-' + k);
         if (el) el.textContent = _upgradeSortKey === k ? (_upgradeSortDir === -1 ? '↓' : '↑') : '↕';
     });
-    document.getElementById('upgrade-count-badge').textContent = rows.length + ' merchant' + (rows.length !== 1 ? 's' : '');
+    const eligCount = rows.filter(m => m.is_eligible).length;
+    document.getElementById('upgrade-count-badge').innerHTML =
+        `${rows.length} merchant${rows.length !== 1 ? 's' : ''} &nbsp;·&nbsp; <span style="color:#15803d;">${eligCount} eligible</span>`;
     if (!rows.length) {
         document.getElementById('upgrade-table-body').innerHTML =
-            `<tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;"><span class="material-icons" style="font-size:36px;display:block;margin-bottom:8px;color:#cbd5e1;">trending_up</span>No upgrade-eligible merchants at this volume threshold.</td></tr>`;
+            `<tr><td colspan="9" style="padding:40px;text-align:center;color:#94a3b8;"><span class="material-icons" style="font-size:36px;display:block;margin-bottom:8px;color:#cbd5e1;">trending_up</span>No merchants found at this volume threshold.</td></tr>`;
         return;
     }
     const equipChips = (items, type) => {
@@ -3833,7 +3828,10 @@ function upgradeRender() {
             <td class="hide-mobile" style="font-size:12px;color:#64748b;">${fmt(m.volume_30_day)}</td>
             <td>${equipChips(m.current_equipment, 'current')}</td>
             <td>${equipChips(m.legacy_equipment, 'legacy')}</td>
-            <td><span style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:99px;background:#f1f5f9;color:#475569;">${m.account_status || '—'}</span></td>
+            <td>${m.is_eligible
+                ? '<span style="font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px;background:#dcfce7;color:#15803d;white-space:nowrap;">✅ Eligible</span>'
+                : '<span style="font-size:10px;font-weight:800;padding:3px 10px;border-radius:99px;background:#fee2e2;color:#dc2626;white-space:nowrap;">✗ Not Eligible</span>'
+            }</td>
         </tr>`).join('');
 }
 
@@ -3842,10 +3840,11 @@ function upgradeExportCSV() {
     const equipList = items => (items || []).map(e => e.terminal_type || e.serial_number).filter(Boolean).join('; ');
     const rows = _upgradeData.filter(m => (m.volume || 0) >= _upgradeVolMin);
     if (!rows.length) { Swal.fire('No data', 'No eligible merchants to export.', 'info'); return; }
-    const header = ['DBA Name','MID','Partner ID','Partner Name','Status','Total Volume','Volume 30D','Volume MTD','Current Equipment','Legacy Equipment'];
+    const header = ['DBA Name','MID','Partner ID','Partner Name','Eligibility','Total Volume','Volume 30D','Volume MTD','Current Equipment','Legacy Equipment'];
     const csv = [header, ...rows.map(m => [
         m.dba_name, m.merchant_id, m.agent_id, m.partner_name || '',
-        m.account_status, fmt(m.volume), fmt(m.volume_30_day), fmt(m.volume_mtd),
+        m.is_eligible ? 'Eligible' : 'Not Eligible',
+        fmt(m.volume), fmt(m.volume_30_day), fmt(m.volume_mtd),
         equipList(m.current_equipment), equipList(m.legacy_equipment)
     ])].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });

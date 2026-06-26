@@ -701,7 +701,7 @@ if (action === 'get_upgrade_eligible') {
         .from('agent_identifiers').select('id_string').eq('prime49', true);
     const prime49Set = new Set((p49Rows || []).map(r => r.id_string).filter(Boolean));
 
-    // 2. Paginate ALL merchants with volume >= 30000 (hard eligibility floor)
+    // 2. Paginate ALL merchants with any volume (eligibility badge set per row below)
     const allMerchants = [];
     let _from = 0;
     const _PAGE = 1000;
@@ -709,7 +709,7 @@ if (action === 'get_upgrade_eligible') {
         const { data: page, error: mErr } = await supabase
             .from('merchants')
             .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
-            .gte('volume', 30000)
+            .gt('volume', 0)
             .order('volume', { ascending: false })
             .range(_from, _from + _PAGE - 1);
         if (mErr) return res.json({ success: false, message: mErr.message });
@@ -778,7 +778,7 @@ if (action === 'get_upgrade_eligible') {
         });
     }
 
-    // 6. Build response
+    // 6. Build response — is_eligible = volume >= 30000 (not prime49, already filtered above)
     const result = eligible.map(m => ({
         id: m.id,
         dba_name: m.dba_name,
@@ -788,6 +788,7 @@ if (action === 'get_upgrade_eligible') {
         volume: m.volume,
         volume_30_day: m.volume_30_day,
         volume_mtd: m.volume_mtd,
+        is_eligible: (parseFloat(m.volume) || 0) >= 30000,
         partner_name: partnerMap[m.agent_id] || null,
         current_equipment: currentByMerchant[m.id] || [],
         legacy_equipment:  legacyByMerchant[m.id]  || []
