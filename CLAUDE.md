@@ -23,52 +23,42 @@
 
 ## Planned Feature: ShipStation Integration
 
-**Status**: Planned — not yet built. User approved the approach on 2026-06-01.
+**Status**: Phase 1 (DB migration) COMPLETE as of 2026-06-26. Design locked in with user. Phases 2-5 pending.
 
-### Approach
-- **Keep existing manual deployment/return process 100% unchanged**
-- Add a new **ShipStation tab** in the console as a separate section
-- ShipStation handles label creation only — does not replace manual workflows
-
-### 3 Shipping Modes
-1. **Ship to Partner** — ship to partner's address; deployment recorded on the merchant tied to that partner; tracking from ShipStation
-2. **Ship to Merchant** — ship directly to merchant's address; creates deployment record; tracking from ShipStation
-3. **Custom Shipping** — custom address tied to a specific merchant
+### Locked-in Design Decisions (user-confirmed 2026-06-26)
+- **Everything stays tied to `merchant_id`** — the deployment/return ownership never changes. We only add a *shipping destination distinction*.
+- **Distinction lives on the parent `deployments`/`returns` row** (not per-item) — one destination per shipment, so single + bulk behave identically.
+- **Deployments = two-leg tracking** (user chose "track both legs"): partner leg + merchant leg, derived from dates. Existing `status` enum (`Open`/`In Transit`/`Closed`) is UNTOUCHED.
+  - Direct: Open → In Transit → 🏪 merchant received (`merchant_received_date`)
+  - Via partner: Open → ✈️ in transit to partner → 🤝 partner received (`partner_received_date`) → 🏪 merchant installed (`merchant_received_date`)
+- **Returns = single-leg** (user clarified): either merchant or partner ships back directly, always tied to merchant record. `ship_from_type` records who sent it. No second-leg date.
+- **Partner is ALWAYS the merchant's own agent** — auto-resolved from `merchants.agent_id → agent_identifiers.id_string → agents.id → persons (parent_agent_id)`. No manual partner picking.
+- **Entry point = INSIDE the existing New Deployment / New Return modal** (a toggle), NOT a separate tab. (Original "separate tab" plan superseded.)
+- **Auto-fill + save-back for BOTH merchant & partner**: pick merchant → fills name/email/phone/address; blanks are editable; on confirm, missing values UPDATE the record.
+- **Order number = distinct, customizable SS-sequence** (`SS-10001`...) via `shipstation_order_seq`, tied to deployment/return via FK. Custom override allowed. (ShipStation `orderNumber` is what we send; `orderId`/`shipmentId` are SS-internal, returned after creation.)
 
 ### Address Logic
-- Merchant address already exists (`merchant_address`, `merchant_city`, `merchant_state`, `merchant_zip`, `merchant_country`)
-- Partner (`persons`) has NO address fields yet — needs `address`, `city`, `state`, `zip`, `country` added
-- If no address on file → manual entry form with "Save to record" checkbox
+- Merchant address/contact ALL already exist: `merchant_address/city/state/zip/country`, `dba_name`, `email`, `merchant_primary_contact`, `merchant_phone` → no merchant schema change needed.
+- Partner (`persons`) already had `full_name`, `email`, `phone_number` → only address fields were added.
 
-### New Table Needed: `shipstation_shipments`
+### Phase 1 schema APPLIED (migration `shipstation_phase1_schema`)
 ```sql
-CREATE TABLE shipstation_shipments (
-    id               uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    ss_order_id      text,
-    ss_shipment_id   text,
-    ss_label_url     text,
-    tracking_number  text,
-    carrier          text,
-    service          text,
-    ship_type        text, -- 'outbound' | 'return_label'
-    merchant_id      uuid REFERENCES merchants(id),
-    return_id        uuid REFERENCES returns(id),
-    ship_to_name     text,
-    address          text,
-    city             text,
-    state            text,
-    zip              text,
-    country          text DEFAULT 'US',
-    status           text DEFAULT 'created', -- created / in_transit / delivered
-    created_by       text,
-    created_at       timestamptz DEFAULT now()
-);
+-- persons: + address, city, state, zip, country (country default 'US')
+-- deployments: + ship_to_type text default 'merchant', ship_to_partner_id uuid→persons, partner_received_date date
+-- returns: + ship_from_type text default 'merchant', ship_from_partner_id uuid→persons
+-- CREATE SEQUENCE shipstation_order_seq START 10001
+-- CREATE TABLE shipstation_shipments (
+--   id, order_number, ss_order_id, ss_shipment_id, ss_return_id, ss_label_url,
+--   tracking_number, carrier, service, ship_type ('outbound'|'return_label'),
+--   merchant_id→merchants, deployment_id→deployments, return_id→returns,
+--   ship_to_name, address, city, state, zip, country default 'US',
+--   status default 'created', created_by, created_at )
+--   + indexes on merchant_id, deployment_id, return_id, tracking_number
 ```
 
-### No Changes to Existing Tables
-- `deployments` — untouched
-- `returns` — untouched
-- Only add address fields to `persons`
+### Existing tables — only ADDITIVE columns, existing rows default to 'merchant'/'merchant'
+- `deployments` / `returns` — only the additive columns above; all current logic untouched
+- Manual deploy/return flow remains 100% intact
 
 ### ShipStation API
 - Auth: HTTP Basic (base64 of `api_key:api_secret`)
@@ -77,14 +67,14 @@ CREATE TABLE shipstation_shipments (
 - Get carriers: `GET https://ssapi.shipstation.com/carriers`
 - Webhook: ShipStation fires `SHIP_NOTIFY` on shipment — update `shipstation_shipments.status` + `tracking_number`
 
-### UI Flow
-1. First screen: choose **Ship to Partner / Ship to Merchant / Custom**
-2. Search & select partner or merchant → auto-fill address
-3. If no address → manual form + save option
-4. Select equipment items from available stock
-5. Pick carrier + service level (loaded from ShipStation)
-6. Review → Create → get tracking number back
-7. Tracking number visible from merchant record and return record
+### UI Flow (revised — toggle inside existing modal, NOT a separate tab)
+1. In the existing New Deployment / New Return modal, select merchant (as today)
+2. Toggle: **Ship to merchant directly** (default) vs **Ship to partner first** (deployments) / merchant-or-partner origin (returns)
+3. Auto-fill name/email/phone/address from merchant (and partner via agent_id chain); blanks editable; on confirm missing values save back to the record
+4. Select equipment (single or bulk — unchanged)
+5. (ShipStation phase) order number auto = `SS-####` (customizable), pick carrier + service
+6. Review → Create → tracking written back into existing `tracking_id` + `shipstation_shipments`
+7. Dashboard shows badge 🏪 Direct / 🤝 Via [Partner]; partner-first deployments show partner-received milestone
 
 ### Webhook Handler
 - New endpoint: `api/shipstation-webhook.js`
