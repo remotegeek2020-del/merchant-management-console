@@ -279,6 +279,7 @@
                         <th class="hide-mobile">TID</th>
                         <th>Merchant</th>
                         <th>Terminal Type</th>
+                        <th class="hide-mobile">Vendor</th>
                         <th class="hide-mobile">Deploy Date</th>
                         <th class="hide-mobile">Purchase Type</th>
                         <th>Status</th>
@@ -2475,6 +2476,8 @@ async function executeBulk(validData) {
     if (jarvisPanel) jarvisPanel.style.display = 'none';
 }
 
+    let vendorMap = {};
+
     window.onload = async () => {
         try {
             const res = await fetch('/api/users');
@@ -2483,6 +2486,12 @@ async function executeBulk(validData) {
             const me = (result.data || []).find(u => String(u.id) === String(uid));
             if (me) currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
         } catch(e) {}
+        // Load vendor map in background (used in legacy tab)
+        fetch('/api/terminal-manager', {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ action: 'get_vendor_map' })
+        }).then(r => r.json()).then(d => { if (d.success) vendorMap = d.data || {}; }).catch(() => {});
         const urlQ = new URLSearchParams(window.location.search).get('q');
         if (urlQ) {
             const el = document.getElementById('depSearch');
@@ -2557,7 +2566,7 @@ async function fetchLegacy() {
 
 async function renderLegacy() {
     const tbody = document.getElementById('legacyTableBody');
-    tbody.innerHTML = '<tr><td colspan="8" style="padding:20px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="padding:20px;text-align:center;color:#94a3b8;">Loading…</td></tr>';
     const search = document.getElementById('legSearch')?.value.trim() || '';
     const status = document.getElementById('legStatus')?.value || 'all';
     const token  = localStorage.getItem('pp_session_token') || '';
@@ -2578,7 +2587,7 @@ async function renderLegacy() {
 
         const rows = data.data || [];
         if (!rows.length) {
-            tbody.innerHTML = '<tr><td colspan="8" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="9" style="padding:24px;text-align:center;color:#94a3b8;font-size:13px;">No legacy records found.</td></tr>';
             document.getElementById('legacyPaginationControls').innerHTML = '';
             return;
         }
@@ -2601,6 +2610,7 @@ async function renderLegacy() {
                     ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}
                     <button onclick="legEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,'\\\'')}')" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>
                 </td>
+                <td class="hide-mobile" style="font-size:12px;">${vendorMap[r.terminal_type] ? `<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:2px 8px;border-radius:10px;">${vendorMap[r.terminal_type]}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>
                 <td style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>
                 <td style="font-size:12px;color:#64748b;">${r.purchase_type || '—'}</td>
                 <td>${statusBadge}</td>
@@ -2621,7 +2631,7 @@ async function renderLegacy() {
             ${legPage < pages ? `<button onclick="legPage++;renderLegacy()" style="padding:5px 14px;border-radius:6px;border:1px solid #e2e8f0;background:white;cursor:pointer;font-size:12px;">Next →</button>` : ''}
         </div>` : `<div style="padding:8px 12px;font-size:11px;color:#94a3b8;text-align:right;">${total} record${total!==1?'s':''}</div>`;
     } catch (e) {
-        tbody.innerHTML = `<tr><td colspan="8" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="9" style="padding:20px;text-align:center;color:#ef4444;">${e.message}</td></tr>`;
     }
 }
 

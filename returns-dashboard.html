@@ -240,6 +240,7 @@ let currentStaffName = '';
 let currentReturns = [];
 let retPageSize = 20;
 let retCurrentPage = 0;
+let vendorMap = {};
 let retTotalCount = 0;
 let retSearchTimeout = null;
 let _lastRetSearchLogged = '';
@@ -284,6 +285,12 @@ window.onload = async () => {
         const me = (result.data || []).find(u => String(u.id) === String(uid));
         if (me) currentStaffName = [me.first_name, me.last_name].filter(Boolean).join(' ');
     } catch(e) {}
+    // Load vendor map in background
+    fetch('/api/terminal-manager', {
+        method: 'POST',
+        headers: authHeaders(),
+        body: JSON.stringify({ action: 'get_vendor_map' })
+    }).then(r => r.json()).then(d => { if (d.success) vendorMap = d.data || {}; }).catch(() => {});
     const urlQ = new URLSearchParams(window.location.search).get('q');
     if (urlQ) {
         const el = document.getElementById('retSearch');
@@ -564,11 +571,13 @@ async function fetchReturns() {
             const isLegacy = !!r.legacy_deployment_id;
             const legacySerial = r.legacy_deployments?.serial_number;
             const legacyType   = r.legacy_deployments?.terminal_type || r.equipments?.terminal_type;
+            const _retType = isLegacy ? legacyType : (r.equipments?.terminal_type || '');
+            const _vendorBadge = vendorMap[_retType] ? ` <span style="font-size:10px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:1px 6px;border-radius:8px;">${vendorMap[_retType]}</span>` : '';
             const equipCell = isBulk
                 ? `<div><span style="font-size:10px;background:#dbeafe;color:#1d4ed8;padding:3px 9px;border-radius:4px;font-weight:700;">${itemCount} UNIT${itemCount !== 1 ? 'S' : ''}</span></div>`
                 : isLegacy
-                    ? `<div style="font-weight:600;font-size:13px;">${legacyType || '—'}</div><div class="pp-muted" style="font-family:monospace;">${legacySerial || '—'}</div>`
-                    : `<div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}</div><div class="pp-muted">${r.equipments?.serial_number || ''}</div>`;
+                    ? `<div style="font-weight:600;font-size:13px;">${legacyType || '—'}${_vendorBadge}</div><div class="pp-muted" style="font-family:monospace;">${legacySerial || '—'}</div>`
+                    : `<div style="font-weight:600; font-size:13px;">${r.equipments?.terminal_type || '---'}${_vendorBadge}</div><div class="pp-muted">${r.equipments?.serial_number || ''}</div>`;
             return `<tr${isLegacy ? ' style="background:#fffbeb;"' : ''}>
                 <td class="pp-id">
                     <span style="cursor:pointer;color:#004990;text-decoration:underline;text-underline-offset:2px;font-weight:700;" onclick="viewRMADetails(${index})">${r.return_id || 'PENDING'}</span>
