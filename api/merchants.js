@@ -710,9 +710,8 @@ if (action === 'get_upgrade_eligible') {
     while (true) {
         const { data: page, error: mErr } = await supabase
             .from('merchants')
-            .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd, is_prime49')
+            .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
             .gt('volume', '0')
-            .eq('is_prime49', false)
             .order('created_at', { ascending: false })
             .range(_from, _from + _PAGE - 1);
         if (mErr) return res.json({ success: false, message: mErr.message });
@@ -722,12 +721,11 @@ if (action === 'get_upgrade_eligible') {
         _from += _PAGE;
     }
 
-    // 3. Apply numeric range filter in JS (volume is text in DB — string gte/lte is unreliable)
-    //    Dual prime49 check: merchant's own is_prime49 flag (already filtered in query above)
-    //    + agent_identifiers.prime49 set (catches agent-level enrollment)
+    // 3. Apply numeric range filter + prime49 exclusion in JS
+    //    Prime49 is partner-level: agent_identifiers.prime49=true means ALL merchants
+    //    under that agent_id are already enrolled — exclude them
     const eligible = allMerchants.filter(m => {
-        if (m.is_prime49) return false;                  // direct merchant flag
-        if (prime49Set.has(m.agent_id)) return false;    // agent-level flag
+        if (prime49Set.has(m.agent_id)) return false;
         const v = parseFloat(m.volume) || 0;
         if (v < vol_min) return false;
         if (vol_max != null && v > vol_max) return false;
