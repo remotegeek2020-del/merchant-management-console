@@ -701,7 +701,7 @@ if (action === 'get_upgrade_eligible') {
         .from('agent_identifiers').select('id_string').eq('prime49', true);
     const prime49Set = new Set((p49Rows || []).map(r => r.id_string).filter(Boolean));
 
-    // 2. Paginate ALL merchants with volume > 0 — no hard cap
+    // 2. Paginate ALL merchants with volume >= 30000 (hard eligibility floor)
     const allMerchants = [];
     let _from = 0;
     const _PAGE = 1000;
@@ -709,7 +709,7 @@ if (action === 'get_upgrade_eligible') {
         const { data: page, error: mErr } = await supabase
             .from('merchants')
             .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
-            .gt('volume', 0)
+            .gte('volume', 30000)
             .order('volume', { ascending: false })
             .range(_from, _from + _PAGE - 1);
         if (mErr) return res.json({ success: false, message: mErr.message });
@@ -763,17 +763,18 @@ if (action === 'get_upgrade_eligible') {
         });
     }
 
-    // 5. Partner info
+    // 5. Partner info — join path: agent_identifiers → agents → persons
     const agentIds = [...new Set(eligible.map(m => m.agent_id).filter(Boolean))];
     const partnerMap = {};
     for (let i = 0; i < agentIds.length; i += CHUNK) {
         const chunk = agentIds.slice(i, i + CHUNK);
         const { data: idents } = await supabase
             .from('agent_identifiers')
-            .select('id_string, persons(first_name, last_name)')
+            .select('id_string, agents!agent_identifiers_agent_id_fkey(persons!agents_parent_agent_id_fkey(full_name))')
             .in('id_string', chunk);
         (idents || []).forEach(ai => {
-            if (ai.persons) partnerMap[ai.id_string] = `${ai.persons.first_name || ''} ${ai.persons.last_name || ''}`.trim();
+            const fullName = ai.agents?.persons?.full_name;
+            if (fullName) partnerMap[ai.id_string] = fullName;
         });
     }
 
