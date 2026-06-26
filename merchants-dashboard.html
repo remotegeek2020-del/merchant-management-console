@@ -2105,7 +2105,7 @@ async function addTask(merchantUuid) {
         const totalVol   = parseFloat(m.volume) || 0;
         const vol30      = parseFloat(m.volume_30_day) || 0;
         const volMtd     = parseFloat(m.volume_mtd) || 0;
-        const isEligible = !isPrime49 && totalVol > 0;
+        const isEligible = !isPrime49 && totalVol >= 30000;
 
         // Fetch equipment fresh
         panel.innerHTML = '<p style="padding:30px;text-align:center;color:#94a3b8;"><span class="material-icons" style="animation:spin 1s linear infinite;display:block;font-size:28px;margin-bottom:8px;">sync</span>Loading equipment records…</p>';
@@ -2133,9 +2133,11 @@ async function addTask(merchantUuid) {
         const badge = (label, bg, color) =>
             `<span style="font-size:10px;font-weight:800;background:${bg};color:${color};padding:2px 8px;border-radius:99px;">${label}</span>`;
 
-        const eligBadge = isEligible
-            ? badge('✅ ELIGIBLE FOR UPGRADE', '#dcfce7', '#166534')
-            : (isPrime49 ? badge('💎 ALREADY PRIME49', '#fef9c3', '#854d0e') : badge('⚠ NOT ELIGIBLE — NO VOLUME', '#fee2e2', '#991b1b'));
+        const eligBadge = isPrime49
+            ? badge('💎 ALREADY PRIME49', '#fef9c3', '#854d0e')
+            : isEligible
+                ? badge('✅ ELIGIBLE FOR UPGRADE', '#dcfce7', '#166534')
+                : badge(`✗ NOT ELIGIBLE — BELOW $30K THRESHOLD`, '#fee2e2', '#991b1b');
 
         // Monthly run rate = 90-day volume ÷ 3 (same formula as health score)
         const vol90     = parseFloat(m.volume_90_day) || 0;
