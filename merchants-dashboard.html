@@ -1657,7 +1657,9 @@ async function addTask(merchantUuid) {
         } catch (err) { console.error(err); }
     }
 
-  async function openModal(id) {
+  let _modalMerchant = null;
+
+  async function openModal(id, _initialTab = 'details') {
     if (!id) return;
     // Fall back to a stub if merchant isn't on the current page — full data is fetched below anyway
     let m = currentRecords.find(r => r.id === id) || { id };
@@ -1682,6 +1684,7 @@ async function addTask(merchantUuid) {
         const fullMerchant = (await fRes.json()).data || {};
         // Merge: full merchant row overrides view data so all columns (esp. dates) are present
         m = { ...m, ...fullMerchant };
+        _modalMerchant = m;
         // Normalize date fields to YYYY-MM-DD for <input type="date">
         const dateFields = ['enrollment_date', 'approved_date', 'last_batch_date', 'account_status_change_date'];
         dateFields.forEach(f => { if (m[f]) m[f] = m[f].slice(0, 10); });
@@ -1705,6 +1708,7 @@ async function addTask(merchantUuid) {
                     <button onclick="switchTab('audit')" id="tab-audit" class="modal-tab-btn">AUDIT HISTORY</button>
                     <button onclick="switchTab('tickets')" id="tab-tickets" class="modal-tab-btn">TICKETS</button>
                     <button onclick="switchTab('partner')" id="tab-partner" class="modal-tab-btn">PARTNER INFO</button>
+                    <button onclick="switchTab('upgrade')" id="tab-upgrade" class="modal-tab-btn" style="color:#1d4ed8;">⬆ UPGRADE ELIGIBILITY</button>
                 </div>
 
                 <div id="content-details" class="tab-content" style="text-align:left; max-height:650px; overflow-y:auto; padding-right:15px;">
@@ -2014,11 +2018,18 @@ async function addTask(merchantUuid) {
                 <div id="content-partner" class="tab-content" style="display:none; text-align:left;">
                     <div id="partner-info-panel"><p style="padding:20px; text-align:center; color:#94a3b8;">Click the tab to load partner info.</p></div>
                 </div>
+
+                <div id="content-upgrade" class="tab-content" style="display:none; text-align:left;">
+                    <div id="upgrade-elig-panel" style="padding:4px 0;">
+                        <p style="padding:30px; text-align:center; color:#94a3b8;">Loading upgrade eligibility assessment…</p>
+                    </div>
+                </div>
             `,
-            showConfirmButton: false, showCloseButton: true
+            showConfirmButton: false, showCloseButton: true,
+            didOpen: () => { if (_initialTab !== 'details') switchTab(_initialTab); }
         });
-    } catch (err) { 
-        Swal.fire('Error', 'Load failed: ' + err.message, 'error'); 
+    } catch (err) {
+        Swal.fire('Error', 'Load failed: ' + err.message, 'error');
     }
 }
     window.switchTab = (tab) => {
@@ -2031,6 +2042,7 @@ async function addTask(merchantUuid) {
         if (tab === 'tasks') fetchMerchantTasks();
         if (tab === 'tickets') fetchMerchantTickets();
         if (tab === 'partner') fetchPartnerInfo();
+        if (tab === 'upgrade') fetchUpgradeEligibilityModal();
         if (tab === 'notes') { clearMentionChips(); loadStaffUsers(); }
     };
 
@@ -2083,6 +2095,157 @@ async function addTask(merchantUuid) {
         } catch(e) {
             panel.innerHTML = '<p style="padding:20px;color:#dc2626;">Failed to load: ' + e.message + '</p>';
         }
+    }
+
+    async function fetchUpgradeEligibilityModal() {
+        const panel = document.getElementById('upgrade-elig-panel');
+        if (!panel || panel.dataset.loaded) return;
+        panel.dataset.loaded = '1';
+
+        const m = _modalMerchant;
+        if (!m) { panel.innerHTML = '<p style="padding:20px;text-align:center;color:#94a3b8;">Merchant data not available.</p>'; return; }
+
+        const token = localStorage.getItem('pp_session_token') || '';
+        const fmtVol = v => v != null ? '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—';
+
+        // Determine eligibility
+        const isPrime49  = !!m.is_prime49;
+        const totalVol   = parseFloat(m.volume) || 0;
+        const vol30      = parseFloat(m.volume_30_day) || 0;
+        const volMtd     = parseFloat(m.volume_mtd) || 0;
+        const isEligible = !isPrime49 && totalVol > 0;
+
+        // Fetch equipment fresh
+        panel.innerHTML = '<p style="padding:30px;text-align:center;color:#94a3b8;"><span class="material-icons" style="animation:spin 1s linear infinite;display:block;font-size:28px;margin-bottom:8px;">sync</span>Loading equipment records…</p>';
+
+        let currentEquip = [], legacyEquip = [];
+        try {
+            const [eqRes, legRes] = await Promise.all([
+                fetch('/api/merchants', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ action: 'get_merchant_equipment', merchant_uuid: m.id })
+                }),
+                fetch('/api/legacy', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+                    body: JSON.stringify({ action: 'get_by_merchant', merchant_id: m.id })
+                })
+            ]);
+            const eqData  = await eqRes.json();
+            const legData = await legRes.json();
+            currentEquip = eqData.current   || [];
+            legacyEquip  = legData.data     || [];
+        } catch(e) { /* equipment fetch failed — show what we have */ }
+
+        const badge = (label, bg, color) =>
+            `<span style="font-size:10px;font-weight:800;background:${bg};color:${color};padding:2px 8px;border-radius:99px;">${label}</span>`;
+
+        const eligBadge = isEligible
+            ? badge('✅ ELIGIBLE FOR UPGRADE', '#dcfce7', '#166534')
+            : (isPrime49 ? badge('💎 ALREADY PRIME49', '#fef9c3', '#854d0e') : badge('⚠ NOT ELIGIBLE — NO VOLUME', '#fee2e2', '#991b1b'));
+
+        const volRow = (label, val, threshold, note) => {
+            const v = parseFloat(val) || 0;
+            const ok = threshold ? v >= threshold : v > 0;
+            return `<tr>
+                <td style="padding:8px 12px;color:#64748b;font-size:12px;">${label}</td>
+                <td style="padding:8px 12px;font-weight:700;font-size:13px;">${fmtVol(val)}</td>
+                <td style="padding:8px 12px;">${ok ? '✅' : '—'} <span style="font-size:11px;color:#94a3b8;">${note}</span></td>
+            </tr>`;
+        };
+
+        const equipRow = (e, type) => {
+            const tt   = type === 'current' ? (e.terminal_type || e.equipment_type || '—') : (e.terminal_type || '—');
+            const sn   = e.serial_number || '—';
+            const stat = type === 'legacy' ? (e.status || '—') : 'Open';
+            const bg   = type === 'current' ? '#dcfce7' : '#fef3c7';
+            const col  = type === 'current' ? '#166534' : '#92400e';
+            return `<tr>
+                <td style="padding:6px 12px;font-size:12px;font-family:monospace;color:#475569;">${sn}</td>
+                <td style="padding:6px 12px;"><span style="font-size:11px;font-weight:700;background:${bg};color:${col};padding:2px 7px;border-radius:99px;">${tt}</span></td>
+                <td style="padding:6px 12px;font-size:11px;color:#64748b;">${stat}</td>
+            </tr>`;
+        };
+
+        const currentRows = currentEquip.length
+            ? currentEquip.map(e => equipRow(e, 'current')).join('')
+            : `<tr><td colspan="3" style="padding:10px 12px;color:#94a3b8;font-size:12px;">No open deployments on record</td></tr>`;
+
+        const legacyRows = legacyEquip.length
+            ? legacyEquip.map(e => equipRow(e, 'legacy')).join('')
+            : `<tr><td colspan="3" style="padding:10px 12px;color:#94a3b8;font-size:12px;">No legacy equipment on record</td></tr>`;
+
+        panel.innerHTML = `
+            <div style="max-height:600px;overflow-y:auto;padding:4px 0;">
+                <!-- Status banner -->
+                <div style="background:${isEligible ? 'linear-gradient(135deg,#1e3a5f,#2563eb)' : '#f1f5f9'};border-radius:14px;padding:20px 24px;margin-bottom:16px;display:flex;align-items:center;gap:14px;">
+                    <span class="material-icons" style="font-size:36px;color:${isEligible ? 'white' : '#94a3b8'};">trending_up</span>
+                    <div>
+                        <div style="font-size:16px;font-weight:800;color:${isEligible ? 'white' : '#475569'};margin-bottom:6px;">${m.dba_name || '—'}</div>
+                        ${eligBadge}
+                        ${isEligible ? '<div style="font-size:11px;color:rgba(255,255,255,0.75);margin-top:6px;">This merchant qualifies for Prime49 enrollment based on processing volume.</div>' : ''}
+                    </div>
+                </div>
+
+                <!-- Volume assessment -->
+                <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+                    <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Volume Assessment</div>
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="background:#f8fafc;">
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Period</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Volume</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Threshold</th>
+                        </tr></thead>
+                        <tbody>
+                            ${volRow('Total (Lifetime)', m.volume, 30000, totalVol >= 30000 ? 'Meets 30k threshold' : totalVol > 0 ? 'Below 30k' : 'No volume')}
+                            ${volRow('Last 30 Days', m.volume_30_day, 0, vol30 > 0 ? 'Active' : 'No recent activity')}
+                            ${volRow('Month to Date', m.volume_mtd, 0, '')}
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Prime49 status -->
+                <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:14px;padding:14px 16px;">
+                    <div style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Prime49 Status</div>
+                    <div style="display:flex;align-items:center;gap:10px;">
+                        ${isPrime49
+                            ? `${badge('💎 ENROLLED IN PRIME49', '#fef9c3', '#854d0e')} <span style="font-size:12px;color:#64748b;">This merchant is already a Prime49 asset — no upgrade needed.</span>`
+                            : `${badge('NOT ENROLLED', '#f1f5f9', '#475569')} <span style="font-size:12px;color:#64748b;">Eligible for Prime49 enrollment.</span>`
+                        }
+                    </div>
+                </div>
+
+                <!-- Current equipment -->
+                <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+                    <div style="padding:12px 16px;background:#f0fdf4;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;">
+                        Current Equipment (Open Deployments) — ${currentEquip.length} unit${currentEquip.length !== 1 ? 's' : ''}
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="background:#f8fafc;">
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Serial #</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Terminal Type</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Status</th>
+                        </tr></thead>
+                        <tbody>${currentRows}</tbody>
+                    </table>
+                </div>
+
+                <!-- Legacy equipment -->
+                <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">
+                    <div style="padding:12px 16px;background:#fffbeb;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:800;color:#92400e;text-transform:uppercase;letter-spacing:.5px;">
+                        Legacy Equipment — ${legacyEquip.length} record${legacyEquip.length !== 1 ? 's' : ''}
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr style="background:#f8fafc;">
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Serial #</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Terminal Type</th>
+                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Status</th>
+                        </tr></thead>
+                        <tbody>${legacyRows}</tbody>
+                    </table>
+                </div>
+            </div>`;
     }
 
     // SURGICAL ADD: fetchMerchantLifecycle function
@@ -3666,15 +3829,7 @@ function upgradeExportCSV() {
 }
 
 function showMerchantBrief(id) {
-    const m = _upgradeData.find(x => x.id === id);
-    if (!m) return;
-    switchPageTab('portfolio');
-    portfolioSubTab('all');
-    if (m.merchant_id) {
-        document.getElementById('searchInput').value = m.merchant_id;
-        document.getElementById('filterBy').value = 'merchant_id';
-        resetAndFetch();
-    }
+    openModal(id, 'upgrade');
 }
 
 // ── LEGACY ATTACHMENTS ────────────────────────────────────────────────────────

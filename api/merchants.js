@@ -701,80 +701,69 @@ if (action === 'get_upgrade_eligible') {
         .from('agent_identifiers').select('id_string').eq('prime49', true);
     const prime49Set = new Set((p49Rows || []).map(r => r.id_string).filter(Boolean));
 
-    // 2. All merchants with volume > 0, ordered by volume desc
-    const { data: merchants, error: mErr } = await supabase
-        .from('merchants')
-        .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
-        .gt('volume', 0)
-        .order('volume', { ascending: false })
-        .limit(5000);
-    if (mErr) return res.json({ success: false, message: mErr.message });
-
-    // 3. Exclude already-prime49 merchants
-    const candidates = (merchants || []).filter(m => !prime49Set.has(m.agent_id));
-    if (!candidates.length) return res.json({ success: true, data: [] });
-
-    const candidateIds = candidates.map(m => m.id);
-
-    // 4. Find which have equipment
-    const depMids = new Set();
-    const legMids = new Set();
-    for (let i = 0; i < candidateIds.length; i += CHUNK) {
-        const chunk = candidateIds.slice(i, i + CHUNK);
-        const { data: deps } = await supabase.from('deployments').select('merchant_id').in('merchant_id', chunk).eq('status', 'Open');
-        (deps || []).forEach(d => depMids.add(d.merchant_id));
-        const { data: legs } = await supabase.from('legacy_deployments').select('merchant_id').in('merchant_id', chunk);
-        (legs || []).forEach(l => legMids.add(l.merchant_id));
+    // 2. Paginate ALL merchants with volume > 0 — no hard cap
+    const allMerchants = [];
+    let _from = 0;
+    const _PAGE = 1000;
+    while (true) {
+        const { data: page, error: mErr } = await supabase
+            .from('merchants')
+            .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
+            .gt('volume', 0)
+            .order('volume', { ascending: false })
+            .range(_from, _from + _PAGE - 1);
+        if (mErr) return res.json({ success: false, message: mErr.message });
+        if (!page?.length) break;
+        allMerchants.push(...page);
+        if (page.length < _PAGE) break;
+        _from += _PAGE;
     }
 
-    const eligible = candidates.filter(m => depMids.has(m.id) || legMids.has(m.id));
-    if (!eligible.length) return res.json({ success: true, data: [] });
+    // 3. Eligibility = NOT prime49 + volume > 0 (equipment records are informational only)
+    const eligible = allMerchants.filter(m => !prime49Set.has(m.agent_id));
+    if (!eligible.length) return res.json({ success: true, data: [], total: 0 });
 
     const eligibleIds = eligible.map(m => m.id);
 
-    // 5. Gather equipment for eligible merchants
+    // 4. Gather equipment (informational — does NOT gate eligibility)
+    //    Parallelise singles + bulks + legacy per chunk for speed
     const currentByMerchant = {};
     const legacyByMerchant  = {};
 
     for (let i = 0; i < eligibleIds.length; i += CHUNK) {
         const chunk = eligibleIds.slice(i, i + CHUNK);
 
-        // Single-unit open deployments
-        const { data: singles } = await supabase
-            .from('deployments')
-            .select('merchant_id, equipments:equipment_id(serial_number, terminal_type)')
-            .in('merchant_id', chunk).eq('status', 'Open').eq('is_bulk', false);
-        (singles || []).forEach(d => {
+        const [singlesRes, bulksRes, legsRes] = await Promise.all([
+            supabase.from('deployments')
+                .select('merchant_id, equipments:equipment_id(serial_number, terminal_type)')
+                .in('merchant_id', chunk).eq('status', 'Open').eq('is_bulk', false),
+            supabase.from('deployments')
+                .select('merchant_id, deployment_items(equip:equipment_id(serial_number, terminal_type))')
+                .in('merchant_id', chunk).eq('status', 'Open').eq('is_bulk', true),
+            supabase.from('legacy_deployments')
+                .select('merchant_id, serial_number, terminal_type, status')
+                .in('merchant_id', chunk).neq('status', 'converted')
+        ]);
+
+        (singlesRes.data || []).forEach(d => {
             if (!d.equipments) return;
             (currentByMerchant[d.merchant_id] = currentByMerchant[d.merchant_id] || [])
                 .push({ serial_number: d.equipments.serial_number, terminal_type: d.equipments.terminal_type });
         });
-
-        // Bulk open deployments
-        const { data: bulks } = await supabase
-            .from('deployments')
-            .select('merchant_id, deployment_items(equip:equipment_id(serial_number, terminal_type))')
-            .in('merchant_id', chunk).eq('status', 'Open').eq('is_bulk', true);
-        (bulks || []).forEach(d => {
+        (bulksRes.data || []).forEach(d => {
             (d.deployment_items || []).forEach(item => {
                 if (!item.equip) return;
                 (currentByMerchant[d.merchant_id] = currentByMerchant[d.merchant_id] || [])
                     .push({ serial_number: item.equip.serial_number, terminal_type: item.equip.terminal_type });
             });
         });
-
-        // Legacy deployments
-        const { data: legs } = await supabase
-            .from('legacy_deployments')
-            .select('merchant_id, serial_number, terminal_type, status')
-            .in('merchant_id', chunk).neq('status', 'converted');
-        (legs || []).forEach(l => {
+        (legsRes.data || []).forEach(l => {
             (legacyByMerchant[l.merchant_id] = legacyByMerchant[l.merchant_id] || [])
                 .push({ serial_number: l.serial_number, terminal_type: l.terminal_type, status: l.status });
         });
     }
 
-    // 6. Partner info
+    // 5. Partner info
     const agentIds = [...new Set(eligible.map(m => m.agent_id).filter(Boolean))];
     const partnerMap = {};
     for (let i = 0; i < agentIds.length; i += CHUNK) {
@@ -788,7 +777,7 @@ if (action === 'get_upgrade_eligible') {
         });
     }
 
-    // 7. Build response
+    // 6. Build response
     const result = eligible.map(m => ({
         id: m.id,
         dba_name: m.dba_name,
