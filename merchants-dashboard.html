@@ -2143,13 +2143,19 @@ async function addTask(merchantUuid) {
             ? badge('✅ ELIGIBLE FOR UPGRADE', '#dcfce7', '#166534')
             : (isPrime49 ? badge('💎 ALREADY PRIME49', '#fef9c3', '#854d0e') : badge('⚠ NOT ELIGIBLE — NO VOLUME', '#fee2e2', '#991b1b'));
 
-        const volRow = (label, val, threshold, note) => {
+        // Monthly run rate = 90-day volume ÷ 3 (same formula as health score)
+        const vol90     = parseFloat(m.volume_90_day) || 0;
+        const runRate   = vol90 > 0 ? vol90 / 3 : vol30;
+        const runRateSrc = vol90 > 0 ? '(90-day vol ÷ 3)' : '(using 30-day vol)';
+
+        const volRow = (label, val, threshold, note, subNote) => {
             const v = parseFloat(val) || 0;
-            const ok = threshold ? v >= threshold : v > 0;
-            return `<tr>
-                <td style="padding:8px 12px;color:#64748b;font-size:12px;">${label}</td>
-                <td style="padding:8px 12px;font-weight:700;font-size:13px;">${fmtVol(val)}</td>
-                <td style="padding:8px 12px;">${ok ? '✅' : '—'} <span style="font-size:11px;color:#94a3b8;">${note}</span></td>
+            const ok = threshold != null ? v >= threshold : v > 0;
+            return `<tr style="border-bottom:1px solid #f1f5f9;">
+                <td style="padding:10px 12px;color:#475569;font-size:12px;font-weight:600;">${label}${subNote ? `<div style="font-size:10px;color:#94a3b8;font-weight:400;margin-top:2px;">${subNote}</div>` : ''}</td>
+                <td style="padding:10px 12px;font-weight:800;font-size:13px;color:#1e293b;">${fmtVol(val)}</td>
+                <td style="padding:10px 12px;font-size:12px;">${threshold != null ? (ok ? '<span style="color:#16a34a;font-weight:700;">✅ Passes</span>' : '<span style="color:#dc2626;font-weight:700;">✗ Below threshold</span>') : (ok ? '<span style="color:#16a34a;">Active</span>' : '<span style="color:#94a3b8;">No activity</span>')}</td>
+                <td style="padding:10px 12px;font-size:11px;color:#94a3b8;">${note}</td>
             </tr>`;
         };
 
@@ -2188,17 +2194,40 @@ async function addTask(merchantUuid) {
 
                 <!-- Volume assessment -->
                 <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;margin-bottom:14px;overflow:hidden;">
-                    <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Volume Assessment</div>
+                    <div style="padding:12px 16px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;align-items:center;justify-content:space-between;">
+                        <span style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;">Volume Assessment</span>
+                        <span style="font-size:10px;color:#94a3b8;">Synced from payment processor</span>
+                    </div>
+                    <!-- Eligibility rule callout -->
+                    <div style="padding:10px 14px;background:#eff6ff;border-bottom:1px solid #dbeafe;font-size:11px;color:#1d4ed8;">
+                        <strong>Eligibility rule:</strong> Total Lifetime Volume ≥ $30,000 AND not already enrolled in Prime49.
+                    </div>
                     <table style="width:100%;border-collapse:collapse;">
                         <thead><tr style="background:#f8fafc;">
-                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Period</th>
-                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Volume</th>
-                            <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Threshold</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Field</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Value</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Eligibility Check</th>
+                            <th style="padding:10px 12px;text-align:left;font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;">Notes</th>
                         </tr></thead>
                         <tbody>
-                            ${volRow('Total (Lifetime)', m.volume, 30000, totalVol >= 30000 ? 'Meets 30k threshold' : totalVol > 0 ? 'Below 30k' : 'No volume')}
-                            ${volRow('Last 30 Days', m.volume_30_day, 0, vol30 > 0 ? 'Active' : 'No recent activity')}
-                            ${volRow('Month to Date', m.volume_mtd, 0, '')}
+                            ${volRow('Total Lifetime Volume', m.volume, 30000,
+                                'Cumulative processing volume since enrollment, imported from processor',
+                                '← Primary eligibility criterion (must be ≥ $30,000)')}
+                            ${volRow('Last 90 Days', m.volume_90_day, null,
+                                'Rolling 90-day processing total',
+                                '')}
+                            ${volRow('Last 30 Days', m.volume_30_day, null,
+                                'Rolling 30-day processing total',
+                                '')}
+                            ${volRow('Month to Date', m.volume_mtd, null,
+                                'Processing volume since the 1st of this month',
+                                '')}
+                            <tr style="background:#f8fafc;">
+                                <td style="padding:10px 12px;color:#475569;font-size:12px;font-weight:600;">Est. Monthly Run Rate<div style="font-size:10px;color:#94a3b8;font-weight:400;margin-top:2px;">${runRateSrc}</div></td>
+                                <td style="padding:10px 12px;font-weight:800;font-size:13px;color:#1e293b;">${fmtVol(runRate)}</td>
+                                <td style="padding:10px 12px;"></td>
+                                <td style="padding:10px 12px;font-size:11px;color:#94a3b8;">${vol90 > 0 ? `${fmtVol(vol90)} ÷ 3 months` : 'Using 30-day volume as proxy'}</td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
