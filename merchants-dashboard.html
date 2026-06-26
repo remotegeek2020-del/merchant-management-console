@@ -277,13 +277,14 @@
         <div style="background:white;border-radius:12px;border:1px solid #e2e8f0;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
             <span style="font-size:11px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap;">Min Volume</span>
             <div style="display:flex;gap:5px;flex-wrap:wrap;" id="upgrade-vol-chips">
-                <button onclick="upgradeSetVol(0,this)"       class="upgrade-vol-chip upgrade-chip-active">All</button>
-                <button onclick="upgradeSetVol(5000,this)"    class="upgrade-vol-chip">5k+</button>
-                <button onclick="upgradeSetVol(10000,this)"   class="upgrade-vol-chip">10k+</button>
-                <button onclick="upgradeSetVol(20000,this)"   class="upgrade-vol-chip">20k+</button>
-                <button onclick="upgradeSetVol(30000,this)"   class="upgrade-vol-chip" style="border-color:#16a34a;color:#15803d;">30k+ ✅</button>
-                <button onclick="upgradeSetVol(50000,this)"   class="upgrade-vol-chip">50k+</button>
-                <button onclick="upgradeSetVol(100000,this)"  class="upgrade-vol-chip">100k+</button>
+                <button onclick="upgradeSetVol(0,5000,this)"         class="upgrade-vol-chip">$0–5k</button>
+                <button onclick="upgradeSetVol(5001,10000,this)"      class="upgrade-vol-chip">$6k–10k</button>
+                <button onclick="upgradeSetVol(10001,20000,this)"     class="upgrade-vol-chip">$10k–20k</button>
+                <button onclick="upgradeSetVol(20001,29999,this)"     class="upgrade-vol-chip">$20k–29k</button>
+                <button onclick="upgradeSetVol(30000,50000,this)"     class="upgrade-vol-chip upgrade-chip-active" style="border-color:#16a34a;color:#15803d;">$30k–50k ✅</button>
+                <button onclick="upgradeSetVol(50001,70000,this)"     class="upgrade-vol-chip" style="color:#15803d;">$50k–70k ✅</button>
+                <button onclick="upgradeSetVol(70001,99999,this)"     class="upgrade-vol-chip" style="color:#15803d;">$70k–99k ✅</button>
+                <button onclick="upgradeSetVol(100000,null,this)"     class="upgrade-vol-chip" style="color:#15803d;">$100k+ ✅</button>
             </div>
             <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
                 <span id="upgrade-count-badge" style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:3px 10px;border-radius:99px;white-space:nowrap;">0 merchants</span>
@@ -3677,7 +3678,8 @@ let _pipelineCustomTo   = null;
 let _portfolioSubTab = 'all';
 let _upgradeLoaded   = false;
 let _upgradeData     = [];
-let _upgradeVolMin   = 0;
+let _upgradeVolMin   = 30000;
+let _upgradeVolMax   = 50000;
 let _upgradeSortKey  = 'volume';
 let _upgradeSortDir  = -1;
 
@@ -3761,7 +3763,7 @@ async function loadUpgradeEligible(forceRefresh = false) {
         const res  = await fetch('/api/merchants', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
-            body: JSON.stringify({ action: 'get_upgrade_eligible' })
+            body: JSON.stringify({ action: 'get_upgrade_eligible', vol_min: _upgradeVolMin, vol_max: _upgradeVolMax })
         });
         const data = await res.json();
         if (!data.success) throw new Error(data.message || 'API error');
@@ -3776,11 +3778,13 @@ async function loadUpgradeEligible(forceRefresh = false) {
     }
 }
 
-function upgradeSetVol(val, btn) {
-    _upgradeVolMin = val;
+function upgradeSetVol(min, max, btn) {
+    _upgradeVolMin = min;
+    _upgradeVolMax = max;
     document.querySelectorAll('.upgrade-vol-chip').forEach(c => c.classList.remove('upgrade-chip-active'));
     btn.classList.add('upgrade-chip-active');
-    upgradeRender();
+    _upgradeLoaded = false;
+    loadUpgradeEligible(true);
 }
 
 function upgradeSort(key) {
@@ -3791,7 +3795,7 @@ function upgradeSort(key) {
 
 function upgradeRender() {
     const fmt = v => v != null ? '$' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 }) : '—';
-    let rows = _upgradeData.filter(m => (m.volume || 0) >= _upgradeVolMin);
+    let rows = [..._upgradeData]; // already range-filtered server-side
     rows = [...rows].sort((a, b) => {
         const av = _upgradeSortKey === 'dba_name' ? (a.dba_name || '') : (a[_upgradeSortKey] || 0);
         const bv = _upgradeSortKey === 'dba_name' ? (b.dba_name || '') : (b[_upgradeSortKey] || 0);
@@ -3838,8 +3842,8 @@ function upgradeRender() {
 function upgradeExportCSV() {
     const fmt = v => v != null ? Number(v).toFixed(2) : '';
     const equipList = items => (items || []).map(e => e.terminal_type || e.serial_number).filter(Boolean).join('; ');
-    const rows = _upgradeData.filter(m => (m.volume || 0) >= _upgradeVolMin);
-    if (!rows.length) { Swal.fire('No data', 'No eligible merchants to export.', 'info'); return; }
+    const rows = _upgradeData;
+    if (!rows.length) { Swal.fire('No data', 'No merchants to export for this range.', 'info'); return; }
     const header = ['DBA Name','MID','Partner ID','Partner Name','Eligibility','Total Volume','Volume 30D','Volume MTD','Current Equipment','Legacy Equipment'];
     const csv = [header, ...rows.map(m => [
         m.dba_name, m.merchant_id, m.agent_id, m.partner_name || '',

@@ -701,17 +701,21 @@ if (action === 'get_upgrade_eligible') {
         .from('agent_identifiers').select('id_string').eq('prime49', true);
     const prime49Set = new Set((p49Rows || []).map(r => r.id_string).filter(Boolean));
 
-    // 2. Paginate ALL merchants with any volume (eligibility badge set per row below)
+    // 2. Paginate merchants in the requested volume range (server-side for performance)
+    const vol_min = parseFloat(req.body.vol_min) ?? 0;
+    const vol_max = req.body.vol_max != null ? parseFloat(req.body.vol_max) : null;
     const allMerchants = [];
     let _from = 0;
     const _PAGE = 1000;
     while (true) {
-        const { data: page, error: mErr } = await supabase
+        let q = supabase
             .from('merchants')
             .select('id, dba_name, merchant_id, agent_id, account_status, volume, volume_30_day, volume_mtd')
-            .gt('volume', 0)
+            .gte('volume', vol_min > 0 ? vol_min : 1)
             .order('volume', { ascending: false })
             .range(_from, _from + _PAGE - 1);
+        if (vol_max != null) q = q.lte('volume', vol_max);
+        const { data: page, error: mErr } = await q;
         if (mErr) return res.json({ success: false, message: mErr.message });
         if (!page?.length) break;
         allMerchants.push(...page);
