@@ -674,6 +674,7 @@
     let lookupTimeout;
     let currentStaffName = '';
     const canDeleteTickets = localStorage.getItem('pp_role') === 'super_admin' || localStorage.getItem('pp_can_delete_tickets') === 'true';
+    const canEditLegacyTermType = localStorage.getItem('pp_role') === 'super_admin' || localStorage.getItem('pp_can_edit_legacy_terminal_type') === 'true';
 
 
     /**
@@ -2608,7 +2609,7 @@ async function renderLegacy() {
                 <td style="font-size:12px;">${merchantName}</td>
                 <td style="font-size:12px;">
                     ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEstBadge}
-                    <button onclick="legEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,'\\\'')}')" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>
+                    ${canEditLegacyTermType ? `<button onclick="legEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,'\\\'')}')" title="Edit terminal type" style="margin-left:4px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:0 2px;vertical-align:middle;">✎</button>` : ''}
                 </td>
                 <td class="hide-mobile" style="font-size:12px;">${vendorMap[r.terminal_type] ? `<span style="font-size:11px;font-weight:700;color:#1d4ed8;background:#eff6ff;padding:2px 8px;border-radius:10px;">${vendorMap[r.terminal_type]}</span>` : '<span style="color:#cbd5e1;">—</span>'}</td>
                 <td style="font-size:12px;color:#64748b;">${r.deployment_date ? new Date(r.deployment_date).toLocaleDateString() : '—'}</td>

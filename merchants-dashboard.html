@@ -2448,6 +2448,7 @@ async function addTask(merchantUuid) {
                 tbody.innerHTML = '<tr><td colspan="5" style="padding:20px;text-align:center;color:#94a3b8;font-size:12px;"><span class="material-icons" style="font-size:28px;display:block;margin-bottom:6px;">history</span>No legacy equipment on record for this merchant.</td></tr>';
                 return;
             }
+            const _canEditLegType = localStorage.getItem('pp_role') === 'super_admin' || localStorage.getItem('pp_can_edit_legacy_terminal_type') === 'true';
             tbody.innerHTML = rows.map(r => {
                 const statusBadge = r.status === 'rma_filed'
                     ? '<span style="background:#fef3c7;color:#b45309;padding:2px 7px;border-radius:99px;font-size:10px;font-weight:700;">RMA Filed</span>'
@@ -2459,7 +2460,7 @@ async function addTask(merchantUuid) {
                     <td style="font-family:monospace;font-size:12px;font-weight:700;color:#92400e;">${r.serial_number}</td>
                     <td style="font-size:12px;">
                         ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}
-                        <button onclick="mlegEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,"\\'")}','${r.serial_number.replace(/'/g,"\\'")}',this.closest('button'))" title="Edit terminal type" style="margin-left:3px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0 2px;vertical-align:middle;">✎</button>
+                        ${_canEditLegType ? `<button onclick="mlegEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,"\\'")}','${r.serial_number.replace(/'/g,"\\'")}',this.closest('button'))" title="Edit terminal type" style="margin-left:3px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0 2px;vertical-align:middle;">✎</button>` : ''}
                         ${vendorMap[r.terminal_type] ? `<div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-top:1px;">${vendorMap[r.terminal_type]}</div>` : ''}
                     </td>
                     <td>${statusBadge}</td>

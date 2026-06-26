@@ -235,6 +235,7 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('userid', user.userid || '');
         localStorage.setItem('pp_can_delete_tickets', user.can_delete_tickets ? 'true' : 'false');
         localStorage.setItem('pp_can_manage_retired_units', user.can_manage_retired_units ? 'true' : 'false');
+        localStorage.setItem('pp_can_edit_legacy_terminal_type', user.can_edit_legacy_terminal_type ? 'true' : 'false');
         localStorage.setItem('pp_access_inventory',   parseBool(user.access_inventory)   ? 'true' : 'false');
         localStorage.setItem('pp_access_deployments', parseBool(user.access_deployments) ? 'true' : 'false');
         localStorage.setItem('pp_access_returns',     parseBool(user.access_returns)     ? 'true' : 'false');

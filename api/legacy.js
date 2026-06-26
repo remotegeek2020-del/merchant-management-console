@@ -392,7 +392,13 @@ export default async function handler(req, res) {
 
         // ── UPDATE (manual correction of terminal type / merchant) ────────────
         if (action === 'update') {
-            if (!(await isSuperAdmin(supabase, session.userid))) return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const isAdmin = await isSuperAdmin(supabase, session.userid);
+            if (!isAdmin) {
+                const { data: uData } = await supabase.from('app_users')
+                    .select('can_edit_legacy_terminal_type').eq('userid', session.userid).maybeSingle();
+                if (!uData?.can_edit_legacy_terminal_type)
+                    return res.status(403).json({ success: false, message: 'You do not have permission to edit legacy terminal types.' });
+            }
             const { legacy_id, terminal_type, merchant_id } = body;
             if (!legacy_id) return res.status(400).json({ success: false, message: 'legacy_id required' });
             const { data: legOld } = await supabase.from('legacy_deployments').select('serial_number, terminal_type, merchant_id').eq('id', legacy_id).maybeSingle();
