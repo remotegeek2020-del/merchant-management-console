@@ -2128,7 +2128,7 @@ async function addTask(merchantUuid) {
                     const row = tbody.insertRow();
                     row.innerHTML = `
                         <td>${serialCell}</td>
-                        <td style="font-size:12px;">${e.terminal_type || '---'}</td>
+                        <td style="font-size:12px;">${e.terminal_type || '---'}${vendorMap[e.terminal_type] ? `<div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-top:1px;">${vendorMap[e.terminal_type]}</div>` : ''}</td>
                         <td><span class="badge" style="background:#dcfce7; color:#166534;">${e.status || '---'}</span></td>
                         <td style="font-size:11px; color:#64748b;">${e.deployment_date ? fmtDate(e.deployment_date) : '---'}</td>
                     `;
@@ -2153,7 +2153,7 @@ async function addTask(merchantUuid) {
                     const row = pastTbody.insertRow();
                     row.innerHTML = `
                         <td>${serialCell}</td>
-                        <td style="font-size:12px;">${e.terminal_type || '---'}</td>
+                        <td style="font-size:12px;">${e.terminal_type || '---'}${vendorMap[e.terminal_type] ? `<div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-top:1px;">${vendorMap[e.terminal_type]}</div>` : ''}</td>
                         <td>${depCell}</td>
                         <td>${rmaCell}</td>
                     `;
@@ -2199,6 +2199,7 @@ async function addTask(merchantUuid) {
                     <td style="font-size:12px;">
                         ${r.terminal_type || '<span style="color:#94a3b8;">Unknown</span>'}${typeEst}
                         <button onclick="mlegEditType('${r.id}','${(r.terminal_type||'').replace(/'/g,"\\'")}','${r.serial_number.replace(/'/g,"\\'")}',this.closest('button'))" title="Edit terminal type" style="margin-left:3px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;padding:0 2px;vertical-align:middle;">✎</button>
+                        ${vendorMap[r.terminal_type] ? `<div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-top:1px;">${vendorMap[r.terminal_type]}</div>` : ''}
                     </td>
                     <td>${statusBadge}</td>
                     <td style="font-size:11px;color:#64748b;">${r.deployment_date ? fmtDate(r.deployment_date) : '—'}</td>
@@ -3002,7 +3003,14 @@ window.saveMerchant = async (uuid) => {
         } catch(e) { Swal.fire('Error', e.message, 'error'); }
     }
 
+    let vendorMap = {};
     window.onload = () => {
+        const _tok = localStorage.getItem('pp_session_token') || '';
+        fetch('/api/terminal-manager', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + _tok },
+            body: JSON.stringify({ action: 'get_vendor_map' })
+        }).then(r => r.json()).then(d => { if (d.success) vendorMap = d.data || {}; }).catch(() => {});
         Swal.fire({ title: 'Initializing Secure Console', html: 'Establishing encrypted link...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
         const params = new URLSearchParams(window.location.search);
         const urlQ = params.get('q');

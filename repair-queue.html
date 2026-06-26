@@ -481,7 +481,7 @@ function renderTable(data) {
                 <span style="font-family:'DM Mono',monospace;font-weight:700;color:#004990;">${esc(e.serial_number)}</span>
                 ${isCritical ? '<span class="material-icons" style="font-size:14px;color:#dc2626;vertical-align:middle;margin-left:4px;" title="Critical: exceeds 14-day threshold">warning</span>' : ''}
             </td>
-            <td style="font-weight:600;">${esc(e.terminal_type || '—')}</td>
+            <td style="font-weight:600;">${esc(e.terminal_type || '—')}${vendorMap[e.terminal_type] ? `<div style="font-size:10px;font-weight:700;color:#1d4ed8;margin-top:2px;">${vendorMap[e.terminal_type]}</div>` : ''}</td>
             <td style="text-align:center;"><span class="badge ${badgeClass}">${esc(stage)}</span></td>
             <td style="text-align:center;">${daysPill(e.days_in_repair)}</td>
             <td style="color:#475569;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(e.repair_notes || '')}">${esc(e.repair_notes || '—')}</td>
@@ -592,7 +592,14 @@ function exportCSV() {
     a.click();
 }
 
-window.addEventListener('load', loadQueue);
+let vendorMap = {};
+window.addEventListener('load', () => {
+    fetch('/api/terminal-manager', {
+        method: 'POST', headers: equipHeaders(),
+        body: JSON.stringify({ action: 'get_vendor_map' })
+    }).then(r => r.json()).then(d => { if (d.success) vendorMap = d.data || {}; }).catch(() => {});
+    loadQueue();
+});
 </script>
 <script>window.NAV_SHORTCUT_PAGE = 'repair';</script>
 <script src="/js/nav-shortcuts.js"></script>
