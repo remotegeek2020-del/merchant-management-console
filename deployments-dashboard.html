@@ -697,6 +697,75 @@
     </div>
 </div>
 
+<!-- ════════════ SHIPSTATION CONFIGURE SHIPMENT / PRINT LABEL MODAL ════════════ -->
+<div id="ssLabelModal" class="modal-backdrop" onclick="closeModal(event, 'ssLabelModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width:760px;">
+        <span class="material-icons close-btn" onclick="document.getElementById('ssLabelModal').style.display='none'">close</span>
+        <h2 style="font-size:1.3rem; font-weight:800; color:#002d5a; margin-bottom:2px;">Configure Shipment &amp; Print Label</h2>
+        <div id="ssl_orderInfo" style="font-size:12px; color:#94a3b8; margin-bottom:14px;"></div>
+
+        <div id="ssl_already" style="display:none; padding:12px 14px; background:#f0fdf4; border:1px solid #bbf7d0; border-radius:10px; margin-bottom:14px; font-size:13px; color:#15803d;"></div>
+
+        <div id="ssl_form">
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+            <!-- LEFT: parcel -->
+            <div>
+                <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Parcel</div>
+                <div style="margin-bottom:8px;"><label class="ship-lbl">Ship From</label>
+                    <select id="ssl_warehouse" class="slds-select ship-in" style="width:100%;border-radius:8px;"><option value="">— Loading —</option></select>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                    <div><label class="ship-lbl">Weight (lbs)</label><input type="number" step="0.01" id="ssl_lbs" class="slds-input ship-in" value="0"></div>
+                    <div><label class="ship-lbl">Weight (oz)</label><input type="number" step="0.01" id="ssl_oz" class="slds-input ship-in" value="0"></div>
+                </div>
+                <label class="ship-lbl">Size (in) — L × W × H</label>
+                <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; margin-bottom:8px;">
+                    <input type="number" step="0.1" id="ssl_l" class="slds-input ship-in" placeholder="L">
+                    <input type="number" step="0.1" id="ssl_w" class="slds-input ship-in" placeholder="W">
+                    <input type="number" step="0.1" id="ssl_h" class="slds-input ship-in" placeholder="H">
+                </div>
+                <div style="margin-bottom:8px;"><label class="ship-lbl">Confirmation</label>
+                    <select id="ssl_confirmation" class="slds-select ship-in" style="width:100%;border-radius:8px;">
+                        <option value="none">None</option>
+                        <option value="delivery">Delivery</option>
+                        <option value="signature">Signature</option>
+                        <option value="adult_signature">Adult Signature</option>
+                    </select>
+                </div>
+                <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; cursor:pointer;">
+                    <input type="checkbox" id="ssl_residential"> Residential address
+                </label>
+                <div style="margin-top:8px;"><label class="ship-lbl">Insurance amount (USD, 0 = none)</label>
+                    <input type="number" step="0.01" id="ssl_insurance" class="slds-input ship-in" value="0">
+                </div>
+            </div>
+
+            <!-- RIGHT: carrier / rates -->
+            <div>
+                <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin-bottom:8px;">Carrier &amp; Service</div>
+                <div style="margin-bottom:8px;"><label class="ship-lbl">Carrier</label>
+                    <select id="ssl_carrier" class="slds-select ship-in" style="width:100%;border-radius:8px;" onchange="sslCarrierChanged()"><option value="">— All carriers —</option></select>
+                </div>
+                <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                    <div><label class="ship-lbl">Service</label>
+                        <select id="ssl_service" class="slds-select ship-in" style="width:100%;border-radius:8px;"><option value="">— Select —</option></select>
+                    </div>
+                    <div><label class="ship-lbl">Package</label>
+                        <select id="ssl_package" class="slds-select ship-in" style="width:100%;border-radius:8px;"><option value="package">Package</option></select>
+                    </div>
+                </div>
+                <button type="button" onclick="sslBrowseRates()" style="width:100%; padding:8px; background:#eff6ff; color:#1d4ed8; border:1px solid #bfdbfe; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; margin-bottom:8px;">🔍 Browse Rates</button>
+                <div id="ssl_rates" style="max-height:220px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; padding:6px; font-size:12px; background:#f8fafc; min-height:60px;">
+                    <div style="color:#94a3b8; padding:8px;">Enter weight, then Browse Rates to see live carrier pricing.</div>
+                </div>
+            </div>
+        </div>
+
+        <button type="button" id="ssl_createBtn" onclick="sslCreateLabel()" class="slds-button slds-button_brand slds-size_1-of-1" style="background:#16a34a; margin-top:14px;">CREATE + PRINT LABEL</button>
+        </div>
+    </div>
+</div>
+
 <div id="editDepModal" class="modal-backdrop" onclick="closeModal(event, 'editDepModal')">
     <div class="modal-content" onclick="event.stopPropagation()">
         <span class="material-icons close-btn" onclick="document.getElementById('editDepModal').style.display='none'">close</span>
@@ -733,6 +802,19 @@
                 <span class="material-icons" style="font-size:13px;color:#7c3aed;">edit</span>
                 <span></span>
             </span>
+        </div>
+
+        <!-- ShipStation label entry (shown only when deployment has a ShipStation order) -->
+        <div id="ssLabelEntry" style="display:none; margin-bottom:14px; padding:12px 14px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
+                <div>
+                    <div style="font-size:10px; font-weight:800; color:#0369a1; text-transform:uppercase; letter-spacing:.5px;">
+                        <span class="material-icons" style="font-size:13px; vertical-align:middle;">local_shipping</span> ShipStation Order
+                    </div>
+                    <div id="ssLabelEntryInfo" style="font-size:12px; color:#0c4a6e; margin-top:3px;"></div>
+                </div>
+                <button type="button" id="ssLabelEntryBtn" onclick="ssOpenLabelModal()" style="padding:7px 14px; background:#0369a1; color:white; border:none; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;">📦 Configure Shipment &amp; Print Label</button>
+            </div>
         </div>
 
         <form id="editDepForm" onsubmit="submitUpdate(event)">
@@ -2240,6 +2322,7 @@ async function openEditModal(index) {
     } catch (e) { console.error("RMA Load Error:", e); }
 
     document.getElementById('editDepModal').style.display = 'flex';
+    ssLabelCheck(d.id);
 }
 function renderEditItemsList(items, returnedEquipMap) {
     returnedEquipMap = returnedEquipMap || {};
@@ -3205,6 +3288,197 @@ async function executeBulk(validData) {
             Swal.fire('Error', e.message, 'error');
         } finally {
             btn.disabled = false; btn.textContent = 'CREATE RETURN + SHIPSTATION LABEL';
+        }
+    }
+
+    // ════════════ SHIPSTATION CONFIGURE SHIPMENT / PRINT LABEL ════════════
+    let _sslShipment = null;       // the shipstation_shipments row for the open deployment
+    let _sslWarehousesLoaded = false;
+    let _sslCarriersLoaded = false;
+
+    // Called when the edit modal opens — shows the label entry only when the
+    // ShipStation flag is ON and this deployment has a ShipStation order.
+    async function ssLabelCheck(deploymentId) {
+        const entry = document.getElementById('ssLabelEntry');
+        entry.style.display = 'none';
+        _sslShipment = null;
+        if (!_shipstationEnabled || !deploymentId) return;   // flag off → no ShipStation UI
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'get_ss_shipment', deployment_id: deploymentId })
+            });
+            const result = await res.json();
+            if (!result.success || !result.shipment) return;
+            _sslShipment = result.shipment;
+            const info = document.getElementById('ssLabelEntryInfo');
+            if (_sslShipment.tracking_number) {
+                info.innerHTML = `Order <b>${_sslShipment.order_number || '—'}</b> · Tracking: <b>${_sslShipment.tracking_number}</b>`;
+                document.getElementById('ssLabelEntryBtn').textContent = '📦 View / Reprint Label';
+            } else {
+                info.innerHTML = `Order <b>${_sslShipment.order_number || '—'}</b> · ${_sslShipment.store_name || ''} · awaiting label`;
+                document.getElementById('ssLabelEntryBtn').textContent = '📦 Configure Shipment & Print Label';
+            }
+            entry.style.display = 'block';
+        } catch (e) { console.error('[ssLabelCheck]', e); }
+    }
+
+    async function ssOpenLabelModal() {
+        if (!_sslShipment) return;
+        document.getElementById('ssl_orderInfo').innerHTML =
+            `Order <b>${_sslShipment.order_number || '—'}</b> → ${_sslShipment.ship_to_name || ''}, ${_sslShipment.city || ''} ${_sslShipment.state || ''} ${_sslShipment.zip || ''}`;
+        // Already-shipped state
+        const already = document.getElementById('ssl_already');
+        const form = document.getElementById('ssl_form');
+        if (_sslShipment.tracking_number) {
+            already.style.display = 'block';
+            already.innerHTML = `✅ Label already created — Tracking <b>${_sslShipment.tracking_number}</b> (${_sslShipment.carrier || ''} ${_sslShipment.service || ''})`;
+        } else {
+            already.style.display = 'none';
+        }
+        form.style.display = 'block';
+        document.getElementById('ssLabelModal').style.display = 'flex';
+        await sslLoadWarehouses();
+        await sslLoadCarriers();
+    }
+
+    async function sslLoadWarehouses() {
+        const sel = document.getElementById('ssl_warehouse');
+        try {
+            const res = await fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'get_warehouses' }) });
+            const r = await res.json();
+            if (!r.configured) { sel.innerHTML = '<option value="">— Keys not configured —</option>'; return; }
+            sel.innerHTML = (r.warehouses || []).map(w =>
+                `<option value="${w.id}" data-zip="${w.postalCode || ''}" ${w.isDefault ? 'selected' : ''}>${w.name}${w.postalCode ? ' (' + w.postalCode + ')' : ''}</option>`).join('')
+                || '<option value="">— No warehouses —</option>';
+        } catch (e) { sel.innerHTML = '<option value="">— Failed to load —</option>'; }
+    }
+
+    async function sslLoadCarriers() {
+        const sel = document.getElementById('ssl_carrier');
+        try {
+            const res = await fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'get_carriers' }) });
+            const r = await res.json();
+            sel.innerHTML = '<option value="">— All carriers —</option>' +
+                (r.carriers || []).map(c => `<option value="${c.code}">${c.name}</option>`).join('');
+        } catch (e) { /* keep default */ }
+    }
+
+    async function sslCarrierChanged() {
+        const carrier = document.getElementById('ssl_carrier').value;
+        const svc = document.getElementById('ssl_service');
+        const pkg = document.getElementById('ssl_package');
+        if (!carrier) { svc.innerHTML = '<option value="">— Select —</option>'; pkg.innerHTML = '<option value="package">Package</option>'; return; }
+        try {
+            const [sres, pres] = await Promise.all([
+                fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'list_services', carrier_code: carrier }) }).then(r => r.json()),
+                fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'list_packages', carrier_code: carrier }) }).then(r => r.json())
+            ]);
+            svc.innerHTML = '<option value="">— Select service —</option>' + (sres.services || []).map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+            pkg.innerHTML = (pres.packages || []).map(p => `<option value="${p.code}">${p.name}</option>`).join('') || '<option value="package">Package</option>';
+        } catch (e) { console.error('[sslCarrierChanged]', e); }
+    }
+
+    function sslWeight() {
+        const lbs = parseFloat(document.getElementById('ssl_lbs').value) || 0;
+        const oz = parseFloat(document.getElementById('ssl_oz').value) || 0;
+        const totalOz = lbs * 16 + oz;
+        return { value: totalOz, units: 'ounces' };
+    }
+    function sslDimensions() {
+        const l = parseFloat(document.getElementById('ssl_l').value) || 0;
+        const w = parseFloat(document.getElementById('ssl_w').value) || 0;
+        const h = parseFloat(document.getElementById('ssl_h').value) || 0;
+        if (l && w && h) return { length: l, width: w, height: h, units: 'inches' };
+        return undefined;
+    }
+
+    async function sslBrowseRates() {
+        const box = document.getElementById('ssl_rates');
+        const weight = sslWeight();
+        if (!weight.value) { box.innerHTML = '<div style="color:#b45309;padding:8px;">Enter a weight first.</div>'; return; }
+        box.innerHTML = '<div style="color:#94a3b8;padding:8px;">Fetching live rates…</div>';
+        try {
+            const res = await fetch('/api/shipstation', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({
+                    action: 'get_rates',
+                    carrier_code: document.getElementById('ssl_carrier').value || null,
+                    from_postal_code: document.getElementById('ssl_warehouse').selectedOptions[0]?.dataset.zip || null,
+                    to_state: _sslShipment.state, to_country: _sslShipment.country, to_postal_code: _sslShipment.zip, to_city: _sslShipment.city,
+                    weight, dimensions: sslDimensions(),
+                    confirmation: document.getElementById('ssl_confirmation').value,
+                    residential: document.getElementById('ssl_residential').checked
+                })
+            });
+            const r = await res.json();
+            if (r.configured === false) { box.innerHTML = '<div style="color:#b45309;padding:8px;">ShipStation keys not configured.</div>'; return; }
+            const rates = r.rates || [];
+            if (!rates.length) { box.innerHTML = '<div style="color:#94a3b8;padding:8px;">No rates returned. Check weight/address.</div>'; return; }
+            box.innerHTML = rates.map((rate, i) => `
+                <div onclick="sslPickRate(${i})" data-carrier="${rate.carrierCode}" data-service="${rate.serviceCode}"
+                     style="display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border-bottom:1px solid #eef2f7;cursor:pointer;border-radius:6px;"
+                     onmouseover="this.style.background='#eff6ff'" onmouseout="this.style.background='transparent'">
+                    <div><b>${rate.serviceName}</b><div style="font-size:10px;color:#94a3b8;">${rate.carrierCode}</div></div>
+                    <div style="font-weight:800;color:#15803d;">$${(rate.totalCost || 0).toFixed(2)}</div>
+                </div>`).join('');
+            window._sslRates = rates;
+        } catch (e) { box.innerHTML = '<div style="color:#dc2626;padding:8px;">Rate lookup failed.</div>'; }
+    }
+
+    async function sslPickRate(i) {
+        const rate = (window._sslRates || [])[i];
+        if (!rate) return;
+        // set carrier, load its services/packages, then select the service
+        const carrierSel = document.getElementById('ssl_carrier');
+        carrierSel.value = rate.carrierCode;
+        await sslCarrierChanged();
+        document.getElementById('ssl_service').value = rate.serviceCode;
+        // highlight
+        document.querySelectorAll('#ssl_rates > div').forEach((d, idx) => d.style.background = idx === i ? '#dbeafe' : 'transparent');
+    }
+
+    async function sslCreateLabel() {
+        if (!_sslShipment) return;
+        if (!_sslShipment.ss_order_id) return Swal.fire('Not synced', 'This order has no ShipStation order id yet (it may have failed to push). Try recreating the ticket.', 'warning');
+        const carrier = document.getElementById('ssl_carrier').value;
+        const service = document.getElementById('ssl_service').value;
+        if (!carrier || !service) return Swal.fire('Pick a service', 'Choose a carrier + service (or Browse Rates and click one).', 'warning');
+        const weight = sslWeight();
+        if (!weight.value) return Swal.fire('Weight required', 'Enter the package weight.', 'warning');
+        const insAmt = parseFloat(document.getElementById('ssl_insurance').value) || 0;
+
+        const btn = document.getElementById('ssl_createBtn');
+        btn.disabled = true; btn.textContent = 'Creating label…';
+        try {
+            const res = await fetch('/api/shipstation', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({
+                    action: 'create_label',
+                    ss_row_id: _sslShipment.id,
+                    order_id: _sslShipment.ss_order_id,
+                    carrier_code: carrier, service_code: service,
+                    package_code: document.getElementById('ssl_package').value || 'package',
+                    confirmation: document.getElementById('ssl_confirmation').value,
+                    weight, dimensions: sslDimensions(),
+                    insurance: insAmt > 0 ? { provider: 'carrier', insureShipment: true, insuredValue: insAmt } : undefined
+                })
+            });
+            const r = await res.json();
+            if (!r.success) throw new Error(r.message || 'Label creation failed');
+            // open the label PDF for printing
+            if (r.labelData) {
+                const win = window.open('');
+                if (win) win.document.write(`<iframe width="100%" height="100%" style="border:0" src="data:application/pdf;base64,${r.labelData}"></iframe>`);
+            }
+            Swal.fire({ icon: 'success', title: 'Label created', html: `Tracking: <b>${r.trackingNumber || '—'}</b><br>Cost: $${(r.shipmentCost || 0).toFixed ? (r.shipmentCost||0).toFixed(2) : r.shipmentCost}`, confirmButtonColor: '#16a34a' });
+            document.getElementById('ssLabelModal').style.display = 'none';
+            document.getElementById('editDepModal').style.display = 'none';
+            await fetchDeployments(currentPage);
+        } catch (e) {
+            Swal.fire('Error', e.message, 'error');
+        } finally {
+            btn.disabled = false; btn.textContent = 'CREATE + PRINT LABEL';
         }
     }
 
