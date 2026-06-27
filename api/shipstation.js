@@ -312,6 +312,15 @@ export default async function handler(req, res) {
             const shipmentId = r.data.shipmentId;
             const cost = r.data.shipmentCost;
 
+            // Test labels return a fake tracking # — don't persist them
+            if (test_label) {
+                return res.status(200).json({
+                    success: true, configured: true, test: true,
+                    trackingNumber: tracking, shipmentId, shipmentCost: cost,
+                    labelData: r.data.labelData || null
+                });
+            }
+
             // Persist tracking + label back to our row and the deployment
             const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
             if (ss_row_id) {
