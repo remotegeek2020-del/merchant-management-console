@@ -808,17 +808,9 @@
             </span>
         </div>
 
-        <!-- ShipStation label entry (shown only when deployment has a ShipStation order) -->
+        <!-- ShipStation order info (shown only when flag ON and deployment has a ShipStation order) -->
         <div id="ssLabelEntry" style="display:none; margin-bottom:14px; padding:12px 14px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:10px;">
-            <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
-                <div>
-                    <div style="font-size:10px; font-weight:800; color:#0369a1; text-transform:uppercase; letter-spacing:.5px;">
-                        <span class="material-icons" style="font-size:13px; vertical-align:middle;">local_shipping</span> ShipStation Order
-                    </div>
-                    <div id="ssLabelEntryInfo" style="font-size:12px; color:#0c4a6e; margin-top:3px;"></div>
-                </div>
-                <button type="button" id="ssLabelEntryBtn" onclick="ssOpenLabelModal()" style="padding:7px 14px; background:#0369a1; color:white; border:none; border-radius:8px; font-size:12px; font-weight:700; cursor:pointer; white-space:nowrap;">📦 Configure Shipment &amp; Print Label</button>
-            </div>
+            <div id="ssLabelEntryBody"></div>
         </div>
 
         <form id="editDepForm" onsubmit="submitUpdate(event)">
@@ -3348,25 +3340,54 @@ async function executeBulk(validData) {
     // ShipStation flag is ON and this deployment has a ShipStation order.
     async function ssLabelCheck(deploymentId) {
         const entry = document.getElementById('ssLabelEntry');
+        const body = document.getElementById('ssLabelEntryBody');
         entry.style.display = 'none';
         _sslShipment = null;
-        if (!_shipstationEnabled || !deploymentId) return;   // flag off → no ShipStation UI
+        if (!_shipstationEnabled || !deploymentId) return;   // flag off → no ShipStation UI at all
         try {
-            const res = await fetch('/api/deployments', {
+            // refresh_shipment also live-pulls latest tracking/status from ShipStation
+            const res = await fetch('/api/shipstation', {
                 method: 'POST', headers: authHeaders(),
-                body: JSON.stringify({ action: 'get_ss_shipment', deployment_id: deploymentId })
+                body: JSON.stringify({ action: 'refresh_shipment', deployment_id: deploymentId })
             });
             const result = await res.json();
             if (!result.success || !result.shipment) return;
             _sslShipment = result.shipment;
-            const info = document.getElementById('ssLabelEntryInfo');
-            if (_sslShipment.tracking_number) {
-                info.innerHTML = `Order <b>${_sslShipment.order_number || '—'}</b> · Tracking: <b>${_sslShipment.tracking_number}</b>`;
-                document.getElementById('ssLabelEntryBtn').textContent = '📦 View / Reprint Label';
-            } else {
-                info.innerHTML = `Order <b>${_sslShipment.order_number || '—'}</b> · ${_sslShipment.store_name || ''} · awaiting label`;
-                document.getElementById('ssLabelEntryBtn').textContent = '📦 Configure Shipment & Print Label';
-            }
+            const s = _sslShipment;
+            const esc = v => (v == null ? '' : String(v));
+            const row = (lbl, val) => val ? `<div style="display:flex;gap:6px;"><span style="color:#64748b;min-width:96px;">${lbl}</span><span style="color:#0f172a;font-weight:600;">${esc(val)}</span></div>` : '';
+            const money = v => (v != null && v !== '') ? '$' + Number(v).toFixed(2) : '';
+            const addr = [s.address, s.address_line2].filter(Boolean).join(', ');
+            const cityline = [s.city, s.state, s.zip].filter(Boolean).join(', ');
+            const trackingHtml = s.tracking_number
+                ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:6px;font-weight:700;">${esc(s.tracking_number)}</span> <span style="font-size:10px;color:#64748b;">${esc(s.carrier)} ${esc(s.service)}</span>`
+                : '<span style="color:#b45309;font-weight:600;">Not shipped yet</span>';
+            const statusBadge = `<span style="text-transform:none;background:#e0f2fe;color:#0369a1;padding:1px 7px;border-radius:6px;font-weight:700;">${esc(s.status || 'created')}</span>`;
+            body.innerHTML = `
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:8px;">
+                <div style="font-size:10px;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:.5px;">
+                  <span class="material-icons" style="font-size:13px;vertical-align:middle;">local_shipping</span> ShipStation Order ${statusBadge}
+                </div>
+                <button type="button" onclick="ssOpenLabelModal()" style="padding:7px 14px;background:#0369a1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${s.tracking_number ? '📦 View / Reprint Label' : '📦 Configure Shipment & Print Label'}</button>
+              </div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12px;">
+                ${row('Order #', s.order_number)}
+                <div style="display:flex;gap:6px;"><span style="color:#64748b;min-width:96px;">Tracking</span><span>${trackingHtml}</span></div>
+                ${row('SS Order ID', s.ss_order_id)}
+                ${row('Store', s.store_name)}
+                ${row('Order Date', s.order_date)}
+                ${row('Paid Date', s.paid_date)}
+                ${row('Recipient', s.ship_to_name)}
+                ${row('Company', s.ship_to_company)}
+                ${row('Phone', s.ship_to_phone)}
+                ${row('Email', s.ship_to_email)}
+                ${row('Address', addr)}
+                ${row('City/State/ZIP', cityline)}
+                ${row('Carrier', s.carrier)}
+                ${row('Service', s.service)}
+                ${row('Shipping Paid', money(s.shipping_paid))}
+                ${row('Total Paid', money(s.total_paid))}
+              </div>`;
             entry.style.display = 'block';
         } catch (e) { console.error('[ssLabelCheck]', e); }
     }

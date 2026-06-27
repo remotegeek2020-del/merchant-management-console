@@ -376,6 +376,42 @@ export default async function handler(req, res) {
             });
         }
 
+        // ── REFRESH SHIPMENT: live-pull latest tracking/status for a deployment ─
+        if (action === 'refresh_shipment') {
+            const { deployment_id } = body;
+            if (!deployment_id) return res.status(400).json({ success: false, message: 'deployment_id required' });
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const { data: row } = await supabase.from('shipstation_shipments')
+                .select('*').eq('deployment_id', deployment_id).eq('ship_type', 'outbound')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (!row) return res.status(200).json({ success: true, shipment: null });
+
+            const auth = await getAuthHeader();
+            if (auth && (row.ss_order_id || row.order_number)) {
+                const url = row.ss_order_id
+                    ? `/shipments?orderId=${row.ss_order_id}`
+                    : `/shipments?orderNumber=${encodeURIComponent(row.order_number)}`;
+                const r = await ssGet(url);
+                const sh = (r.ok && Array.isArray(r.data?.shipments)) ? r.data.shipments.find(s => !s.voided) : null;
+                if (sh && sh.trackingNumber && sh.trackingNumber !== row.tracking_number) {
+                    await supabase.from('shipstation_shipments').update({
+                        tracking_number: sh.trackingNumber,
+                        carrier: sh.carrierCode || row.carrier,
+                        service: sh.serviceCode || row.service,
+                        ss_shipment_id: sh.shipmentId ? String(sh.shipmentId) : row.ss_shipment_id,
+                        status: 'shipped'
+                    }).eq('id', row.id);
+                    await supabase.from('deployments').update({ tracking_id: sh.trackingNumber }).eq('id', deployment_id);
+                    row.tracking_number = sh.trackingNumber;
+                    row.carrier = sh.carrierCode || row.carrier;
+                    row.service = sh.serviceCode || row.service;
+                    row.ss_shipment_id = sh.shipmentId ? String(sh.shipmentId) : row.ss_shipment_id;
+                    row.status = 'shipped';
+                }
+            }
+            return res.status(200).json({ success: true, shipment: row });
+        }
+
         // ── VOID LABEL (refund) ─────────────────────────────────────────────
         if (action === 'void_label') {
             const auth = await getAuthHeader();
