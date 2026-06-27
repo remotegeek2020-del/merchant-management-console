@@ -539,6 +539,49 @@ if (action === 'create') {
         } catch (e) { console.warn('[ShipSaveback]', e.message); }
     };
 
+    // ShipStation-Ready: record a shipstation_shipments row tied to this deployment.
+    // No live ShipStation API call yet (keys added in Vercel later) — we just persist
+    // the order fields. order_number auto-generates (SS-####) unless a custom one is given.
+    const ss = payload.shipstation;
+    const createShipstationRow = async (deploymentId) => {
+        if (!ss || typeof ss !== 'object') return;
+        try {
+            let orderNumber = (ss.order_number || '').trim();
+            if (!orderNumber) {
+                const { data: gen } = await supabase.rpc('next_ss_order_number');
+                orderNumber = gen || `SS-${Date.now()}`;
+            }
+            await supabase.from('shipstation_shipments').insert({
+                order_number:    orderNumber,
+                ship_type:       'outbound',
+                merchant_id,
+                deployment_id:   deploymentId,
+                partner_id:      shipPartnerId,
+                store_vendor_id: ss.store_vendor_id || null,
+                store_name:      ss.store_name || null,
+                order_date:      ss.order_date || null,
+                paid_date:       ss.paid_date || null,
+                notify_merchant: !!ss.notify_merchant,
+                ship_to_name:    ss.ship_to_name || null,
+                ship_to_company: ss.ship_to_company || null,
+                ship_to_phone:   ss.ship_to_phone || null,
+                ship_to_email:   ss.ship_to_email || null,
+                address:         ss.address || null,
+                address_line2:   ss.address_line2 || null,
+                address_line3:   ss.address_line3 || null,
+                city:            ss.city || null,
+                state:           ss.state || null,
+                zip:             ss.zip || null,
+                country:         ss.country || 'US',
+                shipping_paid:   ss.shipping_paid != null && ss.shipping_paid !== '' ? ss.shipping_paid : null,
+                tax_paid:        ss.tax_paid != null && ss.tax_paid !== '' ? ss.tax_paid : null,
+                total_paid:      ss.total_paid != null && ss.total_paid !== '' ? ss.total_paid : null,
+                status:          'created',
+                created_by:      session.userid
+            });
+        } catch (e) { console.warn('[ShipStationRow]', e.message); }
+    };
+
     // --- BULK MODE ---
     if (is_bulk && Array.isArray(items) && items.length > 0) {
         const { data: merchantData } = await supabase
@@ -609,6 +652,7 @@ if (action === 'create') {
         }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
         await doShipSaveback();
+        await createShipstationRow(dep.id);
         return res.status(200).json({ success: true, data: [dep] });
     }
 
@@ -692,6 +736,7 @@ if (action === 'create') {
     }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
     await doShipSaveback();
+    await createShipstationRow(newDep[0]?.id);
     return res.status(200).json({ success: true, data: newDep });
 }
 
@@ -1054,6 +1099,42 @@ if (action === 'getShipInfo') {
     }
 
     return res.status(200).json({ success: true, merchant: m, partner });
+}
+
+// ── PARTNER LOOKUP (ShipStation wizard) ─────────────────────────────────────
+// Search partners (persons) by name for the partner-first flow.
+if (action === 'getPartnerLookups') {
+    const term = `%${query || ''}%`;
+    const { data: partners } = await supabase
+        .from('persons')
+        .select('id, full_name, email, phone_number, address, city, state, zip, country')
+        .ilike('full_name', term)
+        .limit(10);
+    return res.status(200).json({ success: true, partners: partners || [] });
+}
+
+// ── MERCHANTS TIED TO A PARTNER (ShipStation wizard) ────────────────────────
+// Reverse chain: persons.id → agents.parent_agent_id → agents.id →
+// agent_identifiers.agent_id → id_string → merchants.agent_id
+if (action === 'getPartnerMerchants') {
+    const { partner_id, query: q } = body;
+    if (!partner_id) return res.status(400).json({ success: false, message: 'partner_id required' });
+
+    const { data: ags } = await supabase.from('agents').select('id').eq('parent_agent_id', partner_id);
+    const agentUuids = (ags || []).map(a => a.id);
+    if (!agentUuids.length) return res.status(200).json({ success: true, merchants: [] });
+
+    const { data: idents } = await supabase.from('agent_identifiers')
+        .select('id_string').in('agent_id', agentUuids);
+    const idStrings = (idents || []).map(i => i.id_string).filter(Boolean);
+    if (!idStrings.length) return res.status(200).json({ success: true, merchants: [] });
+
+    let mq = supabase.from('merchants')
+        .select('id, dba_name, merchant_id, email, merchant_primary_contact, merchant_phone, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_country')
+        .in('agent_id', idStrings);
+    if (q && q.trim()) mq = mq.or(`dba_name.ilike.%${q.trim()}%,merchant_id.ilike.%${q.trim()}%`);
+    const { data: merchants } = await mq.limit(50);
+    return res.status(200).json({ success: true, merchants: merchants || [] });
 }
 
 if (action === 'getLookups') {

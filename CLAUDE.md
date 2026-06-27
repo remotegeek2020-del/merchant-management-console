@@ -23,14 +23,31 @@
 
 ## Planned Feature: ShipStation Integration
 
-**Status**: Phases 1-2 COMPLETE as of 2026-06-26. Phases 3-5 pending.
-- Phase 1: DB migration (additive columns + shipstation_shipments table + order seq)
-- Phase 2: Deployment modal ship-to toggle + auto-fill + save-back (DONE)
-  - `api/deployments.js`: new `getShipInfo` action (merchant + partner auto-resolve via agent_id chain); `create` extended with `ship_to_type`/`ship_to_partner_id` + whitelisted save-back (`merchant_updates`/`partner_updates`) for both single & bulk
-  - `deployments-dashboard.html`: shipping destination section in New Deployment modal (toggle, auto-fill, editable blanks, save-back checkbox)
-- Phase 3 (next): dashboard badges (🏪 Direct / 🤝 Via Partner) + two-leg partner_received_date milestone in edit modal
-- Phase 4: returns modal (single-leg ship_from_type)
-- Phase 5: ShipStation API (order create, label, webhook). Backtrack/reconcile existing deployments by matching ShipStation tracking number ↔ `deployments.tracking_id`.
+**Status**: Phases 1-3 COMPLETE as of 2026-06-27. Phases 4-5 pending.
+
+### IMPORTANT design change (2026-06-27): wizard supersedes the in-modal toggle
+The Phase 2 in-modal "ship to partner first" toggle was REMOVED. New approach = a
+**multi-screen wizard** gated behind a **global feature flag** (`app_settings.shipstation_ready_enabled`,
+toggled in Secret Dungeon → Feature Flags tab). Flag OFF (default) = "+ New Ticket" opens the
+**unchanged current modal** directly (safe fallback). Flag ON = wizard:
+- Screen 1: "Create Ticket (separate from ShipStation)" → opens current modal · "Create Ticket — ShipStation Ready" → continue
+- Screen 2: "Ship to Merchant" / "Ship to Partner" (partner has notify-merchant flag)
+- Screen 3: form mirroring the ShipStation New Order form (Recipient: Name/Company/Country/Address1-2/City/State/Zip/Phone/Email; Order Summary: Store dropdown=vendors list, Order # auto/custom, Order Date, Paid Date, Shipping/Tax/Total Paid) + Hardware (single/bulk), TID, Deployment Date. Partner mode adds Partner lookup + Merchant lookup restricted to that partner's merchants.
+
+### Phase status
+- Phase 1: DB migration (additive columns + shipstation_shipments table + order seq) — DONE
+- Phase 2: getShipInfo + create ship fields + save-back (backend KEPT, reused by wizard; in-modal UI removed) — DONE
+- Phase 3: ShipStation-Ready wizard + feature flag — DONE
+  - DB: `app_settings` table (key/value, non-secret), `next_ss_order_number()` fn, extra shipstation_shipments cols (store_vendor_id/store_name/order_date/paid_date/notify_merchant/ship_to_phone/email/company/partner_id/address_line2-3/shipping_paid/tax_paid/total_paid)
+  - `api/app-settings.js`: get (any staff) / set (super_admin) for global flags
+  - `api/deployments.js`: `getPartnerLookups`, `getPartnerMerchants`, and `create` writes a shipstation_shipments row when `payload.shipstation` present (order # auto via next_ss_order_number unless custom). NO live ShipStation API call yet — keys go in Vercel env later.
+  - `deployments-dashboard.html`: ssWizardModal (3 screens), reads flag on load, "+ New Ticket" → `newTicketEntry()`
+  - `secret-dungeon.html`: Feature Flags tab with the on/off toggle
+- Phase 4 (next): returns wizard (single-leg ship_from_type) + returns side of ShipStation
+- Phase 5: ShipStation API (order create, label, webhook) — keys added in Vercel. Backtrack/reconcile by matching ShipStation tracking number ↔ `deployments.tracking_id`.
+
+### Vendors list = ShipStation "Store" dropdown
+Reuse `api/terminal-manager` `get_vendors` (table `vendors`, returns {id,name}). Any authenticated staff can read.
 
 ### Locked-in Design Decisions (user-confirmed 2026-06-26)
 - **Everything stays tied to `merchant_id`** — the deployment/return ownership never changes. We only add a *shipping destination distinction*.

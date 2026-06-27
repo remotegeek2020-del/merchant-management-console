@@ -52,6 +52,14 @@
         .ship-toggle-active { background:var(--pp-blue); color:white; border-color:var(--pp-blue); }
         .ship-lbl { display:block; font-weight:700; font-size:9px; color:#94a3b8; text-transform:uppercase; letter-spacing:.4px; margin-bottom:3px; }
         .ship-in { font-size:12px !important; padding:6px 10px !important; }
+        /* ShipStation wizard */
+        .ssw-card { display:flex; flex-direction:column; align-items:flex-start; gap:6px; text-align:left; padding:18px; border:1.5px solid #e2e8f0; border-radius:14px; background:white; cursor:pointer; transition:all .15s; }
+        .ssw-card:hover { border-color:#7c3aed; background:#faf5ff; transform:translateY(-1px); box-shadow:0 4px 14px rgba(124,58,237,.12); }
+        .ssw-card-accent { border-color:#ddd6fe; background:#faf5ff; }
+        .ssw-card-title { font-size:14px; font-weight:800; color:#002d5a; }
+        .ssw-card-sub { font-size:11px; color:#94a3b8; line-height:1.35; }
+        .ssw-back { background:none; border:none; color:#64748b; font-size:12px; font-weight:700; cursor:pointer; padding:0; }
+        .ssw-back:hover { color:#004990; }
         /* Repair queue embedded styles */
         .rq-pipeline { display:grid;grid-template-columns:repeat(4,1fr);gap:0;background:white;border:1px solid var(--border);border-radius:14px;padding:14px 18px;margin-bottom:14px;box-shadow:var(--shadow-sm); }
         .rq-pipeline-stage { display:flex;align-items:center;padding:0 6px; }
@@ -111,7 +119,7 @@
                     <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">upload_file</span>
                     BULK UPLOAD
                 </button>
-                <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="openNewDeploymentModal()">
+                <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="newTicketEntry()">
                     <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
                     NEW TICKET
                 </button>
@@ -415,54 +423,6 @@
                 <div id="mSuggestions" class="suggestions-list"></div>
             </div>
 
-            <!-- SHIPPING DESTINATION (ShipStation Phase 2) — appears after merchant is selected -->
-            <div id="shipDestSection" style="display:none; border:1px solid #e2e8f0; border-radius:12px; padding:12px 14px; margin-bottom:15px; background:#f8fafc;">
-                <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:8px;">SHIPPING DESTINATION</label>
-                <div style="display:flex; gap:8px; margin-bottom:10px;">
-                    <button type="button" id="shipMerchantBtn" onclick="setShipTo('merchant')" class="ship-toggle-btn ship-toggle-active">🏪 Ship to Merchant</button>
-                    <button type="button" id="shipPartnerBtn" onclick="setShipTo('partner')" class="ship-toggle-btn">🤝 Ship to Partner First</button>
-                </div>
-                <div id="shipPartnerNotice" style="display:none; font-size:11px; color:#b45309; background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:6px 10px; margin-bottom:10px;"></div>
-                <div id="shipAddrFields" style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                    <div style="grid-column:1 / -1;">
-                        <label class="ship-lbl">Ship-to Name</label>
-                        <input type="text" id="ship_name" class="slds-input ship-in" placeholder="Recipient / business name">
-                    </div>
-                    <div>
-                        <label class="ship-lbl">Phone</label>
-                        <input type="text" id="ship_phone" class="slds-input ship-in" placeholder="Phone">
-                    </div>
-                    <div>
-                        <label class="ship-lbl">Email</label>
-                        <input type="text" id="ship_email" class="slds-input ship-in" placeholder="Email">
-                    </div>
-                    <div style="grid-column:1 / -1;">
-                        <label class="ship-lbl">Street Address</label>
-                        <input type="text" id="ship_address" class="slds-input ship-in" placeholder="Street address">
-                    </div>
-                    <div>
-                        <label class="ship-lbl">City</label>
-                        <input type="text" id="ship_city" class="slds-input ship-in" placeholder="City">
-                    </div>
-                    <div>
-                        <label class="ship-lbl">State</label>
-                        <input type="text" id="ship_state" class="slds-input ship-in" placeholder="State">
-                    </div>
-                    <div>
-                        <label class="ship-lbl">ZIP</label>
-                        <input type="text" id="ship_zip" class="slds-input ship-in" placeholder="ZIP">
-                    </div>
-                    <div>
-                        <label class="ship-lbl">Country</label>
-                        <input type="text" id="ship_country" class="slds-input ship-in" placeholder="US">
-                    </div>
-                </div>
-                <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:10px; cursor:pointer;">
-                    <input type="checkbox" id="shipSaveBack" checked>
-                    Save any added / edited details back to the <span id="shipSaveBackTarget" style="font-weight:700;">merchant</span> record
-                </label>
-            </div>
-
             <!-- JARVIS Suggests panel — appears after merchant is selected -->
             <div id="jarvisSuggestPanel" style="display:none; background:#eff6ff; border:1px solid #bfdbfe; border-radius:12px; padding:14px; margin-bottom:15px; max-height:120px; overflow:hidden;">
                 <div style="display:flex; align-items:center; gap:6px; margin-bottom:8px;">
@@ -528,6 +488,153 @@
         </div>
             <button type="submit" id="createBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue);">CREATE DEPLOYMENT</button>
         </form>
+    </div>
+</div>
+
+<!-- ════════════ SHIPSTATION-READY WIZARD (feature-flagged) ════════════ -->
+<div id="ssWizardModal" class="modal-backdrop" onclick="closeModal(event, 'ssWizardModal')">
+    <div class="modal-content" onclick="event.stopPropagation()" style="max-width:760px;">
+        <span class="material-icons close-btn" onclick="document.getElementById('ssWizardModal').style.display='none'">close</span>
+
+        <!-- SCREEN 1: choose ticket type -->
+        <div id="sswScreen1" class="ssw-screen">
+            <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:4px;">New Deployment Ticket</h2>
+            <p style="font-size:12px; color:#94a3b8; margin-bottom:18px;">Choose how you want to create this ticket.</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <button type="button" class="ssw-card" onclick="sswOpenLegacyModal()">
+                    <span class="material-icons" style="font-size:30px; color:#64748b;">edit_note</span>
+                    <div class="ssw-card-title">Create Ticket</div>
+                    <div class="ssw-card-sub">Separate from ShipStation — opens the standard deployment form</div>
+                </button>
+                <button type="button" class="ssw-card ssw-card-accent" onclick="sswGoScreen(2)">
+                    <span class="material-icons" style="font-size:30px; color:#7c3aed;">local_shipping</span>
+                    <div class="ssw-card-title">Create Ticket — ShipStation Ready</div>
+                    <div class="ssw-card-sub">Integrated with ShipStation order details</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- SCREEN 2: ship destination -->
+        <div id="sswScreen2" class="ssw-screen" style="display:none;">
+            <button type="button" class="ssw-back" onclick="sswGoScreen(1)"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">arrow_back</span> Back</button>
+            <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin:8px 0 4px;">Where is this shipping?</h2>
+            <p style="font-size:12px; color:#94a3b8; margin-bottom:18px;">ShipStation-Ready deployment.</p>
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <button type="button" class="ssw-card" onclick="sswStart('merchant')">
+                    <span class="material-icons" style="font-size:30px; color:#166534;">storefront</span>
+                    <div class="ssw-card-title">Ship to Merchant</div>
+                    <div class="ssw-card-sub">Ships directly to the merchant</div>
+                </button>
+                <button type="button" class="ssw-card" onclick="sswStart('partner')">
+                    <span class="material-icons" style="font-size:30px; color:#004990;">handshake</span>
+                    <div class="ssw-card-title">Ship to Partner</div>
+                    <div class="ssw-card-sub">Ships to the partner, with option to notify the merchant</div>
+                </button>
+            </div>
+        </div>
+
+        <!-- SCREEN 3: the form -->
+        <div id="sswScreen3" class="ssw-screen" style="display:none;">
+            <button type="button" class="ssw-back" onclick="sswGoScreen(2)"><span class="material-icons" style="font-size:15px;vertical-align:-3px;">arrow_back</span> Back</button>
+            <h2 id="sswFormTitle" style="font-size:1.3rem; font-weight:800; color:#002d5a; margin:8px 0 14px;">ShipStation Order</h2>
+
+            <form id="sswForm" onsubmit="sswSubmit(event)">
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:18px;">
+
+                <!-- LEFT: recipient + hardware -->
+                <div>
+                    <!-- Partner lookup (partner mode only) -->
+                    <div id="sswPartnerLookupWrap" style="display:none; position:relative; margin-bottom:12px;">
+                        <label class="ship-lbl">Partner</label>
+                        <input type="text" id="ssw_partnerSearch" class="slds-input ship-in" placeholder="Search partner name..." autocomplete="off" oninput="sswPartnerSearch(this.value)">
+                        <input type="hidden" id="ssw_partnerId">
+                        <div id="ssw_partnerSuggest" class="suggestions-list"></div>
+                    </div>
+
+                    <!-- Merchant lookup -->
+                    <div style="position:relative; margin-bottom:12px;">
+                        <label class="ship-lbl" id="sswMerchantLbl">Merchant</label>
+                        <input type="text" id="ssw_merchantSearch" class="slds-input ship-in" placeholder="Search merchant..." autocomplete="off" oninput="sswMerchantSearch(this.value)">
+                        <input type="hidden" id="ssw_merchantId">
+                        <div id="ssw_merchantSuggest" class="suggestions-list"></div>
+                    </div>
+
+                    <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin:6px 0 8px;border-top:1px solid #eef2f7;padding-top:10px;">Recipient Information</div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div style="grid-column:1/-1;"><label class="ship-lbl">Name *</label><input type="text" id="ssw_name" class="slds-input ship-in" placeholder="Name"></div>
+                        <div style="grid-column:1/-1;"><label class="ship-lbl">Company</label><input type="text" id="ssw_company" class="slds-input ship-in" placeholder="Company name"></div>
+                        <div style="grid-column:1/-1;"><label class="ship-lbl">Country</label><input type="text" id="ssw_country" class="slds-input ship-in" value="United States"></div>
+                        <div style="grid-column:1/-1;"><label class="ship-lbl">Address *</label><input type="text" id="ssw_addr1" class="slds-input ship-in" placeholder="Address Line 1"></div>
+                        <div style="grid-column:1/-1;"><input type="text" id="ssw_addr2" class="slds-input ship-in" placeholder="Address Line 2"></div>
+                        <div><label class="ship-lbl">City *</label><input type="text" id="ssw_city" class="slds-input ship-in" placeholder="City"></div>
+                        <div><label class="ship-lbl">State *</label><input type="text" id="ssw_state" class="slds-input ship-in" placeholder="State"></div>
+                        <div><label class="ship-lbl">Zip *</label><input type="text" id="ssw_zip" class="slds-input ship-in" placeholder="Zip"></div>
+                        <div><label class="ship-lbl">Phone</label><input type="text" id="ssw_phone" class="slds-input ship-in" placeholder="Phone"></div>
+                        <div style="grid-column:1/-1;"><label class="ship-lbl">Email</label><input type="text" id="ssw_email" class="slds-input ship-in" placeholder="Email"></div>
+                    </div>
+
+                    <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:8px; cursor:pointer;">
+                        <input type="checkbox" id="ssw_saveBack" checked>
+                        Save added / edited details back to the <span id="ssw_saveBackTarget" style="font-weight:700;">record</span>
+                    </label>
+                    <label id="ssw_notifyWrap" style="display:none; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:6px; cursor:pointer;">
+                        <input type="checkbox" id="ssw_notify"> Notify the merchant about this shipment
+                    </label>
+                </div>
+
+                <!-- RIGHT: hardware + order summary -->
+                <div>
+                    <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin:0 0 8px;">Hardware</div>
+                    <div style="display:flex; gap:8px; margin-bottom:10px;">
+                        <button type="button" id="sswModeSingleBtn" onclick="sswSetMode('single')" class="ship-toggle-btn ship-toggle-active">Single Unit</button>
+                        <button type="button" id="sswModeBulkBtn" onclick="sswSetMode('bulk')" class="ship-toggle-btn">Multiple (Bulk)</button>
+                    </div>
+
+                    <div id="sswSingleFields">
+                        <div style="position:relative; margin-bottom:8px;">
+                            <label class="ship-lbl">Hardware (Serial)</label>
+                            <input type="text" id="ssw_eSearch" class="slds-input ship-in" placeholder="Search serial..." autocomplete="off" oninput="sswEquipSearch(this.value)">
+                            <input type="hidden" id="ssw_equipId">
+                            <div id="ssw_eSuggest" class="suggestions-list"></div>
+                        </div>
+                        <div style="margin-bottom:8px;"><label class="ship-lbl">TID</label><input type="text" id="ssw_tid" class="slds-input ship-in" placeholder="TID"></div>
+                    </div>
+
+                    <div id="sswBulkFields" style="display:none; margin-bottom:8px;">
+                        <div style="position:relative; margin-bottom:6px;">
+                            <label class="ship-lbl">Add Units (Serial)</label>
+                            <input type="text" id="ssw_bulkSearch" class="slds-input ship-in" placeholder="Search serial..." autocomplete="off" oninput="sswBulkEquipSearch(this.value)">
+                            <div id="ssw_bulkSuggest" class="suggestions-list"></div>
+                        </div>
+                        <div id="ssw_bulkList" style="min-height:40px; border:1px solid #e2e8f0; border-radius:8px; padding:6px; background:#f8fafc; font-size:12px;"></div>
+                    </div>
+
+                    <div style="margin-bottom:8px;"><label class="ship-lbl">Deployment Date</label><input type="date" id="ssw_depDate" class="slds-input ship-in"></div>
+
+                    <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px;border-top:1px solid #eef2f7;padding-top:10px;">Order Summary (ShipStation)</div>
+                    <div style="margin-bottom:8px;"><label class="ship-lbl">Store</label>
+                        <select id="ssw_store" class="slds-select ship-in" style="width:100%;border-radius:8px;"><option value="">— Select store —</option></select>
+                    </div>
+                    <div style="margin-bottom:4px;"><label class="ship-lbl">Order #</label>
+                        <input type="text" id="ssw_orderNum" class="slds-input ship-in" placeholder="Order # will be autogenerated" disabled>
+                    </div>
+                    <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; margin-bottom:8px; cursor:pointer;">
+                        <input type="checkbox" id="ssw_autoOrder" checked onchange="sswToggleAutoOrder()"> Autogenerate Order #
+                    </label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                        <div><label class="ship-lbl">Order Date</label><input type="date" id="ssw_orderDate" class="slds-input ship-in"></div>
+                        <div><label class="ship-lbl">Paid Date</label><input type="date" id="ssw_paidDate" class="slds-input ship-in"></div>
+                        <div><label class="ship-lbl">Shipping Paid</label><input type="number" step="0.01" id="ssw_shipPaid" class="slds-input ship-in" placeholder="$"></div>
+                        <div><label class="ship-lbl">Tax Paid</label><input type="number" step="0.01" id="ssw_taxPaid" class="slds-input ship-in" placeholder="$"></div>
+                        <div style="grid-column:1/-1;"><label class="ship-lbl">Total Paid</label><input type="number" step="0.01" id="ssw_totalPaid" class="slds-input ship-in" placeholder="$"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top:16px;"><label class="ship-lbl">Internal Notes</label><textarea id="ssw_notes" class="slds-textarea" placeholder="Internal notes..." style="height:50px;"></textarea></div>
+            <button type="submit" id="sswSubmitBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); margin-top:12px;">CREATE SHIPSTATION DEPLOYMENT</button>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -1728,102 +1835,6 @@ async function processReturn() {
         document.getElementById('mSearch').value = name;
         document.getElementById('mSuggestions').style.display = 'none';
         triggerJarvisSuggestions(id);
-        loadShipInfo(id);
-    }
-
-    // ── SHIPPING DESTINATION (ShipStation Phase 2) ────────────────────────────
-    let _shipTo = 'merchant';
-    let _shipMerchant = null;
-    let _shipPartner = null;
-
-    async function loadShipInfo(merchantId) {
-        _shipTo = 'merchant';
-        _shipMerchant = null;
-        _shipPartner = null;
-        const section = document.getElementById('shipDestSection');
-        section.style.display = 'block';
-        // reset toggles to merchant default
-        document.getElementById('shipMerchantBtn').classList.add('ship-toggle-active');
-        document.getElementById('shipPartnerBtn').classList.remove('ship-toggle-active');
-        try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST',
-                headers: authHeaders(),
-                body: JSON.stringify({ action: 'getShipInfo', merchant_id: merchantId })
-            });
-            const result = await res.json();
-            if (result.success) {
-                _shipMerchant = result.merchant || null;
-                _shipPartner = result.partner || null;
-            }
-        } catch (e) { console.error('[getShipInfo]', e); }
-        renderShipFields();
-    }
-
-    function setShipTo(type) {
-        _shipTo = type;
-        document.getElementById('shipMerchantBtn').classList.toggle('ship-toggle-active', type === 'merchant');
-        document.getElementById('shipPartnerBtn').classList.toggle('ship-toggle-active', type === 'partner');
-        document.getElementById('shipSaveBackTarget').innerText = type === 'partner' ? 'partner' : 'merchant';
-        renderShipFields();
-    }
-
-    function renderShipFields() {
-        const notice = document.getElementById('shipPartnerNotice');
-        const set = (id, v) => { document.getElementById(id).value = v || ''; };
-        if (_shipTo === 'partner') {
-            if (!_shipPartner) {
-                notice.style.display = 'block';
-                notice.innerText = '⚠ No partner is linked to this merchant. Enter the partner address manually, or switch back to Ship to Merchant.';
-            } else {
-                notice.style.display = 'block';
-                notice.style.color = '#15803d'; notice.style.background = '#f0fdf4'; notice.style.borderColor = '#bbf7d0';
-                notice.innerText = '🤝 Partner: ' + (_shipPartner.full_name || '—') + ' — tied to this merchant';
-            }
-            const p = _shipPartner || {};
-            set('ship_name', p.full_name);
-            set('ship_phone', p.phone_number);
-            set('ship_email', p.email);
-            set('ship_address', p.address);
-            set('ship_city', p.city);
-            set('ship_state', p.state);
-            set('ship_zip', p.zip);
-            set('ship_country', p.country || 'US');
-        } else {
-            notice.style.display = 'none';
-            notice.style.color = '#b45309'; notice.style.background = '#fff7ed'; notice.style.borderColor = '#fed7aa';
-            const m = _shipMerchant || {};
-            set('ship_name', m.dba_name);
-            set('ship_phone', m.merchant_phone);
-            set('ship_email', m.email);
-            set('ship_address', m.merchant_address);
-            set('ship_city', m.merchant_city);
-            set('ship_state', m.merchant_state);
-            set('ship_zip', m.merchant_zip);
-            set('ship_country', m.merchant_country || 'US');
-        }
-    }
-
-    // Builds the ship fields + save-back payload for saveDeployment
-    function collectShipPayload() {
-        const v = id => (document.getElementById(id).value || '').trim();
-        const out = { ship_to_type: _shipTo, ship_to_partner_id: _shipTo === 'partner' ? (_shipPartner?.id || null) : null };
-        if (document.getElementById('shipSaveBack')?.checked) {
-            if (_shipTo === 'partner' && _shipPartner?.id) {
-                out.partner_updates = {
-                    full_name: v('ship_name'), phone_number: v('ship_phone'), email: v('ship_email'),
-                    address: v('ship_address'), city: v('ship_city'), state: v('ship_state'),
-                    zip: v('ship_zip'), country: v('ship_country')
-                };
-            } else if (_shipTo === 'merchant') {
-                out.merchant_updates = {
-                    dba_name: v('ship_name'), merchant_phone: v('ship_phone'), email: v('ship_email'),
-                    merchant_address: v('ship_address'), merchant_city: v('ship_city'), merchant_state: v('ship_state'),
-                    merchant_zip: v('ship_zip'), merchant_country: v('ship_country')
-                };
-            }
-        }
-        return out;
     }
 
     async function handleEquipSearch(val) {
@@ -2294,8 +2305,6 @@ async function saveDeployment(event) {
 
     let payload;
 
-    const shipPayload = collectShipPayload();
-
     if (currentDepMode === 'bulk') {
         if (bulkItems.length === 0) return Swal.fire('Error', 'Please add at least one unit', 'warning');
         payload = {
@@ -2305,8 +2314,7 @@ async function saveDeployment(event) {
             tracking_id: document.getElementById('trackingInput').value,
             target_date: document.getElementById('dateInput').value,
             purchase_type: document.getElementById('purchaseType').value,
-            notes: document.getElementById('notesInput').value,
-            ...shipPayload
+            notes: document.getElementById('notesInput').value
         };
     } else {
         const equipId = document.getElementById('equipSelect').value;
@@ -2318,8 +2326,7 @@ async function saveDeployment(event) {
             tracking_id: document.getElementById('trackingInput').value,
             target_date: document.getElementById('dateInput').value,
             purchase_type: document.getElementById('purchaseType').value,
-            notes: document.getElementById('notesInput').value,
-            ...shipPayload
+            notes: document.getElementById('notesInput').value
         };
     }
 
@@ -2628,11 +2635,362 @@ async function executeBulk(validData) {
     _jarvisStockCache = null;
     const jarvisPanel = document.getElementById('jarvisSuggestPanel');
     if (jarvisPanel) jarvisPanel.style.display = 'none';
-    // Reset shipping destination section
-    _shipTo = 'merchant'; _shipMerchant = null; _shipPartner = null;
-    const shipSec = document.getElementById('shipDestSection');
-    if (shipSec) shipSec.style.display = 'none';
 }
+
+    // ════════════ SHIPSTATION-READY WIZARD ════════════
+    let _shipstationEnabled = false;
+    let _ssMode = 'merchant';        // 'merchant' | 'partner'
+    let _ssDepMode = 'single';       // 'single' | 'bulk'
+    let _ssBulkItems = [];
+    let _ssMerchant = null;
+    let _ssPartner = null;
+    let _ssLookupTimer = null;
+    let _ssVendorsLoaded = false;
+
+    // Entry point for the "+ New Ticket" button
+    function newTicketEntry() {
+        if (_shipstationEnabled) {
+            sswResetAll();
+            sswGoScreen(1);
+            document.getElementById('ssWizardModal').style.display = 'flex';
+        } else {
+            openNewDeploymentModal();
+        }
+    }
+
+    function sswGoScreen(n) {
+        ['sswScreen1','sswScreen2','sswScreen3'].forEach((id, i) => {
+            document.getElementById(id).style.display = (i === n - 1) ? 'block' : 'none';
+        });
+    }
+
+    function sswOpenLegacyModal() {
+        document.getElementById('ssWizardModal').style.display = 'none';
+        openNewDeploymentModal();
+    }
+
+    function sswResetAll() {
+        _ssMode = 'merchant'; _ssDepMode = 'single'; _ssBulkItems = [];
+        _ssMerchant = null; _ssPartner = null;
+        sswResetForm();
+    }
+
+    function sswResetForm() {
+        ['ssw_partnerSearch','ssw_partnerId','ssw_merchantSearch','ssw_merchantId','ssw_name','ssw_company',
+         'ssw_addr1','ssw_addr2','ssw_city','ssw_state','ssw_zip','ssw_phone','ssw_email',
+         'ssw_eSearch','ssw_equipId','ssw_tid','ssw_bulkSearch','ssw_orderNum','ssw_shipPaid','ssw_taxPaid','ssw_totalPaid','ssw_notes']
+            .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+        const c = document.getElementById('ssw_country'); if (c) c.value = 'United States';
+        const bl = document.getElementById('ssw_bulkList'); if (bl) bl.innerHTML = '';
+        const auto = document.getElementById('ssw_autoOrder'); if (auto) auto.checked = true;
+        const notify = document.getElementById('ssw_notify'); if (notify) notify.checked = false;
+        const sb = document.getElementById('ssw_saveBack'); if (sb) sb.checked = true;
+        sswToggleAutoOrder();
+        sswSetMode('single');
+    }
+
+    async function sswStart(mode) {
+        _ssMode = mode;
+        _ssMerchant = null; _ssPartner = null;
+        sswResetForm();
+        const isPartner = mode === 'partner';
+        document.getElementById('sswPartnerLookupWrap').style.display = isPartner ? 'block' : 'none';
+        document.getElementById('ssw_notifyWrap').style.display = isPartner ? 'flex' : 'none';
+        document.getElementById('sswFormTitle').innerText = isPartner ? 'Ship to Partner — ShipStation Order' : 'Ship to Merchant — ShipStation Order';
+        document.getElementById('sswMerchantLbl').innerText = isPartner ? 'Merchant (tied to partner)' : 'Merchant';
+        document.getElementById('ssw_saveBackTarget').innerText = isPartner ? 'partner' : 'merchant';
+        const today = fmtDateInput(new Date());
+        document.getElementById('ssw_depDate').value = today;
+        document.getElementById('ssw_orderDate').value = today;
+        document.getElementById('ssw_paidDate').value = today;
+        await sswLoadVendors();
+        sswGoScreen(3);
+    }
+
+    function sswSetMode(m) {
+        _ssDepMode = m;
+        document.getElementById('sswModeSingleBtn').classList.toggle('ship-toggle-active', m === 'single');
+        document.getElementById('sswModeBulkBtn').classList.toggle('ship-toggle-active', m === 'bulk');
+        document.getElementById('sswSingleFields').style.display = m === 'single' ? 'block' : 'none';
+        document.getElementById('sswBulkFields').style.display = m === 'bulk' ? 'block' : 'none';
+    }
+
+    function sswToggleAutoOrder() {
+        const auto = document.getElementById('ssw_autoOrder').checked;
+        const inp = document.getElementById('ssw_orderNum');
+        inp.disabled = auto;
+        inp.placeholder = auto ? 'Order # will be autogenerated' : 'Enter custom order #';
+        if (auto) inp.value = '';
+    }
+
+    async function sswLoadVendors() {
+        if (_ssVendorsLoaded) return;
+        try {
+            const res = await fetch('/api/terminal-manager', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'get_vendors', userid: localStorage.getItem('pp_userid') })
+            });
+            const result = await res.json();
+            const sel = document.getElementById('ssw_store');
+            sel.innerHTML = '<option value="">— Select store —</option>' +
+                (result.data || []).map(v => `<option value="${v.id}">${v.name}</option>`).join('');
+            _ssVendorsLoaded = true;
+        } catch (e) { console.error('[ssVendors]', e); }
+    }
+
+    // ── Partner lookup ──
+    function sswPartnerSearch(val) {
+        const list = document.getElementById('ssw_partnerSuggest');
+        if (val.length < 2) { list.style.display = 'none'; return; }
+        clearTimeout(_ssLookupTimer);
+        _ssLookupTimer = setTimeout(async () => {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'getPartnerLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.partners || []).map(p =>
+                `<div class="suggestion-item" onclick='sswSelectPartner(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+                    <strong style="color:#004990;">${p.full_name || '—'}</strong>
+                    <div style="font-size:10px;color:#64748b;">${p.email || ''}</div>
+                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No partners found</div>';
+            list.style.display = 'block';
+        }, 300);
+    }
+
+    function sswSelectPartner(p) {
+        _ssPartner = p;
+        document.getElementById('ssw_partnerId').value = p.id;
+        document.getElementById('ssw_partnerSearch').value = p.full_name || '';
+        document.getElementById('ssw_partnerSuggest').style.display = 'none';
+        // recipient = partner
+        const set = (id, v) => { document.getElementById(id).value = v || ''; };
+        set('ssw_name', p.full_name); set('ssw_company', '');
+        set('ssw_addr1', p.address); set('ssw_city', p.city); set('ssw_state', p.state);
+        set('ssw_zip', p.zip); set('ssw_phone', p.phone_number); set('ssw_email', p.email);
+        document.getElementById('ssw_country').value = p.country || 'United States';
+        // reset merchant selection (must pick one tied to this partner)
+        _ssMerchant = null;
+        document.getElementById('ssw_merchantId').value = '';
+        document.getElementById('ssw_merchantSearch').value = '';
+    }
+
+    // ── Merchant lookup (mode-aware) ──
+    function sswMerchantSearch(val) {
+        const list = document.getElementById('ssw_merchantSuggest');
+        if (_ssMode === 'partner' && !_ssPartner) {
+            list.innerHTML = '<div style="padding:8px;color:#b45309;font-size:12px;">Select a partner first</div>';
+            list.style.display = 'block'; return;
+        }
+        if (val.length < 1 && _ssMode === 'merchant') { list.style.display = 'none'; return; }
+        clearTimeout(_ssLookupTimer);
+        _ssLookupTimer = setTimeout(async () => {
+            let result;
+            if (_ssMode === 'partner') {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST', headers: authHeaders(),
+                    body: JSON.stringify({ action: 'getPartnerMerchants', partner_id: _ssPartner.id, query: val })
+                });
+                result = await res.json();
+            } else {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST', headers: authHeaders(),
+                    body: JSON.stringify({ action: 'getLookups', query: val })
+                });
+                result = await res.json();
+            }
+            const merchants = result.merchants || [];
+            list.innerHTML = merchants.map(m =>
+                `<div class="suggestion-item" onclick="sswSelectMerchant('${m.id}','${(m.dba_name||'').replace(/'/g,"\\'")}')">
+                    <strong style="color:#004990;">${m.dba_name || '—'}</strong>
+                    <div style="font-size:10px;color:#64748b;">MID: ${m.merchant_id || 'N/A'}</div>
+                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No merchants found</div>';
+            list.style.display = 'block';
+        }, 300);
+    }
+
+    async function sswSelectMerchant(id, name) {
+        document.getElementById('ssw_merchantId').value = id;
+        document.getElementById('ssw_merchantSearch').value = name;
+        document.getElementById('ssw_merchantSuggest').style.display = 'none';
+        // In merchant mode the recipient = merchant → autofill from getShipInfo
+        if (_ssMode === 'merchant') {
+            try {
+                const res = await fetch('/api/deployments', {
+                    method: 'POST', headers: authHeaders(),
+                    body: JSON.stringify({ action: 'getShipInfo', merchant_id: id })
+                });
+                const result = await res.json();
+                const m = result.merchant || {};
+                _ssMerchant = m;
+                const set = (eid, v) => { document.getElementById(eid).value = v || ''; };
+                set('ssw_name', m.merchant_primary_contact || m.dba_name);
+                set('ssw_company', m.dba_name);
+                set('ssw_addr1', m.merchant_address); set('ssw_city', m.merchant_city);
+                set('ssw_state', m.merchant_state); set('ssw_zip', m.merchant_zip);
+                set('ssw_phone', m.merchant_phone); set('ssw_email', m.email);
+                document.getElementById('ssw_country').value = m.merchant_country || 'United States';
+            } catch (e) { console.error('[ssMerchant]', e); }
+        } else {
+            _ssMerchant = { id }; // partner mode: merchant just ties the record
+        }
+    }
+
+    // ── Equipment lookup (single + bulk) ──
+    function sswEquipSearch(val) {
+        const list = document.getElementById('ssw_eSuggest');
+        if (val.length < 1) { list.style.display = 'none'; return; }
+        clearTimeout(_ssLookupTimer);
+        _ssLookupTimer = setTimeout(async () => {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.inventory || []).map(e =>
+                `<div class="suggestion-item" onclick="sswSelectEquip('${e.id}','${e.serial_number}')">
+                    <strong>${e.serial_number}</strong>
+                    <div style="font-size:10px;color:#64748b;">${e.terminal_type || ''}</div>
+                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No stocked units</div>';
+            list.style.display = 'block';
+        }, 300);
+    }
+
+    function sswSelectEquip(id, serial) {
+        document.getElementById('ssw_equipId').value = id;
+        document.getElementById('ssw_eSearch').value = serial;
+        document.getElementById('ssw_eSuggest').style.display = 'none';
+    }
+
+    function sswBulkEquipSearch(val) {
+        const list = document.getElementById('ssw_bulkSuggest');
+        if (val.length < 1) { list.style.display = 'none'; return; }
+        clearTimeout(_ssLookupTimer);
+        _ssLookupTimer = setTimeout(async () => {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'getLookups', query: val })
+            });
+            const result = await res.json();
+            list.innerHTML = (result.inventory || []).map(e =>
+                `<div class="suggestion-item" onclick="sswAddBulk('${e.id}','${e.serial_number}','${(e.terminal_type||'').replace(/'/g,"\\'")}')">
+                    <strong>${e.serial_number}</strong>
+                    <div style="font-size:10px;color:#64748b;">${e.terminal_type || ''}</div>
+                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No stocked units</div>';
+            list.style.display = 'block';
+        }, 300);
+    }
+
+    function sswAddBulk(id, serial, type) {
+        if (_ssBulkItems.some(i => i.equipment_id === id)) return;
+        _ssBulkItems.push({ equipment_id: id, serial_number: serial, terminal_type: type, tid: '' });
+        document.getElementById('ssw_bulkSearch').value = '';
+        document.getElementById('ssw_bulkSuggest').style.display = 'none';
+        sswRenderBulk();
+    }
+
+    function sswRemoveBulk(id) {
+        _ssBulkItems = _ssBulkItems.filter(i => i.equipment_id !== id);
+        sswRenderBulk();
+    }
+
+    function sswRenderBulk() {
+        const el = document.getElementById('ssw_bulkList');
+        if (!_ssBulkItems.length) { el.innerHTML = '<span style="color:#94a3b8;">No units added</span>'; return; }
+        el.innerHTML = _ssBulkItems.map(i =>
+            `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;">
+                <strong style="font-family:monospace;">${i.serial_number}</strong>
+                <span style="color:#64748b;font-size:11px;">${i.terminal_type || ''}</span>
+                <input type="text" placeholder="TID" value="${i.tid||''}" oninput="sswSetBulkTid('${i.equipment_id}',this.value)" style="margin-left:auto;width:90px;font-size:11px;padding:2px 6px;border:1px solid #e2e8f0;border-radius:5px;">
+                <span class="material-icons" onclick="sswRemoveBulk('${i.equipment_id}')" style="font-size:15px;color:#dc2626;cursor:pointer;">close</span>
+            </div>`).join('');
+    }
+
+    function sswSetBulkTid(id, val) {
+        const it = _ssBulkItems.find(i => i.equipment_id === id);
+        if (it) it.tid = val;
+    }
+
+    async function sswSubmit(event) {
+        event.preventDefault();
+        const merchantId = document.getElementById('ssw_merchantId').value;
+        if (!merchantId) return Swal.fire('Error', 'Please select a merchant', 'warning');
+        if (_ssMode === 'partner' && !document.getElementById('ssw_partnerId').value)
+            return Swal.fire('Error', 'Please select a partner', 'warning');
+
+        const v = id => (document.getElementById(id).value || '').trim();
+        const saveBack = document.getElementById('ssw_saveBack').checked;
+        const storeSel = document.getElementById('ssw_store');
+
+        const shipstation = {
+            store_vendor_id: storeSel.value || null,
+            store_name: storeSel.options[storeSel.selectedIndex]?.text !== '— Select store —' ? storeSel.options[storeSel.selectedIndex]?.text : null,
+            order_number: document.getElementById('ssw_autoOrder').checked ? '' : v('ssw_orderNum'),
+            order_date: v('ssw_orderDate') || null,
+            paid_date: v('ssw_paidDate') || null,
+            notify_merchant: _ssMode === 'partner' && document.getElementById('ssw_notify').checked,
+            ship_to_name: v('ssw_name'), ship_to_company: v('ssw_company'),
+            ship_to_phone: v('ssw_phone'), ship_to_email: v('ssw_email'),
+            address: v('ssw_addr1'), address_line2: v('ssw_addr2'),
+            city: v('ssw_city'), state: v('ssw_state'), zip: v('ssw_zip'), country: v('ssw_country'),
+            shipping_paid: v('ssw_shipPaid'), tax_paid: v('ssw_taxPaid'), total_paid: v('ssw_totalPaid')
+        };
+
+        const payload = {
+            merchant_id: merchantId,
+            target_date: v('ssw_depDate'),
+            notes: v('ssw_notes'),
+            ship_to_type: _ssMode,
+            ship_to_partner_id: _ssMode === 'partner' ? document.getElementById('ssw_partnerId').value : null,
+            shipstation
+        };
+
+        if (_ssDepMode === 'bulk') {
+            if (!_ssBulkItems.length) return Swal.fire('Error', 'Please add at least one unit', 'warning');
+            payload.is_bulk = true;
+            payload.items = _ssBulkItems.map(i => ({ equipment_id: i.equipment_id, tid: i.tid || null }));
+        } else {
+            const eq = document.getElementById('ssw_equipId').value;
+            if (!eq) return Swal.fire('Error', 'Please select a hardware unit', 'warning');
+            payload.equipment_id = eq;
+            payload.tid = v('ssw_tid');
+        }
+
+        // Save-back to the recipient's record
+        if (saveBack) {
+            if (_ssMode === 'partner') {
+                payload.partner_updates = {
+                    full_name: v('ssw_name'), phone_number: v('ssw_phone'), email: v('ssw_email'),
+                    address: v('ssw_addr1'), city: v('ssw_city'), state: v('ssw_state'), zip: v('ssw_zip'), country: v('ssw_country')
+                };
+            } else {
+                payload.merchant_updates = {
+                    dba_name: v('ssw_company') || v('ssw_name'), merchant_primary_contact: v('ssw_name'),
+                    merchant_phone: v('ssw_phone'), email: v('ssw_email'),
+                    merchant_address: v('ssw_addr1'), merchant_city: v('ssw_city'),
+                    merchant_state: v('ssw_state'), merchant_zip: v('ssw_zip'), merchant_country: v('ssw_country')
+                };
+            }
+        }
+
+        const btn = document.getElementById('sswSubmitBtn');
+        btn.disabled = true; btn.textContent = 'Creating...';
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'create', payload })
+            });
+            const result = await res.json();
+            if (!result.success) throw new Error(result.message);
+            Swal.fire({ icon: 'success', title: 'ShipStation Deployment Created', timer: 1600, showConfirmButton: false });
+            document.getElementById('ssWizardModal').style.display = 'none';
+            await fetchDeployments();
+        } catch (e) {
+            Swal.fire('Error', e.message, 'error');
+        } finally {
+            btn.disabled = false; btn.textContent = 'CREATE SHIPSTATION DEPLOYMENT';
+        }
+    }
 
     let vendorMap = {};
 
@@ -2650,6 +3008,11 @@ async function executeBulk(validData) {
             headers: authHeaders(),
             body: JSON.stringify({ action: 'get_vendor_map' })
         }).then(r => r.json()).then(d => { if (d.success) vendorMap = d.data || {}; }).catch(() => {});
+        // Load ShipStation-Ready feature flag (controls the New Ticket wizard)
+        fetch('/api/app-settings', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'get', key: 'shipstation_ready_enabled' })
+        }).then(r => r.json()).then(d => { _shipstationEnabled = d.value === 'true'; }).catch(() => {});
         const urlQ = new URLSearchParams(window.location.search).get('q');
         if (urlQ) {
             const el = document.getElementById('depSearch');
