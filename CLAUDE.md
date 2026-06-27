@@ -60,7 +60,7 @@ Initially decided to keep labels in ShipStation, but user then chose "Path B: fu
 label panel" so staff never open ShipStation. Phase 6 BUILT:
 - `api/shipstation.js` actions: `get_warehouses`, `get_carriers`, `list_services`,
   `list_packages`, `get_rates` (loops carriers like the Rate Browser, sorts by total cost),
-  `create_label` (POST /orders/createlabelforder → returns base64 labelData + trackingNumber;
+  `create_label` (POST /orders/createlabelfororder → returns base64 labelData + trackingNumber;
   writes tracking/carrier/service/ss_shipment_id back to shipstation_shipments + deployments.tracking_id, status='shipped').
 - `api/deployments.js` `get_ss_shipment` (returns the outbound shipstation_shipments row for a deployment).
 - `deployments-dashboard.html`: `ssLabelModal` (Configure Shipment panel: Ship From/warehouses,

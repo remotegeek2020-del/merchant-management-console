@@ -306,7 +306,7 @@ export default async function handler(req, res) {
                 insuranceOptions: insurance || undefined,
                 testLabel: !!test_label
             };
-            const r = await ssPost('/orders/createlabelforder', labelReq);
+            const r = await ssPost('/orders/createlabelfororder', labelReq);
             if (!r.ok) {
                 const detail = r.data?.ExceptionMessage || r.data?.message || r.data?._raw || (r.raw || '').slice(0, 300) || '';
                 return res.status(200).json({ success: false, configured: true, status: r.status, message: `ShipStation ${r.status}${detail ? ': ' + detail : ' — order not found. Try recreating the ticket so a fresh ShipStation order is generated.'}` });
