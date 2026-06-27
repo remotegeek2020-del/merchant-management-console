@@ -79,6 +79,8 @@ label panel" so staff never open ShipStation. Phase 6 BUILT:
   - CONFIRMED WORKING: V1 API (`ssapi.shipstation.com`), HTTP Basic auth. Keys are in **Vercel env vars** (`SHIPSTATION_API_KEY` + `SHIPSTATION_API_SECRET`). `api/shipstation.js` `getShipStationKeys()` reads `process.env` first, falls back to `app_config`. Store dropdown VERIFIED populating live (Dejavoo, Manual Orders, New WooCommerce Store) → auth works end-to-end.
   - DONE in `api/shipstation.js`: exported `shipStationConfigured()`, `ssCreateOrder(o)` (POST /orders/createorder, maps a normalized order incl. shipTo, items, storeId→advancedOptions.storeId, amountPaid/taxAmount/shippingAmount, countryCode() maps "United States"→"US"), `ssFetchResource(url)` (for webhook resource_url). `get_stores` action live.
   - FK fix applied (DB migration `shipstation_shipments_cascade_delete`): deployment_id/return_id → ON DELETE CASCADE, partner_id → SET NULL. This fixed the "can't delete ticket" bug (shipstation_shipments FK was blocking deployment deletion).
+  - Deleting a deployment ticket now ALSO cancels the ShipStation order(s): `api/deployments.js` `delete` action (step 0) gathers shipstation_shipments rows for the deployment + its returns, voids any label (`ssVoidLabelById`) then deletes the SS order (`ssDeleteOrder` → DELETE /orders/{id}). Best-effort/non-blocking — local delete still succeeds if ShipStation is down.
+  - `void_label` action + "Void Label (refund)" button in ssLabelModal. Test labels: USPS/Stamps.com only (FedEx/UPS reject testLabel — guarded client-side). Email sanitized in ssCreateOrder (invalid → omitted); invalid US ZIP blocked before getrates.
 
   ### REMAINING Phase 5 TODO (resume here):
   1. **Import + call ssCreateOrder** in `api/deployments.js`:

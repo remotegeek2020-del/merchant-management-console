@@ -100,6 +100,32 @@ export async function ssFetchResource(resourceUrl) {
     return r.json();
 }
 
+// Void a label by shipmentId (best-effort). Returns true if voided/approved.
+export async function ssVoidLabelById(shipmentId) {
+    const auth = await getAuthHeader();
+    if (!auth || !shipmentId) return false;
+    try {
+        const r = await fetch(`${SS_BASE}/shipments/voidlabel`, {
+            method: 'POST', headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ shipmentId: Number(shipmentId) })
+        });
+        const d = await r.json().catch(() => ({}));
+        return r.ok && d.approved !== false;
+    } catch { return false; }
+}
+
+// Delete (inactivate) a ShipStation order by orderId (best-effort).
+export async function ssDeleteOrder(orderId) {
+    const auth = await getAuthHeader();
+    if (!auth || !orderId) return false;
+    try {
+        const r = await fetch(`${SS_BASE}/orders/${orderId}`, {
+            method: 'DELETE', headers: { 'Authorization': auth, 'Content-Type': 'application/json' }
+        });
+        return r.ok;
+    } catch { return false; }
+}
+
 // ── Generic ShipStation request helpers ─────────────────────────────────────
 async function ssGet(path) {
     const auth = await getAuthHeader();

@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
-import { ssCreateOrder } from './shipstation.js';
+import { ssCreateOrder, ssDeleteOrder, ssVoidLabelById } from './shipstation.js';
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
@@ -318,6 +318,23 @@ if (action === 'delete') {
     }
 
     try {
+        // 0. Cancel any linked ShipStation orders (best-effort — never blocks the delete).
+        //    Void the label first if one exists, then delete the SS order.
+        try {
+            const { data: retRows } = await supabase.from('returns').select('id').eq('deployment_id', deployment_id);
+            const retIds = (retRows || []).map(r => r.id);
+            let ssQuery = supabase.from('shipstation_shipments').select('ss_order_id, ss_shipment_id, deployment_id, return_id');
+            // rows linked to this deployment OR to any of its returns
+            const orFilter = [`deployment_id.eq.${deployment_id}`];
+            if (retIds.length) orFilter.push(`return_id.in.(${retIds.join(',')})`);
+            ssQuery = ssQuery.or(orFilter.join(','));
+            const { data: ssRows } = await ssQuery;
+            for (const row of (ssRows || [])) {
+                if (row.ss_shipment_id) await ssVoidLabelById(row.ss_shipment_id);
+                if (row.ss_order_id) await ssDeleteOrder(row.ss_order_id);
+            }
+        } catch (e) { console.warn('[ShipStation cancel on delete]', e.message); }
+
         // 1. DELETE LINKED RMA FIRST (cascade handles return_items)
         const { error: rmaDeleteError } = await supabase
             .from('returns')
