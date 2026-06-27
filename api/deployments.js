@@ -749,8 +749,73 @@ if (action === 'return_to_office') {
         notes,
         return_date_initiated,
         equipment_received_date,
-        selected_equipment_ids
+        selected_equipment_ids,
+        ship_from_type,
+        ship_from_partner_id,
+        shipstation: ssReturn,
+        merchant_updates: retMerchantUpdates,
+        partner_updates: retPartnerUpdates
     } = req.body.payload;
+
+    // Single-leg return origin distinction (additive — defaults to 'merchant')
+    const fromType = ship_from_type === 'partner' ? 'partner' : 'merchant';
+    const fromPartnerId = fromType === 'partner' ? (ship_from_partner_id || null) : null;
+
+    // Save-back to merchant/partner record (whitelisted)
+    const RET_MERCHANT_FIELDS = ['dba_name','email','merchant_primary_contact','merchant_phone','merchant_address','merchant_city','merchant_state','merchant_zip','merchant_country'];
+    const RET_PARTNER_FIELDS  = ['full_name','email','phone_number','address','city','state','zip','country'];
+    const doReturnSaveback = async () => {
+        try {
+            if (retMerchantUpdates && typeof retMerchantUpdates === 'object') {
+                const safe = Object.fromEntries(Object.entries(retMerchantUpdates)
+                    .filter(([k, v]) => RET_MERCHANT_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
+                if (Object.keys(safe).length) await supabase.from('merchants').update(safe).eq('id', merchant_id);
+            }
+            if (retPartnerUpdates && fromPartnerId && typeof retPartnerUpdates === 'object') {
+                const safe = Object.fromEntries(Object.entries(retPartnerUpdates)
+                    .filter(([k, v]) => RET_PARTNER_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
+                if (Object.keys(safe).length) await supabase.from('persons').update(safe).eq('id', fromPartnerId);
+            }
+        } catch (e) { console.warn('[ReturnSaveback]', e.message); }
+    };
+
+    // ShipStation return label row (no live API call yet)
+    const createShipstationReturnRow = async (returnId) => {
+        if (!ssReturn || typeof ssReturn !== 'object' || !returnId) return;
+        try {
+            let orderNumber = (ssReturn.order_number || '').trim();
+            if (!orderNumber) {
+                const { data: gen } = await supabase.rpc('next_ss_order_number');
+                orderNumber = gen || `SS-${Date.now()}`;
+            }
+            await supabase.from('shipstation_shipments').insert({
+                order_number:    orderNumber,
+                ship_type:       'return_label',
+                merchant_id,
+                return_id:       returnId,
+                partner_id:      fromPartnerId,
+                store_vendor_id: ssReturn.store_vendor_id || null,
+                store_name:      ssReturn.store_name || null,
+                order_date:      ssReturn.order_date || null,
+                paid_date:       ssReturn.paid_date || null,
+                ship_to_name:    ssReturn.ship_to_name || null,
+                ship_to_company: ssReturn.ship_to_company || null,
+                ship_to_phone:   ssReturn.ship_to_phone || null,
+                ship_to_email:   ssReturn.ship_to_email || null,
+                address:         ssReturn.address || null,
+                address_line2:   ssReturn.address_line2 || null,
+                city:            ssReturn.city || null,
+                state:           ssReturn.state || null,
+                zip:             ssReturn.zip || null,
+                country:         ssReturn.country || 'US',
+                shipping_paid:   ssReturn.shipping_paid != null && ssReturn.shipping_paid !== '' ? ssReturn.shipping_paid : null,
+                tax_paid:        ssReturn.tax_paid != null && ssReturn.tax_paid !== '' ? ssReturn.tax_paid : null,
+                total_paid:      ssReturn.total_paid != null && ssReturn.total_paid !== '' ? ssReturn.total_paid : null,
+                status:          'created',
+                created_by:      session.userid
+            });
+        } catch (e) { console.warn('[ShipStationReturnRow]', e.message); }
+    };
 
     try {
         const isBulk = !equipment_id || equipment_id === 'null';
@@ -778,6 +843,8 @@ if (action === 'return_to_office') {
                     destination: 'In Transit / RMA',
                     status: 'Open',
                     is_bulk: true,
+                    ship_from_type: fromType,
+                    ship_from_partner_id: fromPartnerId,
                     created_by: session.userid
                 }).select().single();
                 if (retErr) throw retErr;
@@ -807,8 +874,10 @@ if (action === 'return_to_office') {
                     action: `RMA Filed by ${actorName} — ${ret?.return_id || 'RMA'} — Bulk (${depItems?.length || 0} units) from ${mDba}`,
                     status: 'success', category: 'returns', target_id: ret?.return_id || deployment_id, target_type: 'return', severity: 'info',
                     old_value: { deployment_id, merchant: mDba, unit_count: depItems?.length || 0 },
-                    new_value: { return_id: ret?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName }
+                    new_value: { return_id: ret?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName, ship_from_type: fromType }
                 });
+                await doReturnSaveback();
+                await createShipstationReturnRow(ret?.id);
             } else {
                 // SINGLE: capture returned row so we can use return_id in the activity log
                 const { data: singleRet, error: singleRetErr } = await supabase.from('returns').insert({
@@ -820,6 +889,8 @@ if (action === 'return_to_office') {
                     condition: 'IN TRANSIT',
                     destination: 'In Transit / RMA',
                     status: 'Open',
+                    ship_from_type: fromType,
+                    ship_from_partner_id: fromPartnerId,
                     created_by: session.userid
                 }).select('id, return_id').single();
                 if (singleRetErr) throw singleRetErr;
@@ -839,8 +910,10 @@ if (action === 'return_to_office') {
                     action: `RMA Filed by ${actorName} — ${singleRet?.return_id || 'RMA'} — Single unit from ${mDbaSingle}`,
                     status: 'success', category: 'returns', target_id: singleRet?.return_id || deployment_id, target_type: 'return', severity: 'info',
                     old_value: { deployment_id, merchant: mDbaSingle, equipment_id },
-                    new_value: { return_id: singleRet?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName }
+                    new_value: { return_id: singleRet?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName, ship_from_type: fromType }
                 });
+                await doReturnSaveback();
+                await createShipstationReturnRow(singleRet?.id);
             }
 
         } else {

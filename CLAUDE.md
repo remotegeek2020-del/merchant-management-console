@@ -43,8 +43,13 @@ toggled in Secret Dungeon → Feature Flags tab). Flag OFF (default) = "+ New Ti
   - `api/deployments.js`: `getPartnerLookups`, `getPartnerMerchants`, and `create` writes a shipstation_shipments row when `payload.shipstation` present (order # auto via next_ss_order_number unless custom). NO live ShipStation API call yet — keys go in Vercel env later.
   - `deployments-dashboard.html`: ssWizardModal (3 screens), reads flag on load, "+ New Ticket" → `newTicketEntry()`
   - `secret-dungeon.html`: Feature Flags tab with the on/off toggle
-- Phase 4 (next): returns wizard (single-leg ship_from_type) + returns side of ShipStation
-- Phase 5: ShipStation API (order create, label, webhook) — keys added in Vercel. Backtrack/reconcile by matching ShipStation tracking number ↔ `deployments.tracking_id`.
+- Phase 4: ShipStation-Ready returns (single-leg ship_from_type) — DONE
+  - Decision: HOOK INTO existing return-initiation flow (not a standalone create). Returns always start from an existing deployed unit (deployment edit modal → processReturn → return_to_office).
+  - SEPARATE flag `shipstation_returns_enabled` (independent of deployments flag).
+  - `api/deployments.js` `return_to_office`: accepts `ship_from_type`/`ship_from_partner_id`/`shipstation`/save-back; sets ship_from on the returns row (bulk + single In-Transit inserts) and writes a shipstation_shipments row (`ship_type='return_label'`). Completion (else) branch untouched.
+  - `deployments-dashboard.html`: when flag ON, `processReturn` opens `ssReturnModal` (ship-from merchant/partner toggle, auto-fill from merchant or auto-resolved partner, ShipStation label fields, save-back) then calls return_to_office; when OFF, identical to before.
+  - `secret-dungeon.html`: second toggle in Feature Flags tab.
+- Phase 5 (next): ShipStation API (order create, label, webhook) — keys added in Vercel. Backtrack/reconcile by matching ShipStation tracking number ↔ `deployments.tracking_id`.
 
 ### Vendors list = ShipStation "Store" dropdown
 Reuse `api/terminal-manager` `get_vendors` (table `vendors`, returns {id,name}). Any authenticated staff can read.
