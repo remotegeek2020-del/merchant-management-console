@@ -55,6 +55,15 @@ toggled in Secret Dungeon → Feature Flags tab). Flag OFF (default) = "+ New Ti
   - `api/shipstation.js`: added `reconcile` action (pull recent GET /shipments, match orderNumber → backfill tracking). Manual backtrack for historical records.
   - **USER TODO to finish wiring:** (1) add env `SHIPSTATION_WEBHOOK_SECRET` in Vercel; (2) in ShipStation → Settings → Integrations → Webhooks, add a "On Items Shipped / SHIP_NOTIFY" webhook pointing to `https://<host>/api/shipstation-webhook?secret=<that secret>`. Until then, order creation works but tracking auto-writeback won't fire (can use the `reconcile` action instead).
 
+### LABEL STEP DECISION (user-confirmed 2026-06-27) — do NOT rebuild ShipStation
+After order creation works, the label/fulfillment step (ship-from, browse rates, service,
+package, weight/size, confirmation, insurance, print label) STAYS IN SHIPSTATION. The portal
+creates the order only; shipping staff rate-shop + print the label inside ShipStation
+("Awaiting Shipment"); tracking auto-syncs back via the webhook. Decision: do NOT build a
+label/rate/print screen in the portal (rejected "slim" and "full" options). ShipStation
+integration is considered COMPLETE. Division of labor: Portal = order entry + system of
+record; ShipStation = fulfillment/labels; Webhook = tracking writeback.
+
 ### (historical) Phase 5 build notes
   - CONFIRMED WORKING: V1 API (`ssapi.shipstation.com`), HTTP Basic auth. Keys are in **Vercel env vars** (`SHIPSTATION_API_KEY` + `SHIPSTATION_API_SECRET`). `api/shipstation.js` `getShipStationKeys()` reads `process.env` first, falls back to `app_config`. Store dropdown VERIFIED populating live (Dejavoo, Manual Orders, New WooCommerce Store) → auth works end-to-end.
   - DONE in `api/shipstation.js`: exported `shipStationConfigured()`, `ssCreateOrder(o)` (POST /orders/createorder, maps a normalized order incl. shipTo, items, storeId→advancedOptions.storeId, amountPaid/taxAmount/shippingAmount, countryCode() maps "United States"→"US"), `ssFetchResource(url)` (for webhook resource_url). `get_stores` action live.
