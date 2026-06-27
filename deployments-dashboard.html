@@ -3142,9 +3142,12 @@ async function executeBulk(validData) {
             });
             const result = await res.json();
             if (!result.success) throw new Error(result.message);
-            Swal.fire({ icon: 'success', title: 'ShipStation Deployment Created', timer: 1600, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: 'ShipStation Deployment Created', timer: 1300, showConfirmButton: false });
             document.getElementById('ssWizardModal').style.display = 'none';
             await fetchDeployments();
+            // Jump straight into the label step for the new deployment
+            const newId = Array.isArray(result.data) ? result.data[0]?.id : result.data?.id;
+            if (newId) setTimeout(() => ssOpenLabelForDeployment(newId), 400);
         } catch (e) {
             Swal.fire('Error', e.message, 'error');
         } finally {
@@ -3323,6 +3326,21 @@ async function executeBulk(validData) {
         } catch (e) { console.error('[ssLabelCheck]', e); }
     }
 
+    // Fetch the ShipStation order for a deployment id and open the label modal.
+    async function ssOpenLabelForDeployment(deploymentId) {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'get_ss_shipment', deployment_id: deploymentId })
+            });
+            const result = await res.json();
+            if (!result.success || !result.shipment) return false;
+            _sslShipment = result.shipment;
+            await ssOpenLabelModal();
+            return true;
+        } catch (e) { console.error('[ssOpenLabelForDeployment]', e); return false; }
+    }
+
     async function ssOpenLabelModal() {
         if (!_sslShipment) return;
         document.getElementById('ssl_orderInfo').innerHTML =
@@ -3374,7 +3392,11 @@ async function executeBulk(validData) {
                 fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'list_services', carrier_code: carrier }) }).then(r => r.json()),
                 fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'list_packages', carrier_code: carrier }) }).then(r => r.json())
             ]);
-            svc.innerHTML = '<option value="">— Select service —</option>' + (sres.services || []).map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+            if (sres.message) {
+                svc.innerHTML = `<option value="">⚠ ${sres.message}</option>`;
+            } else {
+                svc.innerHTML = '<option value="">— Select service —</option>' + (sres.services || []).map(s => `<option value="${s.code}">${s.name}</option>`).join('');
+            }
             pkg.innerHTML = (pres.packages || []).map(p => `<option value="${p.code}">${p.name}</option>`).join('') || '<option value="package">Package</option>';
         } catch (e) { console.error('[sslCarrierChanged]', e); }
     }
@@ -3414,7 +3436,11 @@ async function executeBulk(validData) {
             const r = await res.json();
             if (r.configured === false) { box.innerHTML = '<div style="color:#b45309;padding:8px;">ShipStation keys not configured.</div>'; return; }
             const rates = r.rates || [];
-            if (!rates.length) { box.innerHTML = '<div style="color:#94a3b8;padding:8px;">No rates returned. Check weight/address.</div>'; return; }
+            if (!rates.length) {
+                const why = r.message || (r.errors && r.errors.length ? r.errors.join('<br>') : 'No rates returned. Check weight, Ship From ZIP, and the destination address.');
+                box.innerHTML = `<div style="color:#b45309;padding:8px;font-size:11px;">${why}</div>`;
+                return;
+            }
             box.innerHTML = rates.map((rate, i) => `
                 <div onclick="sslPickRate(${i})" data-carrier="${rate.carrierCode}" data-service="${rate.serviceCode}"
                      style="display:flex;justify-content:space-between;align-items:center;padding:7px 9px;border-bottom:1px solid #eef2f7;cursor:pointer;border-radius:6px;"

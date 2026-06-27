@@ -199,7 +199,7 @@ export default async function handler(req, res) {
             const warehouses = (Array.isArray(r.data) ? r.data : []).map(w => ({
                 id: String(w.warehouseId),
                 name: w.warehouseName,
-                postalCode: w.originAddress?.postalCode || null,
+                postalCode: w.originAddress?.postalCode || w.returnAddress?.postalCode || null,
                 isDefault: !!w.isDefault
             }));
             return res.status(200).json({ success: true, configured: true, warehouses });
@@ -218,14 +218,14 @@ export default async function handler(req, res) {
         if (action === 'list_services') {
             if (!body.carrier_code) return res.status(400).json({ success: false, message: 'carrier_code required' });
             const r = await ssGet(`/carriers/listservices?carrierCode=${encodeURIComponent(body.carrier_code)}`);
-            if (!r.ok) return res.status(200).json({ success: !!r.configured, configured: r.configured, services: [] });
+            if (!r.ok) return res.status(200).json({ success: false, configured: r.configured, services: [], message: r.data?.ExceptionMessage || r.data?.message || ('HTTP ' + r.status) });
             const services = (Array.isArray(r.data) ? r.data : []).map(s => ({ code: s.code, name: s.name }));
             return res.status(200).json({ success: true, configured: true, services });
         }
         if (action === 'list_packages') {
             if (!body.carrier_code) return res.status(400).json({ success: false, message: 'carrier_code required' });
             const r = await ssGet(`/carriers/listpackages?carrierCode=${encodeURIComponent(body.carrier_code)}`);
-            if (!r.ok) return res.status(200).json({ success: !!r.configured, configured: r.configured, packages: [] });
+            if (!r.ok) return res.status(200).json({ success: false, configured: r.configured, packages: [], message: r.data?.ExceptionMessage || r.data?.message || ('HTTP ' + r.status) });
             const packages = (Array.isArray(r.data) ? r.data : []).map(p => ({ code: p.code, name: p.name }));
             return res.status(200).json({ success: true, configured: true, packages });
         }
@@ -245,12 +245,19 @@ export default async function handler(req, res) {
                 confirmation: body.confirmation || 'none',
                 residential: !!body.residential
             };
+            if (!base.fromPostalCode) {
+                return res.status(200).json({ success: false, configured: true, rates: [], message: 'No "Ship From" ZIP — pick a warehouse with an origin ZIP in ShipStation.' });
+            }
+            if (!base.weight?.value) {
+                return res.status(200).json({ success: false, configured: true, rates: [], message: 'Enter a package weight.' });
+            }
             let carrierCodes = body.carrier_code ? [body.carrier_code] : null;
             if (!carrierCodes) {
                 const cr = await ssGet('/carriers');
                 carrierCodes = (Array.isArray(cr.data) ? cr.data : []).map(c => c.code);
             }
             const rates = [];
+            const errors = [];
             for (const code of carrierCodes) {
                 const r = await ssPost('/shipments/getrates', { ...base, carrierCode: code });
                 if (r.ok && Array.isArray(r.data)) {
@@ -264,10 +271,12 @@ export default async function handler(req, res) {
                             totalCost: (Number(rate.shipmentCost) || 0) + (Number(rate.otherCost) || 0)
                         });
                     }
+                } else if (!r.ok) {
+                    errors.push(`${code}: ${r.data?.ExceptionMessage || r.data?.message || ('HTTP ' + r.status)}`);
                 }
             }
             rates.sort((a, b) => a.totalCost - b.totalCost);
-            return res.status(200).json({ success: true, configured: true, rates });
+            return res.status(200).json({ success: true, configured: true, rates, errors: errors.length ? errors : undefined });
         }
 
         // ── CREATE LABEL for an existing order ──────────────────────────────
