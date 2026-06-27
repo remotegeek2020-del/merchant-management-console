@@ -1,3 +1,4 @@
+import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { getConfigValue } from './api-config.js';
 
@@ -127,6 +128,46 @@ export default async function handler(req, res) {
                 active: s.active !== false
             }));
             return res.status(200).json({ success: true, configured: true, stores });
+        }
+
+        // ── RECONCILE (backtrack): pull recent ShipStation shipments and match
+        //     by orderNumber → our shipstation_shipments, writing tracking back ──
+        if (action === 'reconcile') {
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: false, configured: false, message: 'ShipStation keys not configured.' });
+
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const pageSize = Math.min(Number(body.page_size) || 100, 500);
+            const ssRes = await fetch(`${SS_BASE}/shipments?pageSize=${pageSize}&sortBy=ShipDate&sortDir=DESC`, {
+                headers: { 'Authorization': auth, 'Content-Type': 'application/json' }
+            });
+            if (!ssRes.ok) {
+                const txt = await ssRes.text().catch(() => '');
+                return res.status(200).json({ success: false, configured: true, message: `ShipStation ${ssRes.status}: ${txt.slice(0, 200)}` });
+            }
+            const data = await ssRes.json();
+            const shipments = Array.isArray(data?.shipments) ? data.shipments : [];
+            let matched = 0;
+            for (const sh of shipments) {
+                if (!sh.orderNumber) continue;
+                const { data: rows } = await supabase.from('shipstation_shipments')
+                    .select('id, deployment_id').eq('order_number', sh.orderNumber);
+                for (const row of (rows || [])) {
+                    await supabase.from('shipstation_shipments').update({
+                        tracking_number: sh.trackingNumber || null,
+                        carrier: sh.carrierCode || null,
+                        service: sh.serviceCode || null,
+                        ss_shipment_id: sh.shipmentId ? String(sh.shipmentId) : null,
+                        ss_order_id: sh.orderId ? String(sh.orderId) : null,
+                        status: sh.voided ? 'voided' : 'shipped'
+                    }).eq('id', row.id);
+                    if (row.deployment_id && sh.trackingNumber) {
+                        await supabase.from('deployments').update({ tracking_id: sh.trackingNumber }).eq('id', row.deployment_id);
+                    }
+                    matched++;
+                }
+            }
+            return res.status(200).json({ success: true, configured: true, scanned: shipments.length, matched });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

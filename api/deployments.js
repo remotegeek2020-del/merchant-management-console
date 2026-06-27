@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
+import { ssCreateOrder } from './shipstation.js';
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
@@ -539,11 +540,12 @@ if (action === 'create') {
         } catch (e) { console.warn('[ShipSaveback]', e.message); }
     };
 
-    // ShipStation-Ready: record a shipstation_shipments row tied to this deployment.
-    // No live ShipStation API call yet (keys added in Vercel later) — we just persist
-    // the order fields. order_number auto-generates (SS-####) unless a custom one is given.
+    // ShipStation-Ready: record a shipstation_shipments row tied to this deployment,
+    // then push the order LIVE to ShipStation (best-effort, non-blocking — the
+    // deployment still succeeds if ShipStation is unreachable). order_number
+    // auto-generates (SS-####) unless a custom one is given.
     const ss = payload.shipstation;
-    const createShipstationRow = async (deploymentId) => {
+    const createShipstationRow = async (deploymentId, lineItems) => {
         if (!ss || typeof ss !== 'object') return;
         try {
             let orderNumber = (ss.order_number || '').trim();
@@ -551,7 +553,7 @@ if (action === 'create') {
                 const { data: gen } = await supabase.rpc('next_ss_order_number');
                 orderNumber = gen || `SS-${Date.now()}`;
             }
-            await supabase.from('shipstation_shipments').insert({
+            const { data: row, error: rowErr } = await supabase.from('shipstation_shipments').insert({
                 order_number:    orderNumber,
                 ship_type:       'outbound',
                 merchant_id,
@@ -578,7 +580,35 @@ if (action === 'create') {
                 total_paid:      ss.total_paid != null && ss.total_paid !== '' ? ss.total_paid : null,
                 status:          'created',
                 created_by:      session.userid
+            }).select('id').single();
+            if (rowErr) { console.warn('[ShipStationRow]', rowErr.message); return; }
+
+            // Live push to ShipStation
+            const result = await ssCreateOrder({
+                orderNumber,
+                orderDate: ss.order_date,
+                paymentDate: ss.paid_date,
+                storeId: ss.ss_store_id,
+                email: ss.ship_to_email,
+                shipTo: {
+                    name: ss.ship_to_name, company: ss.ship_to_company,
+                    street1: ss.address, street2: ss.address_line2,
+                    city: ss.city, state: ss.state, postalCode: ss.zip,
+                    country: ss.country, phone: ss.ship_to_phone
+                },
+                items: lineItems,
+                amountPaid: ss.total_paid, taxAmount: ss.tax_paid, shippingAmount: ss.shipping_paid
             });
+            if (result?.success) {
+                await supabase.from('shipstation_shipments').update({
+                    ss_order_id: result.orderId ? String(result.orderId) : null,
+                    status: 'submitted'
+                }).eq('id', row.id);
+            } else if (result && result.configured !== false) {
+                await supabase.from('shipstation_shipments').update({ status: 'ss_error' }).eq('id', row.id);
+                console.warn('[ShipStation createorder]', result.message);
+            }
+            // configured===false (no keys) → leave status 'created'
         } catch (e) { console.warn('[ShipStationRow]', e.message); }
     };
 
@@ -652,14 +682,18 @@ if (action === 'create') {
         }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
         await doShipSaveback();
-        await createShipstationRow(dep.id);
+        await createShipstationRow(dep.id, items.map(i => ({
+            sku: equipMap[i.equipment_id]?.serial_number || undefined,
+            name: equipMap[i.equipment_id]?.terminal_type || 'Equipment',
+            quantity: 1
+        })));
         return res.status(200).json({ success: true, data: [dep] });
     }
 
     // --- SINGLE UNIT MODE ---
     const { data: checkEquip, error: checkError } = await supabase
         .from('equipments')
-        .select('status, serial_number')
+        .select('status, serial_number, terminal_type')
         .eq('id', equipment_id)
         .single();
 
@@ -736,7 +770,11 @@ if (action === 'create') {
     }).then(() => {}).catch(e => console.warn('[ActivityLog]', e.message));
 
     await doShipSaveback();
-    await createShipstationRow(newDep[0]?.id);
+    await createShipstationRow(newDep[0]?.id, [{
+        sku: checkEquip.serial_number || undefined,
+        name: checkEquip.terminal_type || 'Equipment',
+        quantity: 1
+    }]);
     return res.status(200).json({ success: true, data: newDep });
 }
 
@@ -779,8 +817,8 @@ if (action === 'return_to_office') {
         } catch (e) { console.warn('[ReturnSaveback]', e.message); }
     };
 
-    // ShipStation return label row (no live API call yet)
-    const createShipstationReturnRow = async (returnId) => {
+    // ShipStation return label row + live push (best-effort, non-blocking)
+    const createShipstationReturnRow = async (returnId, lineItems) => {
         if (!ssReturn || typeof ssReturn !== 'object' || !returnId) return;
         try {
             let orderNumber = (ssReturn.order_number || '').trim();
@@ -788,7 +826,7 @@ if (action === 'return_to_office') {
                 const { data: gen } = await supabase.rpc('next_ss_order_number');
                 orderNumber = gen || `SS-${Date.now()}`;
             }
-            await supabase.from('shipstation_shipments').insert({
+            const { data: row, error: rowErr } = await supabase.from('shipstation_shipments').insert({
                 order_number:    orderNumber,
                 ship_type:       'return_label',
                 merchant_id,
@@ -813,7 +851,33 @@ if (action === 'return_to_office') {
                 total_paid:      ssReturn.total_paid != null && ssReturn.total_paid !== '' ? ssReturn.total_paid : null,
                 status:          'created',
                 created_by:      session.userid
+            }).select('id').single();
+            if (rowErr) { console.warn('[ShipStationReturnRow]', rowErr.message); return; }
+
+            const result = await ssCreateOrder({
+                orderNumber,
+                orderDate: ssReturn.order_date,
+                paymentDate: ssReturn.paid_date,
+                storeId: ssReturn.ss_store_id,
+                email: ssReturn.ship_to_email,
+                shipTo: {
+                    name: ssReturn.ship_to_name, company: ssReturn.ship_to_company,
+                    street1: ssReturn.address, street2: ssReturn.address_line2,
+                    city: ssReturn.city, state: ssReturn.state, postalCode: ssReturn.zip,
+                    country: ssReturn.country, phone: ssReturn.ship_to_phone
+                },
+                items: lineItems,
+                amountPaid: ssReturn.total_paid, taxAmount: ssReturn.tax_paid, shippingAmount: ssReturn.shipping_paid
             });
+            if (result?.success) {
+                await supabase.from('shipstation_shipments').update({
+                    ss_order_id: result.orderId ? String(result.orderId) : null,
+                    status: 'submitted'
+                }).eq('id', row.id);
+            } else if (result && result.configured !== false) {
+                await supabase.from('shipstation_shipments').update({ status: 'ss_error' }).eq('id', row.id);
+                console.warn('[ShipStation return createorder]', result.message);
+            }
         } catch (e) { console.warn('[ShipStationReturnRow]', e.message); }
     };
 
@@ -877,7 +941,13 @@ if (action === 'return_to_office') {
                     new_value: { return_id: ret?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName, ship_from_type: fromType }
                 });
                 await doReturnSaveback();
-                await createShipstationReturnRow(ret?.id);
+                {
+                    const { data: retEquips } = await supabase.from('equipments')
+                        .select('serial_number, terminal_type').in('id', (depItems || []).map(di => di.equipment_id));
+                    await createShipstationReturnRow(ret?.id, (retEquips || []).map(e => ({
+                        sku: e.serial_number || undefined, name: e.terminal_type || 'Equipment', quantity: 1
+                    })));
+                }
             } else {
                 // SINGLE: capture returned row so we can use return_id in the activity log
                 const { data: singleRet, error: singleRetErr } = await supabase.from('returns').insert({
@@ -913,7 +983,13 @@ if (action === 'return_to_office') {
                     new_value: { return_id: singleRet?.return_id, status: 'Open', destination: 'In Transit / RMA', return_reason: notes || null, return_date_initiated, created_by: actorName, ship_from_type: fromType }
                 });
                 await doReturnSaveback();
-                await createShipstationReturnRow(singleRet?.id);
+                {
+                    const { data: re } = await supabase.from('equipments')
+                        .select('serial_number, terminal_type').eq('id', equipment_id).maybeSingle();
+                    await createShipstationReturnRow(singleRet?.id, re
+                        ? [{ sku: re.serial_number || undefined, name: re.terminal_type || 'Equipment', quantity: 1 }]
+                        : undefined);
+                }
             }
 
         } else {
