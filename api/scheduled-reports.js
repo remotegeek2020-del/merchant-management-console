@@ -190,6 +190,15 @@ function buildOpsEmail(data) {
             <td style="padding:8px 12px;font-size:11px;color:#64748b;">${d.tracking_id || '—'}</td>
         </tr>`).join('');
 
+    const ydayRetRows = (yday.returns || []).map(r => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:8px 12px;font-size:11px;color:#64748b;">${r.return_id || '—'}</td>
+            <td style="padding:8px 12px;font-size:12px;font-weight:600;color:#002d5a;">${r.dba_name || '—'}<br><span style="font-size:10px;font-family:monospace;color:#64748b;font-weight:400;">MID: ${r.merchant_id || '—'}</span></td>
+            <td style="padding:8px 12px;font-size:11px;color:#334155;">${r.terminal_type || '—'}</td>
+            <td style="padding:8px 12px;font-size:11px;color:#64748b;">${r.return_reason || '—'}</td>
+            <td style="padding:8px 12px;font-size:11px;color:#64748b;">${r.destination || '—'}</td>
+        </tr>`).join('');
+
     const statusDot = s => {
         const c = s === 'Open' ? '#dc2626' : s === 'Closed' ? '#16a34a' : '#64748b';
         return `<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${c};margin-right:6px;"></span>`;
@@ -304,6 +313,25 @@ function buildOpsEmail(data) {
                 <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Tracking</th>
             </tr></thead>
             <tbody>${ydayRows || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No deployments created yesterday</td></tr>'}</tbody>
+        </table>
+    </div>
+
+    <!-- Returns from Yesterday -->
+    <div style="padding:24px 32px 0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+            <div style="font-size:13px;font-weight:800;color:#002d5a;">📅 Returns from Yesterday</div>
+            <span style="font-size:11px;color:#6366f1;font-weight:700;">${num((yday.returns || []).length)} return(s)</span>
+        </div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">${yday.label}${(yday.returns || []).length ? ' · full list attached as CSV' : ''}</div>
+        <table style="width:100%;border-collapse:collapse;">
+            <thead><tr style="background:#f8fafc;border-bottom:2px solid #e2e8f0;">
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">ID</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Merchant</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Terminal</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Reason</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;">Destination</th>
+            </tr></thead>
+            <tbody>${ydayRetRows || '<tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No returns created yesterday</td></tr>'}</tbody>
         </table>
     </div>
 
@@ -752,21 +780,30 @@ async function buildOpsData() {
     const { data, error } = await supabase.rpc('get_ops_report_stats');
     if (error) throw error;
 
-    // Yesterday's deployments (timezone-aware, tz handled in SQL)
-    const { data: yRows } = await supabase.rpc('get_ops_yesterday_deployments');
+    // Yesterday's deployments + returns (timezone-aware, tz handled in SQL)
+    const [{ data: yDeps }, { data: yRets }] = await Promise.all([
+        supabase.rpc('get_ops_yesterday_deployments'),
+        supabase.rpc('get_ops_yesterday_returns')
+    ]);
     const yesterdayLabel = new Date(today.getTime() - 86400000)
         .toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    return { date: dateStr, yesterday: { label: yesterdayLabel, deployments: yRows || [] }, ...data };
+    return { date: dateStr, yesterday: { label: yesterdayLabel, deployments: yDeps || [], returns: yRets || [] }, ...data };
 }
 
 // ── SEND HELPERS ─────────────────────────────────────────────────────────────
 
-async function sendReport(reportType, trigger = 'cron') {
-    const { data: recipients, error } = await supabase
-        .from('report_recipients').select('email, name')
-        .eq('report_type', reportType);
-    if (error) throw error;
+async function sendReport(reportType, trigger = 'cron', testEmail = null) {
+    let recipients;
+    if (testEmail) {
+        recipients = [{ email: testEmail, name: 'Test' }];
+    } else {
+        const { data, error } = await supabase
+            .from('report_recipients').select('email, name')
+            .eq('report_type', reportType);
+        if (error) throw error;
+        recipients = data;
+    }
     if (!recipients || recipients.length === 0) return { sent: 0, skipped: 'no recipients', report_type: reportType };
 
     let html, subject, reportData, attachments = null;
@@ -775,30 +812,35 @@ async function sendReport(reportType, trigger = 'cron') {
             reportData = await buildOpsData();
             html = buildOpsEmail(reportData);
             subject = `📦 Operations Report — ${reportData.date}`;
-            // Attach yesterday's deployments as a CSV
-            const yRows = reportData.yesterday?.deployments || [];
-            if (yRows.length) {
-                const esc = v => {
-                    const s = (v === null || v === undefined) ? '' : String(v);
-                    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
-                };
-                const header = ['Deployment ID', 'Created At', 'Merchant', 'MID', 'Terminal Type', 'Serials', 'Purchase Type', 'Tracking', 'Bulk', 'Status'];
-                const lines = [header.join(',')];
-                for (const d of yRows) {
-                    lines.push([
-                        esc(d.deployment_id), esc(d.created_at), esc(d.dba_name), esc(d.merchant_id),
-                        esc(d.terminal_type), esc(d.serials), esc(d.purchase_type), esc(d.tracking_id),
-                        esc(d.is_bulk ? 'Yes' : 'No'), esc(d.status)
-                    ].join(','));
-                }
-                const csv = lines.join('\n');
-                const fname = `deployments_${(reportData.yesterday?.label || 'yesterday').replace(/[^a-z0-9]+/gi, '_')}.csv`;
-                attachments = [{
-                    Name: fname,
-                    Content: Buffer.from(csv, 'utf8').toString('base64'),
-                    ContentType: 'text/csv'
-                }];
+            // Attach yesterday's deployments + returns as SEPARATE CSVs.
+            // Only attach a CSV when that list has rows (no empty attachments).
+            const esc = v => {
+                const s = (v === null || v === undefined) ? '' : String(v);
+                return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+            };
+            const toCsv = (rows, header, rowFn) =>
+                [header.join(','), ...rows.map(r => rowFn(r).map(esc).join(','))].join('\n');
+            const b64 = s => Buffer.from(s, 'utf8').toString('base64');
+            const slug = (reportData.yesterday?.label || 'yesterday').replace(/[^a-z0-9]+/gi, '_');
+            const att = [];
+
+            const yDeps = reportData.yesterday?.deployments || [];
+            if (yDeps.length) {
+                const csv = toCsv(yDeps,
+                    ['Deployment ID', 'Created At', 'Merchant', 'MID', 'Terminal Type', 'Serials', 'Purchase Type', 'Tracking', 'Bulk', 'Status'],
+                    d => [d.deployment_id, d.created_at, d.dba_name, d.merchant_id, d.terminal_type, d.serials, d.purchase_type, d.tracking_id, d.is_bulk ? 'Yes' : 'No', d.status]);
+                att.push({ Name: `deployments_${slug}.csv`, Content: b64(csv), ContentType: 'text/csv' });
             }
+
+            const yRets = reportData.yesterday?.returns || [];
+            if (yRets.length) {
+                const csv = toCsv(yRets,
+                    ['Return ID', 'Created At', 'Merchant', 'MID', 'Terminal Type', 'Serials', 'Reason', 'Condition', 'Destination', 'Status'],
+                    r => [r.return_id, r.created_at, r.dba_name, r.merchant_id, r.terminal_type, r.serials, r.return_reason, r.condition, r.destination, r.status]);
+                att.push({ Name: `returns_${slug}.csv`, Content: b64(csv), ContentType: 'text/csv' });
+            }
+
+            if (att.length) attachments = att;
         } else if (reportType === 'prime49') {
             reportData = await buildPrime49Data();
             html = buildPrime49Email(reportData);
@@ -917,6 +959,15 @@ export default async function handler(req, res) {
 
         if (action === 'send_now') {
             const result = await sendReport(report_type, 'manual');
+            return res.status(200).json({ success: true, ...result });
+        }
+
+        if (action === 'send_test') {
+            const testEmail = (req.body.test_email || '').trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(testEmail)) {
+                return res.status(400).json({ success: false, message: 'Invalid test email' });
+            }
+            const result = await sendReport(report_type, 'test', testEmail);
             return res.status(200).json({ success: true, ...result });
         }
 
