@@ -3354,7 +3354,8 @@ async function executeBulk(validData) {
         const form = document.getElementById('ssl_form');
         if (_sslShipment.tracking_number) {
             already.style.display = 'block';
-            already.innerHTML = `✅ Label already created — Tracking <b>${_sslShipment.tracking_number}</b> (${_sslShipment.carrier || ''} ${_sslShipment.service || ''})`;
+            already.innerHTML = `✅ Label already created — Tracking <b>${_sslShipment.tracking_number}</b> (${_sslShipment.carrier || ''} ${_sslShipment.service || ''})`
+                + (_sslShipment.ss_shipment_id ? ` <button type="button" onclick="sslVoidLabel()" style="margin-left:10px;padding:4px 10px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Void Label (refund)</button>` : '');
         } else {
             already.style.display = 'none';
         }
@@ -3468,6 +3469,29 @@ async function executeBulk(validData) {
         document.getElementById('ssl_service').value = rate.serviceCode;
         // highlight
         document.querySelectorAll('#ssl_rates > div').forEach((d, idx) => d.style.background = idx === i ? '#dbeafe' : 'transparent');
+    }
+
+    async function sslVoidLabel() {
+        if (!_sslShipment?.ss_shipment_id) return;
+        const ok = await Swal.fire({
+            title: 'Void this label?', icon: 'warning',
+            html: `This asks the carrier to cancel/refund the label.<br>Tracking <b>${_sslShipment.tracking_number || ''}</b> will be removed from the deployment.`,
+            showCancelButton: true, confirmButtonText: 'Void Label', confirmButtonColor: '#dc2626'
+        });
+        if (!ok.isConfirmed) return;
+        try {
+            const res = await fetch('/api/shipstation', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'void_label', ss_row_id: _sslShipment.id, shipment_id: _sslShipment.ss_shipment_id })
+            });
+            const r = await res.json();
+            if (!r.success) throw new Error(r.message || 'Void failed');
+            Swal.fire({ icon: 'success', title: 'Label voided', text: r.message || 'Refund requested.', timer: 2000, showConfirmButton: false });
+            _sslShipment.tracking_number = null;
+            document.getElementById('ssLabelModal').style.display = 'none';
+            document.getElementById('editDepModal').style.display = 'none';
+            await fetchDeployments(currentPage);
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }
 
     async function sslCreateLabel() {

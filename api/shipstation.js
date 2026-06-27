@@ -350,6 +350,36 @@ export default async function handler(req, res) {
             });
         }
 
+        // ── VOID LABEL (refund) ─────────────────────────────────────────────
+        if (action === 'void_label') {
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: false, configured: false, message: 'ShipStation keys not configured.' });
+            const { ss_row_id, shipment_id } = body;
+            if (!shipment_id) return res.status(400).json({ success: false, message: 'shipment_id required' });
+
+            const r = await ssPost('/shipments/voidlabel', { shipmentId: Number(shipment_id) });
+            if (!r.ok) {
+                const detail = r.data?.ExceptionMessage || r.data?.message || r.data?._raw || (r.raw || '').slice(0, 300);
+                return res.status(200).json({ success: false, configured: true, message: `ShipStation ${r.status}${detail ? ': ' + detail : ''}` });
+            }
+            // ShipStation returns { approved: bool, message }
+            if (r.data && r.data.approved === false) {
+                return res.status(200).json({ success: false, configured: true, message: r.data.message || 'Void was not approved by the carrier.' });
+            }
+
+            // Clear tracking from our row + the deployment
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            if (ss_row_id) {
+                const { data: row } = await supabase.from('shipstation_shipments')
+                    .update({ status: 'voided', tracking_number: null }).eq('id', ss_row_id)
+                    .select('deployment_id').single();
+                if (row?.deployment_id) {
+                    await supabase.from('deployments').update({ tracking_id: null }).eq('id', row.deployment_id);
+                }
+            }
+            return res.status(200).json({ success: true, configured: true, approved: r.data?.approved !== false, message: r.data?.message || 'Label voided.' });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action' });
     } catch (err) {
         console.error('[shipstation]', err.message);
