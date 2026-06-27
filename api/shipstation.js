@@ -21,6 +21,81 @@ async function getAuthHeader() {
     return 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64');
 }
 
+export async function shipStationConfigured() {
+    return !!(await getAuthHeader());
+}
+
+// ShipStation needs a 2-char country code; map the common full name.
+function countryCode(c) {
+    if (!c) return 'US';
+    const t = String(c).trim();
+    if (/^[A-Za-z]{2}$/.test(t)) return t.toUpperCase();
+    if (/united states/i.test(t)) return 'US';
+    if (/canada/i.test(t)) return 'CA';
+    return 'US';
+}
+
+// Create a ShipStation order (V1 POST /orders/createorder).
+// `o` is a normalized object built from a shipstation_shipments row.
+export async function ssCreateOrder(o) {
+    const auth = await getAuthHeader();
+    if (!auth) return { success: false, configured: false };
+
+    const num = n => (n === null || n === undefined || n === '' ? undefined : Number(n));
+    const orderPayload = {
+        orderNumber: o.orderNumber,
+        orderDate: o.orderDate || new Date().toISOString().slice(0, 10),
+        paymentDate: o.paymentDate || undefined,
+        orderStatus: 'awaiting_shipment',
+        billTo: { name: o.shipTo?.name || 'Customer' },
+        shipTo: {
+            name: o.shipTo?.name || 'Customer',
+            company: o.shipTo?.company || undefined,
+            street1: o.shipTo?.street1 || '',
+            street2: o.shipTo?.street2 || undefined,
+            city: o.shipTo?.city || '',
+            state: o.shipTo?.state || '',
+            postalCode: o.shipTo?.postalCode || '',
+            country: countryCode(o.shipTo?.country),
+            phone: o.shipTo?.phone || undefined
+        },
+        customerEmail: o.email || undefined,
+        items: (o.items && o.items.length) ? o.items.map(it => ({
+            sku: it.sku || undefined,
+            name: it.name || 'Equipment',
+            quantity: it.quantity || 1
+        })) : undefined,
+        amountPaid: num(o.amountPaid),
+        taxAmount: num(o.taxAmount),
+        shippingAmount: num(o.shippingAmount),
+        advancedOptions: o.storeId ? { storeId: Number(o.storeId) } : undefined
+    };
+
+    try {
+        const ssRes = await fetch(`${SS_BASE}/orders/createorder`, {
+            method: 'POST',
+            headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+            body: JSON.stringify(orderPayload)
+        });
+        const data = await ssRes.json().catch(() => ({}));
+        if (!ssRes.ok) {
+            return { success: false, configured: true, status: ssRes.status, message: data?.ExceptionMessage || data?.message || JSON.stringify(data).slice(0, 300) };
+        }
+        return { success: true, orderId: data.orderId, orderNumber: data.orderNumber, orderKey: data.orderKey };
+    } catch (e) {
+        return { success: false, configured: true, message: e.message };
+    }
+}
+
+// Fetch shipments from a webhook resource_url (already absolute).
+export async function ssFetchResource(resourceUrl) {
+    const auth = await getAuthHeader();
+    if (!auth) return null;
+    const r = await fetch(resourceUrl, { headers: { 'Authorization': auth, 'Content-Type': 'application/json' } });
+    if (!r.ok) return null;
+    return r.json();
+}
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);

@@ -49,7 +49,30 @@ toggled in Secret Dungeon → Feature Flags tab). Flag OFF (default) = "+ New Ti
   - `api/deployments.js` `return_to_office`: accepts `ship_from_type`/`ship_from_partner_id`/`shipstation`/save-back; sets ship_from on the returns row (bulk + single In-Transit inserts) and writes a shipstation_shipments row (`ship_type='return_label'`). Completion (else) branch untouched.
   - `deployments-dashboard.html`: when flag ON, `processReturn` opens `ssReturnModal` (ship-from merchant/partner toggle, auto-fill from merchant or auto-resolved partner, ShipStation label fields, save-back) then calls return_to_office; when OFF, identical to before.
   - `secret-dungeon.html`: second toggle in Feature Flags tab.
-- Phase 5 (next): ShipStation API (order create, label, webhook) — keys added in Vercel. Backtrack/reconcile by matching ShipStation tracking number ↔ `deployments.tracking_id`.
+- Phase 5 (IN PROGRESS, paused 2026-06-27 — user out of credits): live ShipStation API
+  - CONFIRMED WORKING: V1 API (`ssapi.shipstation.com`), HTTP Basic auth. Keys are in **Vercel env vars** (`SHIPSTATION_API_KEY` + `SHIPSTATION_API_SECRET`). `api/shipstation.js` `getShipStationKeys()` reads `process.env` first, falls back to `app_config`. Store dropdown VERIFIED populating live (Dejavoo, Manual Orders, New WooCommerce Store) → auth works end-to-end.
+  - DONE in `api/shipstation.js`: exported `shipStationConfigured()`, `ssCreateOrder(o)` (POST /orders/createorder, maps a normalized order incl. shipTo, items, storeId→advancedOptions.storeId, amountPaid/taxAmount/shippingAmount, countryCode() maps "United States"→"US"), `ssFetchResource(url)` (for webhook resource_url). `get_stores` action live.
+  - FK fix applied (DB migration `shipstation_shipments_cascade_delete`): deployment_id/return_id → ON DELETE CASCADE, partner_id → SET NULL. This fixed the "can't delete ticket" bug (shipstation_shipments FK was blocking deployment deletion).
+
+  ### REMAINING Phase 5 TODO (resume here):
+  1. **Import + call ssCreateOrder** in `api/deployments.js`:
+     - add `import { ssCreateOrder } from './shipstation.js';` at top
+     - in `createShipstationRow(deploymentId, lineItems)` (deployment create): after inserting the local shipstation_shipments row (capture its id via `.select('id').single()`), call ssCreateOrder with shipTo/items/storeId(ss.ss_store_id)/amounts, then UPDATE the row with `ss_order_id` (+ status 'submitted', or 'ss_error' on failure). Best-effort/non-blocking — deployment must still succeed if SS call fails.
+     - pass line items: single = [{sku:serial, name:terminal_type, quantity:1}]; bulk = one per unit. Gather serials/types in the create flow and pass into createShipstationRow.
+     - same for `createShipstationReturnRow(returnId)` in `return_to_office` (ship_type='return_label').
+  2. **Create `api/shipstation-webhook.js`**: verify shared secret from `?secret=` query (env `SHIPSTATION_WEBHOOK_SECRET`); on SHIP_NOTIFY, `ssFetchResource(resource_url)` → for each shipment match `orderNumber` → our `shipstation_shipments.order_number`; UPDATE tracking_number/carrier/service/status='shipped'; also write tracking back into `deployments.tracking_id` (match via deployment_id on the row). Register this webhook URL in ShipStation settings.
+  3. **Reconcile action** (backtrack existing): match ShipStation tracking number ↔ `deployments.tracking_id` to link historical records. (Lower priority.)
+  - NOTE: cannot test live ShipStation calls from the dev environment (proxy + no keys locally) — user tests on Vercel after deploy.
+
+### Push workflow (every commit this session)
+`git push gh-push push-to-main && git push gh-push push-to-main:claude/hey-hey-hey-hey-YuBH9 && git push gh-push push-to-main:main` (pushes to push-to-main, feature branch, AND main).
+
+### ShipStation wizard/returns FILES (Phases 3-5)
+- `api/app-settings.js`: global flags get(any staff)/set(super_admin). Flags: `shipstation_ready_enabled`, `shipstation_returns_enabled` (both default 'false').
+- `api/shipstation.js`: get_stores + exported ssCreateOrder/ssFetchResource/shipStationConfigured.
+- `api/deployments.js`: getShipInfo, getPartnerLookups, getPartnerMerchants; create writes shipstation_shipments row via createShipstationRow when payload.shipstation present; return_to_office writes return_label row via createShipstationReturnRow. Order # auto via `next_ss_order_number()` rpc (SS-#### from shipstation_order_seq) unless custom.
+- `deployments-dashboard.html`: `newTicketEntry()` (flag-gated), `ssWizardModal` (3 screens), `ssReturnModal` (returns ship-from), `sswLoadStoresInto()` (shared store loader). Standard modal (openNewDeploymentModal) is PRISTINE/unchanged — safe fallback when flags OFF.
+- `secret-dungeon.html`: Feature Flags tab (2 toggles).
 
 ### ShipStation "Store" dropdown = LIVE ShipStation stores (NOT our vendors)
 Corrected 2026-06-27: the ShipStation "Store" is a sales channel (e.g. Dejavoo, Manual Orders, WooCommerce),
