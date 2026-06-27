@@ -275,6 +275,7 @@ export default async function handler(req, res) {
 
             let checked = 0, closed = 0, partnerDated = 0, skipped = 0, notDelivered = 0;
             const skippedList = [];
+            let sample = null;   // capture the first V2 response for diagnostics
             for (const d of (deps || [])) {
                 // resolve carrier: prefer the stored SS carrier, else detect from tracking
                 const { data: ssrow } = await supabase.from('shipstation_shipments')
@@ -284,6 +285,12 @@ export default async function handler(req, res) {
 
                 const t = await ssV2Tracking(carrier, d.tracking_id);
                 checked++;
+                if (!sample) sample = {
+                    carrier, tracking: d.tracking_id, http_status: t?.status, ok: !!t?.ok,
+                    keys: t?.data ? Object.keys(t.data) : null,
+                    status_code: t?.data?.status_code, status_description: t?.data?.status_description,
+                    raw: JSON.stringify(t?.data || {}).slice(0, 600)
+                };
                 if (!t?.ok || !t.data) { notDelivered++; continue; }
                 const sc = String(t.data.status_code || '').toUpperCase();
                 const sd = String(t.data.status_description || '').toLowerCase();
@@ -299,7 +306,7 @@ export default async function handler(req, res) {
                     closed++;
                 }
             }
-            return res.status(200).json({ success: true, scanned: (deps || []).length, checked, closed, partnerDated, notDelivered, skipped, skippedList });
+            return res.status(200).json({ success: true, scanned: (deps || []).length, checked, closed, partnerDated, notDelivered, skipped, skippedList, sample });
         }
 
         // ── SHIP-FROM WAREHOUSES ────────────────────────────────────────────
