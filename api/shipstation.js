@@ -3,10 +3,20 @@ import { getConfigValue } from './api-config.js';
 
 const SS_BASE = 'https://ssapi.shipstation.com';
 
-// Build the HTTP Basic auth header from keys stored (encrypted) in app_config.
+// Build the HTTP Basic auth header. Prefer Vercel env vars; fall back to
+// encrypted app_config so either storage method works.
+async function getShipStationKeys() {
+    let key = process.env.SHIPSTATION_API_KEY;
+    let secret = process.env.SHIPSTATION_API_SECRET;
+    if (!key || !secret) {
+        key = key || await getConfigValue('SHIPSTATION_API_KEY');
+        secret = secret || await getConfigValue('SHIPSTATION_API_SECRET');
+    }
+    return { key, secret };
+}
+
 async function getAuthHeader() {
-    const key = await getConfigValue('SHIPSTATION_API_KEY');
-    const secret = await getConfigValue('SHIPSTATION_API_SECRET');
+    const { key, secret } = await getShipStationKeys();
     if (!key || !secret) return null;
     return 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64');
 }
