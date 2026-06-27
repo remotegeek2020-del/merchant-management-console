@@ -3429,6 +3429,7 @@ async function executeBulk(validData) {
                     from_postal_code: document.getElementById('ssl_warehouse').selectedOptions[0]?.dataset.zip || null,
                     to_state: _sslShipment.state, to_country: _sslShipment.country, to_postal_code: _sslShipment.zip, to_city: _sslShipment.city,
                     weight, dimensions: sslDimensions(),
+                    package_code: document.getElementById('ssl_package').value || 'package',
                     confirmation: document.getElementById('ssl_confirmation').value,
                     residential: document.getElementById('ssl_residential').checked
                 })

@@ -242,9 +242,14 @@ export default async function handler(req, res) {
                 toCity: body.to_city || undefined,
                 weight: body.weight,                    // { value, units }
                 dimensions: body.dimensions || undefined,
+                packageCode: body.package_code || 'package',
                 confirmation: body.confirmation || 'none',
                 residential: !!body.residential
             };
+            // Guard: FedEx/UPS reject malformed US ZIPs
+            if (base.toCountry === 'US' && !/^\d{5}(-\d{4})?$/.test(String(base.toPostalCode || ''))) {
+                return res.status(200).json({ success: false, configured: true, rates: [], message: `Destination ZIP "${base.toPostalCode || ''}" is invalid (must be 5 digits). Fix the recipient address.` });
+            }
             if (!base.fromPostalCode) {
                 return res.status(200).json({ success: false, configured: true, rates: [], message: 'No "Ship From" ZIP — pick a warehouse with an origin ZIP in ShipStation.' });
             }
