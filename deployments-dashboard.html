@@ -3408,6 +3408,9 @@ async function executeBulk(validData) {
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12px;">
                 ${row('Order #', s.order_number)}
                 <div style="display:flex;gap:6px;"><span style="color:#64748b;min-width:96px;">Tracking</span><span>${trackingHtml}</span></div>
+                ${row('Ship To', s.ship_to_type === 'partner' ? 'Partner first' : 'Merchant (direct)')}
+                ${row('Agent ID', s.merchant_agent_id)}
+                ${s.ship_to_type === 'partner' ? row('Partner', s.partner_name) : ''}
                 ${row('SS Order ID', s.ss_order_id)}
                 ${row('Store', s.store_name)}
                 ${row('Order Date', s.order_date)}

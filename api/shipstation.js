@@ -386,6 +386,24 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false }).limit(1).maybeSingle();
             if (!row) return res.status(200).json({ success: true, shipment: null });
 
+            // Enrich: merchant's agent ID (the partner ID tied to the merchant),
+            // ship-to type, and partner name — for the edit-ticket info panel.
+            try {
+                const { data: dep } = await supabase.from('deployments')
+                    .select('ship_to_type, merchant_id').eq('id', deployment_id).maybeSingle();
+                if (dep) {
+                    row.ship_to_type = dep.ship_to_type || 'merchant';
+                    if (dep.merchant_id) {
+                        const { data: mer } = await supabase.from('merchants').select('agent_id').eq('id', dep.merchant_id).maybeSingle();
+                        row.merchant_agent_id = mer?.agent_id || null;
+                    }
+                }
+                if (row.partner_id) {
+                    const { data: per } = await supabase.from('persons').select('full_name').eq('id', row.partner_id).maybeSingle();
+                    row.partner_name = per?.full_name || null;
+                }
+            } catch (e) { /* enrichment best-effort */ }
+
             const auth = await getAuthHeader();
             if (auth && (row.ss_order_id || row.order_number)) {
                 const url = row.ss_order_id
