@@ -97,6 +97,27 @@ export async function ssFetchResource(resourceUrl) {
     return r.json();
 }
 
+// ── Generic ShipStation request helpers ─────────────────────────────────────
+async function ssGet(path) {
+    const auth = await getAuthHeader();
+    if (!auth) return { ok: false, configured: false };
+    const r = await fetch(`${SS_BASE}${path}`, { headers: { 'Authorization': auth, 'Content-Type': 'application/json' } });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data, configured: true };
+}
+async function ssPost(path, payload) {
+    const auth = await getAuthHeader();
+    if (!auth) return { ok: false, configured: false };
+    const r = await fetch(`${SS_BASE}${path}`, {
+        method: 'POST',
+        headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    const data = await r.json().catch(() => ({}));
+    return { ok: r.ok, status: r.status, data, configured: true };
+}
+const num = n => (n === null || n === undefined || n === '' ? undefined : Number(n));
+
 export default async function handler(req, res) {
     const session = await validateSession(req);
     if (!session) return sessionErrorResponse(res);
@@ -168,6 +189,136 @@ export default async function handler(req, res) {
                 }
             }
             return res.status(200).json({ success: true, configured: true, scanned: shipments.length, matched });
+        }
+
+        // ── SHIP-FROM WAREHOUSES ────────────────────────────────────────────
+        if (action === 'get_warehouses') {
+            const r = await ssGet('/warehouses');
+            if (!r.configured) return res.status(200).json({ success: true, configured: false, warehouses: [] });
+            if (!r.ok) return res.status(200).json({ success: false, configured: true, message: `ShipStation ${r.status}` });
+            const warehouses = (Array.isArray(r.data) ? r.data : []).map(w => ({
+                id: String(w.warehouseId),
+                name: w.warehouseName,
+                postalCode: w.originAddress?.postalCode || null,
+                isDefault: !!w.isDefault
+            }));
+            return res.status(200).json({ success: true, configured: true, warehouses });
+        }
+
+        // ── CARRIERS ────────────────────────────────────────────────────────
+        if (action === 'get_carriers') {
+            const r = await ssGet('/carriers');
+            if (!r.configured) return res.status(200).json({ success: true, configured: false, carriers: [] });
+            if (!r.ok) return res.status(200).json({ success: false, configured: true, message: `ShipStation ${r.status}` });
+            const carriers = (Array.isArray(r.data) ? r.data : []).map(c => ({ code: c.code, name: c.name }));
+            return res.status(200).json({ success: true, configured: true, carriers });
+        }
+
+        // ── SERVICES / PACKAGES for a carrier ───────────────────────────────
+        if (action === 'list_services') {
+            if (!body.carrier_code) return res.status(400).json({ success: false, message: 'carrier_code required' });
+            const r = await ssGet(`/carriers/listservices?carrierCode=${encodeURIComponent(body.carrier_code)}`);
+            if (!r.ok) return res.status(200).json({ success: !!r.configured, configured: r.configured, services: [] });
+            const services = (Array.isArray(r.data) ? r.data : []).map(s => ({ code: s.code, name: s.name }));
+            return res.status(200).json({ success: true, configured: true, services });
+        }
+        if (action === 'list_packages') {
+            if (!body.carrier_code) return res.status(400).json({ success: false, message: 'carrier_code required' });
+            const r = await ssGet(`/carriers/listpackages?carrierCode=${encodeURIComponent(body.carrier_code)}`);
+            if (!r.ok) return res.status(200).json({ success: !!r.configured, configured: r.configured, packages: [] });
+            const packages = (Array.isArray(r.data) ? r.data : []).map(p => ({ code: p.code, name: p.name }));
+            return res.status(200).json({ success: true, configured: true, packages });
+        }
+
+        // ── GET RATES (one carrier, or loop all carriers like the Rate Browser) ─
+        if (action === 'get_rates') {
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: true, configured: false, rates: [] });
+            const base = {
+                fromPostalCode: body.from_postal_code,
+                toState: body.to_state,
+                toCountry: countryCode(body.to_country),
+                toPostalCode: body.to_postal_code,
+                toCity: body.to_city || undefined,
+                weight: body.weight,                    // { value, units }
+                dimensions: body.dimensions || undefined,
+                confirmation: body.confirmation || 'none',
+                residential: !!body.residential
+            };
+            let carrierCodes = body.carrier_code ? [body.carrier_code] : null;
+            if (!carrierCodes) {
+                const cr = await ssGet('/carriers');
+                carrierCodes = (Array.isArray(cr.data) ? cr.data : []).map(c => c.code);
+            }
+            const rates = [];
+            for (const code of carrierCodes) {
+                const r = await ssPost('/shipments/getrates', { ...base, carrierCode: code });
+                if (r.ok && Array.isArray(r.data)) {
+                    for (const rate of r.data) {
+                        rates.push({
+                            carrierCode: code,
+                            serviceName: rate.serviceName,
+                            serviceCode: rate.serviceCode,
+                            shipmentCost: rate.shipmentCost,
+                            otherCost: rate.otherCost,
+                            totalCost: (Number(rate.shipmentCost) || 0) + (Number(rate.otherCost) || 0)
+                        });
+                    }
+                }
+            }
+            rates.sort((a, b) => a.totalCost - b.totalCost);
+            return res.status(200).json({ success: true, configured: true, rates });
+        }
+
+        // ── CREATE LABEL for an existing order ──────────────────────────────
+        if (action === 'create_label') {
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: false, configured: false, message: 'ShipStation keys not configured.' });
+            const { ss_row_id, order_id, carrier_code, service_code, package_code,
+                    confirmation, ship_date, weight, dimensions, insurance, test_label } = body;
+            if (!order_id) return res.status(400).json({ success: false, message: 'order_id required' });
+
+            const labelReq = {
+                orderId: Number(order_id),
+                carrierCode: carrier_code,
+                serviceCode: service_code,
+                packageCode: package_code || 'package',
+                confirmation: confirmation || 'none',
+                shipDate: ship_date || new Date().toISOString().slice(0, 10),
+                weight: weight,                              // { value, units }
+                dimensions: dimensions || undefined,
+                insuranceOptions: insurance || undefined,
+                testLabel: !!test_label
+            };
+            const r = await ssPost('/orders/createlabelforder', labelReq);
+            if (!r.ok) {
+                return res.status(200).json({ success: false, configured: true, message: r.data?.ExceptionMessage || r.data?.message || `ShipStation ${r.status}` });
+            }
+            const tracking = r.data.trackingNumber;
+            const shipmentId = r.data.shipmentId;
+            const cost = r.data.shipmentCost;
+
+            // Persist tracking + label back to our row and the deployment
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            if (ss_row_id) {
+                const { data: row } = await supabase.from('shipstation_shipments')
+                    .update({
+                        tracking_number: tracking || null,
+                        carrier: carrier_code || null,
+                        service: service_code || null,
+                        ss_shipment_id: shipmentId ? String(shipmentId) : null,
+                        ss_label_url: r.data.labelData ? 'embedded' : null,
+                        status: 'shipped'
+                    }).eq('id', ss_row_id).select('deployment_id, return_id').single();
+                if (row?.deployment_id && tracking) {
+                    await supabase.from('deployments').update({ tracking_id: tracking }).eq('id', row.deployment_id);
+                }
+            }
+            return res.status(200).json({
+                success: true, configured: true,
+                trackingNumber: tracking, shipmentId, shipmentCost: cost,
+                labelData: r.data.labelData || null   // base64 PDF
+            });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

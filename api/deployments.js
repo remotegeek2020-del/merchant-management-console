@@ -1286,6 +1286,16 @@ if (action === 'getPartnerMerchants') {
     return res.status(200).json({ success: true, merchants: merchants || [] });
 }
 
+// ── GET SHIPSTATION SHIPMENT for a deployment (Phase 6 label modal) ─────────
+if (action === 'get_ss_shipment') {
+    const { deployment_id } = body;
+    if (!deployment_id) return res.status(400).json({ success: false, message: 'deployment_id required' });
+    const { data: row } = await supabase.from('shipstation_shipments')
+        .select('*').eq('deployment_id', deployment_id).eq('ship_type', 'outbound')
+        .order('created_at', { ascending: false }).limit(1).maybeSingle();
+    return res.status(200).json({ success: true, shipment: row || null });
+}
+
 if (action === 'getLookups') {
     const term = `%${query || ''}%`;
 
