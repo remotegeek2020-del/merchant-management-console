@@ -43,6 +43,9 @@ export async function ssCreateOrder(o) {
     if (!auth) return { success: false, configured: false };
 
     const num = n => (n === null || n === undefined || n === '' ? undefined : Number(n));
+    // ShipStation rejects malformed emails — omit anything that isn't valid
+    const validEmail = e => (e && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(e).trim())) ? String(e).trim() : undefined;
+    const cleanEmail = validEmail(o.email);
     const orderPayload = {
         orderNumber: o.orderNumber,
         orderDate: o.orderDate || new Date().toISOString().slice(0, 10),
@@ -60,7 +63,7 @@ export async function ssCreateOrder(o) {
             country: countryCode(o.shipTo?.country),
             phone: o.shipTo?.phone || undefined
         },
-        customerEmail: o.email || undefined,
+        customerEmail: cleanEmail,
         items: (o.items && o.items.length) ? o.items.map(it => ({
             sku: it.sku || undefined,
             name: it.name || 'Equipment',
