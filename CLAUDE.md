@@ -51,8 +51,13 @@ toggled in Secret Dungeon → Feature Flags tab). Flag OFF (default) = "+ New Ti
   - `secret-dungeon.html`: second toggle in Feature Flags tab.
 - Phase 5 (next): ShipStation API (order create, label, webhook) — keys added in Vercel. Backtrack/reconcile by matching ShipStation tracking number ↔ `deployments.tracking_id`.
 
-### Vendors list = ShipStation "Store" dropdown
-Reuse `api/terminal-manager` `get_vendors` (table `vendors`, returns {id,name}). Any authenticated staff can read.
+### ShipStation "Store" dropdown = LIVE ShipStation stores (NOT our vendors)
+Corrected 2026-06-27: the ShipStation "Store" is a sales channel (e.g. Dejavoo, Manual Orders, WooCommerce),
+distinct from our equipment `vendors`. The Store dropdown pulls live from ShipStation `GET /stores` via
+`api/shipstation.js` action `get_stores` (Basic auth from `app_config` SHIPSTATION_API_KEY/SECRET).
+Until the keys are added in Vercel, `get_stores` returns `{configured:false, stores:[]}` and the dropdown
+shows "Add ShipStation API keys to load stores". Selected store stored as `shipstation_shipments.ss_store_id`
+(ShipStation numeric storeId as text) + `store_name`. The old `store_vendor_id` column is now unused.
 
 ### Locked-in Design Decisions (user-confirmed 2026-06-26)
 - **Everything stays tied to `merchant_id`** — the deployment/return ownership never changes. We only add a *shipping destination distinction*.

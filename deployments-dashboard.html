@@ -2768,7 +2768,7 @@ async function executeBulk(validData) {
         document.getElementById('ssw_depDate').value = today;
         document.getElementById('ssw_orderDate').value = today;
         document.getElementById('ssw_paidDate').value = today;
-        await sswLoadVendors();
+        await sswLoadStoresInto('ssw_store');
         sswGoScreen(3);
     }
 
@@ -2788,19 +2788,31 @@ async function executeBulk(validData) {
         if (auto) inp.value = '';
     }
 
-    async function sswLoadVendors() {
-        if (_ssVendorsLoaded) return;
+    // Loads live ShipStation stores (sales channels) into a <select> id.
+    // Shared by the deployment wizard and the return modal.
+    async function sswLoadStoresInto(selId) {
+        const sel = document.getElementById(selId);
+        sel.innerHTML = '<option value="">Loading stores…</option>';
         try {
-            const res = await fetch('/api/terminal-manager', {
+            const res = await fetch('/api/shipstation', {
                 method: 'POST', headers: authHeaders(),
-                body: JSON.stringify({ action: 'get_vendors', userid: localStorage.getItem('pp_userid') })
+                body: JSON.stringify({ action: 'get_stores' })
             });
             const result = await res.json();
-            const sel = document.getElementById('ssw_store');
+            if (result.configured === false) {
+                sel.innerHTML = '<option value="">— Add ShipStation API keys (Vercel) to load stores —</option>';
+                return;
+            }
+            if (!result.success) {
+                sel.innerHTML = '<option value="">— Failed to load stores —</option>';
+                return;
+            }
             sel.innerHTML = '<option value="">— Select store —</option>' +
-                (result.data || []).map(v => `<option value="${v.id}">${v.name}</option>`).join('');
-            _ssVendorsLoaded = true;
-        } catch (e) { console.error('[ssVendors]', e); }
+                (result.stores || []).map(s => `<option value="${s.id}">${s.name}</option>`).join('');
+        } catch (e) {
+            console.error('[ssStores]', e);
+            sel.innerHTML = '<option value="">— Failed to load stores —</option>';
+        }
     }
 
     // ── Partner lookup ──
@@ -2988,8 +3000,8 @@ async function executeBulk(validData) {
         const storeSel = document.getElementById('ssw_store');
 
         const shipstation = {
-            store_vendor_id: storeSel.value || null,
-            store_name: storeSel.options[storeSel.selectedIndex]?.text !== '— Select store —' ? storeSel.options[storeSel.selectedIndex]?.text : null,
+            ss_store_id: storeSel.value || null,
+            store_name: storeSel.value ? storeSel.options[storeSel.selectedIndex].text : null,
             order_number: document.getElementById('ssw_autoOrder').checked ? '' : v('ssw_orderNum'),
             order_date: v('ssw_orderDate') || null,
             paid_date: v('ssw_paidDate') || null,
@@ -3080,7 +3092,7 @@ async function executeBulk(validData) {
         ssrToggleAutoOrder();
         document.getElementById('ssrFromMerchantBtn').classList.add('ship-toggle-active');
         document.getElementById('ssrFromPartnerBtn').classList.remove('ship-toggle-active');
-        await sswLoadVendorsInto('ssr_store');
+        await sswLoadStoresInto('ssr_store');
         document.getElementById('ssReturnModal').style.display = 'flex';
         // fetch merchant + partner for autofill
         try {
@@ -3139,20 +3151,6 @@ async function executeBulk(validData) {
         if (auto) inp.value = '';
     }
 
-    // Load vendors into an arbitrary <select> id (shared by wizard + return modal)
-    async function sswLoadVendorsInto(selId) {
-        try {
-            const res = await fetch('/api/terminal-manager', {
-                method: 'POST', headers: authHeaders(),
-                body: JSON.stringify({ action: 'get_vendors', userid: localStorage.getItem('pp_userid') })
-            });
-            const result = await res.json();
-            const sel = document.getElementById(selId);
-            sel.innerHTML = '<option value="">— Select store —</option>' +
-                (result.data || []).map(v => `<option value="${v.id}">${v.name}</option>`).join('');
-        } catch (e) { console.error('[ssrVendors]', e); }
-    }
-
     async function ssrSubmit(event) {
         event.preventDefault();
         if (!_ssrCtx) return;
@@ -3163,8 +3161,8 @@ async function executeBulk(validData) {
         payload.ship_from_type = _ssrFrom;
         payload.ship_from_partner_id = _ssrFrom === 'partner' ? (_ssrPartner?.id || null) : null;
         payload.shipstation = {
-            store_vendor_id: storeSel.value || null,
-            store_name: storeSel.options[storeSel.selectedIndex]?.text !== '— Select store —' ? storeSel.options[storeSel.selectedIndex]?.text : null,
+            ss_store_id: storeSel.value || null,
+            store_name: storeSel.value ? storeSel.options[storeSel.selectedIndex].text : null,
             order_number: document.getElementById('ssr_autoOrder').checked ? '' : v('ssr_orderNum'),
             order_date: v('ssr_orderDate') || null,
             paid_date: v('ssr_paidDate') || null,
