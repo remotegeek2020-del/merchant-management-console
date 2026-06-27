@@ -3075,6 +3075,27 @@ async function executeBulk(validData) {
         if (it) it.tid = val;
     }
 
+    // Shared recipient validator — ShipStation rejects orders/labels with a bad
+    // address or email. Returns an array of problem strings ([] = all good).
+    function ssValidateRecipient(r) {
+        const problems = [];
+        const need = (val, label) => { if (!val || !String(val).trim()) problems.push(`${label} is required`); };
+        need(r.name, 'Name');
+        need(r.address, 'Street address');
+        need(r.city, 'City');
+        need(r.state, 'State');
+        need(r.zip, 'ZIP');
+        const country = (r.country || 'US');
+        const isUS = /^(us|usa|united states)$/i.test(String(country).trim()) || /^US$/i.test(country);
+        if (r.zip && isUS && !/^\d{5}(-\d{4})?$/.test(String(r.zip).trim())) {
+            problems.push(`ZIP "${r.zip}" is invalid (US ZIPs are 5 digits)`);
+        }
+        if (r.email && r.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email.trim())) {
+            problems.push(`Email "${r.email}" is invalid`);
+        }
+        return problems;
+    }
+
     async function sswSubmit(event) {
         event.preventDefault();
         const merchantId = document.getElementById('ssw_merchantId').value;
@@ -3083,6 +3104,16 @@ async function executeBulk(validData) {
             return Swal.fire('Error', 'Please select a partner', 'warning');
 
         const v = id => (document.getElementById(id).value || '').trim();
+
+        // Verify recipient address + email before creating the ShipStation order
+        const recipientProblems = ssValidateRecipient({
+            name: v('ssw_name'), email: v('ssw_email'), address: v('ssw_addr1'),
+            city: v('ssw_city'), state: v('ssw_state'), zip: v('ssw_zip'), country: v('ssw_country')
+        });
+        if (recipientProblems.length) {
+            return Swal.fire({ icon: 'warning', title: 'Fix the recipient before creating',
+                html: '<div style="text-align:left;font-size:13px;">• ' + recipientProblems.join('<br>• ') + '</div>' });
+        }
         const saveBack = document.getElementById('ssw_saveBack').checked;
         const storeSel = document.getElementById('ssw_store');
 
@@ -3246,6 +3277,16 @@ async function executeBulk(validData) {
         if (!_ssrCtx) return;
         const v = id => (document.getElementById(id).value || '').trim();
         const storeSel = document.getElementById('ssr_store');
+
+        // Verify ship-from address + email before creating the return order
+        const rProblems = ssValidateRecipient({
+            name: v('ssr_name'), email: v('ssr_email'), address: v('ssr_addr1'),
+            city: v('ssr_city'), state: v('ssr_state'), zip: v('ssr_zip'), country: v('ssr_country')
+        });
+        if (rProblems.length) {
+            return Swal.fire({ icon: 'warning', title: 'Fix the ship-from details',
+                html: '<div style="text-align:left;font-size:13px;">• ' + rProblems.join('<br>• ') + '</div>' });
+        }
 
         const payload = { ..._ssrCtx };
         payload.ship_from_type = _ssrFrom;
@@ -3497,6 +3538,17 @@ async function executeBulk(validData) {
     async function sslCreateLabel() {
         if (!_sslShipment) return;
         if (!_sslShipment.ss_order_id) return Swal.fire('Not synced', 'This order has no ShipStation order id yet (it may have failed to push). Try recreating the ticket.', 'warning');
+
+        // Verify recipient email + address — ShipStation won't make a label otherwise
+        const problems = ssValidateRecipient({
+            name: _sslShipment.ship_to_name, email: _sslShipment.ship_to_email,
+            address: _sslShipment.address, city: _sslShipment.city,
+            state: _sslShipment.state, zip: _sslShipment.zip, country: _sslShipment.country
+        });
+        if (problems.length) {
+            return Swal.fire({ icon: 'warning', title: 'Recipient needs fixing',
+                html: '<div style="text-align:left;font-size:13px;">ShipStation will reject this label until these are fixed on the order:<br><br>• ' + problems.join('<br>• ') + '<br><br><span style="color:#64748b;">Recreate the ticket with corrected details.</span></div>' });
+        }
         const carrier = document.getElementById('ssl_carrier').value;
         const service = document.getElementById('ssl_service').value;
         if (!carrier || !service) return Swal.fire('Pick a service', 'Choose a carrier + service (or Browse Rates and click one).', 'warning');
