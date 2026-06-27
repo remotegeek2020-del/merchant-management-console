@@ -2951,6 +2951,28 @@ async function executeBulk(validData) {
         document.getElementById('ssw_merchantId').value = '';
         document.getElementById('ssw_merchantSearch').value = '';
         const tie = document.getElementById('ssw_merchantTie'); if (tie) tie.style.display = 'none';
+        // If the partner has no address on file, pull it from HighLevel
+        if (!p.address || !p.city || !p.zip) ssPullPartnerGhl(p.id, 'ssw_addr1', 'ssw_city', 'ssw_state', 'ssw_zip', 'ssw_country');
+    }
+
+    // Fill empty address fields from the partner's GHL (HighLevel) contact.
+    async function ssPullPartnerGhl(partnerId, addrId, cityId, stateId, zipId, countryId) {
+        try {
+            const res = await fetch('/api/deployments', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'pull_partner_ghl', partner_id: partnerId })
+            });
+            const r = await res.json();
+            if (!r.success || !r.ghl) return;
+            const g = r.ghl;
+            const fillIfEmpty = (id, v) => { const el = document.getElementById(id); if (el && !el.value && v) el.value = v; };
+            fillIfEmpty(addrId, g.address);
+            fillIfEmpty(cityId, g.city);
+            fillIfEmpty(stateId, g.state);
+            fillIfEmpty(zipId, g.zip);
+            const c = document.getElementById(countryId);
+            if (c && (!c.value || c.value === 'United States') && g.country) c.value = g.country;
+        } catch (e) { console.error('[pull_partner_ghl]', e); }
     }
 
     // ── Merchant lookup (mode-aware) ──
@@ -3281,6 +3303,8 @@ async function executeBulk(validData) {
             set('ssr_addr1', p.address); set('ssr_city', p.city); set('ssr_state', p.state);
             set('ssr_zip', p.zip); set('ssr_phone', p.phone_number); set('ssr_email', p.email);
             document.getElementById('ssr_country').value = p.country || 'United States';
+            // Pull partner address from HighLevel if missing
+            if (p.id && (!p.address || !p.city || !p.zip)) ssPullPartnerGhl(p.id, 'ssr_addr1', 'ssr_city', 'ssr_state', 'ssr_zip', 'ssr_country');
         } else {
             notice.style.display = 'none';
             const m = _ssrMerchant || {};

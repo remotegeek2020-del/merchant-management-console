@@ -126,6 +126,12 @@ shows "Add ShipStation API keys to load stores". Selected store stored as `ships
 - Merchant address/contact ALL already exist: `merchant_address/city/state/zip/country`, `dba_name`, `email`, `merchant_primary_contact`, `merchant_phone` → no merchant schema change needed.
 - Partner (`persons`) already had `full_name`, `email`, `phone_number` → only address fields were added.
 
+### GHL (HighLevel) partner address sync (2026-06-27)
+- `persons.hl_contact_id` links each partner to a GHL contact. GHL contact has address1/city/state/postalCode/country.
+- `api/_ghl.js`: `ghlGetContactAddress(id)` / `ghlUpdateContactAddress(id, addr)` — GHL v2 (`services.leadconnectorhq.com`, Bearer `GHL_API_KEY` from app_config/env, `Version: 2021-07-28`).
+- PULL: `api/deployments.js` action `pull_partner_ghl` (by partner_id) returns portal + GHL address. Wizard `sswSelectPartner` and returns `ssrRenderFrom` call `ssPullPartnerGhl()` to fill empty address fields from HighLevel.
+- PUSH: deployment + return save-back (doShipSaveback/doReturnSaveback) update `persons` AND push the address to the GHL contact (best-effort) so HighLevel stays in sync. Two-way gap-fill.
+
 ### Phase 1 schema APPLIED (migration `shipstation_phase1_schema`)
 ```sql
 -- persons: + address, city, state, zip, country (country default 'US')

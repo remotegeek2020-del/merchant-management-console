@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateSession, sessionErrorResponse } from './_validate.js';
 import { ssCreateOrder, ssDeleteOrder, ssVoidLabelById } from './shipstation.js';
+import { ghlGetContactAddress, ghlUpdateContactAddress } from './_ghl.js';
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
@@ -552,7 +553,12 @@ if (action === 'create') {
             if (partner_updates && shipPartnerId && typeof partner_updates === 'object') {
                 const safe = Object.fromEntries(Object.entries(partner_updates)
                     .filter(([k, v]) => PARTNER_SAVE_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
-                if (Object.keys(safe).length) await supabase.from('persons').update(safe).eq('id', shipPartnerId);
+                if (Object.keys(safe).length) {
+                    await supabase.from('persons').update(safe).eq('id', shipPartnerId);
+                    // Sync the partner address back to HighLevel (best-effort)
+                    const { data: pp } = await supabase.from('persons').select('hl_contact_id').eq('id', shipPartnerId).maybeSingle();
+                    if (pp?.hl_contact_id) await ghlUpdateContactAddress(pp.hl_contact_id, safe);
+                }
             }
         } catch (e) { console.warn('[ShipSaveback]', e.message); }
     };
@@ -829,7 +835,11 @@ if (action === 'return_to_office') {
             if (retPartnerUpdates && fromPartnerId && typeof retPartnerUpdates === 'object') {
                 const safe = Object.fromEntries(Object.entries(retPartnerUpdates)
                     .filter(([k, v]) => RET_PARTNER_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
-                if (Object.keys(safe).length) await supabase.from('persons').update(safe).eq('id', fromPartnerId);
+                if (Object.keys(safe).length) {
+                    await supabase.from('persons').update(safe).eq('id', fromPartnerId);
+                    const { data: pp } = await supabase.from('persons').select('hl_contact_id').eq('id', fromPartnerId).maybeSingle();
+                    if (pp?.hl_contact_id) await ghlUpdateContactAddress(pp.hl_contact_id, safe);
+                }
             }
         } catch (e) { console.warn('[ReturnSaveback]', e.message); }
     };
@@ -1269,6 +1279,19 @@ if (action === 'getShipInfo') {
 
 // ── PARTNER LOOKUP (ShipStation wizard) ─────────────────────────────────────
 // Search partners (persons) by name for the partner-first flow.
+// ── PULL PARTNER ADDRESS FROM GHL (HighLevel) ───────────────────────────────
+// Returns the partner's portal address + their GHL contact address so the
+// wizard can fill any gaps from HighLevel.
+if (action === 'pull_partner_ghl') {
+    const { partner_id } = body;
+    if (!partner_id) return res.status(400).json({ success: false, message: 'partner_id required' });
+    const { data: p } = await supabase.from('persons')
+        .select('hl_contact_id, address, city, state, zip, country').eq('id', partner_id).maybeSingle();
+    let ghl = null;
+    if (p?.hl_contact_id) ghl = await ghlGetContactAddress(p.hl_contact_id);
+    return res.status(200).json({ success: true, persons: p || null, ghl, has_ghl_contact: !!p?.hl_contact_id });
+}
+
 if (action === 'getPartnerLookups') {
     // Search partners by partner name, company name, agent name, or agent id.
     // Returns each partner's agent IDs with merchant counts so staff can pick
