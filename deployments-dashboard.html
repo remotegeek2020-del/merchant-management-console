@@ -3479,6 +3479,13 @@ async function executeBulk(validData) {
         const weight = sslWeight();
         if (!weight.value) return Swal.fire('Weight required', 'Enter the package weight.', 'warning');
         const insAmt = parseFloat(document.getElementById('ssl_insurance').value) || 0;
+        const isTest = document.getElementById('ssl_testLabel').checked;
+        // FedEx/UPS reject test labels — only USPS/Stamps.com supports them
+        const carrierLc = (carrier || '').toLowerCase();
+        const supportsTest = carrierLc.includes('stamps') || carrierLc.includes('usps');
+        if (isTest && !supportsTest) {
+            return Swal.fire('Test labels: USPS only', `${carrier} doesn't support test labels. Switch the Carrier to Stamps.com / USPS (Browse Rates → pick a USPS rate) to test for free, or uncheck "Test label" to create a real ${carrier} label (you'll be charged).`, 'warning');
+        }
 
         const btn = document.getElementById('ssl_createBtn');
         btn.disabled = true; btn.textContent = 'Creating label…';
