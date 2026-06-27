@@ -113,8 +113,10 @@ async function ssPost(path, payload) {
         headers: { 'Authorization': auth, 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     });
-    const data = await r.json().catch(() => ({}));
-    return { ok: r.ok, status: r.status, data, configured: true };
+    const raw = await r.text();
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch { data = { _raw: raw }; }
+    return { ok: r.ok, status: r.status, data, raw, configured: true };
 }
 const num = n => (n === null || n === undefined || n === '' ? undefined : Number(n));
 
@@ -306,7 +308,8 @@ export default async function handler(req, res) {
             };
             const r = await ssPost('/orders/createlabelforder', labelReq);
             if (!r.ok) {
-                return res.status(200).json({ success: false, configured: true, message: r.data?.ExceptionMessage || r.data?.message || `ShipStation ${r.status}` });
+                const detail = r.data?.ExceptionMessage || r.data?.message || r.data?._raw || (r.raw || '').slice(0, 300) || '';
+                return res.status(200).json({ success: false, configured: true, status: r.status, message: `ShipStation ${r.status}${detail ? ': ' + detail : ' — order not found. Try recreating the ticket so a fresh ShipStation order is generated.'}` });
             }
             const tracking = r.data.trackingNumber;
             const shipmentId = r.data.shipmentId;
