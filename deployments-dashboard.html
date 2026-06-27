@@ -609,7 +609,19 @@
                         <div id="ssw_bulkList" style="min-height:40px; border:1px solid #e2e8f0; border-radius:8px; padding:6px; background:#f8fafc; font-size:12px;"></div>
                     </div>
 
-                    <div style="margin-bottom:8px;"><label class="ship-lbl">Deployment Date</label><input type="date" id="ssw_depDate" class="slds-input ship-in"></div>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+                        <div><label class="ship-lbl">Deployment Date</label><input type="date" id="ssw_depDate" class="slds-input ship-in"></div>
+                        <div><label class="ship-lbl">Purchase Type</label>
+                            <select id="ssw_purchaseType" class="slds-select ship-in" style="width:100%;border-radius:8px;">
+                                <option value="Free Placement">Free Placement</option>
+                                <option value="Agent Purchase">Agent Purchase</option>
+                                <option value="Rental">Rental</option>
+                                <option value="Reprogram">Reprogram</option>
+                                <option value="Swap">Swap</option>
+                                <option value="Swap/No Return">Swap/No Return</option>
+                            </select>
+                        </div>
+                    </div>
 
                     <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin:12px 0 8px;border-top:1px solid #eef2f7;padding-top:10px;">Order Summary (ShipStation)</div>
                     <div style="margin-bottom:8px;"><label class="ship-lbl">Store</label>
@@ -2825,6 +2837,7 @@ async function executeBulk(validData) {
          'ssw_eSearch','ssw_equipId','ssw_tid','ssw_bulkSearch','ssw_orderNum','ssw_shipPaid','ssw_taxPaid','ssw_totalPaid','ssw_notes']
             .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const c = document.getElementById('ssw_country'); if (c) c.value = 'United States';
+        const pt = document.getElementById('ssw_purchaseType'); if (pt) pt.value = 'Free Placement';
         const bl = document.getElementById('ssw_bulkList'); if (bl) bl.innerHTML = '';
         const auto = document.getElementById('ssw_autoOrder'); if (auto) auto.checked = true;
         const notify = document.getElementById('ssw_notify'); if (notify) notify.checked = false;
@@ -3126,6 +3139,7 @@ async function executeBulk(validData) {
         const payload = {
             merchant_id: merchantId,
             target_date: v('ssw_depDate'),
+            purchase_type: v('ssw_purchaseType'),
             notes: v('ssw_notes'),
             ship_to_type: _ssMode,
             ship_to_partner_id: _ssMode === 'partner' ? document.getElementById('ssw_partnerId').value : null,
