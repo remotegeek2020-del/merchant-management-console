@@ -500,16 +500,16 @@
         <div id="sswScreen1" class="ssw-screen">
             <h2 style="font-size:1.4rem; font-weight:800; color:#002d5a; margin-bottom:4px;">New Deployment Ticket</h2>
             <p style="font-size:12px; color:#94a3b8; margin-bottom:18px;">Choose how you want to create this ticket.</p>
-            <div style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
-                <button type="button" class="ssw-card" onclick="sswOpenLegacyModal()">
+            <div id="sswScreen1Cards" style="display:grid; grid-template-columns:1fr 1fr; gap:14px;">
+                <button type="button" id="sswCardStandard" class="ssw-card" onclick="sswOpenLegacyModal()">
                     <span class="material-icons" style="font-size:30px; color:#64748b;">edit_note</span>
                     <div class="ssw-card-title">Create Ticket</div>
                     <div class="ssw-card-sub">Separate from ShipStation — opens the standard deployment form</div>
                 </button>
-                <button type="button" class="ssw-card ssw-card-accent" onclick="sswGoScreen(2)">
+                <button type="button" id="sswCardSS" class="ssw-card ssw-card-accent" onclick="sswGoScreen(2)">
                     <span class="material-icons" style="font-size:30px; color:#7c3aed;">local_shipping</span>
-                    <div class="ssw-card-title">Create Ticket — ShipStation Ready</div>
-                    <div class="ssw-card-sub">Integrated with ShipStation order details</div>
+                    <div class="ssw-card-title">Create Ticket — ShipStation Ready <span id="sswComingSoonBadge" style="display:none; background:#fef3c7; color:#92400e; font-size:10px; font-weight:800; padding:2px 7px; border-radius:99px; vertical-align:middle; margin-left:4px;">COMING SOON</span></div>
+                    <div class="ssw-card-sub" id="sswCardSSsub">Integrated with ShipStation order details</div>
                 </button>
             </div>
         </div>
@@ -1389,10 +1389,28 @@ async function processReturn() {
         selected_equipment_ids: selectedEquipmentIds
     };
 
-    // ShipStation-Ready returns: collect ship-from + label fields first
-    if (_shipstationReturnsEnabled) {
+    // ShipStation-Ready returns — behavior driven by the returns mode
+    if (_ssReturnsMode === 'ss_only') {
         ssReturnOpen(basePayload);
         return;
+    }
+    if (_ssReturnsMode === 'both' || _ssReturnsMode === 'coming_soon') {
+        const comingSoon = _ssReturnsMode === 'coming_soon';
+        const choice = await Swal.fire({
+            title: 'Return Method',
+            text: 'How should this return be processed?',
+            showDenyButton: true, showCancelButton: true,
+            confirmButtonText: 'Standard Return', confirmButtonColor: '#64748b',
+            denyButtonText: comingSoon ? '🚚 ShipStation (Coming Soon)' : '🚚 ShipStation Return',
+            denyButtonColor: comingSoon ? '#cbd5e1' : '#0369a1'
+        });
+        if (choice.isDismissed) return;
+        if (choice.isDenied) {
+            if (comingSoon) { Swal.fire({ icon: 'info', title: 'Coming soon', text: 'ShipStation returns aren\'t available yet.', timer: 1600, showConfirmButton: false }); return; }
+            ssReturnOpen(basePayload);
+            return;
+        }
+        // isConfirmed → fall through to standard return
     }
 
     Swal.fire({ title: 'Processing Logistics...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
@@ -2796,6 +2814,8 @@ async function executeBulk(validData) {
     // ════════════ SHIPSTATION-READY WIZARD ════════════
     let _shipstationEnabled = false;
     let _shipstationReturnsEnabled = false;
+    let _ssReadyMode = 'disabled';     // 'disabled' | 'coming_soon' | 'ss_only' | 'both'
+    let _ssReturnsMode = 'disabled';   // same set
     let _ssMode = 'merchant';        // 'merchant' | 'partner'
     let _ssDepMode = 'single';       // 'single' | 'bulk'
     let _ssBulkItems = [];
@@ -2804,14 +2824,37 @@ async function executeBulk(validData) {
     let _ssLookupTimer = null;
     let _ssVendorsLoaded = false;
 
-    // Entry point for the "+ New Ticket" button
+    // Entry point for the "+ New Ticket" button — behavior driven by the mode
     function newTicketEntry() {
-        if (_shipstationEnabled) {
-            sswResetAll();
-            sswGoScreen(1);
-            document.getElementById('ssWizardModal').style.display = 'flex';
+        if (_ssReadyMode === 'disabled') { openNewDeploymentModal(); return; }
+        sswResetAll();
+        document.getElementById('ssWizardModal').style.display = 'flex';
+        if (_ssReadyMode === 'ss_only') {
+            sswGoScreen(2);              // skip the choice screen — only ShipStation Ready
         } else {
-            openNewDeploymentModal();
+            sswApplyMode();             // coming_soon (or any non-disabled with both cards)
+            sswGoScreen(1);
+        }
+    }
+
+    // Configure Screen 1 cards for the current mode
+    function sswApplyMode() {
+        const std = document.getElementById('sswCardStandard');
+        const ss = document.getElementById('sswCardSS');
+        const sub = document.getElementById('sswCardSSsub');
+        const badge = document.getElementById('sswComingSoonBadge');
+        // reset to defaults
+        if (std) std.style.display = '';
+        if (ss) { ss.style.opacity = ''; ss.style.pointerEvents = ''; ss.onclick = () => sswGoScreen(2); }
+        if (badge) badge.style.display = 'none';
+        if (sub) sub.textContent = 'Integrated with ShipStation order details';
+
+        if (_ssReadyMode === 'coming_soon') {
+            if (ss) { ss.style.opacity = '0.55'; ss.style.pointerEvents = 'none'; ss.onclick = null; }
+            if (badge) badge.style.display = 'inline-block';
+            if (sub) sub.textContent = 'Coming soon — not yet available';
+        } else if (_ssReadyMode === 'ss_only') {
+            if (std) std.style.display = 'none';   // hide the plain Create Ticket card
         }
     }
 
@@ -3711,8 +3754,10 @@ async function executeBulk(validData) {
             body: JSON.stringify({ action: 'get' })
         }).then(r => r.json()).then(d => {
             const s = d.settings || {};
-            _shipstationEnabled = s.shipstation_ready_enabled === 'true';
-            _shipstationReturnsEnabled = s.shipstation_returns_enabled === 'true';
+            _ssReadyMode = s.shipstation_ready_mode || 'disabled';
+            _shipstationEnabled = _ssReadyMode !== 'disabled';
+            _ssReturnsMode = s.shipstation_returns_mode || 'disabled';
+            _shipstationReturnsEnabled = _ssReturnsMode !== 'disabled';
         }).catch(() => {});
         const urlQ = new URLSearchParams(window.location.search).get('q');
         if (urlQ) {

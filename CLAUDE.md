@@ -104,7 +104,13 @@ label panel" so staff never open ShipStation. Phase 6 BUILT:
 - `api/shipstation.js`: get_stores + exported ssCreateOrder/ssFetchResource/shipStationConfigured.
 - `api/deployments.js`: getShipInfo, getPartnerLookups, getPartnerMerchants; create writes shipstation_shipments row via createShipstationRow when payload.shipstation present; return_to_office writes return_label row via createShipstationReturnRow. Order # auto via `next_ss_order_number()` rpc (SS-#### from shipstation_order_seq) unless custom.
 - `deployments-dashboard.html`: `newTicketEntry()` (flag-gated), `ssWizardModal` (3 screens), `ssReturnModal` (returns ship-from), `sswLoadStoresInto()` (shared store loader). Standard modal (openNewDeploymentModal) is PRISTINE/unchanged — safe fallback when flags OFF.
-- `secret-dungeon.html`: Feature Flags tab (2 toggles).
+- `secret-dungeon.html`: Feature Flags tab. Deployments now use a 4-way **mode selector** `shipstation_ready_mode` (`disabled` | `coming_soon` | `ss_only` | `both`) instead of the old on/off `shipstation_ready_enabled`:
+  - `disabled` → + New Ticket opens the standard modal directly (full fallback)
+  - `coming_soon` → wizard Screen 1 shows; ShipStation Ready card greyed + "COMING SOON" badge (not clickable); standard Create Ticket works
+  - `ss_only` → wizard skips Screen 1 straight to Screen 2 (ship to merchant/partner); plain Create Ticket hidden
+  - `both` → wizard Screen 1 with both cards active; staff choose per ticket
+  - Returns now ALSO a 4-way mode selector `shipstation_returns_mode` (`disabled` | `coming_soon` | `ss_only` | `both`). Returns have no two-card screen, so it maps to the Log Return flow: disabled=standard return; ss_only=ShipStation return modal; both=Swal prompt (Standard vs ShipStation); coming_soon=Swal prompt with ShipStation greyed. `_ssReturnsMode` drives `processReturn`. (Legacy `shipstation_returns_enabled`/`shipstation_ready_enabled` keys retained but unused.) Reconcile Deliveries button also here.
+  - `deployments-dashboard.html`: `_ssReadyMode` drives `newTicketEntry()` + `sswApplyMode()`; `_shipstationEnabled` = (mode !== 'disabled') gates the label/info panels.
 
 ### ShipStation "Store" dropdown = LIVE ShipStation stores (NOT our vendors)
 Corrected 2026-06-27: the ShipStation "Store" is a sales channel (e.g. Dejavoo, Manual Orders, WooCommerce),
