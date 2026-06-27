@@ -26,6 +26,40 @@ export async function shipStationConfigured() {
     return !!(await getAuthHeader());
 }
 
+// ── ShipStation V2 (api.shipstation.com/v2) — used for tracking-status lookups ─
+const SS_V2_BASE = 'https://api.shipstation.com/v2';
+async function getV2Key() {
+    return (await getConfigValue('SHIPSTATION_V2_API_KEY')) || process.env.SHIPSTATION_V2_API_KEY || null;
+}
+function mapV2Carrier(c) {
+    if (!c) return null;
+    const s = String(c).toLowerCase();
+    if (s.includes('stamp') || s.includes('usps')) return 'stamps_com';
+    if (s.includes('fedex')) return 'fedex';
+    if (s.includes('ups')) return 'ups';
+    if (s.includes('dhl')) return 'dhl_express';
+    return s;
+}
+function detectCarrierFromTracking(t) {
+    const s = String(t || '').toUpperCase().replace(/\s/g, '');
+    if (/^1Z[0-9A-Z]{16}$/.test(s)) return 'ups';
+    if (/^[A-Z]{2}\d{9}US$/.test(s)) return 'stamps_com';           // USPS intl-style
+    if (/^(94|93|92|95)\d{18,20}$/.test(s)) return 'stamps_com';    // USPS 20-22 digit
+    if (/^\d{12}$/.test(s) || /^\d{15}$/.test(s)) return 'fedex';   // FedEx
+    return null;
+}
+async function ssV2Tracking(carrierCode, tracking) {
+    const key = await getV2Key();
+    if (!key || !carrierCode || !tracking) return null;
+    try {
+        const r = await fetch(`${SS_V2_BASE}/tracking?carrier_code=${encodeURIComponent(carrierCode)}&tracking_number=${encodeURIComponent(tracking)}`, {
+            headers: { 'API-Key': key }
+        });
+        const data = await r.json().catch(() => ({}));
+        return { ok: r.ok, status: r.status, data };
+    } catch { return null; }
+}
+
 // ShipStation needs a 2-char country code; map the common full name.
 function countryCode(c) {
     if (!c) return 'US';
@@ -220,6 +254,52 @@ export default async function handler(req, res) {
                 }
             }
             return res.status(200).json({ success: true, configured: true, scanned: shipments.length, matched });
+        }
+
+        // ── RECONCILE DELIVERIES (V2): backtrack delivered tickets ───────────
+        // For deployments with a tracking number that aren't Closed, look up the
+        // live delivery status via ShipStation V2 tracking and, if delivered,
+        // set the received date + close (merchant) / set partner date (partner).
+        if (action === 'reconcile_deliveries') {
+            const key = await getV2Key();
+            if (!key) return res.status(200).json({ success: false, message: 'Add SHIPSTATION_V2_API_KEY in the API Key Manager first.' });
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const limit = Math.min(Number(body.limit) || 50, 150);
+
+            const { data: deps } = await supabase.from('deployments')
+                .select('id, tracking_id, status, ship_to_type')
+                .not('tracking_id', 'is', null).neq('tracking_id', '')
+                .neq('status', 'Closed')
+                .order('created_at', { ascending: false })
+                .limit(limit);
+
+            let checked = 0, closed = 0, partnerDated = 0, skipped = 0, notDelivered = 0;
+            const skippedList = [];
+            for (const d of (deps || [])) {
+                // resolve carrier: prefer the stored SS carrier, else detect from tracking
+                const { data: ssrow } = await supabase.from('shipstation_shipments')
+                    .select('carrier').eq('deployment_id', d.id).not('carrier', 'is', null).limit(1).maybeSingle();
+                const carrier = mapV2Carrier(ssrow?.carrier) || detectCarrierFromTracking(d.tracking_id);
+                if (!carrier) { skipped++; if (skippedList.length < 25) skippedList.push({ tracking: d.tracking_id, reason: 'carrier unknown' }); continue; }
+
+                const t = await ssV2Tracking(carrier, d.tracking_id);
+                checked++;
+                if (!t?.ok || !t.data) { notDelivered++; continue; }
+                const sc = String(t.data.status_code || '').toUpperCase();
+                const sd = String(t.data.status_description || '').toLowerCase();
+                const delivered = sc === 'DE' || sd.includes('delivered');
+                if (!delivered) { notDelivered++; continue; }
+
+                const delDate = (t.data.actual_delivery_date || t.data.estimated_delivery_date || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
+                if ((d.ship_to_type || 'merchant') === 'partner') {
+                    await supabase.from('deployments').update({ partner_received_date: delDate }).eq('id', d.id);
+                    partnerDated++;
+                } else {
+                    await supabase.from('deployments').update({ merchant_received_date: delDate, status: 'Closed' }).eq('id', d.id);
+                    closed++;
+                }
+            }
+            return res.status(200).json({ success: true, scanned: (deps || []).length, checked, closed, partnerDated, notDelivered, skipped, skippedList });
         }
 
         // ── SHIP-FROM WAREHOUSES ────────────────────────────────────────────
