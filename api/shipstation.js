@@ -285,6 +285,12 @@ export default async function handler(req, res) {
 
                 const t = await ssV2Tracking(carrier, d.tracking_id);
                 checked++;
+                // V2 tracking is plan-gated — surface the billing error instead of a misleading count
+                if (t?.status === 401 || t?.status === 403) {
+                    const msg = t?.data?.errors?.[0]?.message || 'ShipStation V2 tracking endpoint is not available on this plan.';
+                    return res.status(200).json({ success: false, plan_gated: true,
+                        message: `ShipStation V2 tracking is blocked on your current plan (HTTP ${t.status}): "${msg}"` });
+                }
                 if (!sample) sample = {
                     carrier, tracking: d.tracking_id, http_status: t?.status, ok: !!t?.ok,
                     keys: t?.data ? Object.keys(t.data) : null,
