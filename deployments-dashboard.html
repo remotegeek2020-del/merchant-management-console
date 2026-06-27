@@ -546,7 +546,7 @@
                     <!-- Partner lookup (partner mode only) -->
                     <div id="sswPartnerLookupWrap" style="display:none; position:relative; margin-bottom:12px;">
                         <label class="ship-lbl">Partner</label>
-                        <input type="text" id="ssw_partnerSearch" class="slds-input ship-in" placeholder="Search partner name..." autocomplete="off" oninput="sswPartnerSearch(this.value)">
+                        <input type="text" id="ssw_partnerSearch" class="slds-input ship-in" placeholder="Search partner / company / agent ID..." autocomplete="off" oninput="sswPartnerSearch(this.value)">
                         <input type="hidden" id="ssw_partnerId">
                         <div id="ssw_partnerSuggest" class="suggestions-list"></div>
                     </div>
@@ -557,6 +557,7 @@
                         <input type="text" id="ssw_merchantSearch" class="slds-input ship-in" placeholder="Search merchant..." autocomplete="off" oninput="sswMerchantSearch(this.value)">
                         <input type="hidden" id="ssw_merchantId">
                         <div id="ssw_merchantSuggest" class="suggestions-list"></div>
+                        <div id="ssw_merchantTie" style="display:none; font-size:11px; color:#0369a1; font-weight:700; margin-top:5px; background:#f0f9ff; border:1px solid #bae6fd; border-radius:6px; padding:4px 8px;"></div>
                     </div>
 
                     <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.4px;margin:6px 0 8px;border-top:1px solid #eef2f7;padding-top:10px;">Recipient Information</div>
@@ -2838,6 +2839,7 @@ async function executeBulk(validData) {
             .forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
         const c = document.getElementById('ssw_country'); if (c) c.value = 'United States';
         const pt = document.getElementById('ssw_purchaseType'); if (pt) pt.value = 'Free Placement';
+        const tie = document.getElementById('ssw_merchantTie'); if (tie) tie.style.display = 'none';
         const bl = document.getElementById('ssw_bulkList'); if (bl) bl.innerHTML = '';
         const auto = document.getElementById('ssw_autoOrder'); if (auto) auto.checked = true;
         const notify = document.getElementById('ssw_notify'); if (notify) notify.checked = false;
@@ -2907,7 +2909,7 @@ async function executeBulk(validData) {
         }
     }
 
-    // ── Partner lookup ──
+    // ── Partner lookup (search by partner name / company / agent name / agent id) ──
     function sswPartnerSearch(val) {
         const list = document.getElementById('ssw_partnerSuggest');
         if (val.length < 2) { list.style.display = 'none'; return; }
@@ -2918,19 +2920,25 @@ async function executeBulk(validData) {
                 body: JSON.stringify({ action: 'getPartnerLookups', query: val })
             });
             const result = await res.json();
-            list.innerHTML = (result.partners || []).map(p =>
-                `<div class="suggestion-item" onclick='sswSelectPartner(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
-                    <strong style="color:#004990;">${p.full_name || '—'}</strong>
+            window._sswPartners = result.partners || [];
+            list.innerHTML = window._sswPartners.map((p, idx) => {
+                const agentsStr = (p.agents || []).map(a => `${a.agent_id} (${a.merchant_count})`).join(', ');
+                return `<div class="suggestion-item" onclick="sswSelectPartner(${idx})">
+                    <strong style="color:#004990;">${p.full_name || '—'}</strong>${p.company_name ? ` · <span style="color:#64748b;font-weight:400;">${p.company_name}</span>` : ''}
                     <div style="font-size:10px;color:#64748b;">${p.email || ''}</div>
-                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No partners found</div>';
+                    <div style="font-size:10px;color:#0369a1;font-weight:700;">Agent IDs (merchants): ${agentsStr || '—'}</div>
+                </div>`;
+            }).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No partners found</div>';
             list.style.display = 'block';
         }, 300);
     }
 
-    function sswSelectPartner(p) {
+    function sswSelectPartner(idx) {
+        const p = (window._sswPartners || [])[idx];
+        if (!p) return;
         _ssPartner = p;
         document.getElementById('ssw_partnerId').value = p.id;
-        document.getElementById('ssw_partnerSearch').value = p.full_name || '';
+        document.getElementById('ssw_partnerSearch').value = p.full_name || (p.company_name || '');
         document.getElementById('ssw_partnerSuggest').style.display = 'none';
         // recipient = partner
         const set = (id, v) => { document.getElementById(id).value = v || ''; };
@@ -2942,6 +2950,7 @@ async function executeBulk(validData) {
         _ssMerchant = null;
         document.getElementById('ssw_merchantId').value = '';
         document.getElementById('ssw_merchantSearch').value = '';
+        const tie = document.getElementById('ssw_merchantTie'); if (tie) tie.style.display = 'none';
     }
 
     // ── Merchant lookup (mode-aware) ──
@@ -2969,19 +2978,31 @@ async function executeBulk(validData) {
                 result = await res.json();
             }
             const merchants = result.merchants || [];
-            list.innerHTML = merchants.map(m =>
-                `<div class="suggestion-item" onclick="sswSelectMerchant('${m.id}','${(m.dba_name||'').replace(/'/g,"\\'")}')">
+            window._sswMerchants = merchants;
+            list.innerHTML = merchants.map((m, idx) =>
+                `<div class="suggestion-item" onclick="sswSelectMerchant(${idx})">
                     <strong style="color:#004990;">${m.dba_name || '—'}</strong>
-                    <div style="font-size:10px;color:#64748b;">MID: ${m.merchant_id || 'N/A'}</div>
+                    <div style="font-size:10px;color:#64748b;">MID: ${m.merchant_id || 'N/A'}${m.agent_id ? ` · Agent ID: <b style="color:#0369a1;">${m.agent_id}</b>` : ''}</div>
                 </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No merchants found</div>';
             list.style.display = 'block';
         }, 300);
     }
 
-    async function sswSelectMerchant(id, name) {
+    async function sswSelectMerchant(idx) {
+        const m0 = (window._sswMerchants || [])[idx];
+        if (!m0) return;
+        const id = m0.id;
         document.getElementById('ssw_merchantId').value = id;
-        document.getElementById('ssw_merchantSearch').value = name;
+        document.getElementById('ssw_merchantSearch').value = m0.dba_name || '';
         document.getElementById('ssw_merchantSuggest').style.display = 'none';
+        // Show which partner/agent ID this merchant is tied to
+        const tie = document.getElementById('ssw_merchantTie');
+        if (m0.agent_id) {
+            tie.style.display = 'block';
+            tie.innerHTML = `🔗 This merchant is tied to <b>Agent ID ${m0.agent_id}</b>${_ssPartner ? ` (partner: ${_ssPartner.full_name || _ssPartner.company_name || ''})` : ''}`;
+        } else {
+            tie.style.display = 'none';
+        }
         // In merchant mode the recipient = merchant → autofill from getShipInfo
         if (_ssMode === 'merchant') {
             try {

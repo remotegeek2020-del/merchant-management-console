@@ -1270,13 +1270,21 @@ if (action === 'getShipInfo') {
 // ── PARTNER LOOKUP (ShipStation wizard) ─────────────────────────────────────
 // Search partners (persons) by name for the partner-first flow.
 if (action === 'getPartnerLookups') {
-    const term = `%${query || ''}%`;
-    const { data: partners } = await supabase
-        .from('persons')
-        .select('id, full_name, email, phone_number, address, city, state, zip, country')
-        .ilike('full_name', term)
-        .limit(10);
-    return res.status(200).json({ success: true, partners: partners || [] });
+    // Search partners by partner name, company name, agent name, or agent id.
+    // Returns each partner's agent IDs with merchant counts so staff can pick
+    // the exact partner ID tied to the merchant being shipped.
+    const { data, error } = await supabase.rpc('search_partners', { q: (query || '').trim() });
+    if (error) return res.status(200).json({ success: false, message: error.message, partners: [] });
+    const partners = (data || []).map(r => ({
+        id: r.person_id,
+        full_name: r.full_name,
+        email: r.email,
+        phone_number: r.phone_number,
+        address: r.address, city: r.city, state: r.state, zip: r.zip, country: r.country,
+        company_name: r.company_names || null,
+        agents: r.agents || []   // [{ agent_id, agent_name, merchant_count }]
+    }));
+    return res.status(200).json({ success: true, partners });
 }
 
 // ── MERCHANTS TIED TO A PARTNER (ShipStation wizard) ────────────────────────
@@ -1296,7 +1304,7 @@ if (action === 'getPartnerMerchants') {
     if (!idStrings.length) return res.status(200).json({ success: true, merchants: [] });
 
     let mq = supabase.from('merchants')
-        .select('id, dba_name, merchant_id, email, merchant_primary_contact, merchant_phone, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_country')
+        .select('id, dba_name, merchant_id, agent_id, email, merchant_primary_contact, merchant_phone, merchant_address, merchant_city, merchant_state, merchant_zip, merchant_country')
         .in('agent_id', idStrings);
     if (q && q.trim()) mq = mq.or(`dba_name.ilike.%${q.trim()}%,merchant_id.ilike.%${q.trim()}%`);
     const { data: merchants } = await mq.limit(50);
