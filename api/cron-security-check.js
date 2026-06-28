@@ -42,7 +42,11 @@ export default async function handler(req, res) {
             shouldRun = dayOfWeek === 1 && currentHour === preferredHour;
         }
 
-        if (!shouldRun) {
+        // On-demand test: ?force=1 runs immediately, bypassing the hour check.
+        // Still gated by CRON_SECRET above, so only an authorized caller can force it.
+        const force = req.query?.force === '1' || req.query?.test === '1';
+
+        if (!force && !shouldRun) {
             return res.status(200).json({ success: true, skipped: `not scheduled (current hour: ${currentHour} UTC, schedule: ${schedule} at ${preferredHour}h UTC)` });
         }
 
