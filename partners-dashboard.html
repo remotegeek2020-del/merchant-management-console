@@ -3243,10 +3243,12 @@ window.quickAddId = async function(personId, name) {
                 return;
             }
             const now = new Date();
-            el.innerHTML = partners.map(p => {
+            window._fpPartners = partners;
+            el.innerHTML = partners.map((p, idx) => {
                 const enrolledThisMonth = p.enrolled_at && (() => { const d = new Date(p.enrolled_at); return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth(); })();
                 return `
-                <div style="display:flex;align-items:flex-start;justify-content:space-between;padding:9px 10px;background:#f0fdf4;border-radius:9px;border:1px solid #bbf7d0;">
+                <div style="padding:9px 10px;background:#f0fdf4;border-radius:9px;border:1px solid #bbf7d0;">
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;">
                     <div style="flex:1;min-width:0;">
                         <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
                             <span class="material-icons" style="font-size:14px;color:#059669;">rocket_launch</span>
@@ -3264,11 +3266,41 @@ window.quickAddId = async function(personId, name) {
                         <div style="font-size:9px;color:#94a3b8;font-weight:600;">merchant${p.merchants.length !== 1 ? 's' : ''}</div>
                         <div style="margin-top:3px;">${p.agent_ids.map(id => `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:#d1fae5;color:#065f46;font-family:monospace;display:inline-block;margin:1px;">${id}</span>`).join('')}</div>
                     </div>
+                  </div>
+                  ${enrolledThisMonth ? `<button type="button" onclick="sendThumbsUp(${idx})" style="margin-top:8px;width:100%;background:#059669;color:white;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">👍 Send Thumbs Up Message</button>` : ''}
                 </div>`;
             }).join('');
         } catch(e) {
             el.innerHTML = '<p style="text-align:center;color:#ef4444;font-size:12px;padding:20px;">Failed to load.</p>';
         }
+    }
+
+    // ── SEND THUMBS UP (new agent + new merchant) → configured webhook ──
+    async function sendThumbsUp(idx) {
+        const p = (window._fpPartners || [])[idx];
+        if (!p) return;
+        const ok = await Swal.fire({
+            title: 'Send Thumbs Up?',
+            html: `Send a thumbs-up message for <b>${p.full_name || 'this partner'}</b> (${(p.merchants || []).length} merchant${(p.merchants||[]).length !== 1 ? 's' : ''})?`,
+            icon: 'question', showCancelButton: true, confirmButtonText: 'Send 👍', confirmButtonColor: '#059669'
+        });
+        if (!ok.isConfirmed) return;
+        try {
+            const res = await fetch('/api/partners', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') },
+                body: JSON.stringify({ action: 'send_thumbs_up', payload: {
+                    person_id: p.id || p.person_id || null,
+                    full_name: p.full_name, email: p.email,
+                    agent_ids: p.agent_ids || [],
+                    merchants: p.merchants || [],
+                    is_new_agent: true
+                }})
+            });
+            const r = await res.json();
+            if (r.success) Swal.fire({ icon: 'success', title: 'Thumbs Up sent! 👍', timer: 1600, showConfirmButton: false });
+            else Swal.fire('Not sent', r.message || 'Failed', 'warning');
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }
 
     // ── LEADERBOARD ───────────────────────────────────────

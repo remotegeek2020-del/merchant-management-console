@@ -42,6 +42,51 @@ export default async function handler(req, res) {
 
     try {
 
+        // ── SEND THUMBS UP (forward partner/merchant info to a configured webhook) ──
+        if (action === 'send_thumbs_up') {
+            const { data: setting } = await supabase.from('app_settings')
+                .select('value').eq('key', 'thumbs_up_webhook_url').maybeSingle();
+            const webhookUrl = (setting?.value || '').trim();
+            if (!webhookUrl) {
+                return res.status(200).json({ success: false, message: 'No Thumbs Up webhook is configured (set it in Secret Dungeon → Feature Flags).' });
+            }
+            const actor = await resolveActor();
+            const tu = body.payload || {};
+            const outbound = {
+                event: 'thumbs_up',
+                partner: {
+                    person_id: tu.person_id || null,
+                    name: tu.full_name || null,
+                    email: tu.email || null,
+                    agent_ids: tu.agent_ids || []
+                },
+                merchants: tu.merchants || [],
+                is_new_agent: !!tu.is_new_agent,
+                sent_by: { name: actor.name, email: actor.email },
+                sent_at: new Date().toISOString()
+            };
+            try {
+                const r = await fetch(webhookUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(outbound)
+                });
+                if (!r.ok) {
+                    const t = await r.text().catch(() => '');
+                    return res.status(200).json({ success: false, message: `Webhook returned ${r.status}${t ? ': ' + t.slice(0, 200) : ''}` });
+                }
+                supabase.from('activity_logs').insert({
+                    email: actor.email,
+                    action: `Thumbs Up sent by ${actor.name} — ${tu.full_name || 'partner'}`,
+                    status: 'success', category: 'partners', target_type: 'person', target_id: tu.person_id || null, severity: 'info',
+                    new_value: outbound
+                }).then(() => {}).catch(() => {});
+                return res.status(200).json({ success: true });
+            } catch (e) {
+                return res.status(200).json({ success: false, message: 'Failed to reach webhook: ' + e.message });
+            }
+        }
+
         if (action === 'update_person_field') {
     const { id, field, value } = body;
     const ALLOWED_PERSON_FIELDS = ['full_name', 'email', 'phone_number', 'is_branded', 'enrolled_at'];
