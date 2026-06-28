@@ -407,7 +407,10 @@ export default async function handler(req, res) {
             // ── 7. Data Integrity ─────────────────────────────────────────────
             const [orphanDepsRes, orphanReturnsRes, nullStatusRes, equipConflictsRes,
                    orphanCommentsRes, merchantsNoAgentRes] = await Promise.all([
-                safeQuery(() => supabase.from('deployments').select('*', { count: 'exact', head: true }).or('merchant_id.is.null,equipment_id.is.null')),
+                // Bulk deployments legitimately have equipment_id = null (units live in
+                // deployment_items), so only flag missing merchant, or a SINGLE deployment
+                // missing equipment.
+                safeQuery(() => supabase.from('deployments').select('*', { count: 'exact', head: true }).or('merchant_id.is.null,and(is_bulk.eq.false,equipment_id.is.null)')),
                 safeQuery(() => supabase.from('returns').select('*', { count: 'exact', head: true }).is('equipment_id', null).eq('is_bulk', false)),
                 safeQuery(() => supabase.from('equipments').select('*', { count: 'exact', head: true }).is('status', null)),
                 safeQuery(() => supabase.rpc('get_equipment_status_conflicts')),
