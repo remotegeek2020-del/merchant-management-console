@@ -52,7 +52,11 @@ export default async function handler(req, res) {
 
         const response = await fetch(`${baseUrl}/api/security-check`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+                'Content-Type': 'application/json',
+                // Authenticate the internal call (no staff session in a cron context)
+                ...(cronSecret ? { 'Authorization': `Bearer ${cronSecret}` } : {})
+            },
             body: JSON.stringify({ action: 'run_check', triggered_by: 'cron' })
         });
 

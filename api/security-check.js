@@ -3,7 +3,11 @@ import { validateSession, sessionErrorResponse } from './_validate.js';
 
 export default async function handler(req, res) {
     const session = await validateSession(req);
-    if (!session) return sessionErrorResponse(res);
+    // Allow the scheduled cron to call run_check using the shared CRON_SECRET
+    // (it has no staff session). Any other access still requires a valid session.
+    const cronSecret = process.env.CRON_SECRET;
+    const isInternalCron = !!cronSecret && req.headers['authorization'] === `Bearer ${cronSecret}`;
+    if (!session && !isInternalCron) return sessionErrorResponse(res);
 
     if (req.method !== 'POST') return res.status(405).json({ success: false, message: 'Method not allowed' });
     const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
