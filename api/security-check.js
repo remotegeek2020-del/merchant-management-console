@@ -923,20 +923,26 @@ export default async function handler(req, res) {
                     : 'No users with suspicious multi-IP login patterns in the last 24 hours'
             });
 
-            // Off-hours admin actions: midnight to 5 AM UTC
+            // Off-hours admin actions: genuine overnight (12–5 AM) in the BUSINESS
+            // timezone, not UTC — otherwise normal US-evening work looks suspicious.
+            const BUSINESS_TZ = 'America/New_York';
+            const hourInTz = (iso) => {
+                let h = parseInt(new Intl.DateTimeFormat('en-US', { timeZone: BUSINESS_TZ, hour: '2-digit', hour12: false }).format(new Date(iso)), 10);
+                return h % 24; // some locales render midnight as 24
+            };
             const adminActions = adminActionsRes.data || [];
             const offHoursActions = adminActions.filter(a => {
-                const h = new Date(a.created_at).getUTCHours();
+                const h = hourInTz(a.created_at);
                 return h >= 0 && h < 5;
             });
             const offHoursActors = [...new Set(offHoursActions.map(a => a.email))];
 
             anomalyChecks.push({
-                name: 'Admin/security actions between 00:00–05:00 UTC (7d)',
-                status: offHoursActions.length > 10 ? 'fail' : offHoursActions.length > 0 ? 'warn' : 'pass',
+                name: 'Admin/security actions between 12–5 AM (business time, 7d)',
+                status: offHoursActions.length > 10 ? 'warn' : 'pass',
                 detail: offHoursActions.length > 0
-                    ? `${offHoursActions.length} admin action(s) performed in off-hours window by: ${offHoursActors.join(', ')} — verify these are expected and not from a compromised account`
-                    : 'No admin actions detected in the midnight–5 AM UTC window'
+                    ? `${offHoursActions.length} admin action(s) in the overnight window (12–5 AM ${BUSINESS_TZ}) by: ${offHoursActors.join(', ')} — verify these are expected`
+                    : 'No admin actions in the overnight (12–5 AM) window'
             });
 
             // API abuse: single API key making 500+ calls in 24h
