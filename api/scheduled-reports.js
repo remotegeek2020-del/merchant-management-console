@@ -846,7 +846,7 @@ async function buildActivityData() {
         .sort((a, b) => b.count - a.count).slice(0, 15);
     const topCats = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count).slice(0, 10);
 
-    return { date: dateStr, windowLabel, isWeekly, totalEvents: total, activeUsers: emails.length, topUsers, topCats, excludedCount: excluded.size };
+    return { date: dateStr, windowLabel, schedule: sc, totalEvents: total, activeUsers: emails.length, topUsers, topCats, excludedCount: excluded.size };
 }
 
 function buildActivityEmail(data) {
