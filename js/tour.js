@@ -60,17 +60,46 @@
     // ───────────────────────────────────────────────────────────────────────
     function startPicker() {
         var stepIndex = qs.get('step');
+        var picking = true; // true = next click captures; false = clicks pass through so you can navigate
+
         var box = document.createElement('div');
         box.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #4338ca;background:rgba(99,102,241,0.18);border-radius:4px;transition:all .05s;display:none;';
+
         var banner = document.createElement('div');
-        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#4338ca;color:#fff;font:600 13px system-ui,sans-serif;padding:10px 16px;text-align:center;box-shadow:0 2px 8px rgba(0,0,0,.2);';
-        banner.textContent = '🎯 Tour element picker — click the element you want this step to point at.  (Press ESC to cancel)';
+        banner.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:2147483647;background:#4338ca;color:#fff;font:600 13px system-ui,sans-serif;padding:9px 16px;display:flex;align-items:center;justify-content:center;gap:14px;box-shadow:0 2px 8px rgba(0,0,0,.25);';
+        var label = document.createElement('span');
+        var toggle = document.createElement('button');
+        toggle.style.cssText = 'padding:5px 12px;border:none;border-radius:7px;font:700 12px system-ui,sans-serif;cursor:pointer;';
+        var hint = document.createElement('span');
+        hint.style.cssText = 'opacity:.85;font-weight:500;';
+        hint.textContent = 'ESC to cancel';
+        banner.appendChild(label); banner.appendChild(toggle); banner.appendChild(hint);
         document.body.appendChild(box);
         document.body.appendChild(banner);
-        document.documentElement.style.cursor = 'crosshair';
 
-        function ignore(t) { return t === box || t === banner; }
+        function renderMode() {
+            if (picking) {
+                label.textContent = '🎯 PICK MODE — click the element this step points at.';
+                toggle.textContent = '✋ Switch to Interact (open menus/modals)';
+                toggle.style.background = '#fff'; toggle.style.color = '#4338ca';
+                document.documentElement.style.cursor = 'crosshair';
+            } else {
+                label.textContent = '✋ INTERACT MODE — click around to reveal the element you need.';
+                toggle.textContent = '🎯 Back to Pick mode';
+                toggle.style.background = '#fde68a'; toggle.style.color = '#92400e';
+                document.documentElement.style.cursor = '';
+                box.style.display = 'none';
+            }
+        }
+        toggle.addEventListener('click', function (e) {
+            e.preventDefault(); e.stopPropagation();
+            picking = !picking; renderMode();
+        });
+        renderMode();
+
+        function ignore(t) { return t === box || banner.contains(t); }
         function onMove(e) {
+            if (!picking) return;
             var t = e.target;
             if (ignore(t)) { box.style.display = 'none'; return; }
             var r = t.getBoundingClientRect();
@@ -97,11 +126,15 @@
             }, 200);
         }
         function onClick(e) {
-            if (ignore(e.target)) return;
+            if (ignore(e.target)) return;        // banner/toggle handle themselves
+            if (!picking) return;                // Interact mode: let the click reach the page
             e.preventDefault(); e.stopPropagation();
             send(getUniqueSelector(e.target));
         }
-        function onKey(e) { if (e.key === 'Escape') { cleanup(); window.close(); } }
+        function onKey(e) {
+            if (e.key === 'Escape') { cleanup(); window.close(); }
+            // Hold-to-interact: while a tooltip/menu is open you can also tap the toggle.
+        }
 
         document.addEventListener('mousemove', onMove, true);
         document.addEventListener('click', onClick, true);
