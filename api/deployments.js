@@ -490,6 +490,17 @@ if (action === 'delete') {
                 ]));
             }
 
+            // Flag ShipStation-Ready tickets: those with an outbound shipstation_shipments row.
+            const depIds = (data || []).map(d => d.id).filter(Boolean);
+            let ssMap = {};
+            if (depIds.length) {
+                const { data: ssRows } = await supabase.from('shipstation_shipments')
+                    .select('deployment_id, order_number, status')
+                    .eq('ship_type', 'outbound')
+                    .in('deployment_id', depIds);
+                (ssRows || []).forEach(r => { if (r.deployment_id && !ssMap[r.deployment_id]) ssMap[r.deployment_id] = r; });
+            }
+
             // Normalize to items[] for unified frontend handling
             const safeData = (data || []).map(d => {
                 d.items = d.is_bulk
@@ -497,6 +508,9 @@ if (action === 'delete') {
                     : (d.equipment_id ? [{ equipment_id: d.equipment_id, tid: d.tid, serial_number: d.equipments?.serial_number, terminal_type: d.equipments?.terminal_type, item_id: null }] : []);
                 d.created_by_name = d.created_by ? (userMap[d.created_by] || null) : null;
                 d.updated_by_name = d.updated_by ? (userMap[d.updated_by] || null) : null;
+                const ss = ssMap[d.id];
+                d.is_shipstation = !!ss;
+                d.ss_order_number = ss?.order_number || null;
                 return d;
             });
 
