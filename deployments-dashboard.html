@@ -574,7 +574,14 @@
                         <div><label class="ship-lbl">State *</label><input type="text" id="ssw_state" class="slds-input ship-in" placeholder="State"></div>
                         <div><label class="ship-lbl">Zip *</label><input type="text" id="ssw_zip" class="slds-input ship-in" placeholder="Zip"></div>
                         <div><label class="ship-lbl">Phone</label><input type="text" id="ssw_phone" class="slds-input ship-in" placeholder="Phone"></div>
-                        <div style="grid-column:1/-1;"><label class="ship-lbl">Email</label><input type="text" id="ssw_email" class="slds-input ship-in" placeholder="Email"></div>
+                        <div style="grid-column:1/-1;">
+                            <label class="ship-lbl">Email</label>
+                            <input type="text" id="ssw_email" class="slds-input ship-in" placeholder="Email">
+                            <label id="ssw_usePartnerEmailWrap" style="display:none; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:5px; cursor:pointer;">
+                                <input type="checkbox" id="ssw_usePartnerEmail" onchange="sswTogglePartnerEmail()">
+                                Use partner's email for tracking notifications <span id="ssw_usePartnerEmailHint" style="color:#94a3b8;"></span>
+                            </label>
+                        </div>
                     </div>
 
                     <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:8px; cursor:pointer;">
@@ -2825,6 +2832,7 @@ async function executeBulk(validData) {
     let _ssBulkItems = [];
     let _ssMerchant = null;
     let _ssPartner = null;
+    let _ssMerchantPartner = null; // partner auto-resolved from the merchant (for "use partner email")
     let _ssLookupTimer = null;
     let _ssVendorsLoaded = false;
 
@@ -3082,6 +3090,7 @@ async function executeBulk(validData) {
                 const result = await res.json();
                 const m = result.merchant || {};
                 _ssMerchant = m;
+                _ssMerchantPartner = result.partner || null;
                 const set = (eid, v) => { document.getElementById(eid).value = v || ''; };
                 set('ssw_name', m.merchant_primary_contact || m.dba_name);
                 set('ssw_company', m.dba_name);
@@ -3089,9 +3098,33 @@ async function executeBulk(validData) {
                 set('ssw_state', m.merchant_state); set('ssw_zip', m.merchant_zip);
                 set('ssw_phone', m.merchant_phone); set('ssw_email', m.email);
                 document.getElementById('ssw_country').value = m.merchant_country || 'United States';
+                // Reset + reveal the "use partner email" option for this merchant
+                const cbWrap = document.getElementById('ssw_usePartnerEmailWrap');
+                const cb = document.getElementById('ssw_usePartnerEmail');
+                const hint = document.getElementById('ssw_usePartnerEmailHint');
+                if (cb) cb.checked = false;
+                if (cbWrap) cbWrap.style.display = 'flex';
+                if (hint) hint.textContent = _ssMerchantPartner
+                    ? '(' + (_ssMerchantPartner.full_name || 'partner') + (_ssMerchantPartner.email ? ' · ' + _ssMerchantPartner.email : ' · no email on file') + ')'
+                    : '(no partner found for this merchant)';
             } catch (e) { console.error('[ssMerchant]', e); }
         } else {
             _ssMerchant = { id }; // partner mode: merchant just ties the record
+        }
+    }
+
+    // Toggle the recipient email between the merchant's and the auto-resolved partner's.
+    // The shipping address + phone stay the merchant's; only the notification email changes.
+    function sswTogglePartnerEmail() {
+        const cb = document.getElementById('ssw_usePartnerEmail');
+        const emailField = document.getElementById('ssw_email');
+        if (!cb || !emailField) return;
+        if (cb.checked) {
+            emailField.value = (_ssMerchantPartner && _ssMerchantPartner.email) ? _ssMerchantPartner.email : '';
+            emailField.placeholder = _ssMerchantPartner && _ssMerchantPartner.email ? 'Email' : 'Partner has no email on file';
+        } else {
+            emailField.value = (_ssMerchant && _ssMerchant.email) ? _ssMerchant.email : '';
+            emailField.placeholder = 'Email';
         }
     }
 
@@ -3261,6 +3294,9 @@ async function executeBulk(validData) {
                     merchant_address: v('ssw_addr1'), merchant_city: v('ssw_city'),
                     merchant_state: v('ssw_state'), merchant_zip: v('ssw_zip'), merchant_country: v('ssw_country')
                 };
+                // Using the partner's email for notifications → don't overwrite the merchant's record email.
+                const usePartnerEmail = document.getElementById('ssw_usePartnerEmail');
+                if (usePartnerEmail && usePartnerEmail.checked) delete payload.merchant_updates.email;
             }
         }
 
