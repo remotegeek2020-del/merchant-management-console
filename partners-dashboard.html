@@ -3234,8 +3234,14 @@ window.quickAddId = async function(personId, name) {
         if (!el) return;
         el.innerHTML = '<div style="padding:16px;text-align:center;color:#94a3b8;font-size:13px;display:flex;align-items:center;justify-content:center;gap:8px;"><span class="material-icons" style="animation:spin 1s linear infinite;font-size:18px;">sync</span> Loading...</div>';
         try {
-            const res = await fetch('/api/partners', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'get_first_production', days }) });
+            const _hdrs = { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') };
+            const [res, sentRes] = await Promise.all([
+                fetch('/api/partners', { method: 'POST', headers: _hdrs, body: JSON.stringify({ action: 'get_first_production', days }) }),
+                fetch('/api/partners', { method: 'POST', headers: _hdrs, body: JSON.stringify({ action: 'get_thumbs_up_sent' }) })
+            ]);
             const data = await res.json();
+            const sentData = await sentRes.json().catch(() => ({}));
+            window._fpSent = new Set(sentData.person_ids || []);
             const partners = data.data || [];
             if (badge) badge.textContent = partners.length;
             if (!partners.length) {
@@ -3267,7 +3273,11 @@ window.quickAddId = async function(personId, name) {
                         <div style="margin-top:3px;">${p.agent_ids.map(id => `<span style="font-size:9px;font-weight:700;padding:1px 6px;border-radius:99px;background:#d1fae5;color:#065f46;font-family:monospace;display:inline-block;margin:1px;">${id}</span>`).join('')}</div>
                     </div>
                   </div>
-                  ${enrolledThisMonth ? `<button type="button" onclick="sendThumbsUp(${idx})" style="margin-top:8px;width:100%;background:#059669;color:white;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">👍 Send Thumbs Up Message</button>` : ''}
+                  ${enrolledThisMonth ? (
+                    (window._fpSent && window._fpSent.has(p.person_id))
+                      ? `<button type="button" disabled style="margin-top:8px;width:100%;background:#e2e8f0;color:#64748b;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:800;cursor:default;display:flex;align-items:center;justify-content:center;gap:6px;">✓ Thumbs up sent</button>`
+                      : `<button type="button" id="tu-btn-${idx}" onclick="sendThumbsUp(${idx})" style="margin-top:8px;width:100%;background:#059669;color:white;border:none;border-radius:7px;padding:7px;font-size:11px;font-weight:800;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;">👍 Send Thumbs Up Message</button>`
+                  ) : ''}
                 </div>`;
             }).join('');
         } catch(e) {
@@ -3298,7 +3308,13 @@ window.quickAddId = async function(personId, name) {
                 }})
             });
             const r = await res.json();
-            if (r.success) Swal.fire({ icon: 'success', title: 'Thumbs Up sent! 👍', timer: 1600, showConfirmButton: false });
+            const markSent = () => {
+                if (window._fpSent && p.person_id) window._fpSent.add(p.person_id);
+                const btn = document.getElementById('tu-btn-' + idx);
+                if (btn) { btn.disabled = true; btn.style.background = '#e2e8f0'; btn.style.color = '#64748b'; btn.style.cursor = 'default'; btn.textContent = '✓ Thumbs up sent'; }
+            };
+            if (r.success) { markSent(); Swal.fire({ icon: 'success', title: 'Thumbs Up sent! 👍', timer: 1600, showConfirmButton: false }); }
+            else if (r.already) { markSent(); Swal.fire({ icon: 'info', title: 'Already sent', text: r.message || '', timer: 1800, showConfirmButton: false }); }
             else Swal.fire('Not sent', r.message || 'Failed', 'warning');
         } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }

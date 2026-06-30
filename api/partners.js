@@ -42,8 +42,40 @@ export default async function handler(req, res) {
 
     try {
 
+        // ── GET THUMBS-UP SENT (person_ids already sent — to disable buttons) ──
+        if (action === 'get_thumbs_up_sent') {
+            const { data } = await supabase.from('thumbs_up_sends').select('person_id');
+            return res.status(200).json({ success: true, person_ids: [...new Set((data || []).map(r => r.person_id).filter(Boolean))] });
+        }
+
+        // ── LIST THUMBS-UP LOG (Secret Dungeon activity) ──
+        if (action === 'list_thumbs_up_log') {
+            const { data } = await supabase.from('thumbs_up_sends')
+                .select('*').order('sent_at', { ascending: false }).limit(100);
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        // ── RESTORE THUMBS-UP (clear sends so buttons re-enable — testing) ──
+        if (action === 'restore_thumbs_up') {
+            const { data: caller } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
+            if (caller?.role !== 'super_admin') return res.status(403).json({ success: false, message: 'Super admin only.' });
+            const onlyPerson = body.person_id || null;
+            let q = supabase.from('thumbs_up_sends').delete();
+            q = onlyPerson ? q.eq('person_id', onlyPerson) : q.neq('id', '00000000-0000-0000-0000-000000000000');
+            const { error } = await q;
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+
         // ── SEND THUMBS UP (forward partner/merchant info to a configured webhook) ──
         if (action === 'send_thumbs_up') {
+            const tu = body.payload || {};
+            // Already sent for this partner? (button should be disabled, but guard anyway)
+            if (tu.person_id) {
+                const { data: existing } = await supabase.from('thumbs_up_sends')
+                    .select('id').eq('person_id', tu.person_id).limit(1).maybeSingle();
+                if (existing) return res.status(200).json({ success: false, already: true, message: 'Thumbs up already sent for this partner.' });
+            }
             const { data: setting } = await supabase.from('app_settings')
                 .select('value').eq('key', 'thumbs_up_webhook_url').maybeSingle();
             const webhookUrl = (setting?.value || '').trim();
@@ -51,7 +83,6 @@ export default async function handler(req, res) {
                 return res.status(200).json({ success: false, message: 'No Thumbs Up webhook is configured (set it in Secret Dungeon → Feature Flags).' });
             }
             const actor = await resolveActor();
-            const tu = body.payload || {};
             const outbound = {
                 event: 'thumbs_up',
                 partner: {
@@ -75,6 +106,16 @@ export default async function handler(req, res) {
                     const t = await r.text().catch(() => '');
                     return res.status(200).json({ success: false, message: `Webhook returned ${r.status}${t ? ': ' + t.slice(0, 200) : ''}` });
                 }
+                // Record the send so the button stays disabled (and shows in the log)
+                await supabase.from('thumbs_up_sends').insert({
+                    person_id: tu.person_id || null,
+                    partner_name: tu.full_name || null,
+                    partner_email: tu.email || null,
+                    agent_ids: tu.agent_ids || [],
+                    merchants: tu.merchants || [],
+                    sent_by_email: actor.email,
+                    sent_by_name: actor.name
+                });
                 supabase.from('activity_logs').insert({
                     email: actor.email,
                     action: `Thumbs Up sent by ${actor.name} — ${tu.full_name || 'partner'}`,
