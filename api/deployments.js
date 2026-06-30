@@ -890,7 +890,7 @@ if (action === 'create_consolidated') {
         if (m.is_bulk && Array.isArray(m.items) && m.items.length) {
             const { data: d, error } = await supabase.from('deployments').insert({
                 merchant_id: mid, equipment_id: null, is_bulk: true,
-                target_deployment_date: p.target_date, notes: p.notes, purchase_type: p.purchase_type,
+                target_deployment_date: p.target_date, notes: p.notes, purchase_type: m.purchase_type || p.purchase_type,
                 status: 'Open', ship_to_type: shipType, ship_to_partner_id: shipPartnerId, created_by: session.userid
             }).select().single();
             if (error) throw error;
@@ -904,7 +904,7 @@ if (action === 'create_consolidated') {
         } else {
             const { data: d, error } = await supabase.from('deployments').insert({
                 merchant_id: mid, equipment_id: m.equipment_id, tid: m.tid || null,
-                target_deployment_date: p.target_date, notes: p.notes, purchase_type: p.purchase_type,
+                target_deployment_date: p.target_date, notes: p.notes, purchase_type: m.purchase_type || p.purchase_type,
                 status: 'Open', ship_to_type: shipType, ship_to_partner_id: shipPartnerId, created_by: session.userid
             }).select().single();
             if (error) throw error;

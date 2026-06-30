@@ -3242,12 +3242,18 @@ async function executeBulk(validData) {
                         oninput="sswBranchEquipSearch(${i}, this.value)" onblur="trkHide('sswBrESug${i}')" class="slds-input ship-in">
                     <div id="sswBrESug${i}" class="suggestions-list" style="display:none;"></div>
                 </div>
-                <input type="text" value="${esc(b.tid)}" placeholder="TID (optional)" oninput="_ssBranches[${i}].tid=this.value" class="slds-input ship-in">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                    <input type="text" value="${esc(b.tid)}" placeholder="TID (optional)" oninput="_ssBranches[${i}].tid=this.value" class="slds-input ship-in">
+                    <select onchange="_ssBranches[${i}].purchase_type=this.value" class="slds-select ship-in" style="border-radius:8px;">
+                        ${['Free Placement','Agent Purchase','Rental','Reprogram','Swap','Swap/No Return'].map(pt => `<option value="${pt}" ${b.purchase_type === pt ? 'selected' : ''}>${pt}</option>`).join('')}
+                    </select>
+                </div>
             </div>`).join('');
     }
     function sswAddBranch() {
         if (_ssMode === 'partner' && !_ssPartner) return Swal.fire('Select a partner first', 'Pick the partner before adding branches.', 'warning');
-        _ssBranches.push({ merchant_id: '', merchant_name: '', equipment_id: '', serial: '', tid: '' });
+        const defPt = (document.getElementById('ssw_purchaseType')?.value) || 'Free Placement';
+        _ssBranches.push({ merchant_id: '', merchant_name: '', equipment_id: '', serial: '', tid: '', purchase_type: defPt });
         sswRenderBranches();
     }
     function sswRemoveBranch(i) { _ssBranches.splice(i, 1); sswRenderBranches(); }
@@ -3486,7 +3492,7 @@ async function executeBulk(validData) {
                     ship_to_type: payload.ship_to_type, ship_to_partner_id: payload.ship_to_partner_id,
                     shipstation: payload.shipstation,
                     merchant_updates: payload.merchant_updates, partner_updates: payload.partner_updates,
-                    merchants: [primary, ...branches.map(b => ({ merchant_id: b.merchant_id, equipment_id: b.equipment_id, tid: b.tid || null }))]
+                    merchants: [primary, ...branches.map(b => ({ merchant_id: b.merchant_id, equipment_id: b.equipment_id, tid: b.tid || null, purchase_type: b.purchase_type || null }))]
                 };
                 const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'create_consolidated', payload: cPayload }) });
                 result = await res.json();
