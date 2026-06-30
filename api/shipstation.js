@@ -580,6 +580,7 @@ export default async function handler(req, res) {
                         service: service_code || null,
                         ss_shipment_id: shipmentId ? String(shipmentId) : null,
                         ss_label_url: r.data.labelData ? 'embedded' : null,
+                        label_data: r.data.labelData || null,   // keep the PDF for no-charge reprints
                         status: 'shipped'
                     }).eq('id', ss_row_id).select('deployment_id, return_id').single();
                 if (row?.deployment_id && tracking) {
@@ -591,6 +592,24 @@ export default async function handler(req, res) {
                 trackingNumber: tracking, shipmentId, shipmentCost: cost,
                 labelData: r.data.labelData || null   // base64 PDF
             });
+        }
+
+        // ── GET LABEL (no-charge reprint): return the saved base64 label PDF.
+        //     Makes NO ShipStation call, so it never creates/charges a new label. ─
+        if (action === 'get_label') {
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const { ss_row_id, deployment_id } = body;
+            let q = supabase.from('shipstation_shipments').select('id, label_data, tracking_number, carrier, service');
+            if (ss_row_id) q = q.eq('id', ss_row_id);
+            else if (deployment_id) q = q.eq('deployment_id', deployment_id).eq('ship_type', 'outbound').order('created_at', { ascending: false });
+            else return res.status(400).json({ success: false, message: 'ss_row_id or deployment_id required' });
+            const { data: row } = await q.limit(1).maybeSingle();
+            if (!row) return res.status(200).json({ success: false, message: 'No shipment found.' });
+            if (!row.label_data) {
+                return res.status(200).json({ success: false, no_label: true,
+                    message: 'This label was created before in-app reprint was available, so the PDF wasn’t saved. Reprint it from ShipStation, or Void & recreate here (recreating charges a new label).' });
+            }
+            return res.status(200).json({ success: true, labelData: row.label_data, tracking_number: row.tracking_number, carrier: row.carrier, service: row.service });
         }
 
         // ── REFRESH SHIPMENT: live-pull latest tracking/status for a deployment ─

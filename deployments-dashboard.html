@@ -3607,7 +3607,12 @@ async function executeBulk(validData) {
                 <div style="font-size:10px;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:.5px;">
                   <span class="material-icons" style="font-size:13px;vertical-align:middle;">local_shipping</span> ShipStation Order ${statusBadge}
                 </div>
-                <button type="button" onclick="ssOpenLabelModal()" style="padding:7px 14px;background:#0369a1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">${s.tracking_number ? '📦 View / Reprint Label' : '📦 Configure Shipment & Print Label'}</button>
+                ${s.tracking_number
+                    ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
+                         <button type="button" onclick="ssReprintLabel()" style="padding:7px 14px;background:#16a34a;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🖨 View / Reprint Label</button>
+                         <button type="button" onclick="ssOpenLabelModal()" style="padding:7px 12px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">⚙ Manage / Void</button>
+                       </div>`
+                    : `<button type="button" onclick="ssOpenLabelModal()" style="padding:7px 14px;background:#0369a1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📦 Configure Shipment &amp; Print Label</button>`}
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12px;">
                 ${row('Order #', s.order_number)}
@@ -3632,6 +3637,31 @@ async function executeBulk(validData) {
               </div>`;
             entry.style.display = 'block';
         } catch (e) { console.error('[ssLabelCheck]', e); }
+    }
+
+    // Open a base64 PDF in a new window for viewing/printing.
+    function openLabelPdf(b64) {
+        const win = window.open('');
+        if (win) win.document.write(`<iframe width="100%" height="100%" style="border:0" src="data:application/pdf;base64,${b64}"></iframe>`);
+        else Swal.fire('Popup blocked', 'Allow popups to view the label.', 'info');
+    }
+
+    // No-charge reprint: fetch the SAVED label PDF and open it. Makes no
+    // ShipStation call, so it never creates or charges a new label.
+    async function ssReprintLabel() {
+        if (!_sslShipment) return;
+        try {
+            const res = await fetch('/api/shipstation', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'get_label', ss_row_id: _sslShipment.id })
+            });
+            const r = await res.json();
+            if (!r.success) {
+                return Swal.fire(r.no_label ? 'Label not saved' : 'Cannot reprint',
+                    r.message || 'No saved label available.', 'info');
+            }
+            openLabelPdf(r.labelData);
+        } catch (e) { Swal.fire('Error', e.message, 'error'); }
     }
 
     // Old ticket: look the tracking number up in ShipStation and link it, then
@@ -3676,16 +3706,21 @@ async function executeBulk(validData) {
         if (!_sslShipment) return;
         document.getElementById('ssl_orderInfo').innerHTML =
             `Order <b>${_sslShipment.order_number || '—'}</b> → ${_sslShipment.ship_to_name || ''}, ${_sslShipment.city || ''} ${_sslShipment.state || ''} ${_sslShipment.zip || ''}`;
-        // Already-shipped state
+        // Already-shipped state — HIDE the create form so the label can't be
+        // re-created (and re-charged) by accident; offer reprint + void instead.
         const already = document.getElementById('ssl_already');
         const form = document.getElementById('ssl_form');
         if (_sslShipment.tracking_number) {
             already.style.display = 'block';
             already.innerHTML = `✅ Label already created — Tracking <b>${_sslShipment.tracking_number}</b> (${_sslShipment.carrier || ''} ${_sslShipment.service || ''})`
-                + (_sslShipment.ss_shipment_id ? ` <button type="button" onclick="sslVoidLabel()" style="margin-left:10px;padding:4px 10px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Void Label (refund)</button>` : '');
-        } else {
-            already.style.display = 'none';
+                + ` <button type="button" onclick="ssReprintLabel()" style="margin-left:10px;padding:4px 10px;background:#16a34a;color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">🖨 View / Reprint</button>`
+                + (_sslShipment.ss_shipment_id ? ` <button type="button" onclick="sslVoidLabel()" style="margin-left:6px;padding:4px 10px;background:#fef2f2;color:#dc2626;border:1px solid #fca5a5;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;">Void Label (refund)</button>` : '')
+                + `<div style="margin-top:8px;font-size:11px;color:#64748b;">This shipment already has a label — no new charge. Void it first if you need to create a different one.</div>`;
+            form.style.display = 'none';   // prevent accidental re-charge
+            document.getElementById('ssLabelModal').style.display = 'flex';
+            return;
         }
+        already.style.display = 'none';
         form.style.display = 'block';
         const tl = document.getElementById('ssl_testLabel'); if (tl) tl.checked = false;
         document.getElementById('ssLabelModal').style.display = 'flex';
