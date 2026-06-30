@@ -532,6 +532,35 @@ if (action === 'delete') {
             });
         }
 
+        // ── TRACKING SUGGESTIONS (typeahead in the Deployments search box) ──
+        if (action === 'suggest_tracking') {
+            const q = (body.query || '').trim();
+            if (q.length < 2) return res.status(200).json({ success: true, suggestions: [] });
+            const { data } = await supabase
+                .from('deployments')
+                .select('tracking_id, deployment_id, status, merchants:merchant_id(dba_name), equipments:equipment_id(serial_number)')
+                .ilike('tracking_id', `%${q}%`)
+                .not('tracking_id', 'is', null).neq('tracking_id', '')
+                .order('created_at', { ascending: false })
+                .limit(20);
+            const seen = new Set();
+            const suggestions = [];
+            for (const d of (data || [])) {
+                const t = (d.tracking_id || '').trim();
+                if (!t || seen.has(t)) continue;
+                seen.add(t);
+                suggestions.push({
+                    tracking_id: t,
+                    deployment_id: d.deployment_id || null,
+                    status: d.status || null,
+                    merchant: d.merchants?.dba_name || null,
+                    serial: d.equipments?.serial_number || null
+                });
+                if (suggestions.length >= 8) break;
+            }
+            return res.status(200).json({ success: true, suggestions });
+        }
+
 if (action === 'create') {
     const {
         merchant_id,
