@@ -573,9 +573,9 @@
                         <div><label class="ship-lbl">City *</label><input type="text" id="ssw_city" class="slds-input ship-in" placeholder="City"></div>
                         <div><label class="ship-lbl">State *</label><input type="text" id="ssw_state" class="slds-input ship-in" placeholder="State"></div>
                         <div><label class="ship-lbl">Zip *</label><input type="text" id="ssw_zip" class="slds-input ship-in" placeholder="Zip"></div>
-                        <div><label class="ship-lbl">Phone</label><input type="text" id="ssw_phone" class="slds-input ship-in" placeholder="Phone"></div>
+                        <div><label class="ship-lbl">Phone *</label><input type="text" id="ssw_phone" class="slds-input ship-in" placeholder="Phone"></div>
                         <div style="grid-column:1/-1;">
-                            <label class="ship-lbl">Email</label>
+                            <label class="ship-lbl">Email *</label>
                             <input type="text" id="ssw_email" class="slds-input ship-in" placeholder="Email">
                             <label id="ssw_usePartnerEmailWrap" style="display:none; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:5px; cursor:pointer;">
                                 <input type="checkbox" id="ssw_usePartnerEmail" onchange="sswTogglePartnerEmail()">
@@ -687,8 +687,8 @@
                     <div><label class="ship-lbl">City *</label><input type="text" id="ssr_city" class="slds-input ship-in" placeholder="City"></div>
                     <div><label class="ship-lbl">State *</label><input type="text" id="ssr_state" class="slds-input ship-in" placeholder="State"></div>
                     <div><label class="ship-lbl">Zip *</label><input type="text" id="ssr_zip" class="slds-input ship-in" placeholder="Zip"></div>
-                    <div><label class="ship-lbl">Phone</label><input type="text" id="ssr_phone" class="slds-input ship-in" placeholder="Phone"></div>
-                    <div style="grid-column:1/-1;"><label class="ship-lbl">Email</label><input type="text" id="ssr_email" class="slds-input ship-in" placeholder="Email"></div>
+                    <div><label class="ship-lbl">Phone *</label><input type="text" id="ssr_phone" class="slds-input ship-in" placeholder="Phone"></div>
+                    <div style="grid-column:1/-1;"><label class="ship-lbl">Email *</label><input type="text" id="ssr_email" class="slds-input ship-in" placeholder="Email"></div>
                 </div>
                 <label style="display:flex; align-items:center; gap:6px; font-size:11px; color:#475569; margin-top:8px; cursor:pointer;">
                     <input type="checkbox" id="ssr_saveBack" checked>
@@ -3213,6 +3213,8 @@ async function executeBulk(validData) {
         need(r.city, 'City');
         need(r.state, 'State');
         need(r.zip, 'ZIP');
+        need(r.phone, 'Phone');
+        need(r.email, 'Email');
         const country = (r.country || 'US');
         const isUS = /^(us|usa|united states)$/i.test(String(country).trim()) || /^US$/i.test(country);
         if (r.zip && isUS && !/^\d{5}(-\d{4})?$/.test(String(r.zip).trim())) {
@@ -3235,7 +3237,7 @@ async function executeBulk(validData) {
 
         // Verify recipient address + email before creating the ShipStation order
         const recipientProblems = ssValidateRecipient({
-            name: v('ssw_name'), email: v('ssw_email'), address: v('ssw_addr1'),
+            name: v('ssw_name'), email: v('ssw_email'), phone: v('ssw_phone'), address: v('ssw_addr1'),
             city: v('ssw_city'), state: v('ssw_state'), zip: v('ssw_zip'), country: v('ssw_country')
         });
         if (recipientProblems.length) {
@@ -3414,7 +3416,7 @@ async function executeBulk(validData) {
 
         // Verify ship-from address + email before creating the return order
         const rProblems = ssValidateRecipient({
-            name: v('ssr_name'), email: v('ssr_email'), address: v('ssr_addr1'),
+            name: v('ssr_name'), email: v('ssr_email'), phone: v('ssr_phone'), address: v('ssr_addr1'),
             city: v('ssr_city'), state: v('ssr_state'), zip: v('ssr_zip'), country: v('ssr_country')
         });
         if (rProblems.length) {
@@ -3707,7 +3709,7 @@ async function executeBulk(validData) {
 
         // Verify recipient email + address — ShipStation won't make a label otherwise
         const problems = ssValidateRecipient({
-            name: _sslShipment.ship_to_name, email: _sslShipment.ship_to_email,
+            name: _sslShipment.ship_to_name, email: _sslShipment.ship_to_email, phone: _sslShipment.ship_to_phone,
             address: _sslShipment.address, city: _sslShipment.city,
             state: _sslShipment.state, zip: _sslShipment.zip, country: _sslShipment.country
         });
