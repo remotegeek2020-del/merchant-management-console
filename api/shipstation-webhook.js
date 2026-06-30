@@ -3,7 +3,8 @@ import { ssFetchResource } from './shipstation.js';
 
 // ShipStation webhook receiver. Register TWO webhooks pointing here:
 //   1. "On Orders Shipped"   → writes tracking number to the deployment
-//   2. "On New Track Event"  → on Delivered, sets received date + closes the ticket
+//   2. "On New Track Event"  → on Delivered: deployments get received date + Closed;
+//                              return labels get restocked to HQ + the RMA is completed
 // URL: https://<host>/api/shipstation-webhook?secret=<SHIPSTATION_WEBHOOK_SECRET>
 
 function isDelivered(obj) {
@@ -48,6 +49,112 @@ async function applyDelivery(supabase, { tracking, orderNumber, delDate }) {
     return closed;
 }
 
+// When a RETURN LABEL is delivered (unit received back at PayProTec HQ), mirror the
+// manual "Complete RMA → Warsaw Office" flow: restock the equipment, set received
+// date, and close the RMA (+ linked deployment when fully returned). Idempotent —
+// already-Closed returns are skipped.
+async function completeReturnOnDelivery(supabase, { tracking, orderNumber, delDate }) {
+    const retIds = new Set();
+    const collect = async (col, val) => {
+        if (!val) return;
+        const { data } = await supabase.from('shipstation_shipments')
+            .select('id, return_id, ship_type').eq(col, val);
+        for (const r of (data || [])) {
+            if (r.ship_type === 'return_label' && r.return_id) retIds.add(r.return_id);
+            await supabase.from('shipstation_shipments').update({ status: 'delivered' }).eq('id', r.id);
+        }
+    };
+    await collect('order_number', orderNumber);
+    await collect('tracking_number', tracking);
+    if (!retIds.size) return 0;
+
+    const condition = 'Working (Back to Stock)';
+    const destination = 'Warsaw Office';
+    const finalStatus = 'stocked', finalLocation = 'Warsaw Office';
+    let completed = 0;
+
+    for (const rid of retIds) {
+        try {
+            const { data: rma } = await supabase.from('returns')
+                .select('id, return_id, deployment_id, merchant_id, ticket_id, is_bulk, equipment_id, status')
+                .eq('id', rid).maybeSingle();
+            if (!rma) continue;
+            if (String(rma.status || '').toLowerCase() === 'closed') continue; // already completed
+
+            // Restock equipment back to HQ
+            if (rma.is_bulk) {
+                const { data: retItems } = await supabase.from('return_items').select('equipment_id').eq('return_id', rid);
+                for (const ri of (retItems || [])) {
+                    await supabase.from('equipments')
+                        .update({ status: finalStatus, current_location: finalLocation, merchant_id: null })
+                        .eq('id', ri.equipment_id);
+                }
+                await supabase.from('return_items').update({ condition }).eq('return_id', rid);
+                if ((retItems || []).length) {
+                    await supabase.from('equipment_logs').insert((retItems || []).map(ri => ({
+                        equipment_id: ri.equipment_id, merchant_id: rma.merchant_id,
+                        action: 'RMA Completed', from_location: 'In Transit / RMA', to_location: finalLocation,
+                        notes: 'Auto-completed on ShipStation delivery to HQ. Unit restocked.'
+                    })));
+                }
+            } else if (rma.equipment_id) {
+                await supabase.from('equipments')
+                    .update({ status: finalStatus, current_location: finalLocation, merchant_id: null })
+                    .eq('id', rma.equipment_id);
+                await supabase.from('equipment_logs').insert([{
+                    equipment_id: rma.equipment_id, merchant_id: rma.merchant_id,
+                    action: 'RMA Completed', from_location: 'In Transit / RMA', to_location: finalLocation,
+                    notes: 'Auto-completed on ShipStation delivery to HQ. Unit restocked.'
+                }]);
+            }
+
+            // Close the linked deployment — for bulk, only when ALL units are returned
+            if (rma.deployment_id) {
+                let shouldClose = true;
+                if (rma.is_bulk) {
+                    const { count: totalItems } = await supabase.from('deployment_items')
+                        .select('id', { count: 'exact', head: true }).eq('deployment_id', rma.deployment_id);
+                    const { data: closedRets } = await supabase.from('returns')
+                        .select('id').eq('deployment_id', rma.deployment_id).eq('status', 'Closed');
+                    let returnedCount = 0;
+                    for (const cr of (closedRets || [])) {
+                        const { count } = await supabase.from('return_items')
+                            .select('id', { count: 'exact', head: true }).eq('return_id', cr.id);
+                        returnedCount += count || 0;
+                    }
+                    const { count: currentItems } = await supabase.from('return_items')
+                        .select('id', { count: 'exact', head: true }).eq('return_id', rid);
+                    returnedCount += currentItems || 0;
+                    shouldClose = totalItems > 0 && returnedCount >= totalItems;
+                }
+                if (shouldClose) await supabase.from('deployments').update({ status: 'Closed' }).eq('id', rma.deployment_id);
+            }
+
+            // Close the RMA + stamp received date
+            await supabase.from('returns').update({
+                condition, destination, status: 'Closed',
+                equipment_received_date: delDate, updated_at: new Date().toISOString()
+            }).eq('id', rid);
+
+            // Auto-close linked support ticket
+            if (rma.ticket_id) {
+                await supabase.from('support_tickets')
+                    .update({ status: 'closed', updated_at: new Date().toISOString() }).eq('id', rma.ticket_id);
+            }
+
+            await supabase.from('activity_logs').insert({
+                email: 'shipstation-webhook',
+                action: `RMA auto-completed on delivery to HQ — ${rma.return_id || rid} → ${destination}`,
+                status: 'success', category: 'returns',
+                target_id: rma.return_id || rid, target_type: 'return', severity: 'info',
+                new_value: { status: 'Closed', condition, destination, equipment_status: finalStatus, equipment_location: finalLocation, equipment_received_date: delDate, source: 'shipstation_delivery' }
+            }).then(() => {}).catch(() => {});
+            completed++;
+        } catch (e) { console.warn('[completeReturnOnDelivery]', e.message); }
+    }
+    return completed;
+}
+
 export default async function handler(req, res) {
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
@@ -74,7 +181,7 @@ export default async function handler(req, res) {
         else if (data && Array.isArray(data.shipments)) items = data.shipments;
         else if (data) items = [data];
 
-        let trackingWrites = 0, deliveries = 0;
+        let trackingWrites = 0, deliveries = 0, returnsCompleted = 0;
         for (const it of items) {
             const tracking = it.trackingNumber || it.tracking_number;
             const orderNumber = it.orderNumber;
@@ -99,15 +206,16 @@ export default async function handler(req, res) {
                 }
             }
 
-            // (2) Delivered → set received date + close (always-on, matches by tracking too)
+            // (2) Delivered → deployments: received date + close;
+            //     return labels: restock to HQ + complete the RMA (always-on, matches by tracking too)
             if (isDelivered(it)) {
-                deliveries += await applyDelivery(supabase, {
-                    tracking, orderNumber, delDate: deliveryDateOf(it)
-                });
+                const delDate = deliveryDateOf(it);
+                deliveries += await applyDelivery(supabase, { tracking, orderNumber, delDate });
+                returnsCompleted += await completeReturnOnDelivery(supabase, { tracking, orderNumber, delDate });
             }
         }
 
-        return res.status(200).json({ success: true, event: resourceType, processed: items.length, trackingWrites, deliveries });
+        return res.status(200).json({ success: true, event: resourceType, processed: items.length, trackingWrites, deliveries, returnsCompleted });
     } catch (err) {
         console.error('[shipstation-webhook]', err.message);
         return res.status(200).json({ success: false, message: 'handled with error' });
