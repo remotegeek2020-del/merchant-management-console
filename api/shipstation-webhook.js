@@ -17,6 +17,41 @@ function deliveryDateOf(obj) {
     const d = obj.deliveryDate || obj.actualDeliveryDate || obj.occurredAt || obj.eventDate || null;
     return d ? String(d).slice(0, 10) : new Date().toISOString().slice(0, 10);
 }
+// In-transit (moving, not yet delivered): ShipStation status codes IT/AC/MV or
+// descriptions like "in transit", "accepted", "out for delivery", "picked up".
+function isInTransit(obj) {
+    if (!obj) return false;
+    if (isDelivered(obj)) return false;
+    const code = String(obj.statusCode || obj.status_code || '').toUpperCase();
+    if (['IT', 'AC', 'MV'].includes(code)) return true;
+    const s = String(obj.statusCode || obj.status || obj.deliveryStatus || obj.trackingStatus || obj.status_description || '').toLowerCase();
+    return /in[\s_-]?transit|out for delivery|accepted|picked up|in_?transit/.test(s);
+}
+
+// Move matching deployments to 'In Transit' (only from 'Open' — never downgrade
+// a Closed ticket or override a manual In Transit). Matches by tracking + order #.
+async function applyInTransit(supabase, { tracking, orderNumber }) {
+    const ids = new Set();
+    if (tracking) {
+        const { data } = await supabase.from('deployments').select('id').eq('tracking_id', tracking).eq('status', 'Open');
+        for (const d of (data || [])) ids.add(d.id);
+    }
+    if (orderNumber) {
+        await supabase.from('shipstation_shipments').update({ status: 'in_transit' }).eq('order_number', orderNumber).neq('status', 'delivered');
+        const { data: rows } = await supabase.from('shipstation_shipments').select('deployment_id').eq('order_number', orderNumber);
+        const depIds = (rows || []).map(r => r.deployment_id).filter(Boolean);
+        if (depIds.length) {
+            const { data: deps } = await supabase.from('deployments').select('id').in('id', depIds).eq('status', 'Open');
+            for (const d of (deps || [])) ids.add(d.id);
+        }
+    }
+    let moved = 0;
+    for (const id of ids) {
+        await supabase.from('deployments').update({ status: 'In Transit' }).eq('id', id).eq('status', 'Open');
+        moved++;
+    }
+    return moved;
+}
 
 // Mark a deployment delivered: merchant-direct → received date + Closed;
 // partner-first → partner_received_date only (merchant leg handled manually).
@@ -181,7 +216,7 @@ export default async function handler(req, res) {
         else if (data && Array.isArray(data.shipments)) items = data.shipments;
         else if (data) items = [data];
 
-        let trackingWrites = 0, deliveries = 0, returnsCompleted = 0;
+        let trackingWrites = 0, deliveries = 0, returnsCompleted = 0, inTransit = 0;
         for (const it of items) {
             const tracking = it.trackingNumber || it.tracking_number;
             const orderNumber = it.orderNumber;
@@ -202,6 +237,11 @@ export default async function handler(req, res) {
                     if (row.deployment_id && tracking) {
                         await supabase.from('deployments').update({ tracking_id: tracking }).eq('id', row.deployment_id);
                     }
+                    // A shipped label means the unit is now in transit — move Open → In Transit.
+                    if (row.deployment_id) {
+                        await supabase.from('deployments').update({ status: 'In Transit' })
+                            .eq('id', row.deployment_id).eq('status', 'Open');
+                    }
                     trackingWrites++;
                 }
             }
@@ -212,10 +252,12 @@ export default async function handler(req, res) {
                 const delDate = deliveryDateOf(it);
                 deliveries += await applyDelivery(supabase, { tracking, orderNumber, delDate });
                 returnsCompleted += await completeReturnOnDelivery(supabase, { tracking, orderNumber, delDate });
+            } else if (isInTransit(it)) {
+                inTransit += await applyInTransit(supabase, { tracking, orderNumber });
             }
         }
 
-        return res.status(200).json({ success: true, event: resourceType, processed: items.length, trackingWrites, deliveries, returnsCompleted });
+        return res.status(200).json({ success: true, event: resourceType, processed: items.length, trackingWrites, deliveries, returnsCompleted, inTransit });
     } catch (err) {
         console.error('[shipstation-webhook]', err.message);
         return res.status(200).json({ success: false, message: 'handled with error' });

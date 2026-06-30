@@ -273,7 +273,7 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false })
                 .limit(limit);
 
-            let checked = 0, closed = 0, partnerDated = 0, skipped = 0, notDelivered = 0;
+            let checked = 0, closed = 0, partnerDated = 0, skipped = 0, notDelivered = 0, movedInTransit = 0;
             const skippedList = [];
             let sample = null;   // capture the first V2 response for diagnostics
             for (const d of (deps || [])) {
@@ -301,7 +301,17 @@ export default async function handler(req, res) {
                 const sc = String(t.data.status_code || '').toUpperCase();
                 const sd = String(t.data.status_description || '').toLowerCase();
                 const delivered = sc === 'DE' || sd.includes('delivered');
-                if (!delivered) { notDelivered++; continue; }
+                if (!delivered) {
+                    // Not delivered — if it's moving, move an Open ticket to In Transit.
+                    const inTransit = ['IT', 'AC', 'MV'].includes(sc) || /in[\s_-]?transit|out for delivery|accepted|picked up/.test(sd);
+                    if (inTransit && (d.status || '') === 'Open') {
+                        await supabase.from('deployments').update({ status: 'In Transit' }).eq('id', d.id).eq('status', 'Open');
+                        movedInTransit++;
+                    } else {
+                        notDelivered++;
+                    }
+                    continue;
+                }
 
                 const delDate = (t.data.actual_delivery_date || t.data.estimated_delivery_date || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
                 if ((d.ship_to_type || 'merchant') === 'partner') {
@@ -312,7 +322,7 @@ export default async function handler(req, res) {
                     closed++;
                 }
             }
-            return res.status(200).json({ success: true, scanned: (deps || []).length, checked, closed, partnerDated, notDelivered, skipped, skippedList, sample });
+            return res.status(200).json({ success: true, scanned: (deps || []).length, checked, closed, partnerDated, movedInTransit, notDelivered, skipped, skippedList, sample });
         }
 
         // ── LINK BY TRACKING (old tickets): look a deployment's tracking # up in
