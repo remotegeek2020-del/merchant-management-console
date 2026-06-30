@@ -830,8 +830,10 @@ async function buildActivityData() {
     for (const r of rows) {
         const em = (r.email || '').toLowerCase();
         if (!em || excluded.has(em)) continue;
-        byUser[em] = (byUser[em] || 0) + 1;
         const cat = r.category || 'other';
+        if (!byUser[em]) byUser[em] = { total: 0, cats: {} };
+        byUser[em].total++;
+        byUser[em].cats[cat] = (byUser[em].cats[cat] || 0) + 1;
         byCat[cat] = (byCat[cat] || 0) + 1;
         total++;
     }
@@ -842,8 +844,10 @@ async function buildActivityData() {
         const { data: us } = await supabase.from('app_users').select('email, first_name, last_name').in('email', emails);
         (us || []).forEach(u => { nameMap[(u.email || '').toLowerCase()] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email; });
     }
-    const topUsers = emails.map(em => ({ email: em, name: nameMap[em] || em, count: byUser[em] }))
-        .sort((a, b) => b.count - a.count).slice(0, 15);
+    const topUsers = emails.map(em => ({
+        email: em, name: nameMap[em] || em, count: byUser[em].total,
+        byCategory: Object.entries(byUser[em].cats).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count)
+    })).sort((a, b) => b.count - a.count).slice(0, 15);
     const topCats = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count).slice(0, 10);
 
     return { date: dateStr, windowLabel, schedule: sc, totalEvents: total, activeUsers: emails.length, topUsers, topCats, excludedCount: excluded.size };
@@ -853,15 +857,21 @@ function buildActivityEmail(data) {
     const { date, windowLabel, totalEvents, activeUsers, topUsers, topCats, excludedCount } = data;
     const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
     const maxCount = (topUsers[0]?.count) || 1;
+    const catChips = (cats) => (cats || []).map(c =>
+        `<span style="display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:6px;padding:1px 7px;margin:2px 3px 0 0;font-size:10px;font-weight:600;text-transform:capitalize;">${c.category} ${num(c.count)}</span>`).join('');
     const userRows = (topUsers || []).map((u, i) => `
         <tr style="border-bottom:1px solid #f1f5f9;${i < 3 ? 'background:#faf5ff;' : ''}">
-            <td style="padding:9px 12px;font-weight:700;color:#7c3aed;font-size:13px;width:36px;text-align:center;">${medal(i)}</td>
-            <td style="padding:9px 12px;font-size:13px;color:#1e293b;font-weight:${i < 3 ? '700' : '600'};">${u.name}<br><span style="font-size:10px;color:#94a3b8;font-weight:400;">${u.email}</span></td>
-            <td style="padding:9px 12px;width:45%;">
+            <td style="padding:10px 12px;font-weight:700;color:#7c3aed;font-size:13px;width:36px;text-align:center;vertical-align:top;">${medal(i)}</td>
+            <td style="padding:10px 12px;font-size:13px;color:#1e293b;font-weight:${i < 3 ? '700' : '600'};vertical-align:top;">
+                ${u.name}<br><span style="font-size:10px;color:#94a3b8;font-weight:400;">${u.email}</span>
+                <div style="margin-top:5px;line-height:1.7;">${catChips(u.byCategory)}</div>
+            </td>
+            <td style="padding:10px 12px;width:38%;vertical-align:top;">
                 <div style="display:flex;align-items:center;gap:8px;">
                     <div style="flex:1;height:8px;background:#ede9fe;border-radius:4px;overflow:hidden;"><div style="height:100%;width:${Math.round((u.count / maxCount) * 100)}%;background:#7c3aed;"></div></div>
                     <span style="font-weight:800;color:#5b21b6;font-size:13px;min-width:36px;text-align:right;">${num(u.count)}</span>
                 </div>
+                <div style="font-size:9px;color:#94a3b8;text-align:right;margin-top:2px;text-transform:uppercase;letter-spacing:.5px;">total</div>
             </td>
         </tr>`).join('');
     const catRows = (topCats || []).map(c => `

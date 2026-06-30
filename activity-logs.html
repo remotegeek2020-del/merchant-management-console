@@ -256,6 +256,7 @@ async function loadKpi() {
                 <div style="flex:1;min-width:0;">
                     <div style="font-weight:${i < 3 ? '700' : '600'};color:#1e293b;font-size:13px;">${escHtml(u.name)}</div>
                     <div style="font-size:10px;color:#94a3b8;">${escHtml(u.email)}</div>
+                    <div style="margin-top:4px;line-height:1.8;">${(u.byCategory||[]).map(c=>`<span style="display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:6px;padding:1px 7px;margin:0 3px 2px 0;font-size:10px;font-weight:600;text-transform:capitalize;">${escHtml(c.category)} ${c.count.toLocaleString()}</span>`).join('')}</div>
                 </div>
                 <div style="flex:1;max-width:45%;display:flex;align-items:center;gap:8px;">
                     <div style="flex:1;height:8px;background:#ede9fe;border-radius:4px;overflow:hidden;"><div style="height:100%;width:${Math.round((u.count/max)*100)}%;background:#7c3aed;"></div></div>

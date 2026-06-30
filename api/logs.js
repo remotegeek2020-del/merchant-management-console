@@ -50,8 +50,10 @@ export default async function handler(req, res) {
         for (const r of rows) {
             const em = (r.email || '').toLowerCase();
             if (!em || exSet.has(em)) continue;
-            byUser[em] = (byUser[em] || 0) + 1;
             const c = r.category || 'other';
+            if (!byUser[em]) byUser[em] = { total: 0, cats: {} };
+            byUser[em].total++;
+            byUser[em].cats[c] = (byUser[em].cats[c] || 0) + 1;
             byCat[c] = (byCat[c] || 0) + 1;
             total++;
         }
@@ -61,7 +63,10 @@ export default async function handler(req, res) {
             const { data: us } = await supabase.from('app_users').select('email, first_name, last_name').in('email', emails);
             (us || []).forEach(u => { nameMap[(u.email || '').toLowerCase()] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email; });
         }
-        const topUsers = emails.map(em => ({ email: em, name: nameMap[em] || em, count: byUser[em] })).sort((a, b) => b.count - a.count);
+        const topUsers = emails.map(em => ({
+            email: em, name: nameMap[em] || em, count: byUser[em].total,
+            byCategory: Object.entries(byUser[em].cats).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count)
+        })).sort((a, b) => b.count - a.count);
         const byCategory = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count);
         return res.status(200).json({ success: true, kpi: true, days, totalEvents: total, activeUsers: emails.length, topUsers, byCategory, excluded: [...exSet] });
     }
