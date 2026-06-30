@@ -3521,7 +3521,19 @@ async function executeBulk(validData) {
                 body: JSON.stringify({ action: 'refresh_shipment', deployment_id: deploymentId })
             });
             const result = await res.json();
-            if (!result.success || !result.shipment) return;
+            if (!result.success || !result.shipment) {
+                // Old ticket with a tracking # but no ShipStation link yet → offer lookup
+                const dep = currentDeployments.find(x => x.id === deploymentId);
+                if (dep && (dep.tracking_id || '').trim()) {
+                    body.innerHTML = `
+                      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+                        <div style="font-size:12px;color:#475569;">Tracking <b style="font-family:monospace;">${dep.tracking_id}</b> isn't linked to ShipStation yet.</div>
+                        <button type="button" onclick="ssLinkByTracking('${deploymentId}', this)" style="padding:7px 14px;background:#0369a1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 Look up &amp; Link ShipStation</button>
+                      </div>`;
+                    entry.style.display = 'block';
+                }
+                return;
+            }
             _sslShipment = result.shipment;
             const s = _sslShipment;
             const esc = v => (v == null ? '' : String(v));
@@ -3563,6 +3575,29 @@ async function executeBulk(validData) {
               </div>`;
             entry.style.display = 'block';
         } catch (e) { console.error('[ssLabelCheck]', e); }
+    }
+
+    // Old ticket: look the tracking number up in ShipStation and link it, then
+    // repopulate the info panel. Falls back to carrier tracking when not found.
+    async function ssLinkByTracking(deploymentId, btn) {
+        const orig = btn.textContent; btn.textContent = 'Looking up…'; btn.disabled = true;
+        try {
+            const res = await fetch('/api/shipstation', {
+                method: 'POST', headers: authHeaders(),
+                body: JSON.stringify({ action: 'link_by_tracking', deployment_id: deploymentId })
+            });
+            const r = await res.json();
+            if (!r.success) {
+                btn.textContent = orig; btn.disabled = false;
+                return Swal.fire('Not linked', r.message || 'Could not link this tracking number.', 'info');
+            }
+            await fetchDeployments(currentPage);   // refresh dashboard badge/tracking
+            await ssLabelCheck(deploymentId);      // repopulate the panel with the linked info
+            Swal.fire({ icon: 'success',
+                title: r.source === 'shipstation' ? 'Linked to ShipStation' : 'Carrier info pulled',
+                text: r.source === 'carrier' ? 'No ShipStation order found for this tracking — pulled carrier + delivery status instead.' : '',
+                timer: r.source === 'carrier' ? 2600 : 1500, showConfirmButton: false });
+        } catch (e) { btn.textContent = orig; btn.disabled = false; Swal.fire('Error', e.message, 'error'); }
     }
 
     // Fetch the ShipStation order for a deployment id and open the label modal.

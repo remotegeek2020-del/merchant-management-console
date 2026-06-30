@@ -315,6 +315,120 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, scanned: (deps || []).length, checked, closed, partnerDated, notDelivered, skipped, skippedList, sample });
         }
 
+        // ── LINK BY TRACKING (old tickets): look a deployment's tracking # up in
+        //     ShipStation and create the shipstation_shipments link so the edit
+        //     ticket shows all the info. Falls back to carrier tracking if the
+        //     number isn't a ShipStation label. ─────────────────────────────────
+        if (action === 'link_by_tracking') {
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const deploymentId = body.deployment_id;
+            if (!deploymentId) return res.status(400).json({ success: false, message: 'deployment_id required' });
+
+            const { data: dep } = await supabase.from('deployments')
+                .select('id, merchant_id, tracking_id, ship_to_type, ship_to_partner_id, status')
+                .eq('id', deploymentId).maybeSingle();
+            if (!dep) return res.status(404).json({ success: false, message: 'Deployment not found' });
+            const tid = (dep.tracking_id || '').trim();
+            if (!tid) return res.status(200).json({ success: false, message: 'This ticket has no tracking number to look up.' });
+
+            // Already linked?
+            const { data: existing } = await supabase.from('shipstation_shipments')
+                .select('id').eq('deployment_id', deploymentId).eq('ship_type', 'outbound').limit(1).maybeSingle();
+            if (existing) return res.status(200).json({ success: true, already: true, message: 'Already linked to ShipStation.' });
+
+            const norm = s => String(s || '').toUpperCase().replace(/\s/g, '');
+
+            // 1) ShipStation V1 lookup by tracking number
+            const auth = await getAuthHeader();
+            let shipment = null;
+            if (auth) {
+                const r = await ssGet(`/shipments?trackingNumber=${encodeURIComponent(tid)}&includeShipmentItems=true`);
+                if (r.ok && r.data) {
+                    const list = Array.isArray(r.data.shipments) ? r.data.shipments : (Array.isArray(r.data) ? r.data : []);
+                    // Filter to an exact tracking match (in case the API ignores the filter) — avoid mislinking
+                    const matches = list.filter(s => norm(s.trackingNumber) === norm(tid));
+                    shipment = matches.find(s => !s.voided) || matches[0] || null;
+                }
+            }
+
+            if (shipment) {
+                const st = shipment.shipTo || {};
+                const insert = {
+                    order_number:   shipment.orderNumber || null,
+                    ss_order_id:    shipment.orderId != null ? String(shipment.orderId) : null,
+                    ss_shipment_id: shipment.shipmentId != null ? String(shipment.shipmentId) : null,
+                    ship_type:      'outbound',
+                    merchant_id:    dep.merchant_id,
+                    deployment_id:  deploymentId,
+                    partner_id:     dep.ship_to_partner_id || null,
+                    tracking_number: shipment.trackingNumber || tid,
+                    carrier:        shipment.carrierCode || null,
+                    service:        shipment.serviceCode || null,
+                    ship_to_name:   st.name || null,
+                    ship_to_company: st.company || null,
+                    ship_to_phone:  st.phone || null,
+                    address:        st.street1 || null,
+                    address_line2:  st.street2 || null,
+                    city:           st.city || null,
+                    state:          st.state || null,
+                    zip:            st.postalCode || null,
+                    country:        st.country || 'US',
+                    shipping_paid:  shipment.shipmentCost != null ? shipment.shipmentCost : null,
+                    status:         shipment.voided ? 'voided' : 'shipped',
+                    created_by:     session.userid
+                };
+                const { data: row, error } = await supabase.from('shipstation_shipments').insert(insert).select('*').single();
+                if (error) throw error;
+                if (shipment.trackingNumber && shipment.trackingNumber !== dep.tracking_id) {
+                    await supabase.from('deployments').update({ tracking_id: shipment.trackingNumber }).eq('id', deploymentId);
+                }
+                return res.status(200).json({ success: true, source: 'shipstation', shipment: row });
+            }
+
+            // 2) Fallback: carrier tracking (V2) for carrier + delivery status
+            const carrier = detectCarrierFromTracking(tid);
+            let info = null;
+            if (carrier) {
+                const t = await ssV2Tracking(carrier, tid);
+                if (t?.status === 401 || t?.status === 403) {
+                    return res.status(200).json({ success: false, plan_gated: true,
+                        message: 'Not found in ShipStation, and the carrier-tracking lookup is blocked on your current plan.' });
+                }
+                if (t?.ok && t.data) info = t.data;
+            }
+
+            if (info) {
+                const sc = String(info.status_code || '').toUpperCase();
+                const sd = String(info.status_description || '').toLowerCase();
+                const delivered = sc === 'DE' || sd.includes('delivered');
+                const delDate = (info.actual_delivery_date || info.estimated_delivery_date || '').slice(0, 10) || null;
+                const insert = {
+                    order_number: null, ss_order_id: null, ss_shipment_id: null,
+                    ship_type: 'outbound', merchant_id: dep.merchant_id, deployment_id: deploymentId,
+                    partner_id: dep.ship_to_partner_id || null,
+                    tracking_number: tid, carrier, service: null,
+                    status: delivered ? 'delivered' : (info.status_description || 'in_transit'),
+                    store_name: 'Carrier lookup (not a ShipStation order)',
+                    created_by: session.userid
+                };
+                const { data: row, error } = await supabase.from('shipstation_shipments').insert(insert).select('*').single();
+                if (error) throw error;
+                if (delivered && delDate) {
+                    if ((dep.ship_to_type || 'merchant') === 'partner') {
+                        await supabase.from('deployments').update({ partner_received_date: delDate }).eq('id', deploymentId);
+                    } else {
+                        await supabase.from('deployments').update({ merchant_received_date: delDate, status: 'Closed' }).eq('id', deploymentId);
+                    }
+                }
+                return res.status(200).json({ success: true, source: 'carrier', shipment: row, delivered });
+            }
+
+            return res.status(200).json({ success: false,
+                message: !auth ? 'ShipStation keys not configured.'
+                    : (carrier ? 'Tracking number not found in ShipStation or carrier tracking.'
+                               : 'Tracking number not found in ShipStation, and the carrier could not be detected for a fallback lookup.') });
+        }
+
         // ── SHIP-FROM WAREHOUSES ────────────────────────────────────────────
         if (action === 'get_warehouses') {
             const r = await ssGet('/warehouses');
