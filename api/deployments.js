@@ -844,6 +844,140 @@ if (action === 'create') {
     return res.status(200).json({ success: true, data: newDep });
 }
 
+// ── CREATE CONSOLIDATED: one physical box / one ShipStation label covering
+//     multiple branch merchants. Creates one deployment ticket per merchant,
+//     ONE ShipStation order with ALL line items, and a shipstation_shipments
+//     row per deployment sharing that order (so one charge, shared tracking). ──
+if (action === 'create_consolidated') {
+    const p = payload || {};
+    const shipType = p.ship_to_type === 'partner' ? 'partner' : 'merchant';
+    const shipPartnerId = shipType === 'partner' ? (p.ship_to_partner_id || null) : null;
+    const ss = p.shipstation || {};
+    const merchants = Array.isArray(p.merchants) ? p.merchants.filter(m => m && m.merchant_id) : [];
+    if (merchants.length < 2) return res.status(400).json({ success: false, message: 'Consolidated shipments need at least two merchants.' });
+
+    // Pre-verify ALL equipment is stocked before creating anything (avoid partial state)
+    const allEquipIds = [];
+    for (const m of merchants) {
+        if (m.is_bulk && Array.isArray(m.items)) m.items.forEach(i => allEquipIds.push(i.equipment_id));
+        else if (m.equipment_id) allEquipIds.push(m.equipment_id);
+    }
+    if (!allEquipIds.length) return res.status(400).json({ success: false, message: 'No hardware selected.' });
+    const { data: eqRows } = await supabase.from('equipments').select('id, status, serial_number, terminal_type').in('id', allEquipIds);
+    const eqMap = Object.fromEntries((eqRows || []).map(e => [e.id, e]));
+    for (const id of allEquipIds) {
+        const e = eqMap[id];
+        if (!e) return res.status(400).json({ success: false, message: `Equipment ${id} not found.` });
+        if (e.status !== 'stocked') return res.status(400).json({ success: false, message: `Serial ${e.serial_number} is not available (${e.status}).` });
+    }
+
+    // Order number (one for the whole box)
+    let orderNumber = (ss.order_number || '').trim();
+    if (!orderNumber) {
+        const { data: gen } = await supabase.rpc('next_ss_order_number');
+        orderNumber = gen || `SS-${Date.now()}`;
+    }
+
+    const createdDeployments = [];
+    const ssRowIds = [];
+    const allLineItems = [];
+
+    for (const m of merchants) {
+        const mid = m.merchant_id;
+        const { data: md } = await supabase.from('merchants').select('dba_name').eq('id', mid).single();
+        const dbaName = md?.dba_name || 'Client Site';
+        let dep;
+        if (m.is_bulk && Array.isArray(m.items) && m.items.length) {
+            const { data: d, error } = await supabase.from('deployments').insert({
+                merchant_id: mid, equipment_id: null, is_bulk: true,
+                target_deployment_date: p.target_date, notes: p.notes, purchase_type: p.purchase_type,
+                status: 'Open', ship_to_type: shipType, ship_to_partner_id: shipPartnerId, created_by: session.userid
+            }).select().single();
+            if (error) throw error;
+            dep = d;
+            await supabase.from('deployment_items').insert(m.items.map(i => ({ deployment_id: dep.id, equipment_id: i.equipment_id, tid: i.tid || null })));
+            for (const i of m.items) {
+                await supabase.from('equipments').update({ status: 'deployed', current_location: dbaName, merchant_id: mid }).eq('id', i.equipment_id).eq('status', 'stocked');
+                allLineItems.push({ sku: eqMap[i.equipment_id]?.serial_number || undefined, name: eqMap[i.equipment_id]?.terminal_type || 'Equipment', quantity: 1 });
+            }
+            await supabase.from('equipment_logs').insert(m.items.map(i => ({ equipment_id: i.equipment_id, merchant_id: mid, deployment_id: dep.id, action: 'Deployed', from_location: 'Warsaw Office', to_location: dbaName, notes: `Bulk deployment (consolidated box). TID: ${i.tid || 'N/A'}` })));
+        } else {
+            const { data: d, error } = await supabase.from('deployments').insert({
+                merchant_id: mid, equipment_id: m.equipment_id, tid: m.tid || null,
+                target_deployment_date: p.target_date, notes: p.notes, purchase_type: p.purchase_type,
+                status: 'Open', ship_to_type: shipType, ship_to_partner_id: shipPartnerId, created_by: session.userid
+            }).select().single();
+            if (error) throw error;
+            dep = d;
+            const { data: upd } = await supabase.from('equipments').update({ status: 'deployed', current_location: dbaName, merchant_id: mid }).eq('id', m.equipment_id).eq('status', 'stocked').select('id');
+            if (!upd || !upd.length) { await supabase.from('deployments').delete().eq('id', dep.id); throw new Error(`Serial ${eqMap[m.equipment_id]?.serial_number || ''} was just deployed by someone else.`); }
+            await supabase.from('equipment_logs').insert([{ equipment_id: m.equipment_id, merchant_id: mid, deployment_id: dep.id, action: 'Deployed', from_location: 'Warsaw Office', to_location: dbaName, notes: 'Deployment Created (consolidated box).' }]);
+            allLineItems.push({ sku: eqMap[m.equipment_id]?.serial_number || undefined, name: eqMap[m.equipment_id]?.terminal_type || 'Equipment', quantity: 1 });
+        }
+
+        supabase.from('activity_logs').insert({
+            email: actorEmail,
+            action: `Deployment Created (consolidated) — ${dbaName}`,
+            status: 'success', category: 'deployments', target_id: dep.id, target_type: 'deployment', severity: 'info',
+            new_value: { deployment_id: dep.id, merchant_id: mid, merchant_name: dbaName, consolidated: true, order_number: orderNumber, ship_to_type: shipType }
+        }).then(() => {}).catch(() => {});
+
+        // One shipstation_shipments row per deployment, all sharing this order
+        const { data: row } = await supabase.from('shipstation_shipments').insert({
+            order_number: orderNumber, ship_type: 'outbound',
+            merchant_id: mid, deployment_id: dep.id, partner_id: shipPartnerId,
+            ss_store_id: ss.ss_store_id || null, store_name: ss.store_name || null,
+            order_date: ss.order_date || null, paid_date: ss.paid_date || null,
+            notify_merchant: !!ss.notify_merchant,
+            ship_to_name: ss.ship_to_name || null, ship_to_company: ss.ship_to_company || null,
+            ship_to_phone: ss.ship_to_phone || null, ship_to_email: ss.ship_to_email || null,
+            address: ss.address || null, address_line2: ss.address_line2 || null,
+            city: ss.city || null, state: ss.state || null, zip: ss.zip || null, country: ss.country || 'US',
+            shipping_paid: ss.shipping_paid != null && ss.shipping_paid !== '' ? ss.shipping_paid : null,
+            tax_paid: ss.tax_paid != null && ss.tax_paid !== '' ? ss.tax_paid : null,
+            total_paid: ss.total_paid != null && ss.total_paid !== '' ? ss.total_paid : null,
+            status: 'created', created_by: session.userid
+        }).select('id').single();
+        if (row) ssRowIds.push(row.id);
+        createdDeployments.push(dep);
+    }
+
+    // Save-back to the primary merchant / partner (whitelisted)
+    try {
+        const MERCHANT_SAVE_FIELDS = ['dba_name','email','merchant_primary_contact','merchant_phone','merchant_address','merchant_city','merchant_state','merchant_zip','merchant_country'];
+        const PARTNER_SAVE_FIELDS  = ['full_name','email','phone_number','address','city','state','zip','country'];
+        if (p.merchant_updates && typeof p.merchant_updates === 'object') {
+            const safe = Object.fromEntries(Object.entries(p.merchant_updates).filter(([k, v]) => MERCHANT_SAVE_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
+            if (Object.keys(safe).length) await supabase.from('merchants').update(safe).eq('id', merchants[0].merchant_id);
+        }
+        if (p.partner_updates && shipPartnerId && typeof p.partner_updates === 'object') {
+            const safe = Object.fromEntries(Object.entries(p.partner_updates).filter(([k, v]) => PARTNER_SAVE_FIELDS.includes(k) && v != null && String(v).trim() !== ''));
+            if (Object.keys(safe).length) {
+                await supabase.from('persons').update(safe).eq('id', shipPartnerId);
+                const { data: pp } = await supabase.from('persons').select('hl_contact_id').eq('id', shipPartnerId).maybeSingle();
+                if (pp?.hl_contact_id) await ghlUpdateContactAddress(pp.hl_contact_id, safe);
+            }
+        }
+    } catch (e) { console.warn('[ConsolidatedSaveback]', e.message); }
+
+    // ONE ShipStation order with ALL line items (best-effort)
+    try {
+        const result = await ssCreateOrder({
+            orderNumber, orderDate: ss.order_date, paymentDate: ss.paid_date, storeId: ss.ss_store_id,
+            email: ss.ship_to_email,
+            shipTo: { name: ss.ship_to_name, company: ss.ship_to_company, street1: ss.address, street2: ss.address_line2, city: ss.city, state: ss.state, postalCode: ss.zip, country: ss.country, phone: ss.ship_to_phone },
+            items: allLineItems, amountPaid: ss.total_paid, taxAmount: ss.tax_paid, shippingAmount: ss.shipping_paid
+        });
+        if (result?.success && ssRowIds.length) {
+            await supabase.from('shipstation_shipments').update({ ss_order_id: result.orderId ? String(result.orderId) : null, status: 'submitted' }).in('id', ssRowIds);
+        } else if (result && result.configured !== false && ssRowIds.length) {
+            await supabase.from('shipstation_shipments').update({ status: 'ss_error' }).in('id', ssRowIds);
+        }
+    } catch (e) { console.warn('[ConsolidatedOrder]', e.message); }
+
+    return res.status(200).json({ success: true, data: createdDeployments, order_number: orderNumber });
+}
+
 if (action === 'return_to_office') {
     const {
         equipment_id,

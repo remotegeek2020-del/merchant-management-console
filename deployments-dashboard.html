@@ -662,6 +662,14 @@
                 </div>
             </div>
 
+            <!-- Consolidated: additional branch merchants in the SAME box -->
+            <div style="margin-top:16px; border-top:1px dashed #cbd5e1; padding-top:12px;">
+                <div style="font-size:10px;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:.4px;margin-bottom:3px;">📦 Same Box — Additional Branches (optional)</div>
+                <div style="font-size:11px;color:#64748b;margin-bottom:8px;">Other branch MIDs shipping in this <b>same box</b>. Creates a ticket for each, but <b>one ShipStation label / one charge / one tracking #</b> — all tickets sync together. The box ships to the destination set above.</div>
+                <div id="sswBranchList"></div>
+                <button type="button" onclick="sswAddBranch()" style="padding:6px 14px;background:#eef2ff;color:#0369a1;border:1px solid #bfdbfe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;">+ Add branch</button>
+            </div>
+
             <div style="margin-top:16px;"><label class="ship-lbl">Internal Notes</label><textarea id="ssw_notes" class="slds-textarea" placeholder="Internal notes..." style="height:50px;"></textarea></div>
             <button type="submit" id="sswSubmitBtn" class="slds-button slds-button_brand slds-size_1-of-1" style="background:var(--pp-blue); margin-top:12px;">CREATE SHIPSTATION DEPLOYMENT</button>
             </form>
@@ -2890,6 +2898,7 @@ async function executeBulk(validData) {
     let _ssMerchant = null;
     let _ssPartner = null;
     let _ssMerchantPartner = null; // partner auto-resolved from the merchant (for "use partner email")
+    let _ssBranches = [];          // additional branch merchants sharing one consolidated box
     let _ssLookupTimer = null;
     let _ssVendorsLoaded = false;
 
@@ -2953,6 +2962,7 @@ async function executeBulk(validData) {
         const pt = document.getElementById('ssw_purchaseType'); if (pt) pt.value = 'Free Placement';
         const tie = document.getElementById('ssw_merchantTie'); if (tie) tie.style.display = 'none';
         const bl = document.getElementById('ssw_bulkList'); if (bl) bl.innerHTML = '';
+        _ssBranches = []; sswRenderBranches();
         const auto = document.getElementById('ssw_autoOrder'); if (auto) auto.checked = true;
         const notify = document.getElementById('ssw_notify'); if (notify) notify.checked = false;
         const sb = document.getElementById('ssw_saveBack'); if (sb) sb.checked = true;
@@ -3211,6 +3221,86 @@ async function executeBulk(validData) {
         document.getElementById('ssw_eSuggest').style.display = 'none';
     }
 
+    // ── Consolidated branches (same box) ──
+    function sswRenderBranches() {
+        const wrap = document.getElementById('sswBranchList');
+        if (!wrap) return;
+        const esc = s => String(s == null ? '' : s).replace(/"/g, '&quot;');
+        wrap.innerHTML = _ssBranches.map((b, i) => `
+            <div style="border:1px solid #e2e8f0;border-radius:8px;padding:10px;margin-bottom:8px;background:#fafbff;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+                    <span style="font-size:11px;font-weight:800;color:#0369a1;">BRANCH ${i + 1}${b.merchant_id ? ' ✓' : ''}</span>
+                    <button type="button" onclick="sswRemoveBranch(${i})" style="padding:2px 9px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12px;cursor:pointer;">✕</button>
+                </div>
+                <div style="position:relative;margin-bottom:6px;">
+                    <input type="text" value="${esc(b.merchant_name)}" placeholder="Search branch merchant..." autocomplete="off"
+                        oninput="sswBranchMerchantSearch(${i}, this.value)" onblur="trkHide('sswBrMSug${i}')" class="slds-input ship-in">
+                    <div id="sswBrMSug${i}" class="suggestions-list" style="display:none;"></div>
+                </div>
+                <div style="position:relative;margin-bottom:6px;">
+                    <input type="text" value="${esc(b.serial)}" placeholder="Search serial (1 unit)..." autocomplete="off"
+                        oninput="sswBranchEquipSearch(${i}, this.value)" onblur="trkHide('sswBrESug${i}')" class="slds-input ship-in">
+                    <div id="sswBrESug${i}" class="suggestions-list" style="display:none;"></div>
+                </div>
+                <input type="text" value="${esc(b.tid)}" placeholder="TID (optional)" oninput="_ssBranches[${i}].tid=this.value" class="slds-input ship-in">
+            </div>`).join('');
+    }
+    function sswAddBranch() {
+        if (_ssMode === 'partner' && !_ssPartner) return Swal.fire('Select a partner first', 'Pick the partner before adding branches.', 'warning');
+        _ssBranches.push({ merchant_id: '', merchant_name: '', equipment_id: '', serial: '', tid: '' });
+        sswRenderBranches();
+    }
+    function sswRemoveBranch(i) { _ssBranches.splice(i, 1); sswRenderBranches(); }
+    function sswBranchMerchantSearch(i, val) {
+        const list = document.getElementById('sswBrMSug' + i);
+        if (!list) return;
+        clearTimeout(_ssLookupTimer);
+        _ssLookupTimer = setTimeout(async () => {
+            let result;
+            if (_ssMode === 'partner') {
+                const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'getPartnerMerchants', partner_id: _ssPartner.id, query: val }) });
+                result = await res.json();
+            } else {
+                const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'getLookups', query: val }) });
+                result = await res.json();
+            }
+            const merchants = result.merchants || [];
+            window['_sswBr' + i] = merchants;
+            list.innerHTML = merchants.map((m, idx) =>
+                `<div class="suggestion-item" onmousedown="sswSelectBranchMerchant(${i}, ${idx})">
+                    <strong style="color:#004990;">${m.dba_name || '—'}</strong>
+                    <div style="font-size:10px;color:#64748b;">MID: ${m.merchant_id || 'N/A'}</div>
+                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No merchants found</div>';
+            list.style.display = 'block';
+        }, 300);
+    }
+    function sswSelectBranchMerchant(i, idx) {
+        const m = (window['_sswBr' + i] || [])[idx]; if (!m) return;
+        _ssBranches[i].merchant_id = m.id;
+        _ssBranches[i].merchant_name = m.dba_name || '';
+        sswRenderBranches();
+    }
+    function sswBranchEquipSearch(i, val) {
+        const list = document.getElementById('sswBrESug' + i);
+        if (!list) return;
+        clearTimeout(_ssLookupTimer);
+        _ssLookupTimer = setTimeout(async () => {
+            const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'getLookups', query: val }) });
+            const result = await res.json();
+            list.innerHTML = (result.inventory || []).map(e =>
+                `<div class="suggestion-item" onmousedown="sswSelectBranchEquip(${i}, '${e.id}', '${(e.serial_number || '').replace(/'/g, "\\'")}')">
+                    <strong>${e.serial_number}</strong>
+                    <div style="font-size:10px;color:#64748b;">${e.terminal_type || ''}</div>
+                </div>`).join('') || '<div style="padding:8px;color:#94a3b8;font-size:12px;">No stocked units</div>';
+            list.style.display = 'block';
+        }, 300);
+    }
+    function sswSelectBranchEquip(i, id, serial) {
+        _ssBranches[i].equipment_id = id;
+        _ssBranches[i].serial = serial;
+        sswRenderBranches();
+    }
+
     function sswBulkEquipSearch(val) {
         const list = document.getElementById('ssw_bulkSuggest');
         if (val.length < 1) { list.style.display = 'none'; return; }
@@ -3375,20 +3465,44 @@ async function executeBulk(validData) {
             }
         }
 
+        // Consolidated (same box, multiple branches)?
+        const branches = _ssBranches.filter(b => b.merchant_id || b.equipment_id || b.serial);
+        const useConsolidated = branches.length > 0;
+        if (useConsolidated) {
+            const incomplete = branches.some(b => !b.merchant_id || !b.equipment_id);
+            if (incomplete) return Swal.fire('Finish the branches', 'Each branch needs a merchant and a serial selected (or remove it).', 'warning');
+        }
+
         const btn = document.getElementById('sswSubmitBtn');
         btn.disabled = true; btn.textContent = 'Creating...';
         try {
-            const res = await fetch('/api/deployments', {
-                method: 'POST', headers: authHeaders(),
-                body: JSON.stringify({ action: 'create', payload })
-            });
-            const result = await res.json();
-            if (!result.success) throw new Error(result.message);
-            Swal.fire({ icon: 'success', title: 'ShipStation Deployment Created', timer: 1300, showConfirmButton: false });
+            let result, newId;
+            if (useConsolidated) {
+                const primary = payload.is_bulk
+                    ? { merchant_id: merchantId, is_bulk: true, items: payload.items }
+                    : { merchant_id: merchantId, equipment_id: payload.equipment_id, tid: payload.tid };
+                const cPayload = {
+                    target_date: payload.target_date, purchase_type: payload.purchase_type, notes: payload.notes,
+                    ship_to_type: payload.ship_to_type, ship_to_partner_id: payload.ship_to_partner_id,
+                    shipstation: payload.shipstation,
+                    merchant_updates: payload.merchant_updates, partner_updates: payload.partner_updates,
+                    merchants: [primary, ...branches.map(b => ({ merchant_id: b.merchant_id, equipment_id: b.equipment_id, tid: b.tid || null }))]
+                };
+                const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'create_consolidated', payload: cPayload }) });
+                result = await res.json();
+                if (!result.success) throw new Error(result.message);
+                Swal.fire({ icon: 'success', title: `Consolidated shipment created (${(result.data || []).length} tickets)`, text: 'One label covers all branches — print it from any of the tickets.', timer: 2200, showConfirmButton: false });
+                newId = Array.isArray(result.data) ? result.data[0]?.id : null;
+            } else {
+                const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'create', payload }) });
+                result = await res.json();
+                if (!result.success) throw new Error(result.message);
+                Swal.fire({ icon: 'success', title: 'ShipStation Deployment Created', timer: 1300, showConfirmButton: false });
+                newId = Array.isArray(result.data) ? result.data[0]?.id : result.data?.id;
+            }
             document.getElementById('ssWizardModal').style.display = 'none';
             await fetchDeployments();
-            // Jump straight into the label step for the new deployment
-            const newId = Array.isArray(result.data) ? result.data[0]?.id : result.data?.id;
+            // Jump straight into the label step for the (primary) new deployment
             if (newId) setTimeout(() => ssOpenLabelForDeployment(newId), 400);
         } catch (e) {
             Swal.fire('Error', e.message, 'error');

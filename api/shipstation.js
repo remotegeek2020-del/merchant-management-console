@@ -582,9 +582,29 @@ export default async function handler(req, res) {
                         ss_label_url: r.data.labelData ? 'embedded' : null,
                         label_data: r.data.labelData || null,   // keep the PDF for no-charge reprints
                         status: 'shipped'
-                    }).eq('id', ss_row_id).select('deployment_id, return_id').single();
+                    }).eq('id', ss_row_id).select('deployment_id, return_id, ss_order_id').single();
                 if (row?.deployment_id && tracking) {
+                    await supabase.from('deployments').update({ tracking_id: tracking, status: 'In Transit' }).eq('id', row.deployment_id).eq('status', 'Open');
                     await supabase.from('deployments').update({ tracking_id: tracking }).eq('id', row.deployment_id);
+                }
+                // Consolidated shipment: one label covers sibling tickets sharing the
+                // same ShipStation order — propagate tracking + saved label to them all.
+                if (row?.ss_order_id) {
+                    const { data: siblings } = await supabase.from('shipstation_shipments')
+                        .select('id, deployment_id').eq('ss_order_id', row.ss_order_id).neq('id', ss_row_id);
+                    for (const sib of (siblings || [])) {
+                        await supabase.from('shipstation_shipments').update({
+                            tracking_number: tracking || null,
+                            carrier: carrier_code || null, service: service_code || null,
+                            ss_shipment_id: shipmentId ? String(shipmentId) : null,
+                            label_data: r.data.labelData || null, ss_label_url: r.data.labelData ? 'embedded' : null,
+                            status: 'shipped'
+                        }).eq('id', sib.id);
+                        if (sib.deployment_id && tracking) {
+                            await supabase.from('deployments').update({ tracking_id: tracking }).eq('id', sib.deployment_id);
+                            await supabase.from('deployments').update({ status: 'In Transit' }).eq('id', sib.deployment_id).eq('status', 'Open');
+                        }
+                    }
                 }
             }
             return res.status(200).json({
