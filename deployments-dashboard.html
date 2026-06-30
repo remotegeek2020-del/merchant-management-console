@@ -3239,18 +3239,27 @@ async function executeBulk(validData) {
                     <button type="button" onclick="sswRemoveBranch(${i})" style="padding:2px 9px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:6px;font-size:12px;cursor:pointer;">✕</button>
                 </div>
                 <div style="position:relative;margin-bottom:6px;">
+                    <label class="ship-lbl">Branch Merchant *</label>
                     <input type="text" value="${esc(b.merchant_name)}" placeholder="Search branch merchant..." autocomplete="off"
                         oninput="sswBranchMerchantSearch(${i}, this.value)" onblur="trkHide('sswBrMSug${i}')" class="slds-input ship-in">
                     <div id="sswBrMSug${i}" class="suggestions-list" style="display:none;"></div>
                 </div>
                 <div style="position:relative;margin-bottom:6px;">
-                    <input type="text" value="${esc(b.serial)}" placeholder="Search serial (1 unit)..." autocomplete="off"
+                    <label class="ship-lbl">Hardware (Serials) * <span style="font-weight:500;color:#94a3b8;">— add one or more units</span></label>
+                    <input type="text" id="sswBrEInput${i}" placeholder="Search serial, then pick to add..." autocomplete="off"
                         oninput="sswBranchEquipSearch(${i}, this.value)" onblur="trkHide('sswBrESug${i}')" class="slds-input ship-in">
                     <div id="sswBrESug${i}" class="suggestions-list" style="display:none;"></div>
+                    ${(b.units || []).length ? `<div style="margin-top:6px;display:flex;flex-direction:column;gap:5px;">
+                        ${b.units.map((u, j) => `<div style="display:flex;align-items:center;gap:6px;background:#fff;border:1px solid #e2e8f0;border-radius:6px;padding:5px 8px;">
+                            <span style="font-family:monospace;font-weight:700;color:#004990;font-size:12px;flex:0 0 auto;">${esc(u.serial)}</span>
+                            <input type="text" value="${esc(u.tid)}" placeholder="TID (optional)" oninput="_ssBranches[${i}].units[${j}].tid=this.value" class="slds-input" style="flex:1;height:28px;font-size:12px;">
+                            <button type="button" onclick="sswBranchRemoveUnit(${i},${j})" style="flex:0 0 auto;padding:2px 8px;background:#fff;color:#dc2626;border:1px solid #fecaca;border-radius:5px;font-size:12px;cursor:pointer;">✕</button>
+                        </div>`).join('')}
+                    </div>` : '<div style="margin-top:5px;font-size:11px;color:#b45309;">No units added yet.</div>'}
                 </div>
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-                    <input type="text" value="${esc(b.tid)}" placeholder="TID (optional)" oninput="_ssBranches[${i}].tid=this.value" class="slds-input ship-in">
-                    <select onchange="_ssBranches[${i}].purchase_type=this.value" class="slds-select ship-in" style="border-radius:8px;">
+                <div>
+                    <label class="ship-lbl">Purchase Type *</label>
+                    <select onchange="_ssBranches[${i}].purchase_type=this.value" class="slds-select ship-in" style="border-radius:8px;width:100%;">
                         ${['Free Placement','Agent Purchase','Rental','Reprogram','Swap','Swap/No Return'].map(pt => `<option value="${pt}" ${b.purchase_type === pt ? 'selected' : ''}>${pt}</option>`).join('')}
                     </select>
                 </div>
@@ -3259,7 +3268,7 @@ async function executeBulk(validData) {
     function sswAddBranch() {
         if (_ssMode === 'partner' && !_ssPartner) return Swal.fire('Select a partner first', 'Pick the partner before adding branches.', 'warning');
         const defPt = (document.getElementById('ssw_purchaseType')?.value) || 'Free Placement';
-        _ssBranches.push({ merchant_id: '', merchant_name: '', equipment_id: '', serial: '', tid: '', purchase_type: defPt });
+        _ssBranches.push({ merchant_id: '', merchant_name: '', units: [], purchase_type: defPt });
         sswRenderBranches();
     }
     function sswRemoveBranch(i) { _ssBranches.splice(i, 1); sswRenderBranches(); }
@@ -3308,10 +3317,14 @@ async function executeBulk(validData) {
         }, 300);
     }
     function sswSelectBranchEquip(i, id, serial) {
-        _ssBranches[i].equipment_id = id;
-        _ssBranches[i].serial = serial;
+        if (!_ssBranches[i].units) _ssBranches[i].units = [];
+        // avoid adding the same unit twice (within this branch or another)
+        const already = _ssBranches.some(b => (b.units || []).some(u => u.equipment_id === id));
+        if (already) { Swal.fire('Already added', 'That serial is already in this shipment.', 'info'); return; }
+        _ssBranches[i].units.push({ equipment_id: id, serial: serial, tid: '' });
         sswRenderBranches();
     }
+    function sswBranchRemoveUnit(i, j) { _ssBranches[i].units.splice(j, 1); sswRenderBranches(); }
 
     function sswBulkEquipSearch(val) {
         const list = document.getElementById('ssw_bulkSuggest');
@@ -3478,11 +3491,11 @@ async function executeBulk(validData) {
         }
 
         // Consolidated (same box, multiple branches)?
-        const branches = _ssBranches.filter(b => b.merchant_id || b.equipment_id || b.serial);
+        const branches = _ssBranches.filter(b => b.merchant_id || (b.units && b.units.length));
         const useConsolidated = branches.length > 0;
         if (useConsolidated) {
-            const incomplete = branches.some(b => !b.merchant_id || !b.equipment_id);
-            if (incomplete) return Swal.fire('Finish the branches', 'Each branch needs a merchant and a serial selected (or remove it).', 'warning');
+            const incomplete = branches.some(b => !b.merchant_id || !(b.units && b.units.length));
+            if (incomplete) return Swal.fire('Finish the branches', 'Each branch needs a merchant and at least one unit (or remove it).', 'warning');
         }
 
         const btn = document.getElementById('sswSubmitBtn');
@@ -3498,7 +3511,12 @@ async function executeBulk(validData) {
                     ship_to_type: payload.ship_to_type, ship_to_partner_id: payload.ship_to_partner_id,
                     shipstation: payload.shipstation,
                     merchant_updates: payload.merchant_updates, partner_updates: payload.partner_updates,
-                    merchants: [primary, ...branches.map(b => ({ merchant_id: b.merchant_id, equipment_id: b.equipment_id, tid: b.tid || null, purchase_type: b.purchase_type || null }))]
+                    merchants: [primary, ...branches.map(b => {
+                        if (b.units.length > 1) {
+                            return { merchant_id: b.merchant_id, is_bulk: true, items: b.units.map(u => ({ equipment_id: u.equipment_id, tid: u.tid || null })), purchase_type: b.purchase_type || null };
+                        }
+                        return { merchant_id: b.merchant_id, equipment_id: b.units[0].equipment_id, tid: b.units[0].tid || null, purchase_type: b.purchase_type || null };
+                    })]
                 };
                 const res = await fetch('/api/deployments', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'create_consolidated', payload: cPayload }) });
                 result = await res.json();
