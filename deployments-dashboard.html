@@ -473,7 +473,12 @@
             </div>
           <div style="margin-bottom: 15px;">
             <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TRACKING NUMBER</label>
-            <input type="text" id="trackingInput" class="slds-input" placeholder="Tracking Number" style="margin-bottom:15px;">
+            <div style="position:relative;">
+              <input type="text" id="trackingInput" class="slds-input" placeholder="Tracking Number" autocomplete="off"
+                     oninput="trkSuggest('trackingInput','trackingInputSuggest','fill')"
+                     onblur="trkHide('trackingInputSuggest')">
+              <div id="trackingInputSuggest" class="suggestions-list" style="display:none;"></div>
+            </div>
           </div>
             <div style="margin-bottom: 15px;">
     <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">PURCHASE TYPE</label>
@@ -891,7 +896,13 @@
 
             <div style="margin-bottom:15px;">
                 <label style="display:block; font-weight:700; font-size:11px; color:#64748b; margin-bottom:5px;">TRACKING ID</label>
-                <input type="text" id="editTracking" class="slds-input" placeholder="Update tracking..." style="border-radius:8px;">
+                <div style="position:relative;">
+                    <input type="text" id="editTracking" class="slds-input" placeholder="Update tracking..." autocomplete="off"
+                           oninput="trkSuggest('editTracking','editTrackingSuggest','fill')"
+                           onblur="trkHide('editTrackingSuggest')"
+                           style="border-radius:8px;">
+                    <div id="editTrackingSuggest" class="suggestions-list" style="display:none;"></div>
+                </div>
             </div>
            
 
@@ -971,11 +982,14 @@
     let _depTrackTimer;
     let currentPage = 1;
 
-    // Live tracking-number suggestions for the Deployments search box.
-    function depTrackingSuggest(val) {
-        const box = document.getElementById('depTrackSuggest');
-        if (!box) return;
-        const q = (val || '').trim();
+    // Shared tracking-number typeahead. Used by the dashboard search box
+    // (mode 'search' → filters the list) and the create/edit ticket tracking
+    // fields (mode 'fill' → just fills the field). Harmless lookup of existing
+    // tracking numbers; does not change any save behavior.
+    function trkSuggest(inputId, boxId, mode) {
+        const inp = document.getElementById(inputId), box = document.getElementById(boxId);
+        if (!inp || !box) return;
+        const q = (inp.value || '').trim();
         clearTimeout(_depTrackTimer);
         if (q.length < 2) { box.style.display = 'none'; box.innerHTML = ''; return; }
         _depTrackTimer = setTimeout(async () => {
@@ -990,7 +1004,7 @@
                 box.innerHTML = items.map(s => {
                     const sub = [s.merchant, s.serial, s.status].filter(Boolean).join(' · ');
                     const t = (s.tracking_id || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-                    return `<div class="suggestion-item" onmousedown="depPickTracking('${t}')">
+                    return `<div class="suggestion-item" onmousedown="trkPick('${inputId}','${boxId}','${t}','${mode}')">
                         <div style="font-family:monospace;font-weight:700;color:#0369a1;font-size:12px;">📦 ${s.tracking_id || ''}</div>
                         ${sub ? `<div style="font-size:10px;color:#64748b;margin-top:1px;font-weight:500;">${sub}</div>` : ''}
                     </div>`;
@@ -999,12 +1013,16 @@
             } catch (e) { box.style.display = 'none'; }
         }, 220);
     }
-    function depPickTracking(t) {
-        const inp = document.getElementById('depSearch');
-        if (inp) inp.value = t;
-        const box = document.getElementById('depTrackSuggest'); if (box) box.style.display = 'none';
-        fetchDeployments(1);
+    function trkPick(inputId, boxId, t, mode) {
+        const inp = document.getElementById(inputId); if (inp) inp.value = t;
+        const box = document.getElementById(boxId); if (box) box.style.display = 'none';
+        if (mode === 'search') fetchDeployments(1);
     }
+    function trkHide(boxId) {
+        setTimeout(() => { const b = document.getElementById(boxId); if (b) b.style.display = 'none'; }, 180);
+    }
+    // Back-compat shim for the search box's inline handler.
+    function depTrackingSuggest() { trkSuggest('depSearch', 'depTrackSuggest', 'search'); }
     let _editingDepSnapshot = null; // captures old values when edit modal opens
     let _lastDepSearchLogged = '';
 
