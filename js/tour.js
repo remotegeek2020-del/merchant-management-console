@@ -144,7 +144,10 @@
     // ───────────────────────────────────────────────────────────────────────
     // RUNTIME MODE — auto-run enabled tours, add replay button
     // ───────────────────────────────────────────────────────────────────────
-    function seenKey(t) { return 'pptour_seen_' + t.tour_key; }
+    // Seen-state is per logged-in user (not just per browser) so each staff
+    // account gets the tour on their own first visit, even on a shared machine.
+    function uid() { return localStorage.getItem('pp_userid') || 'anon'; }
+    function seenKey(t) { return 'pptour_seen_' + t.tour_key + '_' + uid(); }
     function hasSeen(t) { return parseInt(localStorage.getItem(seenKey(t)) || '0', 10) >= (t.version || 1); }
     function markSeen(t) { localStorage.setItem(seenKey(t), String(t.version || 1)); }
 
@@ -164,11 +167,15 @@
         return driverSteps;
     }
 
+    // "Don't show the Take-a-tour button" — remembered per user, per page.
+    function hideBtnKey() { return 'pptour_hidebtn_' + PAGE + '_' + uid(); }
+    function isBtnHidden() { return localStorage.getItem(hideBtnKey()) === '1'; }
+
     function runTour(tour, onDone) {
         var lib = window.driver && window.driver.js && window.driver.js.driver;
-        if (!lib) { console.warn('[tour] driver.js not loaded'); if (onDone) onDone(); return; }
+        if (!lib) { console.warn('[tour] driver.js not loaded'); if (onDone) onDone(false); return; }
         var steps = buildSteps(tour);
-        if (!steps.length) { if (onDone) onDone(); return; }
+        if (!steps.length) { if (onDone) onDone(false); return; } // nothing shown — don't mark seen
         var d = lib({
             showProgress: true,
             allowClose: true,
@@ -176,21 +183,23 @@
             prevBtnText: 'Back',
             doneBtnText: 'Done',
             steps: steps,
-            onDestroyed: function () { if (onDone) onDone(); }
+            onDestroyed: function () { if (onDone) onDone(true); }
         });
         d.drive();
     }
 
     function addReplayButton(tours) {
-        if (document.getElementById('pptour-replay')) return;
+        if (document.getElementById('pptour-replay') || isBtnHidden()) return;
+        var wrap = document.createElement('div');
+        wrap.id = 'pptour-replay';
+        wrap.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99990;display:flex;align-items:center;background:#4338ca;border-radius:999px;box-shadow:0 6px 18px rgba(67,56,202,.35);';
+
         var btn = document.createElement('button');
-        btn.id = 'pptour-replay';
         btn.title = 'Take a tour of this page';
         btn.innerHTML = '<span style="font-size:16px;">🧭</span> Take a tour';
-        btn.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:99990;display:flex;align-items:center;gap:7px;padding:10px 16px;background:#4338ca;color:#fff;border:none;border-radius:999px;font:700 13px system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 18px rgba(67,56,202,.35);';
+        btn.style.cssText = 'display:flex;align-items:center;gap:7px;padding:10px 8px 10px 16px;background:none;color:#fff;border:none;font:700 13px system-ui,sans-serif;cursor:pointer;';
         btn.onclick = function () {
             if (tours.length === 1) return runTour(tours[0]);
-            // Multiple tours: tiny chooser (SweetAlert if available, else prompt)
             if (window.Swal) {
                 var inputOptions = {};
                 tours.forEach(function (t, i) { inputOptions[i] = t.name; });
@@ -202,7 +211,25 @@
                 runTour(tours[0]);
             }
         };
-        document.body.appendChild(btn);
+
+        var close = document.createElement('button');
+        close.title = "Don't show this button anymore";
+        close.innerHTML = '✕';
+        close.style.cssText = 'padding:10px 14px 10px 6px;background:none;color:rgba(255,255,255,.7);border:none;font:700 13px system-ui,sans-serif;cursor:pointer;';
+        close.onclick = function (e) {
+            e.stopPropagation();
+            var go = function () { localStorage.setItem(hideBtnKey(), '1'); wrap.remove(); };
+            if (window.Swal) {
+                Swal.fire({
+                    icon: 'question', title: 'Hide the tour button?',
+                    text: 'The "Take a tour" button will stop showing for you on this page.',
+                    showCancelButton: true, confirmButtonText: "Yes, hide it"
+                }).then(function (r) { if (r.isConfirmed) go(); });
+            } else { go(); }
+        };
+
+        wrap.appendChild(btn); wrap.appendChild(close);
+        document.body.appendChild(wrap);
     }
 
     function startRuntime() {
@@ -215,12 +242,12 @@
             var tours = (data && data.tours) || [];
             if (!tours.length) return;
             addReplayButton(tours);
-            // Auto-run the first unseen tour, then mark it seen.
+            // Auto-run the first unseen tour; only mark it seen if it actually displayed.
             var unseen = tours.filter(function (t) { return !hasSeen(t); });
             if (unseen.length) {
                 var t = unseen[0];
                 // small delay so the page has rendered its widgets
-                setTimeout(function () { runTour(t, function () { markSeen(t); }); }, 900);
+                setTimeout(function () { runTour(t, function (ran) { if (ran) markSeen(t); }); }, 900);
             }
         }).catch(function () {});
     }
