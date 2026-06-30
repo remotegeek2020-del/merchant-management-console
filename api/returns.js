@@ -118,6 +118,17 @@ if (action === 'list') {
         ]));
     }
 
+    // Attach the ShipStation return-label row (order #, tracking, carrier) per return.
+    const retIds = (data || []).map(r => r.id).filter(Boolean);
+    let ssMap = {};
+    if (retIds.length) {
+        const { data: ssRows } = await supabase.from('shipstation_shipments')
+            .select('return_id, order_number, tracking_number, carrier, service, status')
+            .eq('ship_type', 'return_label')
+            .in('return_id', retIds);
+        (ssRows || []).forEach(s => { if (s.return_id && !ssMap[s.return_id]) ssMap[s.return_id] = s; });
+    }
+
     // Normalize to items[] for unified frontend handling
     const normalized = (data || []).map(r => {
         r.items = r.is_bulk
@@ -125,6 +136,13 @@ if (action === 'list') {
             : (r.equipment_id ? [{ equipment_id: r.equipment_id, condition: r.condition, serial_number: r.equipments?.serial_number, terminal_type: r.equipments?.terminal_type, item_id: null }] : []);
         r.created_by_name = r.created_by ? (auditUserMap[r.created_by] || null) : null;
         r.updated_by_name = r.updated_by ? (auditUserMap[r.updated_by] || null) : null;
+        const ss = ssMap[r.id];
+        r.is_shipstation = !!ss;
+        r.ss_order_number = ss?.order_number || null;
+        r.ss_tracking_number = ss?.tracking_number || null;
+        r.ss_carrier = ss?.carrier || null;
+        r.ss_service = ss?.service || null;
+        r.ss_status = ss?.status || null;
         return r;
     });
 
