@@ -803,12 +803,13 @@ async function buildActivityData() {
     const today = new Date();
     const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
 
-    // Window follows the configured schedule: weekly = 7 days, daily = 24 h
+    // Window follows the configured schedule: monthly = 30d, weekly = 7d, daily = 24h
     const { data: sched } = await supabase.from('report_schedule_settings').select('schedule').eq('report_type', 'activity').maybeSingle();
-    const isWeekly = (sched?.schedule || 'weekly') === 'weekly';
-    const since = new Date(today.getTime() - (isWeekly ? 7 : 1) * 86400000);
+    const sc = sched?.schedule || 'weekly';
+    const days = sc === 'monthly' ? 30 : sc === 'weekly' ? 7 : 1;
+    const since = new Date(today.getTime() - days * 86400000);
     const sinceIso = since.toISOString();
-    const windowLabel = isWeekly ? 'Past 7 days' : 'Past 24 hours';
+    const windowLabel = sc === 'monthly' ? 'Past 30 days' : sc === 'weekly' ? 'Past 7 days' : 'Past 24 hours';
 
     const excluded = new Set(await getActivityExcludes());
 
