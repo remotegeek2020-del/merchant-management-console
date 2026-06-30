@@ -73,6 +73,44 @@
         </div>
     </div>
 
+    <!-- VIEW TABS -->
+    <div style="display:flex;gap:6px;margin-bottom:16px;border-bottom:1px solid #e2e8f0;">
+        <button id="acttab-audit" onclick="switchActTab('audit')" style="padding:10px 18px;border:none;background:none;border-bottom:3px solid #004990;color:#004990;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;">Audit Trail</button>
+        <button id="acttab-kpi" onclick="switchActTab('kpi')" style="padding:10px 18px;border:none;background:none;border-bottom:3px solid transparent;color:#94a3b8;font-weight:700;font-size:13px;cursor:pointer;font-family:inherit;">🏆 KPI Leaderboard</button>
+    </div>
+
+    <!-- ===== KPI LEADERBOARD VIEW ===== -->
+    <div id="kpiView" style="display:none;">
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:16px;flex-wrap:wrap;">
+            <span style="font-size:12px;font-weight:700;color:#64748b;">Period:</span>
+            <button class="kpi-period-btn" data-days="1" onclick="setKpiPeriod(1)" style="padding:6px 14px;border-radius:20px;border:2px solid #e2e8f0;background:white;color:#64748b;font-size:12px;font-weight:700;cursor:pointer;">Today</button>
+            <button class="kpi-period-btn" data-days="7" onclick="setKpiPeriod(7)" style="padding:6px 14px;border-radius:20px;border:2px solid #7c3aed;background:#7c3aed;color:white;font-size:12px;font-weight:700;cursor:pointer;">7 Days</button>
+            <button class="kpi-period-btn" data-days="30" onclick="setKpiPeriod(30)" style="padding:6px 14px;border-radius:20px;border:2px solid #e2e8f0;background:white;color:#64748b;font-size:12px;font-weight:700;cursor:pointer;">30 Days</button>
+            <span id="kpiExcludeNote" style="font-size:11px;color:#94a3b8;margin-left:auto;"></span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+            <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
+                <div style="font-size:1.6rem;font-weight:800;font-family:'DM Mono',monospace;color:#5b21b6;" id="kpiTotal">—</div>
+                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px;">Total Events</div>
+            </div>
+            <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:16px;text-align:center;">
+                <div style="font-size:1.6rem;font-weight:800;font-family:'DM Mono',monospace;color:#5b21b6;" id="kpiUsers">—</div>
+                <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-top:3px;">Active Users</div>
+            </div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+            <div style="font-size:14px;font-weight:800;color:#0a1628;margin-bottom:12px;">🏆 Most Active Users</div>
+            <div id="kpiLeaderboard"><div class="pp-empty" style="padding:20px;color:#94a3b8;">Loading…</div></div>
+        </div>
+        <div style="background:white;border:1px solid #e2e8f0;border-radius:12px;padding:18px 20px;">
+            <div style="font-size:14px;font-weight:800;color:#0a1628;margin-bottom:12px;">Activity by Category</div>
+            <div id="kpiCategories"></div>
+        </div>
+    </div>
+
+    <!-- ===== AUDIT TRAIL VIEW (wrapped) ===== -->
+    <div id="auditView">
+
     <!-- FILTERS -->
     <div class="search-bar">
         <div class="pp-search" style="flex:1;min-width:200px;">
@@ -154,10 +192,12 @@
             </div>
         </div>
     </div>
+    </div><!-- /auditView -->
 </div>
 
 <script>
 let currentPage = 0;
+let kpiDays = 7;
 let totalCount = 0;
 let searchTimeout = null;
 
@@ -175,6 +215,64 @@ function getFilters() {
 
 function escHtml(s) {
     return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ── KPI LEADERBOARD ──────────────────────────────────────────
+function switchActTab(tab) {
+    const audit = tab === 'audit';
+    document.getElementById('auditView').style.display = audit ? '' : 'none';
+    document.getElementById('kpiView').style.display = audit ? 'none' : '';
+    const ta = document.getElementById('acttab-audit'), tk = document.getElementById('acttab-kpi');
+    ta.style.borderBottomColor = audit ? '#004990' : 'transparent';
+    ta.style.color = audit ? '#004990' : '#94a3b8';
+    tk.style.borderBottomColor = audit ? 'transparent' : '#7c3aed';
+    tk.style.color = audit ? '#94a3b8' : '#7c3aed';
+    if (!audit) loadKpi();
+}
+function setKpiPeriod(days) {
+    kpiDays = days;
+    document.querySelectorAll('.kpi-period-btn').forEach(b => {
+        const on = parseInt(b.dataset.days) === days;
+        b.style.borderColor = on ? '#7c3aed' : '#e2e8f0';
+        b.style.background = on ? '#7c3aed' : 'white';
+        b.style.color = on ? 'white' : '#64748b';
+    });
+    loadKpi();
+}
+async function loadKpi() {
+    const lb = document.getElementById('kpiLeaderboard');
+    lb.innerHTML = '<div class="pp-empty" style="padding:20px;color:#94a3b8;">Loading…</div>';
+    try {
+        const r = await fetch(`/api/logs?kpi=1&days=${kpiDays}`).then(x => x.json());
+        document.getElementById('kpiTotal').textContent = (r.totalEvents || 0).toLocaleString();
+        document.getElementById('kpiUsers').textContent = (r.activeUsers || 0).toLocaleString();
+        document.getElementById('kpiExcludeNote').textContent = (r.excluded && r.excluded.length) ? `${r.excluded.length} user(s) excluded` : '';
+        const users = r.topUsers || [];
+        const max = users[0]?.count || 1;
+        const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+        lb.innerHTML = users.length ? users.map((u, i) => `
+            <div style="display:flex;align-items:center;gap:12px;padding:8px 4px;border-bottom:1px solid #f1f5f9;${i < 3 ? 'background:#faf5ff;' : ''}">
+                <div style="width:30px;text-align:center;font-weight:800;color:#7c3aed;font-size:14px;">${medal(i)}</div>
+                <div style="flex:1;min-width:0;">
+                    <div style="font-weight:${i < 3 ? '700' : '600'};color:#1e293b;font-size:13px;">${escHtml(u.name)}</div>
+                    <div style="font-size:10px;color:#94a3b8;">${escHtml(u.email)}</div>
+                </div>
+                <div style="flex:1;max-width:45%;display:flex;align-items:center;gap:8px;">
+                    <div style="flex:1;height:8px;background:#ede9fe;border-radius:4px;overflow:hidden;"><div style="height:100%;width:${Math.round((u.count/max)*100)}%;background:#7c3aed;"></div></div>
+                    <span style="font-weight:800;color:#5b21b6;font-size:13px;min-width:42px;text-align:right;">${u.count.toLocaleString()}</span>
+                </div>
+            </div>`).join('') : '<div class="pp-empty" style="padding:20px;color:#94a3b8;">No activity in this period.</div>';
+        const cats = r.byCategory || [];
+        const cmax = cats[0]?.count || 1;
+        document.getElementById('kpiCategories').innerHTML = cats.length ? cats.map(c => `
+            <div style="display:flex;align-items:center;gap:10px;padding:5px 0;">
+                <div style="width:110px;font-size:12px;color:#334155;text-transform:capitalize;">${escHtml(c.category)}</div>
+                <div style="flex:1;height:7px;background:#f1f5f9;border-radius:4px;overflow:hidden;"><div style="height:100%;width:${Math.round((c.count/cmax)*100)}%;background:#0369a1;"></div></div>
+                <div style="width:50px;text-align:right;font-weight:700;color:#0369a1;font-size:12px;">${c.count.toLocaleString()}</div>
+            </div>`).join('') : '<div style="color:#94a3b8;font-size:12px;">No data.</div>';
+    } catch (e) {
+        lb.innerHTML = '<div class="pp-empty" style="padding:20px;color:#dc2626;">Failed to load KPI.</div>';
+    }
 }
 
 function formatJsonDiff(val) {

@@ -26,6 +26,46 @@ export default async function handler(req, res) {
 
     res.setHeader('Content-Type', 'application/json');
 
+    // ── KPI LEADERBOARD (most active users) ───────────────
+    if (req.method === 'GET' && req.query.kpi === '1') {
+        const days = Math.min(parseInt(req.query.days) || 7, 90);
+        const since = new Date(Date.now() - days * 86400000).toISOString();
+
+        // Same excluded-users list as the Activity report
+        const { data: exRow } = await supabase.from('app_settings').select('value').eq('key', 'activity_report_excluded_emails').maybeSingle();
+        let excluded = []; try { excluded = JSON.parse(exRow?.value || '[]'); } catch { excluded = []; }
+        const exSet = new Set((excluded || []).map(e => String(e).toLowerCase()));
+
+        let rows = [], off = 0, done = false;
+        while (!done) {
+            const { data: batch } = await supabase.from('activity_logs')
+                .select('email, category, created_at').gte('created_at', since)
+                .order('created_at', { ascending: false }).range(off, off + 999);
+            if (!batch || !batch.length) done = true;
+            else { rows = rows.concat(batch); off += 1000; if (batch.length < 1000 || off >= 30000) done = true; }
+        }
+
+        const byUser = {}, byCat = {};
+        let total = 0;
+        for (const r of rows) {
+            const em = (r.email || '').toLowerCase();
+            if (!em || exSet.has(em)) continue;
+            byUser[em] = (byUser[em] || 0) + 1;
+            const c = r.category || 'other';
+            byCat[c] = (byCat[c] || 0) + 1;
+            total++;
+        }
+        const emails = Object.keys(byUser);
+        let nameMap = {};
+        if (emails.length) {
+            const { data: us } = await supabase.from('app_users').select('email, first_name, last_name').in('email', emails);
+            (us || []).forEach(u => { nameMap[(u.email || '').toLowerCase()] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email; });
+        }
+        const topUsers = emails.map(em => ({ email: em, name: nameMap[em] || em, count: byUser[em] })).sort((a, b) => b.count - a.count);
+        const byCategory = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count);
+        return res.status(200).json({ success: true, kpi: true, days, totalEvents: total, activeUsers: emails.length, topUsers, byCategory, excluded: [...exSet] });
+    }
+
     // ── GET LOGS ──────────────────────────────────────────
     if (req.method === 'GET') {
         const { page = 0, limit = 50, search = '', category = '', severity = '', from = '', to = '' } = req.query;
