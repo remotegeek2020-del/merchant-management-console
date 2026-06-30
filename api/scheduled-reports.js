@@ -791,6 +791,123 @@ async function buildOpsData() {
     return { date: dateStr, yesterday: { label: yesterdayLabel, deployments: yDeps || [], returns: yRets || [] }, ...data };
 }
 
+// ── ACTIVITY LOGS REPORT ─────────────────────────────────────────────────────
+
+async function getActivityExcludes() {
+    const { data } = await supabase.from('app_settings').select('value').eq('key', 'activity_report_excluded_emails').maybeSingle();
+    try { const arr = JSON.parse(data?.value || '[]'); return Array.isArray(arr) ? arr.map(e => String(e).toLowerCase()) : []; }
+    catch { return []; }
+}
+
+async function buildActivityData() {
+    const today = new Date();
+    const dateStr = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+
+    // Window follows the configured schedule: weekly = 7 days, daily = 24 h
+    const { data: sched } = await supabase.from('report_schedule_settings').select('schedule').eq('report_type', 'activity').maybeSingle();
+    const isWeekly = (sched?.schedule || 'weekly') === 'weekly';
+    const since = new Date(today.getTime() - (isWeekly ? 7 : 1) * 86400000);
+    const sinceIso = since.toISOString();
+    const windowLabel = isWeekly ? 'Past 7 days' : 'Past 24 hours';
+
+    const excluded = new Set(await getActivityExcludes());
+
+    // Pull the window's logs (paginated, capped)
+    let rows = [], off = 0, done = false;
+    while (!done) {
+        const { data: batch } = await supabase.from('activity_logs')
+            .select('email, category, created_at')
+            .gte('created_at', sinceIso)
+            .order('created_at', { ascending: false })
+            .range(off, off + 999);
+        if (!batch || !batch.length) done = true;
+        else { rows = rows.concat(batch); off += 1000; if (batch.length < 1000 || off >= 20000) done = true; }
+    }
+
+    const byUser = {}, byCat = {};
+    let total = 0;
+    for (const r of rows) {
+        const em = (r.email || '').toLowerCase();
+        if (!em || excluded.has(em)) continue;
+        byUser[em] = (byUser[em] || 0) + 1;
+        const cat = r.category || 'other';
+        byCat[cat] = (byCat[cat] || 0) + 1;
+        total++;
+    }
+
+    const emails = Object.keys(byUser);
+    let nameMap = {};
+    if (emails.length) {
+        const { data: us } = await supabase.from('app_users').select('email, first_name, last_name').in('email', emails);
+        (us || []).forEach(u => { nameMap[(u.email || '').toLowerCase()] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email; });
+    }
+    const topUsers = emails.map(em => ({ email: em, name: nameMap[em] || em, count: byUser[em] }))
+        .sort((a, b) => b.count - a.count).slice(0, 15);
+    const topCats = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count).slice(0, 10);
+
+    return { date: dateStr, windowLabel, isWeekly, totalEvents: total, activeUsers: emails.length, topUsers, topCats, excludedCount: excluded.size };
+}
+
+function buildActivityEmail(data) {
+    const { date, windowLabel, totalEvents, activeUsers, topUsers, topCats, excludedCount } = data;
+    const medal = i => i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : (i + 1);
+    const maxCount = (topUsers[0]?.count) || 1;
+    const userRows = (topUsers || []).map((u, i) => `
+        <tr style="border-bottom:1px solid #f1f5f9;${i < 3 ? 'background:#faf5ff;' : ''}">
+            <td style="padding:9px 12px;font-weight:700;color:#7c3aed;font-size:13px;width:36px;text-align:center;">${medal(i)}</td>
+            <td style="padding:9px 12px;font-size:13px;color:#1e293b;font-weight:${i < 3 ? '700' : '600'};">${u.name}<br><span style="font-size:10px;color:#94a3b8;font-weight:400;">${u.email}</span></td>
+            <td style="padding:9px 12px;width:45%;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="flex:1;height:8px;background:#ede9fe;border-radius:4px;overflow:hidden;"><div style="height:100%;width:${Math.round((u.count / maxCount) * 100)}%;background:#7c3aed;"></div></div>
+                    <span style="font-weight:800;color:#5b21b6;font-size:13px;min-width:36px;text-align:right;">${num(u.count)}</span>
+                </div>
+            </td>
+        </tr>`).join('');
+    const catRows = (topCats || []).map(c => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:7px 12px;font-size:12px;color:#334155;text-transform:capitalize;">${c.category}</td>
+            <td style="padding:7px 12px;font-size:12px;font-weight:700;color:#5b21b6;text-align:right;">${num(c.count)}</td>
+        </tr>`).join('');
+
+    return `<!DOCTYPE html><html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f1f5f9;font-family:'Segoe UI',Arial,sans-serif;">
+<div style="max-width:680px;margin:32px auto;background:white;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+    <div style="background:linear-gradient(135deg,#5b21b6 0%,#7c3aed 100%);padding:32px 40px;">
+        <div style="color:rgba(255,255,255,0.7);font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Activity Logs Report</div>
+        <div style="color:white;font-size:26px;font-weight:800;letter-spacing:-0.5px;">Most Active Users</div>
+        <div style="color:rgba(255,255,255,0.7);font-size:13px;margin-top:4px;">${date} · ${windowLabel}</div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid #e2e8f0;">
+        <div style="padding:18px 16px;border-right:1px solid #e2e8f0;">
+            <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Total Events</div>
+            <div style="font-size:22px;font-weight:800;color:#5b21b6;">${num(totalEvents)}</div>
+        </div>
+        <div style="padding:18px 16px;">
+            <div style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Active Users</div>
+            <div style="font-size:22px;font-weight:800;color:#5b21b6;">${num(activeUsers)}</div>
+        </div>
+    </div>
+    <div style="padding:24px 32px 0;">
+        <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">🏆 Top Users by Activity</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">${windowLabel}${excludedCount ? ` · ${excludedCount} user(s) excluded` : ''}</div>
+        <table style="width:100%;border-collapse:collapse;">
+            <tbody>${userRows || '<tr><td style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No activity in this window</td></tr>'}</tbody>
+        </table>
+    </div>
+    <div style="padding:24px 32px;">
+        <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">Activity by Category</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Where the events happened</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <tbody>${catRows || '<tr><td colspan="2" style="padding:12px;text-align:center;color:#94a3b8;font-size:12px;">No data</td></tr>'}</tbody>
+        </table>
+    </div>
+    <div style="background:#f8fafc;padding:20px 32px;border-top:1px solid #e2e8f0;">
+        <div style="font-size:11px;color:#94a3b8;text-align:center;">Automated activity report from your Partner Management Console. Excluded users are configured in Secret Dungeon.</div>
+    </div>
+</div></body></html>`;
+}
+
 // ── SEND HELPERS ─────────────────────────────────────────────────────────────
 
 async function sendReport(reportType, trigger = 'cron', testEmail = null) {
@@ -845,6 +962,10 @@ async function sendReport(reportType, trigger = 'cron', testEmail = null) {
             reportData = await buildPrime49Data();
             html = buildPrime49Email(reportData);
             subject = `💎 Prime49 Daily Update — ${reportData.date}`;
+        } else if (reportType === 'activity') {
+            reportData = await buildActivityData();
+            html = buildActivityEmail(reportData);
+            subject = `📋 Activity Leaderboard — ${reportData.date}`;
         } else {
             reportData = await buildPartnersData();
             html = buildPartnersEmail(reportData);
@@ -955,6 +1076,27 @@ export default async function handler(req, res) {
             const { error } = await supabase.from('report_recipients').delete().eq('id', id);
             if (error) throw error;
             return res.status(200).json({ success: true });
+        }
+
+        // Activity-report excluded users (e.g. the developer's own login)
+        if (action === 'get_activity_excludes') {
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'activity_report_excluded_emails').maybeSingle();
+            let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch { arr = []; }
+            return res.status(200).json({ success: true, data: Array.isArray(arr) ? arr : [] });
+        }
+        if (action === 'add_activity_exclude' || action === 'remove_activity_exclude') {
+            const em = (req.body.email || '').toLowerCase().trim();
+            if (action === 'add_activity_exclude' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+                return res.status(400).json({ success: false, message: 'Invalid email address' });
+            }
+            const { data } = await supabase.from('app_settings').select('value').eq('key', 'activity_report_excluded_emails').maybeSingle();
+            let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch { arr = []; }
+            if (!Array.isArray(arr)) arr = [];
+            if (action === 'add_activity_exclude') { if (!arr.includes(em)) arr.push(em); }
+            else { arr = arr.filter(x => x !== em); }
+            const { error } = await supabase.from('app_settings').upsert({ key: 'activity_report_excluded_emails', value: JSON.stringify(arr), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: arr });
         }
 
         if (action === 'send_now') {
