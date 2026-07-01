@@ -370,8 +370,10 @@ function buildPrime49Email(data) {
     const {
         date, totalPartners, totalMerchants, totalVolume30d,
         totalNetResidual, totalPptResidual, totalAgentResidual,
-        newIdsThisWeek, newMerchantsThisWeek,
-        partnerBreakdown, newIdDetails, newMerchantDetails
+        newIdsThisWeek,
+        newMerchantsYesterday = [], newMerchantsWeek = [],
+        newMerchantsYesterdayCount = 0, newMerchantsWeekCount = 0,
+        partnerBreakdown, newIdDetails
     } = data;
 
     const fmt2 = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0);
@@ -396,7 +398,7 @@ function buildPrime49Email(data) {
             <td style="padding:7px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.created_at)}</td>
         </tr>`).join('');
 
-    const newMerchantRows = (newMerchantDetails || []).map(r => {
+    const merchantRowsHtml = list => (list || []).map(r => {
         const stColor = r.account_status === 'Approved' ? '#16a34a' : r.account_status === 'Approved - Collections' ? '#d97706' : '#64748b';
         return `
         <tr style="border-bottom:1px solid #f0fdf4;">
@@ -405,9 +407,21 @@ function buildPrime49Email(data) {
             <td style="padding:8px 12px;font-family:monospace;font-size:11px;color:#64748b;">${r.agent_id || '—'}</td>
             <td style="padding:8px 12px;color:#475569;font-size:12px;">${r.partner_name || '—'}</td>
             <td style="padding:8px 12px;font-size:11px;font-weight:700;color:${stColor};">${r.account_status || '—'}</td>
-            <td style="padding:8px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.enrollment_date)}</td>
+            <td style="padding:8px 12px;color:#94a3b8;font-size:11px;">${dtFmt(r.added_date)}</td>
         </tr>`;
     }).join('');
+    const merchantTable = (list) => `
+        <table style="width:100%;border-collapse:collapse;border:1px solid #bbf7d0;border-radius:10px;overflow:hidden;">
+            <thead><tr style="background:#f0fdf4;">
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">DBA Name</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">MID</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Agent ID</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Partner</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Status</th>
+                <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Added</th>
+            </tr></thead>
+            <tbody>${merchantRowsHtml(list)}</tbody>
+        </table>`;
 
     const kpi = (label, val, sub, accent) => `
         <div style="padding:18px 14px;border-right:1px solid #e2e8f0;text-align:center;">
@@ -447,8 +461,12 @@ function buildPrime49Email(data) {
                 <span style="font-size:11px;color:#78350f;margin-left:5px;">New Prime49 IDs</span>
             </div>
             <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
-                <span style="font-size:18px;font-weight:900;color:#059669;">${newMerchantsThisWeek}</span>
-                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants Enrolled</span>
+                <span style="font-size:18px;font-weight:900;color:#059669;">${newMerchantsYesterdayCount}</span>
+                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants (Yesterday)</span>
+            </div>
+            <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#0d9488;">${newMerchantsWeekCount}</span>
+                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants (This Week)</span>
             </div>
         </div>
     </div>
@@ -501,30 +519,21 @@ function buildPrime49Email(data) {
         </table>
     </div>` : ''}
 
-    ${newMerchantsThisWeek > 0 ? `
-    <!-- NEW MERCHANTS SINCE YESTERDAY -->
+    <!-- NEW MERCHANTS — YESTERDAY -->
     <div style="padding:24px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:4px;">🏪 Newly Enrolled Merchants (${newMerchantsThisWeek})</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Prime49 merchants enrolled since yesterday — existing partners only</div>
-        <table style="width:100%;border-collapse:collapse;border:1px solid #bbf7d0;border-radius:10px;overflow:hidden;">
-            <thead>
-                <tr style="background:#f0fdf4;">
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">DBA Name</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">MID</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Agent ID</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Partner</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Status</th>
-                    <th style="padding:8px 12px;text-align:left;font-size:10px;font-weight:700;color:#065f46;text-transform:uppercase;">Enrolled</th>
-                </tr>
-            </thead>
-            <tbody>${newMerchantRows}</tbody>
-        </table>
-    </div>` : `
+        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:4px;">🏪 New Prime49 Merchants — Yesterday (${newMerchantsYesterdayCount})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Prime49 merchants added in the last 24 hours (any status)</div>
+        ${newMerchantsYesterdayCount > 0 ? merchantTable(newMerchantsYesterday)
+            : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#16a34a;font-weight:700;">✓ None added yesterday</div>`}
+    </div>
+
+    <!-- NEW MERCHANTS — THIS WEEK -->
     <div style="padding:24px 24px 0;">
-        <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:16px 20px;text-align:center;">
-            <div style="font-size:13px;color:#16a34a;font-weight:700;">✓ No new merchant enrollments since yesterday</div>
-        </div>
-    </div>`}
+        <div style="font-size:14px;font-weight:800;color:#0d9488;margin-bottom:4px;">📅 New Prime49 Merchants — This Week (${newMerchantsWeekCount})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Prime49 merchants added since Monday (any status)</div>
+        ${newMerchantsWeekCount > 0 ? merchantTable(newMerchantsWeek)
+            : `<div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#0d9488;font-weight:700;">✓ None added this week</div>`}
+    </div>
 
     <!-- CALCULATION METHODOLOGY -->
     <div style="margin:24px 24px 0;padding:16px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;">
@@ -661,6 +670,12 @@ async function buildPrime49Data() {
     const sinceIso = yesterday.toISOString();
     const sinceDate = sinceIso.slice(0, 10); // 'YYYY-MM-DD' for date-field comparison
 
+    // Week start = Monday 00:00 UTC (for "new this week")
+    const weekStart = new Date(today);
+    weekStart.setUTCHours(0, 0, 0, 0);
+    weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
+    const weekIso = weekStart.toISOString();
+
     // 1. Fetch all approved prime49 merchants with volume
     const { data: merchants, error: mErr } = await supabase
         .from('merchant_portfolio_view')
@@ -707,18 +722,24 @@ async function buildPrime49Data() {
         return { id_string: r.id_string, agent_name: ag.agent_name || '—', agent_company: ag.agent_company || '—', rev_share: revPct, created_at: r.created_at };
     });
 
-    // 4. New merchants enrolled since yesterday on prime49 IDs (for existing partners)
-    const newMerchantDetails = (merchants || [])
-        .filter(m => m.enrollment_date && m.enrollment_date >= sinceDate)
-        .sort((a, b) => (b.enrollment_date || '').localeCompare(a.enrollment_date || ''))
-        .map(m => ({
-            dba_name:       m.dba_name,
-            merchant_id:    m.merchant_id,
-            agent_id:       m.agent_id,
-            partner_name:   m.partner_full_name,
-            account_status: m.account_status,
-            enrollment_date: m.enrollment_date
-        }));
+    // 4. New Prime49 merchants by when they were ADDED (created_at), all statuses —
+    //    this matches when the auto-tasks fire, so the email no longer misses them.
+    const { data: newMerchRows } = await supabase
+        .from('merchant_portfolio_view')
+        .select('merchant_id, dba_name, agent_id, partner_full_name, account_status, created_at, enrollment_date')
+        .eq('is_prime49', true)
+        .gte('created_at', weekIso)
+        .order('created_at', { ascending: false })
+        .limit(500);
+    const mapMerch = m => ({
+        dba_name: m.dba_name, merchant_id: m.merchant_id, agent_id: m.agent_id,
+        partner_name: m.partner_full_name, account_status: m.account_status,
+        added_date: (m.created_at || '').slice(0, 10)
+    });
+    const newMerchantsWeek = (newMerchRows || []).map(mapMerch);
+    const newMerchantsYesterday = (newMerchRows || []).filter(m => m.created_at && m.created_at >= sinceIso).map(mapMerch);
+    // Back-compat alias used elsewhere in the email
+    const newMerchantDetails = newMerchantsYesterday;
 
     // 5. Build per-partner aggregates
     const partnerMap = {};
@@ -766,9 +787,14 @@ async function buildPrime49Data() {
         totalPptResidual,
         totalAgentResidual,
         newIdsThisWeek:      (newIds || []).length,
-        newMerchantsThisWeek: newMerchantDetails.length,
+        newMerchantsYesterdayCount: newMerchantsYesterday.length,
+        newMerchantsWeekCount: newMerchantsWeek.length,
+        newMerchantsYesterday,
+        newMerchantsWeek,
         partnerBreakdown,
         newIdDetails,
+        // legacy alias
+        newMerchantsThisWeek: newMerchantsYesterday.length,
         newMerchantDetails
     };
 }
