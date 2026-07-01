@@ -1124,6 +1124,12 @@ export default async function handler(req, res) {
     const { action, email, name, id, report_type = 'partners_merchants', schedule } = req.body;
 
     try {
+        // Residuals ledger — same computation as the Prime49 report, for on-screen review/export
+        if (action === 'residuals_ledger') {
+            const data = await buildPrime49Data();
+            return res.status(200).json({ success: true, data });
+        }
+
         if (action === 'get_recipients') {
             const { data, error } = await supabase.from('report_recipients')
                 .select('*').eq('report_type', report_type).order('created_at', { ascending: true });

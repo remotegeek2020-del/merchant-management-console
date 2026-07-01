@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Residuals Ledger | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=denied';})();</script>
+    <style>
+        .rl-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:18px;}
+        .rl-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+        .rl-kpi .v{font-size:1.4rem;font-weight:800;font-family:'DM Mono',monospace;color:#0a1628;}
+        .rl-kpi .l{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;}
+        table.rl{width:100%;border-collapse:collapse;background:#fff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;}
+        table.rl th{background:#f8fafc;padding:9px 12px;text-align:left;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.4px;}
+        table.rl td{padding:9px 12px;border-bottom:1px solid #f1f5f9;font-size:13px;color:#334155;}
+        table.rl td.num{text-align:right;font-family:'DM Mono',monospace;}
+        table.rl tfoot td{font-weight:800;color:#0a1628;background:#f8fafc;}
+    </style>
+</head>
+<body>
+<div class="pp-container">
+    <div class="pp-header">
+        <div class="pp-header-left">
+            <a href="/" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <h1 class="pp-header-title">Residuals Ledger</h1>
+        </div>
+        <div style="display:flex;gap:8px;">
+            <button class="pp-btn pp-btn-secondary" onclick="exportLedger()"><span class="material-icons" style="font-size:16px;">download</span> Export CSV</button>
+            <button class="pp-btn pp-btn-secondary" onclick="loadLedger()"><span class="material-icons" style="font-size:16px;">refresh</span></button>
+        </div>
+    </div>
+    <div id="rl-note" style="font-size:12px;color:#64748b;margin-bottom:14px;"></div>
+    <div id="rl-kpis" class="rl-kpis"></div>
+    <table class="rl">
+        <thead><tr>
+            <th>Partner</th><th>Agent ID(s)</th><th style="text-align:right;">Merchants</th>
+            <th style="text-align:right;">30D Volume</th><th style="text-align:right;">Partner Payout</th>
+            <th style="text-align:right;">PPT Share</th><th style="text-align:right;">Rev%</th>
+        </tr></thead>
+        <tbody id="rl-body"><tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Loading…</td></tr></tbody>
+        <tfoot id="rl-foot"></tfoot>
+    </table>
+</div>
+
+<script src="js/notif-bell.js" defer></script>
+<script>
+    const AUTH = () => ({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') });
+    const fmt = n => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n || 0);
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    let _data = null;
+
+    async function loadLedger() {
+        const body = document.getElementById('rl-body');
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Loading…</td></tr>';
+        try {
+            const res = await fetch('/api/scheduled-reports', { method: 'POST', headers: AUTH(), body: JSON.stringify({ action: 'residuals_ledger' }) });
+            const r = await res.json();
+            if (!r.success) throw new Error(r.message || 'Failed (need reports access)');
+            _data = r.data;
+            render(r.data);
+        } catch (e) {
+            body.innerHTML = `<tr><td colspan="7" style="text-align:center;color:#dc2626;padding:24px;">${esc(e.message)}</td></tr>`;
+        }
+    }
+
+    function render(d) {
+        document.getElementById('rl-note').textContent = 'Prime49 residuals as of ' + (d.date || '') + '. Partner payout = 30-day volume × 1.5%, grossed up by rev-share; PPT share is the remainder.';
+        const kpis = [
+            ['Partners', d.totalPartners], ['Merchants', d.totalMerchants],
+            ['30D Volume', fmt(d.totalVolume30d)], ['Partner Payouts', fmt(d.totalAgentResidual)],
+            ['PPT Share', fmt(d.totalPptResidual)], ['Net Pool', fmt(d.totalNetResidual)]
+        ];
+        document.getElementById('rl-kpis').innerHTML = kpis.map(k =>
+            `<div class="rl-kpi"><div class="v">${typeof k[1] === 'number' ? k[1].toLocaleString() : k[1]}</div><div class="l">${k[0]}</div></div>`).join('');
+        const rows = d.partnerBreakdown || [];
+        document.getElementById('rl-body').innerHTML = rows.length ? rows.map(p => `
+            <tr>
+                <td style="font-weight:700;color:#002d5a;">${esc(p.partner_name)}</td>
+                <td style="font-family:'DM Mono',monospace;font-size:11px;color:#64748b;">${esc(p.id_strings)}</td>
+                <td class="num">${(p.merchant_count || 0).toLocaleString()}</td>
+                <td class="num">${fmt(p.volume_30d)}</td>
+                <td class="num" style="color:#059669;font-weight:700;">${fmt(p.agent_payout)}</td>
+                <td class="num" style="color:#004990;">${fmt(p.ppt_share)}</td>
+                <td class="num">${p.rev_share}%</td>
+            </tr>`).join('') : '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">No active Prime49 merchants.</td></tr>';
+        document.getElementById('rl-foot').innerHTML = rows.length ? `
+            <tr><td colspan="2">Grand Total</td>
+            <td class="num">${(d.totalMerchants || 0).toLocaleString()}</td>
+            <td class="num">${fmt(d.totalVolume30d)}</td>
+            <td class="num" style="color:#059669;">${fmt(d.totalAgentResidual)}</td>
+            <td class="num" style="color:#004990;">${fmt(d.totalPptResidual)}</td><td></td></tr>` : '';
+    }
+
+    function exportLedger() {
+        if (!_data || !(_data.partnerBreakdown || []).length) return;
+        const esc2 = v => { const s = (v == null ? '' : String(v)); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        const header = ['Partner', 'Agent IDs', 'Merchants', '30D Volume', 'Partner Payout', 'PPT Share', 'Rev%'];
+        const lines = [header.join(',')].concat(_data.partnerBreakdown.map(p =>
+            [p.partner_name, p.id_strings, p.merchant_count, p.volume_30d, p.agent_payout, p.ppt_share, p.rev_share].map(esc2).join(',')));
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+        a.download = 'residuals-ledger.csv'; a.click();
+    }
+
+    loadLedger();
+</script>
+</body>
+</html>
