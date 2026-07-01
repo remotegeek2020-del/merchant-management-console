@@ -1203,6 +1203,26 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, count: emails.length });
         }
 
+        // Add several staff to the recipients list at once (from the staff picker)
+        if (action === 'add_recipients_bulk') {
+            const recips = Array.isArray(req.body.recipients) ? req.body.recipients : [];
+            const clean = recips
+                .map(r => ({ email: String(r.email || '').toLowerCase().trim(), name: r.name || null }))
+                .filter(r => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(r.email));
+            if (!clean.length) return res.status(400).json({ success: false, message: 'No valid staff selected' });
+            const { data: existing } = await supabase.from('report_recipients').select('email').eq('report_type', report_type);
+            const have = new Set((existing || []).map(e => (e.email || '').toLowerCase()));
+            const seen = new Set();
+            const toInsert = clean
+                .filter(r => !have.has(r.email) && !seen.has(r.email) && seen.add(r.email))
+                .map(r => ({ email: r.email, name: r.name, report_type }));
+            if (toInsert.length) {
+                const { error } = await supabase.from('report_recipients').insert(toInsert);
+                if (error) throw error;
+            }
+            return res.status(200).json({ success: true, added: toInsert.length, skipped: clean.length - toInsert.length });
+        }
+
         if (action === 'send_now') {
             const result = await sendReport(report_type, 'manual');
             return res.status(200).json({ success: true, ...result });
