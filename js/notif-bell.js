@@ -26,8 +26,11 @@
     function fmt(iso) { try { return new Date(iso).toLocaleString(); } catch (e) { return ''; } }
 
     // ── DOM ──
+    // Avoid overlapping the JARVIS float button (bottom:54px right:24px) when present.
+    var hasJarvis = !!document.getElementById('jarvis-trigger');
+    var pos = hasJarvis ? 'right:24px;bottom:118px;' : 'right:18px;bottom:74px;';
     var wrap = document.createElement('div');
-    wrap.style.cssText = 'position:fixed;right:18px;bottom:74px;z-index:99991;font-family:system-ui,Segoe UI,Arial,sans-serif;';
+    wrap.style.cssText = 'position:fixed;' + pos + 'z-index:99991;font-family:system-ui,Segoe UI,Arial,sans-serif;';
     wrap.innerHTML =
         '<button id="nb-btn" title="Notifications" style="position:relative;width:44px;height:44px;border-radius:50%;border:1px solid #e2e8f0;background:#fff;cursor:pointer;color:#334155;box-shadow:0 4px 14px rgba(0,0,0,.12);display:flex;align-items:center;justify-content:center;">' +
         '<span class="material-icons" style="font-size:22px;">notifications</span>' +
