@@ -1188,6 +1188,13 @@ export default async function handler(req, res) {
             if (error) throw error;
             return res.status(200).json({ success: true });
         }
+        if (action === 'clear_recipient_excludes') {
+            const { error } = await supabase.from('app_settings').upsert(
+                { key: `report_recipient_excludes_${report_type}`, value: '[]', updated_at: new Date().toISOString() },
+                { onConflict: 'key' });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: [] });
+        }
         if (action === 'add_recipient_exclude' || action === 'remove_recipient_exclude') {
             const key = `report_recipient_excludes_${report_type}`;
             const em = (req.body.email || '').toLowerCase().trim();
