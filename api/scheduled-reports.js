@@ -371,7 +371,7 @@ function buildPrime49Email(data) {
         date, totalPartners, totalMerchants, totalVolume30d,
         totalNetResidual, totalPptResidual, totalAgentResidual,
         newIdsThisWeek,
-        newMerchantsYesterday = [], newMerchantsWeek = [], newMerchantsMonth = [],
+        newMerchantsAll = [],
         newMerchantsYesterdayCount = 0, newMerchantsWeekCount = 0, newMerchantsMonthCount = 0,
         partnerBreakdown, newIdDetails
     } = data;
@@ -423,26 +423,15 @@ function buildPrime49Email(data) {
             <tbody>${merchantRowsHtml(list)}</tbody>
         </table>`;
 
-    // New-merchant sections — surfaced near the TOP so yesterday's list is seen
-    // without expanding (long emails get clipped by Gmail's "•••").
+    // Single de-duplicated table of new merchants (newest first). The three
+    // period counts live in the badges above; one table avoids Gmail collapsing
+    // near-identical repeated tables behind a "•••" expander.
     const newMerchantsBlock = `
     <div style="padding:22px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:4px;">🏪 New Prime49 Merchants — Yesterday (${newMerchantsYesterdayCount})</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Added in the last 24 hours (any status) — most actionable</div>
-        ${newMerchantsYesterdayCount > 0 ? merchantTable(newMerchantsYesterday)
-            : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#16a34a;font-weight:700;">✓ None added yesterday</div>`}
-    </div>
-    <div style="padding:22px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#0d9488;margin-bottom:4px;">📅 New Prime49 Merchants — This Week (${newMerchantsWeekCount})</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Added since Monday (any status)</div>
-        ${newMerchantsWeekCount > 0 ? merchantTable(newMerchantsWeek)
-            : `<div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#0d9488;font-weight:700;">✓ None added this week</div>`}
-    </div>
-    <div style="padding:22px 24px 0;">
-        <div style="font-size:14px;font-weight:800;color:#0369a1;margin-bottom:4px;">🗓️ New Prime49 Merchants — This Month (${newMerchantsMonthCount})</div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Added since the 1st (any status)</div>
-        ${newMerchantsMonthCount > 0 ? merchantTable(newMerchantsMonth)
-            : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#0369a1;font-weight:700;">✓ None added this month</div>`}
+        <div style="font-size:14px;font-weight:800;color:#059669;margin-bottom:4px;">🏪 New Prime49 Merchants (${newMerchantsMonthCount || newMerchantsWeekCount || newMerchantsYesterdayCount})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Newest first — see the counts above for Yesterday / This Week / This Month. The <b>Added</b> column shows each merchant's date.</div>
+        ${newMerchantsAll.length ? merchantTable(newMerchantsAll)
+            : `<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#16a34a;font-weight:700;">✓ No new Prime49 merchants recently</div>`}
     </div>`;
 
     const kpi = (label, val, sub, accent) => `
@@ -761,6 +750,9 @@ async function buildPrime49Data() {
     const newMerchantsMonth = rowsAll.filter(m => m.created_at && m.created_at >= monthIso).map(mapMerch);
     const newMerchantsWeek = rowsAll.filter(m => m.created_at && m.created_at >= weekIso).map(mapMerch);
     const newMerchantsYesterday = rowsAll.filter(m => m.created_at && m.created_at >= sinceIso).map(mapMerch);
+    // One combined, de-duplicated list (newest first) — a single table avoids Gmail
+    // collapsing near-identical repeated tables behind a "•••" expander.
+    const newMerchantsAll = rowsAll.map(mapMerch);
     // Back-compat alias used elsewhere in the email
     const newMerchantDetails = newMerchantsYesterday;
 
@@ -816,6 +808,7 @@ async function buildPrime49Data() {
         newMerchantsYesterday,
         newMerchantsWeek,
         newMerchantsMonth,
+        newMerchantsAll,
         partnerBreakdown,
         newIdDetails,
         // legacy alias
