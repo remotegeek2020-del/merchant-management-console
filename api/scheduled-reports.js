@@ -1131,6 +1131,17 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: arr });
         }
 
+        // List all active staff (for the recipient checklist)
+        if (action === 'list_staff') {
+            const { data } = await supabase.from('app_users')
+                .select('email, first_name, last_name, is_active')
+                .order('first_name', { ascending: true });
+            const staff = (data || [])
+                .filter(u => u.email && u.is_active !== false)
+                .map(u => ({ email: u.email, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email }));
+            return res.status(200).json({ success: true, data: staff });
+        }
+
         // Send-to-all-staff toggle + recipient exclusions (per report type)
         if (action === 'get_sendall') {
             const cfg = await getSendAllConfig(report_type);
