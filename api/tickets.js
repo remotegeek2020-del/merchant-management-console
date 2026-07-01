@@ -1045,6 +1045,16 @@ export default async function handler(req, res) {
             }
 
             const { data: deletedTicket } = await supabase.from('support_tickets').select('ticket_number, subject').eq('id', ticket_id).single();
+            // Archive a restorable snapshot (ticket + its comments) BEFORE deleting (best-effort)
+            try {
+                const { data: fullT } = await supabase.from('support_tickets').select('*').eq('id', ticket_id).single();
+                const { data: cmts } = await supabase.from('ticket_comments').select('*').eq('ticket_id', ticket_id);
+                if (fullT) await supabase.from('deleted_records').insert({
+                    entity_type: 'ticket', entity_id: String(fullT.id),
+                    label: `Ticket #${fullT.ticket_number || ''} — ${fullT.subject || ''}`,
+                    snapshot: { ...fullT, __comments: cmts || [] }, deleted_by: staffSession.userid
+                });
+            } catch (e) { console.warn('[archive ticket]', e.message); }
             // Delete comments first (FK), then the ticket
             await supabase.from('ticket_comments').delete().eq('ticket_id', ticket_id);
             const { error } = await supabase.from('support_tickets').delete().eq('id', ticket_id);

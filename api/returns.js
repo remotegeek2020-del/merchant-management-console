@@ -501,6 +501,15 @@ if (action === 'complete_return') {
                 .single();
             if (fetchErr || !rma) return res.status(404).json({ success: false, message: 'Return not found.' });
 
+            // Archive a restorable snapshot BEFORE deleting (best-effort; never blocks the delete)
+            try {
+                const { data: snap } = await supabase.from('returns').select('*').eq('id', return_uuid).single();
+                if (snap) await supabase.from('deleted_records').insert({
+                    entity_type: 'return', entity_id: String(snap.id),
+                    label: `RMA ${snap.return_id || ''}`, snapshot: snap, deleted_by: session.userid
+                });
+            } catch (e) { console.warn('[archive return]', e.message); }
+
             // Fetch supporting context for logging before modifying anything
             const [{ data: delMerchant }, { data: delEquip }] = await Promise.all([
                 rma.merchant_id
