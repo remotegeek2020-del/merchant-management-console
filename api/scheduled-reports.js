@@ -371,8 +371,8 @@ function buildPrime49Email(data) {
         date, totalPartners, totalMerchants, totalVolume30d,
         totalNetResidual, totalPptResidual, totalAgentResidual,
         newIdsThisWeek,
-        newMerchantsYesterday = [], newMerchantsWeek = [],
-        newMerchantsYesterdayCount = 0, newMerchantsWeekCount = 0,
+        newMerchantsYesterday = [], newMerchantsWeek = [], newMerchantsMonth = [],
+        newMerchantsYesterdayCount = 0, newMerchantsWeekCount = 0, newMerchantsMonthCount = 0,
         partnerBreakdown, newIdDetails
     } = data;
 
@@ -468,6 +468,10 @@ function buildPrime49Email(data) {
                 <span style="font-size:18px;font-weight:900;color:#0d9488;">${newMerchantsWeekCount}</span>
                 <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants (This Week)</span>
             </div>
+            <div style="background:white;border:1px solid #bbf7d0;border-radius:8px;padding:6px 14px;">
+                <span style="font-size:18px;font-weight:900;color:#0369a1;">${newMerchantsMonthCount}</span>
+                <span style="font-size:11px;color:#065f46;margin-left:5px;">New Merchants (This Month)</span>
+            </div>
         </div>
     </div>
 
@@ -533,6 +537,14 @@ function buildPrime49Email(data) {
         <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Prime49 merchants added since Monday (any status)</div>
         ${newMerchantsWeekCount > 0 ? merchantTable(newMerchantsWeek)
             : `<div style="background:#f0fdfa;border:1px solid #99f6e4;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#0d9488;font-weight:700;">✓ None added this week</div>`}
+    </div>
+
+    <!-- NEW MERCHANTS — THIS MONTH -->
+    <div style="padding:24px 24px 0;">
+        <div style="font-size:14px;font-weight:800;color:#0369a1;margin-bottom:4px;">🗓️ New Prime49 Merchants — This Month (${newMerchantsMonthCount})</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:10px;">Prime49 merchants added since the 1st (any status)</div>
+        ${newMerchantsMonthCount > 0 ? merchantTable(newMerchantsMonth)
+            : `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:14px 20px;text-align:center;font-size:13px;color:#0369a1;font-weight:700;">✓ None added this month</div>`}
     </div>
 
     <!-- CALCULATION METHODOLOGY -->
@@ -676,6 +688,15 @@ async function buildPrime49Data() {
     weekStart.setUTCDate(weekStart.getUTCDate() - ((weekStart.getUTCDay() + 6) % 7));
     const weekIso = weekStart.toISOString();
 
+    // Month start = 1st of current month 00:00 UTC (for "new this month")
+    const monthStart = new Date(today);
+    monthStart.setUTCHours(0, 0, 0, 0);
+    monthStart.setUTCDate(1);
+    const monthIso = monthStart.toISOString();
+
+    // Earliest window bound so one query covers yesterday, this week AND this month
+    const earliestIso = new Date(Math.min(Date.parse(sinceIso), Date.parse(weekIso), Date.parse(monthIso))).toISOString();
+
     // 1. Fetch all approved prime49 merchants with volume
     const { data: merchants, error: mErr } = await supabase
         .from('merchant_portfolio_view')
@@ -728,16 +749,18 @@ async function buildPrime49Data() {
         .from('merchant_portfolio_view')
         .select('merchant_id, dba_name, agent_id, partner_full_name, account_status, created_at, enrollment_date')
         .eq('is_prime49', true)
-        .gte('created_at', weekIso)
+        .gte('created_at', earliestIso)
         .order('created_at', { ascending: false })
-        .limit(500);
+        .limit(1000);
     const mapMerch = m => ({
         dba_name: m.dba_name, merchant_id: m.merchant_id, agent_id: m.agent_id,
         partner_name: m.partner_full_name, account_status: m.account_status,
         added_date: (m.created_at || '').slice(0, 10)
     });
-    const newMerchantsWeek = (newMerchRows || []).map(mapMerch);
-    const newMerchantsYesterday = (newMerchRows || []).filter(m => m.created_at && m.created_at >= sinceIso).map(mapMerch);
+    const rowsAll = newMerchRows || [];
+    const newMerchantsMonth = rowsAll.filter(m => m.created_at && m.created_at >= monthIso).map(mapMerch);
+    const newMerchantsWeek = rowsAll.filter(m => m.created_at && m.created_at >= weekIso).map(mapMerch);
+    const newMerchantsYesterday = rowsAll.filter(m => m.created_at && m.created_at >= sinceIso).map(mapMerch);
     // Back-compat alias used elsewhere in the email
     const newMerchantDetails = newMerchantsYesterday;
 
@@ -789,8 +812,10 @@ async function buildPrime49Data() {
         newIdsThisWeek:      (newIds || []).length,
         newMerchantsYesterdayCount: newMerchantsYesterday.length,
         newMerchantsWeekCount: newMerchantsWeek.length,
+        newMerchantsMonthCount: newMerchantsMonth.length,
         newMerchantsYesterday,
         newMerchantsWeek,
+        newMerchantsMonth,
         partnerBreakdown,
         newIdDetails,
         // legacy alias
