@@ -793,6 +793,20 @@ async function buildOpsData() {
 
 // ── ACTIVITY LOGS REPORT ─────────────────────────────────────────────────────
 
+// Classify a free-text action into a verb bucket (what they did).
+function classifyAction(a) {
+    const s = (a || '').toLowerCase();
+    if (/search|lookup|query/.test(s)) return 'Search';
+    if (/login|log in|logout|log out|sign|auth|password|2fa|token/.test(s)) return 'Auth';
+    if (/delet|remov|void|scrap|decommission/.test(s)) return 'Delete';
+    if (/complet|clos|deliver|receiv|approv|finaliz|stock/.test(s)) return 'Complete';
+    if (/updat|edit|chang|modif|renam|assign|set |toggle|merge/.test(s)) return 'Update';
+    if (/creat|added|\badd\b|filed|enroll|new |generat|deploy|initiat|import|upload/.test(s)) return 'Create';
+    if (/sent|send|email|notif|invite/.test(s)) return 'Send';
+    if (/view|open|print|export|download/.test(s)) return 'View';
+    return 'Other';
+}
+
 async function getActivityExcludes() {
     const { data } = await supabase.from('app_settings').select('value').eq('key', 'activity_report_excluded_emails').maybeSingle();
     try { const arr = JSON.parse(data?.value || '[]'); return Array.isArray(arr) ? arr.map(e => String(e).toLowerCase()) : []; }
@@ -817,7 +831,7 @@ async function buildActivityData() {
     let rows = [], off = 0, done = false;
     while (!done) {
         const { data: batch } = await supabase.from('activity_logs')
-            .select('email, category, created_at')
+            .select('email, category, action, created_at')
             .gte('created_at', sinceIso)
             .order('created_at', { ascending: false })
             .range(off, off + 999);
@@ -825,16 +839,19 @@ async function buildActivityData() {
         else { rows = rows.concat(batch); off += 1000; if (batch.length < 1000 || off >= 20000) done = true; }
     }
 
-    const byUser = {}, byCat = {};
+    const byUser = {}, byCat = {}, byAction = {};
     let total = 0;
     for (const r of rows) {
         const em = (r.email || '').toLowerCase();
         if (!em || excluded.has(em)) continue;
         const cat = r.category || 'other';
-        if (!byUser[em]) byUser[em] = { total: 0, cats: {} };
+        const verb = classifyAction(r.action);
+        if (!byUser[em]) byUser[em] = { total: 0, cats: {}, actions: {} };
         byUser[em].total++;
         byUser[em].cats[cat] = (byUser[em].cats[cat] || 0) + 1;
+        byUser[em].actions[verb] = (byUser[em].actions[verb] || 0) + 1;
         byCat[cat] = (byCat[cat] || 0) + 1;
+        byAction[verb] = (byAction[verb] || 0) + 1;
         total++;
     }
 
@@ -846,11 +863,13 @@ async function buildActivityData() {
     }
     const topUsers = emails.map(em => ({
         email: em, name: nameMap[em] || em, count: byUser[em].total,
-        byCategory: Object.entries(byUser[em].cats).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count)
+        byCategory: Object.entries(byUser[em].cats).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count),
+        byAction: Object.entries(byUser[em].actions).map(([a, n]) => ({ action: a, count: n })).sort((a, b) => b.count - a.count)
     })).sort((a, b) => b.count - a.count).slice(0, 15);
     const topCats = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count).slice(0, 10);
+    const topActions = Object.entries(byAction).map(([a, n]) => ({ action: a, count: n })).sort((a, b) => b.count - a.count);
 
-    return { date: dateStr, windowLabel, schedule: sc, totalEvents: total, activeUsers: emails.length, topUsers, topCats, excludedCount: excluded.size };
+    return { date: dateStr, windowLabel, schedule: sc, totalEvents: total, activeUsers: emails.length, topUsers, topCats, topActions, excludedCount: excluded.size };
 }
 
 function buildActivityEmail(data) {
@@ -859,12 +878,15 @@ function buildActivityEmail(data) {
     const maxCount = (topUsers[0]?.count) || 1;
     const catChips = (cats) => (cats || []).map(c =>
         `<span style="display:inline-block;background:#ede9fe;color:#5b21b6;border-radius:6px;padding:1px 7px;margin:2px 3px 0 0;font-size:10px;font-weight:600;text-transform:capitalize;">${c.category} ${num(c.count)}</span>`).join('');
+    const actChips = (acts) => (acts || []).map(a =>
+        `<span style="display:inline-block;background:#dcfce7;color:#166534;border-radius:6px;padding:1px 7px;margin:2px 3px 0 0;font-size:10px;font-weight:600;">${a.action} ${num(a.count)}</span>`).join('');
     const userRows = (topUsers || []).map((u, i) => `
         <tr style="border-bottom:1px solid #f1f5f9;${i < 3 ? 'background:#faf5ff;' : ''}">
             <td style="padding:10px 12px;font-weight:700;color:#7c3aed;font-size:13px;width:36px;text-align:center;vertical-align:top;">${medal(i)}</td>
             <td style="padding:10px 12px;font-size:13px;color:#1e293b;font-weight:${i < 3 ? '700' : '600'};vertical-align:top;">
                 ${u.name}<br><span style="font-size:10px;color:#94a3b8;font-weight:400;">${u.email}</span>
-                <div style="margin-top:5px;line-height:1.7;">${catChips(u.byCategory)}</div>
+                <div style="margin-top:5px;line-height:1.7;"><span style="font-size:9px;color:#a78bfa;font-weight:700;">BY AREA:</span> ${catChips(u.byCategory)}</div>
+                <div style="margin-top:3px;line-height:1.7;"><span style="font-size:9px;color:#4ade80;font-weight:700;">DID:</span> ${actChips(u.byAction)}</div>
             </td>
             <td style="padding:10px 12px;width:38%;vertical-align:top;">
                 <div style="display:flex;align-items:center;gap:8px;">
@@ -878,6 +900,11 @@ function buildActivityEmail(data) {
         <tr style="border-bottom:1px solid #f1f5f9;">
             <td style="padding:7px 12px;font-size:12px;color:#334155;text-transform:capitalize;">${c.category}</td>
             <td style="padding:7px 12px;font-size:12px;font-weight:700;color:#5b21b6;text-align:right;">${num(c.count)}</td>
+        </tr>`).join('');
+    const actionRows = (data.topActions || []).map(a => `
+        <tr style="border-bottom:1px solid #f1f5f9;">
+            <td style="padding:7px 12px;font-size:12px;color:#334155;">${a.action}</td>
+            <td style="padding:7px 12px;font-size:12px;font-weight:700;color:#166534;text-align:right;">${num(a.count)}</td>
         </tr>`).join('');
 
     return `<!DOCTYPE html><html>
@@ -906,11 +933,18 @@ function buildActivityEmail(data) {
             <tbody>${userRows || '<tr><td style="padding:16px;text-align:center;color:#94a3b8;font-size:12px;">No activity in this window</td></tr>'}</tbody>
         </table>
     </div>
-    <div style="padding:24px 32px;">
+    <div style="padding:24px 32px 0;">
         <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">Activity by Category</div>
         <div style="font-size:11px;color:#64748b;margin-bottom:12px;">Where the events happened</div>
         <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
             <tbody>${catRows || '<tr><td colspan="2" style="padding:12px;text-align:center;color:#94a3b8;font-size:12px;">No data</td></tr>'}</tbody>
+        </table>
+    </div>
+    <div style="padding:24px 32px;">
+        <div style="font-size:13px;font-weight:800;color:#002d5a;margin-bottom:4px;">Activity by Action Type</div>
+        <div style="font-size:11px;color:#64748b;margin-bottom:12px;">What people did (create / update / search / …)</div>
+        <table style="width:100%;border-collapse:collapse;border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+            <tbody>${actionRows || '<tr><td colspan="2" style="padding:12px;text-align:center;color:#94a3b8;font-size:12px;">No data</td></tr>'}</tbody>
         </table>
     </div>
     <div style="background:#f8fafc;padding:20px 32px;border-top:1px solid #e2e8f0;">

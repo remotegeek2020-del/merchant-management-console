@@ -36,25 +36,41 @@ export default async function handler(req, res) {
         let excluded = []; try { excluded = JSON.parse(exRow?.value || '[]'); } catch { excluded = []; }
         const exSet = new Set((excluded || []).map(e => String(e).toLowerCase()));
 
+        const classifyAction = a => {
+            const s = (a || '').toLowerCase();
+            if (/search|lookup|query/.test(s)) return 'Search';
+            if (/login|log in|logout|log out|sign|auth|password|2fa|token/.test(s)) return 'Auth';
+            if (/delet|remov|void|scrap|decommission/.test(s)) return 'Delete';
+            if (/complet|clos|deliver|receiv|approv|finaliz|stock/.test(s)) return 'Complete';
+            if (/updat|edit|chang|modif|renam|assign|set |toggle|merge/.test(s)) return 'Update';
+            if (/creat|added|\badd\b|filed|enroll|new |generat|deploy|initiat|import|upload/.test(s)) return 'Create';
+            if (/sent|send|email|notif|invite/.test(s)) return 'Send';
+            if (/view|open|print|export|download/.test(s)) return 'View';
+            return 'Other';
+        };
+
         let rows = [], off = 0, done = false;
         while (!done) {
             const { data: batch } = await supabase.from('activity_logs')
-                .select('email, category, created_at').gte('created_at', since)
+                .select('email, category, action, created_at').gte('created_at', since)
                 .order('created_at', { ascending: false }).range(off, off + 999);
             if (!batch || !batch.length) done = true;
             else { rows = rows.concat(batch); off += 1000; if (batch.length < 1000 || off >= 30000) done = true; }
         }
 
-        const byUser = {}, byCat = {};
+        const byUser = {}, byCat = {}, byAction = {};
         let total = 0;
         for (const r of rows) {
             const em = (r.email || '').toLowerCase();
             if (!em || exSet.has(em)) continue;
             const c = r.category || 'other';
-            if (!byUser[em]) byUser[em] = { total: 0, cats: {} };
+            const verb = classifyAction(r.action);
+            if (!byUser[em]) byUser[em] = { total: 0, cats: {}, actions: {} };
             byUser[em].total++;
             byUser[em].cats[c] = (byUser[em].cats[c] || 0) + 1;
+            byUser[em].actions[verb] = (byUser[em].actions[verb] || 0) + 1;
             byCat[c] = (byCat[c] || 0) + 1;
+            byAction[verb] = (byAction[verb] || 0) + 1;
             total++;
         }
         const emails = Object.keys(byUser);
@@ -65,10 +81,12 @@ export default async function handler(req, res) {
         }
         const topUsers = emails.map(em => ({
             email: em, name: nameMap[em] || em, count: byUser[em].total,
-            byCategory: Object.entries(byUser[em].cats).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count)
+            byCategory: Object.entries(byUser[em].cats).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count),
+            byAction: Object.entries(byUser[em].actions).map(([a, n]) => ({ action: a, count: n })).sort((a, b) => b.count - a.count)
         })).sort((a, b) => b.count - a.count);
         const byCategory = Object.entries(byCat).map(([c, n]) => ({ category: c, count: n })).sort((a, b) => b.count - a.count);
-        return res.status(200).json({ success: true, kpi: true, days, totalEvents: total, activeUsers: emails.length, topUsers, byCategory, excluded: [...exSet] });
+        const byActionType = Object.entries(byAction).map(([a, n]) => ({ action: a, count: n })).sort((a, b) => b.count - a.count);
+        return res.status(200).json({ success: true, kpi: true, days, totalEvents: total, activeUsers: emails.length, topUsers, byCategory, byActionType, excluded: [...exSet] });
     }
 
     // ── GET LOGS ──────────────────────────────────────────
