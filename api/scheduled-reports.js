@@ -955,13 +955,18 @@ function buildActivityEmail(data) {
 
 // ── SEND HELPERS ─────────────────────────────────────────────────────────────
 
-async function getSendAllConfig(reportType) {
+async function getStaffConfig(reportType) {
     const onKey = `report_sendall_${reportType}`;
-    const exKey = `report_recipient_excludes_${reportType}`;
-    const { data } = await supabase.from('app_settings').select('key, value').in('key', [onKey, exKey]);
+    const listKey = `report_staff_recipients_${reportType}`;
+    const { data } = await supabase.from('app_settings').select('key, value').in('key', [onKey, listKey]);
     const map = Object.fromEntries((data || []).map(r => [r.key, r.value]));
-    let excludes = []; try { excludes = JSON.parse(map[exKey] || '[]'); } catch { excludes = []; }
-    return { sendAll: map[onKey] === 'true', excludes: (Array.isArray(excludes) ? excludes : []).map(e => String(e).toLowerCase()) };
+    let list = null;
+    try { list = map[listKey] != null ? JSON.parse(map[listKey]) : null; } catch { list = null; }
+    return {
+        sendAll: map[onKey] === 'true',
+        // recipients = explicit WHITELIST of staff who receive; null = "not set yet" (= everyone)
+        recipients: Array.isArray(list) ? list.map(e => String(e).toLowerCase()) : null
+    };
 }
 
 async function sendReport(reportType, trigger = 'cron', testEmail = null) {
@@ -969,15 +974,16 @@ async function sendReport(reportType, trigger = 'cron', testEmail = null) {
     if (testEmail) {
         recipients = [{ email: testEmail, name: 'Test' }];
     } else {
-        const { sendAll, excludes } = await getSendAllConfig(reportType);
+        const { sendAll, recipients: whitelist } = await getStaffConfig(reportType);
         if (sendAll) {
-            // Send to every active staff member, minus the recipient-exclusion list
-            const exSet = new Set(excludes);
+            // Send to the CHECKED staff (whitelist). null = everyone (no explicit picks yet).
             const { data: staff } = await supabase.from('app_users').select('email, first_name, last_name, is_active');
-            recipients = (staff || [])
-                .filter(u => u.is_active !== false && u.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u.email) && !exSet.has(u.email.toLowerCase()))
-                .map(u => ({ email: u.email, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email }));
-            if (!recipients.length) return { sent: 0, skipped: 'no eligible staff', report_type: reportType };
+            const active = (staff || []).filter(u => u.is_active !== false && u.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u.email));
+            let chosen;
+            if (whitelist === null) chosen = active;
+            else { const set = new Set(whitelist); chosen = active.filter(u => set.has(u.email.toLowerCase())); }
+            recipients = chosen.map(u => ({ email: u.email, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email }));
+            if (!recipients.length) return { sent: 0, skipped: 'no staff selected', report_type: reportType };
         }
     }
     if (!recipients) {
@@ -1176,39 +1182,25 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: staff });
         }
 
-        // Send-to-all-staff toggle + recipient exclusions (per report type)
+        // Staff recipient picker (whitelist) per report type
         if (action === 'get_sendall') {
-            const cfg = await getSendAllConfig(report_type);
+            const cfg = await getStaffConfig(report_type);
             return res.status(200).json({ success: true, ...cfg });
         }
-        if (action === 'set_sendall') {
-            const { error } = await supabase.from('app_settings').upsert(
-                { key: `report_sendall_${report_type}`, value: req.body.enabled ? 'true' : 'false', updated_at: new Date().toISOString() },
-                { onConflict: 'key' });
-            if (error) throw error;
-            return res.status(200).json({ success: true });
-        }
-        if (action === 'clear_recipient_excludes') {
-            const { error } = await supabase.from('app_settings').upsert(
-                { key: `report_recipient_excludes_${report_type}`, value: '[]', updated_at: new Date().toISOString() },
-                { onConflict: 'key' });
-            if (error) throw error;
-            return res.status(200).json({ success: true, data: [] });
-        }
-        if (action === 'add_recipient_exclude' || action === 'remove_recipient_exclude') {
-            const key = `report_recipient_excludes_${report_type}`;
-            const em = (req.body.email || '').toLowerCase().trim();
-            if (action === 'add_recipient_exclude' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
-                return res.status(400).json({ success: false, message: 'Invalid email address' });
-            }
-            const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
-            let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch { arr = []; }
-            if (!Array.isArray(arr)) arr = [];
-            if (action === 'add_recipient_exclude') { if (!arr.includes(em)) arr.push(em); }
-            else { arr = arr.filter(x => x !== em); }
-            const { error } = await supabase.from('app_settings').upsert({ key, value: JSON.stringify(arr), updated_at: new Date().toISOString() }, { onConflict: 'key' });
-            if (error) throw error;
-            return res.status(200).json({ success: true, data: arr });
+        // Save the FULL chosen-staff list in one write (avoids read-modify-write races).
+        // sendAll flag = true whenever a list is provided; false when cleared.
+        if (action === 'set_staff_recipients') {
+            const emails = Array.isArray(req.body.emails)
+                ? [...new Set(req.body.emails.map(e => String(e).toLowerCase().trim()).filter(e => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e)))]
+                : [];
+            const now = new Date().toISOString();
+            const { error: e1 } = await supabase.from('app_settings').upsert(
+                { key: `report_staff_recipients_${report_type}`, value: JSON.stringify(emails), updated_at: now }, { onConflict: 'key' });
+            if (e1) throw e1;
+            const { error: e2 } = await supabase.from('app_settings').upsert(
+                { key: `report_sendall_${report_type}`, value: emails.length ? 'true' : 'false', updated_at: now }, { onConflict: 'key' });
+            if (e2) throw e2;
+            return res.status(200).json({ success: true, count: emails.length });
         }
 
         if (action === 'send_now') {
