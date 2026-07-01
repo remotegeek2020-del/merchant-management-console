@@ -29,12 +29,23 @@ async function runAlerts(supabase) {
     let TH = DEFAULT_THRESHOLDS;
     try { if (cfg.alert_thresholds) TH = { ...DEFAULT_THRESHOLDS, ...JSON.parse(cfg.alert_thresholds) }; } catch {}
 
-    // Default recipients = active super_admins + Operations Admins
-    const { data: admins } = await supabase.from('app_users')
-        .select('userid, role, is_active');
-    const adminIds = (admins || [])
-        .filter(u => u.is_active !== false && ['super_admin', 'operations admin', 'operations_admin'].includes(String(u.role || '').toLowerCase()))
+    // Recipients: valid staff userids only. adminIds = active super_admins (kept
+    // small on purpose so alerts don't fan out to everyone). Plus optional
+    // configured extra recipients. Owner is added per-item when valid.
+    const { data: staffRows } = await supabase.from('app_users').select('userid, role, is_active');
+    const validUserIds = new Set((staffRows || []).map(u => u.userid));
+    const adminIds = (staffRows || [])
+        .filter(u => u.is_active !== false && String(u.role || '').toLowerCase() === 'super_admin')
         .map(u => u.userid);
+    let extra = [];
+    try { const e = JSON.parse(cfg.alert_recipients || '[]'); if (Array.isArray(e)) extra = e; } catch {}
+    const baseRecipients = [...new Set([...adminIds, ...extra])].filter(id => validUserIds.has(id));
+
+    // Only alert on items that crossed their threshold RECENTLY (not the whole
+    // historical backlog) — window in days. Combined with once/day dedup this
+    // means each item alerts about once, right after it breaches.
+    const WINDOW_DAYS = Number(TH.recent_window_days) || 3;
+    const owner = id => (id && validUserIds.has(id)) ? [id] : [];
 
     const findings = []; // { alert_key, recipients:[userid], title, body, merchant_id }
 
@@ -47,10 +58,10 @@ async function runAlerts(supabase) {
         const pri = String(t.priority || 'normal').toLowerCase();
         const sla = TH.ticket_sla_hours[pri] ?? TH.ticket_sla_hours.normal ?? 72;
         const age = hoursAgo(t.created_at);
-        if (age >= sla) {
+        if (age >= sla && age < sla + WINDOW_DAYS * 24) {
             findings.push({
                 alert_key: `ticket_sla:${t.id}`,
-                recipients: [t.assigned_to, ...adminIds].filter(Boolean),
+                recipients: [...owner(t.assigned_to), ...baseRecipients],
                 title: `⏰ Ticket past SLA: #${t.ticket_number || ''}`,
                 body: `${t.subject || 'Ticket'} — open ${Math.round(age)}h (SLA ${sla}h, ${pri})`,
                 merchant_id: t.merchant_id
@@ -66,9 +77,11 @@ async function runAlerts(supabase) {
             .neq('status', 'Completed').not('due_date', 'is', null).lt('due_date', nowIso)
             .limit(500);
         for (const tk of (tasks || [])) {
+            const overdueDays = daysAgo(tk.due_date);
+            if (overdueDays < 0 || overdueDays >= WINDOW_DAYS) continue; // only recently overdue
             findings.push({
                 alert_key: `task_overdue:${tk.id}`,
-                recipients: [tk.assigned_to, ...adminIds].filter(Boolean),
+                recipients: [...owner(tk.assigned_to), ...baseRecipients],
                 title: `⏰ Task overdue`,
                 body: `${tk.title || 'Task'} — was due ${String(tk.due_date).slice(0, 10)}`,
                 merchant_id: tk.merchant_id, task_id: tk.id
@@ -82,10 +95,11 @@ async function runAlerts(supabase) {
         .in('status', ['Open', 'In Transit']).limit(500);
     for (const d of (deps || [])) {
         const days = daysAgo(d.created_at);
-        if (days >= (TH.deployment_stuck_days || 10)) {
+        const thr = TH.deployment_stuck_days || 10;
+        if (days >= thr && days < thr + WINDOW_DAYS) {
             findings.push({
                 alert_key: `deploy_stuck:${d.id}`,
-                recipients: [d.created_by, ...adminIds].filter(Boolean),
+                recipients: [...owner(d.created_by), ...baseRecipients],
                 title: `⏰ Deployment stuck: ${d.deployment_id || ''}`,
                 body: `Status "${d.status}" for ${Math.round(days)} days`,
                 merchant_id: d.merchant_id
@@ -99,10 +113,11 @@ async function runAlerts(supabase) {
         .eq('status', 'Open').limit(500);
     for (const r of (rets || [])) {
         const days = daysAgo(r.return_date_initiated || r.created_at);
-        if (days >= (TH.return_open_days || 14)) {
+        const thr = TH.return_open_days || 14;
+        if (days >= thr && days < thr + WINDOW_DAYS) {
             findings.push({
                 alert_key: `return_aging:${r.id}`,
-                recipients: [r.created_by, ...adminIds].filter(Boolean),
+                recipients: [...owner(r.created_by), ...baseRecipients],
                 title: `⏰ RMA aging: ${r.return_id || ''}`,
                 body: `Return open ${Math.round(days)} days`,
                 merchant_id: r.merchant_id
@@ -139,13 +154,14 @@ async function runAlerts(supabase) {
     const seen = new Set((existing || []).map(e => `${e.user_id}|${e.alert_key}`));
     const toInsert = rows.filter(r => !seen.has(`${r.user_id}|${r.alert_key}`));
 
-    if (toInsert.length) {
-        // insert in chunks to be safe
-        for (let i = 0; i < toInsert.length; i += 500) {
-            await supabase.from('user_notifications').insert(toInsert.slice(i, i + 500));
-        }
+    let created = 0;
+    const errors = [];
+    for (let i = 0; i < toInsert.length; i += 500) {
+        const chunk = toInsert.slice(i, i + 500);
+        const { error } = await supabase.from('user_notifications').insert(chunk);
+        if (error) errors.push(error.message); else created += chunk.length;
     }
-    return { findings: findings.length, created: toInsert.length, skipped_dupes: rows.length - toInsert.length };
+    return { findings: findings.length, created, skipped_dupes: rows.length - toInsert.length, errors: errors.length ? errors.slice(0, 3) : undefined };
 }
 
 export default async function handler(req, res) {
