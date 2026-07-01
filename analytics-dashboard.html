@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics | PayProTec</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <link rel="stylesheet" href="css/pp-system.css">
+    <script src="js/tz.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=denied';})();</script>
+    <style>
+        .an-kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:18px;}
+        .an-kpi{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+        .an-kpi .v{font-size:1.7rem;font-weight:800;font-family:'DM Mono',monospace;color:#0a1628;}
+        .an-kpi .l{font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-top:3px;}
+        .an-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+        .an-card{background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
+        .an-card h3{font-size:13px;font-weight:800;color:#0f172a;margin:0 0 12px;}
+        .an-card .wrap{position:relative;height:260px;}
+        @media (max-width:820px){ .an-grid{grid-template-columns:1fr;} }
+    </style>
+</head>
+<body>
+<div class="pp-container">
+    <div class="pp-header">
+        <div class="pp-header-left">
+            <a href="/" class="pp-back-btn"><span class="material-icons" style="font-size:16px;">arrow_back</span> HOME</a>
+            <h1 class="pp-header-title">Analytics</h1>
+        </div>
+        <button class="pp-btn pp-btn-secondary" onclick="loadAnalytics()"><span class="material-icons" style="font-size:16px;">refresh</span> Refresh</button>
+    </div>
+
+    <div id="an-kpis" class="an-kpis"></div>
+
+    <div class="an-grid">
+        <div class="an-card"><h3>Deployments vs Returns (weekly)</h3><div class="wrap"><canvas id="c-flow"></canvas></div></div>
+        <div class="an-card"><h3>Tickets — Created vs Resolved (weekly)</h3><div class="wrap"><canvas id="c-tickets"></canvas></div></div>
+        <div class="an-card"><h3>Equipment Status</h3><div class="wrap"><canvas id="c-equip"></canvas></div></div>
+        <div class="an-card"><h3>New Merchants (monthly)</h3><div class="wrap"><canvas id="c-merch"></canvas></div></div>
+        <div class="an-card"><h3>Deployments by Status</h3><div class="wrap"><canvas id="c-dep"></canvas></div></div>
+        <div class="an-card"><h3>Tickets by Status</h3><div class="wrap"><canvas id="c-tk"></canvas></div></div>
+    </div>
+</div>
+
+<script src="js/notif-bell.js" defer></script>
+<script>
+    const AUTH = () => ({ 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('pp_session_token') || '') });
+    const PALETTE = ['#0369a1', '#7c3aed', '#16a34a', '#d97706', '#dc2626', '#0d9488', '#64748b'];
+    let charts = {};
+    function destroy() { Object.values(charts).forEach(c => { try { c.destroy(); } catch (e) {} }); charts = {}; }
+    const shortWeek = w => { const d = new Date(w + 'T00:00:00'); return (d.getUTCMonth() + 1) + '/' + d.getUTCDate(); };
+
+    async function loadAnalytics() {
+        try {
+            const res = await fetch('/api/analytics', { method: 'POST', headers: AUTH(), body: JSON.stringify({ action: 'overview' }) });
+            const d = await res.json();
+            if (!d.success) throw new Error(d.message || 'Failed');
+            renderKpis(d.kpis);
+            render(d);
+        } catch (e) {
+            document.getElementById('an-kpis').innerHTML = '<div style="color:#dc2626;font-size:13px;padding:12px;">Failed to load analytics: ' + (e.message || '') + '</div>';
+        }
+    }
+
+    function renderKpis(k) {
+        const cards = [
+            ['Open Tickets', k.open_tickets],
+            ['Open Deployments', k.open_deployments],
+            ['Open RMAs', k.open_returns],
+            ['Units Deployed', k.equip_deployed],
+            ['Units Stocked', k.equip_stocked],
+            ['Utilization', (k.utilization_pct != null ? k.utilization_pct + '%' : '—')],
+            ['Avg Ticket Resolve', (k.avg_ticket_resolution_h != null ? k.avg_ticket_resolution_h + 'h' : '—')]
+        ];
+        document.getElementById('an-kpis').innerHTML = cards.map(c =>
+            `<div class="an-kpi"><div class="v">${(typeof c[1] === 'number') ? c[1].toLocaleString() : (c[1] ?? '—')}</div><div class="l">${c[0]}</div></div>`).join('');
+    }
+
+    function line(id, labels, datasets) {
+        charts[id] = new Chart(document.getElementById(id), {
+            type: 'line',
+            data: { labels, datasets: datasets.map((ds, i) => ({ ...ds, borderColor: PALETTE[i], backgroundColor: PALETTE[i] + '22', tension: 0.3, fill: true, pointRadius: 2 })) },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+        });
+    }
+    function doughnut(id, obj) {
+        const labels = Object.keys(obj), vals = Object.values(obj);
+        charts[id] = new Chart(document.getElementById(id), {
+            type: 'doughnut',
+            data: { labels, datasets: [{ data: vals, backgroundColor: PALETTE }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, font: { size: 11 } } } } }
+        });
+    }
+    function bar(id, labels, data, color) {
+        charts[id] = new Chart(document.getElementById(id), {
+            type: 'bar',
+            data: { labels, datasets: [{ data, backgroundColor: color || '#0369a1' }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { precision: 0 } } } }
+        });
+    }
+
+    function render(d) {
+        destroy();
+        const wl = d.series.weeks.map(shortWeek);
+        line('c-flow', wl, [
+            { label: 'Deployments', data: d.series.deployments },
+            { label: 'Returns', data: d.series.returns }
+        ]);
+        line('c-tickets', wl, [
+            { label: 'Created', data: d.series.tickets_created },
+            { label: 'Resolved', data: d.series.tickets_resolved }
+        ]);
+        doughnut('c-equip', d.breakdowns.equipment_status);
+        bar('c-merch', d.new_merchants_monthly.labels, d.new_merchants_monthly.counts, '#16a34a');
+        doughnut('c-dep', d.breakdowns.deployments_status);
+        doughnut('c-tk', d.breakdowns.tickets_status);
+    }
+
+    loadAnalytics();
+</script>
+</body>
+</html>
