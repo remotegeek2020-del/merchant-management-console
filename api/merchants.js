@@ -1386,6 +1386,40 @@ if (action === 'get_notes') {
             return res.status(200).json({ success: true, data: notifs || [] });
         }
 
+        // --- ACTION: list_applications (self-onboarding review queue) ---
+        if (action === 'list_applications') {
+            const { data, error } = await supabase.from('merchants')
+                .select('id, merchant_id, dba_name, legal_name, owner_name, email, phone, city, state, monthly_volume, referral_source, agent_id, created_at, account_status')
+                .eq('source', 'self_onboarding').eq('account_status', 'Pending')
+                .order('created_at', { ascending: false }).limit(200);
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: data || [] });
+        }
+
+        // --- ACTION: review_application (approve/reject a self-onboarding app) ---
+        if (action === 'review_application') {
+            const { id: appId, decision } = req.body;
+            if (!appId || !['approve', 'reject'].includes(decision)) {
+                return res.status(400).json({ success: false, message: 'id and decision (approve|reject) required' });
+            }
+            const newStatus = decision === 'approve' ? 'Approved' : 'Rejected';
+            // Only affects self-onboarding applications still Pending — never touches live merchants
+            const { data: upd, error } = await supabase.from('merchants')
+                .update({ account_status: newStatus })
+                .eq('id', appId).eq('source', 'self_onboarding').eq('account_status', 'Pending')
+                .select('id, dba_name').maybeSingle();
+            if (error) throw error;
+            if (!upd) return res.status(409).json({ success: false, message: 'Application not found or already reviewed.' });
+            const { data: revActor } = await supabase.from('app_users').select('email, first_name, last_name').eq('userid', session.userid).maybeSingle();
+            supabase.from('activity_logs').insert({
+                email: revActor?.email || session.userid,
+                action: `Application ${decision === 'approve' ? 'approved' : 'rejected'} — ${upd.dba_name || appId}`,
+                status: 'success', category: 'merchants', target_id: appId, target_type: 'merchant', severity: 'info',
+                new_value: { account_status: newStatus }
+            }).then(() => {}).catch(() => {});
+            return res.status(200).json({ success: true, status: newStatus });
+        }
+
         // --- ACTION: mark_notification_read ---
         if (action === 'mark_notification_read') {
             const { notification_id, user_id, mark_all } = req.body;

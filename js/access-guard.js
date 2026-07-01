@@ -15,6 +15,7 @@
         var page = (location.pathname.split('/').pop() || '').toLowerCase();
         var MAP = {
             'merchants-dashboard.html': 'pp_access_merchants',
+            'merchant-applications.html': 'pp_access_merchants',
             'deployments-dashboard.html': 'pp_access_deployments',
             'returns-dashboard.html': 'pp_access_returns',
             'equipments-dashboard.html': 'pp_access_inventory',
