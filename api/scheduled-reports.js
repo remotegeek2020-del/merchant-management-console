@@ -921,11 +921,32 @@ function buildActivityEmail(data) {
 
 // ── SEND HELPERS ─────────────────────────────────────────────────────────────
 
+async function getSendAllConfig(reportType) {
+    const onKey = `report_sendall_${reportType}`;
+    const exKey = `report_recipient_excludes_${reportType}`;
+    const { data } = await supabase.from('app_settings').select('key, value').in('key', [onKey, exKey]);
+    const map = Object.fromEntries((data || []).map(r => [r.key, r.value]));
+    let excludes = []; try { excludes = JSON.parse(map[exKey] || '[]'); } catch { excludes = []; }
+    return { sendAll: map[onKey] === 'true', excludes: (Array.isArray(excludes) ? excludes : []).map(e => String(e).toLowerCase()) };
+}
+
 async function sendReport(reportType, trigger = 'cron', testEmail = null) {
     let recipients;
     if (testEmail) {
         recipients = [{ email: testEmail, name: 'Test' }];
     } else {
+        const { sendAll, excludes } = await getSendAllConfig(reportType);
+        if (sendAll) {
+            // Send to every active staff member, minus the recipient-exclusion list
+            const exSet = new Set(excludes);
+            const { data: staff } = await supabase.from('app_users').select('email, first_name, last_name, is_active');
+            recipients = (staff || [])
+                .filter(u => u.is_active !== false && u.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(u.email) && !exSet.has(u.email.toLowerCase()))
+                .map(u => ({ email: u.email, name: `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.email }));
+            if (!recipients.length) return { sent: 0, skipped: 'no eligible staff', report_type: reportType };
+        }
+    }
+    if (!recipients) {
         const { data, error } = await supabase
             .from('report_recipients').select('email, name')
             .eq('report_type', reportType);
@@ -1106,6 +1127,34 @@ export default async function handler(req, res) {
             if (action === 'add_activity_exclude') { if (!arr.includes(em)) arr.push(em); }
             else { arr = arr.filter(x => x !== em); }
             const { error } = await supabase.from('app_settings').upsert({ key: 'activity_report_excluded_emails', value: JSON.stringify(arr), updated_at: new Date().toISOString() }, { onConflict: 'key' });
+            if (error) throw error;
+            return res.status(200).json({ success: true, data: arr });
+        }
+
+        // Send-to-all-staff toggle + recipient exclusions (per report type)
+        if (action === 'get_sendall') {
+            const cfg = await getSendAllConfig(report_type);
+            return res.status(200).json({ success: true, ...cfg });
+        }
+        if (action === 'set_sendall') {
+            const { error } = await supabase.from('app_settings').upsert(
+                { key: `report_sendall_${report_type}`, value: req.body.enabled ? 'true' : 'false', updated_at: new Date().toISOString() },
+                { onConflict: 'key' });
+            if (error) throw error;
+            return res.status(200).json({ success: true });
+        }
+        if (action === 'add_recipient_exclude' || action === 'remove_recipient_exclude') {
+            const key = `report_recipient_excludes_${report_type}`;
+            const em = (req.body.email || '').toLowerCase().trim();
+            if (action === 'add_recipient_exclude' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+                return res.status(400).json({ success: false, message: 'Invalid email address' });
+            }
+            const { data } = await supabase.from('app_settings').select('value').eq('key', key).maybeSingle();
+            let arr = []; try { arr = JSON.parse(data?.value || '[]'); } catch { arr = []; }
+            if (!Array.isArray(arr)) arr = [];
+            if (action === 'add_recipient_exclude') { if (!arr.includes(em)) arr.push(em); }
+            else { arr = arr.filter(x => x !== em); }
+            const { error } = await supabase.from('app_settings').upsert({ key, value: JSON.stringify(arr), updated_at: new Date().toISOString() }, { onConflict: 'key' });
             if (error) throw error;
             return res.status(200).json({ success: true, data: arr });
         }
