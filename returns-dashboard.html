@@ -469,8 +469,11 @@ function viewRMADetails(index) {
 
             <!-- ShipStation return label -->
             ${r.is_shipstation ? `
-            <div style="font-size:10px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🚀 ShipStation Return Label</div>
-            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+                <div style="font-size:10px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;">🚀 ShipStation Return Label</div>
+                <button id="ssRefreshBtn" onclick="refreshReturnShipstation('${r.id}', ${index})" style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;cursor:pointer;">🔄 Refresh from ShipStation</button>
+            </div>
+            <div id="ssPanelBody" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
                 ${row('Status', r.ss_status || 'created')}
                 ${row('Tracking #', r.ss_tracking_number || '— (not shipped yet)')}
                 ${row('Carrier / Service', [r.ss_carrier, r.ss_service].filter(Boolean).join(' · ') || null)}
@@ -484,6 +487,11 @@ function viewRMADetails(index) {
                 ${row('Email', r.ss_ship_to_email || null)}
                 ${row('Address', r.ss_address || null)}
                 ${row('City / State / ZIP', r.ss_city_line || null)}
+                ${row('Country', r.ss_country || null)}
+                ${row('Order Date', r.ss_order_date ? fmtDate(r.ss_order_date) : null)}
+                ${row('Paid Date', r.ss_paid_date ? fmtDate(r.ss_paid_date) : null)}
+                ${row('Shipping Paid', r.ss_shipping_paid != null ? '$' + Number(r.ss_shipping_paid).toFixed(2) : null)}
+                ${row('Total Paid', r.ss_total_paid != null ? '$' + Number(r.ss_total_paid).toFixed(2) : null)}
                 ${row('Linked', r.ss_created_at ? fmtDate(r.ss_created_at) : null)}
             </div>` : ''}
 
@@ -614,6 +622,55 @@ async function linkRmaShipstation(returnId, btn) {
     } catch (e) {
         btn.textContent = orig; btn.disabled = false;
         if (out) { out.style.color = '#dc2626'; out.textContent = e.message; }
+    }
+}
+
+// Re-pull the freshest ShipStation data for a return's label and refresh the modal in place.
+async function refreshReturnShipstation(returnId, index) {
+    const ssToast = (msg, icon) => Swal.fire({ toast: true, position: 'top-end', icon: icon || 'info', title: msg, timer: 2600, showConfirmButton: false });
+    const btn = document.getElementById('ssRefreshBtn');
+    const orig = btn ? btn.textContent : '';
+    if (btn) { btn.textContent = 'Refreshing…'; btn.disabled = true; }
+    try {
+        const res = await fetch('/api/shipstation', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'refresh_return_shipment', return_id: returnId })
+        });
+        const r = await res.json();
+        if (!r.success || !r.shipment) {
+            if (btn) { btn.textContent = orig; btn.disabled = false; }
+            return ssToast(r.message || 'Could not refresh from ShipStation.', 'error');
+        }
+        // Merge the refreshed fields back into currentReturns so the reopened modal shows them.
+        const s = r.shipment, cur = currentReturns[index];
+        if (cur) {
+            cur.is_shipstation = true;
+            cur.ss_status = s.status || cur.ss_status;
+            cur.ss_tracking_number = s.tracking_number || cur.ss_tracking_number;
+            cur.ss_carrier = s.carrier || cur.ss_carrier;
+            cur.ss_service = s.service || cur.ss_service;
+            cur.ss_order_number = s.order_number || cur.ss_order_number;
+            cur.ss_order_id = s.ss_order_id || cur.ss_order_id;
+            cur.ss_shipment_id = s.ss_shipment_id || cur.ss_shipment_id;
+            cur.ss_store_name = s.store_name || cur.ss_store_name;
+            cur.ss_ship_to_name = s.ship_to_name || cur.ss_ship_to_name;
+            cur.ss_ship_to_company = s.ship_to_company || cur.ss_ship_to_company;
+            cur.ss_ship_to_phone = s.ship_to_phone || cur.ss_ship_to_phone;
+            cur.ss_ship_to_email = s.ship_to_email || cur.ss_ship_to_email;
+            cur.ss_address = [s.address, s.address_line2].filter(Boolean).join(', ') || cur.ss_address;
+            cur.ss_city_line = [s.city, s.state, s.zip].filter(Boolean).join(', ') || cur.ss_city_line;
+            cur.ss_country = s.country || cur.ss_country;
+            cur.ss_order_date = s.order_date || cur.ss_order_date;
+            cur.ss_paid_date = s.paid_date || cur.ss_paid_date;
+            cur.ss_shipping_paid = s.shipping_paid != null ? s.shipping_paid : cur.ss_shipping_paid;
+            cur.ss_total_paid = s.total_paid != null ? s.total_paid : cur.ss_total_paid;
+        }
+        ssToast(r.message || 'Refreshed from ShipStation.', (r.updated && r.updated.length) ? 'success' : 'info');
+        Swal.close();
+        setTimeout(() => viewRMADetails(index), 150);
+    } catch (e) {
+        if (btn) { btn.textContent = orig; btn.disabled = false; }
+        ssToast(e.message || 'Refresh failed.', 'error');
     }
 }
 

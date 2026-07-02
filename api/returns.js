@@ -123,7 +123,7 @@ if (action === 'list') {
     let ssMap = {};
     if (retIds.length) {
         const { data: ssRows } = await supabase.from('shipstation_shipments')
-            .select('return_id, order_number, ss_order_id, ss_shipment_id, tracking_number, carrier, service, status, store_name, ship_to_name, ship_to_company, ship_to_phone, ship_to_email, address, address_line2, city, state, zip, country, created_at')
+            .select('return_id, order_number, ss_order_id, ss_shipment_id, tracking_number, carrier, service, status, store_name, ship_to_name, ship_to_company, ship_to_phone, ship_to_email, address, address_line2, city, state, zip, country, order_date, paid_date, shipping_paid, total_paid, created_at')
             .eq('ship_type', 'return_label')
             .in('return_id', retIds);
         (ssRows || []).forEach(s => { if (s.return_id && !ssMap[s.return_id]) ssMap[s.return_id] = s; });
@@ -153,6 +153,10 @@ if (action === 'list') {
         r.ss_address = [ss?.address, ss?.address_line2].filter(Boolean).join(', ') || null;
         r.ss_city_line = [ss?.city, ss?.state, ss?.zip].filter(Boolean).join(', ') || null;
         r.ss_country = ss?.country || null;
+        r.ss_order_date = ss?.order_date || null;
+        r.ss_paid_date = ss?.paid_date || null;
+        r.ss_shipping_paid = ss?.shipping_paid || null;
+        r.ss_total_paid = ss?.total_paid || null;
         r.ss_created_at = ss?.created_at || null;
         return r;
     });

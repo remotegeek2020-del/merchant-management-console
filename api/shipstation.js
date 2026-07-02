@@ -839,6 +839,105 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, shipment: row });
         }
 
+        // ── REFRESH RETURN SHIPMENT ─────────────────────────────────────────
+        //     Re-pull a return's ShipStation data (recipient, address, order #,
+        //     costs, carrier/service, delivery status) and update the local row.
+        //     Pulls from BOTH the ShipStation order (recipient/costs/dates) and
+        //     the shipment (tracking/carrier/service) for maximum completeness.
+        if (action === 'refresh_return_shipment') {
+            const { return_id } = body;
+            if (!return_id) return res.status(400).json({ success: false, message: 'return_id required' });
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const { data: row } = await supabase.from('shipstation_shipments')
+                .select('*').eq('return_id', return_id).eq('ship_type', 'return_label')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle();
+            if (!row) return res.status(200).json({ success: true, shipment: null, message: 'No ShipStation return label linked.' });
+
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: true, shipment: row, configured: false, message: 'ShipStation keys not configured — showing stored data.' });
+
+            const norm = s => String(s || '').toUpperCase().replace(/\s/g, '');
+            const upd = {};
+
+            // 1) Pull the ORDER (has full shipTo, amountPaid, shippingAmount, taxAmount, orderDate, paymentDate)
+            let order = null;
+            if (row.ss_order_id) {
+                const r = await ssGet(`/orders/${encodeURIComponent(row.ss_order_id)}`);
+                if (r.ok && r.data && r.data.orderId) order = r.data;
+            }
+            if (!order && row.order_number) {
+                const r = await ssGet(`/orders?orderNumber=${encodeURIComponent(row.order_number)}`);
+                const list = (r.ok && Array.isArray(r.data?.orders)) ? r.data.orders : [];
+                order = list.find(o => norm(o.orderNumber) === norm(row.order_number)) || list[0] || null;
+            }
+            if (order) {
+                const st = order.shipTo || {};
+                if (order.orderNumber) upd.order_number = order.orderNumber;
+                if (order.orderId != null) upd.ss_order_id = String(order.orderId);
+                if (st.name) upd.ship_to_name = st.name;
+                if (st.company) upd.ship_to_company = st.company;
+                if (st.phone) upd.ship_to_phone = st.phone;
+                if (order.customerEmail) upd.ship_to_email = order.customerEmail;
+                if (st.street1) upd.address = st.street1;
+                if (st.street2) upd.address_line2 = st.street2;
+                if (st.city) upd.city = st.city;
+                if (st.state) upd.state = st.state;
+                if (st.postalCode) upd.zip = st.postalCode;
+                if (st.country) upd.country = st.country;
+                if (order.orderDate) upd.order_date = order.orderDate.slice(0, 10);
+                if (order.paymentDate) upd.paid_date = order.paymentDate.slice(0, 10);
+                if (order.shippingAmount != null) upd.shipping_paid = order.shippingAmount;
+                if (order.taxAmount != null) upd.tax_paid = order.taxAmount;
+                if (order.amountPaid != null) upd.total_paid = order.amountPaid;
+                if (order.advancedOptions?.storeId != null) upd.ss_store_id = String(order.advancedOptions.storeId);
+            }
+
+            // 2) Pull the SHIPMENT (tracking / carrier / service)
+            let shipment = null;
+            const shipUrl = row.ss_order_id ? `/shipments?orderId=${encodeURIComponent(row.ss_order_id)}&includeShipmentItems=true`
+                : row.tracking_number ? `/shipments?trackingNumber=${encodeURIComponent(row.tracking_number)}&includeShipmentItems=true`
+                : row.order_number ? `/shipments?orderNumber=${encodeURIComponent(row.order_number)}&includeShipmentItems=true` : null;
+            if (shipUrl) {
+                const r = await ssGet(shipUrl);
+                const list = (r.ok && Array.isArray(r.data?.shipments)) ? r.data.shipments : [];
+                shipment = list.find(s => !s.voided) || list[0] || null;
+            }
+            if (shipment) {
+                if (shipment.trackingNumber) upd.tracking_number = shipment.trackingNumber;
+                if (shipment.carrierCode) upd.carrier = shipment.carrierCode;
+                if (shipment.serviceCode) upd.service = shipment.serviceCode;
+                if (shipment.shipmentId != null) upd.ss_shipment_id = String(shipment.shipmentId);
+                if (shipment.shipmentCost != null && upd.shipping_paid == null && row.shipping_paid == null) upd.shipping_paid = shipment.shipmentCost;
+                upd.status = shipment.voided ? 'voided' : 'shipped';
+            }
+
+            // 3) Delivery status via carrier tracking (V2)
+            let delivered = false, delDate = null;
+            const tid = upd.tracking_number || row.tracking_number;
+            if (tid) {
+                const carrier = mapV2Carrier(upd.carrier || row.carrier) || detectCarrierFromTracking(tid);
+                if (carrier) {
+                    const t = await ssV2Tracking(carrier, tid);
+                    if (t?.ok && t.data) {
+                        const sc = String(t.data.status_code || '').toUpperCase();
+                        delivered = sc === 'DE' || String(t.data.status_description || '').toLowerCase().includes('delivered');
+                        delDate = (t.data.actual_delivery_date || '').slice(0, 10) || null;
+                        if (delivered) upd.status = 'delivered';
+                    }
+                }
+            }
+
+            if (Object.keys(upd).length) {
+                await supabase.from('shipstation_shipments').update(upd).eq('id', row.id);
+                Object.assign(row, upd);
+            }
+            return res.status(200).json({
+                success: true, shipment: row, delivered,
+                updated: Object.keys(upd),
+                message: (order || shipment) ? 'Refreshed from ShipStation.' : 'No matching ShipStation order/shipment found for the stored order # / tracking #.'
+            });
+        }
+
         // ── VOID LABEL (refund) ─────────────────────────────────────────────
         if (action === 'void_label') {
             const auth = await getAuthHeader();
