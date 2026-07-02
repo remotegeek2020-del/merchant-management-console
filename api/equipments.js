@@ -784,13 +784,33 @@ if (action === 'getMonthlyReport') {
             if (is_active !== undefined)   patch.is_active   = is_active;
             if (vendor_id !== undefined)   patch.vendor_id   = vendor_id || null;
             const { error } = await supabase.from('terminal_types').update(patch).eq('id', type_id);
-            if (error) throw error;
+            if (error) {
+                if (error.code === '23505') return res.status(409).json({ success: false, message: 'A terminal type with that name already exists.' });
+                throw error;
+            }
+
+            // A rename must cascade to the denormalized terminal_type text on every
+            // existing unit — otherwise Inventory/ROI/Repair Queue keep showing the
+            // OLD name. (merge_terminal_type already does this; rename must too.)
+            let cascaded = 0;
+            if (patch.name !== undefined && ttOld?.name && patch.name !== ttOld.name) {
+                const { count } = await supabase.from('equipments')
+                    .select('id', { count: 'exact', head: true }).eq('terminal_type', ttOld.name);
+                const { error: updErr } = await supabase.from('equipments')
+                    .update({ terminal_type: patch.name }).eq('terminal_type', ttOld.name);
+                if (updErr) throw updErr;
+                cascaded = count || 0;
+                // Propagate to legacy (Salesforce) deployments too — best-effort.
+                supabase.from('legacy_deployments').update({ terminal_type: patch.name }).eq('terminal_type', ttOld.name)
+                    .then(() => {}).catch(() => {});
+            }
+
             supabase.from('activity_logs').insert({
-                email: actorEmail, action: `Terminal Type Updated by ${actorName} — ${ttOld?.name || type_id}`,
+                email: actorEmail, action: `Terminal Type Updated by ${actorName} — ${ttOld?.name || type_id}${cascaded ? ` (${cascaded} unit${cascaded !== 1 ? 's' : ''} renamed)` : ''}`,
                 status: 'success', category: 'inventory', target_id: ttOld?.name || String(type_id), target_type: 'terminal_type', severity: 'info',
-                old_value: ttOld || null, new_value: patch
+                old_value: ttOld || null, new_value: { ...patch, equipment_updated: cascaded }
             }).then(() => {}).catch(() => {});
-            return res.status(200).json({ success: true });
+            return res.status(200).json({ success: true, renamed: cascaded });
         }
 
         if (action === 'delete_terminal_type') {
