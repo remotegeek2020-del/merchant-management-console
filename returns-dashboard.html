@@ -744,7 +744,76 @@ async function deleteReturn(returnUuid, returnId, dbaName) {
     }
 }
 
+// Before closing an RMA, offer to link it to a ShipStation return (unless already linked).
+// Returns 'proceed' (continue closing), 'abort' (cancel), or 'done' (already completed via link).
+async function rmaLinkGate(id) {
+    const row = currentReturns.find(x => String(x.id) === String(id));
+    if (!row || row.is_shipstation) return 'proceed';   // already linked or unknown → close normally
+    const rmaNo = (row.return_id || '').replace(/"/g, '&quot;');
+    let outcome = null; // set by a candidate "Link" click
+    const swalRes = await Swal.fire({
+        title: '<span style="font-size:15px;font-weight:800;color:#002d5a;">Link ShipStation return?</span>',
+        width: 540,
+        showCancelButton: true, showDenyButton: true,
+        confirmButtonText: 'Skip & close', confirmButtonColor: '#64748b',
+        denyButtonText: 'Cancel', denyButtonColor: '#94a3b8',
+        html: `<div style="text-align:left;">
+            <div style="font-size:12px;color:#475569;margin-bottom:10px;">RMA <b>${rmaNo || '(pending)'}</b> isn't linked to a ShipStation return. Search by <b>Tracking #</b>, <b>Order #</b>, or <b>RMA #</b> to link it before closing. (RMA # only matches if it was used as the ShipStation order #.)</div>
+            <div style="display:flex;gap:8px;">
+                <input id="rlq" value="${rmaNo}" placeholder="Tracking # / Order # / RMA #" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:monospace;">
+                <button type="button" id="rlqBtn" style="background:#0369a1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">Search</button>
+            </div>
+            <div id="rlqResults" style="margin-top:10px;max-height:230px;overflow-y:auto;"></div>
+        </div>`,
+        didOpen: () => {
+            const box = () => document.getElementById('rlqResults');
+            const runSearch = async () => {
+                const q = (document.getElementById('rlq').value || '').trim();
+                if (q.length < 3) { box().innerHTML = '<div style="font-size:12px;color:#b45309;">Type at least 3 characters.</div>'; return; }
+                box().innerHTML = '<div style="font-size:12px;color:#94a3b8;">Searching ShipStation…</div>';
+                try {
+                    const r = await fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'suggest_return_links', query: q }) }).then(x => x.json());
+                    if (!r.success) { box().innerHTML = `<div style="font-size:12px;color:#dc2626;">${r.message || 'Search failed'}</div>`; return; }
+                    const cands = r.candidates || [];
+                    if (!cands.length) { box().innerHTML = '<div style="font-size:12px;color:#94a3b8;">No matching ShipStation shipments. Paste the exact tracking #, or Skip & close.</div>'; return; }
+                    box().innerHTML = cands.map(c => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;margin-bottom:6px;">
+                        <div style="min-width:0;font-size:12px;">
+                            <div style="font-weight:700;color:#0f172a;font-family:monospace;">${c.tracking_number || '(no tracking)'} ${c.voided ? '<b style="color:#dc2626;">(voided)</b>' : ''}</div>
+                            <div style="color:#64748b;font-size:11px;">Order ${c.order_number || '—'} · ${[c.carrier, c.service].filter(Boolean).join(' ')} · ${c.ship_to_name || ''} · ${c.ship_date || ''}</div>
+                        </div>
+                        <button type="button" data-tk="${(c.tracking_number || '').replace(/"/g, '&quot;')}" class="rlqPick" style="flex-shrink:0;background:#16a34a;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;">Link</button>
+                    </div>`).join('');
+                    box().querySelectorAll('.rlqPick').forEach(b => b.addEventListener('click', async () => {
+                        const tk = b.getAttribute('data-tk');
+                        if (!tk) { Swal.showValidationMessage('This shipment has no tracking number.'); return; }
+                        b.disabled = true; b.textContent = 'Linking…';
+                        const lr = await fetch('/api/shipstation', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'link_return_by_tracking', return_id: id, tracking: tk }) }).then(x => x.json());
+                        if (!lr.success) { b.disabled = false; b.textContent = 'Link'; Swal.showValidationMessage(lr.message || 'Link failed'); return; }
+                        outcome = { linked: true, completed: !!lr.completed };
+                        Swal.close();
+                    }));
+                } catch (e) { box().innerHTML = `<div style="font-size:12px;color:#dc2626;">${e.message}</div>`; }
+            };
+            document.getElementById('rlqBtn').addEventListener('click', runSearch);
+            document.getElementById('rlq').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); runSearch(); } });
+            if (rmaNo) runSearch();
+        }
+    });
+    if (outcome && outcome.linked) {
+        await fetchReturns();
+        if (outcome.completed) {
+            Swal.fire({ icon: 'success', title: 'Linked & completed', text: 'Already delivered — RMA closed and unit restocked.', timer: 2000, showConfirmButton: false });
+            return 'done';
+        }
+        return 'proceed';
+    }
+    if (swalRes.isConfirmed) return 'proceed';   // Skip & close
+    return 'abort';                              // Cancel / dismissed
+}
+
 async function finalizeRMA(id, equipment_id, destination) {
+    const _gate = await rmaLinkGate(id);
+    if (_gate === 'abort' || _gate === 'done') return;
     const conditionMap = {
         'Warsaw Office':  'Working (Back to Stock)',
         'Warsaw Repairs': 'Defective (Received in Repairs)',

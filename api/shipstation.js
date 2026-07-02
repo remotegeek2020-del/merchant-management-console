@@ -563,6 +563,35 @@ export default async function handler(req, res) {
                                : 'Tracking not found in ShipStation, and the carrier could not be detected for a fallback lookup.') });
         }
 
+        // ── SUGGEST RETURN LINKS ─────────────────────────────────────────────
+        //     Search ShipStation shipments by a typed value (matches Tracking # or
+        //     Order #; RMA # matches only if it was used as the ShipStation order #).
+        if (action === 'suggest_return_links') {
+            const q = (body.query || '').trim();
+            if (q.length < 3) return res.status(200).json({ success: true, candidates: [] });
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: false, message: 'ShipStation keys not configured.' });
+            const seen = new Set(); const candidates = [];
+            const collect = async (path) => {
+                const r = await ssGet(path);
+                const list = (r.ok && Array.isArray(r.data?.shipments)) ? r.data.shipments : [];
+                for (const s of list) {
+                    const key = String(s.shipmentId || s.trackingNumber || s.orderNumber || '');
+                    if (!key || seen.has(key)) continue; seen.add(key);
+                    candidates.push({
+                        order_number: s.orderNumber || null, tracking_number: s.trackingNumber || null,
+                        carrier: s.carrierCode || null, service: s.serviceCode || null,
+                        ship_to_name: s.shipTo?.name || null, ship_date: (s.shipDate || s.createDate || '').slice(0, 10),
+                        voided: !!s.voided
+                    });
+                    if (candidates.length >= 15) break;
+                }
+            };
+            await collect(`/shipments?trackingNumber=${encodeURIComponent(q)}`);
+            if (candidates.length < 15) await collect(`/shipments?orderNumber=${encodeURIComponent(q)}`);
+            return res.status(200).json({ success: true, candidates });
+        }
+
         // ── SHIP-FROM WAREHOUSES ────────────────────────────────────────────
         if (action === 'get_warehouses') {
             const r = await ssGet('/warehouses');
