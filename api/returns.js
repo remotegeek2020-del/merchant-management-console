@@ -123,7 +123,7 @@ if (action === 'list') {
     let ssMap = {};
     if (retIds.length) {
         const { data: ssRows } = await supabase.from('shipstation_shipments')
-            .select('return_id, order_number, tracking_number, carrier, service, status')
+            .select('return_id, order_number, ss_order_id, ss_shipment_id, tracking_number, carrier, service, status, store_name, ship_to_name, ship_to_company, ship_to_phone, ship_to_email, address, address_line2, city, state, zip, country, created_at')
             .eq('ship_type', 'return_label')
             .in('return_id', retIds);
         (ssRows || []).forEach(s => { if (s.return_id && !ssMap[s.return_id]) ssMap[s.return_id] = s; });
@@ -139,10 +139,21 @@ if (action === 'list') {
         const ss = ssMap[r.id];
         r.is_shipstation = !!ss;
         r.ss_order_number = ss?.order_number || null;
+        r.ss_order_id = ss?.ss_order_id || null;
+        r.ss_shipment_id = ss?.ss_shipment_id || null;
         r.ss_tracking_number = ss?.tracking_number || null;
         r.ss_carrier = ss?.carrier || null;
         r.ss_service = ss?.service || null;
         r.ss_status = ss?.status || null;
+        r.ss_store_name = ss?.store_name || null;
+        r.ss_ship_to_name = ss?.ship_to_name || null;
+        r.ss_ship_to_company = ss?.ship_to_company || null;
+        r.ss_ship_to_phone = ss?.ship_to_phone || null;
+        r.ss_ship_to_email = ss?.ship_to_email || null;
+        r.ss_address = [ss?.address, ss?.address_line2].filter(Boolean).join(', ') || null;
+        r.ss_city_line = [ss?.city, ss?.state, ss?.zip].filter(Boolean).join(', ') || null;
+        r.ss_country = ss?.country || null;
+        r.ss_created_at = ss?.created_at || null;
         return r;
     });
 

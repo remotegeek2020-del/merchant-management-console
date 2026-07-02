@@ -515,13 +515,32 @@ function showReturnMerchantInfo(index) {
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Status</span><span style="font-weight:600;">${r.status || '—'}</span></div>
                     <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Reason</span><span style="font-weight:600;">${r.return_reason || '—'}</span></div>
                 </div>
-                ${r.is_shipstation ? `
+                ${r.is_shipstation ? (() => {
+                    const row = (lbl, val) => val ? `<div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:5px;"><span style="color:#64748b;">${lbl}</span><span style="font-weight:600; text-align:right; word-break:break-word;">${val}</span></div>` : '';
+                    const mono = (lbl, val, color) => val ? `<div style="display:flex; justify-content:space-between; gap:10px; margin-bottom:5px;"><span style="color:#64748b;">${lbl}</span><span style="font-weight:700; font-family:monospace; ${color ? 'color:' + color + ';' : ''}">${val}</span></div>` : '';
+                    return `
                 <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:12px 14px; grid-column:1/-1;">
-                    <div style="font-size:10px; font-weight:700; color:#166534; text-transform:uppercase; margin-bottom:8px;">🚀 ShipStation Return Label</div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">ShipStation Order #</span><span style="font-weight:700; font-family:monospace; color:#166534;">${r.ss_order_number || '—'}</span></div>
-                    <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Tracking #</span><span style="font-weight:700; font-family:monospace;">${r.ss_tracking_number || '— (not shipped yet)'}</span></div>
-                    <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Carrier / Service</span><span style="font-weight:600;">${[r.ss_carrier, r.ss_service].filter(Boolean).join(' · ') || '—'}</span></div>
-                </div>` : (String(r.status || '').toLowerCase() === 'open' ? `
+                    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+                        <div style="font-size:10px; font-weight:700; color:#166534; text-transform:uppercase;">🚀 ShipStation Return Label</div>
+                        <span style="text-transform:none;background:#dcfce7;color:#166534;padding:1px 8px;border-radius:6px;font-size:11px;font-weight:700;">${r.ss_status || 'created'}</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px 18px;font-size:12px;">
+                        ${mono('Tracking #', r.ss_tracking_number || '— (not shipped yet)')}
+                        ${row('Carrier / Service', [r.ss_carrier, r.ss_service].filter(Boolean).join(' · '))}
+                        ${mono('ShipStation Order #', r.ss_order_number, '#166534')}
+                        ${mono('SS Order ID', r.ss_order_id)}
+                        ${mono('SS Shipment ID', r.ss_shipment_id)}
+                        ${row('Store', r.ss_store_name)}
+                        ${row('Ship From — Name', r.ss_ship_to_name)}
+                        ${row('Company', r.ss_ship_to_company)}
+                        ${row('Phone', r.ss_ship_to_phone)}
+                        ${row('Email', r.ss_ship_to_email)}
+                        ${row('Address', r.ss_address)}
+                        ${row('City / State / ZIP', r.ss_city_line)}
+                        ${row('Country', r.ss_country)}
+                        ${row('Linked', r.ss_created_at ? fmtDate(r.ss_created_at) : '')}
+                    </div>
+                </div>`; })() : (String(r.status || '').toLowerCase() === 'open' ? `
                 <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 14px; grid-column:1/-1;">
                     <div style="font-size:10px; font-weight:700; color:#0369a1; text-transform:uppercase; margin-bottom:6px;">🔗 Link ShipStation Return</div>
                     <div style="font-size:11px; color:#475569; margin-bottom:8px;">Paste the return's tracking number (from ShipStation or the label) to link it. If it already shows delivered, this RMA will complete and restock automatically.</div>
