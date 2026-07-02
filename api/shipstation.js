@@ -439,6 +439,137 @@ export default async function handler(req, res) {
                                : 'Tracking number not found in ShipStation, and the carrier could not be detected for a fallback lookup.') });
         }
 
+        // ── BULK LINK DEPLOYMENTS BY TRACKING ────────────────────────────────
+        //     Auto-link many deployments at once using their existing tracking_id.
+        //     Batched: processes up to `limit` unlinked deployments per call and
+        //     reports `total` remaining so the UI can loop until done. `exclude`
+        //     carries deployment ids that already failed, so they aren't retried
+        //     forever. Respects ShipStation's 40 req/min cap with 429 back-off.
+        if (action === 'bulk_link_deployments') {
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const auth = await getAuthHeader();
+            if (!auth) return res.status(200).json({ success: false, message: 'ShipStation keys not configured.' });
+
+            const limit = Math.min(Math.max(Number(body.limit) || 12, 1), 25);
+            const exclude = new Set((Array.isArray(body.exclude) ? body.exclude : []).map(String));
+            const norm = s => String(s || '').toUpperCase().replace(/\s/g, '');
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+            // Rate-limit-aware GET: retry a couple of times on 429.
+            const ssGetRL = async (path) => {
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    const r = await fetch(`${SS_BASE}${path}`, { headers: { 'Authorization': auth, 'Content-Type': 'application/json' } });
+                    if (r.status === 429) {
+                        const reset = Number(r.headers.get('X-Rate-Limit-Reset')) || 2;
+                        await sleep(Math.min(reset * 1000 + 250, 8000));
+                        continue;
+                    }
+                    const data = await r.json().catch(() => ({}));
+                    return { ok: r.ok, status: r.status, data };
+                }
+                return { ok: false, status: 429, data: {}, rate_limited: true };
+            };
+
+            // Candidates: deployments with a tracking_id, not already linked, not excluded.
+            const { data: linkedRows } = await supabase.from('shipstation_shipments')
+                .select('deployment_id').eq('ship_type', 'outbound').not('deployment_id', 'is', null);
+            const linked = new Set((linkedRows || []).map(r => r.deployment_id));
+            const { data: deps } = await supabase.from('deployments')
+                .select('id, merchant_id, tracking_id, ship_to_type, ship_to_partner_id, status')
+                .not('tracking_id', 'is', null)
+                .order('created_at', { ascending: true });
+            const candidates = (deps || []).filter(d =>
+                (d.tracking_id || '').trim() && !linked.has(d.id) && !exclude.has(String(d.id)));
+
+            const total = candidates.length;
+            const batch = candidates.slice(0, limit);
+            let linkedCount = 0, carrierCount = 0, deliveredCount = 0;
+            const failed = [];
+
+            for (const dep of batch) {
+                const tid = (dep.tracking_id || '').trim();
+                try {
+                    // 1) ShipStation V1 lookup by tracking number
+                    let shipment = null;
+                    const r = await ssGetRL(`/shipments?trackingNumber=${encodeURIComponent(tid)}&includeShipmentItems=true`);
+                    if (r.rate_limited) { failed.push({ deployment_id: dep.id, tracking: tid, reason: 'Rate limited — try again' }); continue; }
+                    if (r.ok && r.data) {
+                        const list = Array.isArray(r.data.shipments) ? r.data.shipments : (Array.isArray(r.data) ? r.data : []);
+                        const matches = list.filter(s => norm(s.trackingNumber) === norm(tid));
+                        shipment = matches.find(s => !s.voided) || matches[0] || null;
+                    }
+
+                    if (shipment) {
+                        const st = shipment.shipTo || {};
+                        const insert = {
+                            order_number: shipment.orderNumber || null,
+                            ss_order_id: shipment.orderId != null ? String(shipment.orderId) : null,
+                            ss_shipment_id: shipment.shipmentId != null ? String(shipment.shipmentId) : null,
+                            ship_type: 'outbound', merchant_id: dep.merchant_id, deployment_id: dep.id,
+                            partner_id: dep.ship_to_partner_id || null,
+                            tracking_number: shipment.trackingNumber || tid,
+                            carrier: shipment.carrierCode || null, service: shipment.serviceCode || null,
+                            ship_to_name: st.name || null, ship_to_company: st.company || null, ship_to_phone: st.phone || null,
+                            address: st.street1 || null, address_line2: st.street2 || null, city: st.city || null,
+                            state: st.state || null, zip: st.postalCode || null, country: st.country || 'US',
+                            shipping_paid: shipment.shipmentCost != null ? shipment.shipmentCost : null,
+                            status: shipment.voided ? 'voided' : 'shipped', created_by: session.userid
+                        };
+                        const { error } = await supabase.from('shipstation_shipments').insert(insert);
+                        if (error) { failed.push({ deployment_id: dep.id, tracking: tid, reason: error.message }); continue; }
+                        if (shipment.trackingNumber && shipment.trackingNumber !== dep.tracking_id) {
+                            await supabase.from('deployments').update({ tracking_id: shipment.trackingNumber }).eq('id', dep.id);
+                        }
+                        linkedCount++;
+                        continue;
+                    }
+
+                    // 2) Fallback: carrier tracking (V2) for carrier + delivery status
+                    const carrier = detectCarrierFromTracking(tid);
+                    let info = null;
+                    if (carrier) {
+                        const t = await ssV2Tracking(carrier, tid);
+                        if (t?.status === 401 || t?.status === 403) { failed.push({ deployment_id: dep.id, tracking: tid, reason: 'Not in ShipStation; carrier lookup plan-gated' }); continue; }
+                        if (t?.ok && t.data) info = t.data;
+                    }
+                    if (info) {
+                        const sc = String(info.status_code || '').toUpperCase();
+                        const delivered = sc === 'DE' || String(info.status_description || '').toLowerCase().includes('delivered');
+                        const delDate = (info.actual_delivery_date || info.estimated_delivery_date || '').slice(0, 10) || null;
+                        const insert = {
+                            ship_type: 'outbound', merchant_id: dep.merchant_id, deployment_id: dep.id,
+                            partner_id: dep.ship_to_partner_id || null, tracking_number: tid, carrier, service: null,
+                            status: delivered ? 'delivered' : (info.status_description || 'in_transit'),
+                            store_name: 'Carrier lookup (not a ShipStation order)', created_by: session.userid
+                        };
+                        const { error } = await supabase.from('shipstation_shipments').insert(insert);
+                        if (error) { failed.push({ deployment_id: dep.id, tracking: tid, reason: error.message }); continue; }
+                        if (delivered && delDate) {
+                            if ((dep.ship_to_type || 'merchant') === 'partner') {
+                                await supabase.from('deployments').update({ partner_received_date: delDate }).eq('id', dep.id);
+                            } else {
+                                await supabase.from('deployments').update({ merchant_received_date: delDate, status: 'Closed' }).eq('id', dep.id);
+                            }
+                            deliveredCount++;
+                        }
+                        carrierCount++;
+                        continue;
+                    }
+
+                    failed.push({ deployment_id: dep.id, tracking: tid, reason: carrier ? 'Not found in ShipStation or carrier' : 'Not in ShipStation; carrier not detected' });
+                } catch (e) {
+                    failed.push({ deployment_id: dep.id, tracking: tid, reason: e.message || 'error' });
+                }
+            }
+
+            const processed = batch.length;
+            return res.status(200).json({
+                success: true, total, processed,
+                linked: linkedCount, carrier_linked: carrierCount, delivered: deliveredCount,
+                failed, remaining: Math.max(0, total - linkedCount - carrierCount - failed.length)
+            });
+        }
+
         // ── LINK A RETURN BY TRACKING (existing/manual RMAs) ─────────────────
         //     Paste a return's tracking number → find it in ShipStation → link a
         //     return_label row to the RMA. If it already shows delivered, complete

@@ -123,6 +123,10 @@
                     <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">upload_file</span>
                     BULK UPLOAD
                 </button>
+                <button id="bulkLinkSsBtn" class="slds-button slds-button_neutral" style="display:none; border-radius:10px; border:1px solid #86efac; color:#166534; background:#f0fdf4;" onclick="bulkLinkShipstation()" title="Auto-link existing deployments to ShipStation using their tracking numbers">
+                    <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">link</span>
+                    LINK SHIPSTATION
+                </button>
                 <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="newTicketEntry()">
                     <span class="material-icons" style="font-size:18px; vertical-align:middle; margin-right:5px;">add</span>
                     NEW TICKET
@@ -2909,6 +2913,99 @@ async function executeBulk(validData) {
     let _ssLookupTimer = null;
     let _ssVendorsLoaded = false;
 
+    // Bulk-link existing deployments to ShipStation using their tracking numbers.
+    // Batched loop: calls the API repeatedly (small chunks to respect ShipStation's
+    // 40 req/min cap) and shows live progress. Additive & safe — only creates
+    // shipstation_shipments rows for deployments that have a tracking # and aren't
+    // already linked; it never edits deployment records except to backfill a
+    // corrected tracking # or a delivered-date/close when the carrier confirms it.
+    async function bulkLinkShipstation() {
+        const start = await Swal.fire({
+            icon: 'question',
+            title: 'Link deployments to ShipStation?',
+            html: 'This scans every deployment that has a <b>tracking number</b> but isn\'t linked yet, looks each one up in ShipStation, and links it automatically.<br><br>' +
+                  'It runs in batches and may take a few minutes for a large backlog. It\'s safe to close this — already-linked tickets are skipped, so you can run it again anytime.',
+            showCancelButton: true, confirmButtonText: 'Start linking', confirmButtonColor: '#166534', cancelButtonText: 'Cancel'
+        });
+        if (!start.isConfirmed) return;
+
+        let linked = 0, carrier = 0, delivered = 0, done = 0, total = null;
+        const exclude = [];      // deployment ids that failed — don't retry endlessly
+        const failReasons = {};  // reason → count
+        let cancelled = false;
+
+        const render = () => {
+            const denom = total != null ? (done + '/' + (total + 0)) : done;
+            const pct = (total && total > 0) ? Math.min(100, Math.round((done / total) * 100)) : 0;
+            Swal.update({
+                title: 'Linking to ShipStation…',
+                html: `<div style="text-align:left;font-size:13px;">
+                    <div style="height:10px;background:#e2e8f0;border-radius:6px;overflow:hidden;margin-bottom:10px;">
+                        <div style="height:100%;width:${pct}%;background:#16a34a;transition:width .3s;"></div>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#64748b;">Processed</span><b>${done}${total != null ? ' of ' + total : ''}</b></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#64748b;">Linked (ShipStation)</span><b style="color:#16a34a;">${linked}</b></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#64748b;">Linked (carrier only)</span><b style="color:#0369a1;">${carrier}</b></div>
+                    <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span style="color:#64748b;">Auto-closed (delivered)</span><b>${delivered}</b></div>
+                    <div style="display:flex;justify-content:space-between;"><span style="color:#64748b;">Couldn't match</span><b style="color:#b45309;">${exclude.length}</b></div>
+                </div>`
+            });
+        };
+
+        Swal.fire({
+            title: 'Linking to ShipStation…', html: 'Starting…',
+            allowOutsideClick: false, allowEscapeKey: false,
+            showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Stop',
+            didOpen: () => { render(); }
+        }).then(res => { if (res.dismiss === Swal.DismissReason.cancel) cancelled = true; });
+
+        try {
+            while (!cancelled) {
+                const resp = await fetch('/api/shipstation', {
+                    method: 'POST', headers: authHeaders(),
+                    body: JSON.stringify({ action: 'bulk_link_deployments', limit: 12, exclude })
+                }).then(r => r.json());
+
+                if (!resp || !resp.success) {
+                    Swal.fire({ icon: 'error', title: 'Could not run', text: (resp && resp.message) || 'ShipStation bulk link failed.' });
+                    return;
+                }
+                if (total == null) total = resp.total;      // total unlinked at the very first call
+                linked += resp.linked || 0;
+                carrier += resp.carrier_linked || 0;
+                delivered += resp.delivered || 0;
+                (resp.failed || []).forEach(f => {
+                    exclude.push(f.deployment_id);
+                    failReasons[f.reason] = (failReasons[f.reason] || 0) + 1;
+                });
+                done = linked + carrier + exclude.length;
+                render();
+
+                if (!resp.processed || resp.processed === 0) break;   // nothing left to do
+            }
+        } catch (e) {
+            Swal.fire({ icon: 'error', title: 'Error', text: e.message || 'Bulk link error.' });
+            return;
+        }
+
+        const reasonsHtml = Object.keys(failReasons).length
+            ? '<div style="margin-top:10px;text-align:left;font-size:12px;"><b>Unmatched breakdown:</b><ul style="margin:6px 0 0 18px;color:#64748b;">' +
+              Object.entries(failReasons).map(([k, v]) => `<li>${v} — ${k}</li>`).join('') + '</ul></div>'
+            : '';
+        await Swal.fire({
+            icon: cancelled ? 'info' : 'success',
+            title: cancelled ? 'Stopped' : 'Done',
+            html: `<div style="text-align:left;font-size:13px;">
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Linked (ShipStation)</span><b style="color:#16a34a;">${linked}</b></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Linked (carrier only)</span><b style="color:#0369a1;">${carrier}</b></div>
+                <div style="display:flex;justify-content:space-between;margin-bottom:4px;"><span>Auto-closed (delivered)</span><b>${delivered}</b></div>
+                <div style="display:flex;justify-content:space-between;"><span>Couldn't match</span><b style="color:#b45309;">${exclude.length}</b></div>
+                ${reasonsHtml}
+            </div>`
+        });
+        fetchDeployments();
+    }
+
     // Entry point for the "+ New Ticket" button — behavior driven by the mode
     function newTicketEntry() {
         if (_ssReadyMode === 'disabled') { openNewDeploymentModal(); return; }
@@ -4098,6 +4195,9 @@ async function executeBulk(validData) {
             _shipstationEnabled = _ssReadyMode !== 'disabled';
             _ssReturnsMode = s.shipstation_returns_mode || 'disabled';
             _shipstationReturnsEnabled = _ssReturnsMode !== 'disabled';
+            // Bulk-link tool: super_admin only, and only when ShipStation is enabled.
+            const btn = document.getElementById('bulkLinkSsBtn');
+            if (btn && _shipstationEnabled && localStorage.getItem('pp_role') === 'super_admin') btn.style.display = '';
         }).catch(() => {});
         const urlQ = new URLSearchParams(window.location.search).get('q');
         if (urlQ) {
