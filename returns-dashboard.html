@@ -771,13 +771,15 @@ async function rmaLinkGate(id) {
     const rmaNo = (row.return_id || '').replace(/"/g, '&quot;');
     let outcome = null; // set by a candidate "Link" click
     const swalRes = await Swal.fire({
-        title: '<span style="font-size:15px;font-weight:800;color:#002d5a;">Link ShipStation return?</span>',
+        title: '<span style="font-size:15px;font-weight:800;color:#002d5a;">Link a ShipStation return? <span style="font-weight:600;color:#94a3b8;">(optional)</span></span>',
         width: 540,
         showCancelButton: true, showDenyButton: true,
-        confirmButtonText: 'Skip & close', confirmButtonColor: '#64748b',
+        confirmButtonText: 'Skip — no ShipStation', confirmButtonColor: '#0369a1',
         denyButtonText: 'Cancel', denyButtonColor: '#94a3b8',
         html: `<div style="text-align:left;">
-            <div style="font-size:12px;color:#475569;margin-bottom:10px;">RMA <b>${rmaNo || '(pending)'}</b> isn't linked to a ShipStation return. Search by <b>Tracking #</b>, <b>Order #</b>, or <b>RMA #</b> to link it before closing. (RMA # only matches if it was used as the ShipStation order #.)</div>
+            <div style="font-size:12px;color:#475569;margin-bottom:8px;">RMA <b>${rmaNo || '(pending)'}</b> isn't linked to a ShipStation return. Linking is <b>optional</b> but recommended for accurate tracking &amp; reporting.</div>
+            <div style="font-size:11px;color:#0e7490;background:#ecfeff;border:1px solid #a5f3fc;border-radius:8px;padding:8px 10px;margin-bottom:10px;">💡 If the merchant is shipping the item back <b>themselves</b> (no ShipStation label), just click <b>“Skip — no ShipStation”</b> to close normally.</div>
+            <div style="font-size:11px;color:#64748b;margin-bottom:8px;">To link it: search by <b>Tracking #</b>, <b>Order #</b>, or <b>RMA #</b> (RMA # only matches if it was used as the ShipStation order #).</div>
             <div style="display:flex;gap:8px;">
                 <input id="rlq" value="${rmaNo}" placeholder="Tracking # / Order # / RMA #" style="flex:1;padding:8px 10px;border:1px solid #cbd5e1;border-radius:8px;font-size:13px;font-family:monospace;">
                 <button type="button" id="rlqBtn" style="background:#0369a1;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer;">Search</button>
