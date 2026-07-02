@@ -469,9 +469,12 @@ function viewRMADetails(index) {
 
             <!-- ShipStation return label -->
             ${r.is_shipstation ? `
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;gap:6px;flex-wrap:wrap;">
                 <div style="font-size:10px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;">🚀 ShipStation Return Label</div>
-                <button id="ssRefreshBtn" onclick="refreshReturnShipstation('${r.id}', ${index})" style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;cursor:pointer;">🔄 Refresh from ShipStation</button>
+                <div style="display:flex;gap:6px;">
+                    <button id="ssRefreshBtn" onclick="refreshReturnShipstation('${r.id}', ${index})" style="font-size:10px;font-weight:700;color:#166534;background:#dcfce7;border:1px solid #bbf7d0;border-radius:6px;padding:3px 8px;cursor:pointer;">🔄 Refresh</button>
+                    <button id="ssUnlinkBtn" onclick="unlinkRmaShipstation('${r.id}', ${index})" style="font-size:10px;font-weight:700;color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;border-radius:6px;padding:3px 8px;cursor:pointer;">🔗 Unlink</button>
+                </div>
             </div>
             <div id="ssPanelBody" style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
                 ${row('Status', r.ss_status || 'created')}
@@ -493,7 +496,17 @@ function viewRMADetails(index) {
                 ${row('Shipping Paid', r.ss_shipping_paid != null ? '$' + Number(r.ss_shipping_paid).toFixed(2) : null)}
                 ${row('Total Paid', r.ss_total_paid != null ? '$' + Number(r.ss_total_paid).toFixed(2) : null)}
                 ${row('Linked', r.ss_created_at ? fmtDate(r.ss_created_at) : null)}
-            </div>` : ''}
+            </div>` : `
+            <!-- Not linked: allow linking (any status, incl. closed/legacy) -->
+            <div style="font-size:10px;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🔗 Link ShipStation Return</div>
+            <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+                <div style="font-size:11px;color:#475569;margin-bottom:8px;">Paste the return's tracking number (from ShipStation or the label) to link it — works on closed and legacy RMAs too. If it's already delivered and this RMA is still open, it will complete and restock automatically.</div>
+                <div style="display:flex;gap:8px;">
+                    <input id="rmaLinkTracking" placeholder="Tracking number" style="flex:1;padding:7px 10px;border:1px solid #bfdbfe;border-radius:7px;font-size:12px;font-family:monospace;">
+                    <button onclick="linkRmaShipstation('${r.id}', this)" style="background:#0369a1;color:#fff;border:none;border-radius:7px;padding:7px 16px;font-size:12px;font-weight:700;cursor:pointer;">Link</button>
+                </div>
+                <div id="rmaLinkResult" style="font-size:11px;margin-top:6px;"></div>
+            </div>`}
 
             <!-- Audit trail -->
             <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Audit Trail</div>
@@ -671,6 +684,39 @@ async function refreshReturnShipstation(returnId, index) {
     } catch (e) {
         if (btn) { btn.textContent = orig; btn.disabled = false; }
         ssToast(e.message || 'Refresh failed.', 'error');
+    }
+}
+
+// Detach a wrong/demo ShipStation link from an RMA. Does NOT change RMA status.
+async function unlinkRmaShipstation(returnId, index) {
+    const confirm = await Swal.fire({
+        icon: 'warning', title: 'Unlink ShipStation return?',
+        html: 'This removes the ShipStation label association from this RMA.<br><b>It does not change the RMA status or restock anything</b> — you can re-link a different tracking number afterward.',
+        showCancelButton: true, confirmButtonText: 'Unlink', confirmButtonColor: '#b91c1c', cancelButtonText: 'Cancel'
+    });
+    if (!confirm.isConfirmed) return;
+    const ssToast = (msg, icon) => Swal.fire({ toast: true, position: 'top-end', icon: icon || 'info', title: msg, timer: 2600, showConfirmButton: false });
+    try {
+        const res = await fetch('/api/shipstation', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'unlink_return', return_id: returnId })
+        });
+        const r = await res.json();
+        if (!r.success) return ssToast(r.message || 'Could not unlink.', 'error');
+        // Clear the ShipStation fields locally so the reopened modal shows the Link box.
+        const cur = currentReturns[index];
+        if (cur) {
+            cur.is_shipstation = false;
+            ['ss_status','ss_tracking_number','ss_carrier','ss_service','ss_order_number','ss_order_id','ss_shipment_id',
+             'ss_store_name','ss_ship_to_name','ss_ship_to_company','ss_ship_to_phone','ss_ship_to_email','ss_address',
+             'ss_city_line','ss_country','ss_order_date','ss_paid_date','ss_shipping_paid','ss_total_paid','ss_created_at']
+                .forEach(k => { cur[k] = null; });
+        }
+        ssToast(r.removed ? 'ShipStation link removed.' : 'Nothing was linked.', 'success');
+        Swal.close();
+        setTimeout(() => viewRMADetails(index), 150);
+    } catch (e) {
+        ssToast(e.message || 'Unlink failed.', 'error');
     }
 }
 

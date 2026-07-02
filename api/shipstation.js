@@ -938,6 +938,23 @@ export default async function handler(req, res) {
             });
         }
 
+        // ── UNLINK RETURN ───────────────────────────────────────────────────
+        //     Remove the ShipStation return-label association from an RMA. Does
+        //     NOT change the RMA's status/condition — it only detaches the
+        //     shipstation_shipments row so a wrong/demo link can be corrected.
+        if (action === 'unlink_return') {
+            const { return_id } = body;
+            if (!return_id) return res.status(400).json({ success: false, message: 'return_id required' });
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const { data: rows } = await supabase.from('shipstation_shipments')
+                .select('id').eq('return_id', return_id).eq('ship_type', 'return_label');
+            if (!rows || !rows.length) return res.status(200).json({ success: true, removed: 0, message: 'Nothing linked to unlink.' });
+            const { error } = await supabase.from('shipstation_shipments')
+                .delete().eq('return_id', return_id).eq('ship_type', 'return_label');
+            if (error) return res.status(200).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, removed: rows.length, message: 'ShipStation link removed.' });
+        }
+
         // ── VOID LABEL (refund) ─────────────────────────────────────────────
         if (action === 'void_label') {
             const auth = await getAuthHeader();
