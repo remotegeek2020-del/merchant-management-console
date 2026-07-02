@@ -521,7 +521,16 @@ function showReturnMerchantInfo(index) {
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">ShipStation Order #</span><span style="font-weight:700; font-family:monospace; color:#166534;">${r.ss_order_number || '—'}</span></div>
                     <div style="display:flex; justify-content:space-between; margin-bottom:5px;"><span style="color:#64748b;">Tracking #</span><span style="font-weight:700; font-family:monospace;">${r.ss_tracking_number || '— (not shipped yet)'}</span></div>
                     <div style="display:flex; justify-content:space-between;"><span style="color:#64748b;">Carrier / Service</span><span style="font-weight:600;">${[r.ss_carrier, r.ss_service].filter(Boolean).join(' · ') || '—'}</span></div>
-                </div>` : ''}
+                </div>` : (String(r.status || '').toLowerCase() === 'open' ? `
+                <div style="background:#eff6ff; border:1px solid #bfdbfe; border-radius:8px; padding:12px 14px; grid-column:1/-1;">
+                    <div style="font-size:10px; font-weight:700; color:#0369a1; text-transform:uppercase; margin-bottom:6px;">🔗 Link ShipStation Return</div>
+                    <div style="font-size:11px; color:#475569; margin-bottom:8px;">Paste the return's tracking number (from ShipStation or the label) to link it. If it already shows delivered, this RMA will complete and restock automatically.</div>
+                    <div style="display:flex; gap:8px;">
+                        <input id="rmaLinkTracking" placeholder="Tracking number" style="flex:1; padding:7px 10px; border:1px solid #bfdbfe; border-radius:7px; font-size:12px; font-family:monospace;">
+                        <button onclick="linkRmaShipstation('${r.id}', this)" style="background:#0369a1; color:#fff; border:none; border-radius:7px; padding:7px 16px; font-size:12px; font-weight:700; cursor:pointer;">Link</button>
+                    </div>
+                    <div id="rmaLinkResult" style="font-size:11px; margin-top:6px;"></div>
+                </div>` : '')}
             </div>`,
         showConfirmButton: true,
         confirmButtonColor: '#004990',
@@ -536,6 +545,37 @@ function showReturnMerchantInfo(index) {
             window.location.href = `merchants-dashboard.html?q=${encodeURIComponent(mid || m.dba_name)}&filterBy=${mid ? 'merchant_id' : 'dba_name'}`;
         }
     });
+}
+
+async function linkRmaShipstation(returnId, btn) {
+    const input = document.getElementById('rmaLinkTracking');
+    const out = document.getElementById('rmaLinkResult');
+    const tracking = (input?.value || '').trim();
+    if (!tracking) { if (out) { out.style.color = '#b45309'; out.textContent = 'Enter a tracking number first.'; } return; }
+    const orig = btn.textContent; btn.textContent = 'Linking…'; btn.disabled = true;
+    if (out) { out.style.color = '#64748b'; out.textContent = 'Looking up in ShipStation…'; }
+    try {
+        const res = await fetch('/api/shipstation', {
+            method: 'POST', headers: authHeaders(),
+            body: JSON.stringify({ action: 'link_return_by_tracking', return_id: returnId, tracking })
+        });
+        const r = await res.json();
+        if (!r.success) {
+            btn.textContent = orig; btn.disabled = false;
+            if (out) { out.style.color = '#dc2626'; out.textContent = r.message || 'Could not link.'; }
+            return;
+        }
+        if (out) {
+            out.style.color = '#16a34a';
+            out.textContent = r.completed
+                ? '✓ Linked — already delivered, so this RMA was completed and the unit restocked.'
+                : (r.source === 'carrier' ? '✓ Linked via carrier tracking (not a ShipStation order).' : '✓ Linked to ShipStation.');
+        }
+        setTimeout(() => { Swal.close(); fetchReturns(); }, 1400);
+    } catch (e) {
+        btn.textContent = orig; btn.disabled = false;
+        if (out) { out.style.color = '#dc2626'; out.textContent = e.message; }
+    }
 }
 
 async function fetchReturns() {

@@ -439,6 +439,130 @@ export default async function handler(req, res) {
                                : 'Tracking number not found in ShipStation, and the carrier could not be detected for a fallback lookup.') });
         }
 
+        // ── LINK A RETURN BY TRACKING (existing/manual RMAs) ─────────────────
+        //     Paste a return's tracking number → find it in ShipStation → link a
+        //     return_label row to the RMA. If it already shows delivered, complete
+        //     the RMA and restock the unit(s) to HQ (same as the delivery webhook).
+        if (action === 'link_return_by_tracking') {
+            const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+            const returnId = body.return_id;
+            const tid = (body.tracking || '').trim();
+            if (!returnId) return res.status(400).json({ success: false, message: 'return_id required' });
+            if (!tid) return res.status(400).json({ success: false, message: 'Enter a tracking number.' });
+
+            const { data: rma } = await supabase.from('returns')
+                .select('id, return_id, merchant_id, ship_from_partner_id, status').eq('id', returnId).maybeSingle();
+            if (!rma) return res.status(404).json({ success: false, message: 'Return not found' });
+
+            const { data: existing } = await supabase.from('shipstation_shipments')
+                .select('id').eq('return_id', returnId).eq('ship_type', 'return_label').limit(1).maybeSingle();
+            if (existing) return res.status(200).json({ success: true, already: true, message: 'This RMA is already linked to ShipStation.' });
+
+            const norm = s => String(s || '').toUpperCase().replace(/\s/g, '');
+
+            // Restock + close the RMA (mirrors the delivery webhook)
+            const completeRma = async (delDate) => {
+                if (String(rma.status || '').toLowerCase() === 'closed') return;
+                const finalStatus = 'stocked', finalLocation = 'Warsaw Office', condition = 'Working (Back to Stock)';
+                const { data: full } = await supabase.from('returns').select('id, is_bulk, equipment_id, deployment_id, merchant_id').eq('id', returnId).maybeSingle();
+                if (!full) return;
+                if (full.is_bulk) {
+                    const { data: items } = await supabase.from('return_items').select('equipment_id').eq('return_id', returnId);
+                    for (const it of (items || [])) {
+                        await supabase.from('equipments').update({ status: finalStatus, current_location: finalLocation, merchant_id: null }).eq('id', it.equipment_id);
+                    }
+                    await supabase.from('return_items').update({ condition }).eq('return_id', returnId);
+                } else if (full.equipment_id) {
+                    await supabase.from('equipments').update({ status: finalStatus, current_location: finalLocation, merchant_id: null }).eq('id', full.equipment_id);
+                }
+                await supabase.from('returns').update({
+                    condition, destination: finalLocation, status: 'Closed',
+                    equipment_received_date: delDate || new Date().toISOString().slice(0, 10), updated_at: new Date().toISOString()
+                }).eq('id', returnId);
+                if (full.deployment_id) {
+                    // close the linked deployment if all its units are back
+                    let shouldClose = true;
+                    if (full.is_bulk) {
+                        const { count: totalItems } = await supabase.from('deployment_items').select('id', { count: 'exact', head: true }).eq('deployment_id', full.deployment_id);
+                        const { data: closedRets } = await supabase.from('returns').select('id').eq('deployment_id', full.deployment_id).eq('status', 'Closed');
+                        let returned = 0;
+                        for (const cr of (closedRets || [])) { const { count } = await supabase.from('return_items').select('id', { count: 'exact', head: true }).eq('return_id', cr.id); returned += count || 0; }
+                        shouldClose = totalItems > 0 && returned >= totalItems;
+                    }
+                    if (shouldClose) await supabase.from('deployments').update({ status: 'Closed' }).eq('id', full.deployment_id);
+                }
+            };
+
+            const insertRow = async (extra) => {
+                const base = {
+                    ship_type: 'return_label', return_id: returnId, merchant_id: rma.merchant_id,
+                    partner_id: rma.ship_from_partner_id || null, tracking_number: tid, created_by: session.userid
+                };
+                const { data, error } = await supabase.from('shipstation_shipments').insert({ ...base, ...extra }).select('*').single();
+                if (error) throw error;
+                return data;
+            };
+
+            // 1) ShipStation V1 lookup by tracking number
+            const auth = await getAuthHeader();
+            let shipment = null;
+            if (auth) {
+                const r = await ssGet(`/shipments?trackingNumber=${encodeURIComponent(tid)}&includeShipmentItems=true`);
+                if (r.ok && r.data) {
+                    const list = Array.isArray(r.data.shipments) ? r.data.shipments : (Array.isArray(r.data) ? r.data : []);
+                    const matches = list.filter(s => norm(s.trackingNumber) === norm(tid));
+                    shipment = matches.find(s => !s.voided) || matches[0] || null;
+                }
+            }
+            if (shipment) {
+                const st = shipment.shipTo || {};
+                const row = await insertRow({
+                    order_number: shipment.orderNumber || null,
+                    ss_order_id: shipment.orderId != null ? String(shipment.orderId) : null,
+                    ss_shipment_id: shipment.shipmentId != null ? String(shipment.shipmentId) : null,
+                    carrier: shipment.carrierCode || null, service: shipment.serviceCode || null,
+                    ship_to_name: st.name || null, address: st.street1 || null, city: st.city || null,
+                    state: st.state || null, zip: st.postalCode || null, country: st.country || 'US',
+                    status: shipment.voided ? 'voided' : 'shipped'
+                });
+                // V1 /shipments doesn't give delivery state; check carrier tracking to see if delivered
+                let delivered = false, delDate = null;
+                const carrier = mapV2Carrier(shipment.carrierCode) || detectCarrierFromTracking(tid);
+                if (carrier) {
+                    const t = await ssV2Tracking(carrier, tid);
+                    if (t?.ok && t.data) {
+                        const sc = String(t.data.status_code || '').toUpperCase();
+                        delivered = sc === 'DE' || String(t.data.status_description || '').toLowerCase().includes('delivered');
+                        delDate = (t.data.actual_delivery_date || '').slice(0, 10) || null;
+                    }
+                }
+                if (delivered) { await supabase.from('shipstation_shipments').update({ status: 'delivered' }).eq('id', row.id); await completeRma(delDate); }
+                return res.status(200).json({ success: true, source: 'shipstation', delivered, completed: delivered });
+            }
+
+            // 2) Fallback: carrier tracking (V2) — link + complete if delivered
+            const carrier = detectCarrierFromTracking(tid);
+            let info = null;
+            if (carrier) {
+                const t = await ssV2Tracking(carrier, tid);
+                if (t?.status === 401 || t?.status === 403) return res.status(200).json({ success: false, plan_gated: true, message: 'Not found in ShipStation, and carrier tracking is blocked on your plan.' });
+                if (t?.ok && t.data) info = t.data;
+            }
+            if (info) {
+                const sc = String(info.status_code || '').toUpperCase();
+                const delivered = sc === 'DE' || String(info.status_description || '').toLowerCase().includes('delivered');
+                const delDate = (info.actual_delivery_date || info.estimated_delivery_date || '').slice(0, 10) || null;
+                await insertRow({ carrier, status: delivered ? 'delivered' : (info.status_description || 'in_transit'), store_name: 'Carrier lookup (not a ShipStation order)' });
+                if (delivered) await completeRma(delDate);
+                return res.status(200).json({ success: true, source: 'carrier', delivered, completed: delivered });
+            }
+
+            return res.status(200).json({ success: false,
+                message: !auth ? 'ShipStation keys not configured.'
+                    : (carrier ? 'Tracking number not found in ShipStation or carrier tracking.'
+                               : 'Tracking not found in ShipStation, and the carrier could not be detected for a fallback lookup.') });
+        }
+
         // ── SHIP-FROM WAREHOUSES ────────────────────────────────────────────
         if (action === 'get_warehouses') {
             const r = await ssGet('/warehouses');
