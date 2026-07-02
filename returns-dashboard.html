@@ -467,6 +467,26 @@ function viewRMADetails(index) {
                 ${r.notes ? row('Notes', r.notes) : ''}
             </div>
 
+            <!-- ShipStation return label -->
+            ${r.is_shipstation ? `
+            <div style="font-size:10px;font-weight:800;color:#166534;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">🚀 ShipStation Return Label</div>
+            <div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+                ${row('Status', r.ss_status || 'created')}
+                ${row('Tracking #', r.ss_tracking_number || '— (not shipped yet)')}
+                ${row('Carrier / Service', [r.ss_carrier, r.ss_service].filter(Boolean).join(' · ') || null)}
+                ${row('ShipStation Order #', r.ss_order_number || null)}
+                ${row('SS Order ID', r.ss_order_id || null)}
+                ${row('SS Shipment ID', r.ss_shipment_id || null)}
+                ${row('Store', r.ss_store_name || null)}
+                ${row('Ship From', r.ss_ship_to_name || null)}
+                ${row('Company', r.ss_ship_to_company || null)}
+                ${row('Phone', r.ss_ship_to_phone || null)}
+                ${row('Email', r.ss_ship_to_email || null)}
+                ${row('Address', r.ss_address || null)}
+                ${row('City / State / ZIP', r.ss_city_line || null)}
+                ${row('Linked', r.ss_created_at ? fmtDate(r.ss_created_at) : null)}
+            </div>` : ''}
+
             <!-- Audit trail -->
             <div style="font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;">Audit Trail</div>
             <div style="background:#f8fafc;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
