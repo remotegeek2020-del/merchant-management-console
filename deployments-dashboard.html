@@ -3802,6 +3802,7 @@ async function executeBulk(validData) {
 
     // ════════════ SHIPSTATION CONFIGURE SHIPMENT / PRINT LABEL ════════════
     let _sslShipment = null;       // the shipstation_shipments row for the open deployment
+    let _sslDeploymentId = null;   // the deployment currently shown in the label panel
     let _sslWarehousesLoaded = false;
     let _sslCarriersLoaded = false;
 
@@ -3812,6 +3813,7 @@ async function executeBulk(validData) {
         const body = document.getElementById('ssLabelEntryBody');
         entry.style.display = 'none';
         _sslShipment = null;
+        _sslDeploymentId = deploymentId || null;
         if (!_shipstationEnabled || !deploymentId) return;   // flag off → no ShipStation UI at all
         try {
             // refresh_shipment also live-pulls latest tracking/status from ShipStation
@@ -3905,7 +3907,11 @@ async function executeBulk(validData) {
         const s = _sslShipment;
         let base, q;
         if (kind === 'shipment') {
-            q = s.tracking_number || s.order_number;
+            // Always look the shipment up by its tracking ID. Fall back to the
+            // deployment's tracking_id if the ShipStation row doesn't carry one.
+            const dep = (typeof currentDeployments !== 'undefined' && _sslDeploymentId)
+                ? currentDeployments.find(x => x.id === _sslDeploymentId) : null;
+            q = s.tracking_number || (dep && dep.tracking_id) || '';
             base = 'https://ship.shipstation.com/shipments/all-shipments-search-result?quickSearch=';
         } else {
             q = s.order_number || s.tracking_number;
