@@ -3905,20 +3905,21 @@ async function executeBulk(validData) {
     function ssViewInShipStation(kind) {
         if (!_sslShipment) return;
         const s = _sslShipment;
-        // ShipStation's global quick-search (Orders grid) resolves BOTH order
-        // numbers and tracking numbers and lands on the matching record. There
-        // is no separate stable "shipments" deep link — searching by tracking #
-        // here opens the shipment's order directly.
-        const base = 'https://ship.shipstation.com/orders/all-orders-search-result?quickSearch=';
-        let q;
+        // Deep-link into this PayProTec ShipStation account (ship5 subdomain).
+        //   shipment → Shipments grid, quick-search by tracking ID
+        //   order    → Orders grid, quick-search by order number
+        const SS_HOST = 'https://ship5.shipstation.com';
+        let base, q;
         if (kind === 'shipment') {
             // Look the shipment up by its tracking ID. Fall back to the
             // deployment's tracking_id if the ShipStation row doesn't carry one.
             const dep = (typeof currentDeployments !== 'undefined' && _sslDeploymentId)
                 ? currentDeployments.find(x => x.id === _sslDeploymentId) : null;
             q = s.tracking_number || (dep && dep.tracking_id) || '';
+            base = SS_HOST + '/shipments/shipped-recent?quickSearch=';
         } else {
             q = s.order_number || s.tracking_number;
+            base = SS_HOST + '/orders/all-orders-search-result?quickSearch=';
         }
         if (!q) return Swal.fire('Nothing to look up', 'This record has no ShipStation ' + (kind === 'shipment' ? 'tracking number' : 'order number') + ' yet.', 'info');
         window.open(base + encodeURIComponent(q), '_blank', 'noopener');
