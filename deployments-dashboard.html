@@ -3905,17 +3905,20 @@ async function executeBulk(validData) {
     function ssViewInShipStation(kind) {
         if (!_sslShipment) return;
         const s = _sslShipment;
-        let base, q;
+        // ShipStation's global quick-search (Orders grid) resolves BOTH order
+        // numbers and tracking numbers and lands on the matching record. There
+        // is no separate stable "shipments" deep link — searching by tracking #
+        // here opens the shipment's order directly.
+        const base = 'https://ship.shipstation.com/orders/all-orders-search-result?quickSearch=';
+        let q;
         if (kind === 'shipment') {
-            // Always look the shipment up by its tracking ID. Fall back to the
+            // Look the shipment up by its tracking ID. Fall back to the
             // deployment's tracking_id if the ShipStation row doesn't carry one.
             const dep = (typeof currentDeployments !== 'undefined' && _sslDeploymentId)
                 ? currentDeployments.find(x => x.id === _sslDeploymentId) : null;
             q = s.tracking_number || (dep && dep.tracking_id) || '';
-            base = 'https://ship.shipstation.com/shipments/all-shipments-search-result?quickSearch=';
         } else {
             q = s.order_number || s.tracking_number;
-            base = 'https://ship.shipstation.com/orders/all-orders-search-result?quickSearch=';
         }
         if (!q) return Swal.fire('Nothing to look up', 'This record has no ShipStation ' + (kind === 'shipment' ? 'tracking number' : 'order number') + ' yet.', 'info');
         window.open(base + encodeURIComponent(q), '_blank', 'noopener');
