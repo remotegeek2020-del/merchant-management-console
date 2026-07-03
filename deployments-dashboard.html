@@ -3853,11 +3853,12 @@ async function executeBulk(validData) {
                     ? `<div style="display:flex;gap:6px;flex-wrap:wrap;">
                          <button type="button" onclick="ssReprintLabel()" style="padding:7px 14px;background:#16a34a;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🖨 View / Reprint Label</button>
                          <button type="button" onclick="ssOpenLabelModal()" style="padding:7px 12px;background:#f1f5f9;color:#475569;border:1px solid #cbd5e1;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">⚙ Manage / Void</button>
-                         ${(s.order_number || s.tracking_number) ? `<button type="button" onclick="ssViewInShipStation()" title="Open this order in ShipStation" style="padding:7px 12px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 View in ShipStation</button>` : ''}
+                         ${s.order_number ? `<button type="button" onclick="ssViewInShipStation('order')" title="Open this order in ShipStation" style="padding:7px 12px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 View order in ShipStation</button>` : ''}
+                         <button type="button" onclick="ssViewInShipStation('shipment')" title="Open this shipment in ShipStation" style="padding:7px 12px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 View shipment in ShipStation</button>
                        </div>`
                     : `<div style="display:flex;gap:6px;flex-wrap:wrap;">
                          <button type="button" onclick="ssOpenLabelModal()" style="padding:7px 14px;background:#0369a1;color:white;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">📦 Configure Shipment &amp; Print Label</button>
-                         ${(s.order_number || s.tracking_number) ? `<button type="button" onclick="ssViewInShipStation()" title="Open this order in ShipStation" style="padding:7px 12px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 View in ShipStation</button>` : ''}
+                         ${s.order_number ? `<button type="button" onclick="ssViewInShipStation('order')" title="Open this order in ShipStation" style="padding:7px 12px;background:#eef2ff;color:#4338ca;border:1px solid #c7d2fe;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;">🔗 View order in ShipStation</button>` : ''}
                        </div>`}
               </div>
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;font-size:12px;">
@@ -3894,15 +3895,24 @@ async function executeBulk(validData) {
 
     // No-charge reprint: fetch the SAVED label PDF and open it. Makes no
     // ShipStation call, so it never creates or charges a new label.
-    // Open this order directly in ShipStation's web app (new tab). Uses the
-    // order number quick-search (falls back to tracking #) — a stable deep link
-    // that lands on the order regardless of which ShipStation view it's in.
-    function ssViewInShipStation() {
+    // Open this record directly in ShipStation's web app (new tab).
+    //   kind='order'    → Orders view, quick-search by order number
+    //   kind='shipment' → Shipments view, quick-search by tracking # (falls back to order #)
+    // Quick-search deep links are stable across ShipStation app versions
+    // (unlike internal order-id URLs, which change).
+    function ssViewInShipStation(kind) {
         if (!_sslShipment) return;
-        const q = _sslShipment.order_number || _sslShipment.tracking_number;
-        if (!q) return Swal.fire('No order reference', 'This shipment has no ShipStation order number or tracking number to look up yet.', 'info');
-        const url = 'https://ship.shipstation.com/orders/all-orders-search-result?quickSearch=' + encodeURIComponent(q);
-        window.open(url, '_blank', 'noopener');
+        const s = _sslShipment;
+        let base, q;
+        if (kind === 'shipment') {
+            q = s.tracking_number || s.order_number;
+            base = 'https://ship.shipstation.com/shipments/all-shipments-search-result?quickSearch=';
+        } else {
+            q = s.order_number || s.tracking_number;
+            base = 'https://ship.shipstation.com/orders/all-orders-search-result?quickSearch=';
+        }
+        if (!q) return Swal.fire('Nothing to look up', 'This record has no ShipStation ' + (kind === 'shipment' ? 'tracking number' : 'order number') + ' yet.', 'info');
+        window.open(base + encodeURIComponent(q), '_blank', 'noopener');
     }
 
     async function ssReprintLabel() {
