@@ -28,6 +28,9 @@
     var prevUnread = {};                         // key -> unread count (for new-message detection)
     var baselined = false;                       // skip buzz/pop on the very first poll
     var lastBuzz = 0, notifyAsked = false;
+    var myStatus = 'available', myThought = null;
+    var STATUS = { available: { c: '#22c55e', label: 'Available' }, away: { c: '#f59e0b', label: 'Away' }, busy: { c: '#ef4444', label: 'Busy' } };
+    function statusColor(status, online) { return online ? ((STATUS[status] || STATUS.available).c) : '#cbd5e1'; }
 
     function api(body) {
         return fetch('/api/chat', {
@@ -138,6 +141,18 @@
         '.ppm-send{width:36px;height:36px;border-radius:50%;border:none;background:#0369a1;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}',
         '.ppm-send:disabled{background:#cbd5e1;cursor:default;}',
         '.ppm-empty{text-align:center;color:#94a3b8;font-size:12px;padding:24px 16px;}',
+        // status + thought
+        '#ppm-mydot{position:absolute;bottom:1px;right:1px;width:15px;height:15px;border-radius:50%;border:2.5px solid #fff;background:#22c55e;}',
+        '#ppm-thought{position:absolute;left:0;bottom:66px;max-width:230px;background:#fff;border:1px solid #e2e8f0;border-radius:14px;padding:7px 11px;font-size:12px;color:#0f172a;box-shadow:0 6px 18px rgba(0,0,0,.14);display:none;line-height:1.35;}',
+        '#ppm-thought:after{content:"";position:absolute;left:16px;bottom:-7px;width:12px;height:12px;background:#fff;border-right:1px solid #e2e8f0;border-bottom:1px solid #e2e8f0;transform:rotate(45deg);}',
+        '.ppm-statuspill{display:flex;align-items:center;gap:5px;background:#f1f5f9;border:none;border-radius:99px;padding:4px 9px;cursor:pointer;font-size:11px;font-weight:700;color:#475569;font-family:inherit;}',
+        '.ppm-statuspill:hover{background:#e2e8f0;}',
+        '.ppm-statuspill .d{width:9px;height:9px;border-radius:50%;}',
+        '.ppm-sopt{display:flex;align-items:center;gap:10px;padding:12px 16px;cursor:pointer;font-size:13px;font-weight:600;color:#0f172a;border-bottom:1px solid #f8fafc;}',
+        '.ppm-sopt:hover{background:#f8fafc;}',
+        '.ppm-sopt.on{background:#f0f9ff;}',
+        '.ppm-sopt .d{width:13px;height:13px;border-radius:50%;}',
+        '.ppm-thought{font-size:11px;color:#7c3aed;font-style:italic;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;}',
         '@media(max-width:640px){.ppm-win{width:96vw;left:2vw!important;}#ppm-list{width:96vw;}}'
     ].join('');
     document.head.appendChild(css);
@@ -145,7 +160,9 @@
     // ── shell ──
     var root = document.createElement('div');
     root.id = 'ppm-root';
-    root.innerHTML = '<button id="ppm-launch" title="Messages"><span class="material-icons">chat_bubble</span><span id="ppm-badge"></span></button>';
+    root.innerHTML = '<div id="ppm-thought"></div>' +
+        '<button id="ppm-launch" title="Messages"><span class="material-icons">chat_bubble</span>' +
+        '<span id="ppm-badge"></span><span id="ppm-mydot"></span></button>';
     document.body.appendChild(root);
 
     var listEl = document.createElement('div');
@@ -168,21 +185,74 @@
         b.textContent = n > 99 ? '99+' : String(n);
         document.getElementById('ppm-launch').classList.toggle('alert', n > 0);
     }
+    function setMyStatusUI() {
+        var dot = document.getElementById('ppm-mydot');
+        if (dot) dot.style.background = (STATUS[myStatus] || STATUS.available).c;
+        var th = document.getElementById('ppm-thought');
+        if (th) { if (myThought) { th.textContent = '💭 ' + myThought; th.style.display = 'block'; } else { th.style.display = 'none'; } }
+    }
 
     // ── list vs new-group shell ──
     function renderShell() {
         if (view === 'newgroup') { renderNewGroup(); return; }
+        if (view === 'status') { renderStatus(); return; }
+        var sc = (STATUS[myStatus] || STATUS.available);
         listEl.innerHTML =
-            '<div class="ppm-lhead"><b>Chats</b><div class="ppm-lhbtns">' +
+            '<div class="ppm-lhead">' +
+            '<button class="ppm-statuspill" id="ppm-statusbtn" title="Set your status"><span class="d" style="background:' + sc.c + ';"></span>' + sc.label + '</button>' +
+            '<div class="ppm-lhbtns">' +
             '<button class="ppm-ic" id="ppm-newgrp" title="New group"><span class="material-icons">group_add</span></button>' +
             '<button class="ppm-ic" id="ppm-close" title="Close"><span class="material-icons">close</span></button>' +
             '</div></div>' +
             '<input class="ppm-search" id="ppm-search" placeholder="Search…">' +
             '<div class="ppm-convs" id="ppm-convs"><div class="ppm-empty">Loading…</div></div>';
+        document.getElementById('ppm-statusbtn').addEventListener('click', function () { view = 'status'; renderStatus(); });
         document.getElementById('ppm-newgrp').addEventListener('click', function () { view = 'newgroup'; renderNewGroup(); });
         document.getElementById('ppm-close').addEventListener('click', function () { setList(false); });
         document.getElementById('ppm-search').addEventListener('input', renderConvs);
         renderConvs();
+    }
+
+    // ── status + drop-a-thought sub-view ──
+    function renderStatus() {
+        var opts = ['available', 'away', 'busy'].map(function (s) {
+            var m = STATUS[s];
+            return '<div class="ppm-sopt' + (myStatus === s ? ' on' : '') + '" data-status="' + s + '">' +
+                '<span class="d" style="background:' + m.c + ';"></span>' + m.label +
+                (myStatus === s ? '<span class="material-icons" style="margin-left:auto;color:#0369a1;font-size:18px;">check</span>' : '') + '</div>';
+        }).join('');
+        listEl.innerHTML =
+            '<div class="ppm-lhead"><b>My status</b><button class="ppm-ic" id="ppm-st-back" title="Back"><span class="material-icons">arrow_back</span></button></div>' +
+            opts +
+            '<div style="padding:14px;border-top:1px solid #f1f5f9;">' +
+            '<div class="ppm-sec" style="padding:0 0 6px;">💭 Drop a thought</div>' +
+            '<div style="display:flex;gap:8px;">' +
+            '<input class="ppm-search" id="ppm-th-input" style="margin:0;flex:1;" maxlength="120" placeholder="What\'s on your mind?" value="' + esc(myThought || '') + '">' +
+            '<button class="ppm-btn primary" id="ppm-th-save" style="flex:0 0 auto;padding:9px 14px;">Save</button></div>' +
+            (myThought ? '<button id="ppm-th-clear" style="margin-top:9px;background:none;border:none;color:#94a3b8;font-size:11px;cursor:pointer;">Clear thought</button>' : '') +
+            '<div style="margin-top:8px;font-size:10px;color:#94a3b8;">Your thought shows as a bubble by your chat head, and fades after 24h.</div>' +
+            '</div>';
+        document.getElementById('ppm-st-back').addEventListener('click', function () { view = 'list'; renderShell(); });
+        Array.prototype.forEach.call(listEl.querySelectorAll('.ppm-sopt'), function (el) {
+            el.addEventListener('click', function () {
+                var s = el.getAttribute('data-status');
+                myStatus = s; setMyStatusUI();
+                api({ action: 'setStatus', status: s });
+                view = 'list'; renderShell();
+            });
+        });
+        document.getElementById('ppm-th-save').addEventListener('click', function () {
+            var v = (document.getElementById('ppm-th-input').value || '').trim().slice(0, 120);
+            myThought = v || null; setMyStatusUI();
+            api({ action: 'setThought', thought: v });
+            view = 'list'; renderShell();
+        });
+        var clr = document.getElementById('ppm-th-clear');
+        if (clr) clr.addEventListener('click', function () {
+            myThought = null; setMyStatusUI();
+            api({ action: 'setThought', thought: '' });
+            renderStatus();
+        });
     }
 
     function renderConvs() {
@@ -194,13 +264,13 @@
         var html = '';
         if (gs.length) {
             html += '<div class="ppm-sec">Groups</div>' + gs.map(function (g) {
-                return convRow('group', g.id, g.name, g.member_count + ' members', g.unread, g.last_message, false, 'group');
+                return convRow('group', g.id, g.name, g.member_count + ' members', g.unread, g.last_message, false, 'group', null, null);
             }).join('');
         }
         html += '<div class="ppm-sec">People</div>';
         html += ps.length ? ps.map(function (u) {
             return convRow('dm', u.id, u.name, u.user_type === 'partner' ? 'Partner' : 'Staff', u.unread,
-                u.last_message, u.is_online, u.user_type);
+                u.last_message, u.is_online, u.user_type, u.status, u.thought);
         }).join('') : '<div class="ppm-empty">No people found.</div>';
         box.innerHTML = html;
         Array.prototype.forEach.call(box.querySelectorAll('.ppm-conv'), function (el) {
@@ -211,14 +281,15 @@
         });
     }
 
-    function convRow(kind, id, name, sub, unread, last, online, avClass) {
+    function convRow(kind, id, name, sub, unread, last, online, avClass, status, thought) {
         var isP = avClass === 'partner', isG = avClass === 'group';
-        var av = isG ? '💬' : initials(name);
+        var dot = isG ? '' : '<span class="ppm-dot" style="background:' + statusColor(status, online) + ';"></span>';
         return '<div class="ppm-conv" data-kind="' + kind + '" data-id="' + esc(id) + '" data-name="' + esc(name) + '" data-type="' + esc(isG ? 'group' : avClass) + '" data-online="' + (online ? 1 : 0) + '">' +
-            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:20px;">groups</span>' : esc(av)) +
-            (online ? '<span class="ppm-dot"></span>' : '') + '</div>' +
+            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:20px;">groups</span>' : esc(initials(name))) +
+            dot + '</div>' +
             '<div class="ppm-cbody"><div class="ppm-cname">' + esc(name) +
             (isG ? '' : '<span class="ppm-tag' + (isP ? ' partner' : '') + '">' + esc(sub) + '</span>') + '</div>' +
+            (thought ? '<div class="ppm-thought">💭 ' + esc(thought) + '</div>' : '') +
             '<div class="ppm-prev">' + (last && last.preview ? esc(last.preview) : (isG ? esc(sub) : 'Start a conversation')) + '</div></div>' +
             (unread > 0 ? '<div class="ppm-cunread">' + (unread > 99 ? '99+' : unread) + '</div>' : '') +
             '</div>';
@@ -260,7 +331,10 @@
     function refreshLists() {
         return Promise.all([api({ action: 'getUserList' }), api({ action: 'getGroups' })]).then(function (res) {
             var ul = res[0], gl = res[1];
-            if (ul && ul.success) people = ul.data || [];
+            if (ul && ul.success) {
+                people = ul.data || [];
+                if (ul.me) { myStatus = ul.me.status || 'available'; myThought = ul.me.thought || null; setMyStatusUI(); }
+            }
             if (gl && gl.success) groups = gl.data || [];
 
             var total = 0, cur = {};
@@ -300,13 +374,19 @@
         if (windows.length >= MAX_WINDOWS) { closeWindow(windows[0].key); }
 
         var isG = kind === 'group', isP = type === 'partner';
+        var per = (kind === 'dm') ? people.find(function (p) { return String(p.id) === String(id); }) : null;
+        var pstatus = per ? per.status : null;
+        var ponline = per ? per.is_online : online;
+        var pthought = per ? per.thought : null;
+        var wsub = isG ? 'Group' : (pthought ? ('💭 ' + String(pthought).slice(0, 40)) : (ponline ? ((STATUS[pstatus] || STATUS.available).label) : 'Offline'));
+        var headDot = isG ? '' : '<span class="ppm-dot" style="background:' + statusColor(pstatus, ponline) + ';"></span>';
         var el = document.createElement('div');
         el.className = 'ppm-win' + (popMinimized ? ' min' : '');
         el.innerHTML =
             '<div class="ppm-whead">' +
-            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:17px;">groups</span>' : esc(initials(name))) + '</div>' +
+            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:17px;">groups</span>' : esc(initials(name))) + headDot + '</div>' +
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
-            '<div class="ppm-wsub">' + (isG ? 'Group' : (online ? '● Online' : (isP ? 'Partner' : 'Staff'))) + '</div></div>' +
+            '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +
             '<div class="ppm-msgs"><div class="ppm-empty">Loading…</div></div>' +

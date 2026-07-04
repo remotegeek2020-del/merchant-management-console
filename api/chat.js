@@ -53,9 +53,11 @@ export default async function handler(req, res) {
         if (action === 'getUserList') {
             const { data: users } = await supabase
                 .from('app_users')
-                .select('userid, first_name, last_name, last_seen, role')
+                .select('userid, first_name, last_name, last_seen, role, chat_status, chat_thought, chat_thought_at')
                 .eq('is_active', true)
                 .order('first_name');
+            var THOUGHT_TTL = 24 * 60 * 60 * 1000;   // thoughts fade after 24h
+            var freshThought = function (u) { return (u.chat_thought && u.chat_thought_at && (Date.now() - new Date(u.chat_thought_at).getTime()) < THOUGHT_TTL) ? u.chat_thought : null; };
 
             // Get partner users too (from persons with portal access)
             const { data: partners } = await supabase
@@ -94,9 +96,18 @@ export default async function handler(req, res) {
                 role: u.role,
                 user_type: 'staff',
                 is_online: u.last_seen && (Date.now() - new Date(u.last_seen).getTime()) < 90000,
+                status: u.chat_status || 'available',
+                thought: freshThought(u),
                 unread: counts[u.userid] || 0,
                 last_message: lastMsgMap[u.userid]
             }));
+
+            // The caller's own status/thought (for the launcher UI)
+            let me = null;
+            if (!isPartner) {
+                const self = (users || []).find(u => u.userid === sender_id);
+                if (self) me = { status: self.chat_status || 'available', thought: freshThought(self) };
+            }
 
             const partnerUsers = (partners||[]).map(p => ({
                 id: p.id,
@@ -116,7 +127,27 @@ export default async function handler(req, res) {
                 return bt - at;
             });
 
-            return res.status(200).json({ success: true, data: allUsers, unreadCounts: counts });
+            return res.status(200).json({ success: true, data: allUsers, unreadCounts: counts, me });
+        }
+
+        // ── SET STATUS (available / away / busy) ──────────
+        if (action === 'setStatus') {
+            const { status } = req.body;
+            const allowed = ['available', 'away', 'busy'];
+            if (!allowed.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status.' });
+            await supabase.from('app_users').update({ chat_status: status }).eq('userid', sender_id);
+            return res.status(200).json({ success: true, status });
+        }
+
+        // ── DROP A THOUGHT ────────────────────────────────
+        if (action === 'setThought') {
+            let { thought } = req.body;
+            thought = (thought || '').trim().slice(0, 120);
+            await supabase.from('app_users').update({
+                chat_thought: thought || null,
+                chat_thought_at: thought ? new Date().toISOString() : null
+            }).eq('userid', sender_id);
+            return res.status(200).json({ success: true, thought: thought || null });
         }
 
         // ── GET HISTORY ───────────────────────────────────
