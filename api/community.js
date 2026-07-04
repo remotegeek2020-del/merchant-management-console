@@ -360,8 +360,9 @@ export default async function handler(req, res) {
             if (website !== undefined) updates.website = website;
             if (avatar_url !== undefined) updates.avatar_url = avatar_url;
 
-            await supabase.from('user_profiles').upsert({ user_id: user.id, user_type: user.type, display_name: user.name, ...updates }, { onConflict: 'user_id' });
-            return res.status(200).json({ success: true });
+            const { error: upErr } = await supabase.from('user_profiles').upsert({ user_id: user.id, user_type: user.type, display_name: user.name, ...updates }, { onConflict: 'user_id' });
+            if (upErr) return res.status(500).json({ success: false, message: upErr.message });
+            return res.status(200).json({ success: true, avatar_url: updates.avatar_url });
         }
 
         // ── CHANGE PASSWORD (partner) ─────────────────────

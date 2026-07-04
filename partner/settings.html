@@ -310,11 +310,13 @@ async function handlePhotoUpload(input) {
     const urlRes = await api('community', { action:'get_avatar_upload_url', token, file_type: file.type });
     if (!urlRes.success) { Swal.fire({ icon:'error', title:'Upload failed', confirmButtonColor:'#0d9488' }); return; }
 
-    await fetch(urlRes.upload_url, { method:'PUT', body: file, headers:{ 'Content-Type': file.type } });
+    const putRes = await fetch(urlRes.upload_url, { method:'PUT', body: file, headers:{ 'Content-Type': file.type } });
+    if (!putRes.ok) { Swal.fire({ icon:'error', title:'Upload failed', text:'Could not store the image ('+putRes.status+').', confirmButtonColor:'#0d9488' }); return; }
     currentAvatarUrl = urlRes.public_url + '?t=' + Date.now(); // Cache bust
 
-    // Save to profile
-    await api('community', { action:'update_profile', token, avatar_url: urlRes.public_url });
+    // Save to profile — verify it persisted (don't fail silently)
+    const saveRes = await api('community', { action:'update_profile', token, avatar_url: urlRes.public_url });
+    if (!saveRes || !saveRes.success) { Swal.fire({ icon:'error', title:'Could not save photo', text:(saveRes && saveRes.message) || 'Please try again.', confirmButtonColor:'#0d9488' }); return; }
 
     Swal.fire({ icon:'success', title:'Photo updated!', timer:1500, showConfirmButton:false });
 }
