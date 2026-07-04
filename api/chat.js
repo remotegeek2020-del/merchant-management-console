@@ -11,7 +11,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const PARTNER_ACTIONS = new Set([
     'getUserList', 'getHistory', 'sendMessage', 'getUnreadCount',
     'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
-    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup', 'removeGroupMember'
+    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup', 'removeGroupMember',
+    'get_group_photo_upload_url', 'setGroupPhoto'
 ]);
 
 async function validatePartner(token) {
@@ -125,8 +126,18 @@ export default async function handler(req, res) {
                 last_message: lastMsgMap[p.id]
             }));
 
+            const allUsers = [...staffUsers, ...partnerUsers];
+
+            // Attach avatars from user_profiles (same table keys staff userid + partner id).
+            const profileIds = allUsers.map(u => String(u.id)).concat([String(sender_id)]);
+            const { data: profs } = await supabase.from('user_profiles').select('user_id, avatar_url').in('user_id', profileIds);
+            const avMap = {}; (profs || []).forEach(p => { avMap[String(p.user_id)] = p.avatar_url; });
+            allUsers.forEach(u => { u.avatar_url = avMap[String(u.id)] || null; });
+            if (!me) me = {};
+            me.avatar_url = avMap[String(sender_id)] || null;
+
             // Sort by unread first, then last message time
-            const allUsers = [...staffUsers, ...partnerUsers].sort((a, b) => {
+            allUsers.sort((a, b) => {
                 if (b.unread !== a.unread) return b.unread - a.unread;
                 const at = a.last_message?.time ? new Date(a.last_message.time).getTime() : 0;
                 const bt = b.last_message?.time ? new Date(b.last_message.time).getTime() : 0;
@@ -273,6 +284,12 @@ export default async function handler(req, res) {
             }
             return map;
         }
+        async function avatarsForIds(ids) {
+            if (!ids || !ids.length) return {};
+            const { data } = await supabase.from('user_profiles').select('user_id, avatar_url').in('user_id', ids.map(String));
+            const map = {}; (data || []).forEach(p => { map[String(p.user_id)] = p.avatar_url; });
+            return map;
+        }
         async function myGroupMembership(groupId) {
             const { data } = await supabase.from('chat_group_members')
                 .select('member_id, last_read_at').eq('group_id', groupId).eq('member_id', sender_id).maybeSingle();
@@ -307,7 +324,7 @@ export default async function handler(req, res) {
             const readMap = {};
             (mine || []).forEach(m => { readMap[m.group_id] = m.last_read_at; });
 
-            const { data: groups } = await supabase.from('chat_groups').select('id, name, created_by').in('id', groupIds);
+            const { data: groups } = await supabase.from('chat_groups').select('id, name, created_by, photo_url').in('id', groupIds);
             const { data: counts } = await supabase.from('chat_group_members').select('group_id, member_id').in('group_id', groupIds);
             const memberCount = {};
             (counts || []).forEach(c => { memberCount[c.group_id] = (memberCount[c.group_id] || 0) + 1; });
@@ -323,7 +340,7 @@ export default async function handler(req, res) {
                     .eq('group_id', g.id).is('deleted_at', null)
                     .gt('created_at', since).neq('sender_id', String(sender_id));
                 out.push({
-                    id: g.id, name: g.name, is_group: true,
+                    id: g.id, name: g.name, is_group: true, photo_url: g.photo_url || null,
                     is_owner: String(g.created_by) === String(sender_id),
                     member_count: memberCount[g.id] || 1,
                     unread: unread || 0,
@@ -345,7 +362,8 @@ export default async function handler(req, res) {
             if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
             const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type').eq('group_id', group_id);
             const nameMap = await namesForMembers(members || []);
-            return res.status(200).json({ success: true, data: (members || []).map(m => ({ id: m.member_id, type: m.member_type, name: nameMap[m.member_id] || 'Unknown' })) });
+            const avMap = await avatarsForIds((members || []).map(m => m.member_id));
+            return res.status(200).json({ success: true, data: (members || []).map(m => ({ id: m.member_id, type: m.member_type, name: nameMap[m.member_id] || 'Unknown', avatar_url: avMap[String(m.member_id)] || null })) });
         }
 
         // ── GROUP HISTORY ─────────────────────────────────
@@ -355,6 +373,7 @@ export default async function handler(req, res) {
 
             const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type').eq('group_id', group_id);
             const nameMap = await namesForMembers(members || []);
+            const avMap = await avatarsForIds((members || []).map(m => m.member_id));
 
             const { data } = await supabase.from('messages').select('*')
                 .eq('group_id', group_id).is('deleted_at', null)
@@ -364,7 +383,7 @@ export default async function handler(req, res) {
             await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
                 .eq('group_id', group_id).eq('member_id', sender_id);
 
-            const msgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown' }));
+            const msgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown', sender_avatar: avMap[String(m.sender_id)] || null }));
             return res.status(200).json({ success: true, data: msgs });
         }
 
@@ -429,6 +448,26 @@ export default async function handler(req, res) {
             // FK cascade removes members + group messages.
             await supabase.from('chat_groups').delete().eq('id', group_id);
             return res.status(200).json({ success: true });
+        }
+
+        // ── GROUP PHOTO: signed upload URL (avatars bucket) ──
+        if (action === 'get_group_photo_upload_url') {
+            const { group_id, file_type } = req.body;
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+            const ft = String(file_type || '');
+            const ext = ft.includes('png') ? 'png' : ft.includes('webp') ? 'webp' : ft.includes('gif') ? 'gif' : 'jpg';
+            const path = `groups/${group_id}/${Date.now()}.${ext}`;
+            const { data, error } = await supabase.storage.from('avatars').createSignedUploadUrl(path, { upsert: true });
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, upload_url: data.signedUrl, public_url: `${process.env.SUPABASE_URL}/storage/v1/object/public/avatars/${path}` });
+        }
+
+        // ── SET GROUP PHOTO ───────────────────────────────
+        if (action === 'setGroupPhoto') {
+            const { group_id, photo_url } = req.body;
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+            await supabase.from('chat_groups').update({ photo_url: photo_url || null }).eq('id', group_id);
+            return res.status(200).json({ success: true, photo_url: photo_url || null });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

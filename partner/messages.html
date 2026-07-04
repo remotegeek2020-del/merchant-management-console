@@ -161,6 +161,7 @@ function timeAgo(d) {
     return new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'});
 }
 function escHtml(s){ var d=document.createElement('div');d.textContent=s||'';return d.innerHTML; }
+function avImg(url,name,groupIcon){ if(url) return '<img src="'+escHtml(url)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; return groupIcon?'<span class="material-icons" style="font-size:20px;">groups</span>':escHtml(ini(name)); }
 
 async function init() {
     var auth = await partnerApi({ action: 'validate', token });
@@ -183,6 +184,7 @@ async function loadUserList() {
     var gres = await chatApi({ action: 'getGroups' });
     if (gres && gres.success) groups = gres.data || [];
     if (!res.success) return;
+    if (res.me && res.me.avatar_url) { window._myAvatar = res.me.avatar_url; var sa = document.getElementById('sidebarAvatar'); if (sa && sa.querySelector && !sa.querySelector('img')) sa.innerHTML = avImg(res.me.avatar_url, myName); }
     // Show everyone except self (staff + other partners)
     allUsers = (res.data || []).filter(function(u) {
         return u.id !== myId;
@@ -215,7 +217,7 @@ function renderList(users) {
             div.className = 'conv-item' + (activeKind==='group' && activeId===g.id ? ' active' : '');
             div.onclick = (function(grp){ return function(){ openConv(grp); }; })(g);
             var av = document.createElement('div'); av.className = 'conv-avatar'; av.style.background='#eef2ff'; av.style.color='#4338ca';
-            av.innerHTML = '<span class="material-icons" style="font-size:20px;">groups</span>';
+            av.innerHTML = avImg(g.photo_url, g.name, true);
             var info = document.createElement('div'); info.style.flex='1'; info.style.minWidth='0';
             var nameEl = document.createElement('div'); nameEl.className='conv-name'; nameEl.textContent=g.name;
             var prevEl = document.createElement('div'); prevEl.className='conv-preview';
@@ -239,9 +241,8 @@ function renderList(users) {
         var isStaff = u.user_type === 'staff';
         var av = document.createElement('div');
         av.className = 'conv-avatar' + (isStaff ? '' : ' partner-av');
-        // Add type label
-        av.textContent = ini(u.name);
-        if (u.is_online) av.innerHTML += '<div class="online-dot"></div>';
+        // Avatar (profile picture or initials) + online dot
+        av.innerHTML = avImg(u.avatar_url, u.name) + (u.is_online ? '<div class="online-dot"></div>' : '');
         var info = document.createElement('div'); info.style.flex='1'; info.style.minWidth='0';
         var nameEl = document.createElement('div'); nameEl.className='conv-name';
         nameEl.textContent=u.name;
@@ -271,7 +272,7 @@ function openConv(u) {
     // Build chat UI
     var col = document.getElementById('chatCol');
     var isStaff = u.user_type === 'staff';
-    var avHtml = isG ? '<span class="material-icons" style="font-size:20px;">groups</span>' : ini(u.name);
+    var avHtml = isG ? avImg(u.photo_url, u.name, true) : avImg(u.avatar_url, u.name);
     var statusLine = isG ? ((u.member_count || '') + ' members') : (u.is_online ? '<span style="color:#22c55e;font-weight:700;">● Online</span>' : (isStaff ? 'PayProTec Staff' : 'Partner'));
     col.innerHTML = '<div class="chat-header">'
         + '<div class="chat-av"' + (isG ? ' style="background:#eef2ff;color:#4338ca;"' : '') + '>' + avHtml + '</div>'
@@ -303,8 +304,9 @@ async function openById(userId) {
 function buildMsgEl(m) {
     var isMine = m.sender_id === myId;
     var senderName = isMine ? myName : (activeKind === 'group' ? (m.sender_name || 'Unknown') : (activeUser ? activeUser.name : '?'));
+    var avUrl = isMine ? (window._myAvatar || null) : (activeKind === 'group' ? m.sender_avatar : (activeUser ? activeUser.avatar_url : null));
     var wrap = document.createElement('div'); wrap.className = 'msg-wrap' + (isMine ? ' mine' : '');
-    var av = document.createElement('div'); av.className = 'msg-av' + (isMine ? ' mine-av' : ''); av.textContent = ini(senderName);
+    var av = document.createElement('div'); av.className = 'msg-av' + (isMine ? ' mine-av' : ''); av.innerHTML = avImg(avUrl, senderName);
     var inner = document.createElement('div'); inner.className = 'msg-inner';
     if (activeKind === 'group' && !isMine) { var nm = document.createElement('div'); nm.style.cssText = 'font-size:10px;font-weight:700;color:#64748b;margin:0 0 2px 4px;'; nm.textContent = senderName; inner.appendChild(nm); }
     var bubble = document.createElement('div'); bubble.className = 'msg-bubble ' + (isMine ? 'mine' : 'theirs'); bubble.textContent = m.content || m.body || '';
@@ -428,13 +430,25 @@ async function newGroupDialog() {
     else Swal.fire({icon:'error',title:'Could not create',text:(r&&r.message)||'Try again.'});
 }
 async function groupManage(id) {
-    var g = groups.find(function(x){return x.id===id;}) || {id:id, name:(activeUser?activeUser.name:'Group'), is_owner:false};
+    var g = groups.find(function(x){return x.id===id;}) || {id:id, name:(activeUser?activeUser.name:'Group'), is_owner:false, photo_url:null};
     var mres = await chatApi({ action:'getGroupMembers', group_id:id });
     var members = (mres&&mres.data)||[];
-    window._ppg = { id:id, name:g.name, is_owner:!!g.is_owner, memberIds:new Set(members.map(function(m){return String(m.id);})) };
-    var memberList = members.map(function(m){ return '<div style="padding:3px 0;">• '+escHtml(m.name)+(String(m.id)===String(myId)?' <span style="color:#94a3b8;">(you)</span>':'')+'</div>'; }).join('');
-    Swal.fire({ title:escHtml(g.name), html:'<div style="text-align:left;font-size:13px;"><div style="font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px;">Members ('+members.length+')</div>'+memberList+'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;"><button onclick="groupRename()" class="swal2-styled" style="background:#0d9488;margin:0;">Rename</button><button onclick="groupAdd()" class="swal2-styled" style="background:#0369a1;margin:0;">Add people</button><button onclick="groupLeaveOrDelete()" class="swal2-styled" style="background:#dc2626;margin:0;">'+(g.is_owner?'Delete group':'Leave group')+'</button></div></div>', showConfirmButton:false, showCloseButton:true });
+    window._ppg = { id:id, name:g.name, is_owner:!!g.is_owner, photo_url:g.photo_url||null, memberIds:new Set(members.map(function(m){return String(m.id);})) };
+    var memberRows = members.map(function(m){
+        var self = String(m.id)===String(myId);
+        var kick = (g.is_owner && !self) ? '<button onclick="groupKick(\''+m.id+'\')" title="Remove from group" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#dc2626;"><span class="material-icons" style="font-size:16px;">person_remove</span></button>' : '';
+        return '<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><div style="width:28px;height:28px;border-radius:50%;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;overflow:hidden;flex-shrink:0;position:relative;">'+avImg(m.avatar_url,m.name)+'</div><div style="flex:1;">'+escHtml(m.name)+(self?' <span style="color:#94a3b8;">(you)</span>':'')+'</div>'+kick+'</div>';
+    }).join('');
+    Swal.fire({ title:escHtml(g.name), html:'<div style="text-align:left;font-size:13px;">'
+        +'<div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;"><div style="width:52px;height:52px;border-radius:50%;background:#eef2ff;color:#4338ca;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;position:relative;">'+avImg(g.photo_url,g.name,true)+'</div><button onclick="groupPhoto()" class="swal2-styled" style="background:#64748b;margin:0;">'+(g.photo_url?'Change photo':'Add photo')+'</button><input type="file" id="ppg-photofile" accept="image/*" style="display:none;"></div>'
+        +'<div style="font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px;">Members ('+members.length+')</div>'+memberRows
+        +'<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;"><button onclick="groupRename()" class="swal2-styled" style="background:#0d9488;margin:0;">Rename</button><button onclick="groupAdd()" class="swal2-styled" style="background:#0369a1;margin:0;">Add people</button><button onclick="groupLeaveOrDelete()" class="swal2-styled" style="background:#dc2626;margin:0;">'+(g.is_owner?'Delete group':'Leave group')+'</button></div></div>',
+        showConfirmButton:false, showCloseButton:true,
+        didOpen:function(){ var pf=document.getElementById('ppg-photofile'); if(pf) pf.addEventListener('change',function(){groupPhotoUpload(pf);}); } });
 }
+window.groupPhoto = function(){ var pf=document.getElementById('ppg-photofile'); if(pf) pf.click(); };
+async function groupPhotoUpload(pf){ var f=pf.files&&pf.files[0]; if(!f) return; var r=await chatApi({action:'get_group_photo_upload_url',group_id:_ppg.id,file_type:f.type}); if(!r||!r.success){Swal.fire({icon:'error',title:'Upload failed'});return;} await fetch(r.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}}); await chatApi({action:'setGroupPhoto',group_id:_ppg.id,photo_url:r.public_url}); await loadUserList(); groupManage(_ppg.id); }
+window.groupKick = async function(memberId){ var c=await Swal.fire({title:'Remove member?',text:'They will be removed from this group.',icon:'warning',showCancelButton:true,confirmButtonText:'Remove',confirmButtonColor:'#dc2626'}); if(c.isConfirmed){ await chatApi({action:'removeGroupMember',group_id:_ppg.id,member_id:memberId}); await loadUserList(); groupManage(_ppg.id);} };
 window.groupRename = async function(){ var r=await Swal.fire({title:'Rename group',input:'text',inputValue:_ppg.name,showCancelButton:true,confirmButtonColor:'#0d9488'}); if(r.value&&r.value.trim()){ await chatApi({action:'renameGroup',group_id:_ppg.id,name:r.value.trim()}); await loadUserList(); var g=groups.find(function(x){return x.id===_ppg.id;}); if(g)openConv(g);} };
 window.groupAdd = async function(){ var addable=allUsers.filter(function(u){return !_ppg.memberIds.has(String(u.id));}); var opts=addable.map(function(u){return '<label style="display:flex;gap:8px;padding:5px 4px;font-size:13px;"><input type="checkbox" value="'+u.id+'" data-type="'+u.user_type+'"> '+escHtml(u.name)+'</label>';}).join('')||'<div style="color:#94a3b8;">Everyone is already in.</div>'; var r=await Swal.fire({title:'Add people',html:'<div style="max-height:240px;overflow:auto;text-align:left;">'+opts+'</div>',showCancelButton:true,confirmButtonText:'Add',confirmButtonColor:'#0369a1',preConfirm:function(){return [].slice.call(document.querySelectorAll('.swal2-html-container input:checked')).map(function(c){return {id:c.value,type:c.getAttribute('data-type')};});}}); if(r.value&&r.value.length){ await chatApi({action:'addGroupMembers',group_id:_ppg.id,members:r.value}); await loadUserList(); var g=groups.find(function(x){return x.id===_ppg.id;}); if(g)openConv(g);} };
 window.groupLeaveOrDelete = async function(){ if(_ppg.is_owner){ var c=await Swal.fire({title:'Delete group?',text:'Removes it and all messages for everyone.',icon:'warning',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'}); if(c.isConfirmed){ await chatApi({action:'deleteGroup',group_id:_ppg.id}); afterGroupGone(); } } else { var c=await Swal.fire({title:'Leave group?',icon:'warning',showCancelButton:true,confirmButtonText:'Leave',confirmButtonColor:'#dc2626'}); if(c.isConfirmed){ await chatApi({action:'leaveGroup',group_id:_ppg.id}); afterGroupGone(); } } };

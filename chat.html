@@ -163,6 +163,8 @@ function api(body) {
     return fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, sender_id: myId }) }).then(r=>r.json());
 }
 function escAttr(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function ini2(n){ return (n||'?').split(' ').filter(Boolean).map(w=>w[0]).join('').toUpperCase().slice(0,2); }
+function avImg(url, name, groupIcon){ if(url) return '<img src="'+escAttr(url)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; return groupIcon ? '<span class="material-icons" style="font-size:20px;">groups</span>' : escAttr(ini2(name)); }
 
 // ── INIT ──────────────────────────────────────────────────
 async function init() {
@@ -206,7 +208,7 @@ function renderUserList() {
     const groupsHtml = (gFiltered.length ? `<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;">Groups</div>` : '') +
         gFiltered.map(g => `
         <div class="user-item ${(activeType==='group'&&g.id===activeId)?'active':''}" onclick="openGroup('${g.id}')">
-            <div class="user-avatar" style="background:#eef2ff;color:#4338ca;"><span class="material-icons" style="font-size:20px;">groups</span></div>
+            <div class="user-avatar" style="background:#eef2ff;color:#4338ca;">${avImg(g.photo_url, g.name, true)}</div>
             <div class="user-info">
                 <div class="user-name">${escAttr(g.name)}</div>
                 <div class="user-preview">${g.last_message?.preview ? escAttr(g.last_message.preview.substring(0,35)) : g.member_count+' members'}</div>
@@ -223,7 +225,7 @@ function renderUserList() {
     list.innerHTML = groupsHtml + peopleHdr + filtered.map(u => `
         <div class="user-item ${u.id===activeId?'active':''}" onclick="openChat('${u.id}','${u.name.replace(/'/g,"\\'")}','${u.user_type}','${u.role||''}')">
             <div class="user-avatar ${u.user_type==='partner'?'partner':''}">
-                ${initials(u.name)}
+                ${avImg(u.avatar_url, u.name)}
                 ${u.is_online?'<div class="online-ring"></div>':''}
             </div>
             <div class="user-info">
@@ -264,7 +266,7 @@ async function openChat(id, name, type, role) {
 
     document.getElementById('chatArea').innerHTML = `
         <div class="chat-header">
-            <div class="chat-header-avatar ${type==='partner'?'style="background:#0d9488"':''}">${initials}</div>
+            <div class="chat-header-avatar ${type==='partner'?'style="background:#0d9488"':''}">${avImg(user?.avatar_url, name)}</div>
             <div>
                 <div class="chat-header-name">${name}</div>
                 <div class="chat-header-sub">${type==='staff'?'PayProTec Staff':'Partner'}${user?.is_online?' · <span style="color:#10b981;">● Online</span>':''} · ${role||''}</div>
@@ -298,7 +300,7 @@ async function openGroup(id) {
     renderUserList();
     document.getElementById('chatArea').innerHTML = `
         <div class="chat-header">
-            <div class="chat-header-avatar" style="background:#eef2ff;color:#4338ca;"><span class="material-icons" style="font-size:20px;">groups</span></div>
+            <div class="chat-header-avatar" style="background:#eef2ff;color:#4338ca;">${avImg(g.photo_url, g.name, true)}</div>
             <div><div class="chat-header-name">${escAttr(g.name)}</div>
             <div class="chat-header-sub">${g.member_count} members</div></div>
             <div class="chat-header-actions">
@@ -339,23 +341,47 @@ async function newGroupDialog() {
 }
 
 async function groupManage(id) {
-    const g = groups.find(x => x.id === id) || { id, name: activeName, is_owner: false };
+    const g = groups.find(x => x.id === id) || { id, name: activeName, is_owner: false, photo_url: null };
     const mres = await api({ action: 'getGroupMembers', group_id: id });
     const members = (mres && mres.data) || [];
-    window._ppg = { id: id, name: g.name, is_owner: !!g.is_owner, memberIds: new Set(members.map(m => String(m.id))) };
-    const memberList = members.map(m => `<div style="padding:3px 0;">• ${escAttr(m.name)}${String(m.id) === String(myId) ? ' <span style="color:#94a3b8;">(you)</span>' : ''}</div>`).join('');
+    window._ppg = { id: id, name: g.name, is_owner: !!g.is_owner, photo_url: g.photo_url || null, memberIds: new Set(members.map(m => String(m.id))) };
+    const memberRows = members.map(m => {
+        const self = String(m.id) === String(myId);
+        const kick = (g.is_owner && !self) ? `<button onclick="groupKick('${escAttr(m.id)}')" title="Remove from group" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#dc2626;"><span class="material-icons" style="font-size:16px;">person_remove</span></button>` : '';
+        return `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;"><div style="width:28px;height:28px;border-radius:50%;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:10px;overflow:hidden;flex-shrink:0;position:relative;">${avImg(m.avatar_url, m.name)}</div><div style="flex:1;">${escAttr(m.name)}${self ? ' <span style="color:#94a3b8;">(you)</span>' : ''}</div>${kick}</div>`;
+    }).join('');
     Swal.fire({
         title: escAttr(g.name),
         html: `<div style="text-align:left;font-size:13px;">
-            <div style="font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px;">Members (${members.length})</div>${memberList}
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;">
+              <div style="width:52px;height:52px;border-radius:50%;background:#eef2ff;color:#4338ca;display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;position:relative;">${avImg(g.photo_url, g.name, true)}</div>
+              <button onclick="groupPhoto()" class="swal2-styled" style="background:#64748b;margin:0;">${g.photo_url ? 'Change photo' : 'Add photo'}</button>
+              <input type="file" id="ppg-photofile" accept="image/*" style="display:none;">
+            </div>
+            <div style="font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px;">Members (${members.length})</div>${memberRows}
             <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
               <button onclick="groupRename()" class="swal2-styled" style="background:#004990;margin:0;">Rename</button>
               <button onclick="groupAdd()" class="swal2-styled" style="background:#0d9488;margin:0;">Add people</button>
               <button onclick="groupLeaveOrDelete()" class="swal2-styled" style="background:#dc2626;margin:0;">${g.is_owner ? 'Delete group' : 'Leave group'}</button>
             </div></div>`,
-        showConfirmButton: false, showCloseButton: true
+        showConfirmButton: false, showCloseButton: true,
+        didOpen: () => { const pf = document.getElementById('ppg-photofile'); if (pf) pf.addEventListener('change', () => groupPhotoUpload(pf)); }
     });
 }
+window.groupPhoto = function () { const pf = document.getElementById('ppg-photofile'); if (pf) pf.click(); };
+async function groupPhotoUpload(pf) {
+    const f = pf.files && pf.files[0]; if (!f) return;
+    Swal.showLoading && Swal.showLoading();
+    const r = await api({ action: 'get_group_photo_upload_url', group_id: _ppg.id, file_type: f.type });
+    if (!r || !r.success) { Swal.fire({ icon: 'error', title: 'Upload failed' }); return; }
+    await fetch(r.upload_url, { method: 'PUT', body: f, headers: { 'Content-Type': f.type } });
+    await api({ action: 'setGroupPhoto', group_id: _ppg.id, photo_url: r.public_url });
+    await syncUsers(); groupManage(_ppg.id);
+}
+window.groupKick = async function (memberId) {
+    const c = await Swal.fire({ title: 'Remove member?', text: 'They will be removed from this group.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Remove', confirmButtonColor: '#dc2626' });
+    if (c.isConfirmed) { await api({ action: 'removeGroupMember', group_id: _ppg.id, member_id: memberId }); await syncUsers(); groupManage(_ppg.id); }
+};
 window.groupRename = async function () {
     const { value } = await Swal.fire({ title: 'Rename group', input: 'text', inputValue: _ppg.name, showCancelButton: true, confirmButtonColor: '#004990' });
     if (value && value.trim()) { await api({ action: 'renameGroup', group_id: _ppg.id, name: value.trim() }); activeName = value.trim(); await syncUsers(); openGroup(_ppg.id); }

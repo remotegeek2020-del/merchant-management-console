@@ -53,6 +53,11 @@
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]); }); }
     function initials(n) { return (n || '?').split(' ').filter(Boolean).map(function (w) { return w[0]; }).slice(0, 2).join('').toUpperCase() || '?'; }
     function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
+    // Avatar inner HTML: a profile <img> if a URL exists, else initials/icon.
+    function avInner(url, name, isGroupIcon) {
+        if (url) return '<img src="' + esc(url) + '" alt="" onerror="this.remove()">';
+        return isGroupIcon ? '<span class="material-icons" style="font-size:20px;">groups</span>' : esc(initials(name));
+    }
     function keyOf(kind, id) { return kind + ':' + id; }
 
     // ── buzz + desktop notification ──
@@ -104,6 +109,7 @@
         '.ppm-conv{display:flex;gap:10px;padding:9px 14px;cursor:pointer;align-items:center;border-bottom:1px solid #f8fafc;}',
         '.ppm-conv:hover{background:#f8fafc;}',
         '.ppm-av{position:relative;width:40px;height:40px;border-radius:50%;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;flex-shrink:0;}',
+        '.ppm-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;}',
         '.ppm-av.partner{background:#f0fdf4;color:#16a34a;}',
         '.ppm-av.group{background:#eef2ff;color:#4338ca;}',
         '.ppm-dot{position:absolute;bottom:0;right:0;width:11px;height:11px;border-radius:50%;background:#22c55e;border:2px solid #fff;}',
@@ -286,13 +292,13 @@
         var html = '';
         if (gs.length) {
             html += '<div class="ppm-sec">Groups</div>' + gs.map(function (g) {
-                return convRow('group', g.id, g.name, g.member_count + ' members', g.unread, g.last_message, false, 'group', null, null);
+                return convRow('group', g.id, g.name, g.member_count + ' members', g.unread, g.last_message, false, 'group', null, null, g.photo_url);
             }).join('');
         }
         html += '<div class="ppm-sec">People</div>';
         html += ps.length ? ps.map(function (u) {
             return convRow('dm', u.id, u.name, u.user_type === 'partner' ? 'Partner' : 'Staff', u.unread,
-                u.last_message, u.is_online, u.user_type, u.status, u.thought);
+                u.last_message, u.is_online, u.user_type, u.status, u.thought, u.avatar_url);
         }).join('') : '<div class="ppm-empty">No people found.</div>';
         box.innerHTML = html;
         Array.prototype.forEach.call(box.querySelectorAll('.ppm-conv'), function (el) {
@@ -303,11 +309,11 @@
         });
     }
 
-    function convRow(kind, id, name, sub, unread, last, online, avClass, status, thought) {
+    function convRow(kind, id, name, sub, unread, last, online, avClass, status, thought, imgUrl) {
         var isP = avClass === 'partner', isG = avClass === 'group';
         var dot = isG ? '' : '<span class="ppm-dot" style="background:' + statusColor(status, online) + ';"></span>';
         return '<div class="ppm-conv" data-kind="' + kind + '" data-id="' + esc(id) + '" data-name="' + esc(name) + '" data-type="' + esc(isG ? 'group' : avClass) + '" data-online="' + (online ? 1 : 0) + '">' +
-            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:20px;">groups</span>' : esc(initials(name))) +
+            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + avInner(imgUrl, name, isG) +
             dot + '</div>' +
             '<div class="ppm-cbody"><div class="ppm-cname">' + esc(name) +
             (isG ? '' : '<span class="ppm-tag' + (isP ? ' partner' : '') + '">' + esc(sub) + '</span>') + '</div>' +
@@ -361,11 +367,15 @@
     }
 
     // ── manage an existing group (rename, add members, leave) ──
-    function openManage(id, name) { var g = groups.find(function (x) { return x.id === id; }) || {}; manageGroup = { id: id, name: name, is_owner: !!g.is_owner }; view = 'manage'; setList(true); }
+    function openManage(id, name) { var g = groups.find(function (x) { return x.id === id; }) || {}; manageGroup = { id: id, name: name, is_owner: !!g.is_owner, photo_url: g.photo_url || null }; view = 'manage'; setList(true); }
     function renderManage() {
         var g = manageGroup || {};
         listEl.innerHTML =
             '<div class="ppm-lhead"><b>Group info</b><button class="ppm-ic" id="ppm-mg-back" title="Back"><span class="material-icons">arrow_back</span></button></div>' +
+            '<div style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid #f1f5f9;">' +
+            '<div class="ppm-av group" style="width:52px;height:52px;">' + avInner(g.photo_url, g.name, true) + '</div>' +
+            '<button class="ppm-btn ghost" id="ppm-mg-photo" style="flex:0 0 auto;padding:8px 12px;">' + (g.photo_url ? 'Change photo' : 'Add photo') + '</button>' +
+            '<input type="file" id="ppm-mg-photofile" accept="image/*" style="display:none;"></div>' +
             '<div style="padding:12px 14px;border-bottom:1px solid #f1f5f9;">' +
             '<div class="ppm-sec" style="padding:0 0 5px;">Group name</div>' +
             '<div style="display:flex;gap:8px;"><input class="ppm-search" id="ppm-mg-name" style="margin:0;flex:1;" maxlength="60" value="' + esc(g.name || '') + '">' +
@@ -376,6 +386,22 @@
             '<button class="ppm-btn primary" id="ppm-mg-addbtn">Add selected</button></div>' +
             (g.is_owner ? '<div style="padding:0 12px 12px;"><button class="ppm-btn" id="ppm-mg-delete" style="width:100%;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">Delete group (permanent)</button></div>' : '');
         document.getElementById('ppm-mg-back').addEventListener('click', function () { view = 'list'; renderShell(); });
+        // Group photo upload
+        var photoBtn = document.getElementById('ppm-mg-photo'), photoFile = document.getElementById('ppm-mg-photofile');
+        if (photoBtn && photoFile) {
+            photoBtn.addEventListener('click', function () { photoFile.click(); });
+            photoFile.addEventListener('change', function () {
+                var f = photoFile.files && photoFile.files[0]; if (!f) return;
+                photoBtn.textContent = 'Uploading…'; photoBtn.disabled = true;
+                api({ action: 'get_group_photo_upload_url', group_id: g.id, file_type: f.type }).then(function (r) {
+                    if (!r || !r.success) throw new Error();
+                    return fetch(r.upload_url, { method: 'PUT', body: f, headers: { 'Content-Type': f.type } }).then(function () { return r.public_url; });
+                }).then(function (url) {
+                    return api({ action: 'setGroupPhoto', group_id: g.id, photo_url: url }).then(function () { manageGroup.photo_url = url; });
+                }).then(function () { refreshLists().then(renderManage); })
+                  .catch(function () { photoBtn.textContent = 'Add photo'; photoBtn.disabled = false; window.alert('Could not upload the photo.'); });
+            });
+        }
         var delBtn = document.getElementById('ppm-mg-delete');
         if (delBtn) delBtn.addEventListener('click', function () {
             if (!window.confirm('Delete "' + (g.name || 'this group') + '" for everyone? This removes all its messages and cannot be undone.')) return;
@@ -403,10 +429,24 @@
         api({ action: 'getGroupMembers', group_id: g.id }).then(function (r) {
             var members = (r && r.data) || [];
             var mbox = document.getElementById('ppm-mg-members');
-            if (mbox) mbox.innerHTML = members.map(function (m) {
-                return '<div class="ppm-conv"><div class="ppm-av ' + (m.type === 'partner' ? 'partner' : '') + '" style="width:30px;height:30px;font-size:11px;">' + esc(initials(m.name)) + '</div>' +
-                    '<div class="ppm-cbody"><div class="ppm-cname">' + esc(m.name) + (String(m.id) === UID ? ' <span style="color:#94a3b8;font-weight:600;">(you)</span>' : '') + '</div></div></div>';
-            }).join('') || '<div class="ppm-empty">No members.</div>';
+            if (mbox) {
+                mbox.innerHTML = members.map(function (m) {
+                    var self = String(m.id) === UID;
+                    var kick = (g.is_owner && !self) ? '<button class="ppm-kick" data-id="' + esc(m.id) + '" title="Remove from group" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#dc2626;padding:4px;"><span class="material-icons" style="font-size:17px;">person_remove</span></button>' : '';
+                    return '<div class="ppm-conv" style="cursor:default;"><div class="ppm-av ' + (m.type === 'partner' ? 'partner' : '') + '" style="width:30px;height:30px;font-size:11px;">' + avInner(m.avatar_url, m.name, false) + '</div>' +
+                        '<div class="ppm-cbody"><div class="ppm-cname">' + esc(m.name) + (self ? ' <span style="color:#94a3b8;font-weight:600;">(you)</span>' : '') + '</div></div>' + kick + '</div>';
+                }).join('') || '<div class="ppm-empty">No members.</div>';
+                Array.prototype.forEach.call(mbox.querySelectorAll('.ppm-kick'), function (kb) {
+                    kb.addEventListener('click', function () {
+                        var mid = kb.getAttribute('data-id');
+                        if (!window.confirm('Remove this person from the group?')) return;
+                        api({ action: 'removeGroupMember', group_id: g.id, member_id: mid }).then(function (rr) {
+                            if (rr && rr.success) { refreshLists().then(renderManage); }
+                            else window.alert((rr && rr.message) || 'Could not remove member.');
+                        });
+                    });
+                });
+            }
             var memberIds = {}; members.forEach(function (m) { memberIds[String(m.id)] = true; });
             var abox = document.getElementById('ppm-mg-add');
             var addable = people.filter(function (u) { return !memberIds[String(u.id)]; });
@@ -462,6 +502,8 @@
 
         var isG = kind === 'group', isP = type === 'partner';
         var per = (kind === 'dm') ? people.find(function (p) { return String(p.id) === String(id); }) : null;
+        var grp = isG ? groups.find(function (x) { return x.id === id; }) : null;
+        var headImg = isG ? (grp && grp.photo_url) : (per && per.avatar_url);
         var pstatus = per ? per.status : null;
         var ponline = per ? per.is_online : online;
         var pthought = per ? per.thought : null;
@@ -471,7 +513,7 @@
         el.className = 'ppm-win' + (popMinimized ? ' min' : '');
         el.innerHTML =
             '<div class="ppm-whead">' +
-            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:17px;">groups</span>' : esc(initials(name))) + headDot + '</div>' +
+            '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + avInner(headImg, name, isG) + headDot + '</div>' +
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
             '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
             (isG ? '<button class="ppm-wbtn ppm-manage" title="Group options (rename, add, leave, delete)"><span class="material-icons">more_vert</span></button>' : '') +
