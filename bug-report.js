@@ -3,16 +3,17 @@
     const style = document.createElement('style');
     style.textContent = `
         #bug-report-fab {
-            position: fixed; bottom: 112px; left: 20px; z-index: 99998;
-            background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 50px;
-            padding: 5px 11px 5px 8px; font-size: 10px; font-weight: 600; cursor: pointer;
-            display: none; align-items: center; gap: 4px;
-            box-shadow: 0 2px 8px rgba(220,38,38,0.25);
-            transition: opacity 0.15s, transform 0.15s;
+            position: fixed; top: 50%; right: 0; transform: translateY(-50%); z-index: 99998;
+            writing-mode: vertical-rl;
+            background: rgba(220,38,38,0.85); color: white; border: none; border-radius: 8px 0 0 8px;
+            padding: 12px 5px; font-size: 10px; font-weight: 600; cursor: pointer;
+            display: none; align-items: center; gap: 5px;
+            box-shadow: -2px 2px 8px rgba(220,38,38,0.25);
+            transition: opacity 0.15s, transform 0.15s, padding 0.15s;
             font-family: 'Inter', Arial, sans-serif;
-            opacity: 0.6; letter-spacing: 0.2px;
+            opacity: 0.55; letter-spacing: 0.4px;
         }
-        #bug-report-fab:hover { opacity: 1; transform: translateY(-1px); }
+        #bug-report-fab:hover { opacity: 1; padding-right: 8px; }
         #bug-report-overlay {
             display: none; position: fixed; inset: 0; z-index: 99999;
             background: rgba(0,0,0,0.5); align-items: center; justify-content: center;
