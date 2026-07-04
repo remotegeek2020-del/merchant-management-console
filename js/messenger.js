@@ -39,7 +39,7 @@
     var prevUnread = {};                         // key -> unread count (for new-message detection)
     var baselined = false;                       // skip buzz/pop on the very first poll
     var lastBuzz = 0, notifyAsked = false;
-    var myStatus = 'available', myThought = null;
+    var myStatus = 'available', myThought = null, myAvatar = null;
     var STATUS = { available: { c: '#22c55e', label: 'Available' }, away: { c: '#f59e0b', label: 'Away' }, busy: { c: '#ef4444', label: 'Busy' } };
     function statusColor(status, online) { return online ? ((STATUS[status] || STATUS.available).c) : '#cbd5e1'; }
 
@@ -181,7 +181,9 @@
     var root = document.createElement('div');
     root.id = 'ppm-root';
     root.innerHTML = '<div id="ppm-thought"></div>' +
-        '<button id="ppm-launch" title="Messages"><span class="material-icons">chat_bubble</span>' +
+        '<button id="ppm-launch" title="Messages">' +
+        '<img id="ppm-myav" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%;">' +
+        '<span class="material-icons" id="ppm-launchicon">chat_bubble</span>' +
         '<span id="ppm-badge"></span><span id="ppm-mydot"></span></button>';
     document.body.appendChild(root);
     if (isPartner) {
@@ -217,6 +219,10 @@
         if (dot) dot.style.background = (STATUS[myStatus] || STATUS.available).c;
         var th = document.getElementById('ppm-thought');
         if (th) { if (myThought) { th.textContent = '💭 ' + myThought; th.style.display = 'block'; } else { th.style.display = 'none'; } }
+        // Show my own profile photo on the launcher bubble (from Settings).
+        var av = document.getElementById('ppm-myav'), ic = document.getElementById('ppm-launchicon');
+        if (myAvatar) { if (av) { av.src = myAvatar; av.style.display = 'block'; } if (ic) ic.style.display = 'none'; }
+        else { if (av) av.style.display = 'none'; if (ic) ic.style.display = ''; }
     }
 
     // ── list vs new-group shell ──
@@ -463,7 +469,7 @@
             var ul = res[0], gl = res[1];
             if (ul && ul.success) {
                 people = ul.data || [];
-                if (ul.me) { myStatus = ul.me.status || 'available'; myThought = ul.me.thought || null; setMyStatusUI(); }
+                if (ul.me) { myStatus = ul.me.status || 'available'; myThought = ul.me.thought || null; myAvatar = ul.me.avatar_url || null; setMyStatusUI(); }
             }
             if (gl && gl.success) groups = gl.data || [];
 
