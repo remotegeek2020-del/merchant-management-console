@@ -11,6 +11,7 @@
  */
 (function () {
     'use strict';
+    var _selfSrc = (document.currentScript && document.currentScript.src) || '/js/messenger.js';
     // Dual-mode: staff (pp_session_token → bearer) OR partner (pp_partner_token → body).
     var STAFF_TOKEN = localStorage.getItem('pp_session_token') || '';
     var PARTNER_TOKEN = localStorage.getItem('pp_partner_token') || '';
@@ -18,11 +19,27 @@
     var TOKEN = STAFF_TOKEN;
     var UID = isPartner ? String(localStorage.getItem('pp_partner_id') || '')
                         : String(localStorage.getItem('pp_userid') || localStorage.getItem('userid') || '');
-    if (!UID || (!STAFF_TOKEN && !PARTNER_TOKEN)) return;
     var path = location.pathname;
     if (/\/chat(\.html)?$/.test(path)) return;              // staff full DM page
     if (path.indexOf('/partner/messages') === 0) return;    // partner full DM page
     if (document.getElementById('ppm-root')) return;
+    if (!UID || (!STAFF_TOKEN && !PARTNER_TOKEN)) {
+        // Not logged in yet — the login screen reveals the dashboard via an in-page
+        // transition (no reload), so the session token only appears AFTER this script
+        // first ran. Watch for it and boot the messenger automatically (no refresh).
+        if (_selfSrc && !window.__ppmWait) {
+            window.__ppmWait = true;
+            var _t = 0, _iv = setInterval(function () {
+                var tok = localStorage.getItem('pp_session_token') || localStorage.getItem('pp_partner_token');
+                var uid = localStorage.getItem('pp_userid') || localStorage.getItem('userid') || localStorage.getItem('pp_partner_id');
+                if (tok && uid) {
+                    clearInterval(_iv); window.__ppmWait = false;
+                    var s = document.createElement('script'); s.src = _selfSrc; document.body.appendChild(s);
+                } else if (++_t > 900) { clearInterval(_iv); }   // give up after ~15 min
+            }, 1000);
+        }
+        return;
+    }
 
     var MAX_WINDOWS = 4;
     // Partner portal: dock on the RIGHT (its left corner has the bug/footer on
