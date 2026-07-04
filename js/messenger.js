@@ -39,7 +39,7 @@
     var prevUnread = {};                         // key -> unread count (for new-message detection)
     var baselined = false;                       // skip buzz/pop on the very first poll
     var lastBuzz = 0, notifyAsked = false;
-    var myStatus = 'available', myThought = null, myAvatar = null, _appliedAvatar = null;
+    var myStatus = 'available', myThought = null, myAvatar = null, _appliedAvatar = null, _avTries = 0;
     var STATUS = { available: { c: '#22c55e', label: 'Available' }, away: { c: '#f59e0b', label: 'Away' }, busy: { c: '#ef4444', label: 'Busy' } };
     function statusColor(status, online) { return online ? ((STATUS[status] || STATUS.available).c) : '#cbd5e1'; }
     var REACTIONS = { like: '👍', love: '❤️', laugh: '😆', wow: '😮', sad: '😢', angry: '😠' };
@@ -250,13 +250,18 @@
         var av = document.getElementById('ppm-myav'), ic = document.getElementById('ppm-launchicon');
         if (!av) return;
         if (!myAvatar) { av.style.display = 'none'; if (ic) ic.style.display = ''; _appliedAvatar = null; return; }
-        if (av.complete && av.naturalWidth && _appliedAvatar === myAvatar) { av.style.display = 'block'; if (ic) ic.style.display = 'none'; return; }
-        if (_appliedAvatar !== myAvatar) {
-            _appliedAvatar = myAvatar;
-            av.onload = function () { av.style.display = 'block'; if (ic) ic.style.display = 'none'; };
-            av.onerror = function () { av.style.display = 'none'; if (ic) ic.style.display = ''; _appliedAvatar = null; };
-            av.src = myAvatar;
-        }
+        // Already applying/applied this URL: if it finished loading, show it; else leave the retry loop running.
+        if (_appliedAvatar === myAvatar) { if (av.complete && av.naturalWidth) { av.style.display = 'block'; if (ic) ic.style.display = 'none'; } return; }
+        // New avatar: show it on load; on error keep retrying with a cache-busting URL + backoff
+        // (a cold storage/CDN fetch on first login otherwise caches the failure and never recovers without a refresh).
+        _appliedAvatar = myAvatar; _avTries = 0;
+        av.onload = function () { av.style.display = 'block'; if (ic) ic.style.display = 'none'; };
+        av.onerror = function () {
+            if (_appliedAvatar !== myAvatar) return;
+            if (_avTries < 6) { _avTries++; setTimeout(function () { if (_appliedAvatar === myAvatar) av.src = myAvatar + (myAvatar.indexOf('?') > -1 ? '&' : '?') + '_r=' + _avTries; }, 600 * _avTries); }
+            else { av.style.display = 'none'; if (ic) ic.style.display = ''; }
+        };
+        av.src = myAvatar;
     }
 
     // ── list vs new-group shell ──
