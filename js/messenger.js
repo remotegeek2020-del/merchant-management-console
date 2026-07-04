@@ -39,7 +39,7 @@
     var prevUnread = {};                         // key -> unread count (for new-message detection)
     var baselined = false;                       // skip buzz/pop on the very first poll
     var lastBuzz = 0, notifyAsked = false;
-    var myStatus = 'available', myThought = null, myAvatar = null;
+    var myStatus = 'available', myThought = null, myAvatar = null, _appliedAvatar = null;
     var STATUS = { available: { c: '#22c55e', label: 'Available' }, away: { c: '#f59e0b', label: 'Away' }, busy: { c: '#ef4444', label: 'Busy' } };
     function statusColor(status, online) { return online ? ((STATUS[status] || STATUS.available).c) : '#cbd5e1'; }
     var REACTIONS = { like: '👍', love: '❤️', laugh: '😆', wow: '😮', sad: '😢', angry: '😠' };
@@ -58,8 +58,9 @@
     function fmtTime(iso) { try { return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); } catch (e) { return ''; } }
     // Avatar inner HTML: a profile <img> if a URL exists, else initials/icon.
     function avInner(url, name, isGroupIcon) {
-        if (url) return '<img src="' + esc(url) + '" alt="" onerror="this.remove()">';
-        return isGroupIcon ? '<span class="material-icons" style="font-size:20px;">groups</span>' : esc(initials(name));
+        var fb = isGroupIcon ? '<span class="material-icons" style="font-size:20px;">groups</span>' : esc(initials(name));
+        if (url) return '<img src="' + esc(url) + '" alt="" onerror="this.outerHTML=\'' + fb.replace(/'/g, '&#39;') + '\'">';
+        return fb;
     }
     function keyOf(kind, id) { return kind + ':' + id; }
 
@@ -243,9 +244,19 @@
         var th = document.getElementById('ppm-thought');
         if (th) { if (myThought) { th.textContent = '💭 ' + myThought; th.style.display = 'block'; } else { th.style.display = 'none'; } }
         // Show my own profile photo on the launcher bubble (from Settings).
+        // Reveal the image only once it actually loads (never blank); on error,
+        // keep the chat icon and allow the next poll to retry — so it self-heals
+        // instead of staying empty until a manual refresh.
         var av = document.getElementById('ppm-myav'), ic = document.getElementById('ppm-launchicon');
-        if (myAvatar) { if (av) { av.src = myAvatar; av.style.display = 'block'; } if (ic) ic.style.display = 'none'; }
-        else { if (av) av.style.display = 'none'; if (ic) ic.style.display = ''; }
+        if (!av) return;
+        if (!myAvatar) { av.style.display = 'none'; if (ic) ic.style.display = ''; _appliedAvatar = null; return; }
+        if (av.complete && av.naturalWidth && _appliedAvatar === myAvatar) { av.style.display = 'block'; if (ic) ic.style.display = 'none'; return; }
+        if (_appliedAvatar !== myAvatar) {
+            _appliedAvatar = myAvatar;
+            av.onload = function () { av.style.display = 'block'; if (ic) ic.style.display = 'none'; };
+            av.onerror = function () { av.style.display = 'none'; if (ic) ic.style.display = ''; _appliedAvatar = null; };
+            av.src = myAvatar;
+        }
     }
 
     // ── list vs new-group shell ──
