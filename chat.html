@@ -138,8 +138,9 @@
         </div>
         <div class="sidebar-sections">
             <button class="sec-tab active" onclick="setSection('all',this)">All</button>
-            <button class="sec-tab" onclick="setSection('staff',this)">Staff</button>
-            <button class="sec-tab" onclick="setSection('partners',this)">Partners</button>
+            <button class="sec-tab" onclick="setSection('unread',this)">Unread</button>
+            <button class="sec-tab" onclick="setSection('groups',this)">Groups</button>
+            <button class="sec-tab" onclick="setSection('online',this)">Online</button>
         </div>
         <div class="user-list" id="userList">
             <div style="padding:20px;text-align:center;color:var(--muted);"><div style="width:18px;height:18px;border:2px solid #e2e8f0;border-top-color:var(--blue);border-radius:50%;animation:spin 0.8s linear infinite;margin:0 auto 8px;"></div>Loading...</div>
@@ -205,17 +206,21 @@ function histBody(page) {
 function renderUserList() {
     const search = document.getElementById('sidebarSearch').value.toLowerCase();
     let filtered = allUsers;
-    if (currentSection === 'staff') filtered = filtered.filter(u => u.user_type === 'staff');
-    if (currentSection === 'partners') filtered = filtered.filter(u => u.user_type === 'partner');
     if (search) filtered = filtered.filter(u => u.name.toLowerCase().includes(search));
+    if (currentSection === 'groups') filtered = [];
+    else if (currentSection === 'unread') filtered = filtered.filter(u => (u.unread||0) > 0);
+    else if (currentSection === 'online') filtered = filtered.filter(u => u.is_online);
 
     const list = document.getElementById('userList');
     const initials = n => (n||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const timeAgo = d => { if(!d) return ''; const diff=Date.now()-new Date(d).getTime(),m=Math.floor(diff/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?`${dy}d`:h>0?`${h}h`:m>0?`${m}m`:'now'; };
 
-    // Groups (shown on the "All" tab, matching search)
-    const gFiltered = (currentSection === 'all')
-        ? groups.filter(g => !search || (g.name||'').toLowerCase().includes(search)) : [];
+    // Groups (shown on All / Groups / Unread — not Online), matching search
+    const gFiltered = (currentSection === 'online') ? [] : groups.filter(g => {
+        if (search && !(g.name||'').toLowerCase().includes(search)) return false;
+        if (currentSection === 'unread') return (g.unread||0) > 0;
+        return true;   // all or groups
+    });
     const groupsHtml = (gFiltered.length ? `<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;">Groups</div>` : '') +
         gFiltered.map(g => `
         <div class="user-item ${(activeType==='group'&&g.id===activeId)?'active':''}" onclick="openGroup('${g.id}')">
@@ -230,7 +235,11 @@ function renderUserList() {
             </div>
         </div>`).join('');
 
-    if (!filtered.length && !gFiltered.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">No conversations found</div>'; return; }
+    if (!filtered.length && !gFiltered.length) {
+        list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">' +
+            (currentSection==='unread' ? "You're all caught up 🎉" : currentSection==='online' ? 'No one else is online right now.' : currentSection==='groups' ? 'No groups yet.' : (search?'No matches':'No conversations found')) + '</div>';
+        return;
+    }
     const peopleHdr = gFiltered.length ? `<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;">People</div>` : '';
 
     list.innerHTML = groupsHtml + peopleHdr + filtered.map(u => `

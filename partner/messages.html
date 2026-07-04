@@ -46,6 +46,10 @@
         .conv-meta{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0;}
         .conv-time{font-size:10px;color:var(--muted);}
         .unread-badge{background:#ef4444;color:white;border-radius:99px;font-size:9px;font-weight:800;padding:1px 6px;}
+        .conv-tabs{display:flex;gap:5px;padding:0 12px 9px;}
+        .conv-tab{flex:1;text-align:center;padding:6px 0;font-size:12px;font-weight:700;color:var(--muted);background:#f1f5f9;border:none;border-radius:8px;cursor:pointer;font-family:inherit;transition:background .12s,color .12s;}
+        .conv-tab:hover{background:#e2e8f0;}
+        .conv-tab.on{background:var(--teal);color:#fff;}
         /* CHAT */
         .chat-col{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative;}
         .chat-header{background:white;padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
@@ -126,6 +130,12 @@
             </div>
         </div>
         <div class="conv-search"><input type="text" placeholder="Search..." id="searchInput" oninput="filterList(this.value)"></div>
+        <div class="conv-tabs" id="convTabs">
+            <button class="conv-tab on" data-f="all" onclick="setConvFilter('all')">All</button>
+            <button class="conv-tab" data-f="unread" onclick="setConvFilter('unread')">Unread</button>
+            <button class="conv-tab" data-f="groups" onclick="setConvFilter('groups')">Groups</button>
+            <button class="conv-tab" data-f="online" onclick="setConvFilter('online')">Online</button>
+        </div>
         <div class="conv-list" id="convList"><div class="spinner"></div></div>
     </div>
     <div class="chat-col" id="chatCol">
@@ -208,7 +218,7 @@ async function loadUserList() {
     allUsers = (res.data || []).filter(function(u) {
         return u.id !== myId;
     });
-    renderList(allUsers);
+    renderList();
     // Update unread badge (DMs + groups)
     var totalUnread = allUsers.reduce(function(s,u){ return s+(u.unread||0); }, 0)
         + groups.reduce(function(s,g){ return s+(g.unread||0); }, 0);
@@ -216,22 +226,43 @@ async function loadUserList() {
     if (badge) { badge.textContent = totalUnread; badge.style.display = totalUnread > 0 ? 'inline' : 'none'; }
 }
 
-function filterList(q) {
-    if (!q) { renderList(allUsers); return; }
-    renderList(allUsers.filter(function(u){ return u.name.toLowerCase().includes(q.toLowerCase()); }));
+var convFilter = 'all', searchQ = '';
+function setConvFilter(f) {
+    convFilter = f;
+    Array.prototype.forEach.call(document.querySelectorAll('#convTabs .conv-tab'), function(t){ t.classList.toggle('on', t.getAttribute('data-f') === f); });
+    renderList();
 }
+function filterList(q) { searchQ = q || ''; renderList(); }
 
-function renderList(users) {
+function renderList() {
     var el = document.getElementById('convList');
-    if (!users.length && !groups.length) { el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">No conversations yet</div>'; return; }
+    var q = searchQ.toLowerCase();
+    // Apply search + active filter tab (All / Unread / Groups / Online)
+    var us = (convFilter === 'groups') ? [] : allUsers.filter(function(u){
+        if (q && u.name.toLowerCase().indexOf(q) === -1) return false;
+        if (convFilter === 'unread') return (u.unread||0) > 0;
+        if (convFilter === 'online') return !!u.is_online;
+        return true;
+    });
+    var gl = groups.filter(function(g){
+        if (q && (g.name||'').toLowerCase().indexOf(q) === -1) return false;
+        if (convFilter === 'unread') return (g.unread||0) > 0;
+        if (convFilter === 'online') return false;
+        return true;   // all or groups
+    });
+    if (!us.length && !gl.length) {
+        el.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">' +
+            (convFilter === 'unread' ? "You're all caught up 🎉" : convFilter === 'online' ? 'No one is online right now.' : convFilter === 'groups' ? 'No groups yet.' : (q ? 'No matches' : 'No conversations yet')) + '</div>';
+        return;
+    }
     el.innerHTML = '';
     // Groups first
-    if (groups.length) {
+    if (gl.length) {
         var gsec = document.createElement('div');
         gsec.style.cssText = 'font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;';
         gsec.textContent = 'Groups';
         el.appendChild(gsec);
-        groups.forEach(function(g) {
+        gl.forEach(function(g) {
             var div = document.createElement('div');
             div.className = 'conv-item' + (activeKind==='group' && activeId===g.id ? ' active' : '');
             div.onclick = (function(grp){ return function(){ openConv(grp); }; })(g);
@@ -253,7 +284,7 @@ function renderList(users) {
         psec.textContent = 'People';
         el.appendChild(psec);
     }
-    users.forEach(function(u) {
+    us.forEach(function(u) {
         var div = document.createElement('div');
         div.className = 'conv-item' + (activeId===u.id?' active':'');
         div.onclick = (function(usr){ return function(){ openConv(usr); }; })(u);
@@ -284,7 +315,7 @@ function openConv(u) {
     activeKind = isG ? 'group' : 'dm';
     activeId = u.id;
     activeUser = u;
-    renderList(allUsers); // re-render active state
+    renderList(); // re-render active state
     clearInterval(refreshTimer);
     chatPage = 0;
     loadedMsgIds = new Set();
