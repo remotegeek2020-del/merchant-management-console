@@ -153,19 +153,16 @@
         '.ppm-row.me{align-items:flex-end;}',
         '.ppm-row.them{align-items:flex-start;}',
         '.ppm-sname{font-size:10px;color:#64748b;font-weight:700;margin:0 0 1px 8px;}',
-        '.ppm-b{max-width:82%;width:fit-content;padding:7px 11px;border-radius:16px;font-size:12.5px;line-height:1.35;word-wrap:break-word;overflow-wrap:break-word;}',
+        '.ppm-b{position:relative;display:inline-block;max-width:82%;padding:7px 11px;border-radius:16px;font-size:12.5px;line-height:1.35;word-wrap:break-word;overflow-wrap:break-word;}',
         '.ppm-b.me{background:#0369a1;color:#fff;border-bottom-right-radius:5px;}',
         '.ppm-b.them{background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-bottom-left-radius:5px;}',
         '.ppm-bt{font-size:9px;color:#b4bdc9;margin:2px 5px 0;display:none;}',
         '.ppm-row.showtime .ppm-bt{display:block;}',
         '.ppm-input{position:relative;display:flex;gap:5px;padding:9px 10px;border-top:1px solid #f1f5f9;flex-shrink:0;align-items:flex-end;}',
         '.ppm-b img{max-width:100%;width:190px;max-height:230px;height:auto;object-fit:cover;border-radius:10px;display:block;cursor:pointer;margin:2px 0;}',
-        '.ppm-bwrap{display:flex;align-items:center;gap:4px;max-width:100%;}',
-        '.ppm-row.me .ppm-bwrap{align-self:flex-end;}',
-        '.ppm-row.them .ppm-bwrap{align-self:flex-start;}',
-        '.ppm-row.me .ppm-bwrap{flex-direction:row-reverse;}',
-        '.ppm-acts{display:none;gap:1px;align-items:center;flex-shrink:0;}',
-        '.ppm-row:hover .ppm-acts{display:flex;}',
+        '.ppm-acts{position:absolute;top:-25px;right:2px;display:none;gap:1px;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:1px;box-shadow:0 2px 8px rgba(0,0,0,.12);z-index:2;}',
+        '.ppm-row.me .ppm-acts{right:auto;left:2px;}',
+        '.ppm-b:hover .ppm-acts{display:flex;}',
         '.ppm-actbtn{background:#fff;border:1px solid #e2e8f0;border-radius:50%;width:22px;height:22px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:#64748b;padding:0;}',
         '.ppm-actbtn:hover{background:#f1f5f9;color:#0369a1;}',
         '.ppm-actbtn .material-icons{font-size:14px;}',
@@ -675,7 +672,7 @@
                     (mine ? '<button class="ppm-actbtn ppm-edit" title="Edit"><span class="material-icons">edit</span></button><button class="ppm-actbtn ppm-del" title="Unsend"><span class="material-icons">undo</span></button>' : '') + '</div>';
                 return '<div class="ppm-row ' + (mine ? 'me' : 'them') + (newGroup ? ' gap' : '') + (endGroup ? ' showtime' : '') + '" data-mid="' + esc(m.id) + '">' +
                     nameLbl +
-                    '<div class="ppm-bwrap"><div class="ppm-b ' + (mine ? 'me' : 'them') + '">' + bubbleInner + '</div>' + acts + '</div>' +
+                    '<div class="ppm-b ' + (mine ? 'me' : 'them') + '">' + bubbleInner + acts + '</div>' +
                     reactsHtml(m) +
                     '<div class="ppm-bt">' + fmtTime(m.created_at) + (m.edited_at ? ' · edited' : '') + '</div></div>';
             }).join('');
