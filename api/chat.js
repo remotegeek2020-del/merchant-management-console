@@ -376,6 +376,32 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data });
         }
 
+        // ── RENAME GROUP ──────────────────────────────────
+        if (action === 'renameGroup') {
+            const { group_id, name } = req.body;
+            if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'Name required.' });
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+            await supabase.from('chat_groups').update({ name: name.trim() }).eq('id', group_id);
+            return res.status(200).json({ success: true, name: name.trim() });
+        }
+
+        // ── ADD MEMBERS ───────────────────────────────────
+        if (action === 'addGroupMembers') {
+            const { group_id, members } = req.body;
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+            const rows = (Array.isArray(members) ? members : []).filter(m => m && m.id)
+                .map(m => ({ group_id, member_id: String(m.id), member_type: m.type === 'partner' ? 'partner' : 'staff' }));
+            if (rows.length) await supabase.from('chat_group_members').upsert(rows, { onConflict: 'group_id,member_id', ignoreDuplicates: true });
+            return res.status(200).json({ success: true, added: rows.length });
+        }
+
+        // ── LEAVE GROUP ───────────────────────────────────
+        if (action === 'leaveGroup') {
+            const { group_id } = req.body;
+            await supabase.from('chat_group_members').delete().eq('group_id', group_id).eq('member_id', sender_id);
+            return res.status(200).json({ success: true });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action' });
     } catch (err) {
         console.error('Chat API Error:', err.message);

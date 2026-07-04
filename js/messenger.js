@@ -22,7 +22,8 @@
     var MAX_WINDOWS = 4;
 
     // ── state ──
-    var listOpen = false, view = 'list';        // 'list' | 'newgroup'
+    var listOpen = false, view = 'list';        // 'list' | 'newgroup' | 'status' | 'manage'
+    var manageGroup = null;                      // { id, name } when managing a group
     var windows = [];                            // [{ key, kind, id, name, type, minimized, el, lastSig }]
     var people = [], groups = [];
     var prevUnread = {};                         // key -> unread count (for new-message detection)
@@ -196,6 +197,7 @@
     function renderShell() {
         if (view === 'newgroup') { renderNewGroup(); return; }
         if (view === 'status') { renderStatus(); return; }
+        if (view === 'manage') { renderManage(); return; }
         var sc = (STATUS[myStatus] || STATUS.available);
         listEl.innerHTML =
             '<div class="ppm-lhead">' +
@@ -296,34 +298,90 @@
     }
 
     // ── new group ──
+    function pickRow(u) {
+        return '<label class="ppm-pick"><input type="checkbox" value="' + esc(u.id) + '" data-type="' + esc(u.user_type) + '" data-name="' + esc(u.name) + '">' +
+            '<div class="ppm-av ' + (u.user_type === 'partner' ? 'partner' : '') + '" style="width:30px;height:30px;font-size:11px;">' + esc(initials(u.name)) + '</div>' +
+            '<div style="flex:1;min-width:0;"><div class="ppm-cname">' + esc(u.name) + '</div></div></label>';
+    }
     function renderNewGroup() {
-        var rows = people.map(function (u) {
-            return '<label class="ppm-pick"><input type="checkbox" value="' + esc(u.id) + '" data-type="' + esc(u.user_type) + '" data-name="' + esc(u.name) + '">' +
-                '<div class="ppm-av ' + (u.user_type === 'partner' ? 'partner' : '') + '" style="width:30px;height:30px;font-size:11px;">' + esc(initials(u.name)) + '</div>' +
-                '<div style="flex:1;min-width:0;"><div class="ppm-cname">' + esc(u.name) + '</div></div></label>';
-        }).join('') || '<div class="ppm-empty">No people to add.</div>';
+        var rows = people.length ? people.map(pickRow).join('') : '<div class="ppm-empty" id="ppm-ng-loading">Loading people…</div>';
         listEl.innerHTML =
             '<div class="ppm-lhead"><b>New group</b><button class="ppm-ic" id="ppm-ng-back" title="Back"><span class="material-icons">arrow_back</span></button></div>' +
-            '<input class="ppm-search" id="ppm-ng-name" placeholder="Group name…">' +
+            '<input class="ppm-search" id="ppm-ng-name" placeholder="Group name…" maxlength="60">' +
             '<div class="ppm-ng"><div class="ppm-ngpick" id="ppm-ng-pick">' + rows + '</div>' +
+            '<div id="ppm-ng-err" style="color:#dc2626;font-size:11px;padding:2px 14px;min-height:14px;"></div>' +
             '<div class="ppm-ngfoot"><button class="ppm-btn ghost" id="ppm-ng-cancel">Cancel</button>' +
             '<button class="ppm-btn primary" id="ppm-ng-create">Create</button></div></div>';
         document.getElementById('ppm-ng-back').addEventListener('click', function () { view = 'list'; renderShell(); });
         document.getElementById('ppm-ng-cancel').addEventListener('click', function () { view = 'list'; renderShell(); });
         document.getElementById('ppm-ng-create').addEventListener('click', createGroup);
+        // If the directory hadn't loaded yet, fetch and fill the picker in place.
+        if (!people.length) refreshLists().then(function () {
+            if (view === 'newgroup') { var box = document.getElementById('ppm-ng-pick'); if (box) box.innerHTML = people.length ? people.map(pickRow).join('') : '<div class="ppm-empty">No people to add.</div>'; }
+        });
     }
     function createGroup() {
+        var err = document.getElementById('ppm-ng-err');
         var name = (document.getElementById('ppm-ng-name').value || '').trim();
         var picks = Array.prototype.slice.call(document.querySelectorAll('#ppm-ng-pick input:checked'));
-        if (!name) { document.getElementById('ppm-ng-name').focus(); return; }
-        if (!picks.length) return;
+        if (err) err.textContent = '';
+        if (!name) { if (err) err.textContent = 'Give the group a name.'; document.getElementById('ppm-ng-name').focus(); return; }
+        if (!picks.length) { if (err) err.textContent = 'Pick at least one person to add.'; return; }
         var members = picks.map(function (c) { return { id: c.value, type: c.getAttribute('data-type') }; });
         var btn = document.getElementById('ppm-ng-create'); btn.disabled = true; btn.textContent = 'Creating…';
         api({ action: 'createGroup', name: name, members: members }).then(function (r) {
             if (r && r.success && r.group) {
                 view = 'list';
                 refreshLists().then(function () { setList(false); openWindow('group', r.group.id, r.group.name, 'group', false); });
-            } else { btn.disabled = false; btn.textContent = 'Create'; }
+            } else {
+                btn.disabled = false; btn.textContent = 'Create';
+                if (err) err.textContent = (r && r.message) || 'Could not create the group. Please try again.';
+            }
+        }).catch(function () { btn.disabled = false; btn.textContent = 'Create'; if (err) err.textContent = 'Network error. Please try again.'; });
+    }
+
+    // ── manage an existing group (rename, add members, leave) ──
+    function openManage(id, name) { manageGroup = { id: id, name: name }; view = 'manage'; setList(true); }
+    function renderManage() {
+        var g = manageGroup || {};
+        listEl.innerHTML =
+            '<div class="ppm-lhead"><b>Group info</b><button class="ppm-ic" id="ppm-mg-back" title="Back"><span class="material-icons">arrow_back</span></button></div>' +
+            '<div style="padding:12px 14px;border-bottom:1px solid #f1f5f9;">' +
+            '<div class="ppm-sec" style="padding:0 0 5px;">Group name</div>' +
+            '<div style="display:flex;gap:8px;"><input class="ppm-search" id="ppm-mg-name" style="margin:0;flex:1;" maxlength="60" value="' + esc(g.name || '') + '">' +
+            '<button class="ppm-btn primary" id="ppm-mg-save" style="flex:0 0 auto;padding:9px 14px;">Save</button></div></div>' +
+            '<div class="ppm-sec">Members</div><div id="ppm-mg-members" class="ppm-convs" style="max-height:120px;"><div class="ppm-empty">Loading…</div></div>' +
+            '<div class="ppm-sec">Add people</div><div id="ppm-mg-add" class="ppm-ngpick" style="max-height:140px;overflow-y:auto;"><div class="ppm-empty">Loading…</div></div>' +
+            '<div class="ppm-ngfoot"><button class="ppm-btn ghost" id="ppm-mg-leave" style="color:#dc2626;">Leave group</button>' +
+            '<button class="ppm-btn primary" id="ppm-mg-addbtn">Add selected</button></div>';
+        document.getElementById('ppm-mg-back').addEventListener('click', function () { view = 'list'; renderShell(); });
+        document.getElementById('ppm-mg-save').addEventListener('click', function () {
+            var nm = (document.getElementById('ppm-mg-name').value || '').trim(); if (!nm) return;
+            api({ action: 'renameGroup', group_id: g.id, name: nm }).then(function (r) {
+                if (r && r.success) { manageGroup.name = nm; var w = windows.find(function (x) { return x.key === keyOf('group', g.id); }); if (w) { w.name = nm; var el = w.el.querySelector('.ppm-wname'); if (el) el.textContent = nm; } refreshLists(); }
+            });
+        });
+        document.getElementById('ppm-mg-leave').addEventListener('click', function () {
+            api({ action: 'leaveGroup', group_id: g.id }).then(function () { closeWindow(keyOf('group', g.id)); view = 'list'; refreshLists().then(function () { renderShell(); }); });
+        });
+        document.getElementById('ppm-mg-addbtn').addEventListener('click', function () {
+            var picks = Array.prototype.slice.call(document.querySelectorAll('#ppm-mg-add input:checked'));
+            if (!picks.length) return;
+            var members = picks.map(function (c) { return { id: c.value, type: c.getAttribute('data-type') }; });
+            api({ action: 'addGroupMembers', group_id: g.id, members: members }).then(function () { renderManage(); });
+        });
+        // Load members + non-member picker
+        api({ action: 'getGroupMembers', group_id: g.id }).then(function (r) {
+            var members = (r && r.data) || [];
+            var mbox = document.getElementById('ppm-mg-members');
+            if (mbox) mbox.innerHTML = members.map(function (m) {
+                return '<div class="ppm-conv"><div class="ppm-av ' + (m.type === 'partner' ? 'partner' : '') + '" style="width:30px;height:30px;font-size:11px;">' + esc(initials(m.name)) + '</div>' +
+                    '<div class="ppm-cbody"><div class="ppm-cname">' + esc(m.name) + (String(m.id) === UID ? ' <span style="color:#94a3b8;font-weight:600;">(you)</span>' : '') + '</div></div></div>';
+            }).join('') || '<div class="ppm-empty">No members.</div>';
+            var memberIds = {}; members.forEach(function (m) { memberIds[String(m.id)] = true; });
+            var abox = document.getElementById('ppm-mg-add');
+            var addable = people.filter(function (u) { return !memberIds[String(u.id)]; });
+            if (abox) abox.innerHTML = addable.length ? addable.map(pickRow).join('') : '<div class="ppm-empty">Everyone is already in.</div>';
         });
     }
 
@@ -387,6 +445,7 @@
             '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:17px;">groups</span>' : esc(initials(name))) + headDot + '</div>' +
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
             '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
+            (isG ? '<button class="ppm-wbtn ppm-manage" title="Group info"><span class="material-icons">group</span></button>' : '') +
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +
             '<div class="ppm-msgs"><div class="ppm-empty">Loading…</div></div>' +
@@ -398,10 +457,12 @@
         windows.push(win);
 
         el.querySelector('.ppm-whead').addEventListener('click', function (e) {
-            if (e.target.closest('.ppm-min') || e.target.closest('.ppm-close')) return;
+            if (e.target.closest('.ppm-min') || e.target.closest('.ppm-close') || e.target.closest('.ppm-manage')) return;
             win.minimized = !win.minimized; el.classList.toggle('min', win.minimized); relayout();
             if (!win.minimized) { loadWindow(win, true); focusInput(win); }
         });
+        var mng = el.querySelector('.ppm-manage');
+        if (mng) mng.addEventListener('click', function (e) { e.stopPropagation(); openManage(win.id, win.name); });
         el.querySelector('.ppm-min').addEventListener('click', function () { win.minimized = true; el.classList.add('min'); relayout(); });
         el.querySelector('.ppm-close').addEventListener('click', function () { closeWindow(key); });
         var ta = el.querySelector('.ppm-ta');
