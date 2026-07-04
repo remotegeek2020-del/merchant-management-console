@@ -221,6 +221,15 @@ if (name) {
 }
 
 const escapeHtml = s => s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
+// Best carrier-specific tracking URL; falls back to a universal tracker.
+function carrierTrackUrl(carrier, tracking) {
+    const t = encodeURIComponent(tracking || '');
+    const c = String(carrier || '').toLowerCase();
+    if (c.includes('ups')) return 'https://www.ups.com/track?tracknum=' + t;
+    if (c.includes('fedex')) return 'https://www.fedex.com/fedextrack/?trknbr=' + t;
+    if (c.includes('usps') || c.includes('stamp')) return 'https://tools.usps.com/go/TrackConfirmAction?tLabels=' + t;
+    return 'https://parcelsapp.com/en/tracking/' + t;
+}
 const typeIcon = t => t === 'deployment_request' ? 'local_shipping' : t === 'rma_request' ? 'assignment_return' : 'help_outline';
 const typeClass = t => t === 'deployment_request' ? 'deployment' : t === 'rma_request' ? 'rma' : 'general';
 const typeLabel = t => t === 'deployment_request' ? 'Deployment' : t === 'rma_request' ? 'Returns / RMA' : 'General Support';
@@ -399,6 +408,7 @@ async function viewTicket(ticketId) {
             <button onclick="addEquipToRMA('${t.linked_return_id}', ${t.id})" style="background:#92400e;color:white;border:none;border-radius:8px;padding:7px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;">
                 <span class="material-icons" style="font-size:14px;">add_circle_outline</span> Add Equipment to This RMA
             </button>` : ''}
+            <div id="rma-track-${t.linked_return_id}" style="margin-top:10px;"></div>
         </div>`;
     }
 
@@ -448,6 +458,31 @@ async function viewTicket(ticketId) {
                 </button>
             </div>` : `<div style="font-size:12px;color:var(--muted);text-align:center;padding:8px;">This ticket is ${t.status}. Open a new ticket if you need further assistance.</div>`}
         </div>`;
+
+    if (t.linked_return_id) loadRmaTracking(t.linked_return_id);
+}
+
+// Fetch + render safe ShipStation return-label tracking into the RMA banner.
+async function loadRmaTracking(returnDisplayId) {
+    const el = document.getElementById('rma-track-' + returnDisplayId);
+    if (!el) return;
+    try {
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_return_tracking', token, return_display_id: returnDisplayId })
+        }).then(x => x.json());
+        if (!r.success) return;
+        const ss = r.shipstation;
+        if (!ss || !ss.tracking_number) return;   // nothing to show (partner shipped it themselves, etc.)
+        const statusLabel = ss.status ? ({ shipped:'Shipped', delivered:'Delivered', voided:'Label voided', in_transit:'In transit', created:'Label created' }[ss.status] || ss.status) : '';
+        el.innerHTML = `
+            <div style="background:#fff;border:1px solid #fde68a;border-radius:8px;padding:9px 12px;font-size:12px;color:#92400e;">
+                <div style="font-size:10px;font-weight:700;color:#b45309;text-transform:uppercase;margin-bottom:4px;">Return Tracking</div>
+                <a href="${carrierTrackUrl(ss.carrier, ss.tracking_number)}" target="_blank" rel="noopener" style="color:#0369a1;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">${ss.tracking_number} <span class="material-icons" style="font-size:12px;">open_in_new</span></a>
+                ${ss.carrier ? `<div style="margin-top:4px;">Carrier: <strong>${(ss.carrier||'').toUpperCase()}${ss.service ? ' · ' + ss.service : ''}</strong></div>` : ''}
+                ${statusLabel ? `<div style="margin-top:2px;">Status: <strong>${statusLabel}</strong></div>` : ''}
+            </div>`;
+    } catch (e) { /* non-fatal */ }
 }
 
 async function submitPartnerComment() {
@@ -547,9 +582,17 @@ async function showDeploymentDetail(deploymentId, ticketId) {
     const statusColor = statusColors[dep.status] || '#475569';
     const statusBg = statusBgs[dep.status] || '#f1f5f9';
 
-    const trackingHtml = dep.tracking_id
-        ? `<a href="https://parcelsapp.com/en/tracking/${dep.tracking_id}" target="_blank" rel="noopener" style="color:#0369a1;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">${dep.tracking_id} <span class="material-icons" style="font-size:12px;">open_in_new</span></a>`
+    const ss = dep.shipstation || null;
+    const trackNum = (ss && ss.tracking_number) || dep.tracking_id || '';
+    const trackingHtml = trackNum
+        ? `<a href="${carrierTrackUrl(ss && ss.carrier, trackNum)}" target="_blank" rel="noopener" style="color:#0369a1;font-weight:700;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">${trackNum} <span class="material-icons" style="font-size:12px;">open_in_new</span></a>`
         : '<span style="color:#94a3b8;">Not assigned</span>';
+    // Extra ShipStation detail (carrier / service / status) — no cost data.
+    const ssStatusLabel = ss && ss.status ? ({ shipped:'Shipped', delivered:'Delivered', voided:'Label voided', in_transit:'In transit', created:'Label created' }[ss.status] || ss.status) : '';
+    const ssDetailHtml = ss ? `
+        ${ss.carrier ? `<div style="font-size:11px;color:#475569;margin-top:6px;">Carrier: <strong>${(ss.carrier || '').toUpperCase()}${ss.service ? ' · ' + ss.service : ''}</strong></div>` : ''}
+        ${ssStatusLabel ? `<div style="font-size:11px;color:#475569;margin-top:2px;">Shipment status: <strong>${ssStatusLabel}</strong></div>` : ''}
+    ` : '';
 
     const deliverBtn = !isClosed
         ? `<button id="swal-deliver-btn" style="background:#10b981;color:white;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'DM Sans',sans-serif;display:flex;align-items:center;gap:6px;margin-top:4px;width:100%;justify-content:center;">
@@ -587,6 +630,7 @@ async function showDeploymentDetail(deploymentId, ticketId) {
                 <div style="background:#f8fafc;border-radius:8px;padding:12px 14px;margin-bottom:12px;">
                     <div style="font-size:10px;font-weight:700;color:#94a3b8;text-transform:uppercase;margin-bottom:6px;">Tracking</div>
                     ${trackingHtml}
+                    ${ssDetailHtml}
                 </div>
                 ${dep.target_deployment_date ? `<div style="font-size:11px;color:#64748b;margin-bottom:12px;">Deployment date: <strong>${new Date(dep.target_deployment_date.includes('T') ? dep.target_deployment_date : dep.target_deployment_date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}
                 ${dep.merchant_received_date ? `<div style="font-size:11px;color:#166534;margin-bottom:12px;font-weight:600;"><span style="vertical-align:middle;">✓</span> Received: <strong>${new Date(dep.merchant_received_date + 'T12:00:00Z').toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</strong></div>` : ''}

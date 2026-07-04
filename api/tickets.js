@@ -906,7 +906,39 @@ export default async function handler(req, res) {
                 .eq('deployment_id', deployment_id)
                 .single();
             if (error || !dep) return res.status(404).json({ success: false, message: 'Deployment record not found. It may have been archived or processed.' });
+
+            // Attach SAFE ShipStation shipment info (carrier/service/status/tracking).
+            // Partner-facing → NEVER expose internal cost fields (shipping/tax/total paid)
+            // or internal ids (ss_order_id / ss_shipment_id / store).
+            const { data: ss } = await supabase.from('shipstation_shipments')
+                .select('order_number, tracking_number, carrier, service, status, created_at')
+                .eq('deployment_id', dep.id).eq('ship_type', 'outbound')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle();
+            dep.shipstation = ss || null;
             return res.status(200).json({ success: true, deployment: dep });
+        }
+
+        // Partner-facing return/RMA tracking — safe ShipStation return-label fields only.
+        if (action === 'get_return_tracking') {
+            const { token, return_display_id } = req.body;
+            const personId = await validatePartner(token);
+            if (!personId) return res.status(401).json({ success: false, message: 'Session expired.' });
+
+            const { data: rma } = await supabase.from('returns')
+                .select('id, return_id, status, equipment_received_date, created_at')
+                .eq('return_id', return_display_id).single();
+            if (!rma) return res.status(404).json({ success: false, message: 'RMA not found.' });
+
+            const { data: ss } = await supabase.from('shipstation_shipments')
+                .select('order_number, tracking_number, carrier, service, status, created_at')
+                .eq('return_id', rma.id).eq('ship_type', 'return_label')
+                .order('created_at', { ascending: false }).limit(1).maybeSingle();
+
+            return res.status(200).json({
+                success: true,
+                rma: { return_id: rma.return_id, status: rma.status, received_date: rma.equipment_received_date },
+                shipstation: ss || null
+            });
         }
 
         if (action === 'mark_delivered') {
