@@ -107,3 +107,14 @@
     load();
     setInterval(load, 60000);
 })();
+
+// Also load the floating staff messenger (self-guarding; no-ops without a staff
+// session, on the full /chat page, and on partner pages). Loading it here means
+// it appears on every staff page that already ships the notification bell.
+(function () {
+    if (document.getElementById('ppm-loader')) return;
+    var s = document.createElement('script');
+    s.id = 'ppm-loader';
+    s.src = '/js/messenger.js';
+    (document.body || document.head).appendChild(s);
+})();
