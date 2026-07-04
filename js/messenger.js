@@ -133,6 +133,9 @@
         // windows
         '.ppm-win{position:fixed;bottom:46px;width:320px;height:440px;max-height:70vh;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;z-index:99989;}',
         '.ppm-win.min{height:46px;}',
+        '@keyframes ppm-shake{0%,100%{transform:translateX(0);}15%{transform:translateX(-5px);}30%{transform:translateX(5px);}45%{transform:translateX(-4px);}60%{transform:translateX(4px);}75%{transform:translateX(-2px);}}',
+        '.ppm-win.ppm-shake{animation:ppm-shake .55s ease;}',
+        '.ppm-wpill{background:#e11d48;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;padding:0 5px;margin:0 2px;display:none;flex-shrink:0;}',
         '.ppm-whead{background:linear-gradient(135deg,#002d5a,#004990);color:#fff;padding:10px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;}',
         '.ppm-whead .ppm-av{width:30px;height:30px;font-size:11px;background:rgba(255,255,255,.18);color:#fff;}',
         '.ppm-wname{flex:1;min-width:0;font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
@@ -469,8 +472,28 @@
             groups.forEach(function (g) { total += g.unread || 0; cur[keyOf('group', g.id)] = { unread: g.unread || 0, name: g.name, kind: 'group', id: g.id, type: 'group', last: g.last_message }; });
             setBadge(total);
             detectNew(cur);
+            updateWindowBadges(cur);
             prevUnread = {}; Object.keys(cur).forEach(function (k) { prevUnread[k] = cur[k].unread; });
             if (listOpen && view === 'list') renderConvs();
+        });
+    }
+
+    // Per-window red unread pill + buzz shake. Pill persists until the box is
+    // read; it hides only while the user is actively reading that window.
+    function updateWindowBadges(cur) {
+        windows.forEach(function (w) {
+            var u = (cur[w.key] && cur[w.key].unread) || 0;
+            var reading = !w.minimized && w._focused && !document.hidden;
+            var pill = w.el.querySelector('.ppm-wpill');
+            if (pill) {
+                var show = u > 0 && !reading;
+                pill.style.display = show ? 'inline-block' : 'none';
+                pill.textContent = u > 99 ? '99+' : u;
+            }
+            if (u > (w._lastUnread || 0)) {  // new message → buzz the box
+                w.el.classList.remove('ppm-shake'); void w.el.offsetWidth; w.el.classList.add('ppm-shake');
+            }
+            w._lastUnread = u;
         });
     }
 
@@ -516,6 +539,7 @@
             '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + avInner(headImg, name, isG) + headDot + '</div>' +
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
             '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
+            '<span class="ppm-wpill"></span>' +
             (isG ? '<button class="ppm-wbtn ppm-manage" title="Group options (rename, add, leave, delete)"><span class="material-icons">more_vert</span></button>' : '') +
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +
@@ -525,6 +549,10 @@
         document.body.appendChild(el);
 
         var win = { key: key, kind: kind, id: id, name: name, type: type, minimized: !!popMinimized, el: el, lastSig: '' };
+        var _src = isG ? grp : per;
+        // Manual open: seed to current unread so it doesn't false-shake. Auto-pop
+        // (new message): seed 0 so the imminent badge pass shakes + shows the pill.
+        win._lastUnread = popMinimized ? 0 : ((_src && _src.unread) || 0);
         windows.push(win);
 
         el.querySelector('.ppm-whead').addEventListener('click', function (e) {
