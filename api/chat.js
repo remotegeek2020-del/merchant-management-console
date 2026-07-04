@@ -12,7 +12,8 @@ const PARTNER_ACTIONS = new Set([
     'getUserList', 'getHistory', 'sendMessage', 'getUnreadCount',
     'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
     'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup', 'removeGroupMember',
-    'get_group_photo_upload_url', 'setGroupPhoto'
+    'get_group_photo_upload_url', 'setGroupPhoto',
+    'editMessage', 'deleteMessage', 'reactMessage', 'get_chat_image_upload_url'
 ]);
 
 async function validatePartner(token) {
@@ -185,18 +186,21 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
 
-            return res.status(200).json({ success: true, data: (data||[]).reverse() });
+            const dmMsgs = (data || []).reverse();
+            const dmReacts = await reactionsFor(dmMsgs.map(m => m.id));
+            return res.status(200).json({ success: true, data: withReactions(dmMsgs, dmReacts) });
         }
 
         // ── SEND MESSAGE ──────────────────────────────────
         if (action === 'sendMessage') {
-            const { recipient_id, content, message_type = 'dm' } = req.body;
-            if (!content?.trim() || !recipient_id) return res.status(400).json({ success: false, message: 'Content and recipient required.' });
+            const { recipient_id, content, message_type = 'dm', image_url } = req.body;
+            if ((!content?.trim() && !image_url) || !recipient_id) return res.status(400).json({ success: false, message: 'Content or image, and recipient required.' });
 
             const { data, error } = await supabase.from('messages').insert({
                 sender_id,
                 recipient_id,
-                content: content.trim(),
+                content: (content || '').trim(),
+                image_url: image_url || null,
                 is_read: false,
                 message_type
             }).select().single();
@@ -290,6 +294,19 @@ export default async function handler(req, res) {
             const map = {}; (data || []).forEach(p => { map[String(p.user_id)] = p.avatar_url; });
             return map;
         }
+        // Reaction counts per message + the caller's own reaction.
+        async function reactionsFor(ids) {
+            if (!ids || !ids.length) return {};
+            const { data } = await supabase.from('message_reactions').select('message_id, user_id, reaction').in('message_id', ids);
+            const map = {};
+            (data || []).forEach(r => {
+                if (!map[r.message_id]) map[r.message_id] = { counts: {}, mine: null };
+                map[r.message_id].counts[r.reaction] = (map[r.message_id].counts[r.reaction] || 0) + 1;
+                if (String(r.user_id) === String(sender_id)) map[r.message_id].mine = r.reaction;
+            });
+            return map;
+        }
+        function withReactions(msgs, rmap) { return msgs.map(m => Object.assign({}, m, { reactions: (rmap[m.id] && rmap[m.id].counts) || {}, my_reaction: (rmap[m.id] && rmap[m.id].mine) || null })); }
         async function myGroupMembership(groupId) {
             const { data } = await supabase.from('chat_group_members')
                 .select('member_id, last_read_at').eq('group_id', groupId).eq('member_id', sender_id).maybeSingle();
@@ -383,17 +400,18 @@ export default async function handler(req, res) {
             await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
                 .eq('group_id', group_id).eq('member_id', sender_id);
 
-            const msgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown', sender_avatar: avMap[String(m.sender_id)] || null }));
-            return res.status(200).json({ success: true, data: msgs });
+            const gMsgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown', sender_avatar: avMap[String(m.sender_id)] || null }));
+            const gReacts = await reactionsFor(gMsgs.map(m => m.id));
+            return res.status(200).json({ success: true, data: withReactions(gMsgs, gReacts) });
         }
 
         // ── SEND GROUP MESSAGE ────────────────────────────
         if (action === 'sendGroupMessage') {
-            const { group_id, content } = req.body;
-            if (!content?.trim() || !group_id) return res.status(400).json({ success: false, message: 'Content and group required.' });
+            const { group_id, content, image_url } = req.body;
+            if ((!content?.trim() && !image_url) || !group_id) return res.status(400).json({ success: false, message: 'Content or image, and group required.' });
             if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
             const { data, error } = await supabase.from('messages')
-                .insert({ sender_id: String(sender_id), group_id, content: content.trim(), is_read: false, message_type: 'group' })
+                .insert({ sender_id: String(sender_id), group_id, content: (content || '').trim(), image_url: image_url || null, is_read: false, message_type: 'group' })
                 .select().single();
             if (error) throw error;
             // Keep sender's own read pointer current so it doesn't count as unread.
@@ -468,6 +486,35 @@ export default async function handler(req, res) {
             if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
             await supabase.from('chat_groups').update({ photo_url: photo_url || null }).eq('id', group_id);
             return res.status(200).json({ success: true, photo_url: photo_url || null });
+        }
+
+        // ── CHAT IMAGE: signed upload URL (avatars bucket) ──
+        if (action === 'get_chat_image_upload_url') {
+            const ft = String(req.body.file_type || '');
+            const ALLOWED = { 'image/png': 'png', 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/jpg': 'jpg', 'image/gif': 'gif' };
+            const ext = ALLOWED[ft];
+            if (!ext) return res.status(400).json({ success: false, message: 'Only PNG, JPG, WEBP, or GIF images are allowed.' });
+            const path = `chat/${sender_id}/${Date.now()}.${ext}`;
+            const { data, error } = await supabase.storage.from('avatars').createSignedUploadUrl(path);
+            if (error) return res.status(500).json({ success: false, message: error.message });
+            return res.status(200).json({ success: true, upload_url: data.signedUrl, public_url: `${process.env.SUPABASE_URL}/storage/v1/object/public/avatars/${path}` });
+        }
+
+        // ── REACT TO A MESSAGE (like/love/laugh/angry, toggle) ──
+        if (action === 'reactMessage') {
+            const { message_id, reaction } = req.body;
+            const ALLOWED = ['like', 'love', 'laugh', 'angry', 'wow', 'sad'];
+            if (!message_id) return res.status(400).json({ success: false, message: 'message_id required.' });
+            const { data: ex } = await supabase.from('message_reactions')
+                .select('reaction').eq('message_id', message_id).eq('user_id', String(sender_id)).maybeSingle();
+            if (ex && ex.reaction === reaction) {   // same reaction → remove (toggle off)
+                await supabase.from('message_reactions').delete().eq('message_id', message_id).eq('user_id', String(sender_id));
+                return res.status(200).json({ success: true, reaction: null });
+            }
+            if (!ALLOWED.includes(reaction)) return res.status(400).json({ success: false, message: 'Invalid reaction.' });
+            await supabase.from('message_reactions')
+                .upsert({ message_id, user_id: String(sender_id), reaction }, { onConflict: 'message_id,user_id' });
+            return res.status(200).json({ success: true, reaction });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });
