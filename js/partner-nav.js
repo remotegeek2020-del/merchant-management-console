@@ -16,7 +16,9 @@
     // ── NOTIFICATION BELL ────────────────────────────────────
     function injectNotificationBell() {
         var topbar = document.querySelector('.topbar');
-        if (!topbar || document.getElementById('pnav-bell')) return;
+        // Skip if already injected, or if this page has its own native bell
+        // (e.g. community's richer notif panel) — one bell per page.
+        if (!topbar || document.getElementById('pnav-bell') || document.querySelector('.notif-bell')) return;
         var bell = document.createElement('div');
         bell.id = 'pnav-bell';
         bell.style.cssText = 'position:relative;display:inline-flex;align-items:center;flex-shrink:0;';
@@ -156,8 +158,23 @@
         tag.parentNode.insertBefore(badge, tag.nextSibling);
     }
 
+    // Add the "My Residuals" nav item on every partner page (after My Merchants),
+    // so the sidebar stays consistent without editing all page files.
+    function injectResidualsNav() {
+        var nav = document.querySelector('.sidebar-nav');
+        if (!nav || nav.querySelector('a[href="/partner/residuals"]')) return;
+        var merchants = nav.querySelector('a[href="/partner/merchants"]');
+        if (!merchants) return;
+        var a = document.createElement('a');
+        a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/residuals') !== -1 ? ' active' : '');
+        a.href = '/partner/residuals';
+        a.innerHTML = '<span class="material-icons">payments</span> My Residuals';
+        merchants.parentNode.insertBefore(a, merchants.nextSibling);
+    }
+
     function init() {
         injectBadges();
+        injectResidualsNav();
         injectNotificationBell();
         injectBrandedBadge();
         pollNav();

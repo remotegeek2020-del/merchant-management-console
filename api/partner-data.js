@@ -73,6 +73,44 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: { merchants, approved, pending, closed, mtd, vol30, vol90, open_rmas: openRmas || 0, identifiers } });
         }
 
+        // ── RESIDUALS (partner's own estimate) ─────────────
+        //   Mirrors the staff Prime49 residuals formula exactly:
+        //   Prime49 + Approved merchants; per merchant net residual = vol30 * 0.03,
+        //   partner payout = net * rev%%. Scoped to this partner's id_strings.
+        if (action === 'get_residuals') {
+            if (!idStrings.length) return res.status(200).json({ success: true, data: { rows: [], total_payout: 0, total_volume: 0, merchant_count: 0 } });
+
+            // rev% per id_string from the partner's own identifiers
+            const revMap = {};
+            identifiers.forEach(i => { revMap[i.id_string] = i.rev_share; });
+
+            const { data: merchants } = await supabase.from('merchant_portfolio_view')
+                .select('merchant_id, dba_name, volume_30_day, agent_id, account_status')
+                .in('agent_id', idStrings)
+                .eq('is_prime49', true)
+                .in('account_status', ['Approved', 'Approved - Collections'])
+                .limit(10000);
+
+            let totalPayout = 0, totalVolume = 0;
+            const rows = (merchants || []).map(m => {
+                const vol = parseFloat(m.volume_30_day) || 0;
+                const rawRev = revMap[m.agent_id];
+                const revPct = rawRev != null ? (parseFloat(String(rawRev).replace(/%/g, '')) || 50) : 50;
+                const netResidual = vol * 0.03;              // agentShare (vol*1.5%) * 2
+                const payout = netResidual * (revPct / 100); // partner's share
+                totalPayout += payout; totalVolume += vol;
+                return {
+                    dba_name: m.dba_name, merchant_id: m.merchant_id,
+                    volume_30d: vol, rev_share: revPct, residual: payout,
+                    account_status: m.account_status, agent_id: m.agent_id
+                };
+            }).sort((a, b) => b.residual - a.residual);
+
+            return res.status(200).json({ success: true, data: {
+                rows, total_payout: totalPayout, total_volume: totalVolume, merchant_count: rows.length
+            }});
+        }
+
         // ── MERCHANT LIST ──────────────────────────────────
         if (action === 'get_merchants') {
             const { page = 0, limit = 25, search = '', status_filter = '' } = req.body;

@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Residuals | PayProTec Partner Portal</title>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; }
+        :root {
+            --teal:#0d9488; --teal-dark:#0f766e; --teal-light:#ccfbf1; --teal-bg:#f0fdfa;
+            --navy:#001e3c; --border:#e2e8f0; --surface:#f8fafc; --white:#ffffff;
+            --text:#0a1628; --secondary:#475569; --muted:#94a3b8;
+            --green:#10b981; --green-bg:#dcfce7; --green-text:#166534;
+            --blue-bg:#e0f2fe; --blue-text:#0369a1;
+        }
+        body { margin:0; padding:0; font-family:'DM Sans',sans-serif; background:var(--surface); color:var(--text); min-height:100vh; -webkit-font-smoothing:antialiased; }
+        .sidebar { position:fixed; top:0; left:0; width:240px; height:100vh; background:var(--navy); display:flex; flex-direction:column; z-index:100; box-shadow:4px 0 20px rgba(0,0,0,0.15); }
+        .sidebar-header { padding:24px 20px 20px; border-bottom:1px solid rgba(255,255,255,0.08); }
+        .sidebar-logo { height:28px; filter:brightness(0) invert(1); display:block; margin-bottom:16px; }
+        .sidebar-partner { display:flex; align-items:center; gap:10px; }
+        .sidebar-avatar { width:36px; height:36px; border-radius:50%; background:var(--teal); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:white; flex-shrink:0; }
+        .sidebar-name { font-size:13px; font-weight:700; color:white; line-height:1.3; }
+        .sidebar-tag { font-size:10px; color:rgba(255,255,255,0.4); font-weight:500; }
+        .sidebar-nav { flex:1; padding:16px 12px; display:flex; flex-direction:column; gap:4px; }
+        .nav-item { display:flex; align-items:center; gap:12px; padding:10px 12px; border-radius:10px; font-size:13px; font-weight:600; color:rgba(255,255,255,0.6); text-decoration:none; cursor:pointer; transition:all 0.2s; border:none; background:none; width:100%; font-family:'DM Sans',sans-serif; }
+        .nav-item:hover { background:rgba(255,255,255,0.08); color:white; }
+        .nav-item.active { background:var(--teal); color:white; }
+        .nav-item .material-icons { font-size:20px; flex-shrink:0; }
+        .nav-divider { height:1px; background:rgba(255,255,255,0.08); margin:8px 0; }
+        .main { margin-left:240px; min-height:100vh; }
+        .topbar { background:white; padding:16px 28px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; position:sticky; top:0; z-index:50; gap:12px; flex-wrap:wrap; }
+        .topbar-title { font-size:1.2rem; font-weight:800; color:var(--text); margin:0; }
+        .content { padding:24px 28px; max-width:1000px; }
+        .btn { display:inline-flex; align-items:center; gap:6px; padding:9px 16px; border-radius:8px; font-size:12px; font-weight:700; font-family:'DM Sans',sans-serif; cursor:pointer; border:none; transition:all 0.2s; }
+        .btn-outline { background:white; color:var(--secondary); border:1px solid var(--border); }
+        .btn-outline:hover { border-color:var(--teal); color:var(--teal); }
+        .kpi-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-bottom:22px; }
+        .kpi { background:white; border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+        .kpi-label { font-size:11px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:6px; }
+        .kpi-value { font-size:26px; font-weight:800; letter-spacing:-0.5px; }
+        .kpi-sub { font-size:11px; color:var(--muted); margin-top:3px; }
+        .panel { background:white; border:1px solid var(--border); border-radius:14px; overflow:hidden; }
+        table { width:100%; border-collapse:collapse; }
+        th { text-align:left; font-size:10px; font-weight:800; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; padding:11px 14px; border-bottom:1px solid var(--border); background:var(--surface); }
+        td { padding:10px 14px; font-size:12px; border-bottom:1px solid #f1f5f9; }
+        tr:last-child td { border-bottom:none; }
+        .num { text-align:right; font-variant-numeric:tabular-nums; }
+        .disclaimer { background:#fffbeb; border:1px solid #fde68a; color:#92400e; border-radius:10px; padding:11px 14px; font-size:11.5px; line-height:1.5; margin-bottom:20px; }
+        .empty { padding:60px 20px; text-align:center; color:var(--muted); }
+        .empty .material-icons { font-size:48px; opacity:0.3; display:block; margin-bottom:12px; }
+        @media (max-width:760px){ .kpi-grid{grid-template-columns:1fr;} }
+        @media (max-width:640px) { .sidebar{transform:translateX(-100%);} .main{margin-left:0;} .content{padding:16px;} .table-wrap{overflow-x:auto;} }
+        @keyframes spin { to { transform:rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="sidebar-logo" alt="PayProTec">
+        <div class="sidebar-partner">
+            <div class="sidebar-avatar" id="avatarInitial">?</div>
+            <div>
+                <div class="sidebar-name" id="partnerName">Loading...</div>
+                <div class="sidebar-tag">Partner Portal</div>
+            </div>
+        </div>
+    </div>
+    <nav class="sidebar-nav">
+        <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
+        <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
+        <a class="nav-item active" href="/partner/residuals"><span class="material-icons">payments</span> My Residuals</a>
+        <a class="nav-item" href="/partner/sub-partners"><span class="material-icons">account_tree</span> Sub-Partners</a>
+        <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
+        <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
+        <a class="nav-item" href="/partner/tickets"><span class="material-icons">confirmation_number</span> My Tickets</a>
+        <a class="nav-item" href="/partner/profile"><span class="material-icons">account_circle</span> My Profile</a>
+        <a class="nav-item" href="/partner/settings"><span class="material-icons">settings</span> Settings</a>
+        <div class="nav-divider"></div>
+        <button class="nav-item" onclick="handleLogout()"><span class="material-icons">logout</span> Sign Out</button>
+    </nav>
+</aside>
+
+<div class="main">
+    <div class="topbar">
+        <h1 class="topbar-title">My Residuals</h1>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+            <button class="btn btn-outline" onclick="exportCsv()">
+                <span class="material-icons" style="font-size:16px;">download</span>
+                Export CSV
+            </button>
+        </div>
+    </div>
+
+    <div class="content">
+        <div class="disclaimer">
+            <strong>Estimate.</strong> These figures are an <strong>estimate</strong> of your monthly residual based on each Prime49 merchant's last-30-day processing volume and your recorded revenue-share split. Actual payouts are reconciled by PayProTec and may differ. Only <strong>Approved</strong> Prime49 accounts are included.
+        </div>
+
+        <div class="kpi-grid">
+            <div class="kpi">
+                <div class="kpi-label">Estimated Monthly Residual</div>
+                <div class="kpi-value" id="kpiPayout" style="color:var(--green-text);">—</div>
+                <div class="kpi-sub">your share</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">30-Day Volume</div>
+                <div class="kpi-value" id="kpiVolume" style="color:var(--blue-text);">—</div>
+                <div class="kpi-sub">across residual-earning accounts</div>
+            </div>
+            <div class="kpi">
+                <div class="kpi-label">Residual-Earning Merchants</div>
+                <div class="kpi-value" id="kpiCount" style="color:var(--navy);">—</div>
+                <div class="kpi-sub">Prime49 · Approved</div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Merchant</th>
+                            <th>MID</th>
+                            <th class="num">30-Day Volume</th>
+                            <th class="num">Rev %</th>
+                            <th class="num">Est. Residual</th>
+                        </tr>
+                    </thead>
+                    <tbody id="resBody">
+                        <tr><td colspan="5" class="empty"><span class="material-icons" style="animation:spin 0.8s linear infinite;">sync</span>Loading residuals…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/js/site-config.js"></script>
+<script>
+const token = localStorage.getItem('pp_partner_token');
+if (!token) window.location.href = '/partner';
+
+const name = localStorage.getItem('pp_partner_name') || '';
+if (name) {
+    document.getElementById('partnerName').textContent = name;
+    document.getElementById('avatarInitial').textContent = name.charAt(0).toUpperCase();
+}
+
+let _rows = [];
+
+const money = n => '$' + (Number(n) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = s => s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+async function loadResiduals() {
+    try {
+        const r = await fetch('/api/partner-data', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_residuals', token })
+        });
+        if (r.status === 401) { localStorage.clear(); window.location.href = '/partner'; return; }
+        const d = await r.json();
+        if (!d.success) throw new Error(d.message || 'Failed to load');
+        const data = d.data || {};
+        _rows = data.rows || [];
+
+        document.getElementById('kpiPayout').textContent = money(data.total_payout);
+        document.getElementById('kpiVolume').textContent = money(data.total_volume);
+        document.getElementById('kpiCount').textContent = data.merchant_count || 0;
+
+        const body = document.getElementById('resBody');
+        if (!_rows.length) {
+            body.innerHTML = '<tr><td colspan="5" class="empty"><span class="material-icons">payments</span>No residual-earning Prime49 accounts yet.</td></tr>';
+            return;
+        }
+        body.innerHTML = _rows.map(row => `
+            <tr>
+                <td style="font-weight:700;color:var(--text);">${esc(row.dba_name) || '—'}</td>
+                <td style="font-family:'DM Mono',monospace;color:var(--secondary);">${esc(row.merchant_id) || '—'}</td>
+                <td class="num">${money(row.volume_30d)}</td>
+                <td class="num">${row.rev_share}%</td>
+                <td class="num" style="font-weight:800;color:var(--green-text);">${money(row.residual)}</td>
+            </tr>`).join('');
+    } catch (e) {
+        document.getElementById('resBody').innerHTML = '<tr><td colspan="5" class="empty" style="color:var(--red,#ef4444);">Could not load residuals. Please try again.</td></tr>';
+    }
+}
+
+function exportCsv() {
+    if (!_rows.length) { Swal.fire('Nothing to export', 'No residual data available.', 'info'); return; }
+    const header = ['Merchant', 'MID', '30-Day Volume', 'Rev %', 'Est. Residual'];
+    const lines = [header.join(',')].concat(_rows.map(r =>
+        [`"${(r.dba_name || '').replace(/"/g, '""')}"`, r.merchant_id || '', (Number(r.volume_30d) || 0).toFixed(2), r.rev_share, (Number(r.residual) || 0).toFixed(2)].join(',')
+    ));
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'my-residuals-estimate.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+}
+
+async function handleLogout() {
+    await fetch('/api/partner-auth', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'logout', token }) });
+    localStorage.clear(); window.location.href = '/partner';
+}
+
+loadResiduals();
+</script>
+<script src="/js/partner-nav.js"></script>
+</body>
+</html>
