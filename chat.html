@@ -76,6 +76,17 @@
         .msg-deleted{opacity:0.5;font-style:italic;}
         .msg-actions{display:none;position:absolute;top:-24px;background:white;border:1px solid var(--border);border-radius:6px;padding:2px 4px;gap:2px;box-shadow:var(--shadow-sm);}
         .msg-bubble:hover .msg-actions{display:flex;}
+        .cimg{max-width:230px;max-height:270px;border-radius:10px;display:block;cursor:pointer;margin:2px 0;}
+        .msg-reacts{display:flex;gap:3px;margin:3px 8px 0;flex-wrap:wrap;}
+        .msg-reacts.mine{justify-content:flex-end;}
+        .rchip{background:white;border:1px solid var(--border);border-radius:11px;font-size:11px;font-weight:700;color:#475569;padding:1px 6px;cursor:pointer;}
+        .rchip.mine{background:#e0f2fe;border-color:#7dd3fc;}
+        .react-picker{position:fixed;background:white;border:1px solid var(--border);border-radius:22px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:4px 8px;display:flex;gap:4px;z-index:100000;}
+        .react-picker span{font-size:22px;cursor:pointer;padding:2px;transition:transform .1s;}
+        .react-picker span:hover{transform:scale(1.25);}
+        .emoji-panel{display:none;flex-wrap:wrap;gap:2px;max-height:150px;overflow-y:auto;padding:8px;border:1px solid var(--border);border-radius:10px;margin-bottom:8px;background:#fafafa;}
+        .emoji-panel span{font-size:22px;cursor:pointer;padding:3px;border-radius:6px;line-height:1;}
+        .emoji-panel span:hover{background:#f1f5f9;}
         .msg-action-btn{background:none;border:none;cursor:pointer;padding:3px;color:var(--muted);border-radius:4px;font-size:12px;}
         .msg-action-btn:hover{background:#f1f5f9;color:var(--blue);}
         .date-divider{text-align:center;font-size:11px;color:var(--muted);font-weight:600;padding:8px 0;position:relative;}
@@ -279,7 +290,11 @@ async function openChat(id, name, type, role) {
         <div class="messages-area" id="messagesArea"></div>
         <div class="chat-input-area">
             <div class="typing-indicator" id="typingIndicator"></div>
+            <div class="emoji-panel" id="emojiPanel"></div>
             <div class="input-row">
+                <button class="icon-btn" onclick="document.getElementById('chatImgFile').click()" title="Photo/GIF"><span class="material-icons" style="font-size:22px;">image</span></button>
+                <button class="icon-btn" onclick="toggleEmoji()" title="Emoji"><span class="material-icons" style="font-size:22px;">mood</span></button>
+                <input type="file" id="chatImgFile" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="chatSendImage(this)">
                 <textarea class="msg-input" id="msgInput" placeholder="Type a message... (Enter to send)" rows="1" onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()"><span class="material-icons">send</span></button>
             </div>
@@ -309,7 +324,11 @@ async function openGroup(id) {
         </div>
         <div class="messages-area" id="messagesArea"></div>
         <div class="chat-input-area">
+            <div class="emoji-panel" id="emojiPanel"></div>
             <div class="input-row">
+                <button class="icon-btn" onclick="document.getElementById('chatImgFile').click()" title="Photo/GIF"><span class="material-icons" style="font-size:22px;">image</span></button>
+                <button class="icon-btn" onclick="toggleEmoji()" title="Emoji"><span class="material-icons" style="font-size:22px;">mood</span></button>
+                <input type="file" id="chatImgFile" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="chatSendImage(this)">
                 <textarea class="msg-input" id="msgInput" placeholder="Message the group..." rows="1" onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
                 <button class="send-btn" id="sendBtn" onclick="sendMessage()"><span class="material-icons">send</span></button>
             </div>
@@ -414,26 +433,68 @@ function buildMsgHtml(m) {
     const timeStr = fmtTime(d);
     const isDeleted = !!m.deleted_at;
     const isEdited = !!m.edited_at;
-    const actions = isMine && !isDeleted ? `
+    const actions = !isDeleted ? `
         <div class="msg-actions">
-            <button class="msg-action-btn" onclick="editMessage('${m.id}','${(m.content||'').replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:13px;">edit</span></button>
-            <button class="msg-action-btn" onclick="deleteMessage('${m.id}')"><span class="material-icons" style="font-size:13px;">delete</span></button>
+            <button class="msg-action-btn" onclick="chatReactPicker(event,'${m.id}')" title="React"><span class="material-icons" style="font-size:13px;">add_reaction</span></button>
+            ${isMine ? `<button class="msg-action-btn" onclick="editMessage('${m.id}','${(m.content||'').replace(/'/g,"\\'").replace(/\n/g,' ')}')" title="Edit"><span class="material-icons" style="font-size:13px;">edit</span></button>
+            <button class="msg-action-btn" onclick="deleteMessage('${m.id}')" title="Unsend"><span class="material-icons" style="font-size:13px;">undo</span></button>` : ''}
         </div>` : '';
     const senderLbl = (activeType === 'group' && !isMine && m.sender_name)
         ? `<div style="font-size:10px;font-weight:700;color:#64748b;margin:0 0 2px 4px;">${escAttr(m.sender_name)}</div>` : '';
+    const imgHtml = (!isDeleted && m.image_url) ? `<img class="cimg" src="${escAttr(m.image_url)}" data-full="${escAttr(m.image_url)}" onclick="window.open(this.dataset.full,'_blank','noopener')">` : '';
+    const txt = isDeleted ? `<i style="opacity:.7;">This message was unsent.</i>` : (m.content ? escAttr(m.content) : '');
     return `<div class="msg-group ${isMine?'mine':'theirs'}">
         ${senderLbl}
         <div class="msg-bubble ${isMine?'mine':'theirs'} ${isDeleted?'msg-deleted':''}">
             ${actions}
-            ${m.content || 'This message was deleted.'}
+            ${imgHtml}${txt}
             ${isEdited&&!isDeleted?'<span class="msg-edited"> (edited)</span>':''}
         </div>
+        ${chatReactsHtml(m)}
         <div class="msg-meta ${isMine?'mine':''}">
             ${timeStr}
             ${isMine?'<span class="material-icons" style="font-size:12px;">done_all</span>':''}
         </div>
     </div>`;
 }
+const REACT_EMOJI = { like:'👍', love:'❤️', laugh:'😆', wow:'😮', sad:'😢', angry:'😠' };
+const REACT_ORDER = ['like','love','laugh','wow','sad','angry'];
+const CHAT_EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','😎','🤩','🥳','😉','🙂','😇','🤔','😏','😐','😴','🥰','😅','😆','😜','😢','😭','😤','😠','😡','🥺','😱','👍','👎','👏','🙏','💪','🔥','🎉','💯','❤️','💔','✨','⭐','✅','❌','❓','❗','👀','🤝','🙌','💰'];
+function chatReactsHtml(m) {
+    const counts = m.reactions || {}; const keys = Object.keys(counts).filter(k => counts[k] > 0);
+    if (!keys.length) return '';
+    return `<div class="msg-reacts ${m.sender_id===myId?'mine':''}">` + keys.map(k => `<span class="rchip ${m.my_reaction===k?'mine':''}" onclick="chatReact('${m.id}','${k}')">${REACT_EMOJI[k]||''} ${counts[k]}</span>`).join('') + `</div>`;
+}
+function chatReactPicker(ev, mid) {
+    ev.stopPropagation(); closeChatPicker();
+    const p = document.createElement('div'); p.className = 'react-picker'; p.id = 'chatReactPicker';
+    p.innerHTML = REACT_ORDER.map(k => `<span onclick="chatReact('${mid}','${k}')">${REACT_EMOJI[k]}</span>`).join('');
+    document.body.appendChild(p);
+    const r = ev.target.getBoundingClientRect();
+    p.style.left = Math.max(8, Math.min(r.left - 60, innerWidth - p.offsetWidth - 8)) + 'px';
+    p.style.top = Math.max(8, r.top - 48) + 'px';
+}
+function closeChatPicker() { const p = document.getElementById('chatReactPicker'); if (p) p.remove(); }
+async function chatReact(mid, reaction) { closeChatPicker(); await api({ action:'reactMessage', message_id: mid, reaction }); lastMsgCount = 0; loadMessages(); }
+async function chatSendImage(input) {
+    const f = input.files && input.files[0]; input.value = ''; if (!f) return;
+    if (f.size > 8*1024*1024) { Swal.fire({ icon:'warning', title:'Image too large', text:'Max 8MB.' }); return; }
+    const r = await api({ action:'get_chat_image_upload_url', file_type: f.type });
+    if (!r.success) { Swal.fire({ icon:'error', title:'Upload failed', text: r.message || '' }); return; }
+    await fetch(r.upload_url, { method:'PUT', body: f, headers:{ 'Content-Type': f.type } });
+    const body = activeType === 'group'
+        ? { action:'sendGroupMessage', group_id: activeId, content:'', image_url: r.public_url }
+        : { action:'sendMessage', recipient_id: activeId, content:'', image_url: r.public_url };
+    await api(body); lastMsgCount = 0; await loadMessages(); syncUsers();
+}
+function toggleEmoji() {
+    const p = document.getElementById('emojiPanel'); if (!p) return;
+    if (p.style.display === 'flex') { p.style.display = 'none'; return; }
+    if (!p.innerHTML) p.innerHTML = CHAT_EMOJIS.map(x => `<span onclick="insertEmoji('${x}')">${x}</span>`).join('');
+    p.style.display = 'flex';
+}
+function insertEmoji(x) { const ta = document.getElementById('msgInput'); if (ta) { ta.value += x; ta.focus(); } }
+document.addEventListener('click', e => { if (!e.target.closest('[onclick*=chatReactPicker]') && !e.target.closest('#chatReactPicker')) closeChatPicker(); });
 
 function renderAllMessages(currentMsgs, area) {
     const wasAtBottom = area.scrollTop + area.clientHeight >= area.scrollHeight - 20;
