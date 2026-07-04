@@ -11,7 +11,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const PARTNER_ACTIONS = new Set([
     'getUserList', 'getHistory', 'sendMessage', 'getUnreadCount',
     'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
-    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup'
+    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup', 'removeGroupMember'
 ]);
 
 async function validatePartner(token) {
@@ -400,6 +400,17 @@ export default async function handler(req, res) {
                 .map(m => ({ group_id, member_id: String(m.id), member_type: m.type === 'partner' ? 'partner' : 'staff' }));
             if (rows.length) await supabase.from('chat_group_members').upsert(rows, { onConflict: 'group_id,member_id', ignoreDuplicates: true });
             return res.status(200).json({ success: true, added: rows.length });
+        }
+
+        // ── REMOVE MEMBER (kick — creator only) ───────────
+        if (action === 'removeGroupMember') {
+            const { group_id, member_id } = req.body;
+            const { data: g } = await supabase.from('chat_groups').select('created_by').eq('id', group_id).maybeSingle();
+            if (!g) return res.status(404).json({ success: false, message: 'Group not found.' });
+            if (String(g.created_by) !== String(sender_id)) return res.status(403).json({ success: false, message: 'Only the group creator can remove members.' });
+            if (String(member_id) === String(sender_id)) return res.status(400).json({ success: false, message: 'You cannot remove yourself — use Delete group.' });
+            await supabase.from('chat_group_members').delete().eq('group_id', group_id).eq('member_id', String(member_id));
+            return res.status(200).json({ success: true });
         }
 
         // ── LEAVE GROUP ───────────────────────────────────
