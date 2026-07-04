@@ -219,6 +219,132 @@ export default async function handler(req, res) {
             return res.status(200).json({ success: true, data: data || [] });
         }
 
+        // ══════════════ GROUP CHAT (additive) ══════════════
+        // Resolve display names for a set of members (split by type to avoid
+        // casting non-uuid staff ids against persons.id).
+        async function namesForMembers(members) {
+            const staffIds = members.filter(m => m.member_type !== 'partner').map(m => m.member_id);
+            const partnerIds = members.filter(m => m.member_type === 'partner').map(m => m.member_id);
+            const map = {};
+            if (staffIds.length) {
+                const { data } = await supabase.from('app_users').select('userid, first_name, last_name').in('userid', staffIds);
+                (data || []).forEach(u => { map[u.userid] = `${u.first_name} ${u.last_name || ''}`.trim(); });
+            }
+            if (partnerIds.length) {
+                const { data } = await supabase.from('persons').select('id, full_name').in('id', partnerIds);
+                (data || []).forEach(p => { map[p.id] = p.full_name; });
+            }
+            return map;
+        }
+        async function myGroupMembership(groupId) {
+            const { data } = await supabase.from('chat_group_members')
+                .select('member_id, last_read_at').eq('group_id', groupId).eq('member_id', sender_id).maybeSingle();
+            return data || null;
+        }
+
+        // ── CREATE GROUP ──────────────────────────────────
+        if (action === 'createGroup') {
+            const { name, members } = req.body;   // members: [{ id, type }]
+            if (!name || !name.trim()) return res.status(400).json({ success: false, message: 'Group name required.' });
+            const others = (Array.isArray(members) ? members : []).filter(m => m && m.id && String(m.id) !== String(sender_id));
+            if (!others.length) return res.status(400).json({ success: false, message: 'Pick at least one other member.' });
+
+            const { data: grp, error } = await supabase.from('chat_groups')
+                .insert({ name: name.trim(), created_by: sender_id }).select('id, name, created_at').single();
+            if (error) throw error;
+
+            const rows = [{ group_id: grp.id, member_id: String(sender_id), member_type: 'staff' }];
+            const seen = new Set([String(sender_id)]);
+            others.forEach(m => { if (!seen.has(String(m.id))) { seen.add(String(m.id)); rows.push({ group_id: grp.id, member_id: String(m.id), member_type: m.type === 'partner' ? 'partner' : 'staff' }); } });
+            await supabase.from('chat_group_members').insert(rows);
+
+            return res.status(200).json({ success: true, group: { id: grp.id, name: grp.name, member_count: rows.length } });
+        }
+
+        // ── LIST MY GROUPS ────────────────────────────────
+        if (action === 'getGroups') {
+            const { data: mine } = await supabase.from('chat_group_members')
+                .select('group_id, last_read_at').eq('member_id', sender_id);
+            const groupIds = (mine || []).map(m => m.group_id);
+            if (!groupIds.length) return res.status(200).json({ success: true, data: [] });
+            const readMap = {};
+            (mine || []).forEach(m => { readMap[m.group_id] = m.last_read_at; });
+
+            const { data: groups } = await supabase.from('chat_groups').select('id, name').in('id', groupIds);
+            const { data: counts } = await supabase.from('chat_group_members').select('group_id, member_id').in('group_id', groupIds);
+            const memberCount = {};
+            (counts || []).forEach(c => { memberCount[c.group_id] = (memberCount[c.group_id] || 0) + 1; });
+
+            const out = [];
+            for (const g of (groups || [])) {
+                const { data: last } = await supabase.from('messages')
+                    .select('content, created_at, sender_id').eq('group_id', g.id).is('deleted_at', null)
+                    .order('created_at', { ascending: false }).limit(1).maybeSingle();
+                const since = readMap[g.id] || '1970-01-01';
+                const { count: unread } = await supabase.from('messages')
+                    .select('*', { count: 'exact', head: true })
+                    .eq('group_id', g.id).is('deleted_at', null)
+                    .gt('created_at', since).neq('sender_id', String(sender_id));
+                out.push({
+                    id: g.id, name: g.name, is_group: true,
+                    member_count: memberCount[g.id] || 1,
+                    unread: unread || 0,
+                    last_message: last ? { preview: last.content, time: last.created_at } : null
+                });
+            }
+            out.sort((a, b) => {
+                if (b.unread !== a.unread) return b.unread - a.unread;
+                const at = a.last_message?.time ? new Date(a.last_message.time).getTime() : 0;
+                const bt = b.last_message?.time ? new Date(b.last_message.time).getTime() : 0;
+                return bt - at;
+            });
+            return res.status(200).json({ success: true, data: out });
+        }
+
+        // ── GROUP MEMBERS ─────────────────────────────────
+        if (action === 'getGroupMembers') {
+            const { group_id } = req.body;
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+            const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type').eq('group_id', group_id);
+            const nameMap = await namesForMembers(members || []);
+            return res.status(200).json({ success: true, data: (members || []).map(m => ({ id: m.member_id, type: m.member_type, name: nameMap[m.member_id] || 'Unknown' })) });
+        }
+
+        // ── GROUP HISTORY ─────────────────────────────────
+        if (action === 'getGroupHistory') {
+            const { group_id, page = 0, limit = 50 } = req.body;
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+
+            const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type').eq('group_id', group_id);
+            const nameMap = await namesForMembers(members || []);
+
+            const { data } = await supabase.from('messages').select('*')
+                .eq('group_id', group_id).is('deleted_at', null)
+                .order('created_at', { ascending: false }).range(page * limit, (page + 1) * limit - 1);
+
+            // Mark this group read for me
+            await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
+                .eq('group_id', group_id).eq('member_id', sender_id);
+
+            const msgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown' }));
+            return res.status(200).json({ success: true, data: msgs });
+        }
+
+        // ── SEND GROUP MESSAGE ────────────────────────────
+        if (action === 'sendGroupMessage') {
+            const { group_id, content } = req.body;
+            if (!content?.trim() || !group_id) return res.status(400).json({ success: false, message: 'Content and group required.' });
+            if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
+            const { data, error } = await supabase.from('messages')
+                .insert({ sender_id: String(sender_id), group_id, content: content.trim(), is_read: false, message_type: 'group' })
+                .select().single();
+            if (error) throw error;
+            // Keep sender's own read pointer current so it doesn't count as unread.
+            await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
+                .eq('group_id', group_id).eq('member_id', sender_id);
+            return res.status(200).json({ success: true, data });
+        }
+
         return res.status(400).json({ success: false, message: 'Unknown action' });
     } catch (err) {
         console.error('Chat API Error:', err.message);
