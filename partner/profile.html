@@ -245,6 +245,17 @@ function api(body) {
         body: JSON.stringify(Object.assign({ token: token }, body))
     }).then(function(r) { return r.json(); });
 }
+// The shared avatar store (user_profiles.avatar_url) lives behind /api/community.
+function commfetch(body) {
+    return fetch('/api/community', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({ token: token }, body))
+    }).then(function(r) { return r.json(); });
+}
+function setAvatarImg(url) {
+    var h = '<img src="' + url + (url.indexOf('?')>-1?'':'?'+Date.now()) + '" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">';
+    ['avatarEl','sidebarAvatar','composerAvatar'].forEach(function(id){ var el=document.getElementById(id); if(el) el.innerHTML=h; });
+}
 
 function initials(name) {
     return (name || '?').split(' ').map(function(w){ return w[0]; }).join('').toUpperCase().slice(0,2);
@@ -287,6 +298,12 @@ async function init() {
 
     loadAgentIds(result);
     loadFeed(false, true);
+
+    // Show the current profile photo (shared avatar) if one is set
+    commfetch({ action: 'get_profile' }).then(function(pr){
+        var url = pr && (pr.avatar_url || (pr.profile && pr.profile.avatar_url));
+        if (url) setAvatarImg(url);
+    }).catch(function(){});
 }
 
 function loadAgentIds(result) {
@@ -585,19 +602,22 @@ async function submitPost() {
 function changeAvatar() { document.getElementById('avatarInput').click(); }
 
 async function uploadAvatar(input) {
-    var file = input.files[0]; if (!file) return;
-    if (file.size > 2*1024*1024) { Swal.fire('Image too large', 'Max 2MB for avatar.', 'warning'); return; }
+    var file = input.files[0]; input.value = ''; if (!file) return;
+    if (file.size > 5*1024*1024) { Swal.fire('Image too large', 'Max 5MB.', 'warning'); return; }
+    Swal.fire({ title:'Uploading...', didOpen: function(){ Swal.showLoading(); } });
+    // Instant local preview
     var reader = new FileReader();
-    reader.onload = async function(e) {
-        var b64 = e.target.result.split(',')[1];
-        var result = await api({ action:'upload_media', file_base64:b64, file_name:'avatar_'+partnerId+'.jpg', content_type:file.type });
-        if (result.success) {
-            var el = document.getElementById('avatarEl');
-            el.innerHTML = '<img src="' + result.url + '?' + Date.now() + '">';
-        }
-    };
+    reader.onload = function(e){ var el = document.getElementById('avatarEl'); if (el) el.innerHTML = '<img src="'+e.target.result+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; };
     reader.readAsDataURL(file);
-    input.value = '';
+    // Upload to the shared avatars bucket and persist to user_profiles.avatar_url
+    var urlRes = await commfetch({ action:'get_avatar_upload_url', file_type: file.type });
+    if (!urlRes.success) { Swal.fire('Upload failed', urlRes.message || '', 'error'); return; }
+    var put = await fetch(urlRes.upload_url, { method:'PUT', body: file, headers:{ 'Content-Type': file.type } });
+    if (!put.ok) { Swal.fire('Upload failed', 'Could not store the image ('+put.status+').', 'error'); return; }
+    var save = await commfetch({ action:'update_profile', avatar_url: urlRes.public_url });
+    if (!save || !save.success) { Swal.fire('Could not save photo', (save && save.message) || 'Please try again.', 'error'); return; }
+    setAvatarImg(urlRes.public_url);
+    Swal.fire({ icon:'success', title:'Photo updated!', timer:1400, showConfirmButton:false });
 }
 
 function handleLogout() {
