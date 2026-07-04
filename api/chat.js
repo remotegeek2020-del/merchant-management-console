@@ -11,7 +11,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const PARTNER_ACTIONS = new Set([
     'getUserList', 'getHistory', 'sendMessage', 'getUnreadCount',
     'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
-    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup'
+    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup'
 ]);
 
 async function validatePartner(token) {
@@ -290,7 +290,7 @@ export default async function handler(req, res) {
                 .insert({ name: name.trim(), created_by: sender_id }).select('id, name, created_at').single();
             if (error) throw error;
 
-            const rows = [{ group_id: grp.id, member_id: String(sender_id), member_type: 'staff' }];
+            const rows = [{ group_id: grp.id, member_id: String(sender_id), member_type: isPartner ? 'partner' : 'staff' }];
             const seen = new Set([String(sender_id)]);
             others.forEach(m => { if (!seen.has(String(m.id))) { seen.add(String(m.id)); rows.push({ group_id: grp.id, member_id: String(m.id), member_type: m.type === 'partner' ? 'partner' : 'staff' }); } });
             await supabase.from('chat_group_members').insert(rows);
@@ -307,7 +307,7 @@ export default async function handler(req, res) {
             const readMap = {};
             (mine || []).forEach(m => { readMap[m.group_id] = m.last_read_at; });
 
-            const { data: groups } = await supabase.from('chat_groups').select('id, name').in('id', groupIds);
+            const { data: groups } = await supabase.from('chat_groups').select('id, name, created_by').in('id', groupIds);
             const { data: counts } = await supabase.from('chat_group_members').select('group_id, member_id').in('group_id', groupIds);
             const memberCount = {};
             (counts || []).forEach(c => { memberCount[c.group_id] = (memberCount[c.group_id] || 0) + 1; });
@@ -324,6 +324,7 @@ export default async function handler(req, res) {
                     .gt('created_at', since).neq('sender_id', String(sender_id));
                 out.push({
                     id: g.id, name: g.name, is_group: true,
+                    is_owner: String(g.created_by) === String(sender_id),
                     member_count: memberCount[g.id] || 1,
                     unread: unread || 0,
                     last_message: last ? { preview: last.content, time: last.created_at } : null
@@ -405,6 +406,17 @@ export default async function handler(req, res) {
         if (action === 'leaveGroup') {
             const { group_id } = req.body;
             await supabase.from('chat_group_members').delete().eq('group_id', group_id).eq('member_id', sender_id);
+            return res.status(200).json({ success: true });
+        }
+
+        // ── DELETE GROUP (creator only) ───────────────────
+        if (action === 'deleteGroup') {
+            const { group_id } = req.body;
+            const { data: g } = await supabase.from('chat_groups').select('created_by').eq('id', group_id).maybeSingle();
+            if (!g) return res.status(404).json({ success: false, message: 'Group not found.' });
+            if (String(g.created_by) !== String(sender_id)) return res.status(403).json({ success: false, message: 'Only the group creator can delete it.' });
+            // FK cascade removes members + group messages.
+            await supabase.from('chat_groups').delete().eq('id', group_id);
             return res.status(200).json({ success: true });
         }
 

@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href = '/?reason=unauthorized';})();</script>
     <script src="js/tz.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         *,*::before,*::after{box-sizing:border-box;}
         :root{--blue:#004990;--blue-dark:#002d5a;--border:#e2e8f0;--surface:#f0f4f8;--text:#0a1628;--secondary:#475569;--muted:#94a3b8;--shadow-sm:0 1px 3px rgba(0,0,0,0.06);}
@@ -117,11 +118,12 @@
 <div class="chat-layout">
     <!-- SIDEBAR -->
     <div class="chat-sidebar">
-        <div class="sidebar-search">
+        <div class="sidebar-search" style="display:flex;gap:8px;align-items:center;">
             <div class="search-wrap">
                 <span class="material-icons">search</span>
                 <input class="search-input" id="sidebarSearch" placeholder="Search messages..." oninput="filterUsers(this.value)">
             </div>
+            <button onclick="newGroupDialog()" title="New group" style="flex-shrink:0;width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:#eef2ff;color:#4338ca;cursor:pointer;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:19px;">group_add</span></button>
         </div>
         <div class="sidebar-sections">
             <button class="sec-tab active" onclick="setSection('all',this)">All</button>
@@ -148,7 +150,7 @@ const myId = localStorage.getItem('pp_userid') || localStorage.getItem('userid')
 const myName = localStorage.getItem('pp_user_first_name') || 'Me';
 if (!myId) window.location.href = '/';
 
-let allUsers = [], activeId = null, activeType = null, activeName = '';
+let allUsers = [], groups = [], activeId = null, activeType = null, activeName = '';
 let currentSection = 'all';
 let msgPollInterval = null, userPollInterval = null;
 let lastMsgCount = 0;
@@ -160,6 +162,7 @@ let lastNewestId = null;
 function api(body) {
     return fetch('/api/chat', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...body, sender_id: myId }) }).then(r=>r.json());
 }
+function escAttr(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 
 // ── INIT ──────────────────────────────────────────────────
 async function init() {
@@ -172,9 +175,18 @@ async function init() {
 
 async function syncUsers() {
     const res = await api({ action:'getUserList' });
+    const gres = await api({ action:'getGroups' });
+    if (gres && gres.success) groups = gres.data || [];
     if (!res.success) return;
     allUsers = res.data || [];
     renderUserList();
+}
+
+// Group-aware history/send bodies
+function histBody(page) {
+    return activeType === 'group'
+        ? { action:'getGroupHistory', group_id: activeId, page: page||0 }
+        : { action:'getHistory', recipient_id: activeId, page: page||0 };
 }
 
 function renderUserList() {
@@ -185,12 +197,30 @@ function renderUserList() {
     if (search) filtered = filtered.filter(u => u.name.toLowerCase().includes(search));
 
     const list = document.getElementById('userList');
-    if (!filtered.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">No conversations found</div>'; return; }
-
     const initials = n => (n||'?').split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
     const timeAgo = d => { if(!d) return ''; const diff=Date.now()-new Date(d).getTime(),m=Math.floor(diff/60000),h=Math.floor(m/60),dy=Math.floor(h/24); return dy>0?`${dy}d`:h>0?`${h}h`:m>0?`${m}m`:'now'; };
 
-    list.innerHTML = filtered.map(u => `
+    // Groups (shown on the "All" tab, matching search)
+    const gFiltered = (currentSection === 'all')
+        ? groups.filter(g => !search || (g.name||'').toLowerCase().includes(search)) : [];
+    const groupsHtml = (gFiltered.length ? `<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;">Groups</div>` : '') +
+        gFiltered.map(g => `
+        <div class="user-item ${(activeType==='group'&&g.id===activeId)?'active':''}" onclick="openGroup('${g.id}')">
+            <div class="user-avatar" style="background:#eef2ff;color:#4338ca;"><span class="material-icons" style="font-size:20px;">groups</span></div>
+            <div class="user-info">
+                <div class="user-name">${escAttr(g.name)}</div>
+                <div class="user-preview">${g.last_message?.preview ? escAttr(g.last_message.preview.substring(0,35)) : g.member_count+' members'}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0;">
+                ${g.last_message?.time?`<div style="font-size:10px;color:var(--muted);">${timeAgo(g.last_message.time)}</div>`:''}
+                ${g.unread?`<span class="unread-badge">${g.unread}</span>`:''}
+            </div>
+        </div>`).join('');
+
+    if (!filtered.length && !gFiltered.length) { list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:12px;">No conversations found</div>'; return; }
+    const peopleHdr = gFiltered.length ? `<div style="font-size:10px;font-weight:800;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;">People</div>` : '';
+
+    list.innerHTML = groupsHtml + peopleHdr + filtered.map(u => `
         <div class="user-item ${u.id===activeId?'active':''}" onclick="openChat('${u.id}','${u.name.replace(/'/g,"\\'")}','${u.user_type}','${u.role||''}')">
             <div class="user-avatar ${u.user_type==='partner'?'partner':''}">
                 ${initials(u.name)}
@@ -259,6 +289,99 @@ async function openChat(id, name, type, role) {
     document.getElementById('msgInput')?.focus();
 }
 
+// ── GROUPS ────────────────────────────────────────────────
+async function openGroup(id) {
+    if (activeId === id && activeType === 'group') return;
+    const g = groups.find(x => x.id === id); if (!g) return;
+    activeId = id; activeName = g.name; activeType = 'group';
+    chatPage = 0; olderMsgs = []; olderMsgsExhausted = false; lastMsgCount = 0; lastNewestId = null;
+    renderUserList();
+    document.getElementById('chatArea').innerHTML = `
+        <div class="chat-header">
+            <div class="chat-header-avatar" style="background:#eef2ff;color:#4338ca;"><span class="material-icons" style="font-size:20px;">groups</span></div>
+            <div><div class="chat-header-name">${escAttr(g.name)}</div>
+            <div class="chat-header-sub">${g.member_count} members</div></div>
+            <div class="chat-header-actions">
+                <button class="icon-btn" onclick="groupManage('${g.id}')" title="Group info"><span class="material-icons" style="font-size:18px;">group</span></button>
+            </div>
+        </div>
+        <div class="messages-area" id="messagesArea"></div>
+        <div class="chat-input-area">
+            <div class="input-row">
+                <textarea class="msg-input" id="msgInput" placeholder="Message the group..." rows="1" onkeydown="handleKeydown(event)" oninput="autoResize(this)"></textarea>
+                <button class="send-btn" id="sendBtn" onclick="sendMessage()"><span class="material-icons">send</span></button>
+            </div>
+        </div>`;
+    if (msgPollInterval) clearInterval(msgPollInterval);
+    await loadMessages();
+    msgPollInterval = setInterval(loadMessages, 3000);
+    document.getElementById('msgInput')?.focus();
+}
+
+async function newGroupDialog() {
+    const opts = allUsers.map(u => `<label style="display:flex;align-items:center;gap:8px;padding:6px 4px;cursor:pointer;font-size:13px;"><input type="checkbox" value="${escAttr(u.id)}" data-type="${escAttr(u.user_type)}"> ${escAttr(u.name)} <span style="font-size:9px;color:#94a3b8;">${u.user_type==='partner'?'Partner':'Staff'}</span></label>`).join('') || '<div style="color:#94a3b8;">No people available.</div>';
+    const { value: form } = await Swal.fire({
+        title: 'New group',
+        html: `<input id="ppg-name" class="swal2-input" placeholder="Group name" maxlength="60"><div style="max-height:220px;overflow-y:auto;text-align:left;border:1px solid #e2e8f0;border-radius:8px;padding:6px;margin-top:8px;">${opts}</div>`,
+        showCancelButton: true, confirmButtonText: 'Create', confirmButtonColor: '#004990',
+        preConfirm: () => {
+            const name = (document.getElementById('ppg-name').value || '').trim();
+            const picks = [...document.querySelectorAll('.swal2-html-container input[type=checkbox]:checked')].map(c => ({ id: c.value, type: c.getAttribute('data-type') }));
+            if (!name) { Swal.showValidationMessage('Give the group a name'); return false; }
+            if (!picks.length) { Swal.showValidationMessage('Pick at least one person'); return false; }
+            return { name, members: picks };
+        }
+    });
+    if (!form) return;
+    const r = await api({ action: 'createGroup', name: form.name, members: form.members });
+    if (r && r.success && r.group) { await syncUsers(); openGroup(r.group.id); }
+    else Swal.fire({ icon: 'error', title: 'Could not create', text: (r && r.message) || 'Try again.' });
+}
+
+async function groupManage(id) {
+    const g = groups.find(x => x.id === id) || { id, name: activeName, is_owner: false };
+    const mres = await api({ action: 'getGroupMembers', group_id: id });
+    const members = (mres && mres.data) || [];
+    window._ppg = { id: id, name: g.name, is_owner: !!g.is_owner, memberIds: new Set(members.map(m => String(m.id))) };
+    const memberList = members.map(m => `<div style="padding:3px 0;">• ${escAttr(m.name)}${String(m.id) === String(myId) ? ' <span style="color:#94a3b8;">(you)</span>' : ''}</div>`).join('');
+    Swal.fire({
+        title: escAttr(g.name),
+        html: `<div style="text-align:left;font-size:13px;">
+            <div style="font-weight:700;color:#64748b;font-size:11px;text-transform:uppercase;margin-bottom:4px;">Members (${members.length})</div>${memberList}
+            <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:14px;">
+              <button onclick="groupRename()" class="swal2-styled" style="background:#004990;margin:0;">Rename</button>
+              <button onclick="groupAdd()" class="swal2-styled" style="background:#0d9488;margin:0;">Add people</button>
+              <button onclick="groupLeaveOrDelete()" class="swal2-styled" style="background:#dc2626;margin:0;">${g.is_owner ? 'Delete group' : 'Leave group'}</button>
+            </div></div>`,
+        showConfirmButton: false, showCloseButton: true
+    });
+}
+window.groupRename = async function () {
+    const { value } = await Swal.fire({ title: 'Rename group', input: 'text', inputValue: _ppg.name, showCancelButton: true, confirmButtonColor: '#004990' });
+    if (value && value.trim()) { await api({ action: 'renameGroup', group_id: _ppg.id, name: value.trim() }); activeName = value.trim(); await syncUsers(); openGroup(_ppg.id); }
+};
+window.groupAdd = async function () {
+    const addable = allUsers.filter(u => !_ppg.memberIds.has(String(u.id)));
+    const opts = addable.map(u => `<label style="display:flex;gap:8px;padding:5px 4px;font-size:13px;"><input type="checkbox" value="${escAttr(u.id)}" data-type="${escAttr(u.user_type)}"> ${escAttr(u.name)}</label>`).join('') || '<div style="color:#94a3b8;">Everyone is already in.</div>';
+    const { value: ok } = await Swal.fire({ title: 'Add people', html: `<div style="max-height:240px;overflow:auto;text-align:left;">${opts}</div>`, showCancelButton: true, confirmButtonText: 'Add', confirmButtonColor: '#0d9488', preConfirm: () => [...document.querySelectorAll('.swal2-html-container input:checked')].map(c => ({ id: c.value, type: c.getAttribute('data-type') })) });
+    if (ok && ok.length) { await api({ action: 'addGroupMembers', group_id: _ppg.id, members: ok }); await syncUsers(); openGroup(_ppg.id); }
+};
+window.groupLeaveOrDelete = async function () {
+    if (_ppg.is_owner) {
+        const c = await Swal.fire({ title: 'Delete group?', text: 'Removes it and all messages for everyone.', icon: 'warning', showCancelButton: true, confirmButtonText: 'Delete', confirmButtonColor: '#dc2626' });
+        if (c.isConfirmed) { await api({ action: 'deleteGroup', group_id: _ppg.id }); afterGroupGone(); }
+    } else {
+        const c = await Swal.fire({ title: 'Leave group?', icon: 'warning', showCancelButton: true, confirmButtonText: 'Leave', confirmButtonColor: '#dc2626' });
+        if (c.isConfirmed) { await api({ action: 'leaveGroup', group_id: _ppg.id }); afterGroupGone(); }
+    }
+};
+function afterGroupGone() {
+    Swal.close(); activeId = null; activeType = null;
+    if (msgPollInterval) clearInterval(msgPollInterval);
+    document.getElementById('chatArea').innerHTML = '<div class="chat-empty"><span class="material-icons">forum</span><h3>Select a conversation</h3><p>Choose a conversation to start messaging</p></div>';
+    syncUsers();
+}
+
 function buildMsgHtml(m) {
     const isMine = m.sender_id === myId;
     const d = new Date(m.created_at);
@@ -270,7 +393,10 @@ function buildMsgHtml(m) {
             <button class="msg-action-btn" onclick="editMessage('${m.id}','${(m.content||'').replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:13px;">edit</span></button>
             <button class="msg-action-btn" onclick="deleteMessage('${m.id}')"><span class="material-icons" style="font-size:13px;">delete</span></button>
         </div>` : '';
+    const senderLbl = (activeType === 'group' && !isMine && m.sender_name)
+        ? `<div style="font-size:10px;font-weight:700;color:#64748b;margin:0 0 2px 4px;">${escAttr(m.sender_name)}</div>` : '';
     return `<div class="msg-group ${isMine?'mine':'theirs'}">
+        ${senderLbl}
         <div class="msg-bubble ${isMine?'mine':'theirs'} ${isDeleted?'msg-deleted':''}">
             ${actions}
             ${m.content || 'This message was deleted.'}
@@ -306,7 +432,7 @@ function renderAllMessages(currentMsgs, area) {
 
 async function loadMessages() {
     if (!activeId) return;
-    const res = await api({ action:'getHistory', recipient_id: activeId });
+    const res = await api(histBody(0));
     if (!res.success) return;
 
     const msgs = res.data || [];
@@ -329,13 +455,13 @@ async function loadOlderMessages() {
     const btnEl = btn?.querySelector('button');
     if (btnEl) { btnEl.textContent = 'Loading...'; btnEl.disabled = true; }
     chatPage++;
-    const res = await api({ action:'getHistory', recipient_id: activeId, page: chatPage });
+    const res = await api(histBody(chatPage));
     if (!res.success) { chatPage--; if (btnEl) { btnEl.textContent = '↑ Load older messages'; btnEl.disabled = false; } return; }
     const fetched = res.data || [];
     if (!fetched.length) {
         olderMsgsExhausted = true;
         const area = document.getElementById('messagesArea');
-        const currentMsgs = (await api({ action:'getHistory', recipient_id: activeId })).data || [];
+        const currentMsgs = (await api(histBody(0))).data || [];
         if (area) renderAllMessages(currentMsgs, area);
         return;
     }
@@ -346,7 +472,7 @@ async function loadOlderMessages() {
     const area = document.getElementById('messagesArea');
     if (!area) return;
     const prevScrollHeight = area.scrollHeight;
-    const currentMsgs = (await api({ action:'getHistory', recipient_id: activeId })).data || [];
+    const currentMsgs = (await api(histBody(0))).data || [];
     renderAllMessages(currentMsgs, area);
     // Restore scroll so user sees same content
     area.scrollTop = area.scrollHeight - prevScrollHeight;
@@ -362,7 +488,9 @@ async function sendMessage() {
     input.value = '';
     if (input) { input.style.height = 'auto'; }
 
-    await api({ action:'sendMessage', recipient_id: activeId, content });
+    await api(activeType === 'group'
+        ? { action:'sendGroupMessage', group_id: activeId, content }
+        : { action:'sendMessage', recipient_id: activeId, content });
     lastMsgCount = 0; // force refresh
     await loadMessages();
     if (btn) btn.disabled = false;

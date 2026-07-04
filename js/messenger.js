@@ -25,6 +25,11 @@
     if (document.getElementById('ppm-root')) return;
 
     var MAX_WINDOWS = 4;
+    // Partner portal: dock on the RIGHT (its left corner has the bug/footer on
+    // staff; partner right corner is free). Staff stays on the LEFT.
+    var SIDE = isPartner ? 'right' : 'left';
+    var OTHER = SIDE === 'left' ? 'right' : 'left';
+    var DOCK_START = isPartner ? 90 : 150;   // clear launcher (+ "Report a Bug" pill on staff)
 
     // ── state ──
     var listOpen = false, view = 'list';        // 'list' | 'newgroup' | 'status' | 'manage'
@@ -170,11 +175,17 @@
         '<button id="ppm-launch" title="Messages"><span class="material-icons">chat_bubble</span>' +
         '<span id="ppm-badge"></span><span id="ppm-mydot"></span></button>';
     document.body.appendChild(root);
-    if (isPartner) { var _md = document.getElementById('ppm-mydot'); if (_md) _md.style.display = 'none'; }
+    if (isPartner) {
+        var _md = document.getElementById('ppm-mydot'); if (_md) _md.style.display = 'none';
+        // flip to the right corner
+        root.style.left = 'auto'; root.style.right = '20px';
+        var _th = document.getElementById('ppm-thought'); if (_th) { _th.style.left = 'auto'; _th.style.right = '0'; }
+    }
 
     var listEl = document.createElement('div');
     listEl.id = 'ppm-list';
     document.body.appendChild(listEl);
+    if (isPartner) { listEl.style.left = 'auto'; listEl.style.right = '20px'; }
 
     document.getElementById('ppm-launch').addEventListener('click', function () {
         if (!notifyAsked && 'Notification' in window && Notification.permission === 'default') { notifyAsked = true; try { Notification.requestPermission(); } catch (e) {} }
@@ -350,7 +361,7 @@
     }
 
     // ── manage an existing group (rename, add members, leave) ──
-    function openManage(id, name) { manageGroup = { id: id, name: name }; view = 'manage'; setList(true); }
+    function openManage(id, name) { var g = groups.find(function (x) { return x.id === id; }) || {}; manageGroup = { id: id, name: name, is_owner: !!g.is_owner }; view = 'manage'; setList(true); }
     function renderManage() {
         var g = manageGroup || {};
         listEl.innerHTML =
@@ -362,8 +373,17 @@
             '<div class="ppm-sec">Members</div><div id="ppm-mg-members" class="ppm-convs" style="max-height:120px;"><div class="ppm-empty">Loading…</div></div>' +
             '<div class="ppm-sec">Add people</div><div id="ppm-mg-add" class="ppm-ngpick" style="max-height:140px;overflow-y:auto;"><div class="ppm-empty">Loading…</div></div>' +
             '<div class="ppm-ngfoot"><button class="ppm-btn ghost" id="ppm-mg-leave" style="color:#dc2626;">Leave group</button>' +
-            '<button class="ppm-btn primary" id="ppm-mg-addbtn">Add selected</button></div>';
+            '<button class="ppm-btn primary" id="ppm-mg-addbtn">Add selected</button></div>' +
+            (g.is_owner ? '<div style="padding:0 12px 12px;"><button class="ppm-btn" id="ppm-mg-delete" style="width:100%;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;">Delete group (permanent)</button></div>' : '');
         document.getElementById('ppm-mg-back').addEventListener('click', function () { view = 'list'; renderShell(); });
+        var delBtn = document.getElementById('ppm-mg-delete');
+        if (delBtn) delBtn.addEventListener('click', function () {
+            if (!window.confirm('Delete "' + (g.name || 'this group') + '" for everyone? This removes all its messages and cannot be undone.')) return;
+            api({ action: 'deleteGroup', group_id: g.id }).then(function (r) {
+                if (r && r.success) { closeWindow(keyOf('group', g.id)); view = 'list'; refreshLists().then(function () { renderShell(); }); }
+                else window.alert((r && r.message) || 'Could not delete the group.');
+            });
+        });
         document.getElementById('ppm-mg-save').addEventListener('click', function () {
             var nm = (document.getElementById('ppm-mg-name').value || '').trim(); if (!nm) return;
             api({ action: 'renameGroup', group_id: g.id, name: nm }).then(function (r) {
@@ -491,10 +511,10 @@
         windows[i].el.remove(); windows.splice(i, 1); relayout();
     }
     function relayout() {
-        var left = 150;   // clear the launcher + "Report a Bug" pill width
+        var off = DOCK_START;   // dock windows along the bottom, away from the launcher
         windows.forEach(function (w) {
-            w.el.style.left = left + 'px'; w.el.style.right = 'auto';
-            left += (w.minimized ? 210 : 320) + 12;
+            w.el.style[SIDE] = off + 'px'; w.el.style[OTHER] = 'auto';
+            off += (w.minimized ? 210 : 320) + 12;
         });
     }
 
