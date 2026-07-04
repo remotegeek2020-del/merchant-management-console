@@ -5,8 +5,14 @@ export const config = { api: { bodyParser: { sizeLimit: '5mb' } } };
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
-// Partner-accessible actions — validated via partner_token in body, not staff session
-const PARTNER_ACTIONS = new Set(['getUserList', 'getHistory', 'sendMessage', 'getUnreadCount']);
+// Partner-accessible actions — validated via partner_token in body, not staff session.
+// Groups can mix staff + partners, so partners get the full group action set too.
+// (setStatus/setThought stay staff-only — those live on app_users.)
+const PARTNER_ACTIONS = new Set([
+    'getUserList', 'getHistory', 'sendMessage', 'getUnreadCount',
+    'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
+    'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup'
+]);
 
 async function validatePartner(token) {
     if (!token) return null;

@@ -11,12 +11,17 @@
  */
 (function () {
     'use strict';
-    var TOKEN = localStorage.getItem('pp_session_token') || '';
-    var UID = String(localStorage.getItem('pp_userid') || localStorage.getItem('userid') || '');
-    if (!TOKEN || !UID) return;
+    // Dual-mode: staff (pp_session_token → bearer) OR partner (pp_partner_token → body).
+    var STAFF_TOKEN = localStorage.getItem('pp_session_token') || '';
+    var PARTNER_TOKEN = localStorage.getItem('pp_partner_token') || '';
+    var isPartner = !STAFF_TOKEN && !!PARTNER_TOKEN;
+    var TOKEN = STAFF_TOKEN;
+    var UID = isPartner ? String(localStorage.getItem('pp_partner_id') || '')
+                        : String(localStorage.getItem('pp_userid') || localStorage.getItem('userid') || '');
+    if (!UID || (!STAFF_TOKEN && !PARTNER_TOKEN)) return;
     var path = location.pathname;
-    if (path.indexOf('/partner') === 0) return;
-    if (/\/chat(\.html)?$/.test(path)) return;
+    if (/\/chat(\.html)?$/.test(path)) return;              // staff full DM page
+    if (path.indexOf('/partner/messages') === 0) return;    // partner full DM page
     if (document.getElementById('ppm-root')) return;
 
     var MAX_WINDOWS = 4;
@@ -34,11 +39,11 @@
     function statusColor(status, online) { return online ? ((STATUS[status] || STATUS.available).c) : '#cbd5e1'; }
 
     function api(body) {
-        return fetch('/api/chat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN },
-            body: JSON.stringify(Object.assign({ sender_id: UID }, body))
-        }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
+        var payload = Object.assign({ sender_id: UID }, body);
+        var headers = { 'Content-Type': 'application/json' };
+        if (isPartner) payload.partner_token = PARTNER_TOKEN; else headers['Authorization'] = 'Bearer ' + TOKEN;
+        return fetch('/api/chat', { method: 'POST', headers: headers, body: JSON.stringify(payload) })
+            .then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
     }
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]); }); }
     function initials(n) { return (n || '?').split(' ').filter(Boolean).map(function (w) { return w[0]; }).slice(0, 2).join('').toUpperCase() || '?'; }
@@ -165,6 +170,7 @@
         '<button id="ppm-launch" title="Messages"><span class="material-icons">chat_bubble</span>' +
         '<span id="ppm-badge"></span><span id="ppm-mydot"></span></button>';
     document.body.appendChild(root);
+    if (isPartner) { var _md = document.getElementById('ppm-mydot'); if (_md) _md.style.display = 'none'; }
 
     var listEl = document.createElement('div');
     listEl.id = 'ppm-list';
@@ -199,16 +205,19 @@
         if (view === 'status') { renderStatus(); return; }
         if (view === 'manage') { renderManage(); return; }
         var sc = (STATUS[myStatus] || STATUS.available);
+        var head = isPartner
+            ? '<b>Chats</b>'
+            : '<button class="ppm-statuspill" id="ppm-statusbtn" title="Set your status"><span class="d" style="background:' + sc.c + ';"></span>' + sc.label + '</button>';
         listEl.innerHTML =
-            '<div class="ppm-lhead">' +
-            '<button class="ppm-statuspill" id="ppm-statusbtn" title="Set your status"><span class="d" style="background:' + sc.c + ';"></span>' + sc.label + '</button>' +
+            '<div class="ppm-lhead">' + head +
             '<div class="ppm-lhbtns">' +
             '<button class="ppm-ic" id="ppm-newgrp" title="New group"><span class="material-icons">group_add</span></button>' +
             '<button class="ppm-ic" id="ppm-close" title="Close"><span class="material-icons">close</span></button>' +
             '</div></div>' +
             '<input class="ppm-search" id="ppm-search" placeholder="Search…">' +
             '<div class="ppm-convs" id="ppm-convs"><div class="ppm-empty">Loading…</div></div>';
-        document.getElementById('ppm-statusbtn').addEventListener('click', function () { view = 'status'; renderStatus(); });
+        var sb = document.getElementById('ppm-statusbtn');
+        if (sb) sb.addEventListener('click', function () { view = 'status'; renderStatus(); });
         document.getElementById('ppm-newgrp').addEventListener('click', function () { view = 'newgroup'; renderNewGroup(); });
         document.getElementById('ppm-close').addEventListener('click', function () { setList(false); });
         document.getElementById('ppm-search').addEventListener('input', renderConvs);
