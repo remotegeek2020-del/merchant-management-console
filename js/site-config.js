@@ -1,3 +1,14 @@
+// Load the floating staff messenger on every page that ships site-config.js.
+// It self-guards: no-ops without a staff session (so it never shows on the
+// login/setup screens) and skips the full /chat page and all partner pages.
+(function () {
+    if (document.getElementById('ppm-loader')) return;
+    var s = document.createElement('script');
+    s.id = 'ppm-loader';
+    s.src = '/js/messenger.js';
+    (document.body || document.head).appendChild(s);
+})();
+
 // Auto-attach session token to all /api/ calls and handle 401 session expiry globally
 (function () {
     const EXEMPT = ['/api/login', '/api/partner-auth', '/api/setup-password', '/api/partner-data'];

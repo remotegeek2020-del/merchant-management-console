@@ -43,12 +43,12 @@
     // ── styles ──
     var css = document.createElement('style');
     css.textContent = [
-        '#ppm-root{position:fixed;left:20px;bottom:20px;z-index:99990;font-family:system-ui,Segoe UI,Arial,sans-serif;}',
+        '#ppm-root{position:fixed;left:20px;bottom:46px;z-index:99990;font-family:system-ui,Segoe UI,Arial,sans-serif;}',
         '#ppm-launch{position:relative;width:54px;height:54px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#004990,#0369a1);color:#fff;box-shadow:0 6px 20px rgba(0,73,144,.4);display:flex;align-items:center;justify-content:center;transition:transform .15s;}',
         '#ppm-launch:hover{transform:scale(1.06);}',
         '#ppm-launch .material-icons{font-size:26px;}',
         '#ppm-badge{position:absolute;top:-3px;right:-3px;min-width:20px;height:20px;padding:0 5px;border-radius:11px;background:#e11d48;color:#fff;font-size:11px;font-weight:800;line-height:20px;text-align:center;border:2px solid #fff;display:none;}',
-        '#ppm-list{position:fixed;left:20px;bottom:84px;width:330px;max-width:92vw;height:min(500px,70vh);background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;z-index:99990;}',
+        '#ppm-list{position:fixed;left:20px;bottom:172px;width:330px;max-width:92vw;height:min(440px,60vh);background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;z-index:99990;}',
         '#ppm-list.open{display:flex;}',
         '.ppm-lhead{padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;}',
         '.ppm-lhead b{font-size:15px;color:#0f172a;}',
@@ -66,7 +66,7 @@
         '.ppm-tag.partner{background:#f0fdf4;color:#166534;}',
         '.ppm-prev{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
         '.ppm-cunread{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;line-height:18px;text-align:center;flex-shrink:0;}',
-        '.ppm-win{position:fixed;bottom:20px;width:320px;height:440px;max-height:72vh;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;z-index:99989;}',
+        '.ppm-win{position:fixed;bottom:46px;width:320px;height:440px;max-height:70vh;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;z-index:99989;}',
         '.ppm-win.min{height:46px;}',
         '.ppm-whead{background:linear-gradient(135deg,#002d5a,#004990);color:#fff;padding:10px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;}',
         '.ppm-whead .ppm-av{width:30px;height:30px;font-size:11px;background:rgba(255,255,255,.18);color:#fff;}',
@@ -218,7 +218,7 @@
     // Dock windows along the bottom, to the RIGHT of the launcher; rightward as
     // more open. (Launcher sits in the empty bottom-left corner.)
     function relayout() {
-        var left = 90;    // clear the 54px launcher + margin
+        var left = 150;   // clear the launcher + the "Report a Bug" pill width
         windows.forEach(function (w) {
             w.el.style.left = left + 'px';
             w.el.style.right = 'auto';
