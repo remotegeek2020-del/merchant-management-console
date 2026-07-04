@@ -43,12 +43,12 @@
     // ── styles ──
     var css = document.createElement('style');
     css.textContent = [
-        '#ppm-root{position:fixed;right:20px;bottom:20px;z-index:99990;font-family:system-ui,Segoe UI,Arial,sans-serif;}',
-        '#ppm-launch{position:relative;width:56px;height:56px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#004990,#0369a1);color:#fff;box-shadow:0 6px 20px rgba(0,73,144,.4);display:flex;align-items:center;justify-content:center;transition:transform .15s;}',
+        '#ppm-root{position:fixed;left:20px;bottom:20px;z-index:99990;font-family:system-ui,Segoe UI,Arial,sans-serif;}',
+        '#ppm-launch{position:relative;width:54px;height:54px;border-radius:50%;border:none;cursor:pointer;background:linear-gradient(135deg,#004990,#0369a1);color:#fff;box-shadow:0 6px 20px rgba(0,73,144,.4);display:flex;align-items:center;justify-content:center;transition:transform .15s;}',
         '#ppm-launch:hover{transform:scale(1.06);}',
-        '#ppm-launch .material-icons{font-size:27px;}',
+        '#ppm-launch .material-icons{font-size:26px;}',
         '#ppm-badge{position:absolute;top:-3px;right:-3px;min-width:20px;height:20px;padding:0 5px;border-radius:11px;background:#e11d48;color:#fff;font-size:11px;font-weight:800;line-height:20px;text-align:center;border:2px solid #fff;display:none;}',
-        '#ppm-list{position:fixed;right:20px;bottom:88px;width:340px;max-width:92vw;height:min(520px,70vh);background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;z-index:99990;}',
+        '#ppm-list{position:fixed;left:20px;bottom:84px;width:330px;max-width:92vw;height:min(500px,70vh);background:#fff;border:1px solid #e2e8f0;border-radius:16px;box-shadow:0 12px 40px rgba(0,0,0,.22);display:none;flex-direction:column;overflow:hidden;z-index:99990;}',
         '#ppm-list.open{display:flex;}',
         '.ppm-lhead{padding:14px 16px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between;}',
         '.ppm-lhead b{font-size:15px;color:#0f172a;}',
@@ -66,7 +66,7 @@
         '.ppm-tag.partner{background:#f0fdf4;color:#166534;}',
         '.ppm-prev{font-size:11px;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}',
         '.ppm-cunread{min-width:18px;height:18px;padding:0 5px;border-radius:9px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;line-height:18px;text-align:center;flex-shrink:0;}',
-        '.ppm-win{position:fixed;bottom:20px;width:328px;height:430px;max-height:74vh;background:#fff;border:1px solid #e2e8f0;border-radius:14px 14px 0 0;box-shadow:0 12px 40px rgba(0,0,0,.22);display:flex;flex-direction:column;overflow:hidden;z-index:99989;}',
+        '.ppm-win{position:fixed;bottom:20px;width:320px;height:440px;max-height:72vh;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;z-index:99989;}',
         '.ppm-win.min{height:46px;}',
         '.ppm-whead{background:linear-gradient(135deg,#002d5a,#004990);color:#fff;padding:10px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;flex-shrink:0;}',
         '.ppm-whead .ppm-av{width:30px;height:30px;font-size:11px;background:rgba(255,255,255,.18);color:#fff;}',
@@ -75,20 +75,24 @@
         '.ppm-wbtn{background:none;border:none;color:#fff;cursor:pointer;padding:2px;display:flex;opacity:.85;}',
         '.ppm-wbtn:hover{opacity:1;}',
         '.ppm-wbtn .material-icons{font-size:18px;}',
-        '.ppm-msgs{flex:1;overflow-y:auto;padding:12px;background:#f8fafc;display:flex;flex-direction:column;gap:6px;}',
+        '.ppm-msgs{flex:1;overflow-y:auto;padding:12px 12px 6px;background:#f8fafc;display:flex;flex-direction:column;}',
         '.ppm-win.min .ppm-msgs,.ppm-win.min .ppm-input{display:none;}',
-        '.ppm-b{max-width:78%;padding:7px 11px;border-radius:14px;font-size:12.5px;line-height:1.4;word-wrap:break-word;}',
-        '.ppm-b.me{align-self:flex-end;background:#0369a1;color:#fff;border-bottom-right-radius:4px;}',
-        '.ppm-b.them{align-self:flex-start;background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-bottom-left-radius:4px;}',
-        '.ppm-bt{font-size:9px;color:#94a3b8;margin:1px 4px 0;}',
-        '.ppm-bt.me{align-self:flex-end;}',
+        '.ppm-row{display:flex;flex-direction:column;margin-top:2px;}',
+        '.ppm-row.gap{margin-top:10px;}',
+        '.ppm-row.me{align-items:flex-end;}',
+        '.ppm-row.them{align-items:flex-start;}',
+        '.ppm-b{max-width:80%;padding:7px 11px;border-radius:16px;font-size:12.5px;line-height:1.35;word-wrap:break-word;}',
+        '.ppm-b.me{background:#0369a1;color:#fff;border-bottom-right-radius:5px;}',
+        '.ppm-b.them{background:#fff;color:#0f172a;border:1px solid #e2e8f0;border-bottom-left-radius:5px;}',
+        '.ppm-bt{font-size:9px;color:#b4bdc9;margin:2px 5px 0;display:none;}',
+        '.ppm-row.showtime .ppm-bt{display:block;}',
         '.ppm-input{display:flex;gap:8px;padding:9px 10px;border-top:1px solid #f1f5f9;flex-shrink:0;align-items:flex-end;}',
         '.ppm-ta{flex:1;resize:none;border:1px solid #e2e8f0;border-radius:18px;padding:8px 12px;font-size:13px;max-height:90px;outline:none;font-family:inherit;}',
         '.ppm-ta:focus{border-color:#0369a1;}',
         '.ppm-send{width:36px;height:36px;border-radius:50%;border:none;background:#0369a1;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}',
         '.ppm-send:disabled{background:#cbd5e1;cursor:default;}',
         '.ppm-empty{text-align:center;color:#94a3b8;font-size:12px;padding:24px 16px;}',
-        '@media(max-width:640px){.ppm-win{width:96vw;right:2vw!important;}#ppm-list{width:96vw;}}'
+        '@media(max-width:640px){.ppm-win{width:96vw;left:2vw!important;}#ppm-list{width:96vw;}}'
     ].join('');
     document.head.appendChild(css);
 
@@ -211,12 +215,14 @@
         relayout();
     }
 
-    // Dock windows along the bottom, left of the launcher; leftward as more open.
+    // Dock windows along the bottom, to the RIGHT of the launcher; rightward as
+    // more open. (Launcher sits in the empty bottom-left corner.)
     function relayout() {
-        var right = 92;   // clear the 56px launcher + margin
+        var left = 90;    // clear the 54px launcher + margin
         windows.forEach(function (w) {
-            w.el.style.right = right + 'px';
-            right += (w.minimized ? 220 : 328) + 12;
+            w.el.style.left = left + 'px';
+            w.el.style.right = 'auto';
+            left += (w.minimized ? 210 : 320) + 12;
         });
     }
 
@@ -230,11 +236,16 @@
             var box = win.el.querySelector('.ppm-msgs');
             if (!msgs.length) { box.innerHTML = '<div class="ppm-empty">No messages yet. Say hi 👋</div>'; return; }
             var nearBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
-            box.innerHTML = msgs.map(function (m) {
+            box.innerHTML = msgs.map(function (m, i) {
                 var mine = String(m.sender_id) === String(UID);
+                var prev = msgs[i - 1], next = msgs[i + 1];
+                var newGroup = !prev || String(prev.sender_id) !== String(m.sender_id);
+                // Show the time only on the last message of a same-sender run.
+                var endGroup = !next || String(next.sender_id) !== String(m.sender_id);
                 var body = m.deleted_at ? '<i style="opacity:.6;">message deleted</i>' : esc(m.content);
-                return '<div class="ppm-b ' + (mine ? 'me' : 'them') + '">' + body + '</div>' +
-                    '<div class="ppm-bt ' + (mine ? 'me' : 'them') + '">' + fmtTime(m.created_at) + (m.edited_at ? ' · edited' : '') + '</div>';
+                return '<div class="ppm-row ' + (mine ? 'me' : 'them') + (newGroup ? ' gap' : '') + (endGroup ? ' showtime' : '') + '">' +
+                    '<div class="ppm-b ' + (mine ? 'me' : 'them') + '">' + body + '</div>' +
+                    '<div class="ppm-bt">' + fmtTime(m.created_at) + (m.edited_at ? ' · edited' : '') + '</div></div>';
             }).join('');
             if (scroll || nearBottom) box.scrollTop = box.scrollHeight;
         });
