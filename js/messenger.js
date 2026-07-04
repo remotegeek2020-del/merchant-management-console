@@ -50,6 +50,7 @@
 
     // ── state ──
     var listOpen = false, view = 'list';        // 'list' | 'newgroup' | 'status' | 'manage'
+    var convFilter = 'all';                      // 'all' | 'unread' | 'groups'
     var manageGroup = null;                      // { id, name } when managing a group
     var windows = [];                            // [{ key, kind, id, name, type, minimized, el, lastSig }]
     var people = [], groups = [];
@@ -125,6 +126,10 @@
         '.ppm-ic .material-icons{font-size:19px;}',
         '.ppm-search{margin:10px 12px;padding:8px 12px;border:1px solid #e2e8f0;border-radius:10px;font-size:13px;outline:none;}',
         '.ppm-search:focus{border-color:#0369a1;}',
+        '.ppm-tabs{display:flex;gap:5px;padding:0 12px 9px;}',
+        '.ppm-tab{flex:1;text-align:center;padding:6px 0;font-size:12px;font-weight:700;color:#64748b;background:#f1f5f9;border:none;border-radius:8px;cursor:pointer;font-family:inherit;transition:background .12s,color .12s;}',
+        '.ppm-tab:hover{background:#e2e8f0;}',
+        '.ppm-tab.on{background:#0369a1;color:#fff;}',
         '.ppm-convs{flex:1;overflow-y:auto;}',
         '.ppm-sec{font-size:10px;font-weight:800;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;padding:8px 14px 3px;}',
         '.ppm-conv{display:flex;gap:10px;padding:9px 14px;cursor:pointer;align-items:center;border-bottom:1px solid #f8fafc;}',
@@ -297,12 +302,24 @@
             '<button class="ppm-ic" id="ppm-close" title="Close"><span class="material-icons">close</span></button>' +
             '</div></div>' +
             '<input class="ppm-search" id="ppm-search" placeholder="Search…">' +
+            '<div class="ppm-tabs" id="ppm-tabs">' +
+            [['all', 'All'], ['unread', 'Unread'], ['groups', 'Groups'], ['online', 'Online']].map(function (f) {
+                return '<button class="ppm-tab' + (convFilter === f[0] ? ' on' : '') + '" data-f="' + f[0] + '">' + f[1] + '</button>';
+            }).join('') +
+            '</div>' +
             '<div class="ppm-convs" id="ppm-convs"><div class="ppm-empty">Loading…</div></div>';
         var sb = document.getElementById('ppm-statusbtn');
         if (sb) sb.addEventListener('click', function () { view = 'status'; renderStatus(); });
         document.getElementById('ppm-newgrp').addEventListener('click', function () { view = 'newgroup'; renderNewGroup(); });
         document.getElementById('ppm-close').addEventListener('click', function () { setList(false); });
         document.getElementById('ppm-search').addEventListener('input', renderConvs);
+        Array.prototype.forEach.call(listEl.querySelectorAll('#ppm-tabs .ppm-tab'), function (t) {
+            t.addEventListener('click', function () {
+                convFilter = t.getAttribute('data-f');
+                Array.prototype.forEach.call(listEl.querySelectorAll('#ppm-tabs .ppm-tab'), function (x) { x.classList.toggle('on', x === t); });
+                renderConvs();
+            });
+        });
         renderConvs();
     }
 
@@ -350,21 +367,29 @@
 
     function renderConvs() {
         var box = document.getElementById('ppm-convs'); if (!box) return;
-        var q = (document.getElementById('ppm-search') || {}).value || '';
-        q = q.toLowerCase();
-        var gs = groups.filter(function (g) { return !q || (g.name || '').toLowerCase().indexOf(q) !== -1; });
-        var ps = people.filter(function (u) { return !q || (u.name || '').toLowerCase().indexOf(q) !== -1; });
+        var q = ((document.getElementById('ppm-search') || {}).value || '').toLowerCase();
+        var f = convFilter;
+        var gs = groups.filter(function (g) {
+            if (q && (g.name || '').toLowerCase().indexOf(q) === -1) return false;
+            if (f === 'unread') return (g.unread || 0) > 0;   // groups only appear under All / Unread / Groups
+            return f === 'all' || f === 'groups';
+        });
+        var ps = (f === 'groups') ? [] : people.filter(function (u) {
+            if (q && (u.name || '').toLowerCase().indexOf(q) === -1) return false;
+            if (f === 'unread') return (u.unread || 0) > 0;
+            if (f === 'online') return !!u.is_online;
+            return true;   // all
+        });
         var html = '';
-        if (gs.length) {
-            html += '<div class="ppm-sec">Groups</div>' + gs.map(function (g) {
-                return convRow('group', g.id, g.name, g.member_count + ' members', g.unread, g.last_message, false, 'group', null, null, g.photo_url);
-            }).join('');
-        }
-        html += '<div class="ppm-sec">People</div>';
-        html += ps.length ? ps.map(function (u) {
+        if (gs.length) html += '<div class="ppm-sec">Groups</div>' + gs.map(function (g) {
+            return convRow('group', g.id, g.name, g.member_count + ' members', g.unread, g.last_message, false, 'group', null, null, g.photo_url);
+        }).join('');
+        if (ps.length) html += '<div class="ppm-sec">' + (f === 'online' ? 'Online now' : 'People') + '</div>' + ps.map(function (u) {
             return convRow('dm', u.id, u.name, u.user_type === 'partner' ? 'Partner' : 'Staff', u.unread,
                 u.last_message, u.is_online, u.user_type, u.status, u.thought, u.avatar_url);
-        }).join('') : '<div class="ppm-empty">No people found.</div>';
+        }).join('');
+        if (!html) html = '<div class="ppm-empty">' +
+            (f === 'unread' ? "You're all caught up 🎉" : f === 'online' ? 'No one else is online right now.' : f === 'groups' ? 'No groups yet.' : (q ? 'No matches.' : 'No conversations yet.')) + '</div>';
         box.innerHTML = html;
         Array.prototype.forEach.call(box.querySelectorAll('.ppm-conv'), function (el) {
             el.addEventListener('click', function () {
