@@ -302,7 +302,7 @@ async function openGroup(id) {
             <div><div class="chat-header-name">${escAttr(g.name)}</div>
             <div class="chat-header-sub">${g.member_count} members</div></div>
             <div class="chat-header-actions">
-                <button class="icon-btn" onclick="groupManage('${g.id}')" title="Group info"><span class="material-icons" style="font-size:18px;">group</span></button>
+                <button class="icon-btn" onclick="groupManage('${g.id}')" title="Group options (rename, add, leave, delete)"><span class="material-icons" style="font-size:18px;">more_vert</span></button>
             </div>
         </div>
         <div class="messages-area" id="messagesArea"></div>

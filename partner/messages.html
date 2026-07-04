@@ -277,7 +277,7 @@ function openConv(u) {
         + '<div class="chat-av"' + (isG ? ' style="background:#eef2ff;color:#4338ca;"' : '') + '>' + avHtml + '</div>'
         + '<div><div class="chat-name">' + escHtml(u.name) + '</div>'
         + '<div class="chat-status">' + statusLine + '</div></div>'
-        + (isG ? '<button onclick="groupManage(\'' + u.id + '\')" title="Group info" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#64748b;padding:4px;"><span class="material-icons">group</span></button>' : '')
+        + (isG ? '<button onclick="groupManage(\'' + u.id + '\')" title="Group options (rename, add, leave, delete)" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#64748b;padding:4px;"><span class="material-icons">more_vert</span></button>' : '')
         + '</div>'
         + '<div class="chat-messages" id="chatMessages"><div class="spinner"></div></div>'
         + '<div class="chat-input-row">'

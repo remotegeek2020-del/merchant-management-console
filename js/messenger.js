@@ -474,7 +474,7 @@
             '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + (isG ? '<span class="material-icons" style="font-size:17px;">groups</span>' : esc(initials(name))) + headDot + '</div>' +
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
             '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
-            (isG ? '<button class="ppm-wbtn ppm-manage" title="Group info"><span class="material-icons">group</span></button>' : '') +
+            (isG ? '<button class="ppm-wbtn ppm-manage" title="Group options (rename, add, leave, delete)"><span class="material-icons">more_vert</span></button>' : '') +
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +
             '<div class="ppm-msgs"><div class="ppm-empty">Loading…</div></div>' +
@@ -501,8 +501,10 @@
         el.addEventListener('mousedown', function () { windows.forEach(function (w) { w._focused = (w === win); }); });
 
         relayout();
-        loadWindow(win, true);
-        if (!popMinimized) focusInput(win);
+        // Don't load history for an auto-popped minimized head — loading marks the
+        // conversation read server-side, which would clear the unread before the
+        // user actually opens it. Load only when it's opened (here or on un-minimize).
+        if (!popMinimized) { loadWindow(win, true); focusInput(win); }
     }
     function focusInput(win) { try { win.el.querySelector('.ppm-ta').focus(); } catch (e) {} windows.forEach(function (w) { w._focused = (w === win); }); }
     function closeWindow(key) {
