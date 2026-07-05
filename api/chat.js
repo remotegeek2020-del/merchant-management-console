@@ -13,7 +13,7 @@ const PARTNER_ACTIONS = new Set([
     'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
     'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup', 'removeGroupMember',
     'get_group_photo_upload_url', 'setGroupPhoto',
-    'editMessage', 'deleteMessage', 'reactMessage', 'get_chat_image_upload_url'
+    'editMessage', 'deleteMessage', 'reactMessage', 'get_chat_image_upload_url', 'setTyping'
 ]);
 
 async function validatePartner(token) {
@@ -172,9 +172,9 @@ export default async function handler(req, res) {
         if (action === 'getHistory') {
             const { recipient_id, page = 0, limit = 50 } = req.body;
 
-            // Mark as read
+            // Mark as read (stamp read_at on first read for the "Seen" receipt)
             await supabase.from('messages')
-                .update({ is_read: true })
+                .update({ is_read: true, read_at: new Date().toISOString() })
                 .eq('sender_id', recipient_id)
                 .eq('recipient_id', sender_id)
                 .eq('is_read', false);
@@ -186,9 +186,14 @@ export default async function handler(req, res) {
                 .order('created_at', { ascending: false })
                 .range(page * limit, (page + 1) * limit - 1);
 
+            // Is the other party currently typing to me? (row fresh within ~6s)
+            const { data: typ } = await supabase.from('chat_typing').select('updated_at')
+                .eq('user_id', String(recipient_id)).eq('target', String(sender_id))
+                .gt('updated_at', new Date(Date.now() - 6000).toISOString()).maybeSingle();
+
             const dmMsgs = (data || []).reverse();
             const dmReacts = await reactionsFor(dmMsgs.map(m => m.id));
-            return res.status(200).json({ success: true, data: withReactions(dmMsgs, dmReacts) });
+            return res.status(200).json({ success: true, data: withReactions(dmMsgs, dmReacts), typing: !!typ });
         }
 
         // ── SEND MESSAGE ──────────────────────────────────
@@ -206,6 +211,7 @@ export default async function handler(req, res) {
             }).select().single();
 
             if (error) throw error;
+            await supabase.from('chat_typing').delete().eq('user_id', String(sender_id)).eq('target', String(recipient_id));
 
             // Get sender name for notification
             let senderName;
@@ -400,9 +406,15 @@ export default async function handler(req, res) {
             await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
                 .eq('group_id', group_id).eq('member_id', sender_id);
 
+            // Other members currently typing in this group (fresh within ~6s)
+            const { data: typRows } = await supabase.from('chat_typing').select('user_id')
+                .eq('target', 'group:' + group_id).neq('user_id', String(sender_id))
+                .gt('updated_at', new Date(Date.now() - 6000).toISOString());
+            const typingNames = (typRows || []).map(t => nameMap[t.user_id] || 'Someone');
+
             const gMsgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown', sender_avatar: avMap[String(m.sender_id)] || null }));
             const gReacts = await reactionsFor(gMsgs.map(m => m.id));
-            return res.status(200).json({ success: true, data: withReactions(gMsgs, gReacts) });
+            return res.status(200).json({ success: true, data: withReactions(gMsgs, gReacts), typing: typingNames });
         }
 
         // ── SEND GROUP MESSAGE ────────────────────────────
@@ -414,6 +426,7 @@ export default async function handler(req, res) {
                 .insert({ sender_id: String(sender_id), group_id, content: (content || '').trim(), image_url: image_url || null, is_read: false, message_type: 'group' })
                 .select().single();
             if (error) throw error;
+            await supabase.from('chat_typing').delete().eq('user_id', String(sender_id)).eq('target', 'group:' + group_id);
             // Keep sender's own read pointer current so it doesn't count as unread.
             await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
                 .eq('group_id', group_id).eq('member_id', sender_id);
@@ -515,6 +528,16 @@ export default async function handler(req, res) {
             await supabase.from('message_reactions')
                 .upsert({ message_id, user_id: String(sender_id), reaction }, { onConflict: 'message_id,user_id' });
             return res.status(200).json({ success: true, reaction });
+        }
+
+        // ── TYPING PING (throttled by clients; rows expire ~6s after last ping) ──
+        if (action === 'setTyping') {
+            const { target_id, is_group } = req.body;
+            if (!target_id) return res.status(400).json({ success: false, message: 'target_id required.' });
+            const target = is_group ? ('group:' + target_id) : String(target_id);
+            await supabase.from('chat_typing')
+                .upsert({ user_id: String(sender_id), target, updated_at: new Date().toISOString() }, { onConflict: 'user_id,target' });
+            return res.status(200).json({ success: true });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

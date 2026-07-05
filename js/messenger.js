@@ -202,6 +202,12 @@
         '.ppm-emojipanel{position:absolute;bottom:52px;left:8px;right:8px;background:#fff;border:1px solid #e2e8f0;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.16);padding:8px;display:none;flex-wrap:wrap;gap:1px;max-height:150px;overflow-y:auto;z-index:6;}',
         '.ppm-emojipanel span{font-size:20px;cursor:pointer;padding:3px;border-radius:6px;line-height:1;}',
         '.ppm-emojipanel span:hover{background:#f1f5f9;}',
+        '.ppm-typing{padding:3px 12px 5px;font-size:11px;color:#64748b;font-style:italic;flex-shrink:0;display:flex;align-items:center;gap:5px;}',
+        '.ppm-dots{display:inline-flex;gap:2px;}',
+        '.ppm-dots i{width:4px;height:4px;border-radius:50%;background:#94a3b8;display:inline-block;animation:ppmdot 1.2s infinite ease-in-out;}',
+        '.ppm-dots i:nth-child(2){animation-delay:.2s;} .ppm-dots i:nth-child(3){animation-delay:.4s;}',
+        '@keyframes ppmdot{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-2px);}}',
+        '.ppm-seen{text-align:right;font-size:10px;color:#94a3b8;padding:1px 4px 4px;font-weight:600;}',
         '.ppm-ta{flex:1;resize:none;border:1px solid #e2e8f0;border-radius:18px;padding:8px 12px;font-size:13px;max-height:90px;outline:none;font-family:inherit;}',
         '.ppm-ta:focus{border-color:#0369a1;}',
         '.ppm-send{width:36px;height:36px;border-radius:50%;border:none;background:#0369a1;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}',
@@ -631,6 +637,7 @@
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +
             '<div class="ppm-msgs"><div class="ppm-empty">Loading…</div></div>' +
+            '<div class="ppm-typing" style="display:none;"></div>' +
             '<div class="ppm-input"><div class="ppm-emojipanel"></div>' +
             '<button class="ppm-iconbtn ppm-imgbtn" title="Send photo/GIF"><span class="material-icons">image</span></button>' +
             '<button class="ppm-iconbtn ppm-emojibtn" title="Emoji"><span class="material-icons">mood</span></button>' +
@@ -657,7 +664,7 @@
         el.querySelector('.ppm-close').addEventListener('click', function () { closeWindow(key); });
         var ta = el.querySelector('.ppm-ta');
         ta.addEventListener('keydown', function (e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); doSend(win); } });
-        ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 90) + 'px'; });
+        ta.addEventListener('input', function () { ta.style.height = 'auto'; ta.style.height = Math.min(ta.scrollHeight, 90) + 'px'; if (ta.value) sendTyping(win); });
         el.querySelector('.ppm-send').addEventListener('click', function () { doSend(win); });
         el.addEventListener('mousedown', function () { windows.forEach(function (w) { w._focused = (w === win); }); });
         // image + emoji + message actions
@@ -700,10 +707,11 @@
         return api(body).then(function (r) {
             if (!r || !r.success) return;
             var msgs = r.data || [];
+            updateTyping(win, r.typing);   // always refresh the typing bar (independent of message changes)
             var sig = msgs.map(function (m) {
                 var rc = m.reactions || {};
                 var rsig = REACT_ORDER.map(function (k) { return rc[k] || 0; }).join('.');
-                return m.id + (m.edited_at || '') + (m.deleted_at || '') + (m.image_url || '') + rsig + (m.my_reaction || '');
+                return m.id + (m.edited_at || '') + (m.deleted_at || '') + (m.image_url || '') + rsig + (m.my_reaction || '') + (m.is_read ? '1' : '0');
             }).join(',');
             var changed = sig !== win.lastSig;
             // Soft buzz when a new message arrives inside an open window from someone else.
@@ -733,9 +741,41 @@
                     '<div class="ppm-b ' + (mine ? 'me' : 'them') + '">' + bubbleInner + acts + '</div>' +
                     reactsHtml(m) +
                     '<div class="ppm-bt">' + fmtTime(m.created_at) + (m.edited_at ? ' · edited' : '') + '</div></div>';
-            }).join('');
+            }).join('') + seenHtml(win, msgs);
             if (scroll || nearBottom) box.scrollTop = box.scrollHeight;
         });
+    }
+
+    // ── typing + seen ──
+    var _typingSent = {};
+    function sendTyping(win) {
+        var now = Date.now();
+        if (_typingSent[win.key] && now - _typingSent[win.key] < 2500) return;   // throttle pings
+        _typingSent[win.key] = now;
+        api({ action: 'setTyping', target_id: win.id, is_group: win.kind === 'group' });
+    }
+    function updateTyping(win, typing) {
+        var bar = win.el && win.el.querySelector('.ppm-typing'); if (!bar) return;
+        var label = '';
+        if (win.kind === 'group') {
+            var names = typing || [];
+            if (names.length === 1) label = esc(names[0]) + ' is typing';
+            else if (names.length === 2) label = esc(names[0]) + ' and ' + esc(names[1]) + ' are typing';
+            else if (names.length > 2) label = names.length + ' people are typing';
+        } else if (typing) {
+            label = esc(win.name) + ' is typing';
+        }
+        if (label) { bar.innerHTML = label + ' <span class="ppm-dots"><i></i><i></i><i></i></span>'; bar.style.display = 'flex'; }
+        else bar.style.display = 'none';
+    }
+    function seenHtml(win, msgs) {
+        if (win.kind !== 'dm') return '';   // DM read receipts only
+        for (var i = msgs.length - 1; i >= 0; i--) {
+            if (String(msgs[i].sender_id) === UID) {
+                return msgs[i].is_read ? '<div class="ppm-seen">Seen' + (msgs[i].read_at ? ' ' + fmtTime(msgs[i].read_at) : '') + '</div>' : '';
+            }
+        }
+        return '';
     }
 
     function doSend(win) {
