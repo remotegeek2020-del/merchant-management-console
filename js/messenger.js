@@ -298,9 +298,7 @@
         if (view === 'status') { renderStatus(); return; }
         if (view === 'manage') { renderManage(); return; }
         var sc = (STATUS[myStatus] || STATUS.available);
-        var head = isPartner
-            ? '<b>Chats</b>'
-            : '<button class="ppm-statuspill" id="ppm-statusbtn" title="Set your status"><span class="d" style="background:' + sc.c + ';"></span>' + sc.label + '</button>';
+        var head = '<button class="ppm-statuspill" id="ppm-statusbtn" title="Set your status"><span class="d" style="background:' + sc.c + ';"></span>' + sc.label + '</button>';
         listEl.innerHTML =
             '<div class="ppm-lhead">' + head +
             '<div class="ppm-lhbtns">' +

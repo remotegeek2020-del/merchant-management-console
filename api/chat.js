@@ -13,7 +13,8 @@ const PARTNER_ACTIONS = new Set([
     'getGroups', 'getGroupHistory', 'sendGroupMessage', 'getGroupMembers',
     'createGroup', 'addGroupMembers', 'renameGroup', 'leaveGroup', 'deleteGroup', 'removeGroupMember',
     'get_group_photo_upload_url', 'setGroupPhoto',
-    'editMessage', 'deleteMessage', 'reactMessage', 'get_chat_image_upload_url', 'setTyping'
+    'editMessage', 'deleteMessage', 'reactMessage', 'get_chat_image_upload_url', 'setTyping',
+    'setStatus', 'setThought'
 ]);
 
 async function validatePartner(token) {
@@ -129,13 +130,27 @@ export default async function handler(req, res) {
 
             const allUsers = [...staffUsers, ...partnerUsers];
 
-            // Attach avatars from user_profiles (same table keys staff userid + partner id).
+            // Attach avatars + partner presence (status/thought) from user_profiles
+            // (same table keys staff userid + partner id; partners store status here).
             const profileIds = allUsers.map(u => String(u.id)).concat([String(sender_id)]);
-            const { data: profs } = await supabase.from('user_profiles').select('user_id, avatar_url').in('user_id', profileIds);
-            const avMap = {}; (profs || []).forEach(p => { avMap[String(p.user_id)] = p.avatar_url; });
+            const { data: profs } = await supabase.from('user_profiles')
+                .select('user_id, avatar_url, chat_status, chat_thought, chat_thought_at').in('user_id', profileIds);
+            const avMap = {}, profMap = {};
+            (profs || []).forEach(p => { avMap[String(p.user_id)] = p.avatar_url; profMap[String(p.user_id)] = p; });
             allUsers.forEach(u => { u.avatar_url = avMap[String(u.id)] || null; });
+            // Partner status/thought live on user_profiles (staff came from app_users above).
+            partnerUsers.forEach(u => {
+                const ps = profMap[String(u.id)];
+                u.status = (ps && ps.chat_status) || 'available';
+                u.thought = ps ? freshThought(ps) : null;
+            });
             if (!me) me = {};
             me.avatar_url = avMap[String(sender_id)] || null;
+            if (isPartner) {
+                const ps = profMap[String(sender_id)];
+                me.status = (ps && ps.chat_status) || 'available';
+                me.thought = ps ? freshThought(ps) : null;
+            }
 
             // Sort by unread first, then last message time
             allUsers.sort((a, b) => {
@@ -153,7 +168,11 @@ export default async function handler(req, res) {
             const { status } = req.body;
             const allowed = ['available', 'away', 'busy'];
             if (!allowed.includes(status)) return res.status(400).json({ success: false, message: 'Invalid status.' });
-            await supabase.from('app_users').update({ chat_status: status }).eq('userid', sender_id);
+            if (isPartner) {
+                await supabase.from('user_profiles').upsert({ user_id: String(sender_id), user_type: 'partner', chat_status: status }, { onConflict: 'user_id' });
+            } else {
+                await supabase.from('app_users').update({ chat_status: status }).eq('userid', sender_id);
+            }
             return res.status(200).json({ success: true, status });
         }
 
@@ -161,10 +180,12 @@ export default async function handler(req, res) {
         if (action === 'setThought') {
             let { thought } = req.body;
             thought = (thought || '').trim().slice(0, 120);
-            await supabase.from('app_users').update({
-                chat_thought: thought || null,
-                chat_thought_at: thought ? new Date().toISOString() : null
-            }).eq('userid', sender_id);
+            const patch = { chat_thought: thought || null, chat_thought_at: thought ? new Date().toISOString() : null };
+            if (isPartner) {
+                await supabase.from('user_profiles').upsert({ user_id: String(sender_id), user_type: 'partner', ...patch }, { onConflict: 'user_id' });
+            } else {
+                await supabase.from('app_users').update(patch).eq('userid', sender_id);
+            }
             return res.status(200).json({ success: true, thought: thought || null });
         }
 
