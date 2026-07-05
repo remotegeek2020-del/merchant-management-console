@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Residuals | PayProTec Partner Portal</title>
+    <title>My Prime49 | PayProTec Partner Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
@@ -72,7 +72,7 @@
     <nav class="sidebar-nav">
         <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
         <a class="nav-item" href="/partner/merchants"><span class="material-icons">storefront</span> My Merchants</a>
-        <a class="nav-item active" href="/partner/residuals"><span class="material-icons">payments</span> My Residuals</a>
+        <a class="nav-item active" href="/partner/residuals"><span class="material-icons">payments</span> My Prime49</a>
         <a class="nav-item" href="/partner/sub-partners"><span class="material-icons">account_tree</span> Sub-Partners</a>
         <a class="nav-item" href="/partner/community"><span class="material-icons">groups</span> Community</a>
         <a class="nav-item" href="/partner/messages"><span class="material-icons">forum</span> Messages</a>
@@ -86,7 +86,7 @@
 
 <div class="main">
     <div class="topbar">
-        <h1 class="topbar-title">My Residuals</h1>
+        <h1 class="topbar-title">My Prime49</h1>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
             <button class="btn btn-outline" onclick="exportCsv()">
                 <span class="material-icons" style="font-size:16px;">download</span>
@@ -173,7 +173,10 @@ async function loadResiduals() {
 
         const body = document.getElementById('resBody');
         if (!_rows.length) {
-            body.innerHTML = '<tr><td colspan="5" class="empty"><span class="material-icons">payments</span>No residual-earning Prime49 accounts yet.</td></tr>';
+            const msg = data.has_prime49
+                ? 'No residual-earning Prime49 accounts yet.'
+                : "You don't have Prime49 IDs yet.";
+            body.innerHTML = `<tr><td colspan="5" class="empty"><span class="material-icons">payments</span>${msg}</td></tr>`;
             return;
         }
         body.innerHTML = _rows.map(row => `

@@ -158,7 +158,7 @@
         tag.parentNode.insertBefore(badge, tag.nextSibling);
     }
 
-    // Add the "My Residuals" nav item on every partner page (after My Merchants),
+    // Add the "My Prime49" nav item on every partner page (after My Merchants),
     // so the sidebar stays consistent without editing all page files.
     function injectResidualsNav() {
         var nav = document.querySelector('.sidebar-nav');
@@ -168,7 +168,7 @@
         var a = document.createElement('a');
         a.className = 'nav-item' + (window.location.pathname.indexOf('/partner/residuals') !== -1 ? ' active' : '');
         a.href = '/partner/residuals';
-        a.innerHTML = '<span class="material-icons">payments</span> My Residuals';
+        a.innerHTML = '<span class="material-icons">payments</span> My Prime49';
         merchants.parentNode.insertBefore(a, merchants.nextSibling);
     }
 

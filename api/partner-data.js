@@ -78,7 +78,7 @@ export default async function handler(req, res) {
         //   Prime49 + Approved merchants; per merchant net residual = vol30 * 0.03,
         //   partner payout = net * rev%%. Scoped to this partner's id_strings.
         if (action === 'get_residuals') {
-            if (!idStrings.length) return res.status(200).json({ success: true, data: { rows: [], total_payout: 0, total_volume: 0, merchant_count: 0 } });
+            if (!idStrings.length) return res.status(200).json({ success: true, data: { rows: [], total_payout: 0, total_volume: 0, merchant_count: 0, has_prime49: false } });
 
             // rev% per id_string from the partner's own identifiers
             const revMap = {};
@@ -106,8 +106,16 @@ export default async function handler(req, res) {
                 };
             }).sort((a, b) => b.residual - a.residual);
 
+            // Does this partner have ANY Prime49 accounts at all (any status)? Used to
+            // distinguish "no Prime49 IDs yet" from "has Prime49 IDs but none earning yet".
+            const { count: p49count } = await supabase.from('merchant_portfolio_view')
+                .select('merchant_id', { count: 'exact', head: true })
+                .in('agent_id', idStrings)
+                .eq('is_prime49', true);
+            const has_prime49 = (p49count || 0) > 0;
+
             return res.status(200).json({ success: true, data: {
-                rows, total_payout: totalPayout, total_volume: totalVolume, merchant_count: rows.length
+                rows, total_payout: totalPayout, total_volume: totalVolume, merchant_count: rows.length, has_prime49
             }});
         }
 
