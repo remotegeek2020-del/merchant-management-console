@@ -166,10 +166,13 @@ export default async function handler(req, res) {
         }
 
         if (action === 'change_password') {
-            const { partner_id, current_password, new_password } = req.body;
-            if (!partner_id || !current_password || !new_password) {
+            const { token, current_password, new_password } = req.body;
+            if (!token || !current_password || !new_password) {
                 return res.status(400).json({ success: false, message: 'Missing required fields.' });
             }
+            // Derive the partner from the validated session — never trust an id from the body.
+            const partner_id = await validateSession(token);
+            if (!partner_id) return res.status(401).json({ success: false, message: 'Session expired. Please log in again.', reason: 'invalid_token' });
 
             // Get current hash
             const { data: person, error: fetchErr } = await supabase

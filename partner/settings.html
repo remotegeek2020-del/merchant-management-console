@@ -365,7 +365,7 @@ async function changePassword() {
     if (newPass !== confirm) return Swal.fire({ icon:'warning', title:'Passwords do not match', confirmButtonColor:'#0d9488' });
 
     Swal.fire({ title:'Updating...', didOpen:()=>Swal.showLoading() });
-    const res = await api('community', { action:'change_password', token, current_password: current, new_password: newPass });
+    const res = await api('partner-auth', { action:'change_password', token, current_password: current, new_password: newPass });
     if (res.success) {
         document.getElementById('currentPass').value = '';
         document.getElementById('newPass').value = '';

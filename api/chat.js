@@ -29,17 +29,21 @@ export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
     if (req.method !== 'POST') return res.status(405).json({ success: false });
 
-    const { action, sender_id, partner_token } = req.body;
+    const { action, partner_token } = req.body;
 
-    // Determine if this is a partner request
-    let isPartner = false;
+    // Authenticate and derive the caller's identity from the validated token/session.
+    // SECURITY: never trust sender_id from the request body — it was previously
+    // spoofable, letting any authenticated user read/send/edit as anyone else.
+    let sender_id, isPartner = false;
     if (PARTNER_ACTIONS.has(action) && partner_token) {
         const personId = await validatePartner(partner_token);
         if (!personId) return res.status(401).json({ success: false, message: 'Invalid or expired partner session.', reason: 'invalid_token' });
         isPartner = true;
+        sender_id = String(personId);
     } else {
         const session = await validateSession(req);
         if (!session) return sessionErrorResponse(res);
+        sender_id = String(session.userid);
     }
 
     try {
@@ -244,18 +248,22 @@ export default async function handler(req, res) {
                 senderName = staffUser ? `${staffUser.first_name} ${staffUser.last_name||''}`.trim() : 'Staff';
             }
 
-            // Create notification for recipient
+            // Create notification for recipient — type it by the RECIPIENT's actual
+            // kind so the right notification bell surfaces it (staff DMs were being
+            // typed 'partner', so staff never saw partner messages).
             try {
+                const { data: staffRecip } = await supabase.from('app_users').select('userid').eq('userid', recipient_id).maybeSingle();
+                const recipientType = staffRecip ? 'staff' : 'partner';
                 await supabase.from('notifications').insert({
                     recipient_id,
-                    recipient_type: 'partner',
+                    recipient_type: recipientType,
                     type: 'dm',
                     title: `New message from ${senderName}`,
-                    body: content.trim().slice(0, 80),
+                    body: (content && content.trim()) ? content.trim().slice(0, 80) : '📷 Photo',
                     actor_id: sender_id,
                     actor_name: senderName,
                     reference_id: sender_id,
-                    link: '/partner/messages'
+                    link: recipientType === 'partner' ? '/partner/messages' : '/chat'
                 });
             } catch(e) { /* notifications are optional */ }
 
