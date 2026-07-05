@@ -3506,6 +3506,9 @@ window.saveMerchant = async (uuid) => {
     // "Add New Deployment" entry — routes through the shared ShipStation wizard when the
     // flag is enabled (merchant preselected), otherwise falls back to the standard modal.
     window.merchantNewDeployment = function(uuid, name, mid) {
+        // The merchant detail view is itself a Swal modal; close it so the wizard
+        // (and its own validation popups) layer correctly instead of appearing under it.
+        try { if (window.Swal && Swal.isVisible && Swal.isVisible()) Swal.close(); } catch (e) {}
         if (!window.SSDeployWizard) { window.openMerchantDepModal(uuid, name, mid); return; }
         window.SSDeployWizard.open({
             prefillMerchant: { id: uuid, name: name, code: mid },
