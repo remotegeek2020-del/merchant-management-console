@@ -630,7 +630,7 @@
             '<div class="ppm-av ' + (isP ? 'partner' : isG ? 'group' : '') + '">' + avInner(headImg, name, isG) + headDot + '</div>' +
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
             '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
-            '<span class="ppm-wpill"></span>' +
+            (isG ? '' : '<span class="ppm-tag' + (isP ? ' partner' : '') + '" style="align-self:center;margin-right:2px;">' + (isP ? 'Partner' : 'Staff') + '</span>') +
             (isG ? '<button class="ppm-wbtn ppm-manage" title="Group options (rename, add, leave, delete)"><span class="material-icons">more_vert</span></button>' : '') +
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +

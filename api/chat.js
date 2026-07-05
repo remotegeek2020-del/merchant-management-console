@@ -132,8 +132,9 @@ export default async function handler(req, res) {
                 last_message: lastMsgMap[p.id]
             }));
 
-            // Partners communicate with staff only — don't expose other partners to them.
-            const allUsers = isPartner ? [...staffUsers] : [...staffUsers, ...partnerUsers];
+            // Everyone (staff + partners) can see and message each other; the UI
+            // labels each person as Staff or Partner.
+            const allUsers = [...staffUsers, ...partnerUsers];
 
             // Attach avatars + partner presence (status/thought) from user_profiles
             // (same table keys staff userid + partner id; partners store status here).
@@ -226,11 +227,6 @@ export default async function handler(req, res) {
         if (action === 'sendMessage') {
             const { recipient_id, content, message_type = 'dm', image_url } = req.body;
             if ((!content?.trim() && !image_url) || !recipient_id) return res.status(400).json({ success: false, message: 'Content or image, and recipient required.' });
-            // Partners may DM staff only.
-            if (isPartner) {
-                const { data: staffR } = await supabase.from('app_users').select('userid').eq('userid', recipient_id).maybeSingle();
-                if (!staffR) return res.status(403).json({ success: false, message: 'Partners can only message staff.' });
-            }
 
             const { data, error } = await supabase.from('messages').insert({
                 sender_id,
