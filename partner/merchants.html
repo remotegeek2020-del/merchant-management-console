@@ -276,6 +276,8 @@ async function loadMerchants() {
     totalCount = data.count;
     if (!data.data.length) { tbody.innerHTML = `<tr><td colspan="9"><div class="empty"><span class="material-icons">storefront</span><p>No merchants found</p></div></td></tr>`; }
     else {
+        const esc = s => s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+        const jsArg = s => String(s == null ? '' : s).replace(/\\/g,'\\\\').replace(/'/g,"\\'").replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
         tbody.innerHTML = data.data.map(m => {
             const st = (m.account_status||'').toLowerCase().replace(/[\s-]+/g,'-');
             const vol30 = parseFloat(m.volume_30_day||0);
@@ -292,20 +294,20 @@ async function loadMerchants() {
             } else {
                 trendBadge = '<span style="background:#e0f2fe;color:#0369a1;padding:3px 9px;border-radius:99px;font-size:10px;font-weight:700;display:inline-flex;align-items:center;gap:3px;"><span class="material-icons" style="font-size:11px;">trending_flat</span>Stable</span>';
             }
-            return `<tr onclick="openMerchantDetail('${m.id}', '${m.dba_name.replace(/'/g,"\\'")}')">
-                <td style="font-weight:700;">${m.dba_name}</td>
-                <td class="mono" style="color:var(--teal);">${m.merchant_id}</td>
-                <td class="mono hide-mobile">${m.agent_id||'—'}</td>
+            return `<tr onclick="openMerchantDetail('${jsArg(m.id)}', '${jsArg(m.dba_name)}')">
+                <td style="font-weight:700;">${esc(m.dba_name)}</td>
+                <td class="mono" style="color:var(--teal);">${esc(m.merchant_id)}</td>
+                <td class="mono hide-mobile">${esc(m.agent_id) || '—'}</td>
                 <td class="hide-mobile" style="font-size:12px;color:var(--muted);">${m.enrollment_date ? new Date(m.enrollment_date).toLocaleDateString() : '—'}</td>
-                <td><span class="badge ${st}">${m.account_status||'—'}</span></td>
+                <td><span class="badge ${st}">${esc(m.account_status) || '—'}</span></td>
                 <td class="mono hide-mobile">$${parseFloat(m.volume_mtd||0).toLocaleString(undefined,{minimumFractionDigits:2})}</td>
                 <td class="mono hide-mobile">$${vol30.toLocaleString(undefined,{minimumFractionDigits:2})}</td>
                 <td class="hide-mobile">${trendBadge}</td>
                 <td onclick="event.stopPropagation()">
                     <div style="display:flex;gap:4px;flex-wrap:wrap;">
-                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openMerchantDetail('${m.id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">open_in_new</span></button>
-                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openTicketMenu('${m.merchant_id}','${m.dba_name.replace(/'/g,"\\'")}')"><span class="material-icons" style="font-size:14px;">confirmation_number</span></button>
-                        ${m.merchant_phone ? `<a href="tel:${m.merchant_phone.replace(/[^0-9+]/g,'')}" class="btn btn-outline" style="padding:5px 8px;text-decoration:none;" title="Call ${m.merchant_phone}"><span class="material-icons" style="font-size:14px;">call</span></a>` : ''}
+                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openMerchantDetail('${jsArg(m.id)}','${jsArg(m.dba_name)}')"><span class="material-icons" style="font-size:14px;">open_in_new</span></button>
+                        <button class="btn btn-outline" style="padding:5px 8px;" onclick="openTicketMenu('${jsArg(m.merchant_id)}','${jsArg(m.dba_name)}')"><span class="material-icons" style="font-size:14px;">confirmation_number</span></button>
+                        ${m.merchant_phone ? `<a href="tel:${String(m.merchant_phone).replace(/[^0-9+]/g,'')}" class="btn btn-outline" style="padding:5px 8px;text-decoration:none;" title="Call ${esc(m.merchant_phone)}"><span class="material-icons" style="font-size:14px;">call</span></a>` : ''}
                         <button class="btn btn-outline" style="padding:5px 8px;${flaggedSet.has(m.merchant_id)?'color:#d97706;border-color:#fde68a;background:#fef9c3;':''}" onclick="toggleFlag('${m.merchant_id}',this)" title="${flaggedSet.has(m.merchant_id)?'Remove follow-up flag':'Flag for follow-up'}"><span class="material-icons" style="font-size:14px;">${flaggedSet.has(m.merchant_id)?'star':'star_border'}</span></button>
                     </div>
                 </td>
@@ -335,10 +337,11 @@ window.renderNotesSection = function() {
     const page = window._modalNotes.slice(start, start + NOTES_PER_PAGE);
     const btnStyle = 'background:white;border:1px solid #e2e8f0;border-radius:6px;padding:4px 10px;font-size:11px;font-weight:700;cursor:pointer;font-family:\'DM Sans\',sans-serif;color:#475569;';
     const disabledStyle = 'opacity:0.4;cursor:default;';
+    const esc = s => s == null ? '' : String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
     el.innerHTML = page.map(n => `
         <div style="border-left:3px solid #0d9488;padding:8px 12px;margin-bottom:6px;background:#f0fdfa;border-radius:0 8px 8px 0;">
-            <div style="font-weight:700;font-size:12px;">${n.title || '(no title)'}</div>
-            <div style="font-size:11px;color:#475569;margin-top:4px;line-height:1.5;">${n.body || ''}</div>
+            <div style="font-weight:700;font-size:12px;">${esc(n.title) || '(no title)'}</div>
+            <div style="font-size:11px;color:#475569;margin-top:4px;line-height:1.5;">${esc(n.body)}</div>
             ${n.created_at ? `<div style="font-size:10px;color:#94a3b8;margin-top:4px;">${new Date(n.created_at).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</div>` : ''}
         </div>`).join('') + (totalPages > 1 ? `
         <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;">

@@ -5,6 +5,26 @@
     var myId = localStorage.getItem('pp_partner_id');
     if (!token || !window.location.pathname.startsWith('/partner')) return;
 
+    // Shared session-expiry guard: any /api/ call returning 401 means the partner
+    // session expired — clear and send to re-login. (Previously each page handled
+    // this inconsistently, so an expired session looked like an app outage.)
+    (function () {
+        var _fetch = window.fetch, redirected = false;
+        window.fetch = function (u, opts) {
+            return _fetch(u, opts).then(function (res) {
+                try {
+                    var url = typeof u === 'string' ? u : (u && u.url) || '';
+                    if (res.status === 401 && url.indexOf('/api/') !== -1 && !redirected) {
+                        redirected = true;
+                        localStorage.clear();
+                        window.location.href = '/partner';
+                    }
+                } catch (e) {}
+                return res;
+            });
+        };
+    })();
+
     // Inject nav-badge style if not already present
     if (!document.getElementById('pnav-style')) {
         var s = document.createElement('style');
