@@ -4234,7 +4234,8 @@ async function executeBulk(validData) {
             const btn = document.getElementById('bulkLinkSsBtn');
             if (btn && _shipstationEnabled && localStorage.getItem('pp_role') === 'super_admin') btn.style.display = '';
         }).catch(() => {});
-        const urlQ = new URLSearchParams(window.location.search).get('q');
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlQ = urlParams.get('q');
         if (urlQ) {
             const el = document.getElementById('depSearch');
             if (el) el.value = urlQ;
@@ -4242,6 +4243,9 @@ async function executeBulk(validData) {
         fetchDeployments();
         // Load repair queue in background to show badge count on tab
         rqLoadQueue();
+        // Hand-off from another dashboard's ShipStation wizard: jump straight to the label step.
+        const urlLabel = urlParams.get('label');
+        if (urlLabel) setTimeout(() => { try { ssOpenLabelForDeployment(urlLabel); } catch (e) {} }, 700);
     };
 
     async function closeLinkedTicket(ticketId) {

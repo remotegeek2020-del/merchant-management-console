@@ -256,7 +256,7 @@ export default async function handler(req, res) {
         if (action === 'get_detail') {
             const { ticket_id, token } = req.body;
             const { data: ticket, error } = await supabase.from('support_tickets')
-                .select('*, merchants:merchant_id(dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), persons:person_id(full_name, email, phone_number)')
+                .select('*, merchants:merchant_id(id, dba_name, merchant_id, merchant_city, merchant_state, merchant_phone), persons:person_id(full_name, email, phone_number)')
                 .eq('id', ticket_id)
                 .single();
 
@@ -882,6 +882,21 @@ export default async function handler(req, res) {
             }
 
             return res.status(400).json({ success: false, message: 'Invalid record_type.' });
+        }
+
+        // Link an already-created deployment to a ticket (used by the ShipStation wizard,
+        // which creates the deployment via /api/deployments and then links it here).
+        if (action === 'link_deployment') {
+            const { ticket_id, deployment_id, staff_name } = req.body;
+            if (!ticket_id || !deployment_id) return res.status(400).json({ success: false, message: 'ticket_id and deployment_id required.' });
+            await supabase.from('support_tickets').update({ linked_deployment_id: String(deployment_id) }).eq('id', ticket_id);
+            await supabase.from('ticket_comments').insert({
+                ticket_id, author_type: 'system', author_name: staff_name || 'Staff',
+                change_summary: `Deployment <strong>${deployment_id}</strong> (ShipStation-ready) created and linked to this ticket.`,
+                is_internal: false
+            });
+            try { await supabase.rpc('increment_partner_unread', { tid: parseInt(ticket_id) }); } catch (e) {}
+            return res.status(200).json({ success: true });
         }
 
         if (action === 'get_terminal_types') {

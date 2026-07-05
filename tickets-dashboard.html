@@ -908,7 +908,33 @@ function selectDepEquip(id, serial, type) {
     if (sugg) sugg.style.display = 'none';
 }
 
+// Entry for "Create Deployment Record" — routes through the shared ShipStation wizard
+// when the flag is enabled (ticket's merchant preselected, links the new deployment to
+// the ticket), otherwise falls back to the standard create-and-link flow below.
 async function createLinkedDeployment() {
+    const t = currentTicketData;
+    if (!t || !t.merchant_id) { Swal.fire('No Merchant', 'This ticket has no merchant linked.', 'warning'); return; }
+    if (!window.SSDeployWizard) { return createLinkedDeploymentStandard(); }
+    const muid = t.merchants && t.merchants.id;
+    window.SSDeployWizard.open({
+        prefillMerchant: muid ? { id: muid, name: (t.merchants && t.merchants.dba_name) || '', code: t.merchant_id } : null,
+        ticketId: currentTicketId,
+        onStandard: () => createLinkedDeploymentStandard(),
+        onCreated: async (newId) => {
+            try {
+                await fetch('/api/tickets', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: 'link_deployment', ticket_id: currentTicketId, deployment_id: newId, staff_name: currentStaffName }) });
+            } catch (e) {}
+            Swal.fire({ icon: 'success', title: 'Deployment created & linked',
+                text: 'Print the shipping label on the Deployments dashboard.',
+                showCancelButton: true, confirmButtonText: '🏷️ Print label now', cancelButtonText: 'Done',
+                confirmButtonColor: '#001e3c' })
+                .then(r => { if (r.isConfirmed && newId) window.location.href = 'deployments-dashboard.html?label=' + newId; else openTicket(currentTicketId); });
+        }
+    });
+}
+
+async function createLinkedDeploymentStandard() {
     const t = currentTicketData;
     if (!t || !t.merchant_id) {
         Swal.fire('No Merchant', 'This ticket has no merchant linked.', 'warning');
@@ -1403,6 +1429,7 @@ window.addEventListener('load', function() {
 </script>
 <script>(function(){const uid=localStorage.getItem('pp_userid'),tok=localStorage.getItem('pp_session_token')||'';if(uid)fetch('/api/notifications',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({action:'mark_seen',userid:uid,section:'tickets'})});})();</script>
 <script src="/js/site-config.js"></script>
+<script src="/js/ss-deploy-wizard.js"></script>
 <script>window.NAV_SHORTCUT_PAGE = 'tickets';</script>
 <script src="/js/nav-shortcuts.js"></script>
 <script src="/bug-report.js"></script>

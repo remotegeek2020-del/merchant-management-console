@@ -1782,7 +1782,7 @@ async function addTask(merchantUuid) {
                     <!-- Current Equipment -->
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                         <div style="font-size:10px; font-weight:800; color:#64748b; text-transform:uppercase; letter-spacing:.6px;">Currently Deployed</div>
-                        <button onclick="openMerchantDepModal('${m.id}', '${(m.dba_name || '').replace(/'/g, "\\'")}', '${(m.merchant_id || '').replace(/'/g, "\\'")}')" style="display:flex; align-items:center; gap:5px; background:#004990; color:white; border:none; border-radius:8px; padding:6px 14px; font-size:11px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">
+                        <button onclick="merchantNewDeployment('${m.id}', '${(m.dba_name || '').replace(/'/g, "\\'")}', '${(m.merchant_id || '').replace(/'/g, "\\'")}')" style="display:flex; align-items:center; gap:5px; background:#004990; color:white; border:none; border-radius:8px; padding:6px 14px; font-size:11px; font-weight:700; cursor:pointer; font-family:'DM Sans',sans-serif;">
                             <span class="material-icons" style="font-size:14px;">add</span> Add New Deployment
                         </button>
                     </div>
@@ -3503,6 +3503,23 @@ window.saveMerchant = async (uuid) => {
     let _mdBulkItems = [];
     let _mdLookupTimer = null;
 
+    // "Add New Deployment" entry — routes through the shared ShipStation wizard when the
+    // flag is enabled (merchant preselected), otherwise falls back to the standard modal.
+    window.merchantNewDeployment = function(uuid, name, mid) {
+        if (!window.SSDeployWizard) { window.openMerchantDepModal(uuid, name, mid); return; }
+        window.SSDeployWizard.open({
+            prefillMerchant: { id: uuid, name: name, code: mid },
+            onStandard: () => window.openMerchantDepModal(uuid, name, mid),
+            onCreated: (newId) => {
+                Swal.fire({ icon: 'success', title: 'ShipStation deployment created',
+                    text: 'Print the shipping label on the Deployments dashboard.',
+                    showCancelButton: true, confirmButtonText: '🏷️ Print label now', cancelButtonText: 'Done',
+                    confirmButtonColor: '#004990' })
+                    .then(r => { if (r.isConfirmed && newId) window.location.href = 'deployments-dashboard.html?label=' + newId; });
+            }
+        });
+    };
+
     window.openMerchantDepModal = function(uuid, name, mid) {
         _mdMerchantUuid = uuid;
         _mdBulkItems = [];
@@ -5159,6 +5176,7 @@ function renderPipeline(d, period, customLabel) {
 
 <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
 <script src="/js/site-config.js"></script>
+<script src="/js/ss-deploy-wizard.js"></script>
 <script>window.NAV_SHORTCUT_PAGE = 'merchants';</script>
 <script src="/js/nav-shortcuts.js"></script>
 <script src="/bug-report.js"></script>
