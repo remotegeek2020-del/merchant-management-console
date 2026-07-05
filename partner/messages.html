@@ -50,6 +50,12 @@
         .conv-tab{flex:1;text-align:center;padding:6px 0;font-size:12px;font-weight:700;color:var(--muted);background:#f1f5f9;border:none;border-radius:8px;cursor:pointer;font-family:inherit;transition:background .12s,color .12s;}
         .conv-tab:hover{background:#e2e8f0;}
         .conv-tab.on{background:var(--teal);color:#fff;}
+        .typing-indicator{font-size:11px;color:var(--muted);font-style:italic;padding:2px 14px 4px;display:flex;align-items:center;gap:5px;flex-shrink:0;}
+        .typing-dots{display:inline-flex;gap:2px;}
+        .typing-dots i{width:4px;height:4px;border-radius:50%;background:var(--muted);display:inline-block;animation:pmdot 1.2s infinite ease-in-out;}
+        .typing-dots i:nth-child(2){animation-delay:.2s;} .typing-dots i:nth-child(3){animation-delay:.4s;}
+        @keyframes pmdot{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-2px);}}
+        .pm-seen{text-align:right;font-size:10px;color:var(--muted);font-weight:700;padding:0 14px 2px;flex-shrink:0;}
         /* CHAT */
         .chat-col{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative;}
         .chat-header{background:white;padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
@@ -331,12 +337,14 @@ function openConv(u) {
         + (isG ? '<button onclick="groupManage(\'' + u.id + '\')" title="Group options (rename, add, leave, delete)" style="margin-left:auto;background:none;border:none;cursor:pointer;color:#64748b;padding:4px;"><span class="material-icons">more_vert</span></button>' : '')
         + '</div>'
         + '<div class="chat-messages" id="chatMessages"><div class="spinner"></div></div>'
+        + '<div class="pm-seen" id="pmSeen" style="display:none;"></div>'
+        + '<div class="typing-indicator" id="pmTyping" style="display:none;"></div>'
         + '<div class="emoji-panel" id="emojiPanel"></div>'
         + '<div class="chat-input-row">'
         + '<button class="pm-iconbtn" onclick="document.getElementById(\'pmImgFile\').click()" title="Photo/GIF"><span class="material-icons" style="font-size:21px;">image</span></button>'
         + '<button class="pm-iconbtn" onclick="pmToggleEmoji()" title="Emoji"><span class="material-icons" style="font-size:21px;">mood</span></button>'
         + '<input type="file" id="pmImgFile" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="pmSendImage(this)">'
-        + '<textarea class="chat-input" id="chatInput" placeholder="Type a message..." rows="1" onkeydown="onKey(event)"></textarea>'
+        + '<textarea class="chat-input" id="chatInput" placeholder="Type a message..." rows="1" onkeydown="onKey(event)" oninput="pmTyping()"></textarea>'
         + '<button class="send-btn" onclick="sendMsg()"><span class="material-icons" style="font-size:18px;">send</span></button>'
         + '</div>';
     var cm = document.getElementById('chatMessages'); if (cm) cm.addEventListener('click', pmMsgClick);
@@ -416,6 +424,22 @@ async function pmReact(mid, reaction){ pmCloseP(); await chatApi({ action:'react
 async function pmEdit(mid, wrap){ var span = wrap.querySelector('.msg-bubble span'); var cur = span?span.textContent:''; var nv = window.prompt('Edit message:', cur); if(nv==null) return; nv=nv.trim(); if(!nv) return; await chatApi({ action:'editMessage', message_id:mid, content:nv }); loadMessages(true); }
 async function pmDelete(mid){ if(!window.confirm('Unsend this message for everyone?')) return; await chatApi({ action:'deleteMessage', message_id:mid }); loadMessages(true); }
 async function pmSendImage(input){ var f=input.files&&input.files[0]; input.value=''; if(!f) return; if(f.size>8*1024*1024){ Swal.fire({icon:'warning',title:'Image too large',text:'Max 8MB.'}); return; } var r=await chatApi({ action:'get_chat_image_upload_url', file_type:f.type }); if(!r.success){ Swal.fire({icon:'error',title:'Upload failed',text:r.message||''}); return; } await fetch(r.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}}); var body = activeKind==='group'?{action:'sendGroupMessage',group_id:activeId,content:'',image_url:r.public_url}:{action:'sendMessage',recipient_id:activeId,content:'',image_url:r.public_url}; await chatApi(body); loadMessages(true); loadUserList(); }
+var _pmTypingSent = 0;
+function pmTyping(){ var el=document.getElementById('chatInput'); if(!el||!el.value) return; var now=Date.now(); if(now-_pmTypingSent<2500) return; _pmTypingSent=now; chatApi({ action:'setTyping', target_id:activeId, is_group:activeKind==='group' }); }
+function pmUpdateTyping(typing){
+    var el=document.getElementById('pmTyping'); if(!el) return;
+    var label='';
+    if(activeKind==='group'){ var n=typing||[]; if(n.length===1) label=n[0]+' is typing'; else if(n.length===2) label=n[0]+' and '+n[1]+' are typing'; else if(n.length>2) label=n.length+' people are typing'; }
+    else if(typing){ label=(activeUser&&activeUser.name?activeUser.name:'Someone')+' is typing'; }
+    if(label){ el.innerHTML=escHtml(label)+' <span class="typing-dots"><i></i><i></i><i></i></span>'; el.style.display='flex'; } else el.style.display='none';
+}
+function pmUpdateSeen(msgs){
+    var el=document.getElementById('pmSeen'); if(!el) return;
+    if(activeKind==='group'){ el.style.display='none'; return; }
+    var seen='';
+    for(var i=msgs.length-1;i>=0;i--){ if(msgs[i].sender_id===myId){ if(msgs[i].is_read) seen='Seen'+(msgs[i].read_at?' '+new Date(msgs[i].read_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''); break; } }
+    if(seen){ el.textContent=seen; el.style.display='block'; } else el.style.display='none';
+}
 function pmToggleEmoji(){ var p=document.getElementById('emojiPanel'); if(!p)return; if(p.style.display==='flex'){p.style.display='none';return;} if(!p.innerHTML) p.innerHTML=PM_EMOJIS.map(function(x){return '<span>'+x+'</span>';}).join(''); p.style.display='flex'; if(!p._wired){ p._wired=true; p.addEventListener('click',function(e){ if(e.target.tagName==='SPAN'){ var ta=document.getElementById('chatInput'); if(ta){ta.value+=e.target.textContent; ta.focus();} } }); } }
 document.addEventListener('click', function(e){ if(!e.target.closest('[data-act=react]') && !e.target.closest('#pmReactPicker')) pmCloseP(); if(!e.target.closest('[onclick*=pmToggleEmoji]') && !e.target.closest('#emojiPanel')){ var p=document.getElementById('emojiPanel'); if(p)p.style.display='none'; } });
 
@@ -429,6 +453,8 @@ async function loadMessages(isInitial) {
     var res = await chatApi(histBody(0));
     if (!res.success) return;
     var msgs = res.data || [];
+    pmUpdateTyping(res.typing);   // refresh typing + seen every poll
+    pmUpdateSeen(msgs);
     var el = document.getElementById('chatMessages');
     if (!el) return;
 
