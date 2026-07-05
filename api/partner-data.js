@@ -119,6 +119,35 @@ export default async function handler(req, res) {
             }});
         }
 
+        // ── PRIME49 UPGRADE OPPORTUNITIES ──────────────────
+        // Partner's merchants that are NOT yet Prime49 but qualify (30-day volume
+        // >= $30k), with the residual they'd earn if enrolled. Actionable list.
+        if (action === 'get_prime49_eligible') {
+            if (!idStrings.length) return res.status(200).json({ success: true, data: { rows: [], count: 0, potential_total: 0 } });
+            const revMap = {}; identifiers.forEach(i => { revMap[i.id_string] = i.rev_share; });
+            const prime49Ids = new Set(identifiers.filter(i => i.prime49).map(i => i.id_string));
+
+            const { data: merchants } = await supabase.from('merchants')
+                .select('id, merchant_id, dba_name, agent_id, account_status, volume_30_day')
+                .in('agent_id', idStrings)
+                .limit(5000);
+
+            let potentialTotal = 0;
+            const rows = (merchants || []).filter(m => {
+                if (prime49Ids.has(m.agent_id)) return false;         // already Prime49
+                return (parseFloat(m.volume_30_day) || 0) >= 30000;   // qualifies on volume
+            }).map(m => {
+                const vol = parseFloat(m.volume_30_day) || 0;
+                const rawRev = revMap[m.agent_id];
+                const revPct = rawRev != null ? (parseFloat(String(rawRev).replace(/%/g, '')) || 50) : 50;
+                const potential = vol * 0.03 * (revPct / 100);
+                potentialTotal += potential;
+                return { merchant_uuid: m.id, dba_name: m.dba_name, merchant_id: m.merchant_id, account_status: m.account_status, volume_30d: vol, rev_share: revPct, potential };
+            }).sort((a, b) => b.potential - a.potential);
+
+            return res.status(200).json({ success: true, data: { rows, count: rows.length, potential_total: potentialTotal } });
+        }
+
         // ── MERCHANT LIST ──────────────────────────────────
         if (action === 'get_merchants') {
             const { page = 0, limit = 25, search = '', status_filter = '' } = req.body;

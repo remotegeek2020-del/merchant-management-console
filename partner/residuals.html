@@ -136,6 +136,33 @@
                 </table>
             </div>
         </div>
+
+        <!-- PRIME49 UPGRADE OPPORTUNITIES -->
+        <div style="margin-top:28px;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+            <div>
+                <div style="font-size:15px;font-weight:800;color:var(--navy);display:flex;align-items:center;gap:7px;">💎 Prime49 Upgrade Opportunities</div>
+                <div style="font-size:12px;color:var(--muted);margin-top:3px;max-width:640px;">Your merchants doing <strong>$30k+</strong> in 30-day volume that aren't Prime49 yet. Enroll them to start earning residual — the estimate below is what you'd make each month.</div>
+            </div>
+            <div id="oppSummary" style="font-size:12px;color:var(--muted);white-space:nowrap;"></div>
+        </div>
+        <div class="panel" style="margin-top:12px;">
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Merchant</th>
+                            <th>MID</th>
+                            <th class="num">30-Day Volume</th>
+                            <th class="num">Potential Residual</th>
+                            <th style="text-align:right;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody id="oppBody">
+                        <tr><td colspan="5" class="empty"><span class="material-icons" style="animation:spin 0.8s linear infinite;">sync</span>Scanning your portfolio…</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -211,7 +238,71 @@ async function handleLogout() {
     localStorage.clear(); window.location.href = '/partner';
 }
 
+// ── Prime49 upgrade opportunities ──
+let _opps = [];
+async function loadEligible() {
+    try {
+        const r = await fetch('/api/partner-data', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'get_prime49_eligible', token })
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.message || 'Failed');
+        const data = d.data || {};
+        _opps = data.rows || [];
+        const body = document.getElementById('oppBody');
+        const summ = document.getElementById('oppSummary');
+        if (!_opps.length) {
+            body.innerHTML = '<tr><td colspan="5" class="empty"><span class="material-icons">verified</span>No upgrade opportunities right now — merchants qualify at $30k+ in 30-day volume.</td></tr>';
+            summ.textContent = '';
+            return;
+        }
+        summ.innerHTML = `<strong style="color:var(--navy);">${data.count}</strong> eligible · <strong style="color:var(--green-text);">${money(data.potential_total)}/mo</strong> potential`;
+        body.innerHTML = _opps.map((o, i) => `
+            <tr>
+                <td style="font-weight:700;">${esc(o.dba_name) || '—'}</td>
+                <td style="font-family:'DM Mono',monospace;color:var(--secondary);">${esc(o.merchant_id) || '—'}</td>
+                <td class="num">${money(o.volume_30d)}</td>
+                <td class="num" style="font-weight:800;color:var(--green-text);">${money(o.potential)}</td>
+                <td style="text-align:right;"><button id="oppBtn${i}" onclick="requestUpgrade(${i})" style="background:#004990;color:white;border:none;border-radius:7px;padding:6px 12px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;">Request Enrollment</button></td>
+            </tr>`).join('');
+    } catch (e) {
+        document.getElementById('oppBody').innerHTML = '<tr><td colspan="5" class="empty" style="color:var(--red,#ef4444);">Could not load opportunities.</td></tr>';
+    }
+}
+
+async function requestUpgrade(i) {
+    const o = _opps[i]; if (!o) return;
+    const btn = document.getElementById('oppBtn' + i);
+    const c = await Swal.fire({
+        icon: 'question', title: 'Request Prime49 enrollment?',
+        html: `Send a request to PayProTec to enroll <strong>${esc(o.dba_name)}</strong> (${esc(o.merchant_id)}) in Prime49.<br><span style="font-size:12px;color:#64748b;">Estimated residual: <strong>${money(o.potential)}/mo</strong></span>`,
+        showCancelButton: true, confirmButtonText: 'Send request', confirmButtonColor: '#004990'
+    });
+    if (!c.isConfirmed) return;
+    if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+    try {
+        const r = await fetch('/api/tickets', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'create', token, type: 'general', category: 'Prime49 Enrollment',
+                merchant_id: o.merchant_id, priority: 'normal',
+                subject: `Prime49 enrollment request — ${o.dba_name}`,
+                description: `Partner requests Prime49 enrollment for ${o.dba_name} (MID ${o.merchant_id}). 30-day volume ${money(o.volume_30d)}; estimated monthly residual ${money(o.potential)}.`
+            })
+        });
+        const d = await r.json();
+        if (!d.success) throw new Error(d.message || 'Failed');
+        if (btn) { btn.textContent = '✓ Requested'; btn.style.background = '#16a34a'; btn.disabled = true; }
+        Swal.fire({ icon: 'success', title: 'Request sent', text: `Ticket ${d.ticket?.ticket_number || ''} created — PayProTec will follow up.`, timer: 2400, showConfirmButton: false });
+    } catch (e) {
+        if (btn) { btn.disabled = false; btn.textContent = 'Request Enrollment'; }
+        Swal.fire('Could not send', e.message || 'Please try again.', 'error');
+    }
+}
+
 loadResiduals();
+loadEligible();
 </script>
 <script src="/js/partner-nav.js"></script>
 </body>
