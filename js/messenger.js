@@ -158,7 +158,8 @@
         '.ppm-btn.ghost{background:#f1f5f9;color:#475569;}',
         // windows
         '.ppm-win{position:fixed;bottom:46px;width:320px;height:440px;max-height:70vh;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.24);display:flex;flex-direction:column;overflow:hidden;z-index:99989;}',
-        '.ppm-win.min{height:46px;}',
+        '.ppm-win.min{height:46px;width:210px;}',
+        '.ppm-win.min .ppm-tag,.ppm-win.min .ppm-wsub{display:none;}',
         '@keyframes ppm-shake{0%,100%{transform:translateX(0);}15%{transform:translateX(-5px);}30%{transform:translateX(5px);}45%{transform:translateX(-4px);}60%{transform:translateX(4px);}75%{transform:translateX(-2px);}}',
         '.ppm-win.ppm-shake{animation:ppm-shake .55s ease;}',
         '.ppm-wpill{background:#e11d48;color:#fff;font-size:10px;font-weight:800;min-width:18px;height:18px;line-height:18px;text-align:center;border-radius:9px;padding:0 5px;margin:0 2px;display:none;flex-shrink:0;}',
@@ -590,7 +591,28 @@
 
     // Buzz / notify / auto-pop a chat head when unread rises for a conversation.
     function detectNew(cur) {
-        if (!baselined) { baselined = true; return; }   // first poll = baseline, no alerts
+        if (!baselined) {
+            baselined = true;
+            // First poll after page load: surface conversations that ALREADY have
+            // unread (messages that arrived while the user was offline) as chat heads,
+            // so they're not stuck as just an unread number. Minimized (preserves the
+            // unread until opened), most-recent first, capped to MAX_WINDOWS.
+            Object.keys(cur)
+                .filter(function (k) { return (cur[k].unread || 0) > 0; })
+                .sort(function (a, b) {
+                    var at = cur[a].last && cur[a].last.time ? new Date(cur[a].last.time).getTime() : 0;
+                    var bt = cur[b].last && cur[b].last.time ? new Date(cur[b].last.time).getTime() : 0;
+                    return bt - at;
+                })
+                .slice(0, MAX_WINDOWS)
+                .forEach(function (k) {
+                    var c = cur[k];
+                    if (!windows.find(function (w) { return w.key === k; })) {
+                        openWindow(c.kind, c.id, c.name, c.type, false, true, true);   // minimized head, no focus, no load
+                    }
+                });
+            return;
+        }
         var alerted = false;
         Object.keys(cur).forEach(function (k) {
             var c = cur[k], was = prevUnread[k] || 0;
@@ -635,6 +657,7 @@
             '<div style="flex:1;min-width:0;"><div class="ppm-wname">' + esc(name) + '</div>' +
             '<div class="ppm-wsub" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' + esc(wsub) + '</div></div>' +
             (isG ? '' : '<span class="ppm-tag' + (isP ? ' partner' : '') + '" style="align-self:center;margin-right:2px;">' + (isP ? 'Partner' : 'Staff') + '</span>') +
+            '<span class="ppm-wpill"></span>' +
             (isG ? '<button class="ppm-wbtn ppm-manage" title="Group options (rename, add, leave, delete)"><span class="material-icons">more_vert</span></button>' : '') +
             '<button class="ppm-wbtn ppm-min" title="Minimize"><span class="material-icons">remove</span></button>' +
             '<button class="ppm-wbtn ppm-close" title="Close"><span class="material-icons">close</span></button></div>' +
