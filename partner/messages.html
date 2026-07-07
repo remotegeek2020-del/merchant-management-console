@@ -111,6 +111,12 @@
             <div class="sidebar-avatar" id="sidebarAvatar">?</div>
             <div><div class="sidebar-name" id="sidebarName">Loading...</div><div class="sidebar-tag">Partner Portal</div></div>
         </div>
+        <button id="myStatusBtn" onclick="openStatusMenu()" title="Set your availability" style="margin-top:12px;display:flex;align-items:center;gap:7px;width:100%;background:rgba(255,255,255,0.08);border:none;border-radius:99px;padding:6px 11px;cursor:pointer;color:rgba(255,255,255,0.9);font-size:11px;font-weight:700;font-family:inherit;">
+            <span id="myStatusDot" style="width:9px;height:9px;border-radius:50%;background:#22c55e;flex-shrink:0;"></span>
+            <span id="myStatusLabel">Available</span>
+            <span class="material-icons" style="font-size:15px;margin-left:auto;opacity:.6;">expand_more</span>
+        </button>
+        <div id="myThoughtLine" style="display:none;font-size:10px;color:rgba(255,255,255,0.55);margin-top:6px;padding:0 4px;font-style:italic;line-height:1.4;"></div>
     </div>
     <nav class="sidebar-nav">
         <a class="nav-item" href="/partner/dashboard"><span class="material-icons">dashboard</span> Overview</a>
@@ -198,6 +204,39 @@ function timeAgo(d) {
 function escHtml(s){ var d=document.createElement('div');d.textContent=s||'';return d.innerHTML; }
 function avImg(url,name,groupIcon){ if(url) return '<img src="'+escHtml(url)+'" alt="" style="width:100%;height:100%;object-fit:cover;border-radius:50%;">'; return groupIcon?'<span class="material-icons" style="font-size:20px;">groups</span>':escHtml(ini(name)); }
 
+// ── Availability status + "what's on your mind" (mirrors staff) ──
+var STATUS_META = { available:{c:'#22c55e',label:'Available'}, away:{c:'#f59e0b',label:'Away'}, busy:{c:'#ef4444',label:'Busy'} };
+var myStatus = 'available', myThought = null;
+function statusColor(status, online){ return online ? ((STATUS_META[status]||STATUS_META.available).c) : '#cbd5e1'; }
+function applyMyStatusUI(){
+    var m = STATUS_META[myStatus] || STATUS_META.available;
+    var dot = document.getElementById('myStatusDot'); if(dot) dot.style.background = m.c;
+    var lbl = document.getElementById('myStatusLabel'); if(lbl) lbl.textContent = m.label;
+    var th = document.getElementById('myThoughtLine'); if(th){ if(myThought){ th.textContent = '💭 '+myThought; th.style.display='block'; } else th.style.display='none'; }
+}
+async function openStatusMenu(){
+    const { value } = await Swal.fire({
+        title:'Set your status',
+        html:`<div style="text-align:left;font-size:13px;">
+            <div style="font-weight:700;margin-bottom:6px;color:#334155;">Availability</div>
+            <select id="pmStatusSel" class="swal2-input" style="margin:0 0 16px;">
+              <option value="available">🟢 Available</option>
+              <option value="away">🟡 Away</option>
+              <option value="busy">🔴 Busy</option>
+            </select>
+            <div style="font-weight:700;margin-bottom:6px;color:#334155;">💭 What's on your mind?</div>
+            <input id="pmThoughtInp" class="swal2-input" style="margin:0;" maxlength="120" placeholder="Share a thought (optional)">
+          </div>`,
+        didOpen: () => { document.getElementById('pmStatusSel').value = myStatus; document.getElementById('pmThoughtInp').value = myThought || ''; },
+        showCancelButton:true, confirmButtonText:'Save', confirmButtonColor:'#0d9488',
+        preConfirm: () => ({ status: document.getElementById('pmStatusSel').value, thought: (document.getElementById('pmThoughtInp').value||'').trim().slice(0,120) })
+    });
+    if (!value) return;
+    myStatus = value.status; myThought = value.thought || null; applyMyStatusUI();
+    chatApi({ action:'setStatus', status: myStatus });
+    chatApi({ action:'setThought', thought: myThought || '' });
+}
+
 async function init() {
     var auth = await partnerApi({ action: 'validate', token });
     if (!auth.success) { localStorage.clear(); window.location.href='/partner'; return; }
@@ -220,6 +259,7 @@ async function loadUserList() {
     if (gres && gres.success) groups = gres.data || [];
     if (!res.success) return;
     if (res.me && res.me.avatar_url) { window._myAvatar = res.me.avatar_url; var sa = document.getElementById('sidebarAvatar'); if (sa && sa.querySelector && !sa.querySelector('img')) sa.innerHTML = avImg(res.me.avatar_url, myName); }
+    if (res.me) { myStatus = res.me.status || 'available'; myThought = res.me.thought || null; applyMyStatusUI(); }
     // Show everyone except self (staff + other partners)
     allUsers = (res.data || []).filter(function(u) {
         return u.id !== myId;
@@ -297,8 +337,9 @@ function renderList() {
         var isStaff = u.user_type === 'staff';
         var av = document.createElement('div');
         av.className = 'conv-avatar' + (isStaff ? '' : ' partner-av');
-        // Avatar (profile picture or initials) + online dot
-        av.innerHTML = avImg(u.avatar_url, u.name) + (u.is_online ? '<div class="online-dot"></div>' : '');
+        // Avatar (profile picture or initials) + availability dot (status colour when
+        // online, grey when offline) so everyone can see who's online/offline.
+        av.innerHTML = avImg(u.avatar_url, u.name) + '<div class="online-dot" style="background:' + statusColor(u.status, u.is_online) + ';"></div>';
         var info = document.createElement('div'); info.style.flex='1'; info.style.minWidth='0';
         var nameEl = document.createElement('div'); nameEl.className='conv-name';
         nameEl.textContent=u.name;
@@ -306,7 +347,9 @@ function renderList() {
         typeTag.style.cssText = 'font-size:9px;padding:1px 5px;border-radius:99px;font-weight:800;margin-left:5px;background:' + (isStaff?'#e0f2fe':'#ccfbf1') + ';color:' + (isStaff?'#0369a1':'#0f766e') + ';';
         typeTag.textContent = isStaff ? 'STAFF' : 'PARTNER';
         nameEl.appendChild(typeTag);
-        var prevEl = document.createElement('div'); prevEl.className='conv-preview'; prevEl.textContent=u.last_message?u.last_message.preview:'Start a conversation';
+        var prevEl = document.createElement('div'); prevEl.className='conv-preview';
+        if (u.thought) { prevEl.style.color='#0d9488'; prevEl.style.fontStyle='italic'; prevEl.textContent='💭 '+u.thought; }
+        else prevEl.textContent=u.last_message?u.last_message.preview:'Start a conversation';
         info.appendChild(nameEl); info.appendChild(prevEl);
         var meta = document.createElement('div'); meta.className='conv-meta';
         if (u.last_message) { var t=document.createElement('div');t.className='conv-time';t.textContent=timeAgo(u.last_message.time);meta.appendChild(t); }
@@ -329,7 +372,15 @@ function openConv(u) {
     var col = document.getElementById('chatCol');
     var isStaff = u.user_type === 'staff';
     var avHtml = isG ? avImg(u.photo_url, u.name, true) : avImg(u.avatar_url, u.name);
-    var statusLine = isG ? ((u.member_count || '') + ' members') : (u.is_online ? '<span style="color:#22c55e;font-weight:700;">● Online</span>' : (isStaff ? 'PayProTec Staff' : 'Partner'));
+    var statusLine;
+    if (isG) { statusLine = (u.member_count || '') + ' members'; }
+    else {
+        var sm = STATUS_META[u.status] || STATUS_META.available;
+        statusLine = u.is_online
+            ? '<span style="color:' + sm.c + ';font-weight:700;">● ' + sm.label + '</span>'
+            : '<span style="color:#94a3b8;font-weight:700;">● Offline</span>';
+        if (u.thought) statusLine += ' <span style="color:#0d9488;font-style:italic;">· 💭 ' + escHtml(u.thought) + '</span>';
+    }
     col.innerHTML = '<div class="chat-header">'
         + '<div class="chat-av"' + (isG ? ' style="background:#eef2ff;color:#4338ca;"' : '') + '>' + avHtml + '</div>'
         + '<div><div class="chat-name">' + escHtml(u.name) + '</div>'
