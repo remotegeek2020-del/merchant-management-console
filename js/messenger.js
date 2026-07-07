@@ -599,7 +599,11 @@
                 var openFocused = win && !win.minimized && win._focused && !document.hidden;
                 if (!openFocused) {
                     alerted = true;
-                    if (!win) openWindow(c.kind, c.id, c.name, c.type, false, true);   // auto-pop minimized
+                    // Pop the conversation OPEN (visible) so the user notices someone
+                    // messaged them — even while online. noFocus=true so we don't steal
+                    // focus/scroll from whatever they're doing. Only act if the window
+                    // is missing or minimized (an already-visible one updates via poll).
+                    if (!win || win.minimized) openWindow(c.kind, c.id, c.name, c.type, false, false, true);
                     desktopNotify(c.name, c.last && c.last.preview ? String(c.last.preview).slice(0, 90) : 'New message');
                 }
             }
@@ -608,10 +612,10 @@
     }
 
     // ── chat windows ──
-    function openWindow(kind, id, name, type, online, popMinimized) {
+    function openWindow(kind, id, name, type, online, popMinimized, noFocus) {
         var key = keyOf(kind, id);
         var existing = windows.find(function (w) { return w.key === key; });
-        if (existing) { existing.minimized = false; existing.el.classList.remove('min'); relayout(); loadWindow(existing, true); focusInput(existing); return; }
+        if (existing) { existing.minimized = false; existing.el.classList.remove('min'); relayout(); loadWindow(existing, true); if (!noFocus) focusInput(existing); return; }
         if (windows.length >= MAX_WINDOWS) { closeWindow(windows[0].key); }
 
         var isG = kind === 'group', isP = type === 'partner';
@@ -683,7 +687,7 @@
         // Don't load history for an auto-popped minimized head — loading marks the
         // conversation read server-side, which would clear the unread before the
         // user actually opens it. Load only when it's opened (here or on un-minimize).
-        if (!popMinimized) { loadWindow(win, true); focusInput(win); }
+        if (!popMinimized) { loadWindow(win, true); if (!noFocus) focusInput(win); }
     }
     function focusInput(win) { try { win.el.querySelector('.ppm-ta').focus(); } catch (e) {} windows.forEach(function (w) { w._focused = (w === win); }); }
     function closeWindow(key) {
