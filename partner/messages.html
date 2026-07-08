@@ -403,7 +403,7 @@ function openConv(u) {
     var cm = document.getElementById('chatMessages'); if (cm) cm.addEventListener('click', pmMsgClick);
     setTimeout(function() {
         loadMessages(true);
-        refreshTimer = setInterval(function(){ loadMessages(false); }, 4000);
+        refreshTimer = setInterval(function(){ loadMessages(false); }, 2000);
     }, 50);
 }
 

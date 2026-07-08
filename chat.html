@@ -319,7 +319,7 @@ async function openChat(id, name, type, role) {
 
     if (msgPollInterval) clearInterval(msgPollInterval);
     await loadMessages();
-    msgPollInterval = setInterval(loadMessages, 3000);
+    msgPollInterval = setInterval(loadMessages, 2000);
     document.getElementById('msgInput')?.focus();
 }
 
@@ -352,7 +352,7 @@ async function openGroup(id) {
         </div>`;
     if (msgPollInterval) clearInterval(msgPollInterval);
     await loadMessages();
-    msgPollInterval = setInterval(loadMessages, 3000);
+    msgPollInterval = setInterval(loadMessages, 2000);
     document.getElementById('msgInput')?.focus();
 }
 

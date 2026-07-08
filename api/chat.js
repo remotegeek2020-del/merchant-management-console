@@ -201,28 +201,25 @@ export default async function handler(req, res) {
         if (action === 'getHistory') {
             const { recipient_id, page = 0, limit = 50 } = req.body;
 
-            // Mark as read (stamp read_at on first read for the "Seen" receipt)
-            await supabase.from('messages')
+            // Mark as read (stamp read_at on first read) — fire without blocking the response.
+            const readMark = supabase.from('messages')
                 .update({ is_read: true, read_at: new Date().toISOString() })
-                .eq('sender_id', recipient_id)
-                .eq('recipient_id', sender_id)
-                .eq('is_read', false);
+                .eq('sender_id', recipient_id).eq('recipient_id', sender_id).eq('is_read', false);
 
-            const { data } = await supabase.from('messages')
-                .select('*')
-                .or(`and(sender_id.eq.${sender_id},recipient_id.eq.${recipient_id}),and(sender_id.eq.${recipient_id},recipient_id.eq.${sender_id})`)
-                .is('deleted_at', null)
-                .order('created_at', { ascending: false })
-                .range(page * limit, (page + 1) * limit - 1);
+            // Messages + typing in parallel.
+            const [msgsRes, typRes] = await Promise.all([
+                supabase.from('messages').select('*')
+                    .or(`and(sender_id.eq.${sender_id},recipient_id.eq.${recipient_id}),and(sender_id.eq.${recipient_id},recipient_id.eq.${sender_id})`)
+                    .is('deleted_at', null).order('created_at', { ascending: false }).range(page * limit, (page + 1) * limit - 1),
+                supabase.from('chat_typing').select('updated_at')
+                    .eq('user_id', String(recipient_id)).eq('target', String(sender_id))
+                    .gt('updated_at', new Date(Date.now() - 6000).toISOString()).maybeSingle()
+            ]);
 
-            // Is the other party currently typing to me? (row fresh within ~6s)
-            const { data: typ } = await supabase.from('chat_typing').select('updated_at')
-                .eq('user_id', String(recipient_id)).eq('target', String(sender_id))
-                .gt('updated_at', new Date(Date.now() - 6000).toISOString()).maybeSingle();
-
-            const dmMsgs = (data || []).reverse();
+            const dmMsgs = (msgsRes.data || []).reverse();
             const dmReacts = await reactionsFor(dmMsgs.map(m => m.id));
-            return res.status(200).json({ success: true, data: withReactions(dmMsgs, dmReacts), typing: !!typ });
+            await readMark;
+            return res.status(200).json({ success: true, data: withReactions(dmMsgs, dmReacts), typing: !!(typRes.data) });
         }
 
         // ── SEND MESSAGE ──────────────────────────────────
@@ -427,32 +424,32 @@ export default async function handler(req, res) {
             const { group_id, page = 0, limit = 50 } = req.body;
             if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
 
-            const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type, last_read_at').eq('group_id', group_id);
-            const nameMap = await namesForMembers(members || []);
-            const avMap = await avatarsForIds((members || []).map(m => m.member_id));
-            // Per-member read cursor (for group "seen by" receipts). Captured BEFORE we
-            // stamp the caller's own read below, which is fine (caller is excluded client-side).
+            // Stamp my read cursor without blocking the response on the write.
+            const readStamp = supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
+                .eq('group_id', group_id).eq('member_id', sender_id);
+
+            // Independent reads in parallel (members, messages, typing).
+            const [membersRes, msgsRes, typRes] = await Promise.all([
+                supabase.from('chat_group_members').select('member_id, member_type, last_read_at').eq('group_id', group_id),
+                supabase.from('messages').select('*').eq('group_id', group_id).is('deleted_at', null).order('created_at', { ascending: false }).range(page * limit, (page + 1) * limit - 1),
+                supabase.from('chat_typing').select('user_id').eq('target', 'group:' + group_id).neq('user_id', String(sender_id)).gt('updated_at', new Date(Date.now() - 6000).toISOString())
+            ]);
+            const members = membersRes.data, data = msgsRes.data, typRows = typRes.data;
+
+            // Dependent lookups in parallel (names/avatars need members; reactions need messages).
+            const [nameMap, avMap, gReacts] = await Promise.all([
+                namesForMembers(members || []),
+                avatarsForIds((members || []).map(m => m.member_id)),
+                reactionsFor((data || []).map(m => m.id))
+            ]);
+            await readStamp;
+
             const readers = (members || []).filter(m => String(m.member_id) !== String(sender_id)).map(m => ({
                 id: String(m.member_id), name: nameMap[m.member_id] || 'Member',
                 avatar_url: avMap[String(m.member_id)] || null, last_read_at: m.last_read_at
             }));
-
-            const { data } = await supabase.from('messages').select('*')
-                .eq('group_id', group_id).is('deleted_at', null)
-                .order('created_at', { ascending: false }).range(page * limit, (page + 1) * limit - 1);
-
-            // Mark this group read for me
-            await supabase.from('chat_group_members').update({ last_read_at: new Date().toISOString() })
-                .eq('group_id', group_id).eq('member_id', sender_id);
-
-            // Other members currently typing in this group (fresh within ~6s)
-            const { data: typRows } = await supabase.from('chat_typing').select('user_id')
-                .eq('target', 'group:' + group_id).neq('user_id', String(sender_id))
-                .gt('updated_at', new Date(Date.now() - 6000).toISOString());
             const typingNames = (typRows || []).map(t => nameMap[t.user_id] || 'Someone');
-
             const gMsgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown', sender_avatar: avMap[String(m.sender_id)] || null }));
-            const gReacts = await reactionsFor(gMsgs.map(m => m.id));
             return res.status(200).json({ success: true, data: withReactions(gMsgs, gReacts), typing: typingNames, readers });
         }
 

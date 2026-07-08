@@ -891,7 +891,7 @@
         refreshLists();
         windows.forEach(function (w) { if (!w.minimized) loadWindow(w, false); });
     }
-    function startTicking() { if (tickTimer) clearInterval(tickTimer); tickTimer = setInterval(tick, 2500); }
+    function startTicking() { if (tickTimer) clearInterval(tickTimer); tickTimer = setInterval(tick, 2000); }
     document.addEventListener('visibilitychange', function () { if (!document.hidden) tick(); });
     window.addEventListener('focus', tick);
     document.addEventListener('click', function (e) {
