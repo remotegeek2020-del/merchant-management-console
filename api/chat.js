@@ -427,9 +427,15 @@ export default async function handler(req, res) {
             const { group_id, page = 0, limit = 50 } = req.body;
             if (!await myGroupMembership(group_id)) return res.status(403).json({ success: false, message: 'Not a member.' });
 
-            const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type').eq('group_id', group_id);
+            const { data: members } = await supabase.from('chat_group_members').select('member_id, member_type, last_read_at').eq('group_id', group_id);
             const nameMap = await namesForMembers(members || []);
             const avMap = await avatarsForIds((members || []).map(m => m.member_id));
+            // Per-member read cursor (for group "seen by" receipts). Captured BEFORE we
+            // stamp the caller's own read below, which is fine (caller is excluded client-side).
+            const readers = (members || []).filter(m => String(m.member_id) !== String(sender_id)).map(m => ({
+                id: String(m.member_id), name: nameMap[m.member_id] || 'Member',
+                avatar_url: avMap[String(m.member_id)] || null, last_read_at: m.last_read_at
+            }));
 
             const { data } = await supabase.from('messages').select('*')
                 .eq('group_id', group_id).is('deleted_at', null)
@@ -447,7 +453,7 @@ export default async function handler(req, res) {
 
             const gMsgs = (data || []).reverse().map(m => Object.assign({}, m, { sender_name: nameMap[m.sender_id] || 'Unknown', sender_avatar: avMap[String(m.sender_id)] || null }));
             const gReacts = await reactionsFor(gMsgs.map(m => m.id));
-            return res.status(200).json({ success: true, data: withReactions(gMsgs, gReacts), typing: typingNames });
+            return res.status(200).json({ success: true, data: withReactions(gMsgs, gReacts), typing: typingNames, readers });
         }
 
         // ── SEND GROUP MESSAGE ────────────────────────────

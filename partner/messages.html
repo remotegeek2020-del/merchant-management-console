@@ -56,6 +56,8 @@
         .typing-dots i:nth-child(2){animation-delay:.2s;} .typing-dots i:nth-child(3){animation-delay:.4s;}
         @keyframes pmdot{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-2px);}}
         .pm-seen{text-align:right;font-size:10px;color:var(--muted);font-weight:700;padding:0 14px 2px;flex-shrink:0;}
+        .pm-seenav{width:17px;height:17px;border-radius:50%;overflow:hidden;background:#cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#475569;border:1px solid #fff;flex-shrink:0;}
+        .pm-seenav img{width:100%;height:100%;object-fit:cover;}
         /* CHAT */
         .chat-col{flex:1;min-width:0;display:flex;flex-direction:column;overflow:hidden;position:relative;}
         .chat-header{background:white;padding:12px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-shrink:0;}
@@ -484,12 +486,24 @@ function pmUpdateTyping(typing){
     else if(typing){ label=(activeUser&&activeUser.name?activeUser.name:'Someone')+' is typing'; }
     if(label){ el.innerHTML=escHtml(label)+' <span class="typing-dots"><i></i><i></i><i></i></span>'; el.style.display='flex'; } else el.style.display='none';
 }
+var _pmReaders = [];
 function pmUpdateSeen(msgs){
     var el=document.getElementById('pmSeen'); if(!el) return;
-    if(activeKind==='group'){ el.style.display='none'; return; }
-    var seen='';
-    for(var i=msgs.length-1;i>=0;i--){ if(msgs[i].sender_id===myId){ if(msgs[i].is_read) seen='Seen'+(msgs[i].read_at?' '+new Date(msgs[i].read_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''); break; } }
-    if(seen){ el.textContent=seen; el.style.display='block'; } else el.style.display='none';
+    if(activeKind==='group'){
+        // Group "seen by": avatars of members who've read the last message.
+        if(!msgs.length){ el.style.display='none'; return; }
+        var last = msgs[msgs.length-1];
+        var seen = (_pmReaders||[]).filter(function(r){ return r.id !== String(last.sender_id) && r.last_read_at && new Date(r.last_read_at) >= new Date(last.created_at); });
+        if(!seen.length){ el.style.display='none'; return; }
+        el.innerHTML = seen.slice(0,12).map(function(r){ return '<span class="pm-seenav" title="'+escHtml(r.name)+'">'+avImg(r.avatar_url, r.name)+'</span>'; }).join('');
+        el.title = 'Seen by ' + seen.map(function(r){ return r.name; }).join(', ');
+        el.style.display='flex'; el.style.justifyContent='flex-end'; el.style.gap='3px';
+        return;
+    }
+    el.style.justifyContent=''; el.title='';
+    var seenTxt='';
+    for(var i=msgs.length-1;i>=0;i--){ if(msgs[i].sender_id===myId){ if(msgs[i].is_read) seenTxt='Seen'+(msgs[i].read_at?' '+new Date(msgs[i].read_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}):''); break; } }
+    if(seenTxt){ el.textContent=seenTxt; el.style.display='block'; } else el.style.display='none';
 }
 function pmToggleEmoji(){ var p=document.getElementById('emojiPanel'); if(!p)return; if(p.style.display==='flex'){p.style.display='none';return;} if(!p.innerHTML) p.innerHTML=PM_EMOJIS.map(function(x){return '<span>'+x+'</span>';}).join(''); p.style.display='flex'; if(!p._wired){ p._wired=true; p.addEventListener('click',function(e){ if(e.target.tagName==='SPAN'){ var ta=document.getElementById('chatInput'); if(ta){ta.value+=e.target.textContent; ta.focus();} } }); } }
 document.addEventListener('click', function(e){ if(!e.target.closest('[data-act=react]') && !e.target.closest('#pmReactPicker')) pmCloseP(); if(!e.target.closest('[onclick*=pmToggleEmoji]') && !e.target.closest('#emojiPanel')){ var p=document.getElementById('emojiPanel'); if(p)p.style.display='none'; } });
@@ -504,6 +518,7 @@ async function loadMessages(isInitial) {
     var res = await chatApi(histBody(0));
     if (!res.success) return;
     var msgs = res.data || [];
+    _pmReaders = res.readers || [];
     pmUpdateTyping(res.typing);   // refresh typing + seen every poll
     pmUpdateSeen(msgs);
     var el = document.getElementById('chatMessages');

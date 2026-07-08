@@ -102,6 +102,9 @@
         .typing-dots i:nth-child(2){animation-delay:.2s;} .typing-dots i:nth-child(3){animation-delay:.4s;}
         @keyframes chatdot{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-2px);}}
         .msg-seen{text-align:right;font-size:10px;color:var(--muted);font-weight:700;padding:2px 6px 0;}
+        .grp-seen{display:flex;justify-content:flex-end;gap:3px;padding:3px 6px 0;}
+        .grp-seenav{width:17px;height:17px;border-radius:50%;overflow:hidden;background:#cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:800;color:#475569;border:1px solid #fff;flex-shrink:0;}
+        .grp-seenav img{width:100%;height:100%;object-fit:cover;}
         .input-row{display:flex;gap:8px;align-items:flex-end;}
         .msg-input{flex:1;padding:10px 14px;border:1.5px solid var(--border);border-radius:12px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;resize:none;max-height:120px;min-height:42px;transition:border-color 0.2s;line-height:1.5;}
         .msg-input:focus{border-color:var(--blue);}
@@ -545,9 +548,24 @@ function updateTypingIndicator(typing) {
     else if (typing) { label = (activeName || 'Someone') + ' is typing'; }
     el.innerHTML = label ? `${escAttr(label)} <span class="typing-dots"><i></i><i></i><i></i></span>` : '';
 }
-function chatSeenSig(msgs) { for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].sender_id === myId) return msgs[i].id + (msgs[i].is_read ? '1' : '0'); } return ''; }
+let _grpReaders = [];
+function chatSeenSig(msgs) {
+    if (activeType === 'group') {
+        const last = msgs.length ? msgs[msgs.length - 1] : null;
+        return (last ? last.id : '') + '|' + (_grpReaders || []).map(r => r.id + ':' + (r.last_read_at || '')).join(',');
+    }
+    for (let i = msgs.length - 1; i >= 0; i--) { if (msgs[i].sender_id === myId) return msgs[i].id + (msgs[i].is_read ? '1' : '0'); }
+    return '';
+}
 function chatSeenHtml(msgs) {
-    if (activeType === 'group') return '';
+    if (!msgs.length) return '';
+    if (activeType === 'group') {
+        const last = msgs[msgs.length - 1];
+        const seen = (_grpReaders || []).filter(r => r.id !== String(last.sender_id) && r.last_read_at && new Date(r.last_read_at) >= new Date(last.created_at));
+        if (!seen.length) return '';
+        const avs = seen.slice(0, 12).map(r => `<span class="grp-seenav" title="${escAttr(r.name)}">${avImg(r.avatar_url, r.name)}</span>`).join('');
+        return `<div class="grp-seen" title="Seen by ${escAttr(seen.map(r => r.name).join(', '))}">${avs}</div>`;
+    }
     for (let i = msgs.length - 1; i >= 0; i--) {
         if (msgs[i].sender_id === myId) return msgs[i].is_read ? `<div class="msg-seen">Seen${msgs[i].read_at ? ' ' + fmtTime(new Date(msgs[i].read_at)) : ''}</div>` : '';
     }
@@ -560,6 +578,7 @@ async function loadMessages() {
 
     const msgs = res.data || [];
     updateTypingIndicator(res.typing);
+    _grpReaders = res.readers || [];
     const newestId = msgs.length ? msgs[msgs.length - 1].id : null;
     const seenSig = chatSeenSig(msgs);
     if (msgs.length === lastMsgCount && newestId === lastNewestId && olderMsgs.length === 0 && seenSig === lastSeenSig) return;

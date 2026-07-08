@@ -209,6 +209,9 @@
         '.ppm-dots i:nth-child(2){animation-delay:.2s;} .ppm-dots i:nth-child(3){animation-delay:.4s;}',
         '@keyframes ppmdot{0%,60%,100%{opacity:.3;transform:translateY(0);}30%{opacity:1;transform:translateY(-2px);}}',
         '.ppm-seen{text-align:right;font-size:10px;color:#94a3b8;padding:1px 4px 4px;font-weight:600;}',
+        '.ppm-seengrp{display:flex;justify-content:flex-end;gap:2px;padding:2px 4px 5px;}',
+        '.ppm-seenav{width:15px;height:15px;border-radius:50%;overflow:hidden;background:#cbd5e1;display:inline-flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#475569;border:1px solid #fff;flex-shrink:0;}',
+        '.ppm-seenav img{width:100%;height:100%;object-fit:cover;}',
         '.ppm-ta{flex:1;resize:none;border:1px solid #e2e8f0;border-radius:18px;padding:8px 12px;font-size:13px;max-height:90px;outline:none;font-family:inherit;}',
         '.ppm-ta:focus{border-color:#0369a1;}',
         '.ppm-send{width:36px;height:36px;border-radius:50%;border:none;background:#0369a1;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;}',
@@ -738,6 +741,9 @@
                 var rsig = REACT_ORDER.map(function (k) { return rc[k] || 0; }).join('.');
                 return m.id + (m.edited_at || '') + (m.deleted_at || '') + (m.image_url || '') + rsig + (m.my_reaction || '') + (m.is_read ? '1' : '0');
             }).join(',');
+            if (win.kind === 'group' && r.readers) {   // group seen-by changes → re-render
+                sig += '|R:' + r.readers.map(function (x) { return x.id + ':' + (x.last_read_at || ''); }).join(',');
+            }
             var changed = sig !== win.lastSig;
             // Soft buzz when a new message arrives inside an open window from someone else.
             if (changed && win.lastSig && msgs.length) {
@@ -766,7 +772,7 @@
                     '<div class="ppm-b ' + (mine ? 'me' : 'them') + '">' + bubbleInner + acts + '</div>' +
                     reactsHtml(m) +
                     '<div class="ppm-bt">' + fmtTime(m.created_at) + (m.edited_at ? ' · edited' : '') + '</div></div>';
-            }).join('') + seenHtml(win, msgs);
+            }).join('') + seenHtml(win, msgs, r.readers);
             if (scroll || nearBottom) box.scrollTop = box.scrollHeight;
         });
     }
@@ -793,14 +799,24 @@
         if (label) { bar.innerHTML = label + ' <span class="ppm-dots"><i></i><i></i><i></i></span>'; bar.style.display = 'flex'; }
         else bar.style.display = 'none';
     }
-    function seenHtml(win, msgs) {
-        if (win.kind !== 'dm') return '';   // DM read receipts only
-        for (var i = msgs.length - 1; i >= 0; i--) {
-            if (String(msgs[i].sender_id) === UID) {
-                return msgs[i].is_read ? '<div class="ppm-seen">Seen' + (msgs[i].read_at ? ' ' + fmtTime(msgs[i].read_at) : '') + '</div>' : '';
+    function seenHtml(win, msgs, readers) {
+        if (!msgs.length) return '';
+        if (win.kind === 'dm') {
+            for (var i = msgs.length - 1; i >= 0; i--) {
+                if (String(msgs[i].sender_id) === UID) {
+                    return msgs[i].is_read ? '<div class="ppm-seen">Seen' + (msgs[i].read_at ? ' ' + fmtTime(msgs[i].read_at) : '') + '</div>' : '';
+                }
             }
+            return '';
         }
-        return '';
+        // group: avatars of members who've seen the last message (excludes me + sender)
+        var last = msgs[msgs.length - 1];
+        var seen = (readers || []).filter(function (r) {
+            return String(r.id) !== String(last.sender_id) && r.last_read_at && new Date(r.last_read_at) >= new Date(last.created_at);
+        });
+        if (!seen.length) return '';
+        var avs = seen.slice(0, 12).map(function (r) { return '<span class="ppm-seenav" title="' + esc(r.name) + '">' + avInner(r.avatar_url, r.name) + '</span>'; }).join('');
+        return '<div class="ppm-seengrp" title="Seen by ' + esc(seen.map(function (r) { return r.name; }).join(', ')) + '">' + avs + '</div>';
     }
 
     function doSend(win) {
