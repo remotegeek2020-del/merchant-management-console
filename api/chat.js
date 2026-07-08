@@ -124,7 +124,7 @@ export default async function handler(req, res) {
                 if (self) me = { status: self.chat_status || 'available', thought: freshThought(self) };
             }
 
-            const partnerUsers = (partners||[]).map(p => ({
+            const partnerUsers = (partners||[]).filter(p => String(p.id) !== String(sender_id)).map(p => ({
                 id: p.id,
                 name: p.full_name,
                 role: 'Partner',
