@@ -47,10 +47,12 @@ export default async function handler(req, res) {
     }
 
     try {
-        // Heartbeat — update last_seen (staff) or last_portal_login (partner)
+        // Heartbeat — update last_seen (staff) or last_portal_login (partner).
+        // Must be awaited: on serverless, a fire-and-forget write is dropped when the
+        // function freezes, so the partner's presence went stale after login.
         if (sender_id && action !== 'logout') {
             if (isPartner) {
-                supabase.from('persons').update({ last_portal_login: new Date().toISOString() }).eq('id', sender_id);
+                await supabase.from('persons').update({ last_portal_login: new Date().toISOString() }).eq('id', sender_id);
             } else {
                 await supabase.from('app_users').update({ last_seen: new Date().toISOString() }).eq('userid', sender_id);
             }
