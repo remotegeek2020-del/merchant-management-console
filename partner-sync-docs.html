@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Partner Sync API (HighLevel → Zapier) | PayProTec</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  :root{--navy:#001e3c;--blue:#004990;--border:#e2e8f0;--surface:#f8fafc;--text:#0a1628;--muted:#64748b;--green:#16a34a;--amber:#b45309;}
+  body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);-webkit-font-smoothing:antialiased;line-height:1.6;}
+  .wrap{max-width:860px;margin:0 auto;padding:36px 22px 80px;}
+  h1{font-size:26px;font-weight:800;margin:0 0 4px;}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:26px;}
+  h2{font-size:18px;font-weight:800;margin:34px 0 10px;padding-top:10px;border-top:1px solid var(--border);}
+  h3{font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:18px 0 6px;}
+  p{font-size:14px;}
+  code{font-family:'DM Mono',monospace;background:#eef2f7;padding:1px 6px;border-radius:5px;font-size:13px;}
+  pre{background:#0a1628;color:#e2e8f0;padding:14px 16px;border-radius:10px;overflow-x:auto;font-family:'DM Mono',monospace;font-size:12.5px;line-height:1.55;}
+  pre .k{color:#7dd3fc;} pre .s{color:#86efac;} pre .c{color:#64748b;}
+  table{width:100%;border-collapse:collapse;margin:8px 0 4px;font-size:13px;}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:top;}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);}
+  td code{font-size:12px;}
+  .pill{display:inline-block;font-family:'DM Mono',monospace;font-weight:700;font-size:11px;padding:2px 8px;border-radius:6px;color:#fff;margin-right:8px;}
+  .get{background:#0369a1;} .post{background:#16a34a;} .put{background:#b45309;} .del{background:#dc2626;}
+  .ep{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin:12px 0;}
+  .ep .path{font-family:'DM Mono',monospace;font-weight:600;font-size:14px;}
+  .note{background:#fffbeb;border:1px solid #fde68a;color:#92400e;border-radius:10px;padding:12px 14px;font-size:13px;margin:14px 0;}
+  .ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534;border-radius:10px;padding:12px 14px;font-size:13px;margin:14px 0;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Partner Sync API</h1>
+  <div class="sub">Create, update, read, and deactivate partners from an external system (HighLevel form → Zapier → this endpoint). Everything is keyed by the <b>HighLevel contact id</b>.</div>
+
+  <div class="ok"><b>One endpoint, four verbs.</b> Base URL: <code>https://portal.mypayprotec.com/api/partner-sync</code></div>
+
+  <h2>Authentication</h2>
+  <p>Send the shared secret on every request as the <code>x-api-key</code> header (or <code>Authorization: Bearer &lt;key&gt;</code>). The secret is stored server-side as the Vercel env var <code>PARTNER_SYNC_KEY</code>.</p>
+  <pre><span class="k">x-api-key</span>: psk_live_your_secret_here</pre>
+  <div class="note">Keep this secret private — anyone with it can create/modify partners. Rotate it by changing <code>PARTNER_SYNC_KEY</code> in Vercel.</div>
+
+  <h2>The unique key</h2>
+  <p>Every request identifies the partner by <code>hl_contact_id</code> (the HighLevel contact id). It maps to <code>persons.hl_contact_id</code> in the app — the single dedup key. If a partner with that id exists, writes update it; otherwise they create it.</p>
+
+  <h2>Fields</h2>
+  <table>
+    <tr><th>Field</th><th>Maps to</th><th>Notes</th></tr>
+    <tr><td><code>hl_contact_id</code> <b>*</b></td><td>persons.hl_contact_id</td><td>Required on every call. The unique key.</td></tr>
+    <tr><td><code>full_name</code></td><td>persons.full_name</td><td>Required when creating a brand-new partner.</td></tr>
+    <tr><td><code>email</code></td><td>persons.email</td><td>Optional.</td></tr>
+    <tr><td><code>phone</code></td><td>persons.phone_number</td><td>Optional.</td></tr>
+    <tr><td><code>business_name</code></td><td>companies.company_name</td><td>The partner's company. Same name = same company record. Blank = independent.</td></tr>
+    <tr><td><code>agent_ids</code></td><td>agent_identifiers.id_string</td><td>One or many. Comma-separated string <b>or</b> an array (see below).</td></tr>
+    <tr><td><code>prime49</code></td><td>agent_identifiers.prime49</td><td>true/false (also yes/no, 1/0). Applies to all <code>agent_ids</code> in the request.</td></tr>
+    <tr><td><code>rev_share</code></td><td>agent_identifiers.rev_share</td><td>Percent (default <code>50</code>). Applies to all <code>agent_ids</code>.</td></tr>
+  </table>
+  <h3>Agent IDs — accepted formats</h3>
+  <pre><span class="c">// simplest — comma-separated, one prime49 + rev_share for all</span>
+<span class="k">"agent_ids"</span>: <span class="s">"AGENT001, AGENT002"</span>, <span class="k">"prime49"</span>: true, <span class="k">"rev_share"</span>: 50
+
+<span class="c">// or an array of strings</span>
+<span class="k">"agent_ids"</span>: [<span class="s">"AGENT001"</span>, <span class="s">"AGENT002"</span>]
+
+<span class="c">// or per-ID objects (advanced — different prime49/rev_share per ID)</span>
+<span class="k">"agent_ids"</span>: [{<span class="k">"id_string"</span>:<span class="s">"AGENT001"</span>,<span class="k">"prime49"</span>:true,<span class="k">"rev_share"</span>:50}]</pre>
+
+  <h2>Endpoints</h2>
+
+  <div class="ep">
+    <div><span class="pill get">GET</span><span class="path">/api/partner-sync?hl_contact_id=&lt;id&gt;</span></div>
+    <p>Read a partner: name, email, phone, business name, agent IDs (with prime49 + rev_share + status), portal status.</p>
+    <pre>curl <span class="s">"https://portal.mypayprotec.com/api/partner-sync?hl_contact_id=ABC123"</span> \
+  -H <span class="s">"x-api-key: psk_live_your_secret"</span></pre>
+  </div>
+
+  <div class="ep">
+    <div><span class="pill post">POST</span><span class="pill put">PUT</span><span class="path">/api/partner-sync</span></div>
+    <p>Create-or-update (idempotent). POST and PUT behave the same — you never have to know if the partner already exists. Returns <code>201</code> on create, <code>200</code> on update.</p>
+    <pre>curl -X POST <span class="s">"https://portal.mypayprotec.com/api/partner-sync"</span> \
+  -H <span class="s">"x-api-key: psk_live_your_secret"</span> \
+  -H <span class="s">"Content-Type: application/json"</span> \
+  -d '{
+    <span class="k">"hl_contact_id"</span>: <span class="s">"ABC123"</span>,
+    <span class="k">"full_name"</span>: <span class="s">"Jerry Pierce"</span>,
+    <span class="k">"email"</span>: <span class="s">"jerry@alt-pay.net"</span>,
+    <span class="k">"business_name"</span>: <span class="s">"Alt-Pay LLC"</span>,
+    <span class="k">"agent_ids"</span>: <span class="s">"AGENT001, AGENT002"</span>,
+    <span class="k">"prime49"</span>: true,
+    <span class="k">"rev_share"</span>: 50
+  }'</pre>
+  </div>
+
+  <div class="ep">
+    <div><span class="pill del">DELETE</span><span class="path">/api/partner-sync?hl_contact_id=&lt;id&gt;</span></div>
+    <p><b>Soft delete</b> — the partner's agent IDs are set to <code>inactive</code>, portal access is disabled, and any live sessions are ended. The record and its history are kept (merchants stay linked). Reversible by sending a POST/PUT again.</p>
+    <pre>curl -X DELETE <span class="s">"https://portal.mypayprotec.com/api/partner-sync?hl_contact_id=ABC123"</span> \
+  -H <span class="s">"x-api-key: psk_live_your_secret"</span></pre>
+  </div>
+
+  <h2>Responses</h2>
+  <pre><span class="c">// success</span>
+{ <span class="k">"success"</span>: true, <span class="k">"data"</span>: {
+    <span class="k">"hl_contact_id"</span>: <span class="s">"ABC123"</span>,
+    <span class="k">"full_name"</span>: <span class="s">"Jerry Pierce"</span>,
+    <span class="k">"business_name"</span>: <span class="s">"Alt-Pay LLC"</span>,
+    <span class="k">"is_portal_active"</span>: true,
+    <span class="k">"agent_ids"</span>: [{ <span class="k">"id_string"</span>:<span class="s">"AGENT001"</span>, <span class="k">"prime49"</span>:true, <span class="k">"rev_share"</span>:<span class="s">"50"</span>, <span class="k">"status"</span>:<span class="s">"active"</span> }]
+} }
+
+<span class="c">// error</span>
+{ <span class="k">"success"</span>: false, <span class="k">"error"</span>: { <span class="k">"code"</span>:<span class="s">"NOT_FOUND"</span>, <span class="k">"message"</span>:<span class="s">"No partner found…"</span> } }</pre>
+  <table>
+    <tr><th>Status</th><th>Meaning</th></tr>
+    <tr><td><code>200</code></td><td>OK (read / updated / deactivated)</td></tr>
+    <tr><td><code>201</code></td><td>Created (new partner)</td></tr>
+    <tr><td><code>401</code></td><td>Missing / wrong <code>x-api-key</code></td></tr>
+    <tr><td><code>404</code></td><td>No partner for that <code>hl_contact_id</code> (GET/DELETE)</td></tr>
+    <tr><td><code>400</code></td><td>Missing required field (e.g. <code>hl_contact_id</code>, or <code>full_name</code> on create)</td></tr>
+  </table>
+
+  <h2>Zapier setup</h2>
+  <p>Use a <b>Webhooks by Zapier → Custom Request</b> action:</p>
+  <table>
+    <tr><th>Setting</th><th>Value</th></tr>
+    <tr><td>Method</td><td><code>POST</code> (create/update) · <code>GET</code> · <code>DELETE</code></td></tr>
+    <tr><td>URL</td><td><code>https://portal.mypayprotec.com/api/partner-sync</code></td></tr>
+    <tr><td>Data Pass-Through?</td><td>No — send JSON</td></tr>
+    <tr><td>Data</td><td>Map HighLevel fields → <code>hl_contact_id</code>, <code>full_name</code>, <code>business_name</code>, <code>agent_ids</code>, <code>prime49</code>, <code>rev_share</code></td></tr>
+    <tr><td>Headers</td><td><code>x-api-key</code> : <i>your secret</i> &nbsp;·&nbsp; <code>Content-Type</code> : <code>application/json</code></td></tr>
+  </table>
+  <div class="note"><b>Note:</b> This syncs partner <i>data</i> (person, company, agent IDs, prime49). It does <b>not</b> send a portal invite / set a login password — do that from the staff dashboard when you're ready to give the partner portal access.</div>
+</div>
+</body>
+</html>
