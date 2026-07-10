@@ -7,7 +7,9 @@
 //        Set PARTNER_SYNC_KEY in the Vercel env.
 //
 // Data model:
-//   persons            — the partner            (hl_contact_id = unique key)
+//   persons            — the partner            (hl_contact_id = unique key; enrolled_at =
+//                                                  "Partner Activation Date" shown in the
+//                                                  staff dashboard — same field, no new column)
 //   companies          — business name          (company_name)
 //   agents             — links person ↔ company (parent_agent_id → persons.id)
 //   agent_identifiers  — the Agent IDs          (id_string unique, prime49, rev_share)
@@ -30,6 +32,13 @@ function toBool(v) {
     if (v === false || v == null) return false;
     const s = String(v).trim().toLowerCase();
     return s === 'true' || s === 'yes' || s === 'y' || s === '1' || s === 'prime49' || s === 'prime 49';
+}
+
+// Normalizes a date-ish value (HighLevel sends ISO strings or millis) to YYYY-MM-DD, or null.
+function toDateOnly(v) {
+    if (v == null || v === '') return null;
+    const d = typeof v === 'number' || /^\d+$/.test(String(v)) ? new Date(Number(v)) : new Date(v);
+    return isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
 }
 
 // Accepts: "A1, A2"  |  ["A1","A2"]  |  [{id_string, prime49, rev_share}, …]
@@ -76,6 +85,7 @@ async function readPartner(person) {
         email: person.email,
         phone: person.phone_number,
         is_portal_active: !!person.is_portal_active,
+        activation_date: person.enrolled_at ? String(person.enrolled_at).slice(0, 10) : null,   // "Partner Activation Date" in the staff dashboard
         business_name: businessNames[0] || null,
         business_names: businessNames,
         agent_ids: identifiers.map(i => ({ id_string: i.id_string, prime49: !!i.prime49, rev_share: i.rev_share, status: i.status }))
@@ -130,6 +140,9 @@ export default async function handler(req, res) {
             const email = (body.email || '').trim().toLowerCase() || null;
             const phone = (body.phone || body.phone_number || '').trim() || null;
             const businessName = (body.business_name || body.company || body.company_name || '').trim();
+            // "Agent Approval Date" from HighLevel = the same field the staff dashboard calls
+            // "Partner Activation Date" (persons.enrolled_at) — no separate column needed.
+            const activationDate = toDateOnly(body.approved_date || body.approval_date || body.activation_date);
             const defPrime49 = toBool(body.prime49);
             const defRev = (body.rev_share != null && body.rev_share !== '') ? String(body.rev_share).replace(/%/g, '').trim() : '50';
             const agentIdList = parseAgentIds(body.agent_ids != null ? body.agent_ids : body.agent_id, defPrime49, defRev);
@@ -142,6 +155,7 @@ export default async function handler(req, res) {
                 if (fullName) patch.full_name = fullName;
                 if (email) patch.email = email;
                 if (phone) patch.phone_number = phone;
+                if (activationDate) patch.enrolled_at = activationDate;   // only touch it if the caller sent one
                 if (Object.keys(patch).length) {
                     const { data: updated, error: uErr } = await supabase.from('persons').update(patch).eq('id', existing.id).select().single();
                     if (uErr) return err(res, 'Person update failed: ' + uErr.message, 400, 'PERSON_UPDATE_FAILED');
@@ -149,7 +163,7 @@ export default async function handler(req, res) {
                 } else person = existing;
             } else {
                 if (!fullName) return err(res, 'full_name is required to create a new partner.', 400, 'MISSING_PARAM');
-                const rec = { full_name: fullName, hl_contact_id: hl, phone_number: phone, enrolled_at: new Date().toISOString() };
+                const rec = { full_name: fullName, hl_contact_id: hl, phone_number: phone, enrolled_at: activationDate || new Date().toISOString() };
                 if (email) rec.email = email;
                 const { data: inserted, error: iErr } = await supabase.from('persons').insert(rec).select().single();
                 if (iErr) return err(res, 'Person create failed: ' + iErr.message, 400, 'PERSON_CREATE_FAILED');
@@ -189,7 +203,7 @@ export default async function handler(req, res) {
             supabase.from('activity_logs').insert({
                 email: 'partner-sync', action: `Partner sync (${existing ? 'update' : 'create'}): ${person.full_name}`,
                 status: 'success', category: 'partners', target_id: person.id, target_type: 'person', severity: 'info',
-                new_value: { hl_contact_id: hl, business_name: businessName || null, agent_ids: agentIdList, source: 'partner-sync' },
+                new_value: { hl_contact_id: hl, business_name: businessName || null, agent_ids: agentIdList, activation_date: activationDate, source: 'partner-sync' },
                 ip_address: req.headers['x-forwarded-for'] || 'zapier'
             }).then(() => {}, () => {});
 

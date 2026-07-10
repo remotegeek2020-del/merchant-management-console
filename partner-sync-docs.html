@@ -44,6 +44,7 @@
 
   <h2>The unique key</h2>
   <p>Every request identifies the partner by <code>hl_contact_id</code> (the HighLevel contact id). It maps to <code>persons.hl_contact_id</code> in the app — the single dedup key. If a partner with that id exists, writes update it; otherwise they create it.</p>
+  <div class="ok"><b>No separate "search" step needed in Zapier.</b> A single <code>POST</code> already does search-then-create-or-update: if the <code>hl_contact_id</code> is found, it updates that partner (adds/updates agent IDs, prime49, approval date, company); if not found, it creates the partner, company, agent IDs, and prime49/approval in one call. Just send the same POST every time the HighLevel form fires — no branching/lookup logic required in your Zap.</div>
 
   <h2>Fields</h2>
   <table>
@@ -56,6 +57,7 @@
     <tr><td><code>agent_ids</code></td><td>agent_identifiers.id_string</td><td>One or many. Comma-separated string <b>or</b> an array (see below).</td></tr>
     <tr><td><code>prime49</code></td><td>agent_identifiers.prime49</td><td>true/false (also yes/no, 1/0). Applies to all <code>agent_ids</code> in the request.</td></tr>
     <tr><td><code>rev_share</code></td><td>agent_identifiers.rev_share</td><td>Percent (default <code>50</code>). Applies to all <code>agent_ids</code>.</td></tr>
+    <tr><td><code>approved_date</code> <span style="color:var(--muted);">(alias: <code>approval_date</code>, <code>activation_date</code>)</span></td><td>persons.enrolled_at</td><td>HighLevel's "Agent Approval Date" — this is the same field the staff dashboard calls <b>Partner Activation Date</b>. Accepts an ISO date/datetime. On create, defaults to today if omitted; on update, only touched when you send a value.</td></tr>
   </table>
   <h3>Agent IDs — accepted formats</h3>
   <pre><span class="c">// simplest — comma-separated, one prime49 + rev_share for all</span>
@@ -89,7 +91,8 @@
     <span class="k">"business_name"</span>: <span class="s">"Alt-Pay LLC"</span>,
     <span class="k">"agent_ids"</span>: <span class="s">"AGENT001, AGENT002"</span>,
     <span class="k">"prime49"</span>: true,
-    <span class="k">"rev_share"</span>: 50
+    <span class="k">"rev_share"</span>: 50,
+    <span class="k">"approved_date"</span>: <span class="s">"2026-07-08"</span>
   }'</pre>
   </div>
 
@@ -107,6 +110,7 @@
     <span class="k">"full_name"</span>: <span class="s">"Jerry Pierce"</span>,
     <span class="k">"business_name"</span>: <span class="s">"Alt-Pay LLC"</span>,
     <span class="k">"is_portal_active"</span>: true,
+    <span class="k">"activation_date"</span>: <span class="s">"2026-07-08"</span>,
     <span class="k">"agent_ids"</span>: [{ <span class="k">"id_string"</span>:<span class="s">"AGENT001"</span>, <span class="k">"prime49"</span>:true, <span class="k">"rev_share"</span>:<span class="s">"50"</span>, <span class="k">"status"</span>:<span class="s">"active"</span> }]
 } }
 
@@ -121,17 +125,25 @@
     <tr><td><code>400</code></td><td>Missing required field (e.g. <code>hl_contact_id</code>, or <code>full_name</code> on create)</td></tr>
   </table>
 
-  <h2>Zapier setup</h2>
-  <p>Use a <b>Webhooks by Zapier → Custom Request</b> action:</p>
+  <h2>The end-to-end flow</h2>
+  <p>This is a <b>trigger → transform → write</b> pipeline, all happening in Zapier before it ever touches the portal:</p>
+  <ol style="font-size:14px;">
+    <li><b>Trigger:</b> the HighLevel form submission fires a webhook into Zapier (HighLevel's native trigger, or a Webhook step on the form/workflow).</li>
+    <li><b>Transform:</b> inside the Zap, map the HighLevel custom fields (Agent IDs, Business Name, Prime49, Approval Date, etc.) onto this API's field names.</li>
+    <li><b>Write:</b> a <b>Webhooks by Zapier → Custom Request</b> action sends that mapped JSON to <code>POST /api/partner-sync</code> on the portal, which does the actual search-or-create/update in the database.</li>
+  </ol>
+  <p>Nothing about HighLevel's field structure needs to match the portal's schema — Zapier is where you translate one into the other. The portal side only ever sees the field names below.</p>
+
+  <h3>Custom Request settings</h3>
   <table>
     <tr><th>Setting</th><th>Value</th></tr>
     <tr><td>Method</td><td><code>POST</code> (create/update) · <code>GET</code> · <code>DELETE</code></td></tr>
     <tr><td>URL</td><td><code>https://portal.mypayprotec.com/api/partner-sync</code></td></tr>
     <tr><td>Data Pass-Through?</td><td>No — send JSON</td></tr>
-    <tr><td>Data</td><td>Map HighLevel fields → <code>hl_contact_id</code>, <code>full_name</code>, <code>business_name</code>, <code>agent_ids</code>, <code>prime49</code>, <code>rev_share</code></td></tr>
+    <tr><td>Data</td><td>Map HighLevel fields → <code>hl_contact_id</code>, <code>full_name</code>, <code>business_name</code>, <code>agent_ids</code>, <code>prime49</code>, <code>rev_share</code>, <code>approved_date</code></td></tr>
     <tr><td>Headers</td><td><code>x-api-key</code> : <i>your secret</i> &nbsp;·&nbsp; <code>Content-Type</code> : <code>application/json</code></td></tr>
   </table>
-  <div class="note"><b>Note:</b> This syncs partner <i>data</i> (person, company, agent IDs, prime49). It does <b>not</b> send a portal invite / set a login password — do that from the staff dashboard when you're ready to give the partner portal access.</div>
+  <div class="note"><b>Note:</b> This syncs partner <i>data</i> only (person, company, agent IDs, prime49, activation date). It does <b>not</b> send a portal invite / set a login password — do that from the staff dashboard when you're ready to give the partner portal access.</div>
 </div>
 </body>
 </html>
