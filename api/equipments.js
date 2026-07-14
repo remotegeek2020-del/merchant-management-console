@@ -239,23 +239,25 @@ if (action === 'getMonthlyReport') {
                 .select('name, sort_order, is_active')
                 .order('sort_order', { ascending: true, nullsFirst: false })
                 .order('name', { ascending: true });
-            const includeEmpty = req.body.include_empty === true;   // show 0-stock managed types too
             const row = (name, s, isManaged) => ({ type: name, count: s.total, total: s.total, office: s.office, repairs: s.repairs, deployed: s.deployed, retired: s.retired, other: s.other, managed: isManaged });
             const ZERO = { total: 0, office: 0, repairs: 0, deployed: 0, retired: 0, other: 0 };
-            const out = [];
+            // Every active type from the Terminal Manager, in its sort_order — split so
+            // in-stock types are listed first, then the empty ones (still shown).
+            const withStock = [], empty = [];
             const seen = new Set();
             (managed || []).forEach(m => {
                 const name = (m.name || '').trim();
                 if (!name || m.is_active === false || seen.has(name.toLowerCase())) return;
-                seen.add(name.toLowerCase());   // mark as managed so it isn't re-added as an orphan
+                seen.add(name.toLowerCase());
                 const s = stats[name] || ZERO;
-                if (s.total > 0 || includeEmpty) out.push(row(name, s, true));
+                (s.total > 0 ? withStock : empty).push(row(name, s, true));
             });
-            // Orphan types present in inventory but not in the manager
-            Object.keys(stats)
+            // Orphan types present in inventory but not in the manager (currently none, but safe)
+            const orphans = Object.keys(stats)
                 .filter(t => !seen.has(t.toLowerCase()))
                 .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-                .forEach(t => out.push(row(t, stats[t], false)));
+                .map(t => row(t, stats[t], false));
+            const out = [...withStock, ...orphans, ...empty];
             return res.status(200).json({ success: true, data: out });
         }
 
