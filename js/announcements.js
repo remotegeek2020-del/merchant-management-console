@@ -29,6 +29,7 @@
     if (window.__ppAnnLoaded) return; window.__ppAnnLoaded = true;
 
     var SNOOZE_KEY = 'pp_ann_snooze';                         // localStorage: {id: epochMs closed}
+    var PERM_KEY = 'pp_ann_dismissed';                        // localStorage: [ids] permanently dismissed
     var DEFAULT_FREQ_MIN = 5;                                 // fallback re-show cadence (minutes)
     var cardWrap = null, cardList = [], cardIdx = 0;
     var floatList = [], floatIdx = 0, floatEl = null;
@@ -53,6 +54,12 @@
     function snooze(id) { try { var m = snoozeMap(); m[id] = Date.now(); localStorage.setItem(SNOOZE_KEY, JSON.stringify(m)); } catch (e) {} }
     function freqMs(c) { var n = c && +c.reshow_minutes; return (isFinite(n) && n > 0 ? n : DEFAULT_FREQ_MIN) * 60 * 1000; }
     function isSnoozed(c) { var m = snoozeMap(); return m[c.id] && (Date.now() - m[c.id]) < freqMs(c); }
+
+    // Permanent dismiss (checkbox / "until action" click) — remembered locally so the
+    // ad never returns on this browser, independent of server round-trips / re-polls.
+    function permList() { try { return JSON.parse(localStorage.getItem(PERM_KEY) || '[]'); } catch (e) { return []; } }
+    function permAdd(id) { try { var a = permList(); if (a.indexOf(id) === -1) { a.push(id); localStorage.setItem(PERM_KEY, JSON.stringify(a)); } } catch (e) {} }
+    function isPerm(id) { return permList().indexOf(id) !== -1; }
 
     // ── shared CSS ────────────────────────────────────────────────────────────
     function injectCss() {
@@ -106,7 +113,7 @@
     // ── homepage cards ────────────────────────────────────────────────────────
     function renderCards() {
         if (!cardWrap) return;
-        var visible = cardList.filter(function (c) { return !isSnoozed(c); });
+        var visible = cardList.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });
         if (!visible.length) { cardWrap.style.display = 'none'; cardWrap.innerHTML = ''; shownCardId = null; return; }
         if (cardIdx >= visible.length) cardIdx = 0;
         var c = visible[cardIdx];
@@ -147,7 +154,7 @@
     function floatVisible() {
         // Don't float a campaign that is already shown as a card on THIS page.
         var cardIds = {}; cardList.forEach(function (c) { cardIds[c.id] = 1; });
-        return floatList.filter(function (c) { return !cardIds[c.id] && !isSnoozed(c); });
+        return floatList.filter(function (c) { return !cardIds[c.id] && !isPerm(c.id) && !isSnoozed(c); });
     }
 
     function renderFloat() {
@@ -184,7 +191,7 @@
     // ── global handlers ───────────────────────────────────────────────────────
     window.ppAnnClick = function (id, t) { track(id, 'click', t); };
     window.ppAnnNav = function (d) {
-        var visible = cardList.filter(function (c) { return !isSnoozed(c); });
+        var visible = cardList.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });
         cardIdx = Math.max(0, Math.min(visible.length - 1, cardIdx + d)); shownCardId = null; renderCards();
     };
     window.ppAnnFloatNav = function (d) {
@@ -196,10 +203,10 @@
     // CTA on a floating ad: count the click, open the link, and snooze (re-shows later).
     window.ppAnnCta = function (id) { track(id, 'click', 'cta'); snooze(id); shownFloatId = null; setTimeout(renderFloat, 50); };
     // "Don't show again" checkbox: the ONLY permanent dismiss.
-    window.ppAnnForget = function (id) { dismissServer(id); track(id, 'dismiss'); removeEverywhere(id); };
+    window.ppAnnForget = function (id) { permAdd(id); dismissServer(id); track(id, 'dismiss'); removeEverywhere(id); };
     // "Until they click an action" mode: clicking the CTA/hotspot counts the
     // click AND permanently dismisses (the action is the goal).
-    window.ppAnnAction = function (id, target) { track(id, 'click', target || 'cta'); dismissServer(id); removeEverywhere(id); };
+    window.ppAnnAction = function (id, target) { permAdd(id); track(id, 'click', target || 'cta'); dismissServer(id); removeEverywhere(id); };
 
     function removeEverywhere(id) {
         cardList = cardList.filter(function (c) { return c.id !== id; });
@@ -215,7 +222,7 @@
     // lives in localStorage and dismissed ones are already filtered server-side,
     // so it's safe to rebuild wholesale.
     function applyData(data) {
-        var all = Array.isArray(data) ? data : [];
+        var all = (Array.isArray(data) ? data : []).filter(function (c) { return !isPerm(c.id); });
         cardWrap = document.getElementById('staffAnnCarousel') || document.getElementById('annCarousel');
         var newCards = [], newFloat = [];
         all.forEach(function (c) {
