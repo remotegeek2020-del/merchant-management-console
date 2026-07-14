@@ -12,30 +12,47 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
-import sanitizeHtml from 'sanitize-html';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
 import { ghlListLocations, ghlLocationNames } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import * as webflow from './_webflow.js';
 
 // Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
-// sites, so this is the authoritative XSS boundary — allowlist only.
-function sanitizeBody(html) {
+// sites, so this is the authoritative XSS boundary — allowlist only. The
+// sanitizer is loaded lazily with a fallback so a missing/failed dependency can
+// never take down the whole marketing API.
+let _sanitizer = null, _sanitizerTried = false;
+async function getSanitizer() {
+    if (_sanitizerTried) return _sanitizer;
+    _sanitizerTried = true;
+    try { const m = await import('sanitize-html'); _sanitizer = m.default || m; } catch { _sanitizer = null; }
+    return _sanitizer;
+}
+async function sanitizeBody(html) {
     if (html == null) return null;
-    return sanitizeHtml(String(html), {
-        allowedTags: ['p', 'br', 'span', 'div', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
-            'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'sub', 'sup', 'pre', 'code', 'hr'],
-        allowedAttributes: { a: ['href', 'target', 'rel'], '*': ['style', 'class'] },
-        allowedSchemes: ['http', 'https', 'mailto', 'tel'],
-        allowedStyles: {
-            '*': {
-                'color': [/^.*$/], 'background-color': [/^.*$/], 'text-align': [/^(left|right|center|justify)$/],
-                'font-size': [/^\d+(px|em|rem|%)$/], 'font-weight': [/^.*$/], 'font-style': [/^.*$/],
-                'text-decoration': [/^.*$/], 'font-family': [/^.*$/], 'line-height': [/^.*$/]
-            }
-        },
-        transformTags: { 'a': sanitizeHtml.simpleTransform('a', { target: '_blank', rel: 'noopener noreferrer' }) }
-    });
+    const s = await getSanitizer();
+    if (s) {
+        return s(String(html), {
+            allowedTags: ['p', 'br', 'span', 'div', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
+                'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'sub', 'sup', 'pre', 'code', 'hr'],
+            allowedAttributes: { a: ['href', 'target', 'rel'], '*': ['style', 'class'] },
+            allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+            allowedStyles: {
+                '*': {
+                    'color': [/^.*$/], 'background-color': [/^.*$/], 'text-align': [/^(left|right|center|justify)$/],
+                    'font-size': [/^\d+(px|em|rem|%)$/], 'font-weight': [/^.*$/], 'font-style': [/^.*$/],
+                    'text-decoration': [/^.*$/], 'font-family': [/^.*$/], 'line-height': [/^.*$/]
+                }
+            },
+            transformTags: { 'a': s.simpleTransform('a', { target: '_blank', rel: 'noopener noreferrer' }) }
+        });
+    }
+    // Fallback: strip scripts, inline event handlers, and javascript:/data: URLs.
+    return String(html)
+        .replace(/<\s*(script|style|iframe|object|embed|link|meta)[\s\S]*?<\s*\/\s*\1\s*>/gi, '')
+        .replace(/<\s*(script|style|iframe|object|embed|link|meta)\b[^>]*>/gi, '')
+        .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
+        .replace(/(href|src)\s*=\s*("\s*javascript:[^"]*"|'\s*javascript:[^']*'|"\s*data:[^"]*"|'\s*data:[^']*')/gi, '$1="#"');
 }
 function newSiteKey() { return 'ss_' + randomBytes(12).toString('hex'); }
 function embedLoaderSource(origin, siteKey) {
@@ -144,10 +161,10 @@ export default async function handler(req, res) {
                 const b = req.body;
                 // Variant B body is rich-text too — sanitize it before storing.
                 let variantB = (b.variant_b && typeof b.variant_b === 'object') ? { ...b.variant_b } : {};
-                if (variantB.body_text != null) variantB.body_text = sanitizeBody(variantB.body_text);
+                if (variantB.body_text != null) variantB.body_text = await sanitizeBody(variantB.body_text);
                 const rec = {
                     title: (b.title || '').trim() || 'Untitled',
-                    body_text: sanitizeBody(b.body_text),
+                    body_text: await sanitizeBody(b.body_text),
                     image_url: b.image_url ?? null,
                     content_type: ['text', 'graphic', 'both'].includes(b.content_type) ? b.content_type : 'both',
                     cta_enabled: !!b.cta_enabled,
