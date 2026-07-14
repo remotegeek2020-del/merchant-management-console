@@ -536,6 +536,7 @@ async function editCampaign(id){
   document.getElementById('ghlSearch').value=''; onGhlScope();
   setContentType(c.content_type||'both');
   if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
+  else { document.getElementById('hotspotArea').style.display='none'; document.getElementById('hsImage').removeAttribute('src'); document.getElementById('hsList').innerHTML=''; document.getElementById('hsWrap').querySelectorAll('.hs-box').forEach(b=>b.remove()); }
   document.getElementById('editorModal').style.display='flex';
 }
 
@@ -652,6 +653,7 @@ async function saveCampaign(){
     priority: parseInt(document.getElementById('f_priority').value)||0
   };
   if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
+  if (document.getElementById('f_show_embed').checked && document.querySelector('input[name=embedScope]:checked')?.value==='specific' && !payload.embed_site_ids.length){ Swal.fire('Pick sites','Select at least one site for “Specific sites only”, or switch to “All registered sites”.','warning'); return; }
   if (document.getElementById('f_show_embed').checked && document.querySelector('input[name=ghlScope]:checked')?.value==='specific' && !payload.ghl_location_ids.length){ Swal.fire('Pick sub-accounts','Select at least one GoHighLevel sub-account, or switch to “All sub-accounts”.','warning'); return; }
   const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='Saving…';
   const r = await api(payload);

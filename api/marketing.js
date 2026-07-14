@@ -189,7 +189,7 @@ export default async function handler(req, res) {
             if (action === 'get_stats') {
                 const { id } = req.body;
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant, site_id').eq('campaign_id', id);
+                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location').eq('campaign_id', id);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
                 const impressions = rows.filter(r => r.event_type === 'impression').length;
@@ -411,12 +411,15 @@ export default async function handler(req, res) {
                 const { id, event_type } = req.body;
                 const type = ['click', 'impression', 'dismiss'].includes(event_type) ? event_type : 'click';
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant')
+                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location')
                     .eq('campaign_id', id).eq('event_type', type).order('created_at', { ascending: false });
                 const rows = ev || [];
                 const staffIds = [...new Set(rows.filter(r => r.user_type === 'staff').map(r => r.user_id).filter(Boolean))];
                 const partnerIds = [...new Set(rows.filter(r => r.user_type === 'partner').map(r => r.user_id).filter(Boolean))];
-                const info = {};   // `${type}:${id}` → {name, email}
+                const eSiteIds = [...new Set(rows.filter(r => r.site_id).map(r => r.site_id))];
+                const eLocs = [...new Set(rows.filter(r => r.ghl_location).map(r => r.ghl_location))];
+                const info = {}, sNames = {};
+                let lNames = {};
                 if (staffIds.length) {
                     const { data: su } = await supabase.from('app_users').select('userid, first_name, last_name, email').in('userid', staffIds);
                     (su || []).forEach(u => { info['staff:' + u.userid] = { name: `${u.first_name || ''} ${u.last_name || ''}`.trim(), email: u.email || '' }; });
@@ -425,9 +428,17 @@ export default async function handler(req, res) {
                     const { data: pp } = await supabase.from('persons').select('id, full_name, email').in('id', partnerIds);
                     (pp || []).forEach(p => { info['partner:' + p.id] = { name: p.full_name || '', email: p.email || '' }; });
                 }
+                if (eSiteIds.length) { const { data: ss } = await supabase.from('marketing_sites').select('id, name').in('id', eSiteIds); (ss || []).forEach(s => { sNames[s.id] = s.name || 'Site'; }); }
+                if (eLocs.length) { try { lNames = await ghlLocationNames(eLocs); } catch { lNames = {}; } }
                 const out = rows.map(r => {
+                    if (r.user_type === 'embed') {
+                        const email = String(r.user_id || '').indexOf('email:') === 0 ? String(r.user_id).slice(6) : '';
+                        const channel = r.ghl_location ? 'GHL' : 'Website';
+                        const source = r.ghl_location ? (lNames[r.ghl_location] || 'GoHighLevel sub-account') : (r.site_id ? (sNames[r.site_id] || 'Website') : 'Website');
+                        return { name: email || (r.ghl_location ? source : 'Website visitor'), email, user_type: channel, source, target: r.target || '', variant: r.variant || '', at: r.created_at };
+                    }
                     const i = info[r.user_type + ':' + r.user_id] || { name: '', email: '' };
-                    return { name: i.name || (r.user_type === 'partner' ? 'Partner' : 'Staff'), email: i.email, user_type: r.user_type, target: r.target || '', variant: r.variant || '', at: r.created_at };
+                    return { name: i.name || (r.user_type === 'partner' ? 'Partner' : 'Staff'), email: i.email, user_type: r.user_type === 'partner' ? 'Partner' : 'Staff', source: r.user_type === 'partner' ? 'Partner portal' : 'Staff portal', target: r.target || '', variant: r.variant || '', at: r.created_at };
                 });
                 return ok(res, out);
             }

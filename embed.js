@@ -74,7 +74,12 @@
     }
     var GHL_LOC = ghlLocation();
 
-    function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+    function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
+    // Only allow safe link schemes (blocks javascript:/data: URLs).
+    function safeUrl(u) { u = String(u == null ? '' : u).trim(); return /^(https?:|mailto:|tel:|\/|#)/i.test(u) ? u : '#'; }
+    function num(n) { n = parseFloat(n); return isFinite(n) ? n : 0; }
+    // Sanitize a value used inside a JS string in an inline handler.
+    function jsArg(s) { return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]/g, ''); }
     function api(body) {
         body.site_key = SITE_KEY; body.viewer_id = VIEWER; if (GHL_LOC) body.ghl_location = GHL_LOC;
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
@@ -137,20 +142,21 @@
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var clickFn = untilAction ? '__ppxAction' : '__ppxClick';
+        var cid = jsArg(c.id);
 
         var hot = (c.hotspots || []).filter(function (h) { return h.url; }).map(function (h) {
-            return '<a class="ppx-hot" href="' + esc(h.url) + '" target="_blank" rel="noopener" style="left:' + h.x + '%;top:' + h.y + '%;width:' + h.w + '%;height:' + h.h + '%;" onclick="' + clickFn + '(\'' + c.id + '\',\'' + esc(h.id || 'hotspot') + '\')"></a>';
+            return '<a class="ppx-hot" href="' + esc(safeUrl(h.url)) + '" target="_blank" rel="noopener" style="left:' + num(h.x) + '%;top:' + num(h.y) + '%;width:' + num(h.w) + '%;height:' + num(h.h) + '%;" onclick="' + clickFn + '(\'' + cid + '\',\'' + jsArg(h.id || 'hotspot') + '\')"></a>';
         }).join('');
 
         var html = '<div class="ppx-modal">';
         html += '<button class="ppx-x" onclick="__ppxClose()">×</button>';
-        if (showGraphic) html += '<div class="ppx-img"><img src="' + esc(c.image_url) + '" alt="">' + hot + '</div>';
+        if (showGraphic) html += '<div class="ppx-img"><img src="' + esc(safeUrl(c.image_url)) + '" alt="">' + hot + '</div>';
         html += '<div class="ppx-body">';
         if (showText && c.title) html += '<div class="ppx-title">' + esc(c.title) + '</div>';
         if (showText && c.body_text) html += '<div class="ppx-text">' + esc(c.body_text) + '</div>';
         if (c.cta_enabled && c.cta_url) {
-            var cta = untilAction ? '__ppxAction(\'' + c.id + '\',\'cta\')' : '__ppxClick(\'' + c.id + '\',\'cta\')';
-            html += '<a class="ppx-cta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
+            var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
+            html += '<a class="ppx-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
         }
         if (dismissible) html += '<label class="ppx-forget"><input type="checkbox" onchange="if(this.checked)__ppxForget()"> Don\'t show this again</label>';
         if (queue.length) html += '<div class="ppx-nav">' + queue.length + ' more announcement' + (queue.length > 1 ? 's' : '') + '</div>';

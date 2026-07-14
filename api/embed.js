@@ -101,10 +101,19 @@ export default async function handler(req, res) {
             return ok(res, out);
         }
 
+        // Only allow tracking/dismissing campaigns actually enabled for embeds,
+        // so a site-key holder can't inject events for internal-only campaigns.
+        const isEmbedCampaign = async (cid) => {
+            if (!cid) return false;
+            const { data } = await supabase.from('marketing_campaigns').select('id').eq('id', cid).eq('show_on_embed', true).maybeSingle();
+            return !!data;
+        };
+
         if (action === 'track') {
             const { campaign_id, event_type, target, variant } = body;
             if (!campaign_id || !['impression', 'click', 'dismiss'].includes(event_type)) return bad(res, 'bad params');
             if (!viewer) return ok(res, { logged: false });
+            if (!(await isEmbedCampaign(campaign_id))) return bad(res, 'Unknown campaign', 404);
             if (event_type === 'impression') {
                 const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
                 const { data: recent } = await supabase.from('marketing_events').select('id')
@@ -122,6 +131,7 @@ export default async function handler(req, res) {
         if (action === 'dismiss') {
             const { campaign_id } = body;
             if (!campaign_id || !viewer) return bad(res, 'bad params');
+            if (!(await isEmbedCampaign(campaign_id))) return bad(res, 'Unknown campaign', 404);
             await supabase.from('marketing_dismissals')
                 .upsert({ campaign_id, user_id: viewer, user_type: 'embed' }, { onConflict: 'campaign_id,user_id' });
             await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'dismiss', site_id: siteId });
