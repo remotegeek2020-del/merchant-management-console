@@ -109,6 +109,7 @@ export default async function handler(req, res) {
                     ].includes(b.display_mode)
                         ? b.display_mode
                         : (b.display_mode === 'floating' ? 'floating_dismissible' : 'card_dismissible'),
+                    reshow_minutes: Number.isFinite(+b.reshow_minutes) && +b.reshow_minutes > 0 ? Math.min(1440, Math.round(+b.reshow_minutes)) : 5,
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -228,7 +229,8 @@ export default async function handler(req, res) {
                     id: c.id, title: c.title, body_text: c.body_text, image_url: c.image_url,
                     content_type: c.content_type, cta_enabled: c.cta_enabled, cta_label: c.cta_label,
                     cta_url: c.cta_url, hotspots: c.hotspots || [], priority: c.priority,
-                    display_mode: c.display_mode || 'card_dismissible'
+                    display_mode: c.display_mode || 'card_dismissible',
+                    reshow_minutes: c.reshow_minutes || 5
                 }));
                 return ok(res, out);
             }

@@ -29,7 +29,7 @@
     if (window.__ppAnnLoaded) return; window.__ppAnnLoaded = true;
 
     var SNOOZE_KEY = 'pp_ann_snooze';                         // localStorage: {id: epochMs closed}
-    var FREQ_MS = 5 * 60 * 1000;                              // re-show a closed ad after 5 minutes
+    var DEFAULT_FREQ_MIN = 5;                                 // fallback re-show cadence (minutes)
     var cardWrap = null, cardList = [], cardIdx = 0;
     var floatList = [], floatIdx = 0, floatEl = null;
     var shownCardId = null, shownFloatId = null;             // to avoid re-tracking impressions
@@ -46,11 +46,13 @@
     function dismissServer(id) { api({ action: 'dismiss', campaign_id: id }).catch(function () {}); }
 
     // ── snooze (X / CTA close) ───────────────────────────────────────────────
-    // Closing an ad only hides it temporarily; it re-shows after FREQ_MS. Only the
-    // "Don't show again" checkbox hides it permanently (server-side dismiss).
+    // Closing an ad only hides it temporarily; it re-shows after the campaign's
+    // own re-show frequency (reshow_minutes). Only the "Don't show again" checkbox
+    // hides it permanently (server-side dismiss).
     function snoozeMap() { try { return JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}'); } catch (e) { return {}; } }
     function snooze(id) { try { var m = snoozeMap(); m[id] = Date.now(); localStorage.setItem(SNOOZE_KEY, JSON.stringify(m)); } catch (e) {} }
-    function isSnoozed(id) { var m = snoozeMap(); return m[id] && (Date.now() - m[id]) < FREQ_MS; }
+    function freqMs(c) { var n = c && +c.reshow_minutes; return (isFinite(n) && n > 0 ? n : DEFAULT_FREQ_MIN) * 60 * 1000; }
+    function isSnoozed(c) { var m = snoozeMap(); return m[c.id] && (Date.now() - m[c.id]) < freqMs(c); }
 
     // ── shared CSS ────────────────────────────────────────────────────────────
     function injectCss() {
@@ -104,7 +106,7 @@
     // ── homepage cards ────────────────────────────────────────────────────────
     function renderCards() {
         if (!cardWrap) return;
-        var visible = cardList.filter(function (c) { return !isSnoozed(c.id); });
+        var visible = cardList.filter(function (c) { return !isSnoozed(c); });
         if (!visible.length) { cardWrap.style.display = 'none'; cardWrap.innerHTML = ''; shownCardId = null; return; }
         if (cardIdx >= visible.length) cardIdx = 0;
         var c = visible[cardIdx];
@@ -145,7 +147,7 @@
     function floatVisible() {
         // Don't float a campaign that is already shown as a card on THIS page.
         var cardIds = {}; cardList.forEach(function (c) { cardIds[c.id] = 1; });
-        return floatList.filter(function (c) { return !cardIds[c.id] && !isSnoozed(c.id); });
+        return floatList.filter(function (c) { return !cardIds[c.id] && !isSnoozed(c); });
     }
 
     function renderFloat() {
@@ -182,7 +184,7 @@
     // ── global handlers ───────────────────────────────────────────────────────
     window.ppAnnClick = function (id, t) { track(id, 'click', t); };
     window.ppAnnNav = function (d) {
-        var visible = cardList.filter(function (c) { return !isSnoozed(c.id); });
+        var visible = cardList.filter(function (c) { return !isSnoozed(c); });
         cardIdx = Math.max(0, Math.min(visible.length - 1, cardIdx + d)); shownCardId = null; renderCards();
     };
     window.ppAnnFloatNav = function (d) {

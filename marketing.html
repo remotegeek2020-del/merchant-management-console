@@ -172,6 +172,15 @@
       <div class="muted" id="displayModeHint" style="margin:-6px 0 10px;font-size:12px;"></div>
 
       <div class="row2">
+        <div>
+          <label class="fld">Re-show frequency (minutes)</label>
+          <input class="inp" id="f_reshow" type="number" min="1" max="1440" value="5">
+          <div class="muted" style="font-size:11px;margin-top:3px;">After a user closes it (X), it comes back this many minutes later. Ignored once they permanently dismiss / take the action.</div>
+        </div>
+        <div></div>
+      </div>
+
+      <div class="row2">
         <div><label class="fld">Activation date</label><input class="inp" id="f_starts" type="datetime-local"></div>
         <div><label class="fld">Expiration date</label><input class="inp" id="f_ends" type="datetime-local"></div>
       </div>
@@ -334,6 +343,7 @@ function openEditor(){
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_audience').value='partner';
   setDisplayMode('card_dismissible');
+  document.getElementById('f_reshow').value='5';
   document.getElementById('f_priority').value='0';
   document.getElementById('f_starts').value=''; document.getElementById('f_ends').value='';
   document.getElementById('f_active').checked=false;
@@ -356,6 +366,7 @@ async function editCampaign(id){
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
   document.getElementById('f_audience').value=c.audience||'partner';
   setDisplayMode(c.display_mode||'card_dismissible');
+  document.getElementById('f_reshow').value=c.reshow_minutes??5;
   document.getElementById('f_priority').value=c.priority??0;
   document.getElementById('f_starts').value=toLocalInput(c.starts_at);
   document.getElementById('f_ends').value=toLocalInput(c.ends_at);
@@ -458,6 +469,7 @@ async function saveCampaign(){
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),
+    reshow_minutes: parseInt(document.getElementById('f_reshow').value)||5,
     is_active: document.getElementById('f_active').checked,
     starts_at: fromLocalInput(document.getElementById('f_starts').value),
     ends_at: fromLocalInput(document.getElementById('f_ends').value),
