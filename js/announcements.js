@@ -91,9 +91,13 @@
         document.head.appendChild(s);
     }
 
+    function isUntilAction(c) { return /until_action$/.test(c.display_mode || ''); }
+
     function hotspotHtml(c, cls) {
+        // In "until action" mode, clicking a hotspot IS the action → permanent dismiss.
+        var fn = isUntilAction(c) ? 'ppAnnAction' : 'ppAnnClick';
         return (c.hotspots || []).filter(function (h) { return h.url; }).map(function (h) {
-            return '<a class="' + cls + '" href="' + esc(h.url) + '" target="_blank" rel="noopener" style="left:' + h.x + '%;top:' + h.y + '%;width:' + h.w + '%;height:' + h.h + '%;" title="' + esc(h.label || '') + '" onclick="ppAnnClick(\'' + c.id + '\',\'' + esc(h.id || 'hotspot') + '\')"></a>';
+            return '<a class="' + cls + '" href="' + esc(h.url) + '" target="_blank" rel="noopener" style="left:' + h.x + '%;top:' + h.y + '%;width:' + h.w + '%;height:' + h.h + '%;" title="' + esc(h.label || '') + '" onclick="' + fn + '(\'' + c.id + '\',\'' + esc(h.id || 'hotspot') + '\')"></a>';
         }).join('');
     }
 
@@ -109,7 +113,10 @@
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var dismissible = /dismissible$/.test(c.display_mode || '');
-        var canDismiss = dismissible;
+        var persistent = /persistent$/.test(c.display_mode || '');
+        var untilAction = isUntilAction(c);
+        var canDismiss = !persistent;   // persistent has no close; dismissible + until_action snooze via X
+        var ctaFn = untilAction ? 'ppAnnAction' : 'ppAnnClick';
         var html = '<div class="ppa-card">';
         if (canDismiss) html += '<button class="ppa-x" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:18px;">close</span></button>';
         if (showGraphic) html += '<div class="ppa-imgwrap"><img src="' + esc(c.image_url) + '" alt="' + esc(c.title) + '">' + hotspotHtml(c, 'ppa-hotspot') + '</div>';
@@ -117,7 +124,7 @@
             html += '<div class="ppa-body">';
             if (showText && c.title) html += '<div class="ppa-title">' + esc(c.title) + '</div>';
             if (showText && c.body_text) html += '<div class="ppa-text">' + esc(c.body_text) + '</div>';
-            if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="ppAnnClick(\'' + c.id + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
+            if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + c.id + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
             html += '</div>';
         }
         var showFoot = dismissible || visible.length > 1;
@@ -150,6 +157,7 @@
         if (floatEl && shownFloatId === c.id) return;
         if (!floatEl) { floatEl = document.createElement('div'); floatEl.className = 'ppa-float'; document.body.appendChild(floatEl); }
         var dismissible = /dismissible$/.test(c.display_mode || '');
+        var untilAction = isUntilAction(c);
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var html = '<button class="ppa-fx" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:16px;">close</span></button>';
@@ -157,11 +165,13 @@
         html += '<div class="ppa-fbody">';
         if (showText && c.title) html += '<div class="ppa-ftitle">' + esc(c.title) + '</div>';
         if (showText && c.body_text) html += '<div class="ppa-ftext">' + esc(c.body_text) + '</div>';
-        // CTA just opens the link + counts the click, then snoozes (re-shows later).
+        // until_action: CTA click is the action → permanent dismiss. Others: click
+        // just opens the link + counts, then snoozes (re-shows later).
         if (c.cta_enabled && c.cta_url) {
-            html += '<a class="ppa-fcta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="ppAnnCta(\'' + c.id + '\')">' + esc(c.cta_label || 'Learn more') + '</a>';
+            var onCta = untilAction ? 'ppAnnAction(\'' + c.id + '\',\'cta\')' : 'ppAnnCta(\'' + c.id + '\')';
+            html += '<a class="ppa-fcta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="' + onCta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
         }
-        // Only dismissible ads offer a permanent opt-out.
+        // Only dismissible ads offer a permanent opt-out checkbox.
         if (dismissible) html += '<label class="ppa-fforget"><input type="checkbox" onchange="if(this.checked)ppAnnForget(\'' + c.id + '\')"> Don\'t show this again</label>';
         html += '</div>';
         if (visible.length > 1) html += '<div class="ppa-fnav"><button onclick="ppAnnFloatNav(-1)">‹</button> ' + (floatIdx + 1) + ' / ' + visible.length + ' <button onclick="ppAnnFloatNav(1)">›</button></div>';
@@ -185,6 +195,9 @@
     window.ppAnnCta = function (id) { track(id, 'click', 'cta'); snooze(id); shownFloatId = null; setTimeout(renderFloat, 50); };
     // "Don't show again" checkbox: the ONLY permanent dismiss.
     window.ppAnnForget = function (id) { dismissServer(id); track(id, 'dismiss'); removeEverywhere(id); };
+    // "Until they click an action" mode: clicking the CTA/hotspot counts the
+    // click AND permanently dismisses (the action is the goal).
+    window.ppAnnAction = function (id, target) { track(id, 'click', target || 'cta'); dismissServer(id); removeEverywhere(id); };
 
     function removeEverywhere(id) {
         cardList = cardList.filter(function (c) { return c.id !== id; });

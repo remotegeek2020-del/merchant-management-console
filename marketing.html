@@ -165,6 +165,7 @@
           <select class="sel" id="f_behavior" onchange="updateDisplayHint()">
             <option value="dismissible">Dismissible — user can hide it for good</option>
             <option value="persistent">Persistent — always shows until it expires</option>
+            <option value="until_action">Until action — shows until they click the CTA</option>
           </select>
         </div>
       </div>
@@ -225,9 +226,9 @@ let contentType = 'both';
 
 function displayModeLabel(m){
   var map={
-    card_dismissible:'dismissible card',card_persistent:'persistent card',
-    floating_dismissible:'dismissible floating ad',floating_persistent:'persistent floating ad',
-    both_dismissible:'card + floating (dismissible)',both_persistent:'card + floating (persistent)',
+    card_dismissible:'dismissible card',card_persistent:'persistent card',card_until_action:'card (until action)',
+    floating_dismissible:'dismissible floating ad',floating_persistent:'persistent floating ad',floating_until_action:'floating (until action)',
+    both_dismissible:'card + floating (dismissible)',both_persistent:'card + floating (persistent)',both_until_action:'card + floating (until action)',
     floating:'floating ad'
   };
   return map[m]||'dismissible card';
@@ -235,14 +236,17 @@ function displayModeLabel(m){
 // Compose/parse the display_mode from the Placement + Behavior selects.
 function getDisplayMode(){
   var p=document.getElementById('f_placement').value;   // card | floating | both
-  var b=document.getElementById('f_behavior').value;    // dismissible | persistent
+  var b=document.getElementById('f_behavior').value;    // dismissible | persistent | until_action
   return p+'_'+b;
 }
 function setDisplayMode(m){
   if (m==='floating') m='floating_dismissible';          // legacy
-  var parts=(m||'card_dismissible').split('_');
-  document.getElementById('f_placement').value=parts[0]||'card';
-  document.getElementById('f_behavior').value=parts[1]||'dismissible';
+  m=m||'card_dismissible';
+  var i=m.indexOf('_');                                   // placement = before 1st '_', behavior = the rest
+  var p=i>=0?m.slice(0,i):'card';
+  var b=i>=0?m.slice(i+1):'dismissible';
+  document.getElementById('f_placement').value=p;
+  document.getElementById('f_behavior').value=b;
   updateDisplayHint();
 }
 function updateDisplayHint(){
@@ -252,6 +256,9 @@ function updateDisplayHint(){
     card_persistent:'Homepage card only, no dismiss controls — always shown until the campaign expires.',
     floating_dismissible:'Small floating ad on every page. The X closes it for the session; clicking the CTA (or “Don’t show again”) hides it permanently.',
     floating_persistent:'Small floating ad on every page that keeps returning until the campaign expires. The X only closes it for the session; the CTA just opens the link.',
+    card_until_action:'Homepage card that keeps returning (X only closes it for ~5 min) until the user clicks the CTA — clicking the CTA hides it for good.',
+    floating_until_action:'Floating ad on every page that keeps returning (X only closes it for ~5 min) until the user clicks the CTA — the click hides it for good.',
+    both_until_action:'Homepage card AND floating ad that keep returning until the user clicks the CTA — the click hides both for good.',
     both_dismissible:'Shows as a homepage card AND a floating ad on every page. X closes for the session; “Don’t show again” / CTA click hides both permanently.',
     both_persistent:'Shows as a homepage card AND a floating ad on every page, always returning until the campaign expires. X only closes for the session.'
   };
@@ -432,6 +439,12 @@ async function saveCampaign(){
   const title=document.getElementById('f_title').value.trim();
   if (!title){ Swal.fire('Missing title','Give the campaign a title.','warning'); return; }
   if ((contentType==='graphic'||contentType==='both') && !currentImageUrl && contentType==='graphic'){ Swal.fire('Missing graphic','Upload a graphic or switch to Text only.','warning'); return; }
+  // "Until action" needs a clickable action (CTA or hotspot) — otherwise it can never be dismissed.
+  if (document.getElementById('f_behavior').value==='until_action'){
+    const hasCta = document.getElementById('f_cta_enabled').checked && document.getElementById('f_cta_url').value.trim();
+    const hasHotspot = (contentType!=='text') && hotspots.some(h=>h.url && h.url.trim());
+    if (!hasCta && !hasHotspot){ Swal.fire('Add an action','“Until action” needs a CTA button (or a graphic hotspot) for the user to click. Enable the CTA with a link, or choose a different behavior.','warning'); return; }
+  }
   const payload={
     action: editing&&editing.id ? 'update_campaign':'create_campaign',
     id: editing&&editing.id ? editing.id : undefined,
