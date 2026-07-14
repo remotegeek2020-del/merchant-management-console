@@ -13,6 +13,24 @@ function ghlHeaders(key) {
     return { 'Authorization': `Bearer ${key}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' };
 }
 
+// Resolve a set of GHL location ids → { id: name } (best-effort, agency token).
+export async function ghlLocationNames(ids) {
+    const token = (await getConfigValue('GHL_AGENCY_TOKEN')) || process.env.GHL_AGENCY_TOKEN;
+    const out = {};
+    if (!token || !Array.isArray(ids) || !ids.length) return out;
+    const uniq = [...new Set(ids.filter(Boolean))].slice(0, 50);
+    await Promise.all(uniq.map(async (id) => {
+        try {
+            const r = await fetch(`${GHL_BASE}/locations/${encodeURIComponent(id)}`, { headers: ghlHeaders(token) });
+            if (!r.ok) return;
+            const data = await r.json().catch(() => ({}));
+            const l = data?.location || data || {};
+            out[id] = l.name || l.businessName || id;
+        } catch { /* ignore */ }
+    }));
+    return out;
+}
+
 // ── Agency-level: list all sub-accounts (locations) ──────────────────────────
 // Uses an agency Private Integration token (GHL_AGENCY_TOKEN) + company id
 // (GHL_COMPANY_ID). Returns { configured, locations:[{id,name}] }.

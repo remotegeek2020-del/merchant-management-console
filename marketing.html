@@ -878,7 +878,7 @@ async function showStats(id, title){
     </div>
     <div style="margin-top:14px;font-size:13px;color:var(--secondary);">
       <div>${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
-      <div style="margin-top:6px;">By audience: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff clicks</div>
+      <div style="margin-top:6px;">Clicks by channel: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff · <b>${s.clicks_by_audience.ghl||0}</b> GHL · <b>${s.clicks_by_audience.website||0}</b> website</div>
     </div>
     ${abSection(s.ab)}
     ${siteSection(s.by_site)}
@@ -928,6 +928,17 @@ async function exportClicks(id, title){
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
 }
 
+// Channel badge (staff / partner / GHL / website).
+function channelBadge(ch){
+  const map={
+    staff:['Staff','#e0f2fe','#0369a1'],
+    partner:['Partner','#ccfbf1','#0f766e'],
+    ghl:['GHL','#ede9fe','#6d28d9'],
+    website:['Website','#fef3c7','#b45309']
+  };
+  const [label,bg,fg]=map[ch]||map.staff;
+  return `<span class="pill" style="font-size:10px;background:${bg};color:${fg};">${label}</span>`;
+}
 // Render a named list of people for an event (clickers / viewers / dismissers).
 function peopleSection(title, people, showTargets){
   people = people||[];
@@ -935,12 +946,13 @@ function peopleSection(title, people, showTargets){
   const rows = people.map(p=>{
     const tgt = (showTargets && p.targets && Object.keys(p.targets).length)
       ? ` <span class="muted" style="font-size:11px;">(${Object.entries(p.targets).map(([k,v])=>esc(k)+(v>1?'×'+v:'')).join(', ')})</span>` : '';
-    const badge = p.user_type==='partner'
-      ? '<span class="pill partner" style="font-size:10px;">Partner</span>'
-      : '<span class="pill staff" style="font-size:10px;">Staff</span>';
+    const badge = channelBadge(p.channel || (p.user_type==='partner'?'partner':'staff'));
+    // Show the source (sub-account / site) when it differs from the shown name.
+    const src = (p.source && p.source!==p.name && (p.channel==='ghl'||p.channel==='website'))
+      ? ` <span class="muted" style="font-size:11px;">· ${esc(p.source)}</span>` : '';
     const when = p.last_at ? new Date(p.last_at).toLocaleString() : '';
     return `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
-      <span style="display:flex;align-items:center;gap:8px;">${badge}<b>${esc(p.name)}</b>${tgt}</span>
+      <span style="display:flex;align-items:center;gap:8px;">${badge}<b>${esc(p.name)}</b>${src}${tgt}</span>
       <span class="muted" style="font-size:11px;white-space:nowrap;">${p.count>1?p.count+'× · ':''}${esc(when)}</span>
     </div>`;
   }).join('');

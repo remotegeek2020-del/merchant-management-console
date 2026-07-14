@@ -12,7 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -190,13 +190,14 @@ export default async function handler(req, res) {
                 // clicks broken down by target (hotspot/cta)
                 const byTarget = {};
                 rows.filter(r => r.event_type === 'click').forEach(r => { const k = r.target || 'cta'; byTarget[k] = (byTarget[k] || 0) + 1; });
-                const byAudience = { partner: 0, staff: 0 };
-                rows.filter(r => r.event_type === 'click').forEach(r => { if (byAudience[r.user_type] != null) byAudience[r.user_type]++; });
-
-                // ── Resolve NAMES for the people behind each event type ──────────
+                // ── Resolve NAMES + CHANNEL for each person ──────────────────────
                 const staffIds = [...new Set(rows.filter(r => r.user_type === 'staff').map(r => r.user_id).filter(Boolean))];
                 const partnerIds = [...new Set(rows.filter(r => r.user_type === 'partner').map(r => r.user_id).filter(Boolean))];
-                const nameMap = {};   // `${type}:${id}` → display name
+                const siteIds = [...new Set(rows.filter(r => r.site_id).map(r => r.site_id))];
+                const ghlLocs = [...new Set(rows.filter(r => r.ghl_location).map(r => r.ghl_location))];
+                const nameMap = {};
+                const siteNames = {};
+                let locNames = {};
                 if (staffIds.length) {
                     const { data: su } = await supabase.from('app_users').select('userid, first_name, last_name').in('userid', staffIds);
                     (su || []).forEach(u => { nameMap['staff:' + u.userid] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || ('Staff #' + u.userid); });
@@ -205,14 +206,37 @@ export default async function handler(req, res) {
                     const { data: pp } = await supabase.from('persons').select('id, full_name').in('id', partnerIds);
                     (pp || []).forEach(p => { nameMap['partner:' + p.id] = p.full_name || 'Partner'; });
                 }
-                const nameOf = (r) => nameMap[r.user_type + ':' + r.user_id] || (r.user_type === 'partner' ? 'Partner' : 'Staff');
+                if (siteIds.length) {
+                    const { data: sites } = await supabase.from('marketing_sites').select('id, name').in('id', siteIds);
+                    (sites || []).forEach(s => { siteNames[s.id] = s.name || 'Site'; });
+                }
+                if (ghlLocs.length) { try { locNames = await ghlLocationNames(ghlLocs); } catch { locNames = {}; } }
+
+                // Classify one event → { name, channel, source } where channel is
+                // 'staff' | 'partner' | 'ghl' | 'website'.
+                const classify = (r) => {
+                    if (r.user_type === 'staff') return { name: nameMap['staff:' + r.user_id] || 'Staff', channel: 'staff', source: 'Staff portal' };
+                    if (r.user_type === 'partner') return { name: nameMap['partner:' + r.user_id] || 'Partner', channel: 'partner', source: 'Partner portal' };
+                    // embed viewer (external site / GHL)
+                    const email = String(r.user_id || '').indexOf('email:') === 0 ? String(r.user_id).slice(6) : '';
+                    if (r.ghl_location) {
+                        const acct = locNames[r.ghl_location] || 'GoHighLevel sub-account';
+                        return { name: email || acct, channel: 'ghl', source: acct };
+                    }
+                    const site = r.site_id ? (siteNames[r.site_id] || 'Website') : 'Website';
+                    return { name: email || 'Website visitor', channel: 'website', source: site };
+                };
+
+                const byAudience = { partner: 0, staff: 0, ghl: 0, website: 0 };
+                rows.filter(r => r.event_type === 'click').forEach(r => { const ch = classify(r).channel; if (byAudience[ch] != null) byAudience[ch]++; });
 
                 // Aggregate a per-person list for a given event type (most recent first).
                 const peopleFor = (evType) => {
                     const by = {};
                     rows.filter(r => r.event_type === evType).forEach(r => {
                         const key = r.user_type + ':' + r.user_id;
-                        const e = by[key] || (by[key] = { name: nameOf(r), user_type: r.user_type, count: 0, targets: {}, last_at: r.created_at });
+                        if (!by[key]) { const c = classify(r); by[key] = { name: c.name, channel: c.channel, source: c.source, user_type: r.user_type, count: 0, targets: {}, last_at: r.created_at }; }
+                        const e = by[key];
                         e.count++;
                         if (evType === 'click') { const t = r.target || 'cta'; e.targets[t] = (e.targets[t] || 0) + 1; }
                         if (r.created_at > e.last_at) e.last_at = r.created_at;
@@ -232,13 +256,10 @@ export default async function handler(req, res) {
 
                 // ── Per-site (embed) breakdown: views + clicks per external site ──
                 let bySite = null;
-                const siteIds = [...new Set(rows.filter(r => r.site_id).map(r => r.site_id))];
                 if (siteIds.length) {
-                    const { data: sites } = await supabase.from('marketing_sites').select('id, name').in('id', siteIds);
-                    const sname = {}; (sites || []).forEach(s => { sname[s.id] = s.name || 'Site'; });
                     const acc = {};
                     rows.filter(r => r.site_id).forEach(r => {
-                        const e = acc[r.site_id] || (acc[r.site_id] = { name: sname[r.site_id] || 'Site', impressions: 0, clicks: 0 });
+                        const e = acc[r.site_id] || (acc[r.site_id] = { name: siteNames[r.site_id] || 'Site', impressions: 0, clicks: 0 });
                         if (r.event_type === 'impression') e.impressions++;
                         else if (r.event_type === 'click') e.clicks++;
                     });
