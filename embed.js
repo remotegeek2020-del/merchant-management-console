@@ -95,21 +95,29 @@
         if (document.getElementById('ppx-css')) return;
         var s = document.createElement('style'); s.id = 'ppx-css';
         s.textContent = [
-            '.ppx-back{position:fixed;inset:0;background:rgba(4,10,22,.6);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:18px;animation:ppxFade .2s ease;}',
+            // Scoped box-sizing reset so the host site's CSS can't distort us.
+            '.ppx-back,.ppx-back *{box-sizing:border-box;}',
+            '.ppx-back{position:fixed;inset:0;background:rgba(4,10,22,.6);z-index:2147483000;display:flex;align-items:center;justify-content:center;padding:16px;animation:ppxFade .2s ease;-webkit-font-smoothing:antialiased;}',
             '@keyframes ppxFade{from{opacity:0}to{opacity:1}}',
-            '.ppx-modal{background:#fff;border-radius:16px;max-width:440px;width:100%;box-shadow:0 24px 70px rgba(0,0,0,.4);overflow:hidden;position:relative;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;animation:ppxUp .25s ease;}',
+            // Fluid width, viewport-capped height, scrolls internally if tall.
+            '.ppx-modal{background:#fff;border-radius:16px;width:min(460px,100%);max-height:90vh;max-height:90dvh;overflow-y:auto;overflow-x:hidden;box-shadow:0 24px 70px rgba(0,0,0,.4);position:relative;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#0a1628;animation:ppxUp .25s ease;-webkit-overflow-scrolling:touch;}',
             '@keyframes ppxUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}',
             '.ppx-img{position:relative;line-height:0;}',
-            '.ppx-img img{width:100%;display:block;}',
+            '.ppx-img img{width:100%;height:auto;display:block;}',
             '.ppx-hot{position:absolute;display:block;cursor:pointer;border-radius:6px;}',
             '.ppx-hot:hover{background:rgba(0,73,144,.12);box-shadow:0 0 0 2px rgba(0,73,144,.5) inset;}',
-            '.ppx-body{padding:22px 24px;}',
-            '.ppx-title{font-size:1.15rem;font-weight:800;color:#0a1628;margin:0 0 8px;}',
-            '.ppx-text{font-size:14px;color:#475569;line-height:1.6;white-space:pre-wrap;}',
-            '.ppx-cta{display:block;text-align:center;margin-top:18px;background:#004990;color:#fff;border:none;border-radius:10px;padding:12px 18px;font-size:14px;font-weight:700;cursor:pointer;text-decoration:none;}',
-            '.ppx-x{position:absolute;top:12px;right:12px;z-index:3;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:30px;height:30px;font-size:18px;line-height:1;cursor:pointer;}',
+            '.ppx-body{padding:clamp(16px,4vw,24px);}',
+            '.ppx-title{font-size:clamp(1.05rem,3.6vw,1.2rem);font-weight:800;color:#0a1628;margin:0 0 8px;line-height:1.3;}',
+            '.ppx-text{font-size:clamp(13px,3.4vw,14.5px);color:#475569;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}',
+            '.ppx-cta{display:block;text-align:center;margin-top:18px;background:#004990;color:#fff;border:none;border-radius:10px;padding:13px 18px;font-size:clamp(13px,3.6vw,14.5px);font-weight:700;cursor:pointer;text-decoration:none;line-height:1.2;}',
+            '.ppx-cta:hover{filter:brightness(1.07);}',
+            '.ppx-x{position:absolute;top:12px;right:12px;z-index:3;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:19px;line-height:30px;text-align:center;cursor:pointer;padding:0;}',
+            '.ppx-x:hover{background:rgba(0,0,0,.72);}',
             '.ppx-forget{display:flex;align-items:center;gap:7px;margin-top:14px;font-size:12px;color:#94a3b8;cursor:pointer;}',
-            '.ppx-nav{margin-top:12px;text-align:center;font-size:11px;color:#94a3b8;font-weight:700;}'
+            '.ppx-forget input{margin:0;flex:none;}',
+            '.ppx-nav{margin-top:12px;text-align:center;font-size:11px;color:#94a3b8;font-weight:700;}',
+            // Phones: dock to the bottom as a sheet, nearly full width.
+            '@media (max-width:520px){.ppx-back{padding:10px;align-items:flex-end;}.ppx-modal{max-height:88vh;max-height:88dvh;}}'
         ].join('');
         document.head.appendChild(s);
     }
