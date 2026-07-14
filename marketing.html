@@ -153,14 +153,21 @@
 
       <div class="row2">
         <div>
-          <label class="fld">Display mode</label>
-          <select class="sel" id="f_display_mode">
-            <option value="card_dismissible">Homepage card — dismissible (X closes for the session; "Don't show again" hides it for good)</option>
-            <option value="card_persistent">Homepage card — persistent (always shown until it expires)</option>
-            <option value="floating">Floating ad on every page (shows until they click the CTA)</option>
+          <label class="fld">Placement</label>
+          <select class="sel" id="f_placement" onchange="updateDisplayHint()">
+            <option value="card">Homepage card</option>
+            <option value="floating">Floating ad (every page)</option>
+          </select>
+        </div>
+        <div>
+          <label class="fld">Behavior</label>
+          <select class="sel" id="f_behavior" onchange="updateDisplayHint()">
+            <option value="dismissible">Dismissible — user can hide it for good</option>
+            <option value="persistent">Persistent — always shows until it expires</option>
           </select>
         </div>
       </div>
+      <div class="muted" id="displayModeHint" style="margin:-6px 0 10px;font-size:12px;"></div>
 
       <div class="row2">
         <div><label class="fld">Activation date</label><input class="inp" id="f_starts" type="datetime-local"></div>
@@ -215,7 +222,33 @@ let contentType = 'both';
   loadList();
 })();
 
-function displayModeLabel(m){ return m==='floating'?'floating ad':(m==='card_persistent'?'persistent card':'dismissible card'); }
+function displayModeLabel(m){
+  var map={card_dismissible:'dismissible card',card_persistent:'persistent card',floating_dismissible:'dismissible floating ad',floating_persistent:'persistent floating ad',floating:'floating ad'};
+  return map[m]||'dismissible card';
+}
+// Compose/parse the display_mode from the Placement + Behavior selects.
+function getDisplayMode(){
+  var p=document.getElementById('f_placement').value;   // card | floating
+  var b=document.getElementById('f_behavior').value;    // dismissible | persistent
+  return p+'_'+b;
+}
+function setDisplayMode(m){
+  if (m==='floating') m='floating_dismissible';          // legacy
+  var parts=(m||'card_dismissible').split('_');
+  document.getElementById('f_placement').value=parts[0]||'card';
+  document.getElementById('f_behavior').value=parts[1]||'dismissible';
+  updateDisplayHint();
+}
+function updateDisplayHint(){
+  var m=getDisplayMode();
+  var hints={
+    card_dismissible:'Homepage card. The X closes it for this browser session (it returns next login); “Don’t show again” hides it permanently.',
+    card_persistent:'Homepage card with no dismiss controls — always shown until the campaign expires.',
+    floating_dismissible:'Small floating ad on every page. The X closes it for the session; clicking the CTA (or “Don’t show again”) hides it permanently.',
+    floating_persistent:'Small floating ad on every page that keeps returning until the campaign expires. The X only closes it for the session; the CTA just opens the link.'
+  };
+  var el=document.getElementById('displayModeHint'); if(el) el.textContent=hints[m]||'';
+}
 async function loadList(){
   const r = await api({action:'list_campaigns'});
   const body = document.getElementById('listBody');
@@ -285,7 +318,7 @@ function openEditor(){
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_audience').value='partner';
-  document.getElementById('f_display_mode').value='card_dismissible';
+  setDisplayMode('card_dismissible');
   document.getElementById('f_priority').value='0';
   document.getElementById('f_starts').value=''; document.getElementById('f_ends').value='';
   document.getElementById('f_active').checked=false;
@@ -307,7 +340,7 @@ async function editCampaign(id){
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
   document.getElementById('f_audience').value=c.audience||'partner';
-  document.getElementById('f_display_mode').value=c.display_mode||'card_dismissible';
+  setDisplayMode(c.display_mode||'card_dismissible');
   document.getElementById('f_priority').value=c.priority??0;
   document.getElementById('f_starts').value=toLocalInput(c.starts_at);
   document.getElementById('f_ends').value=toLocalInput(c.ends_at);
@@ -403,7 +436,7 @@ async function saveCampaign(){
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
-    display_mode: document.getElementById('f_display_mode').value,
+    display_mode: getDisplayMode(),
     is_active: document.getElementById('f_active').checked,
     starts_at: fromLocalInput(document.getElementById('f_starts').value),
     ends_at: fromLocalInput(document.getElementById('f_ends').value),

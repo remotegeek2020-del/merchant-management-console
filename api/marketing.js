@@ -102,7 +102,9 @@ export default async function handler(req, res) {
                     cta_url: b.cta_url ?? null,
                     hotspots: Array.isArray(b.hotspots) ? b.hotspots : [],
                     audience: ['partner', 'staff', 'both'].includes(b.audience) ? b.audience : 'partner',
-                    display_mode: ['card_dismissible', 'card_persistent', 'floating'].includes(b.display_mode) ? b.display_mode : 'card_dismissible',
+                    display_mode: ['card_dismissible', 'card_persistent', 'floating_dismissible', 'floating_persistent'].includes(b.display_mode)
+                        ? b.display_mode
+                        : (b.display_mode === 'floating' ? 'floating_dismissible' : 'card_dismissible'),
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,

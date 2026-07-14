@@ -9,8 +9,11 @@
  *     (comes back next login); "Don't show again" checkbox = permanent dismiss.
  *   • card_persistent  → homepage card. No dismiss controls; always shown until
  *     the campaign expires.
- *   • floating         → small fixed-corner ad shown on EVERY page. X = close for
- *     this session; clicking the CTA (or Got it) permanently dismisses it.
+ *   • floating_dismissible → small fixed-corner ad on EVERY page. X = close for
+ *     this session; clicking the CTA (or "Don't show again") permanently hides it.
+ *   • floating_persistent  → same floating ad, but it always returns until the
+ *     campaign expires. X only closes it for the session; the CTA just opens the
+ *     link (no permanent dismiss).
  *
  * Homepage cards render into #staffAnnCarousel (staff hub) or #annCarousel
  * (partner dashboard). The floating ad is injected on every page.
@@ -75,7 +78,8 @@
             '.ppa-float .ppa-fbody{padding:12px 14px;}',
             '.ppa-float .ppa-ftitle{font-size:13px;font-weight:800;color:#0a1628;margin:0 0 4px;}',
             '.ppa-float .ppa-ftext{font-size:12px;color:#475569;line-height:1.5;white-space:pre-wrap;max-height:96px;overflow:auto;}',
-            '.ppa-float .ppa-fcta{display:block;text-align:center;margin-top:10px;background:' + accent + ';color:#fff;border:none;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;}',
+            '.ppa-float .ppa-fcta{display:block;text-align:center;margin-top:10px;background:' + accent + ';color:#fff;border:none;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;width:100%;}',
+            '.ppa-float .ppa-fforget{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;color:#94a3b8;cursor:pointer;}',
             '.ppa-float .ppa-fx{position:absolute;top:8px;right:8px;z-index:3;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;}',
             '.ppa-float .ppa-fnav{display:flex;align-items:center;justify-content:center;gap:8px;font-size:11px;color:#94a3b8;font-weight:700;padding:0 0 10px;}',
             '.ppa-float .ppa-fnav button{background:#fff;border:1px solid #e2e8f0;border-radius:7px;width:22px;height:22px;cursor:pointer;font-size:13px;line-height:1;color:#475569;}'
@@ -130,6 +134,7 @@
         if (floatIdx >= visible.length) floatIdx = 0;
         var c = visible[floatIdx];
         if (!floatEl) { floatEl = document.createElement('div'); floatEl.className = 'ppa-float'; document.body.appendChild(floatEl); }
+        var persistent = c.display_mode === 'floating_persistent';
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var html = '<button class="ppa-fx" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:16px;">close</span></button>';
@@ -137,9 +142,15 @@
         html += '<div class="ppa-fbody">';
         if (showText && c.title) html += '<div class="ppa-ftitle">' + esc(c.title) + '</div>';
         if (showText && c.body_text) html += '<div class="ppa-ftext">' + esc(c.body_text) + '</div>';
-        // Floating dismisses permanently on CTA. If no CTA, offer a "Got it" that forgets.
-        if (c.cta_enabled && c.cta_url) html += '<a class="ppa-fcta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="ppAnnCtaDone(\'' + c.id + '\')">' + esc(c.cta_label || 'Learn more') + '</a>';
-        else html += '<button class="ppa-fcta" onclick="ppAnnForget(\'' + c.id + '\')">Got it</button>';
+        if (c.cta_enabled && c.cta_url) {
+            // Persistent: CTA just opens the link (keeps returning). Dismissible: CTA click also hides it for good.
+            var onCta = persistent ? 'ppAnnClick(\'' + c.id + '\',\'cta\')' : 'ppAnnCtaDone(\'' + c.id + '\')';
+            html += '<a class="ppa-fcta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="' + onCta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
+        } else if (!persistent) {
+            html += '<button class="ppa-fcta" onclick="ppAnnForget(\'' + c.id + '\')">Got it</button>';
+        }
+        // Dismissible floating ads always offer an explicit permanent opt-out.
+        if (!persistent) html += '<label class="ppa-fforget"><input type="checkbox" onchange="if(this.checked)ppAnnForget(\'' + c.id + '\')"> Don\'t show this again</label>';
         html += '</div>';
         if (visible.length > 1) html += '<div class="ppa-fnav"><button onclick="ppAnnFloatNav(-1)">‹</button> ' + (floatIdx + 1) + ' / ' + visible.length + ' <button onclick="ppAnnFloatNav(1)">›</button></div>';
         floatEl.innerHTML = html;
@@ -175,7 +186,7 @@
         injectCss();
         cardWrap = document.getElementById('staffAnnCarousel') || document.getElementById('annCarousel');
         all.forEach(function (c) {
-            if (c.display_mode === 'floating') floatList.push(c);
+            if ((c.display_mode || '').indexOf('floating') === 0) floatList.push(c);
             else if (cardWrap) cardList.push(c);   // card modes only render where a carousel exists
         });
         renderCards();
