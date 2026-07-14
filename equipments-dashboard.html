@@ -258,7 +258,7 @@
     <!-- ── END REPAIR QUEUE PANEL ── -->
 
     <article class="main-card" id="inv-main-card">
-        <div id="invCountBar" style="display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:#eef4ff; border:1px solid #cfe0ff; border-radius:12px;">
+        <div id="invCountBar" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:12px 14px; margin-bottom:12px; background:#eef4ff; border:1px solid #cfe0ff; border-radius:12px;">
             <span class="material-icons" style="color:var(--pp-blue); font-size:22px;">inventory_2</span>
             <span id="invCountLabel" style="font-size:15px; font-weight:800; color:#002d5a;">—</span>
             <span id="invCountContext" style="font-size:12px; font-weight:600; color:#64748b;"></span>
@@ -1329,14 +1329,16 @@ async function saveNote() {
             if (_type && s) {
                 // Grand total for the type + where those units are (matches dropdown "154")
                 _lbl.innerText = `${s.total.toLocaleString()} ${_type} units total`;
-                const parts = [];
-                if (s.office)   parts.push(`${s.office} in Office`);
-                if (s.deployed) parts.push(`${s.deployed} Deployed`);
-                if (s.repairs)  parts.push(`${s.repairs} in Repairs`);
-                if (s.retired)  parts.push(`${s.retired} Retired`);
-                if (s.other)    parts.push(`${s.other} Other`);
+                const chip = (n, label, bg, color, extra) => `<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:99px;font-size:11px;font-weight:800;background:${bg};color:${color};${extra || ''}"><b style="font-size:12px;">${n}</b> ${label}</span>`;
+                const chips = [];
+                // Office + Deployed are highlighted (matching the KPI cards)
+                chips.push(chip(s.office, 'in Office', '#dcfce7', '#166534', 'border:1px solid #86efac;'));
+                chips.push(chip(s.deployed, 'Deployed', '#002d5a', '#ffffff'));
+                if (s.repairs) chips.push(chip(s.repairs, 'in Repairs', '#fef3c7', '#b45309', 'border:1px solid #fde68a;'));
+                if (s.retired) chips.push(chip(s.retired, 'Retired', '#f1f5f9', '#64748b', 'border:1px solid #e2e8f0;'));
+                if (s.other)   chips.push(chip(s.other, 'Other', '#f1f5f9', '#64748b', 'border:1px solid #e2e8f0;'));
                 const tabName = currentFilter === 'deployed' ? 'Deployed' : (currentFilter || 'all');
-                if (_ctx) _ctx.innerText = (parts.length ? '· ' + parts.join(' · ') : '') + ` · showing ${totalItems.toLocaleString()} in ${tabName}`;
+                if (_ctx) _ctx.innerHTML = `<span style="display:inline-flex;flex-wrap:wrap;gap:6px;align-items:center;">${chips.join('')}<span style="color:#94a3b8;font-weight:600;margin-left:2px;">showing ${totalItems.toLocaleString()} in ${tabName}</span></span>`;
             } else {
                 const _n = totalItems.toLocaleString();
                 _lbl.innerText = `${_n} ${totalItems === 1 ? 'unit' : 'units'}`;
