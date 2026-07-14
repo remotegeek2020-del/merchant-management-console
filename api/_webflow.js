@@ -76,9 +76,17 @@ export async function clearCustomCode(siteId) {
     return wf(`/sites/${siteId}/custom_code`, { method: 'PUT', body: JSON.stringify({ scripts: [] }) });
 }
 
-// Publish the site so injected/removed code goes live.
+// Publish the site so injected/removed code goes live — to the Webflow
+// subdomain AND every custom domain (otherwise the live site stays stale).
 export async function publishSite(siteId) {
-    try { return await wf(`/sites/${siteId}/publish`, { method: 'POST', body: JSON.stringify({ publishToWebflowSubdomain: true }) }); }
+    let domainIds = [];
+    try {
+        const d = await wf(`/sites/${siteId}/custom_domains`);
+        domainIds = (d.customDomains || d.domains || []).map(x => x.id).filter(Boolean);
+    } catch { /* no custom domains / not permitted */ }
+    const body = { publishToWebflowSubdomain: true };
+    if (domainIds.length) body.customDomains = domainIds;
+    try { return await wf(`/sites/${siteId}/publish`, { method: 'POST', body: JSON.stringify(body) }); }
     catch (e) { return { published: false, message: e.message }; }
 }
 
