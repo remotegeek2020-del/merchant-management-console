@@ -243,6 +243,7 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_partners',          parseBool(user.access_partners)          ? 'true' : 'false');
         localStorage.setItem('pp_access_admin_dashboard',   parseBool(user.access_admin_dashboard)   ? 'true' : 'false');
         localStorage.setItem('pp_access_sending_reports',   parseBool(user.access_sending_reports)   ? 'true' : 'false');
+        localStorage.setItem('pp_access_marketing',         parseBool(user.access_marketing)         ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
         window.dispatchEvent(new CustomEvent('pp-authorized', { detail: user }));
     } catch (e) { console.error("Storage Error:", e); }
@@ -290,6 +291,9 @@ async function authorizeUser(user, sessionToken) {
     if (document.getElementById('card-cms')) document.getElementById('card-cms').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-logs')) document.getElementById('card-logs').style.display = isAdmin ? 'flex' : 'none';
     if (document.getElementById('card-admin-dashboard')) document.getElementById('card-admin-dashboard').style.display = hasAdminDashAccess ? 'flex' : 'none';
+    // Marketing: admins always, or users granted access_marketing
+    const hasMarketingAccess = isAdmin || parseBool(user.access_marketing);
+    if (document.getElementById('card-marketing')) document.getElementById('card-marketing').style.display = hasMarketingAccess ? 'flex' : 'none';
 
     // --- 3. THE DUNGEON LOCKDOWN ---
     if (elements.secretDungeon) {

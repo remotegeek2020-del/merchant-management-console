@@ -21,7 +21,8 @@
             'equipment-roi.html': 'pp_access_inventory',
             'repair-queue.html': 'pp_access_inventory',
             'partners-dashboard.html': 'pp_access_partners',
-            'admin-dashboard.html': 'pp_access_admin_dashboard'
+            'admin-dashboard.html': 'pp_access_admin_dashboard',
+            'marketing.html': 'pp_access_marketing'
         };
         var flag = MAP[page];
         if (!flag) return;

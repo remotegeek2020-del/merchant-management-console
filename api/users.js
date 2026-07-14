@@ -109,7 +109,7 @@ export default async function handler(req, res) {
                     'access_admin_dashboard','access_merchants','access_deployments',
                     'access_returns','access_inventory','access_partners',
                     'access_jarvis','can_delete_tickets','access_sending_reports',
-                    'can_manage_retired_units','can_edit_legacy_terminal_type'
+                    'can_manage_retired_units','can_edit_legacy_terminal_type','access_marketing'
                 ];
                 // Only super_admin can change roles or grant privileged permissions
                 const PRIVILEGED_FIELDS = ['role', 'can_delete_tickets', 'can_manage_retired_units', 'can_edit_legacy_terminal_type'];
