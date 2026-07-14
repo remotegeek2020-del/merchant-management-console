@@ -12,6 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
+import { ghlListLocations } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -19,7 +20,7 @@ const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
-    'list_sites', 'create_site', 'toggle_site', 'delete_site'
+    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -139,6 +140,7 @@ export default async function handler(req, res) {
                     variant_b: (b.variant_b && typeof b.variant_b === 'object') ? b.variant_b : {},
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
+                    ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -291,6 +293,12 @@ export default async function handler(req, res) {
                 const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
                 if (error) return bad(res, error.message);
                 return ok(res, { deleted: true });
+            }
+
+            // Live list of GHL sub-accounts (for the targeting picker).
+            if (action === 'ghl_locations') {
+                const r = await ghlListLocations();
+                return ok(res, r);
             }
 
             // Resolve names for a set of saved partner ids (edit → chips).

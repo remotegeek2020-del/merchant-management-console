@@ -254,9 +254,19 @@
       </label>
       <div class="muted" style="font-size:11px;margin-top:4px;">Uses the embed script + your registered site keys. Manage sites with the “Embed Sites” button on the main screen.</div>
       <div id="embedTarget" style="display:none;margin-top:10px;">
+        <label class="fld" style="margin-top:0;">Which registered sites</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="embedScope" value="all" checked onchange="onEmbedScope()"> All registered sites</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px;"><input type="radio" name="embedScope" value="specific" onchange="onEmbedScope()"> Specific sites only</label>
         <div id="embedSiteChecks" style="display:none;margin-top:8px;padding-left:6px;"></div>
+
+        <label class="fld">GoHighLevel sub-accounts</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="ghlScope" value="all" checked onchange="onGhlScope()"> All sub-accounts</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px;"><input type="radio" name="ghlScope" value="specific" onchange="onGhlScope()"> Selected sub-accounts only</label>
+        <div id="ghlSelWrap" style="display:none;margin-top:8px;">
+          <input class="inp" id="ghlSearch" placeholder="Filter sub-accounts…" oninput="renderGhlList()" autocomplete="off">
+          <div id="ghlList" style="border:1px solid var(--border);border-radius:9px;margin-top:6px;max-height:200px;overflow:auto;padding:6px;"></div>
+          <div id="ghlHint" class="muted" style="font-size:11px;margin-top:4px;"></div>
+        </div>
       </div>
 
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
@@ -463,6 +473,8 @@ function openEditor(){
   document.getElementById('embedTarget').style.display='none';
   const allRadio=document.querySelector('input[name=embedScope][value=all]'); if(allRadio) allRadio.checked=true;
   onEmbedScope(); renderEmbedSiteChecks([]);
+  document.querySelector('input[name=ghlScope][value=all]').checked=true;
+  selectedGhl=new Set(); document.getElementById('ghlSearch').value=''; onGhlScope();
   setContentType('both');
   document.getElementById('editorModal').style.display='flex';
 }
@@ -507,6 +519,11 @@ async function editCampaign(id){
   document.querySelector('input[name=embedScope][value=all]').checked=!scopeSpecific;
   document.querySelector('input[name=embedScope][value=specific]').checked=scopeSpecific;
   onEmbedScope(); renderEmbedSiteChecks(eids);
+  const glids = Array.isArray(c.ghl_location_ids)?c.ghl_location_ids.map(String):[];
+  selectedGhl = new Set(glids);
+  document.querySelector('input[name=ghlScope][value=all]').checked = glids.length===0;
+  document.querySelector('input[name=ghlScope][value=specific]').checked = glids.length>0;
+  document.getElementById('ghlSearch').value=''; onGhlScope();
   setContentType(c.content_type||'both');
   if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
   document.getElementById('editorModal').style.display='flex';
@@ -610,6 +627,7 @@ async function saveCampaign(){
     ab_enabled: document.getElementById('f_ab_enabled').checked,
     show_on_embed: document.getElementById('f_show_embed').checked,
     embed_site_ids: document.getElementById('f_show_embed').checked ? getEmbedSiteIds() : [],
+    ghl_location_ids: document.getElementById('f_show_embed').checked ? getGhlLocationIds() : [],
     ab_split: parseInt(document.getElementById('f_ab_split').value),
     variant_b: document.getElementById('f_ab_enabled').checked ? {
       title: document.getElementById('f_b_title').value.trim()||null,
@@ -624,6 +642,7 @@ async function saveCampaign(){
     priority: parseInt(document.getElementById('f_priority').value)||0
   };
   if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
+  if (document.getElementById('f_show_embed').checked && document.querySelector('input[name=ghlScope]:checked')?.value==='specific' && !payload.ghl_location_ids.length){ Swal.fire('Pick sub-accounts','Select at least one GoHighLevel sub-account, or switch to “All sub-accounts”.','warning'); return; }
   const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='Saving…';
   const r = await api(payload);
   btn.disabled=false; btn.textContent='Save Campaign';
@@ -808,6 +827,34 @@ function getEmbedSiteIds(){
   const scope = document.querySelector('input[name=embedScope]:checked')?.value || 'all';
   if (scope!=='specific') return [];
   return Array.from(document.querySelectorAll('.embed-site-cb:checked')).map(cb=>cb.value);
+}
+
+// ── GHL sub-account (location) targeting ──
+let ghlLocCache = null;        // {configured, locations:[{id,name}]}
+let selectedGhl = new Set();   // chosen location ids (survives search filtering)
+async function getGhlLocations(){ if(ghlLocCache) return ghlLocCache; const r=await api({action:'ghl_locations'}); ghlLocCache = r.success ? r.data : {configured:false, locations:[]}; return ghlLocCache; }
+async function onGhlScope(){
+  const specific = document.querySelector('input[name=ghlScope]:checked')?.value==='specific';
+  document.getElementById('ghlSelWrap').style.display = specific ? '' : 'none';
+  if (specific) await renderGhlList();
+}
+async function renderGhlList(){
+  const box=document.getElementById('ghlList'); const hint=document.getElementById('ghlHint');
+  box.innerHTML='<div class="muted" style="font-size:12px;padding:6px;">Loading sub-accounts…</div>';
+  const data=await getGhlLocations();
+  if (!data.configured){ box.innerHTML=''; hint.innerHTML='⚠️ Add <b>GHL_AGENCY_TOKEN</b> and <b>GHL_COMPANY_ID</b> in Vercel to load sub-accounts. You can still enter them later — “All sub-accounts” works without it.'; return; }
+  const q=(document.getElementById('ghlSearch').value||'').trim().toLowerCase();
+  let locs=data.locations||[];
+  if (q) locs=locs.filter(l=>(l.name||'').toLowerCase().includes(q)||String(l.id).includes(q));
+  hint.textContent = `${selectedGhl.size} selected · ${data.locations.length} sub-accounts total`;
+  if (!locs.length){ box.innerHTML='<div class="muted" style="font-size:12px;padding:6px;">No matches.</div>'; return; }
+  box.innerHTML = locs.slice(0,300).map(l=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:3px;cursor:pointer;">
+    <input type="checkbox" class="ghl-cb" value="${esc(l.id)}" ${selectedGhl.has(String(l.id))?'checked':''} onchange="toggleGhl('${esc(l.id)}',this.checked)"> ${esc(l.name||l.id)}</label>`).join('');
+}
+function toggleGhl(id, on){ if(on) selectedGhl.add(String(id)); else selectedGhl.delete(String(id)); document.getElementById('ghlHint').textContent = `${selectedGhl.size} selected`; }
+function getGhlLocationIds(){
+  const specific = document.querySelector('input[name=ghlScope]:checked')?.value==='specific';
+  return specific ? Array.from(selectedGhl) : [];
 }
 
 // ── stats ──

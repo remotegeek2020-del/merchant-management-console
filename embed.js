@@ -57,9 +57,26 @@
     }
     var VIEWER = visitorId();
 
+    // Detect the current GHL sub-account (location) id from the app URL, so the
+    // portal can target "all or selected sub-accounts". Works from the app frame
+    // or a nested frame; cross-origin top access is ignored safely.
+    function ghlLocation() {
+        var override = cfg.ghlLocation || '';
+        if (override) return String(override);
+        var urls = [];
+        try { urls.push(location.href); } catch (e) {}
+        try { if (window.top && window.top !== window) urls.push(window.top.location.href); } catch (e) {}
+        for (var i = 0; i < urls.length; i++) {
+            var m = /\/location\/([A-Za-z0-9]{10,})/.exec(urls[i]);
+            if (m) return m[1];
+        }
+        return null;
+    }
+    var GHL_LOC = ghlLocation();
+
     function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
     function api(body) {
-        body.site_key = SITE_KEY; body.viewer_id = VIEWER;
+        body.site_key = SITE_KEY; body.viewer_id = VIEWER; if (GHL_LOC) body.ghl_location = GHL_LOC;
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
     }
     function track(id, type, target, variant) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variant || null }); }
@@ -151,7 +168,7 @@
     function log() { if (DEBUG) try { console.log.apply(console, ['[PPX]'].concat([].slice.call(arguments))); } catch (e) {} }
 
     function load() {
-        log('loading', { api: API, site: SITE_KEY, viewer: VIEWER });
+        log('loading', { api: API, site: SITE_KEY, viewer: VIEWER, ghl_location: GHL_LOC });
         api({ action: 'get_active' }).then(function (d) {
             if (!d || !d.success) { log('endpoint error', d && d.message); return; }
             if (!Array.isArray(d.data)) return;

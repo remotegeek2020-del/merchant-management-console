@@ -39,6 +39,7 @@ export default async function handler(req, res) {
     const action = body?.action;
     const siteKey = body?.site_key;
     const viewer = String(body?.viewer_id || '').slice(0, 200);
+    const ghlLoc = body?.ghl_location ? String(body.ghl_location).slice(0, 100) : null;
     if (!action) return bad(res, 'No action');
     if (!siteKey) return bad(res, 'Missing site_key', 401);
 
@@ -59,7 +60,11 @@ export default async function handler(req, res) {
                 (!c.starts_at || new Date(c.starts_at).getTime() <= now) &&
                 (!c.ends_at || new Date(c.ends_at).getTime() >= now) &&
                 // Site scoping: [] = all embed sites, otherwise must include this site.
-                (!Array.isArray(c.embed_site_ids) || c.embed_site_ids.length === 0 || c.embed_site_ids.map(String).includes(String(siteId))));
+                (!Array.isArray(c.embed_site_ids) || c.embed_site_ids.length === 0 || c.embed_site_ids.map(String).includes(String(siteId))) &&
+                // GHL sub-account scoping: [] = all. If set, the campaign is GHL-scoped,
+                // so it only shows when the caller reports a matching location id.
+                (!Array.isArray(c.ghl_location_ids) || c.ghl_location_ids.length === 0 ||
+                    (ghlLoc && c.ghl_location_ids.map(String).includes(String(ghlLoc)))));
 
             // Exclude ones this viewer permanently dismissed.
             const ids = live.map(c => c.id);
@@ -108,7 +113,7 @@ export default async function handler(req, res) {
                 if (recent && recent.length) return ok(res, { logged: false });
             }
             await supabase.from('marketing_events').insert({
-                campaign_id, user_id: viewer, user_type: 'embed', event_type, site_id: siteId,
+                campaign_id, user_id: viewer, user_type: 'embed', event_type, site_id: siteId, ghl_location: ghlLoc,
                 target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null
             });
             return ok(res, { logged: true });
