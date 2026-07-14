@@ -18,7 +18,7 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
-    'search_partners', 'export_clicks'
+    'search_partners', 'export_clicks', 'partners_by_ids'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -245,6 +245,14 @@ export default async function handler(req, res) {
                     id: r.person_id, full_name: r.full_name, email: r.email,
                     company_name: r.company_names || null
                 })));
+            }
+
+            // Resolve names for a set of saved partner ids (edit → chips).
+            if (action === 'partners_by_ids') {
+                const ids = Array.isArray(req.body.ids) ? req.body.ids.map(String) : [];
+                if (!ids.length) return ok(res, []);
+                const { data } = await supabase.from('persons').select('id, full_name').in('id', ids);
+                return ok(res, (data || []).map(p => ({ id: p.id, full_name: p.full_name || 'Partner' })));
             }
 
             // Detailed click-through rows for CSV export (names + emails resolved).

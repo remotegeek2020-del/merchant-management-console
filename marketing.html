@@ -59,7 +59,17 @@
   .statbox{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
   .statbox .n{font-size:24px;font-weight:800;font-family:'DM Mono',monospace;}
   .statbox .l{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:4px;}
-  @media(max-width:640px){ .row2{grid-template-columns:1fr;} .statgrid{grid-template-columns:1fr 1fr;} }
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;}
+  .cal-dow{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:center;padding:4px 0;}
+  .cal-cell{min-height:78px;border:1px solid var(--border);border-radius:9px;padding:5px;background:#fff;overflow:hidden;}
+  .cal-cell.other{background:#f8fafc;opacity:.6;}
+  .cal-cell.today{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset;}
+  .cal-day{font-size:11px;font-weight:800;color:var(--muted);margin-bottom:3px;}
+  .cal-ev{font-size:10px;font-weight:700;color:#fff;border-radius:5px;padding:2px 5px;margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;cursor:pointer;}
+  .cal-chip{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid var(--border);border-radius:99px;padding:3px 6px 3px 10px;font-size:12px;font-weight:600;}
+  .cal-chip .x{cursor:pointer;color:var(--muted);display:flex;}
+  .pres-row:hover{background:#f8fafc;}
+  @media(max-width:640px){ .row2{grid-template-columns:1fr;} .statgrid{grid-template-columns:1fr 1fr;} .cal-cell{min-height:56px;} }
 </style>
 </head>
 <body>
@@ -78,6 +88,20 @@
     <div class="muted" style="margin-top:6px;">Ask a super admin to enable it for your account.</div>
   </div>
 
+  <div id="viewBar" style="display:none;align-items:center;gap:10px;margin-bottom:14px;">
+    <div class="seg">
+      <button id="viewListBtn" class="on" onclick="setView('list')">List</button>
+      <button id="viewCalBtn" onclick="setView('calendar')">Calendar</button>
+    </div>
+    <div style="flex:1;"></div>
+    <div id="calNav" style="display:none;align-items:center;gap:8px;">
+      <button class="btn btn-neutral" onclick="calMove(-1)"><span class="material-icons" style="font-size:16px;">chevron_left</span></button>
+      <b id="calLabel" style="min-width:130px;text-align:center;"></b>
+      <button class="btn btn-neutral" onclick="calMove(1)"><span class="material-icons" style="font-size:16px;">chevron_right</span></button>
+      <button class="btn btn-neutral" onclick="calToday()">Today</button>
+    </div>
+  </div>
+
   <div id="listCard" class="card" style="overflow:hidden;">
     <div style="overflow-x:auto;">
       <table>
@@ -88,6 +112,8 @@
       </table>
     </div>
   </div>
+
+  <div id="calendarCard" class="card" style="display:none;padding:16px;"></div>
 </div>
 
 <!-- ── EDITOR MODAL ── -->
@@ -139,7 +165,7 @@
       <div class="row2">
         <div>
           <label class="fld">Audience</label>
-          <select class="sel" id="f_audience">
+          <select class="sel" id="f_audience" onchange="onAudienceChange()">
             <option value="partner">Partner portal</option>
             <option value="staff">Staff portal</option>
             <option value="both">Both</option>
@@ -148,6 +174,21 @@
         <div>
           <label class="fld">Priority (higher shows first)</label>
           <input class="inp" id="f_priority" type="number" value="0">
+        </div>
+      </div>
+
+      <div id="targetingSection">
+        <label class="fld">Partner targeting</label>
+        <select class="sel" id="f_target_type" onchange="onTargetTypeChange()">
+          <option value="all">All partners</option>
+          <option value="prime49">Prime49 partners only</option>
+          <option value="specific">Specific partners…</option>
+        </select>
+        <div class="muted" style="font-size:11px;margin-top:3px;">Applies to the partner audience only — staff always see staff/both campaigns.</div>
+        <div id="specificPartners" style="display:none;margin-top:8px;">
+          <input class="inp" id="f_partner_search" placeholder="Search partners by name or company…" oninput="onPartnerSearch()" autocomplete="off">
+          <div id="partnerResults" style="border:1px solid var(--border);border-radius:9px;margin-top:4px;max-height:170px;overflow:auto;display:none;"></div>
+          <div id="partnerChips" style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;"></div>
         </div>
       </div>
 
@@ -178,6 +219,28 @@
           <div class="muted" style="font-size:11px;margin-top:3px;">After a user closes it (X), it comes back this many minutes later. Ignored once they permanently dismiss / take the action.</div>
         </div>
         <div></div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px;">
+        <label style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;cursor:pointer;margin:0;">
+          <span class="switch"><input type="checkbox" id="f_ab_enabled" onchange="onAbToggle()"><span class="slider"></span></span> A/B test — show two versions & compare CTR
+        </label>
+        <div id="abFields" style="display:none;margin-top:12px;">
+          <label class="fld" style="margin-top:0;">Split — % of users who see Version A (the rest see B)</label>
+          <input class="inp" id="f_ab_split" type="number" min="0" max="100" value="50">
+          <div class="muted" style="font-size:11px;margin:6px 0 4px;">Version A = everything above. Fill only the Version B fields you want to differ — blanks fall back to A.</div>
+          <label class="fld">B — Title</label><input class="inp" id="f_b_title" placeholder="(defaults to A's title)">
+          <label class="fld">B — Message text</label><textarea class="ta" id="f_b_body" placeholder="(defaults to A's text)"></textarea>
+          <label class="fld">B — Graphic</label>
+          <input type="file" id="f_b_image" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="onPickImageB(this)">
+          <button type="button" class="btn btn-neutral" onclick="document.getElementById('f_b_image').click()"><span class="material-icons" style="font-size:16px;">image</span> Upload B graphic</button>
+          <button type="button" class="btn btn-neutral" id="bClearImg" style="display:none;" onclick="clearImageB()"><span class="material-icons" style="font-size:16px;">close</span></button>
+          <span id="uploadStateB" class="muted" style="margin-left:8px;"></span>
+          <div class="row2" style="margin-top:8px;">
+            <div><label class="fld" style="margin-top:0;">B — Button label</label><input class="inp" id="f_b_cta_label" placeholder="(defaults to A)"></div>
+            <div><label class="fld" style="margin-top:0;">B — Button link (URL)</label><input class="inp" id="f_b_cta_url" placeholder="(defaults to A)"></div>
+          </div>
+        </div>
       </div>
 
       <div class="row2">
@@ -218,8 +281,13 @@ const money = null;
 
 let editing = null;          // campaign being edited (null = new)
 let currentImageUrl = '';    // uploaded graphic url
+let currentImageUrlB = '';   // A/B variant B graphic url
 let hotspots = [];           // [{id,x,y,w,h,url,label}] in %
 let contentType = 'both';
+let selectedPartners = [];   // [{id, full_name}] for specific targeting
+let allCampaigns = [];       // last loaded list (for calendar)
+let currentView = 'list';
+let calCursor = null;        // Date at first-of-month being viewed
 
 // ── init / access ──
 (async function init(){
@@ -278,6 +346,9 @@ async function loadList(){
   const body = document.getElementById('listBody');
   if (!r.success){ body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--red);">Failed to load.</td></tr>'; return; }
   const rows = r.data || [];
+  allCampaigns = rows;
+  document.getElementById('viewBar').style.display = 'flex';
+  if (currentView === 'calendar') renderCalendar();
   if (!rows.length){ body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);">No campaigns yet. Click “New Campaign”.</td></tr>'; return; }
   body.innerHTML = rows.map(c=>{
     const st = c.stats||{}; const imp=st.impression||0, clk=st.click||0;
@@ -288,7 +359,7 @@ async function loadList(){
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           ${c.image_url?`<img src="${esc(c.image_url)}" style="width:44px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`:`<div style="width:44px;height:32px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:16px;color:#94a3b8;">${c.content_type==='text'?'notes':'image'}</span></div>`}
-          <div><div style="font-weight:700;">${esc(c.title)}</div><div class="muted">${esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
+          <div><div style="font-weight:700;">${esc(c.title)}${c.ab_enabled?' <span class="pill both" style="font-size:9px;">A/B</span>':''}${c.target_type&&c.target_type!=='all'?` <span class="pill partner" style="font-size:9px;">${c.target_type==='prime49'?'PRIME49':'TARGETED'}</span>`:''}</div><div class="muted">${esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
         </div>
       </td>
       <td><span class="pill ${c.audience}">${c.audience}</span></td>
@@ -349,6 +420,14 @@ function openEditor(){
   document.getElementById('f_active').checked=false;
   document.getElementById('uploadState').innerText='';
   document.getElementById('hotspotArea').style.display='none';
+  // targeting
+  document.getElementById('f_target_type').value='all';
+  selectedPartners=[]; renderPartnerChips(); onTargetTypeChange(); onAudienceChange();
+  // A/B
+  document.getElementById('f_ab_enabled').checked=false; document.getElementById('abFields').style.display='none';
+  document.getElementById('f_ab_split').value='50';
+  ['f_b_title','f_b_body','f_b_cta_label','f_b_cta_url'].forEach(id=>document.getElementById(id).value='');
+  currentImageUrlB=''; document.getElementById('uploadStateB').innerText=''; document.getElementById('bClearImg').style.display='none';
   setContentType('both');
   document.getElementById('editorModal').style.display='flex';
 }
@@ -372,6 +451,20 @@ async function editCampaign(id){
   document.getElementById('f_ends').value=toLocalInput(c.ends_at);
   document.getElementById('f_active').checked=!!c.is_active;
   document.getElementById('uploadState').innerText = currentImageUrl ? 'Graphic loaded' : '';
+  // targeting
+  document.getElementById('f_target_type').value=c.target_type||'all';
+  selectedPartners=[]; renderPartnerChips();
+  onTargetTypeChange(); onAudienceChange();
+  if (c.target_type==='specific' && Array.isArray(c.target_partner_ids) && c.target_partner_ids.length) hydratePartnerChips(c.target_partner_ids);
+  // A/B
+  const ab=!!c.ab_enabled; document.getElementById('f_ab_enabled').checked=ab; document.getElementById('abFields').style.display=ab?'':'none';
+  document.getElementById('f_ab_split').value=c.ab_split??50;
+  const vb=c.variant_b||{};
+  document.getElementById('f_b_title').value=vb.title||'';
+  document.getElementById('f_b_body').value=vb.body_text||'';
+  document.getElementById('f_b_cta_label').value=vb.cta_label||'';
+  document.getElementById('f_b_cta_url').value=vb.cta_url||'';
+  currentImageUrlB=vb.image_url||''; document.getElementById('uploadStateB').innerText=currentImageUrlB?'B graphic loaded':''; document.getElementById('bClearImg').style.display=currentImageUrlB?'':'none';
   setContentType(c.content_type||'both');
   if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
   document.getElementById('editorModal').style.display='flex';
@@ -470,17 +563,138 @@ async function saveCampaign(){
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),
     reshow_minutes: parseInt(document.getElementById('f_reshow').value)||5,
+    target_type: document.getElementById('f_target_type').value,
+    target_partner_ids: document.getElementById('f_target_type').value==='specific' ? selectedPartners.map(p=>p.id) : [],
+    ab_enabled: document.getElementById('f_ab_enabled').checked,
+    ab_split: parseInt(document.getElementById('f_ab_split').value),
+    variant_b: document.getElementById('f_ab_enabled').checked ? {
+      title: document.getElementById('f_b_title').value.trim()||null,
+      body_text: document.getElementById('f_b_body').value.trim()||null,
+      image_url: currentImageUrlB||null,
+      cta_label: document.getElementById('f_b_cta_label').value.trim()||null,
+      cta_url: document.getElementById('f_b_cta_url').value.trim()||null
+    } : {},
     is_active: document.getElementById('f_active').checked,
     starts_at: fromLocalInput(document.getElementById('f_starts').value),
     ends_at: fromLocalInput(document.getElementById('f_ends').value),
     priority: parseInt(document.getElementById('f_priority').value)||0
   };
+  if (payload.target_type==='specific' && !payload.target_partner_ids.length){ Swal.fire('Pick partners','Add at least one partner for “Specific partners”, or choose a different targeting option.','warning'); return; }
   const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='Saving…';
   const r = await api(payload);
   btn.disabled=false; btn.textContent='Save Campaign';
   if (!r.success){ Swal.fire('Error', r.message||'Save failed','error'); return; }
   closeEditor(); loadList();
   Swal.fire({icon:'success',title:'Saved',timer:1200,showConfirmButton:false});
+}
+
+// ── targeting ──
+function onAudienceChange(){
+  // Partner targeting only matters when partners are in the audience.
+  const aud=document.getElementById('f_audience').value;
+  document.getElementById('targetingSection').style.display = (aud==='staff') ? 'none' : '';
+}
+function onTargetTypeChange(){
+  const t=document.getElementById('f_target_type').value;
+  document.getElementById('specificPartners').style.display = (t==='specific') ? '' : 'none';
+}
+let _psTimer=null;
+function onPartnerSearch(){
+  clearTimeout(_psTimer);
+  const q=document.getElementById('f_partner_search').value.trim();
+  const box=document.getElementById('partnerResults');
+  if (q.length<2){ box.style.display='none'; box.innerHTML=''; return; }
+  _psTimer=setTimeout(async ()=>{
+    const r=await api({action:'search_partners', query:q});
+    if (!r.success){ box.style.display='none'; return; }
+    const rows=(r.data||[]).slice(0,25);
+    box.innerHTML = rows.length ? rows.map(p=>`
+      <div class="pres-row" style="padding:8px 10px;border-bottom:1px solid #f1f5f9;cursor:pointer;font-size:13px;" onclick='addPartner(${JSON.stringify(p.id)},${JSON.stringify(p.full_name||"Partner")})'>
+        <b>${esc(p.full_name||'Partner')}</b>${p.company_name?` <span class="muted">· ${esc(p.company_name)}</span>`:''}${p.email?`<div class="muted" style="font-size:11px;">${esc(p.email)}</div>`:''}
+      </div>`).join('') : '<div class="muted" style="padding:10px;">No matches.</div>';
+    box.style.display='';
+  }, 250);
+}
+function addPartner(id, name){
+  if (!selectedPartners.some(p=>String(p.id)===String(id))) selectedPartners.push({id:String(id), full_name:name});
+  document.getElementById('f_partner_search').value=''; document.getElementById('partnerResults').style.display='none';
+  renderPartnerChips();
+}
+function removePartner(id){ selectedPartners=selectedPartners.filter(p=>String(p.id)!==String(id)); renderPartnerChips(); }
+function renderPartnerChips(){
+  const wrap=document.getElementById('partnerChips');
+  wrap.innerHTML = selectedPartners.map(p=>`<span class="cal-chip">${esc(p.full_name)} <span class="x" onclick='removePartner(${JSON.stringify(p.id)})'><span class="material-icons" style="font-size:15px;">close</span></span></span>`).join('')
+    || '<span class="muted" style="font-size:11px;">No partners selected yet.</span>';
+}
+async function hydratePartnerChips(ids){
+  const r=await api({action:'partners_by_ids', ids});
+  const named=(r.success && Array.isArray(r.data)) ? r.data : [];
+  const map={}; named.forEach(p=>map[String(p.id)]=p.full_name);
+  selectedPartners = ids.map(id=>({id:String(id), full_name: map[String(id)] || ('Partner '+String(id).slice(0,6))}));
+  renderPartnerChips();
+}
+
+// ── A/B ──
+function onAbToggle(){ document.getElementById('abFields').style.display = document.getElementById('f_ab_enabled').checked ? '' : 'none'; }
+async function onPickImageB(input){
+  const f=input.files&&input.files[0]; input.value=''; if(!f) return;
+  if (f.size>8*1024*1024){ Swal.fire('Too large','Max 8MB.','warning'); return; }
+  document.getElementById('uploadStateB').innerText='Uploading…';
+  const u=await api({action:'get_upload_url', file_type:f.type});
+  if (!u.success){ document.getElementById('uploadStateB').innerText=''; Swal.fire('Upload failed',u.message||'','error'); return; }
+  const put=await fetch(u.data.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}});
+  if (!put.ok){ document.getElementById('uploadStateB').innerText=''; Swal.fire('Upload failed','Storage error '+put.status,'error'); return; }
+  currentImageUrlB=u.data.public_url;
+  document.getElementById('uploadStateB').innerText='B graphic uploaded ✓';
+  document.getElementById('bClearImg').style.display='';
+}
+function clearImageB(){ currentImageUrlB=''; document.getElementById('uploadStateB').innerText=''; document.getElementById('bClearImg').style.display='none'; }
+
+// ── calendar ──
+function setView(v){
+  currentView=v;
+  document.getElementById('viewListBtn').classList.toggle('on', v==='list');
+  document.getElementById('viewCalBtn').classList.toggle('on', v==='calendar');
+  document.getElementById('listCard').style.display = v==='list' ? '' : 'none';
+  document.getElementById('calendarCard').style.display = v==='calendar' ? '' : 'none';
+  document.getElementById('calNav').style.display = v==='calendar' ? 'flex' : 'none';
+  if (v==='calendar'){ if(!calCursor){ const n=new Date(); calCursor=new Date(n.getFullYear(),n.getMonth(),1); } renderCalendar(); }
+}
+function calMove(d){ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+d, 1); renderCalendar(); }
+function calToday(){ const n=new Date(); calCursor=new Date(n.getFullYear(),n.getMonth(),1); renderCalendar(); }
+const CAL_COLORS=['#2563eb','#db2777','#0d9488','#d97706','#7c3aed','#dc2626','#0891b2','#65a30d'];
+function renderCalendar(){
+  if(!calCursor){ const n=new Date(); calCursor=new Date(n.getFullYear(),n.getMonth(),1); }
+  const y=calCursor.getFullYear(), m=calCursor.getMonth();
+  document.getElementById('calLabel').textContent = calCursor.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+  const first=new Date(y,m,1), startDow=first.getDay();
+  const daysInMonth=new Date(y,m+1,0).getDate();
+  const todayStr=new Date().toDateString();
+  // Map each campaign to a color + its [start,end] window (default open-ended).
+  const camps=allCampaigns.map((c,i)=>{
+    const s=c.starts_at?new Date(c.starts_at):null;
+    const e=c.ends_at?new Date(c.ends_at):null;
+    return {c, color:CAL_COLORS[i%CAL_COLORS.length], s, e};
+  });
+  const inWindow=(day, x)=>{
+    const d0=new Date(y,m,day,0,0,0), d1=new Date(y,m,day,23,59,59);
+    if (x.s && x.s>d1) return false;
+    if (x.e && x.e<d0) return false;
+    return true;
+  };
+  const dow=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="cal-dow">${d}</div>`).join('');
+  let cells='';
+  for (let i=0;i<startDow;i++) cells+='<div class="cal-cell other"></div>';
+  for (let day=1; day<=daysInMonth; day++){
+    const isToday=new Date(y,m,day).toDateString()===todayStr;
+    const evs=camps.filter(x=>inWindow(day,x));
+    const evHtml=evs.slice(0,4).map(x=>`<div class="cal-ev" style="background:${x.color};" title="${esc(x.c.title)}" onclick='editCampaign(${JSON.stringify(x.c.id)})'>${esc(x.c.title)}</div>`).join('')
+      + (evs.length>4?`<div class="muted" style="font-size:10px;">+${evs.length-4} more</div>`:'');
+    cells+=`<div class="cal-cell${isToday?' today':''}"><div class="cal-day">${day}</div>${evHtml}</div>`;
+  }
+  document.getElementById('calendarCard').innerHTML =
+    `<div class="cal-grid" style="margin-bottom:6px;">${dow}</div><div class="cal-grid">${cells}</div>
+     <div class="muted" style="margin-top:12px;font-size:11px;">Bars span each campaign's activation → expiration window. Click a bar to edit. “Active” toggle still controls whether it actually shows.</div>`;
 }
 
 // ── stats ──
@@ -493,6 +707,9 @@ async function showStats(id, title){
   const s=r.data;
   const targets = Object.entries(s.clicks_by_target||{});
   document.getElementById('statsBody').innerHTML=`
+    <div style="display:flex;justify-content:flex-end;margin-bottom:10px;">
+      <button class="btn btn-neutral" onclick='exportClicks(${JSON.stringify(id)},${JSON.stringify(title)})'><span class="material-icons" style="font-size:16px;">download</span> Export clickers (CSV)</button>
+    </div>
     <div class="statgrid">
       <div class="statbox"><div class="n">${s.impressions}</div><div class="l">Views</div></div>
       <div class="statbox"><div class="n">${s.clicks}</div><div class="l">Clicks</div></div>
@@ -503,11 +720,41 @@ async function showStats(id, title){
       <div>${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
       <div style="margin-top:6px;">By audience: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff clicks</div>
     </div>
+    ${abSection(s.ab)}
     ${targets.length?`<label class="fld">Clicks by button / hotspot</label>${targets.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}`:''}
     ${peopleSection('Who clicked', s.clickers, true)}
     ${peopleSection('Who viewed', s.viewers, false)}
     ${peopleSection('Who dismissed', s.dismissers, false)}
   `;
+}
+
+// A/B comparison block (only when the campaign has variant events).
+function abSection(ab){
+  if (!ab) return '';
+  const row=(label,v)=>`<div class="statbox">
+      <div class="l" style="margin:0 0 6px;">Version ${label}</div>
+      <div style="font-size:13px;font-weight:700;">${v.unique_clicks}/${v.unique_impressions} <span class="muted" style="font-weight:600;">clickers/viewers</span></div>
+      <div style="font-size:20px;font-weight:800;color:var(--green);font-family:'DM Mono',monospace;margin-top:2px;">${v.ctr}%</div>
+    </div>`;
+  const winner = (ab.A.ctr===ab.B.ctr) ? 'Tie so far' : (ab.A.ctr>ab.B.ctr ? 'Version A is winning' : 'Version B is winning');
+  return `<label class="fld">A/B test</label>
+    <div class="statgrid" style="grid-template-columns:1fr 1fr;">${row('A',ab.A)}${row('B',ab.B)}</div>
+    <div class="muted" style="margin-top:6px;font-size:12px;">${winner} (by unique CTR).</div>`;
+}
+
+// ── CSV export of clickers ──
+function csvCell(v){ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+async function exportClicks(id, title){
+  const r=await api({action:'export_clicks', id, event_type:'click'});
+  if (!r.success){ Swal.fire('Export failed', r.message||'', 'error'); return; }
+  const rows=r.data||[];
+  if (!rows.length){ Swal.fire('No clicks yet','Nobody has clicked this campaign.','info'); return; }
+  const header=['Name','Email','Type','Target','Variant','Clicked at'];
+  const lines=[header.join(',')].concat(rows.map(x=>[x.name,x.email,x.user_type,x.target,x.variant,new Date(x.at).toLocaleString()].map(csvCell).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=(title||'campaign').replace(/[^a-z0-9]+/gi,'_').toLowerCase()+'_clickers.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
 }
 
 // Render a named list of people for an event (clickers / viewers / dismissers).
