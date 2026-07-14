@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marketing | PayProTec</title>
+<script>(function(){const u=localStorage.getItem('pp_userid'),v=localStorage.getItem('pp_verified');if(!u||v!=='true')window.location.href='/?reason=unauthorized';})();</script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  :root{--blue:#004990;--navy:#002d5a;--border:#e2e8f0;--surface:#f0f4f8;--text:#0a1628;--muted:#64748b;--green:#16a34a;--amber:#b45309;--red:#dc2626;--shadow:0 1px 3px rgba(0,0,0,0.08);}
+  body{margin:0;font-family:'DM Sans',sans-serif;background:var(--surface);color:var(--text);-webkit-font-smoothing:antialiased;}
+  .topbar{background:linear-gradient(135deg,var(--navy),var(--blue));padding:14px 22px;display:flex;align-items:center;gap:14px;}
+  .topbar-logo{height:24px;filter:brightness(0) invert(1);}
+  .topbar h1{font-size:16px;font-weight:800;color:#fff;margin:0;}
+  .topbar .sp{flex:1;}
+  .btn{display:inline-flex;align-items:center;gap:6px;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
+  .btn-brand{background:var(--blue);color:#fff;}
+  .btn-white{background:rgba(255,255,255,0.15);color:#fff;border:1px solid rgba(255,255,255,0.25);}
+  .btn-neutral{background:#fff;color:var(--text);border:1px solid var(--border);}
+  .btn-danger{background:#fff;color:var(--red);border:1px solid #fecaca;}
+  .wrap{max-width:1200px;margin:0 auto;padding:24px 22px 80px;}
+  .card{background:#fff;border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);}
+  table{width:100%;border-collapse:collapse;}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);text-align:left;padding:12px 14px;border-bottom:1px solid var(--border);}
+  td{padding:12px 14px;border-bottom:1px solid #f1f5f9;font-size:13px;vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  .pill{display:inline-block;font-size:10px;font-weight:800;padding:2px 8px;border-radius:99px;text-transform:uppercase;letter-spacing:.3px;}
+  .pill.partner{background:#ccfbf1;color:#0f766e;} .pill.staff{background:#e0f2fe;color:#0369a1;} .pill.both{background:#ede9fe;color:#6d28d9;}
+  .dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px;}
+  .switch{position:relative;display:inline-block;width:38px;height:21px;}
+  .switch input{opacity:0;width:0;height:0;}
+  .slider{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:99px;transition:.2s;}
+  .slider:before{content:'';position:absolute;height:15px;width:15px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s;}
+  input:checked+.slider{background:var(--green);} input:checked+.slider:before{transform:translateX(17px);}
+  .modal{display:none;position:fixed;inset:0;background:rgba(2,10,25,.55);z-index:1000;align-items:flex-start;justify-content:center;overflow:auto;padding:26px 14px;}
+  .modal-box{background:#fff;border-radius:16px;width:100%;max-width:720px;box-shadow:0 20px 60px rgba(0,0,0,.3);}
+  .modal-head{display:flex;align-items:center;gap:10px;padding:16px 20px;border-bottom:1px solid var(--border);}
+  .modal-head h2{font-size:16px;font-weight:800;margin:0;flex:1;}
+  .modal-body{padding:20px;}
+  label.fld{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:14px 0 5px;}
+  .inp,.sel,.ta{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;}
+  .inp:focus,.sel:focus,.ta:focus{border-color:var(--blue);}
+  .ta{min-height:70px;resize:vertical;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .seg{display:inline-flex;background:#f1f5f9;border-radius:10px;padding:3px;gap:3px;}
+  .seg button{border:none;background:none;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;color:var(--muted);font-family:inherit;}
+  .seg button.on{background:#fff;color:var(--blue);box-shadow:var(--shadow);}
+  .hs-wrap{position:relative;display:inline-block;max-width:100%;border:1px solid var(--border);border-radius:10px;overflow:hidden;user-select:none;}
+  .hs-wrap img{display:block;max-width:100%;}
+  .hs-box{position:absolute;border:2px solid #f59e0b;background:rgba(245,158,11,.18);cursor:move;font-size:10px;font-weight:800;color:#92400e;}
+  .hs-box .hs-del{position:absolute;top:-9px;right:-9px;background:var(--red);color:#fff;border-radius:50%;width:18px;height:18px;font-size:12px;line-height:18px;text-align:center;cursor:pointer;}
+  .hs-num{position:absolute;top:1px;left:3px;background:#f59e0b;color:#fff;border-radius:4px;padding:0 4px;}
+  .muted{color:var(--muted);font-size:12px;}
+  .statgrid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;}
+  .statbox{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;}
+  .statbox .n{font-size:24px;font-weight:800;font-family:'DM Mono',monospace;}
+  .statbox .l{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin-top:4px;}
+  @media(max-width:640px){ .row2{grid-template-columns:1fr;} .statgrid{grid-template-columns:1fr 1fr;} }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" class="topbar-logo" alt="PayProTec">
+  <h1>📣 Marketing &amp; Announcements</h1>
+  <div class="sp"></div>
+  <button class="btn btn-white" onclick="location.href='/'"><span class="material-icons" style="font-size:17px;">home</span> Home</button>
+  <button class="btn btn-brand" onclick="openEditor()"><span class="material-icons" style="font-size:17px;">add</span> New Campaign</button>
+</div>
+
+<div class="wrap">
+  <div id="noAccess" style="display:none;" class="card" style="padding:40px;text-align:center;">
+    <span class="material-icons" style="font-size:44px;color:#cbd5e1;">lock</span>
+    <div style="font-weight:800;margin-top:10px;">You don't have access to Marketing.</div>
+    <div class="muted" style="margin-top:6px;">Ask a super admin to enable it for your account.</div>
+  </div>
+
+  <div id="listCard" class="card" style="overflow:hidden;">
+    <div style="overflow-x:auto;">
+      <table>
+        <thead><tr>
+          <th>Campaign</th><th>Audience</th><th>Window</th><th class="num">Views</th><th class="num">Clicks</th><th class="num">CTR</th><th>Active</th><th style="text-align:right;">Actions</th>
+        </tr></thead>
+        <tbody id="listBody"><tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);">Loading…</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ── EDITOR MODAL ── -->
+<div class="modal" id="editorModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">campaign</span>
+      <h2 id="editorTitle">New Campaign</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="closeEditor()">close</span>
+    </div>
+    <div class="modal-body">
+      <label class="fld">Campaign Title *</label>
+      <input class="inp" id="f_title" placeholder="e.g. Summer Prime49 Push">
+
+      <label class="fld">Content Type</label>
+      <div class="seg" id="segContent">
+        <button data-v="both" class="on" onclick="setContentType('both')">Text + Graphic</button>
+        <button data-v="text" onclick="setContentType('text')">Text only</button>
+        <button data-v="graphic" onclick="setContentType('graphic')">Graphic only</button>
+      </div>
+
+      <div id="textSection">
+        <label class="fld">Message Text</label>
+        <textarea class="ta" id="f_body" placeholder="Announcement text shown on the card…"></textarea>
+      </div>
+
+      <div id="graphicSection">
+        <label class="fld">Graphic</label>
+        <input type="file" id="f_image" accept="image/png,image/jpeg,image/webp,image/gif" style="display:none;" onchange="onPickImage(this)">
+        <button class="btn btn-neutral" onclick="document.getElementById('f_image').click()"><span class="material-icons" style="font-size:16px;">image</span> Upload graphic</button>
+        <span id="uploadState" class="muted" style="margin-left:8px;"></span>
+
+        <div id="hotspotArea" style="display:none;margin-top:12px;">
+          <div class="muted" style="margin-bottom:6px;">💡 Drag on the image to draw a clickable button/hotspot, then set its link below. You can add several.</div>
+          <div class="hs-wrap" id="hsWrap"><img id="hsImage" src="" alt=""></div>
+          <div id="hsList" style="margin-top:10px;"></div>
+        </div>
+      </div>
+
+      <label class="fld">Call-to-action button (optional)</label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
+        <input type="checkbox" id="f_cta_enabled" onchange="document.getElementById('ctaFields').style.display=this.checked?'grid':'none';"> Show a CTA button on the card
+      </label>
+      <div class="row2" id="ctaFields" style="display:none;margin-top:8px;">
+        <div><label class="fld" style="margin-top:0;">Button label</label><input class="inp" id="f_cta_label" placeholder="Learn more"></div>
+        <div><label class="fld" style="margin-top:0;">Button link (URL)</label><input class="inp" id="f_cta_url" placeholder="https://…"></div>
+      </div>
+
+      <div class="row2">
+        <div>
+          <label class="fld">Audience</label>
+          <select class="sel" id="f_audience">
+            <option value="partner">Partner portal</option>
+            <option value="staff">Staff portal</option>
+            <option value="both">Both</option>
+          </select>
+        </div>
+        <div>
+          <label class="fld">Priority (higher shows first)</label>
+          <input class="inp" id="f_priority" type="number" value="0">
+        </div>
+      </div>
+
+      <div class="row2">
+        <div><label class="fld">Activation date</label><input class="inp" id="f_starts" type="datetime-local"></div>
+        <div><label class="fld">Expiration date</label><input class="inp" id="f_ends" type="datetime-local"></div>
+      </div>
+
+      <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
+        <span class="switch"><input type="checkbox" id="f_active"><span class="slider"></span></span> Active (live now, within the dates above)
+      </label>
+
+      <div style="display:flex;gap:10px;justify-content:flex-end;margin-top:22px;">
+        <button class="btn btn-neutral" onclick="closeEditor()">Cancel</button>
+        <button class="btn btn-brand" id="saveBtn" onclick="saveCampaign()">Save Campaign</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── STATS MODAL ── -->
+<div class="modal" id="statsModal">
+  <div class="modal-box" style="max-width:560px;">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">insights</span>
+      <h2 id="statsTitle">Campaign Stats</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('statsModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body" id="statsBody"></div>
+  </div>
+</div>
+
+<script>
+const token = localStorage.getItem('pp_session_token') || '';
+if (!token) location.href = '/';
+function api(body){ return fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+token},body:JSON.stringify(body)}).then(r=>r.json()); }
+const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const money = null;
+
+let editing = null;          // campaign being edited (null = new)
+let currentImageUrl = '';    // uploaded graphic url
+let hotspots = [];           // [{id,x,y,w,h,url,label}] in %
+let contentType = 'both';
+
+// ── init / access ──
+(async function init(){
+  const acc = await api({action:'can_access'});
+  if (!acc.success || !acc.data.can_access) {
+    document.getElementById('noAccess').style.display='';
+    document.getElementById('listCard').style.display='none';
+    document.querySelector('.btn-brand').style.display='none';
+    return;
+  }
+  loadList();
+})();
+
+async function loadList(){
+  const r = await api({action:'list_campaigns'});
+  const body = document.getElementById('listBody');
+  if (!r.success){ body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:30px;color:var(--red);">Failed to load.</td></tr>'; return; }
+  const rows = r.data || [];
+  if (!rows.length){ body.innerHTML='<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--muted);">No campaigns yet. Click “New Campaign”.</td></tr>'; return; }
+  body.innerHTML = rows.map(c=>{
+    const st = c.stats||{}; const imp=st.impression||0, clk=st.click||0;
+    const ctr = imp ? ((clk/imp)*100).toFixed(1)+'%' : '—';
+    const win = fmtWindow(c);
+    const live = isLive(c);
+    return `<tr>
+      <td>
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${c.image_url?`<img src="${esc(c.image_url)}" style="width:44px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`:`<div style="width:44px;height:32px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:16px;color:#94a3b8;">${c.content_type==='text'?'notes':'image'}</span></div>`}
+          <div><div style="font-weight:700;">${esc(c.title)}</div><div class="muted">${esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''}</div></div>
+        </div>
+      </td>
+      <td><span class="pill ${c.audience}">${c.audience}</span></td>
+      <td class="muted">${win}${live?'':' <span style="color:#b45309;">(not live)</span>'}</td>
+      <td class="num">${imp}</td>
+      <td class="num">${clk}</td>
+      <td class="num">${ctr}</td>
+      <td><span class="switch"><input type="checkbox" ${c.is_active?'checked':''} onchange="toggleActive('${c.id}',this.checked)"><span class="slider"></span></span></td>
+      <td style="text-align:right;white-space:nowrap;">
+        <button class="btn btn-neutral" style="padding:6px 9px;" title="Stats" onclick='showStats(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">insights</span></button>
+        <button class="btn btn-neutral" style="padding:6px 9px;" title="Edit" onclick='editCampaign(${JSON.stringify(c.id)})'><span class="material-icons" style="font-size:16px;">edit</span></button>
+        <button class="btn btn-danger" style="padding:6px 9px;" title="Delete" onclick='delCampaign(${JSON.stringify(c.id)},${JSON.stringify(c.title)})'><span class="material-icons" style="font-size:16px;">delete</span></button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function fmtWindow(c){
+  const f = d => d ? new Date(d).toLocaleDateString(undefined,{month:'short',day:'numeric'}) : null;
+  const s=f(c.starts_at), e=f(c.ends_at);
+  if (!s && !e) return 'Always';
+  return `${s||'now'} → ${e||'∞'}`;
+}
+function isLive(c){
+  if (!c.is_active) return false;
+  const now=Date.now();
+  if (c.starts_at && new Date(c.starts_at).getTime()>now) return false;
+  if (c.ends_at && new Date(c.ends_at).getTime()<now) return false;
+  return true;
+}
+
+async function toggleActive(id, val){ await api({action:'toggle_active', id, is_active:val}); loadList(); }
+async function delCampaign(id, title){
+  const c = await Swal.fire({icon:'warning',title:'Delete campaign?',html:`“${esc(title)}” and its stats will be removed.`,showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
+  if (!c.isConfirmed) return;
+  await api({action:'delete_campaign', id}); loadList();
+}
+
+// ── editor ──
+function setContentType(v){
+  contentType=v;
+  document.querySelectorAll('#segContent button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
+  document.getElementById('textSection').style.display = (v==='text'||v==='both')?'':'none';
+  document.getElementById('graphicSection').style.display = (v==='graphic'||v==='both')?'':'none';
+}
+function openEditor(){
+  editing=null; currentImageUrl=''; hotspots=[];
+  document.getElementById('editorTitle').innerText='New Campaign';
+  document.getElementById('f_title').value='';
+  document.getElementById('f_body').value='';
+  document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
+  document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
+  document.getElementById('f_audience').value='partner';
+  document.getElementById('f_priority').value='0';
+  document.getElementById('f_starts').value=''; document.getElementById('f_ends').value='';
+  document.getElementById('f_active').checked=false;
+  document.getElementById('uploadState').innerText='';
+  document.getElementById('hotspotArea').style.display='none';
+  setContentType('both');
+  document.getElementById('editorModal').style.display='flex';
+}
+function closeEditor(){ document.getElementById('editorModal').style.display='none'; }
+
+async function editCampaign(id){
+  const r = await api({action:'get_campaign', id});
+  if (!r.success){ Swal.fire('Error', r.message||'Not found','error'); return; }
+  const c = r.data; editing=c;
+  currentImageUrl=c.image_url||''; hotspots=Array.isArray(c.hotspots)?c.hotspots:[];
+  document.getElementById('editorTitle').innerText='Edit Campaign';
+  document.getElementById('f_title').value=c.title||'';
+  document.getElementById('f_body').value=c.body_text||'';
+  document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
+  document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
+  document.getElementById('f_audience').value=c.audience||'partner';
+  document.getElementById('f_priority').value=c.priority??0;
+  document.getElementById('f_starts').value=toLocalInput(c.starts_at);
+  document.getElementById('f_ends').value=toLocalInput(c.ends_at);
+  document.getElementById('f_active').checked=!!c.is_active;
+  document.getElementById('uploadState').innerText = currentImageUrl ? 'Graphic loaded' : '';
+  setContentType(c.content_type||'both');
+  if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
+  document.getElementById('editorModal').style.display='flex';
+}
+
+function toLocalInput(iso){ if(!iso) return ''; const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
+function fromLocalInput(v){ return v ? new Date(v).toISOString() : null; }
+
+async function onPickImage(input){
+  const f = input.files&&input.files[0]; input.value=''; if(!f) return;
+  if (f.size>8*1024*1024){ Swal.fire('Too large','Max 8MB.','warning'); return; }
+  document.getElementById('uploadState').innerText='Uploading…';
+  const u = await api({action:'get_upload_url', file_type:f.type});
+  if (!u.success){ document.getElementById('uploadState').innerText=''; Swal.fire('Upload failed', u.message||'', 'error'); return; }
+  const put = await fetch(u.data.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}});
+  if (!put.ok){ document.getElementById('uploadState').innerText=''; Swal.fire('Upload failed','Storage error '+put.status,'error'); return; }
+  currentImageUrl = u.data.public_url;
+  document.getElementById('uploadState').innerText='Graphic uploaded ✓';
+  const img=document.getElementById('hsImage'); img.src=currentImageUrl; img.onload=renderHotspots;
+  document.getElementById('hotspotArea').style.display='';
+}
+
+// ── hotspot drawing ──
+(function(){
+  const wrap=document.getElementById('hsWrap');
+  let drawing=false, startX=0, startY=0, temp=null;
+  wrap.addEventListener('mousedown', e=>{
+    if (e.target.classList.contains('hs-del') || e.target.closest('.hs-box')) return; // don't draw when interacting with a box
+    const img=document.getElementById('hsImage'); if(!img.src) return;
+    const r=img.getBoundingClientRect(); drawing=true;
+    startX=e.clientX-r.left; startY=e.clientY-r.top;
+    temp=document.createElement('div'); temp.className='hs-box'; wrap.appendChild(temp);
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e=>{
+    if(!drawing) return; const img=document.getElementById('hsImage'); const r=img.getBoundingClientRect();
+    let x=Math.min(startX,e.clientX-r.left), y=Math.min(startY,e.clientY-r.top);
+    let w=Math.abs(e.clientX-r.left-startX), h=Math.abs(e.clientY-r.top-startY);
+    x=Math.max(0,x); y=Math.max(0,y); w=Math.min(w,r.width-x); h=Math.min(h,r.height-y);
+    temp.style.left=x+'px'; temp.style.top=y+'px'; temp.style.width=w+'px'; temp.style.height=h+'px';
+  });
+  window.addEventListener('mouseup', e=>{
+    if(!drawing) return; drawing=false;
+    const img=document.getElementById('hsImage'); const r=img.getBoundingClientRect();
+    const bx=temp.getBoundingClientRect();
+    const w=bx.width, h=bx.height;
+    if (temp) temp.remove(); temp=null;
+    if (w<12 || h<12) return; // ignore tiny drags
+    const x=bx.left-r.left, y=bx.top-r.top;
+    hotspots.push({ id:'h'+Date.now(), x:+(x/r.width*100).toFixed(2), y:+(y/r.height*100).toFixed(2), w:+(w/r.width*100).toFixed(2), h:+(h/r.height*100).toFixed(2), url:'', label:'' });
+    renderHotspots();
+  });
+})();
+
+function renderHotspots(){
+  const wrap=document.getElementById('hsWrap');
+  wrap.querySelectorAll('.hs-box').forEach(b=>b.remove());
+  hotspots.forEach((hs,i)=>{
+    const d=document.createElement('div'); d.className='hs-box';
+    d.style.left=hs.x+'%'; d.style.top=hs.y+'%'; d.style.width=hs.w+'%'; d.style.height=hs.h+'%';
+    d.innerHTML=`<span class="hs-num">${i+1}</span><span class="hs-del" onclick="removeHotspot(${i});event.stopPropagation();">×</span>`;
+    wrap.appendChild(d);
+  });
+  const list=document.getElementById('hsList');
+  list.innerHTML = hotspots.length ? hotspots.map((hs,i)=>`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="background:#f59e0b;color:#fff;border-radius:6px;width:22px;height:22px;display:inline-flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0;">${i+1}</span>
+      <input class="inp" style="flex:0 0 130px;" placeholder="Label (optional)" value="${esc(hs.label)}" oninput="hotspots[${i}].label=this.value">
+      <input class="inp" style="flex:1;" placeholder="https://link-for-this-button" value="${esc(hs.url)}" oninput="hotspots[${i}].url=this.value">
+      <span class="material-icons" style="color:var(--red);cursor:pointer;" onclick="removeHotspot(${i})">delete</span>
+    </div>`).join('') : '<div class="muted">No hotspots yet — drag a box on the image above to add one.</div>';
+}
+function removeHotspot(i){ hotspots.splice(i,1); renderHotspots(); }
+
+async function saveCampaign(){
+  const title=document.getElementById('f_title').value.trim();
+  if (!title){ Swal.fire('Missing title','Give the campaign a title.','warning'); return; }
+  if ((contentType==='graphic'||contentType==='both') && !currentImageUrl && contentType==='graphic'){ Swal.fire('Missing graphic','Upload a graphic or switch to Text only.','warning'); return; }
+  const payload={
+    action: editing&&editing.id ? 'update_campaign':'create_campaign',
+    id: editing&&editing.id ? editing.id : undefined,
+    title,
+    body_text: (contentType==='graphic') ? null : document.getElementById('f_body').value,
+    image_url: (contentType==='text') ? null : (currentImageUrl||null),
+    content_type: contentType,
+    cta_enabled: document.getElementById('f_cta_enabled').checked,
+    cta_label: document.getElementById('f_cta_label').value.trim()||null,
+    cta_url: document.getElementById('f_cta_url').value.trim()||null,
+    hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
+    audience: document.getElementById('f_audience').value,
+    is_active: document.getElementById('f_active').checked,
+    starts_at: fromLocalInput(document.getElementById('f_starts').value),
+    ends_at: fromLocalInput(document.getElementById('f_ends').value),
+    priority: parseInt(document.getElementById('f_priority').value)||0
+  };
+  const btn=document.getElementById('saveBtn'); btn.disabled=true; btn.textContent='Saving…';
+  const r = await api(payload);
+  btn.disabled=false; btn.textContent='Save Campaign';
+  if (!r.success){ Swal.fire('Error', r.message||'Save failed','error'); return; }
+  closeEditor(); loadList();
+  Swal.fire({icon:'success',title:'Saved',timer:1200,showConfirmButton:false});
+}
+
+// ── stats ──
+async function showStats(id, title){
+  document.getElementById('statsTitle').innerText='Stats — '+title;
+  document.getElementById('statsBody').innerHTML='<div class="muted" style="text-align:center;padding:20px;">Loading…</div>';
+  document.getElementById('statsModal').style.display='flex';
+  const r = await api({action:'get_stats', id});
+  if (!r.success){ document.getElementById('statsBody').innerHTML='<div style="color:var(--red);">Failed to load.</div>'; return; }
+  const s=r.data;
+  const targets = Object.entries(s.clicks_by_target||{});
+  document.getElementById('statsBody').innerHTML=`
+    <div class="statgrid">
+      <div class="statbox"><div class="n">${s.impressions}</div><div class="l">Views</div></div>
+      <div class="statbox"><div class="n">${s.clicks}</div><div class="l">Clicks</div></div>
+      <div class="statbox"><div class="n">${s.dismissals}</div><div class="l">Dismissed</div></div>
+      <div class="statbox"><div class="n" style="color:var(--green);">${s.ctr}%</div><div class="l">CTR (unique)</div></div>
+    </div>
+    <div style="margin-top:14px;font-size:13px;color:var(--secondary);">
+      <div>${s.unique_impressions} unique viewers · ${s.unique_clicks} unique clickers</div>
+      <div style="margin-top:6px;">By audience: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff clicks</div>
+    </div>
+    ${targets.length?`<label class="fld">Clicks by button / hotspot</label>${targets.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}`:''}
+  `;
+}
+
+// close modals on backdrop click
+document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.style.display='none'; }));
+</script>
+</body>
+</html>
