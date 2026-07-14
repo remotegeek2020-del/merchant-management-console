@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Announcements</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;}
+  html,body{margin:0;background:transparent;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#0a1628;}
+  #wrap{padding:6px;}
+  .w-card{background:#fff;border:1px solid #e5e9f0;border-radius:14px;box-shadow:0 1px 3px rgba(0,0,0,.06);overflow:hidden;position:relative;margin-bottom:10px;}
+  .w-img{position:relative;line-height:0;}
+  .w-img img{width:100%;display:block;}
+  .w-hot{position:absolute;display:block;cursor:pointer;border-radius:6px;}
+  .w-hot:hover{background:rgba(0,73,144,.12);box-shadow:0 0 0 2px rgba(0,73,144,.5) inset;}
+  .w-body{padding:14px 16px;}
+  .w-title{font-size:15px;font-weight:800;margin:0 0 6px;}
+  .w-text{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;}
+  .w-cta{display:inline-block;margin-top:12px;background:#004990;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;cursor:pointer;text-decoration:none;}
+  .w-x{position:absolute;top:9px;right:9px;z-index:3;background:rgba(0,0,0,.45);color:#fff;border:none;border-radius:50%;width:26px;height:26px;font-size:16px;line-height:1;cursor:pointer;}
+  .w-forget{display:flex;align-items:center;gap:6px;margin-top:10px;font-size:11px;color:#94a3b8;cursor:pointer;}
+  .w-empty{font-size:12px;color:#94a3b8;text-align:center;padding:14px;}
+</style>
+</head>
+<body>
+<div id="wrap"><div class="w-empty">Loading…</div></div>
+<script>
+(function(){
+  var qs = new URLSearchParams(location.search);
+  var SITE_KEY = qs.get('site_key') || qs.get('k') || '';
+  var EMAIL = (qs.get('email') || '').trim();
+  // API base: same origin this page is served from.
+  var API = location.origin + '/api/embed';
+  var VID_KEY='ppw_vid', SNOOZE_KEY='ppw_snooze', PERM_KEY='ppw_perm', FREQ=5;
+
+  function store(k){ try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;} }
+  function save(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
+  function vid(){
+    if (EMAIL) return 'email:'+EMAIL.toLowerCase();
+    var v=null; try{v=localStorage.getItem(VID_KEY);}catch(e){}
+    if(!v){ v=(window.crypto&&crypto.randomUUID)?crypto.randomUUID():('v'+Date.now()+Math.random().toString(36).slice(2)); try{localStorage.setItem(VID_KEY,v);}catch(e){} }
+    return v;
+  }
+  var VIEWER=vid();
+  function esc(s){ return s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function api(b){ b.site_key=SITE_KEY; b.viewer_id=VIEWER; return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}).catch(function(){return {success:false};}); }
+  function track(id,t,tg,v){ api({action:'track',campaign_id:id,event_type:t,target:tg||null,variant:v||null}); }
+
+  function snoozeMap(){ return store(SNOOZE_KEY)||{}; }
+  function snooze(id){ var m=snoozeMap(); m[id]=Date.now(); save(SNOOZE_KEY,m); }
+  function isSnoozed(c){ var m=snoozeMap(); var mins=(+c.reshow_minutes>0?+c.reshow_minutes:FREQ); return m[c.id]&&(Date.now()-m[c.id])<mins*60000; }
+  function permList(){ return store(PERM_KEY)||[]; }
+  function permAdd(id){ var a=permList(); if(a.indexOf(id)===-1){a.push(id);save(PERM_KEY,a);} }
+  function isPerm(id){ return permList().indexOf(id)!==-1; }
+
+  var list=[];
+  window.wClose=function(id){ snooze(id); rerender(); };
+  window.wForget=function(id){ permAdd(id); track(id,'dismiss'); api({action:'dismiss',campaign_id:id}); rerender(); };
+  window.wAction=function(id,tg){ permAdd(id); var c=byId(id); track(id,'click',tg||'cta',c&&c.variant); api({action:'dismiss',campaign_id:id}); rerender(); };
+  window.wClick=function(id,tg){ var c=byId(id); track(id,'click',tg,c&&c.variant); };
+  function byId(id){ for(var i=0;i<list.length;i++) if(list[i].id===id) return list[i]; return null; }
+
+  function cardHtml(c){
+    var untilAction=c.behavior==='until_action', dismissible=c.behavior==='dismissible';
+    var showG=(c.content_type==='graphic'||c.content_type==='both')&&c.image_url;
+    var showT=(c.content_type==='text'||c.content_type==='both');
+    var clickFn=untilAction?'wAction':'wClick';
+    var hot=(c.hotspots||[]).filter(function(h){return h.url;}).map(function(h){
+      return '<a class="w-hot" href="'+esc(h.url)+'" target="_blank" rel="noopener" style="left:'+h.x+'%;top:'+h.y+'%;width:'+h.w+'%;height:'+h.h+'%;" onclick="'+clickFn+'(\''+c.id+'\',\''+esc(h.id||'hotspot')+'\')"></a>';
+    }).join('');
+    var h='<div class="w-card"><button class="w-x" onclick="wClose(\''+c.id+'\')">×</button>';
+    if(showG) h+='<div class="w-img"><img src="'+esc(c.image_url)+'" alt="">'+hot+'</div>';
+    h+='<div class="w-body">';
+    if(showT&&c.title) h+='<div class="w-title">'+esc(c.title)+'</div>';
+    if(showT&&c.body_text) h+='<div class="w-text">'+esc(c.body_text)+'</div>';
+    if(c.cta_enabled&&c.cta_url){ var cta=untilAction?'wAction(\''+c.id+'\',\'cta\')':'wClick(\''+c.id+'\',\'cta\')'; h+='<a class="w-cta" href="'+esc(c.cta_url)+'" target="_blank" rel="noopener" onclick="'+cta+'">'+esc(c.cta_label||'Learn more')+'</a>'; }
+    if(dismissible) h+='<label class="w-forget"><input type="checkbox" onchange="if(this.checked)wForget(\''+c.id+'\')"> Don\'t show this again</label>';
+    h+='</div></div>';
+    return h;
+  }
+
+  var shown={};
+  function rerender(){
+    var vis=list.filter(function(c){ return !isPerm(c.id)&&!isSnoozed(c); });
+    var wrap=document.getElementById('wrap');
+    if(!vis.length){ wrap.innerHTML=''; return; }
+    wrap.innerHTML=vis.map(cardHtml).join('');
+    vis.forEach(function(c){ if(!shown[c.id]){ shown[c.id]=1; track(c.id,'impression',null,c.variant); } });
+  }
+
+  function load(){
+    if(!SITE_KEY){ document.getElementById('wrap').innerHTML='<div class="w-empty">Missing site_key.</div>'; return; }
+    api({action:'get_active'}).then(function(d){
+      if(!d||!d.success||!Array.isArray(d.data)){ document.getElementById('wrap').innerHTML=''; return; }
+      list=d.data; rerender();
+    });
+  }
+  load();
+})();
+</script>
+</body>
+</html>

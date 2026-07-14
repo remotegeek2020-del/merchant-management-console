@@ -138,6 +138,7 @@ export default async function handler(req, res) {
                     ab_split: Number.isFinite(+b.ab_split) ? Math.min(100, Math.max(0, Math.round(+b.ab_split))) : 50,
                     variant_b: (b.variant_b && typeof b.variant_b === 'object') ? b.variant_b : {},
                     show_on_embed: !!b.show_on_embed,
+                    embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -177,7 +178,7 @@ export default async function handler(req, res) {
             if (action === 'get_stats') {
                 const { id } = req.body;
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant').eq('campaign_id', id);
+                    .select('event_type, user_id, user_type, target, created_at, variant, site_id').eq('campaign_id', id);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
                 const impressions = rows.filter(r => r.event_type === 'impression').length;
@@ -227,6 +228,21 @@ export default async function handler(req, res) {
                 };
                 const hasAb = rows.some(r => r.variant === 'A' || r.variant === 'B');
 
+                // ── Per-site (embed) breakdown: views + clicks per external site ──
+                let bySite = null;
+                const siteIds = [...new Set(rows.filter(r => r.site_id).map(r => r.site_id))];
+                if (siteIds.length) {
+                    const { data: sites } = await supabase.from('marketing_sites').select('id, name').in('id', siteIds);
+                    const sname = {}; (sites || []).forEach(s => { sname[s.id] = s.name || 'Site'; });
+                    const acc = {};
+                    rows.filter(r => r.site_id).forEach(r => {
+                        const e = acc[r.site_id] || (acc[r.site_id] = { name: sname[r.site_id] || 'Site', impressions: 0, clicks: 0 });
+                        if (r.event_type === 'impression') e.impressions++;
+                        else if (r.event_type === 'click') e.clicks++;
+                    });
+                    bySite = Object.values(acc).sort((a, b) => b.clicks - a.clicks);
+                }
+
                 return ok(res, {
                     impressions, clicks, dismissals,
                     unique_impressions: uImp, unique_clicks: uClick,
@@ -235,7 +251,8 @@ export default async function handler(req, res) {
                     clickers: peopleFor('click'),
                     viewers: peopleFor('impression'),
                     dismissers: peopleFor('dismiss'),
-                    ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null
+                    ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null,
+                    by_site: bySite
                 });
             }
 

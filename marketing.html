@@ -250,9 +250,14 @@
       </div>
 
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
-        <span class="switch"><input type="checkbox" id="f_show_embed"><span class="slider"></span></span> Also show on external sites (Webflow / GoHighLevel) as a modal
+        <span class="switch"><input type="checkbox" id="f_show_embed" onchange="onShowEmbed()"><span class="slider"></span></span> Also show on external sites (Webflow / GoHighLevel) as a modal
       </label>
       <div class="muted" style="font-size:11px;margin-top:4px;">Uses the embed script + your registered site keys. Manage sites with the “Embed Sites” button on the main screen.</div>
+      <div id="embedTarget" style="display:none;margin-top:10px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="embedScope" value="all" checked onchange="onEmbedScope()"> All registered sites</label>
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px;"><input type="radio" name="embedScope" value="specific" onchange="onEmbedScope()"> Specific sites only</label>
+        <div id="embedSiteChecks" style="display:none;margin-top:8px;padding-left:6px;"></div>
+      </div>
 
       <label style="display:flex;align-items:center;gap:10px;font-size:13px;font-weight:700;margin-top:16px;cursor:pointer;">
         <span class="switch"><input type="checkbox" id="f_active"><span class="slider"></span></span> Active (live now, within the dates above)
@@ -455,6 +460,9 @@ function openEditor(){
   ['f_b_title','f_b_body','f_b_cta_label','f_b_cta_url'].forEach(id=>document.getElementById(id).value='');
   currentImageUrlB=''; document.getElementById('uploadStateB').innerText=''; document.getElementById('bClearImg').style.display='none';
   document.getElementById('f_show_embed').checked=false;
+  document.getElementById('embedTarget').style.display='none';
+  const allRadio=document.querySelector('input[name=embedScope][value=all]'); if(allRadio) allRadio.checked=true;
+  onEmbedScope(); renderEmbedSiteChecks([]);
   setContentType('both');
   document.getElementById('editorModal').style.display='flex';
 }
@@ -493,6 +501,12 @@ async function editCampaign(id){
   document.getElementById('f_b_cta_url').value=vb.cta_url||'';
   currentImageUrlB=vb.image_url||''; document.getElementById('uploadStateB').innerText=currentImageUrlB?'B graphic loaded':''; document.getElementById('bClearImg').style.display=currentImageUrlB?'':'none';
   document.getElementById('f_show_embed').checked=!!c.show_on_embed;
+  onShowEmbed();
+  const eids = Array.isArray(c.embed_site_ids)?c.embed_site_ids:[];
+  const scopeSpecific = eids.length>0;
+  document.querySelector('input[name=embedScope][value=all]').checked=!scopeSpecific;
+  document.querySelector('input[name=embedScope][value=specific]').checked=scopeSpecific;
+  onEmbedScope(); renderEmbedSiteChecks(eids);
   setContentType(c.content_type||'both');
   if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
   document.getElementById('editorModal').style.display='flex';
@@ -595,6 +609,7 @@ async function saveCampaign(){
     target_partner_ids: document.getElementById('f_target_type').value==='specific' ? selectedPartners.map(p=>p.id) : [],
     ab_enabled: document.getElementById('f_ab_enabled').checked,
     show_on_embed: document.getElementById('f_show_embed').checked,
+    embed_site_ids: document.getElementById('f_show_embed').checked ? getEmbedSiteIds() : [],
     ab_split: parseInt(document.getElementById('f_ab_split').value),
     variant_b: document.getElementById('f_ab_enabled').checked ? {
       title: document.getElementById('f_b_title').value.trim()||null,
@@ -738,17 +753,23 @@ async function loadSites(){
   const origin=location.origin;
   box.innerHTML = sites.map(s=>{
     const snippet=`<script src="${origin}/embed.js" data-site-key="${s.site_key}"><\/script>`;
+    const widgetUrl=`${origin}/ghl-widget.html?site_key=${s.site_key}`;
     return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <b style="flex:1;">${esc(s.name||'Untitled site')}</b>
-        <span class="pill ${s.is_active?'staff':''}" style="background:${s.is_active?'#dcfce7':'#f1f5f9'};color:${s.is_active?'#166534':'#94a3b8'};">${s.is_active?'Active':'Off'}</span>
+        <span class="pill" style="background:${s.is_active?'#dcfce7':'#f1f5f9'};color:${s.is_active?'#166534':'#94a3b8'};">${s.is_active?'Active':'Off'}</span>
         <label class="switch"><input type="checkbox" ${s.is_active?'checked':''} onchange="toggleSite('${s.id}',this.checked)"><span class="slider"></span></label>
         <span class="material-icons" style="color:var(--red);cursor:pointer;" title="Delete" onclick="deleteSite('${s.id}','${esc(s.name||'')}')">delete</span>
       </div>
-      <div class="muted" style="font-size:11px;margin:8px 0 4px;">Paste into the site's custom code (Webflow footer / GHL Agency Custom JS):</div>
+      <div class="muted" style="font-size:11px;margin:8px 0 4px;">① Script snippet — Webflow footer or GHL Agency Custom JS (modal on every page):</div>
       <div style="display:flex;gap:6px;">
         <input class="inp" style="font-family:'DM Mono',monospace;font-size:11px;" readonly value='${snippet.replace(/'/g,"&#39;")}' onclick="this.select()">
         <button class="btn btn-neutral" style="white-space:nowrap;" onclick='copyText(${JSON.stringify(snippet)})'><span class="material-icons" style="font-size:15px;">content_copy</span></button>
+      </div>
+      <div class="muted" style="font-size:11px;margin:10px 0 4px;">② GHL dashboard widget URL — for a custom dashboard/iframe widget (inline cards):</div>
+      <div style="display:flex;gap:6px;">
+        <input class="inp" style="font-family:'DM Mono',monospace;font-size:11px;" readonly value='${widgetUrl}' onclick="this.select()">
+        <button class="btn btn-neutral" style="white-space:nowrap;" onclick='copyText(${JSON.stringify(widgetUrl)})'><span class="material-icons" style="font-size:15px;">content_copy</span></button>
       </div>
     </div>`;
   }).join('');
@@ -758,15 +779,37 @@ async function createSite(){
   if (!name){ Swal.fire('Name required','Give the site a name.','warning'); return; }
   const r=await api({action:'create_site', name});
   if (!r.success){ Swal.fire('Error', r.message||'Failed','error'); return; }
-  document.getElementById('newSiteName').value=''; loadSites();
+  document.getElementById('newSiteName').value=''; embedSitesCache=null; loadSites();
 }
-async function toggleSite(id, val){ await api({action:'toggle_site', id, is_active:val}); loadSites(); }
+async function toggleSite(id, val){ await api({action:'toggle_site', id, is_active:val}); embedSitesCache=null; loadSites(); }
 async function deleteSite(id, name){
   const c=await Swal.fire({icon:'warning',title:'Delete site?',html:`“${esc(name)}” will stop showing announcements immediately.`,showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
   if (!c.isConfirmed) return;
-  await api({action:'delete_site', id}); loadSites();
+  await api({action:'delete_site', id}); embedSitesCache=null; loadSites();
 }
 function copyText(t){ navigator.clipboard.writeText(t).then(()=>Swal.fire({icon:'success',title:'Copied',timer:900,showConfirmButton:false})).catch(()=>{}); }
+
+// ── embed site targeting (in the editor) ──
+let embedSitesCache = null;
+async function getEmbedSites(){ if(embedSitesCache) return embedSitesCache; const r=await api({action:'list_sites'}); embedSitesCache=(r.success?r.data:[])||[]; return embedSitesCache; }
+function onShowEmbed(){ document.getElementById('embedTarget').style.display = document.getElementById('f_show_embed').checked ? '' : 'none'; }
+function onEmbedScope(){
+  const specific = document.querySelector('input[name=embedScope]:checked')?.value==='specific';
+  document.getElementById('embedSiteChecks').style.display = specific ? '' : 'none';
+}
+async function renderEmbedSiteChecks(selectedIds){
+  const sites = await getEmbedSites();
+  const box = document.getElementById('embedSiteChecks');
+  if (!sites.length){ box.innerHTML='<div class="muted" style="font-size:11px;">No sites registered yet — add one via “Embed Sites”.</div>'; return; }
+  const sel = new Set((selectedIds||[]).map(String));
+  box.innerHTML = sites.map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px;cursor:pointer;">
+    <input type="checkbox" class="embed-site-cb" value="${s.id}" ${sel.has(String(s.id))?'checked':''}> ${esc(s.name||'Untitled site')}${s.is_active?'':' <span class="muted">(off)</span>'}</label>`).join('');
+}
+function getEmbedSiteIds(){
+  const scope = document.querySelector('input[name=embedScope]:checked')?.value || 'all';
+  if (scope!=='specific') return [];
+  return Array.from(document.querySelectorAll('.embed-site-cb:checked')).map(cb=>cb.value);
+}
 
 // ── stats ──
 async function showStats(id, title){
@@ -792,6 +835,7 @@ async function showStats(id, title){
       <div style="margin-top:6px;">By audience: <b>${s.clicks_by_audience.partner||0}</b> partner · <b>${s.clicks_by_audience.staff||0}</b> staff clicks</div>
     </div>
     ${abSection(s.ab)}
+    ${siteSection(s.by_site)}
     ${targets.length?`<label class="fld">Clicks by button / hotspot</label>${targets.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}`:''}
     ${peopleSection('Who clicked', s.clickers, true)}
     ${peopleSection('Who viewed', s.viewers, false)}
@@ -811,6 +855,16 @@ function abSection(ab){
   return `<label class="fld">A/B test</label>
     <div class="statgrid" style="grid-template-columns:1fr 1fr;">${row('A',ab.A)}${row('B',ab.B)}</div>
     <div class="muted" style="margin-top:6px;font-size:12px;">${winner} (by unique CTR).</div>`;
+}
+
+// External-site (embed) engagement breakdown.
+function siteSection(bySite){
+  if (!bySite || !bySite.length) return '';
+  const rows = bySite.map(s=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+    <span style="display:flex;align-items:center;gap:8px;"><span class="material-icons" style="font-size:15px;color:#94a3b8;">public</span><b>${esc(s.name)}</b></span>
+    <span class="muted" style="font-size:12px;">${s.impressions} views · <b style="color:var(--text);">${s.clicks}</b> clicks</span>
+  </div>`).join('');
+  return `<label class="fld">External sites (embed)</label>${rows}`;
 }
 
 // ── CSV export of clickers ──

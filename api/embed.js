@@ -47,6 +47,7 @@ export default async function handler(req, res) {
         const { data: site } = await supabase.from('marketing_sites')
             .select('id, is_active').eq('site_key', siteKey).maybeSingle();
         if (!site || !site.is_active) return bad(res, 'Invalid or inactive site key', 403);
+        const siteId = site.id;
 
         if (action === 'get_active') {
             if (!viewer) return ok(res, []);
@@ -56,7 +57,9 @@ export default async function handler(req, res) {
             const now = Date.now();
             const live = (all || []).filter(c =>
                 (!c.starts_at || new Date(c.starts_at).getTime() <= now) &&
-                (!c.ends_at || new Date(c.ends_at).getTime() >= now));
+                (!c.ends_at || new Date(c.ends_at).getTime() >= now) &&
+                // Site scoping: [] = all embed sites, otherwise must include this site.
+                (!Array.isArray(c.embed_site_ids) || c.embed_site_ids.length === 0 || c.embed_site_ids.map(String).includes(String(siteId))));
 
             // Exclude ones this viewer permanently dismissed.
             const ids = live.map(c => c.id);
@@ -105,7 +108,7 @@ export default async function handler(req, res) {
                 if (recent && recent.length) return ok(res, { logged: false });
             }
             await supabase.from('marketing_events').insert({
-                campaign_id, user_id: viewer, user_type: 'embed', event_type,
+                campaign_id, user_id: viewer, user_type: 'embed', event_type, site_id: siteId,
                 target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null
             });
             return ok(res, { logged: true });
@@ -116,7 +119,7 @@ export default async function handler(req, res) {
             if (!campaign_id || !viewer) return bad(res, 'bad params');
             await supabase.from('marketing_dismissals')
                 .upsert({ campaign_id, user_id: viewer, user_type: 'embed' }, { onConflict: 'campaign_id,user_id' });
-            await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'dismiss' });
+            await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'dismiss', site_id: siteId });
             return ok(res, { dismissed: true });
         }
 
