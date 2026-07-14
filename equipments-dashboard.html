@@ -109,8 +109,11 @@
             </div>
             
             <div id="inv-header-controls" style="display:flex; align-items:center; gap:10px;">
-                <input type="text" id="invSearch" placeholder="Search..." class="slds-input" style="width:140px; border-radius:10px;">
-                <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="fetchInventory()">Search</button>
+                <select id="typeFilter" class="slds-select" title="Filter by terminal type" style="border-radius:10px; max-width:160px;" onchange="currentPage=0; fetchInventory();">
+                    <option value="">All types</option>
+                </select>
+                <input type="text" id="invSearch" placeholder="Search serial…" class="slds-input" style="width:140px; border-radius:10px;">
+                <button class="slds-button slds-button_brand" style="border-radius:10px; background:var(--pp-blue);" onclick="currentPage=0; fetchInventory();">Search</button>
                 <button class="slds-button slds-button_neutral" style="border-radius:10px; display:flex; align-items:center; gap:5px; border: 1px solid #cbd5e1; background: white;" onclick="printPDFReport()">
                     <span class="material-icons" style="font-size:18px; color: #1e293b;">picture_as_pdf</span>
                     Print PDF Summary
@@ -1292,9 +1295,10 @@ async function saveNote() {
             headers: equipHeaders(),
             body: JSON.stringify({
                 action: 'list',
-                query: _invQ, 
-                page: currentPage, 
+                query: _invQ,
+                page: currentPage,
                 limit: limit,
+                filterType: document.getElementById('typeFilter')?.value || null,
                 filterLocation: currentFilter === 'deployed' ? null : currentFilter,
                 filterStatus: currentFilter === 'deployed' ? 'deployed' : null
             })
@@ -1743,6 +1747,20 @@ function rqInvExportCSV() {
 
     let vendorMap = {};
 
+    async function loadTerminalTypes() {
+        const sel = document.getElementById('typeFilter');
+        if (!sel) return;
+        try {
+            const res = await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'get_terminal_types' }) });
+            const d = await res.json();
+            if (!d.success) return;
+            const current = sel.value;
+            sel.innerHTML = '<option value="">All types</option>' +
+                (d.data || []).map(t => `<option value="${t.replace(/"/g, '&quot;')}">${t}</option>`).join('');
+            sel.value = current;   // preserve selection across reloads
+        } catch (e) { /* leave "All types" */ }
+    }
+
     window.onload = async () => {
         const urlQ = new URLSearchParams(window.location.search).get('q');
         if (urlQ) {
@@ -1750,6 +1768,10 @@ function rqInvExportCSV() {
             currentFilter = null;
             document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
         }
+        // Enter key in the search box runs the search
+        const _si = document.getElementById('invSearch');
+        if (_si) _si.addEventListener('keydown', e => { if (e.key === 'Enter') { currentPage = 0; fetchInventory(); } });
+        loadTerminalTypes();
         // Load vendor map in background (non-blocking)
         fetch('/api/terminal-manager', {
             method: 'POST',

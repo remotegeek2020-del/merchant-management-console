@@ -207,20 +207,39 @@ if (action === 'getMonthlyReport') {
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });
         }
+        // Distinct terminal types (for the inventory "Terminal Type" filter dropdown).
+        if (action === 'get_terminal_types') {
+            const { data, error } = await supabase.from('equipments').select('terminal_type');
+            if (error) return res.status(200).json({ success: false, message: error.message });
+            const types = [...new Set((data || []).map(r => (r.terminal_type || '').trim()).filter(Boolean))]
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+            return res.status(200).json({ success: true, data: types });
+        }
+
         if (action === 'list') {
             const limit = parseInt(req.body.limit) || 50;
             const page = parseInt(req.body.page) || 0;
-            const { query, filterLocation, filterStatus } = req.body;
+            const { query, filterLocation, filterStatus, filterType } = req.body;
 
-            // SURGICAL FIX: Using the explicit foreign key name 'current_merchant' 
+            // SURGICAL FIX: Using the explicit foreign key name 'current_merchant'
             // identified in your screenshot to resolve the ambiguity.
             let sb = supabase.from('equipments').select(`
                 *,
                 merchants!current_merchant(dba_name)
             `, { count: 'exact' });
 
+            // Exact terminal-type filter (dropdown) — scopes results to one model,
+            // e.g. only "P8" units, without matching serials that contain "P8".
+            if (filterType) {
+                sb = sb.eq('terminal_type', filterType);
+            }
+
             if (query) {
-                sb = sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
+                // When a type filter is active, free-text targets the serial only
+                // (type is already narrowed); otherwise it searches serial + type.
+                sb = filterType
+                    ? sb.ilike('serial_number', `%${query}%`)
+                    : sb.or(`serial_number.ilike.%${query}%,terminal_type.ilike.%${query}%`);
             }
 
             if (filterStatus) {
