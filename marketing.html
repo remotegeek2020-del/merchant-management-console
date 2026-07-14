@@ -1022,14 +1022,16 @@ function trafficSection(t){
     if(!arr.length) return '';
     const max=Math.max(...arr.map(x=>x.count),1);
     const rows=arr.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;">
-      <span style="flex:0 0 42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)}</span>
-      <span style="flex:1;background:#eef2f7;border-radius:4px;height:8px;overflow:hidden;"><span style="display:block;height:100%;width:${Math.round(x.count/max*100)}%;background:var(--blue);"></span></span>
-      <b style="flex:0 0 34px;text-align:right;">${x.count}</b></div>`).join('');
+      <span style="flex:0 0 40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(x.name)}">${esc(x.name)}</span>
+      <span style="flex:1;background:#eef2f7;border-radius:4px;height:8px;overflow:hidden;"><span style="display:block;height:100%;width:${x.pct||Math.round(x.count/max*100)}%;background:var(--blue);"></span></span>
+      <b style="flex:0 0 58px;text-align:right;">${x.count} <span class="muted" style="font-weight:600;">${x.pct!=null?x.pct+'%':''}</span></b></div>`).join('');
     return `<div style="margin-bottom:10px;"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">${title}</div>${rows}</div>`;
   };
-  const body=list('Referrers',t.referrers)+list('UTM sources',t.sources)+list('Countries',t.countries)+list('Devices',t.devices);
+  const body=list('Landing pages',t.pages)+list('Referrers',t.referrers)+list('UTM sources',t.sources)+list('Countries',t.countries)+list('Devices',t.devices);
   if(!body) return '';
-  return `<label class="fld">Traffic sources (website / GHL views)</label>${body}`;
+  const cov=t.coverage||{};
+  const note = cov.total ? `<div class="muted" style="font-size:11px;margin:2px 0 8px;">Based on <b>${cov.with_data}</b> of ${cov.total} external views that have traffic data${cov.with_data<cov.total?` · ${cov.total-cov.with_data} older views predate tracking`:''}.</div>` : '';
+  return `<label class="fld">Traffic sources (website / GHL views)</label>${note}${body}`;
 }
 
 // External-site (embed) engagement breakdown.

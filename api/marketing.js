@@ -315,15 +315,23 @@ export default async function handler(req, res) {
                     bySite = Object.values(acc).sort((a, b) => b.clicks - a.clicks);
                 }
 
-                // ── Traffic sources (embed views): referrer / UTM / country / device ──
-                const embedRows = rows.filter(r => r.user_type === 'embed');
+                // ── Traffic sources (embed views) — only count views that actually
+                // carry data, so pre-tracking / direct-with-no-data views don't
+                // swamp the report. Referrer/UTM are empty for direct/untagged
+                // traffic; landing page + device + country are the reliable ones.
+                const embedImp = rows.filter(r => r.user_type === 'embed' && r.event_type === 'impression');
+                const dataImp = embedImp.filter(r => r.meta || r.country);
                 const host = (u) => { try { return u ? new URL(u).hostname.replace(/^www\./, '') : ''; } catch { return ''; } };
+                const pagePath = (u) => { try { const x = new URL(u); return (x.hostname.replace(/^www\./, '') + x.pathname).replace(/\/+$/, '') || (x.hostname.replace(/^www\./, '') + '/'); } catch { return ''; } };
                 const bucket = (keyFn) => {
                     const acc = {};
-                    embedRows.filter(r => r.event_type === 'impression').forEach(r => { const k = keyFn(r) || '(none)'; acc[k] = (acc[k] || 0) + 1; });
-                    return Object.entries(acc).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+                    dataImp.forEach(r => { const k = keyFn(r) || '(none)'; acc[k] = (acc[k] || 0) + 1; });
+                    return Object.entries(acc).map(([name, count]) => ({ name, count, pct: Math.round(count / dataImp.length * 100) }))
+                        .sort((a, b) => b.count - a.count).slice(0, 10);
                 };
-                const traffic = embedRows.length ? {
+                const traffic = dataImp.length ? {
+                    coverage: { with_data: dataImp.length, total: embedImp.length },
+                    pages: bucket(r => pagePath(r.meta && r.meta.url) || '(unknown)'),
                     referrers: bucket(r => host(r.meta && r.meta.ref) || '(direct)'),
                     sources: bucket(r => (r.meta && r.meta.utm_source) || '(none)'),
                     countries: bucket(r => r.country || '(unknown)'),
