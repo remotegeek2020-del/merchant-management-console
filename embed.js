@@ -13,17 +13,31 @@
  * persistent / until_action) + re-show frequency mirror the internal portal.
  */
 (function () {
+    if (window.__ppEmbedLoaded) return; window.__ppEmbedLoaded = true;
+
+    // Find our own <script> tag (for data-* attrs + origin). currentScript is
+    // null when a host (e.g. GHL) injects the code via eval, so fall back to a
+    // scan for embed.js among all script tags.
     var self = document.currentScript;
-    if (!self) { var ss = document.getElementsByTagName('script'); for (var i = 0; i < ss.length; i++) { if (/embed\.js(\?|$)/.test(ss[i].src)) { self = ss[i]; break; } } }
-    if (!self || window.__ppEmbedLoaded) return; window.__ppEmbedLoaded = true;
+    if (!self || !/embed\.js/.test(self.src || '')) {
+        var ss = document.getElementsByTagName('script');
+        for (var i = 0; i < ss.length; i++) { if (/embed\.js(\?|$)/.test(ss[i].src)) { self = ss[i]; break; } }
+    }
 
-    var SITE_KEY = self.getAttribute('data-site-key') || '';
-    var EMAIL = (self.getAttribute('data-email') || '').trim();
-    var ACCOUNT = (self.getAttribute('data-account') || '').trim();
-    if (!SITE_KEY) { return; }
+    // Config can come from (a) a global set before loading (raw-JS snippet), or
+    // (b) data-* attributes on the <script> tag.
+    var cfg = window.PPX || window.PPX_CONFIG || {};
+    function attr(n) { return self && self.getAttribute ? (self.getAttribute(n) || '') : ''; }
+    var SITE_KEY = cfg.siteKey || cfg.site_key || attr('data-site-key') || '';
+    var EMAIL = String(cfg.email || attr('data-email') || '').trim();
+    var ACCOUNT = String(cfg.account || attr('data-account') || '').trim();
+    if (!SITE_KEY) { try { console.warn('[PPX] announcements: no site key (set window.PPX={siteKey:"…"} or data-site-key).'); } catch (e) {} return; }
 
-    // API base = origin the script was served from (so it works cross-domain).
-    var API = self.src.replace(/\/embed\.js(\?.*)?$/, '') + '/api/embed';
+    // API base = the origin embed.js was served from (works cross-domain). Prefer
+    // an explicit override, then the script src, then this page's origin.
+    var scriptSrc = (self && self.src) || cfg.src || '';
+    var base = cfg.origin || (scriptSrc ? scriptSrc.replace(/\/embed\.js(\?.*)?$/, '') : location.origin);
+    var API = base + '/api/embed';
 
     var VID_KEY = 'ppx_vid', SNOOZE_KEY = 'ppx_snooze', PERM_KEY = 'ppx_perm';
     var DEFAULT_FREQ_MIN = 5;
@@ -133,12 +147,19 @@
         }
     }
 
+    var DEBUG = !!(cfg.debug) || /[?&]ppxdebug/.test(location.search);
+    function log() { if (DEBUG) try { console.log.apply(console, ['[PPX]'].concat([].slice.call(arguments))); } catch (e) {} }
+
     function load() {
+        log('loading', { api: API, site: SITE_KEY, viewer: VIEWER });
         api({ action: 'get_active' }).then(function (d) {
-            if (!d || !d.success || !Array.isArray(d.data)) return;
+            if (!d || !d.success) { log('endpoint error', d && d.message); return; }
+            if (!Array.isArray(d.data)) return;
+            log('campaigns returned:', d.data.length);
             queue = d.data.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });
-            if (queue.length) next();
-        });
+            log('after snooze/dismiss filter:', queue.length);
+            if (queue.length) next(); else log('nothing to show (none active/embed-enabled, or all snoozed/dismissed).');
+        }).catch(function (e) { log('fetch failed (CSP/CORS/network?):', e && e.message); });
     }
 
     if (document.readyState !== 'loading') load();

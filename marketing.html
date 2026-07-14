@@ -753,7 +753,13 @@ async function loadSites(){
   const origin=location.origin;
   box.innerHTML = sites.map(s=>{
     const snippet=`<script src="${origin}/embed.js" data-site-key="${s.site_key}"><\/script>`;
+    const rawJs=`window.PPX={siteKey:"${s.site_key}"};(function(d){var s=d.createElement("script");s.src="${origin}/embed.js";(d.body||d.head).appendChild(s);})(document);`;
     const widgetUrl=`${origin}/ghl-widget.html?site_key=${s.site_key}`;
+    const line=(label, value)=>`<div class="muted" style="font-size:11px;margin:10px 0 4px;">${label}</div>
+      <div style="display:flex;gap:6px;">
+        <input class="inp" style="font-family:'DM Mono',monospace;font-size:11px;" readonly value='${String(value).replace(/'/g,"&#39;")}' onclick="this.select()">
+        <button class="btn btn-neutral" style="white-space:nowrap;" onclick='copyText(${JSON.stringify(value)})'><span class="material-icons" style="font-size:15px;">content_copy</span></button>
+      </div>`;
     return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <b style="flex:1;">${esc(s.name||'Untitled site')}</b>
@@ -761,16 +767,9 @@ async function loadSites(){
         <label class="switch"><input type="checkbox" ${s.is_active?'checked':''} onchange="toggleSite('${s.id}',this.checked)"><span class="slider"></span></label>
         <span class="material-icons" style="color:var(--red);cursor:pointer;" title="Delete" onclick="deleteSite('${s.id}','${esc(s.name||'')}')">delete</span>
       </div>
-      <div class="muted" style="font-size:11px;margin:8px 0 4px;">① Script snippet — Webflow footer or GHL Agency Custom JS (modal on every page):</div>
-      <div style="display:flex;gap:6px;">
-        <input class="inp" style="font-family:'DM Mono',monospace;font-size:11px;" readonly value='${snippet.replace(/'/g,"&#39;")}' onclick="this.select()">
-        <button class="btn btn-neutral" style="white-space:nowrap;" onclick='copyText(${JSON.stringify(snippet)})'><span class="material-icons" style="font-size:15px;">content_copy</span></button>
-      </div>
-      <div class="muted" style="font-size:11px;margin:10px 0 4px;">② GHL dashboard widget URL — for a custom dashboard/iframe widget (inline cards):</div>
-      <div style="display:flex;gap:6px;">
-        <input class="inp" style="font-family:'DM Mono',monospace;font-size:11px;" readonly value='${widgetUrl}' onclick="this.select()">
-        <button class="btn btn-neutral" style="white-space:nowrap;" onclick='copyText(${JSON.stringify(widgetUrl)})'><span class="material-icons" style="font-size:15px;">content_copy</span></button>
-      </div>
+      ${line('① HTML snippet — Webflow footer / any “head or body code” box (renders modal):', snippet)}
+      ${line('② Raw JavaScript — GHL Agency “Custom JS” box (no &lt;script&gt; tag allowed there):', rawJs)}
+      ${line('③ Dashboard widget URL — GHL custom dashboard / iframe widget (inline cards):', widgetUrl)}
     </div>`;
   }).join('');
 }
