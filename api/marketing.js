@@ -66,7 +66,8 @@ const ADMIN_ACTIONS = new Set([
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations',
-    'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect'
+    'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
+    'get_pixels', 'set_pixels', 'export_audience'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -460,6 +461,52 @@ export default async function handler(req, res) {
             if (action === 'webflow_disconnect') {
                 await webflow.disconnect();
                 return ok(res, { disconnected: true });
+            }
+
+            // ── Retargeting pixels ───────────────────────────────────────────
+            if (action === 'get_pixels') {
+                const { data } = await supabase.from('marketing_pixels').select('*').eq('id', 1).maybeSingle();
+                return ok(res, data || {});
+            }
+            if (action === 'set_pixels') {
+                const b = req.body;
+                const rec = {
+                    id: 1,
+                    fb_pixel_id: (b.fb_pixel_id || '').trim() || null,
+                    google_tag_id: (b.google_tag_id || '').trim() || null,
+                    linkedin_partner_id: (b.linkedin_partner_id || '').trim() || null,
+                    fb_enabled: !!b.fb_enabled, google_enabled: !!b.google_enabled, linkedin_enabled: !!b.linkedin_enabled,
+                    updated_at: new Date().toISOString()
+                };
+                const { data, error } = await supabase.from('marketing_pixels').upsert(rec, { onConflict: 'id' }).select().single();
+                if (error) return bad(res, error.message);
+                return ok(res, data);
+            }
+
+            // Ad-audience export: unique external visitors with their retargeting
+            // identifiers (SHA-256 email for Custom Audience/Customer Match uploads,
+            // plus click-IDs / pixel cookies for server-side CAPI).
+            if (action === 'export_audience') {
+                const { id } = req.body;   // optional campaign filter
+                let q = supabase.from('marketing_events')
+                    .select('user_id, meta, country, created_at, campaign_id').eq('user_type', 'embed');
+                if (id) q = q.eq('campaign_id', id);
+                const { data: ev } = await q.order('created_at', { ascending: false }).limit(5000);
+                const byViewer = {};
+                (ev || []).forEach(r => {
+                    if (byViewer[r.user_id]) return;   // newest wins (ordered desc)
+                    const m = r.meta || {};
+                    const email = String(r.user_id || '').indexOf('email:') === 0 ? String(r.user_id).slice(6) : '';
+                    byViewer[r.user_id] = {
+                        email, email_sha256: m.email_sha256 || '',
+                        fbp: m.fbp || '', fbc: m.fbc || '', gcl_au: m.gcl_au || '',
+                        fbclid: m.fbclid || '', gclid: m.gclid || '', li_fat_id: m.li_fat_id || '',
+                        country: r.country || '', last_seen: r.created_at
+                    };
+                });
+                // Only rows that carry at least one retargeting identifier.
+                const out = Object.values(byViewer).filter(x => x.email_sha256 || x.fbp || x.gclid || x.li_fat_id || x.fbclid || x.gcl_au || x.email);
+                return ok(res, out);
             }
 
             // Resolve names for a set of saved partner ids (edit → chips).

@@ -36,12 +36,23 @@
     // email-shaped value in the site's OWN (first-party) cookies. Browsers do
     // NOT allow reading other domains' cookies (e.g. Google), so this only finds
     // an email the site itself stored (form fill / CRM).
+    function cookie(n) {
+        try { var m = document.cookie.match(new RegExp('(?:^|; )' + n.replace(/([.$?*|{}()\[\]\\\/+^])/g, '\\$1') + '=([^;]*)')); return m ? decodeURIComponent(m[1]) : ''; } catch (e) { return ''; }
+    }
     function cookieEmail() {
         try {
             var raw = decodeURIComponent(document.cookie || '');
             var m = raw.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
             return m ? m[0] : '';
         } catch (e) { return ''; }
+    }
+    function sha256Hex(str) {
+        if (!(window.crypto && crypto.subtle && window.TextEncoder)) return Promise.resolve('');
+        try {
+            return crypto.subtle.digest('SHA-256', new TextEncoder().encode(str)).then(function (h) {
+                return Array.prototype.map.call(new Uint8Array(h), function (b) { return ('0' + b.toString(16)).slice(-2); }).join('');
+            }).catch(function () { return ''; });
+        } catch (e) { return Promise.resolve(''); }
     }
     var EMAIL = String(cfg.email || attr('data-email') || qp('email') || qp('contact_email') || cookieEmail() || '').trim();
     if (!SITE_KEY) { try { console.warn('[PPX] announcements: no site key (set window.PPX={siteKey:"…"} or data-site-key).'); } catch (e) {} return; }
@@ -107,7 +118,10 @@
             utm_campaign: cut(qp('utm_campaign'), 120),
             device: /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? 'mobile' : 'desktop',
             lang: cut(navigator.language || '', 12),
-            account: cut(ACCOUNT, 120)
+            account: cut(ACCOUNT, 120),
+            // Retargeting identifiers (click-IDs from URL, pixel cookies)
+            fbclid: cut(qp('fbclid'), 200), gclid: cut(qp('gclid'), 200), li_fat_id: cut(qp('li_fat_id'), 120),
+            fbp: cut(cookie('_fbp'), 120), fbc: cut(cookie('_fbc'), 200), gcl_au: cut(cookie('_gcl_au'), 120)
         };
     }
     var CTX = trafficCtx();
@@ -116,7 +130,43 @@
         body.site_key = SITE_KEY; body.viewer_id = VIEWER; if (GHL_LOC) body.ghl_location = GHL_LOC;
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
     }
-    function track(id, type, target, variant) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variant || null, meta: CTX }); }
+    function track(id, type, target, variant) {
+        api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variant || null, meta: CTX });
+        if (type === 'impression') pixelEvent('PPTAnnouncementView');
+        else if (type === 'click') pixelEvent('PPTAnnouncementClick');
+    }
+
+    // ── Retargeting pixels (Meta / Google / LinkedIn), injected from portal config ──
+    var _pixelsDone = false;
+    function injectPixels(p) {
+        if (_pixelsDone || !p) return; _pixelsDone = true;
+        try {
+            if (p.fb) {
+                !function (f, b, e, v, n, t, s) { if (f.fbq) return; n = f.fbq = function () { n.callMethod ? n.callMethod.apply(n, arguments) : n.queue.push(arguments) }; if (!f._fbq) f._fbq = n; n.push = n; n.loaded = !0; n.version = '2.0'; n.queue = []; t = b.createElement(e); t.async = !0; t.src = v; s = b.getElementsByTagName(e)[0]; s.parentNode.insertBefore(t, s) }(window, document, 'script', 'https://connect.facebook.net/en_US/fbevents.js');
+                window.fbq('init', String(p.fb)); window.fbq('track', 'PageView');
+            }
+        } catch (e) {}
+        try {
+            if (p.google) {
+                var g = document.createElement('script'); g.async = true; g.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(p.google); document.head.appendChild(g);
+                window.dataLayer = window.dataLayer || []; window.gtag = window.gtag || function () { window.dataLayer.push(arguments); };
+                window.gtag('js', new Date()); window.gtag('config', String(p.google));
+            }
+        } catch (e) {}
+        try {
+            if (p.linkedin) {
+                window._linkedin_partner_id = String(p.linkedin);
+                window._linkedin_data_partner_ids = window._linkedin_data_partner_ids || [];
+                window._linkedin_data_partner_ids.push(String(p.linkedin));
+                (function (l) { if (!l) { window.lintrk = function (a, b) { window.lintrk.q.push([a, b]) }; window.lintrk.q = []; } var s = document.getElementsByTagName('script')[0]; var b = document.createElement('script'); b.type = 'text/javascript'; b.async = true; b.src = 'https://snap.licdn.com/li.lms-analytics/insight.min.js'; s.parentNode.insertBefore(b, s); })(window.lintrk);
+            }
+        } catch (e) {}
+    }
+    function pixelEvent(name) {
+        try { if (window.fbq) window.fbq('trackCustom', name); } catch (e) {}
+        try { if (window.gtag) window.gtag('event', name); } catch (e) {}
+        try { if (window.lintrk) window.lintrk('track'); } catch (e) {}
+    }
 
     // ── snooze / permanent (localStorage) ────────────────────────────────────
     function snoozeMap() { return store(SNOOZE_KEY) || {}; }
@@ -218,6 +268,7 @@
         log('loading', { api: API, site: SITE_KEY, viewer: VIEWER, ghl_location: GHL_LOC });
         api({ action: 'get_active' }).then(function (d) {
             if (!d || !d.success) { log('endpoint error', d && d.message); return; }
+            injectPixels(d.pixels);   // retargeting pixels load even if no ad shows
             if (!Array.isArray(d.data)) return;
             log('campaigns returned:', d.data.length);
             queue = d.data.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });
@@ -226,6 +277,11 @@
         }).catch(function (e) { log('fetch failed (CSP/CORS/network?):', e && e.message); });
     }
 
-    if (document.readyState !== 'loading') load();
-    else document.addEventListener('DOMContentLoaded', load);
+    // Hash the visitor email (if any) for CAPI/Custom-Audience matching, then load.
+    function boot() {
+        if (EMAIL) { sha256Hex(EMAIL.trim().toLowerCase()).then(function (h) { if (h) CTX.email_sha256 = h; }).then(load, load); }
+        else load();
+    }
+    if (document.readyState !== 'loading') boot();
+    else document.addEventListener('DOMContentLoaded', boot);
 })();

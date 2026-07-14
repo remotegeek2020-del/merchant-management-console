@@ -50,7 +50,11 @@ export default async function handler(req, res) {
             ref: cut(m.ref, 300), url: cut(m.url, 300),
             utm_source: cut(m.utm_source, 120), utm_medium: cut(m.utm_medium, 120), utm_campaign: cut(m.utm_campaign, 120),
             device: m.device === 'mobile' ? 'mobile' : (m.device === 'desktop' ? 'desktop' : null),
-            lang: cut(m.lang, 12), account: cut(m.account, 120)
+            lang: cut(m.lang, 12), account: cut(m.account, 120),
+            // Retargeting identifiers (for CAPI / Custom Audiences / Customer Match)
+            email_sha256: /^[a-f0-9]{64}$/i.test(String(m.email_sha256 || '')) ? String(m.email_sha256).toLowerCase() : null,
+            fbp: cut(m.fbp, 120), fbc: cut(m.fbc, 200), gcl_au: cut(m.gcl_au, 120),
+            fbclid: cut(m.fbclid, 200), gclid: cut(m.gclid, 200), li_fat_id: cut(m.li_fat_id, 120)
         };
         return Object.values(out).some(v => v) ? out : null;
     }
@@ -112,7 +116,14 @@ export default async function handler(req, res) {
                     behavior, reshow_minutes: c.reshow_minutes || 5, variant
                 };
             });
-            return ok(res, out);
+            // Central retargeting pixels to inject on this site (enabled only).
+            const { data: px } = await supabase.from('marketing_pixels').select('*').eq('id', 1).maybeSingle();
+            const pixels = px ? {
+                fb: (px.fb_enabled && px.fb_pixel_id) ? px.fb_pixel_id : null,
+                google: (px.google_enabled && px.google_tag_id) ? px.google_tag_id : null,
+                linkedin: (px.linkedin_enabled && px.linkedin_partner_id) ? px.linkedin_partner_id : null
+            } : null;
+            return res.status(200).json({ success: true, data: out, pixels });
         }
 
         // Only allow tracking/dismissing campaigns actually enabled for embeds,

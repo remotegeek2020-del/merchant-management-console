@@ -305,6 +305,29 @@
         <div id="wfBody" style="margin-top:10px;"></div>
       </div>
 
+      <!-- Retargeting pixels -->
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;background:#fafbfc;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <span class="material-icons" style="color:#db2777;">ads_click</span>
+          <b style="flex:1;">Retargeting pixels</b>
+          <button class="btn btn-neutral" style="padding:6px 10px;" onclick="exportAudience()"><span class="material-icons" style="font-size:15px;">download</span> Export audience</button>
+        </div>
+        <div class="muted" style="font-size:11px;margin-bottom:8px;">Injected on all connected sites (Meta / Google / LinkedIn) so those platforms build retargeting audiences. Announcement views/clicks also fire as custom pixel events.</div>
+        <div class="row2">
+          <div><label class="fld" style="margin-top:0;">Meta (Facebook) Pixel ID</label><input class="inp" id="px_fb" placeholder="e.g. 123456789012345"></div>
+          <div style="display:flex;align-items:end;padding-bottom:9px;"><label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;"><input type="checkbox" id="px_fb_en" checked> Enabled</label></div>
+        </div>
+        <div class="row2">
+          <div><label class="fld">Google tag ID (G-… or AW-…)</label><input class="inp" id="px_google" placeholder="e.g. AW-123456789"></div>
+          <div style="display:flex;align-items:end;padding-bottom:9px;"><label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;"><input type="checkbox" id="px_google_en" checked> Enabled</label></div>
+        </div>
+        <div class="row2">
+          <div><label class="fld">LinkedIn Partner ID</label><input class="inp" id="px_linkedin" placeholder="e.g. 1234567"></div>
+          <div style="display:flex;align-items:end;padding-bottom:9px;"><label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;"><input type="checkbox" id="px_linkedin_en" checked> Enabled</label></div>
+        </div>
+        <div style="text-align:right;margin-top:8px;"><button class="btn btn-brand" onclick="savePixels(this)"><span class="material-icons" style="font-size:16px;">save</span> Save pixels</button></div>
+      </div>
+
       <div class="muted" style="font-size:12px;margin-bottom:12px;">Or register a site manually (paste its snippet into the site's custom code). Any campaign with “Also show on external sites” appears on every active site it targets.</div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
         <input class="inp" id="newSiteName" placeholder="Site name (e.g. GHL App)">
@@ -807,7 +830,37 @@ function renderCalendar(){
 }
 
 // ── embed sites ──
-function openSites(){ document.getElementById('sitesModal').style.display='flex'; loadSites(); loadWebflow(); }
+function openSites(){ document.getElementById('sitesModal').style.display='flex'; loadSites(); loadWebflow(); loadPixels(); }
+async function loadPixels(){
+  const r=await api({action:'get_pixels'});
+  const d=(r.success&&r.data)?r.data:{};
+  document.getElementById('px_fb').value=d.fb_pixel_id||'';
+  document.getElementById('px_google').value=d.google_tag_id||'';
+  document.getElementById('px_linkedin').value=d.linkedin_partner_id||'';
+  document.getElementById('px_fb_en').checked=d.fb_enabled!==false;
+  document.getElementById('px_google_en').checked=d.google_enabled!==false;
+  document.getElementById('px_linkedin_en').checked=d.linkedin_enabled!==false;
+}
+async function savePixels(btn){
+  if(btn) btn.disabled=true;
+  const r=await api({action:'set_pixels',
+    fb_pixel_id:document.getElementById('px_fb').value, google_tag_id:document.getElementById('px_google').value, linkedin_partner_id:document.getElementById('px_linkedin').value,
+    fb_enabled:document.getElementById('px_fb_en').checked, google_enabled:document.getElementById('px_google_en').checked, linkedin_enabled:document.getElementById('px_linkedin_en').checked });
+  if(btn) btn.disabled=false;
+  if(!r.success){ Swal.fire('Error', r.message||'Failed','error'); return; }
+  Swal.fire({icon:'success',title:'Pixels saved',text:'Live on all connected sites on their next page load.',timer:1800,showConfirmButton:false});
+}
+async function exportAudience(){
+  const r=await api({action:'export_audience'});
+  if(!r.success){ Swal.fire('Export failed', r.message||'','error'); return; }
+  const rows=r.data||[];
+  if(!rows.length){ Swal.fire('No audience yet','No external visitors with retargeting identifiers captured yet.','info'); return; }
+  const header=['email','email_sha256','fbp','fbc','gcl_au','fbclid','gclid','li_fat_id','country','last_seen'];
+  const lines=[header.join(',')].concat(rows.map(x=>[x.email,x.email_sha256,x.fbp,x.fbc,x.gcl_au,x.fbclid,x.gclid,x.li_fat_id,x.country,new Date(x.last_seen).toLocaleString()].map(csvCell).join(',')));
+  const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='ad_audience.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(a.href);
+}
 async function loadSites(){
   const box=document.getElementById('sitesList');
   box.innerHTML='<div class="muted" style="text-align:center;padding:16px;">Loading…</div>';
