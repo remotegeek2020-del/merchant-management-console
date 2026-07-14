@@ -39,6 +39,7 @@
     function safeUrl(u) { u = String(u == null ? '' : u).trim(); return /^(https?:|mailto:|tel:|\/|#)/i.test(u) ? u : '#'; }
     function num(n) { n = parseFloat(n); return isFinite(n) ? n : 0; }
     function jsArg(s) { return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]/g, ''); }
+    function bodyHtml(b) { b = b == null ? '' : String(b); return /<[a-z][\s\S]*>/i.test(b) ? b : esc(b).replace(/\n/g, '<br>'); }
 
     function api(body) {
         var headers = { 'Content-Type': 'application/json' };
@@ -79,7 +80,8 @@
             '.ppa-hotspot:hover{background:rgba(0,73,144,0.12);box-shadow:0 0 0 2px rgba(0,73,144,0.5) inset;}',
             '.ppa-body{padding:18px 20px;}',
             '.ppa-title{font-size:1.05rem;font-weight:800;color:#0a1628;margin:0 0 6px;}',
-            '.ppa-text{font-size:13px;color:#475569;line-height:1.6;white-space:pre-wrap;}',
+            '.ppa-text{font-size:13px;color:#475569;line-height:1.6;}',
+            '.ppa-text p{margin:0 0 8px;}.ppa-text p:last-child{margin-bottom:0;}.ppa-text a{color:var(--pp-blue,#004990);}.ppa-text ul,.ppa-text ol{margin:0 0 8px;padding-left:20px;}',
             '.ppa-cta{display:inline-flex;align-items:center;gap:6px;margin-top:14px;background:' + accent + ';color:#fff;border:none;border-radius:10px;padding:10px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;}',
             '.ppa-foot{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 20px;border-top:1px solid #e2e8f0;background:#fafbfc;flex-wrap:wrap;}',
             '.ppa-dismiss{display:flex;align-items:center;gap:7px;font-size:12px;color:#64748b;cursor:pointer;}',
@@ -94,7 +96,8 @@
             '.ppa-float .ppa-fimg img{width:100%;display:block;}',
             '.ppa-float .ppa-fbody{padding:12px 14px;}',
             '.ppa-float .ppa-ftitle{font-size:13px;font-weight:800;color:#0a1628;margin:0 0 4px;}',
-            '.ppa-float .ppa-ftext{font-size:12px;color:#475569;line-height:1.5;white-space:pre-wrap;max-height:96px;overflow:auto;}',
+            '.ppa-float .ppa-ftext{font-size:12px;color:#475569;line-height:1.5;max-height:96px;overflow:auto;}',
+            '.ppa-ftext p{margin:0 0 6px;}.ppa-ftext p:last-child{margin-bottom:0;}.ppa-ftext a{color:var(--pp-blue,#004990);}',
             '.ppa-float .ppa-fcta{display:block;text-align:center;margin-top:10px;background:' + accent + ';color:#fff;border:none;border-radius:9px;padding:9px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;width:100%;}',
             '.ppa-float .ppa-fforget{display:flex;align-items:center;gap:6px;margin-top:9px;font-size:11px;color:#94a3b8;cursor:pointer;}',
             '.ppa-float .ppa-fx{position:absolute;top:8px;right:8px;z-index:3;background:rgba(0,0,0,0.5);color:#fff;border:none;border-radius:50%;width:24px;height:24px;cursor:pointer;display:flex;align-items:center;justify-content:center;}',
@@ -137,7 +140,7 @@
         if (showText || (c.cta_enabled && c.cta_url)) {
             html += '<div class="ppa-body">';
             if (showText && c.title) html += '<div class="ppa-title">' + esc(c.title) + '</div>';
-            if (showText && c.body_text) html += '<div class="ppa-text">' + esc(c.body_text) + '</div>';
+            if (showText && c.body_text) html += '<div class="ppa-text">' + bodyHtml(c.body_text) + '</div>';
             if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
             html += '</div>';
         }
@@ -179,7 +182,7 @@
         if (showGraphic) html += '<div class="ppa-fimg"><img src="' + esc(safeUrl(c.image_url)) + '" alt="' + esc(c.title) + '">' + hotspotHtml(c, 'ppa-hotspot') + '</div>';
         html += '<div class="ppa-fbody">';
         if (showText && c.title) html += '<div class="ppa-ftitle">' + esc(c.title) + '</div>';
-        if (showText && c.body_text) html += '<div class="ppa-ftext">' + esc(c.body_text) + '</div>';
+        if (showText && c.body_text) html += '<div class="ppa-ftext">' + bodyHtml(c.body_text) + '</div>';
         // until_action: CTA click is the action → permanent dismiss. Others: click
         // just opens the link + counts, then snoozes (re-shows later).
         if (c.cta_enabled && c.cta_url) {

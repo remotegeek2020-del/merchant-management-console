@@ -9,6 +9,8 @@
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link href="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.snow.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/quill@2.0.3/dist/quill.js"></script>
 <style>
   *,*::before,*::after{box-sizing:border-box;}
   :root{--blue:#004990;--navy:#002d5a;--border:#e2e8f0;--surface:#f0f4f8;--text:#0a1628;--muted:#64748b;--green:#16a34a;--amber:#b45309;--red:#dc2626;--shadow:0 1px 3px rgba(0,0,0,0.08);}
@@ -69,6 +71,9 @@
   .cal-chip{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;border:1px solid var(--border);border-radius:99px;padding:3px 6px 3px 10px;font-size:12px;font-weight:600;}
   .cal-chip .x{cursor:pointer;color:var(--muted);display:flex;}
   .pres-row:hover{background:#f8fafc;}
+  #f_body_editor .ql-editor{min-height:140px;font-family:inherit;font-size:14px;}
+  #f_body_editor .ql-container{border-radius:0 0 9px 9px;border-color:var(--border);}
+  #f_body_editor .ql-toolbar{border-radius:9px 9px 0 0;border-color:var(--border);}
   @media(max-width:640px){ .row2{grid-template-columns:1fr;} .statgrid{grid-template-columns:1fr 1fr;} .cal-cell{min-height:56px;} }
 </style>
 </head>
@@ -138,7 +143,7 @@
 
       <div id="textSection">
         <label class="fld">Message Text</label>
-        <textarea class="ta" id="f_body" placeholder="Announcement text shown on the card…"></textarea>
+        <div id="f_body_editor"></div>
       </div>
 
       <div id="graphicSection">
@@ -329,6 +334,35 @@ function api(body){ return fetch('/api/marketing',{method:'POST',headers:{'Conte
 const esc = s => s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 const money = null;
 
+// ── Rich-text (Quill) body editor ──
+let bodyQuill = null;
+function ensureQuill(){
+  if (bodyQuill || typeof Quill === 'undefined') return bodyQuill;
+  bodyQuill = new Quill('#f_body_editor', {
+    theme:'snow', placeholder:'Announcement text shown on the card…',
+    modules:{ toolbar:[
+      [{header:[1,2,3,false]}],
+      [{size:['small',false,'large','huge']}],
+      ['bold','italic','underline','strike'],
+      [{color:[]},{background:[]}],
+      [{list:'ordered'},{list:'bullet'}],
+      [{align:[]}],
+      ['link','clean']
+    ]}
+  });
+  return bodyQuill;
+}
+function setBody(html){
+  ensureQuill();
+  if (!bodyQuill){ return; }
+  if (html){ bodyQuill.setContents([]); bodyQuill.clipboard.dangerouslyPasteHTML(0, html); }
+  else bodyQuill.setText('');
+}
+function getBody(){
+  if (!bodyQuill) return '';
+  return bodyQuill.getText().trim() ? bodyQuill.root.innerHTML : '';
+}
+
 let editing = null;          // campaign being edited (null = new)
 let currentImageUrl = '';    // uploaded graphic url
 let currentImageUrlB = '';   // A/B variant B graphic url
@@ -460,7 +494,7 @@ function openEditor(){
   editing=null; currentImageUrl=''; hotspots=[];
   document.getElementById('editorTitle').innerText='New Campaign';
   document.getElementById('f_title').value='';
-  document.getElementById('f_body').value='';
+  setBody('');
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_audience').value='partner';
@@ -497,7 +531,7 @@ async function editCampaign(id){
   currentImageUrl=c.image_url||''; hotspots=Array.isArray(c.hotspots)?c.hotspots:[];
   document.getElementById('editorTitle').innerText='Edit Campaign';
   document.getElementById('f_title').value=c.title||'';
-  document.getElementById('f_body').value=c.body_text||'';
+  setBody(c.body_text||'');
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
   document.getElementById('f_audience').value=c.audience||'partner';
@@ -623,7 +657,7 @@ async function saveCampaign(){
     action: editing&&editing.id ? 'update_campaign':'create_campaign',
     id: editing&&editing.id ? editing.id : undefined,
     title,
-    body_text: (contentType==='graphic') ? null : document.getElementById('f_body').value,
+    body_text: (contentType==='graphic') ? null : getBody(),
     image_url: (contentType==='text') ? null : (currentImageUrl||null),
     content_type: contentType,
     cta_enabled: document.getElementById('f_cta_enabled').checked,

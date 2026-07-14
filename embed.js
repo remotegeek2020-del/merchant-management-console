@@ -80,6 +80,8 @@
     function num(n) { n = parseFloat(n); return isFinite(n) ? n : 0; }
     // Sanitize a value used inside a JS string in an inline handler.
     function jsArg(s) { return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]/g, ''); }
+    // Body may be sanitized rich-text HTML (server-side) or legacy plain text.
+    function bodyHtml(b) { b = b == null ? '' : String(b); return /<[a-z][\s\S]*>/i.test(b) ? b : esc(b).replace(/\n/g, '<br>'); }
     function api(body) {
         body.site_key = SITE_KEY; body.viewer_id = VIEWER; if (GHL_LOC) body.ghl_location = GHL_LOC;
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
@@ -113,7 +115,8 @@
             '.ppx-hot:hover{background:rgba(0,73,144,.12);box-shadow:0 0 0 2px rgba(0,73,144,.5) inset;}',
             '.ppx-body{padding:clamp(16px,4vw,24px);}',
             '.ppx-title{font-size:clamp(1.05rem,3.6vw,1.2rem);font-weight:800;color:#0a1628;margin:0 0 8px;line-height:1.3;}',
-            '.ppx-text{font-size:clamp(13px,3.4vw,14.5px);color:#475569;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;}',
+            '.ppx-text{font-size:clamp(13px,3.4vw,14.5px);color:#475569;line-height:1.6;overflow-wrap:anywhere;}',
+            '.ppx-text p{margin:0 0 8px;}.ppx-text p:last-child{margin-bottom:0;}.ppx-text a{color:#004990;}.ppx-text ul,.ppx-text ol{margin:0 0 8px;padding-left:20px;}',
             '.ppx-cta{display:block;text-align:center;margin-top:18px;background:#004990;color:#fff;border:none;border-radius:10px;padding:13px 18px;font-size:clamp(13px,3.6vw,14.5px);font-weight:700;cursor:pointer;text-decoration:none;line-height:1.2;}',
             '.ppx-cta:hover{filter:brightness(1.07);}',
             '.ppx-x{position:absolute;top:12px;right:12px;z-index:3;background:rgba(0,0,0,.5);color:#fff;border:none;border-radius:50%;width:32px;height:32px;font-size:19px;line-height:30px;text-align:center;cursor:pointer;padding:0;}',
@@ -153,7 +156,7 @@
         if (showGraphic) html += '<div class="ppx-img"><img src="' + esc(safeUrl(c.image_url)) + '" alt="">' + hot + '</div>';
         html += '<div class="ppx-body">';
         if (showText && c.title) html += '<div class="ppx-title">' + esc(c.title) + '</div>';
-        if (showText && c.body_text) html += '<div class="ppx-text">' + esc(c.body_text) + '</div>';
+        if (showText && c.body_text) html += '<div class="ppx-text">' + bodyHtml(c.body_text) + '</div>';
         if (c.cta_enabled && c.cta_url) {
             var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
             html += '<a class="ppx-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';

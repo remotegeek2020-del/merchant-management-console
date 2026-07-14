@@ -12,11 +12,31 @@
 
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
+import sanitizeHtml from 'sanitize-html';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
 import { ghlListLocations, ghlLocationNames } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import * as webflow from './_webflow.js';
 
+// Sanitize rich-text campaign bodies (WYSIWYG). Renders on partners' external
+// sites, so this is the authoritative XSS boundary — allowlist only.
+function sanitizeBody(html) {
+    if (html == null) return null;
+    return sanitizeHtml(String(html), {
+        allowedTags: ['p', 'br', 'span', 'div', 'strong', 'b', 'em', 'i', 'u', 's', 'strike', 'a',
+            'ul', 'ol', 'li', 'blockquote', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'sub', 'sup', 'pre', 'code', 'hr'],
+        allowedAttributes: { a: ['href', 'target', 'rel'], '*': ['style', 'class'] },
+        allowedSchemes: ['http', 'https', 'mailto', 'tel'],
+        allowedStyles: {
+            '*': {
+                'color': [/^.*$/], 'background-color': [/^.*$/], 'text-align': [/^(left|right|center|justify)$/],
+                'font-size': [/^\d+(px|em|rem|%)$/], 'font-weight': [/^.*$/], 'font-style': [/^.*$/],
+                'text-decoration': [/^.*$/], 'font-family': [/^.*$/], 'line-height': [/^.*$/]
+            }
+        },
+        transformTags: { 'a': sanitizeHtml.simpleTransform('a', { target: '_blank', rel: 'noopener noreferrer' }) }
+    });
+}
 function newSiteKey() { return 'ss_' + randomBytes(12).toString('hex'); }
 function embedLoaderSource(origin, siteKey) {
     return `window.PPX={siteKey:"${siteKey}"};(function(d){var s=d.createElement("script");s.src="${origin}/embed.js";(d.body||d.head).appendChild(s);})(document);`;
@@ -122,9 +142,12 @@ export default async function handler(req, res) {
 
             if (action === 'create_campaign' || action === 'update_campaign') {
                 const b = req.body;
+                // Variant B body is rich-text too — sanitize it before storing.
+                let variantB = (b.variant_b && typeof b.variant_b === 'object') ? { ...b.variant_b } : {};
+                if (variantB.body_text != null) variantB.body_text = sanitizeBody(variantB.body_text);
                 const rec = {
                     title: (b.title || '').trim() || 'Untitled',
-                    body_text: b.body_text ?? null,
+                    body_text: sanitizeBody(b.body_text),
                     image_url: b.image_url ?? null,
                     content_type: ['text', 'graphic', 'both'].includes(b.content_type) ? b.content_type : 'both',
                     cta_enabled: !!b.cta_enabled,
@@ -146,7 +169,7 @@ export default async function handler(req, res) {
                     // A/B testing
                     ab_enabled: !!b.ab_enabled,
                     ab_split: Number.isFinite(+b.ab_split) ? Math.min(100, Math.max(0, Math.round(+b.ab_split))) : 50,
-                    variant_b: (b.variant_b && typeof b.variant_b === 'object') ? b.variant_b : {},
+                    variant_b: variantB,
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
