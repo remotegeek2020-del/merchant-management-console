@@ -212,41 +212,50 @@ if (action === 'getMonthlyReport') {
         // sort_order) with LIVE inventory counts, plus any stray types present in
         // equipments but not yet in the manager (so nothing is unfilterable).
         if (action === 'get_terminal_types') {
-            // Counts are scoped to the SAME location/status filter as the current
-            // inventory view, so the dropdown "(n)" matches the count bar / table.
-            const { filterLocation, filterStatus } = req.body;
-            const counts = {};
+            // Per-type totals + a location breakdown (office / repairs / deployed /
+            // retired) so the dropdown can show the grand total and the count bar can
+            // explain where those units are. Buckets mirror the location tabs.
+            const stats = {};   // type -> { total, office, repairs, deployed, retired, other }
             let from = 0; const PAGE = 1000;
             while (true) {
-                let cq = supabase.from('equipments').select('terminal_type');
-                if (filterStatus) cq = cq.eq('status', filterStatus);
-                else if (filterLocation) cq = cq.eq('current_location', filterLocation);
-                const { data, error } = await cq.range(from, from + PAGE - 1);
+                const { data, error } = await supabase.from('equipments').select('terminal_type, current_location, status').range(from, from + PAGE - 1);
                 if (error) return res.status(200).json({ success: false, message: error.message });
-                (data || []).forEach(r => { const t = (r.terminal_type || '').trim(); if (t) counts[t] = (counts[t] || 0) + 1; });
+                (data || []).forEach(r => {
+                    const t = (r.terminal_type || '').trim(); if (!t) return;
+                    const s = stats[t] || (stats[t] = { total: 0, office: 0, repairs: 0, deployed: 0, retired: 0, other: 0 });
+                    s.total++;
+                    const loc = r.current_location, st = r.status;
+                    if (st === 'deployed') s.deployed++;
+                    else if (st === 'decommissioned' || loc === 'Retired') s.retired++;
+                    else if (loc === 'Warsaw Repairs') s.repairs++;
+                    else if (loc === 'Warsaw Office') s.office++;
+                    else s.other++;
+                });
                 if (!data || data.length < PAGE) break;
                 from += PAGE;
             }
-            // 2) curated master list from the Terminal Manager
+            // Curated master list from the Terminal Manager (names + sort_order)
             const { data: managed } = await supabase.from('terminal_types')
                 .select('name, sort_order, is_active')
                 .order('sort_order', { ascending: true, nullsFirst: false })
                 .order('name', { ascending: true });
             const includeEmpty = req.body.include_empty === true;   // show 0-stock managed types too
+            const row = (name, s, isManaged) => ({ type: name, count: s.total, total: s.total, office: s.office, repairs: s.repairs, deployed: s.deployed, retired: s.retired, other: s.other, managed: isManaged });
+            const ZERO = { total: 0, office: 0, repairs: 0, deployed: 0, retired: 0, other: 0 };
             const out = [];
             const seen = new Set();
             (managed || []).forEach(m => {
                 const name = (m.name || '').trim();
                 if (!name || m.is_active === false || seen.has(name.toLowerCase())) return;
                 seen.add(name.toLowerCase());   // mark as managed so it isn't re-added as an orphan
-                const c = counts[name] || 0;
-                if (c > 0 || includeEmpty) out.push({ type: name, count: c, managed: true });
+                const s = stats[name] || ZERO;
+                if (s.total > 0 || includeEmpty) out.push(row(name, s, true));
             });
-            // 3) orphan types that exist in inventory but aren't in the manager
-            Object.keys(counts)
+            // Orphan types present in inventory but not in the manager
+            Object.keys(stats)
                 .filter(t => !seen.has(t.toLowerCase()))
                 .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-                .forEach(t => out.push({ type: t, count: counts[t], managed: false }));
+                .forEach(t => out.push(row(t, stats[t], false)));
             return res.status(200).json({ success: true, data: out });
         }
 
