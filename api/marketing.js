@@ -11,8 +11,16 @@
 //     (partner_token in body) or a staff session. Mobile reuses the same JSON.
 
 import { createClient } from '@supabase/supabase-js';
+import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
 import { ghlListLocations, ghlLocationNames } from './_ghl.js';
+import { setConfigValue } from './api-config.js';
+import * as webflow from './_webflow.js';
+
+function newSiteKey() { return 'ss_' + randomBytes(12).toString('hex'); }
+function embedLoaderSource(origin, siteKey) {
+    return `window.PPX={siteKey:"${siteKey}"};(function(d){var s=d.createElement("script");s.src="${origin}/embed.js";(d.body||d.head).appendChild(s);})(document);`;
+}
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -20,7 +28,8 @@ const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
-    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations'
+    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations',
+    'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -320,6 +329,73 @@ export default async function handler(req, res) {
             if (action === 'ghl_locations') {
                 const r = await ghlListLocations();
                 return ok(res, r);
+            }
+
+            // ── Webflow connector ────────────────────────────────────────────
+            if (action === 'webflow_status') {
+                const token = await webflow.getToken();
+                const { data: sites } = await supabase.from('marketing_sites')
+                    .select('id, name, site_key, webflow_site_id, wired, is_active')
+                    .eq('provider', 'webflow').order('name');
+                return ok(res, { app_configured: webflow.webflowConfigured(), connected: !!token, sites: sites || [] });
+            }
+
+            if (action === 'webflow_authorize_url') {
+                if (!webflow.webflowConfigured()) return bad(res, 'Add WEBFLOW_CLIENT_ID and WEBFLOW_CLIENT_SECRET in Vercel first.');
+                const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+                const host = req.headers['x-forwarded-host'] || req.headers.host;
+                const redirectUri = `${proto}://${host}/api/webflow-oauth`;
+                const state = randomBytes(16).toString('hex');
+                await setConfigValue('WEBFLOW_OAUTH_STATE', state, actorName);
+                return ok(res, { url: webflow.authorizeUrl(redirectUri, state) });
+            }
+
+            // Pull Webflow sites → ensure a marketing_sites row (+ key) for each.
+            if (action === 'webflow_sync') {
+                let sites;
+                try { sites = await webflow.listSites(); } catch (e) { return bad(res, e.message); }
+                for (const s of sites) {
+                    const { data: existing } = await supabase.from('marketing_sites').select('id').eq('webflow_site_id', s.id).maybeSingle();
+                    if (!existing) {
+                        await supabase.from('marketing_sites').insert({
+                            site_key: newSiteKey(), name: s.name, provider: 'webflow', webflow_site_id: s.id, created_by: actorName
+                        });
+                    } else {
+                        await supabase.from('marketing_sites').update({ name: s.name }).eq('id', existing.id);
+                    }
+                }
+                const { data: rows } = await supabase.from('marketing_sites')
+                    .select('id, name, site_key, webflow_site_id, wired, is_active').eq('provider', 'webflow').order('name');
+                return ok(res, rows || []);
+            }
+
+            // Inject the loader on a Webflow site (register inline script + apply + publish).
+            if (action === 'webflow_wire' || action === 'webflow_unwire') {
+                const { id } = req.body;
+                const { data: site } = await supabase.from('marketing_sites').select('*').eq('id', id).maybeSingle();
+                if (!site || !site.webflow_site_id) return bad(res, 'Webflow site not found');
+                try {
+                    if (action === 'webflow_wire') {
+                        const proto = (req.headers['x-forwarded-proto'] || 'https').split(',')[0];
+                        const host = req.headers['x-forwarded-host'] || req.headers.host;
+                        const origin = `${proto}://${host}`;
+                        const src = embedLoaderSource(origin, site.site_key);
+                        const scriptId = await webflow.registerInlineScript(site.webflow_site_id, src, 'PPTAnnounce', '1.0.0');
+                        await webflow.applyFooterScript(site.webflow_site_id, scriptId, '1.0.0');
+                        await webflow.publishSite(site.webflow_site_id);
+                        await supabase.from('marketing_sites').update({ wired: true, script_id: scriptId, is_active: true }).eq('id', id);
+                    } else {
+                        await webflow.clearCustomCode(site.webflow_site_id);
+                        await webflow.publishSite(site.webflow_site_id);
+                        await supabase.from('marketing_sites').update({ wired: false }).eq('id', id);
+                    }
+                } catch (e) { return bad(res, e.message); }
+                return ok(res, { ok: true });
+            }
+
+            if (action === 'webflow_disconnect') {
+                await webflow.disconnect();
+                return ok(res, { disconnected: true });
             }
 
             // Resolve names for a set of saved partner ids (edit → chips).

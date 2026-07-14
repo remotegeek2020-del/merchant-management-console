@@ -45,6 +45,21 @@ export async function getConfigValue(key) {
     try { return decrypt(data.encrypted_value, data.iv, data.auth_tag); } catch { return null; }
 }
 
+// Store (encrypt + upsert) a config value. Used by server-side integrations
+// (e.g. the Webflow OAuth token) — never exposes plaintext to the client.
+export async function setConfigValue(key, value, updatedBy = 'system') {
+    const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
+    if (value == null || value === '') {
+        await supabase.from('app_config').delete().eq('key', key);
+        return true;
+    }
+    const { encrypted_value, iv, auth_tag } = encrypt(String(value));
+    const { error } = await supabase.from('app_config').upsert({
+        key, encrypted_value, iv, auth_tag, updated_at: new Date().toISOString(), updated_by: updatedBy
+    }, { onConflict: 'key' });
+    return !error;
+}
+
 async function verifySuperAdmin(supabase, userid) {
     if (!userid) return false;
     const { data } = await supabase

@@ -290,9 +290,19 @@
       <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('sitesModal').style.display='none'">close</span>
     </div>
     <div class="modal-body">
-      <div class="muted" style="font-size:12px;margin-bottom:12px;">Register each external property (a Webflow site, your GoHighLevel app, etc.). Paste that site's snippet into its custom code. Any campaign with “Also show on external sites” appears as a modal on every active site.</div>
+      <!-- Webflow centralized connector -->
+      <div id="wfPanel" style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:16px;background:#fafbfc;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span class="material-icons" style="color:#146ef5;">bolt</span>
+          <b style="flex:1;">Webflow (centralized)</b>
+          <span id="wfStatus" class="muted" style="font-size:12px;">…</span>
+        </div>
+        <div id="wfBody" style="margin-top:10px;"></div>
+      </div>
+
+      <div class="muted" style="font-size:12px;margin-bottom:12px;">Or register a site manually (paste its snippet into the site's custom code). Any campaign with “Also show on external sites” appears on every active site it targets.</div>
       <div style="display:flex;gap:8px;margin-bottom:14px;">
-        <input class="inp" id="newSiteName" placeholder="Site name (e.g. Acme Webflow, GHL App)">
+        <input class="inp" id="newSiteName" placeholder="Site name (e.g. GHL App)">
         <button class="btn btn-brand" style="white-space:nowrap;" onclick="createSite()"><span class="material-icons" style="font-size:16px;">add</span> Add site</button>
       </div>
       <div id="sitesList"></div>
@@ -761,13 +771,13 @@ function renderCalendar(){
 }
 
 // ── embed sites ──
-function openSites(){ document.getElementById('sitesModal').style.display='flex'; loadSites(); }
+function openSites(){ document.getElementById('sitesModal').style.display='flex'; loadSites(); loadWebflow(); }
 async function loadSites(){
   const box=document.getElementById('sitesList');
   box.innerHTML='<div class="muted" style="text-align:center;padding:16px;">Loading…</div>';
   const r=await api({action:'list_sites'});
   if (!r.success){ box.innerHTML='<div style="color:var(--red);">Failed to load.</div>'; return; }
-  const sites=r.data||[];
+  const sites=(r.data||[]).filter(s=>s.provider!=='webflow');   // Webflow sites live in their own panel
   if (!sites.length){ box.innerHTML='<div class="muted" style="text-align:center;padding:16px;">No sites yet. Add one above to get an embed snippet.</div>'; return; }
   const origin=location.origin;
   box.innerHTML = sites.map(s=>{
@@ -806,6 +816,70 @@ async function deleteSite(id, name){
   await api({action:'delete_site', id}); embedSitesCache=null; loadSites();
 }
 function copyText(t){ navigator.clipboard.writeText(t).then(()=>Swal.fire({icon:'success',title:'Copied',timer:900,showConfirmButton:false})).catch(()=>{}); }
+
+// ── Webflow connector ──
+async function loadWebflow(){
+  const body=document.getElementById('wfBody'), status=document.getElementById('wfStatus');
+  body.innerHTML='<div class="muted" style="font-size:12px;">Loading…</div>';
+  const r=await api({action:'webflow_status'});
+  if (!r.success){ status.textContent=''; body.innerHTML='<div style="color:var(--red);font-size:12px;">Failed to load.</div>'; return; }
+  const d=r.data;
+  if (!d.app_configured){
+    status.textContent='Not set up';
+    body.innerHTML='<div class="muted" style="font-size:12px;">Add <b>WEBFLOW_CLIENT_ID</b> and <b>WEBFLOW_CLIENT_SECRET</b> in Vercel (from your Webflow App), then reload. One connect covers all sites in your workspace.</div>';
+    return;
+  }
+  if (!d.connected){
+    status.textContent='Not connected';
+    body.innerHTML=`<div class="muted" style="font-size:12px;margin-bottom:8px;">Connect once to list your Webflow sites and push the announcement loader automatically — no manual pasting.</div>
+      <button class="btn btn-brand" onclick="connectWebflow()"><span class="material-icons" style="font-size:16px;">link</span> Connect Webflow</button>`;
+    return;
+  }
+  status.innerHTML='<span style="color:var(--green);font-weight:700;">● Connected</span>';
+  const sites=d.sites||[];
+  const rows = sites.length ? sites.map(s=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #eef2f7;font-size:13px;">
+      <span style="flex:1;"><b>${esc(s.name)}</b></span>
+      <span class="muted" style="font-size:11px;">${s.wired?'live on site':'not injected'}</span>
+      <label class="switch" title="Inject / remove the announcement loader"><input type="checkbox" ${s.wired?'checked':''} onchange="wireWebflow('${s.id}',this.checked,this)"><span class="slider"></span></label>
+    </div>`).join('') : '<div class="muted" style="font-size:12px;">No sites yet — click Sync.</div>';
+  body.innerHTML = `<div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button class="btn btn-neutral" onclick="syncWebflow(this)"><span class="material-icons" style="font-size:16px;">sync</span> Sync sites</button>
+      <button class="btn btn-neutral" style="color:var(--red);" onclick="disconnectWebflow()">Disconnect</button>
+    </div>
+    <div class="muted" style="font-size:11px;margin-bottom:6px;">Toggle a site ON to inject the loader &amp; publish it. Then pick sites per campaign under “Which registered sites”.</div>
+    ${rows}`;
+}
+async function connectWebflow(){
+  const r=await api({action:'webflow_authorize_url'});
+  if (!r.success){ Swal.fire('Error', r.message||'Failed','error'); return; }
+  window.location.href=r.data.url;   // Webflow OAuth consent → redirects back to /marketing
+}
+async function syncWebflow(btn){
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="material-icons" style="font-size:16px;">hourglass_empty</span> Syncing…'; }
+  const r=await api({action:'webflow_sync'});
+  if (!r.success){ Swal.fire('Sync failed', r.message||'','error'); }
+  embedSitesCache=null; loadWebflow();
+}
+async function wireWebflow(id, on, el){
+  if(el) el.disabled=true;
+  const r=await api({action: on?'webflow_wire':'webflow_unwire', id});
+  if (!r.success){ Swal.fire('Error', r.message||'Failed','error'); }
+  else Swal.fire({icon:'success',title: on?'Injected & published':'Removed & published',timer:1400,showConfirmButton:false});
+  embedSitesCache=null; loadWebflow();
+}
+async function disconnectWebflow(){
+  const c=await Swal.fire({icon:'warning',title:'Disconnect Webflow?',text:'Injected scripts stay on sites until you toggle them off first.',showCancelButton:true,confirmButtonText:'Disconnect',confirmButtonColor:'#dc2626'});
+  if (!c.isConfirmed) return;
+  await api({action:'webflow_disconnect'}); loadWebflow();
+}
+// Show a toast when returning from the Webflow OAuth redirect.
+(function(){
+  const p=new URLSearchParams(location.search).get('webflow');
+  if(!p) return;
+  const msg={connected:['success','Webflow connected'],error:['error','Webflow connection failed'],state:['error','Security check failed — try again']}[p];
+  if(msg){ setTimeout(()=>{ Swal.fire({icon:msg[0],title:msg[1],timer:1800,showConfirmButton:false}); if(p==='connected'){ document.getElementById('sitesModal').style.display='flex'; loadWebflow(); loadSites(); } },400); }
+  history.replaceState({},'',location.pathname);
+})();
 
 // ── embed site targeting (in the editor) ──
 let embedSitesCache = null;
