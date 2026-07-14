@@ -28,9 +28,11 @@
     if (!STAFF_TOKEN && !PARTNER_TOKEN) return;              // not logged in
     if (window.__ppAnnLoaded) return; window.__ppAnnLoaded = true;
 
-    var SESS_HIDE = 'pp_ann_hidden';                          // sessionStorage key (session-only X)
+    var SNOOZE_KEY = 'pp_ann_snooze';                         // localStorage: {id: epochMs closed}
+    var FREQ_MS = 5 * 60 * 1000;                              // re-show a closed ad after 5 minutes
     var cardWrap = null, cardList = [], cardIdx = 0;
     var floatList = [], floatIdx = 0, floatEl = null;
+    var shownCardId = null, shownFloatId = null;             // to avoid re-tracking impressions
 
     function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 
@@ -43,12 +45,12 @@
     function track(id, type, target) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null }).catch(function () {}); }
     function dismissServer(id) { api({ action: 'dismiss', campaign_id: id }).catch(function () {}); }
 
-    // ── session-only hide (X) ────────────────────────────────────────────────
-    function sessHidden() { try { return JSON.parse(sessionStorage.getItem(SESS_HIDE) || '[]'); } catch (e) { return []; } }
-    function sessHide(id) {
-        try { var a = sessHidden(); if (a.indexOf(id) === -1) { a.push(id); sessionStorage.setItem(SESS_HIDE, JSON.stringify(a)); } } catch (e) {}
-    }
-    function isSessHidden(id) { return sessHidden().indexOf(id) !== -1; }
+    // ── snooze (X / CTA close) ───────────────────────────────────────────────
+    // Closing an ad only hides it temporarily; it re-shows after FREQ_MS. Only the
+    // "Don't show again" checkbox hides it permanently (server-side dismiss).
+    function snoozeMap() { try { return JSON.parse(localStorage.getItem(SNOOZE_KEY) || '{}'); } catch (e) { return {}; } }
+    function snooze(id) { try { var m = snoozeMap(); m[id] = Date.now(); localStorage.setItem(SNOOZE_KEY, JSON.stringify(m)); } catch (e) {} }
+    function isSnoozed(id) { var m = snoozeMap(); return m[id] && (Date.now() - m[id]) < FREQ_MS; }
 
     // ── shared CSS ────────────────────────────────────────────────────────────
     function injectCss() {
@@ -98,10 +100,12 @@
     // ── homepage cards ────────────────────────────────────────────────────────
     function renderCards() {
         if (!cardWrap) return;
-        var visible = cardList.filter(function (c) { return !isSessHidden(c.id); });
-        if (!visible.length) { cardWrap.style.display = 'none'; cardWrap.innerHTML = ''; return; }
+        var visible = cardList.filter(function (c) { return !isSnoozed(c.id); });
+        if (!visible.length) { cardWrap.style.display = 'none'; cardWrap.innerHTML = ''; shownCardId = null; return; }
         if (cardIdx >= visible.length) cardIdx = 0;
         var c = visible[cardIdx];
+        // Already showing this exact card → don't re-render (avoids flicker + re-tracking).
+        if (shownCardId === c.id && cardWrap.firstChild) return;
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var dismissible = /dismissible$/.test(c.display_mode || '');
@@ -127,17 +131,25 @@
         html += '</div>';
         cardWrap.innerHTML = html;
         cardWrap.style.display = '';
-        track(c.id, 'impression');
+        if (shownCardId !== c.id) { shownCardId = c.id; track(c.id, 'impression'); }
     }
 
     // ── floating ad ───────────────────────────────────────────────────────────
+    function floatVisible() {
+        // Don't float a campaign that is already shown as a card on THIS page.
+        var cardIds = {}; cardList.forEach(function (c) { cardIds[c.id] = 1; });
+        return floatList.filter(function (c) { return !cardIds[c.id] && !isSnoozed(c.id); });
+    }
+
     function renderFloat() {
-        var visible = floatList.filter(function (c) { return !isSessHidden(c.id); });
-        if (!visible.length) { if (floatEl) { floatEl.remove(); floatEl = null; } return; }
+        var visible = floatVisible();
+        if (!visible.length) { if (floatEl) { floatEl.remove(); floatEl = null; } shownFloatId = null; return; }
         if (floatIdx >= visible.length) floatIdx = 0;
         var c = visible[floatIdx];
+        // Already showing this exact ad → leave it (avoids flicker + re-tracking).
+        if (floatEl && shownFloatId === c.id) return;
         if (!floatEl) { floatEl = document.createElement('div'); floatEl.className = 'ppa-float'; document.body.appendChild(floatEl); }
-        var persistent = /persistent$/.test(c.display_mode || '');
+        var dismissible = /dismissible$/.test(c.display_mode || '');
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var html = '<button class="ppa-fx" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:16px;">close</span></button>';
@@ -145,41 +157,39 @@
         html += '<div class="ppa-fbody">';
         if (showText && c.title) html += '<div class="ppa-ftitle">' + esc(c.title) + '</div>';
         if (showText && c.body_text) html += '<div class="ppa-ftext">' + esc(c.body_text) + '</div>';
+        // CTA just opens the link + counts the click, then snoozes (re-shows later).
         if (c.cta_enabled && c.cta_url) {
-            // Persistent: CTA just opens the link (keeps returning). Dismissible: CTA click also hides it for good.
-            var onCta = persistent ? 'ppAnnClick(\'' + c.id + '\',\'cta\')' : 'ppAnnCtaDone(\'' + c.id + '\')';
-            html += '<a class="ppa-fcta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="' + onCta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
-        } else if (!persistent) {
-            html += '<button class="ppa-fcta" onclick="ppAnnForget(\'' + c.id + '\')">Got it</button>';
+            html += '<a class="ppa-fcta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="ppAnnCta(\'' + c.id + '\')">' + esc(c.cta_label || 'Learn more') + '</a>';
         }
-        // Dismissible floating ads always offer an explicit permanent opt-out.
-        if (!persistent) html += '<label class="ppa-fforget"><input type="checkbox" onchange="if(this.checked)ppAnnForget(\'' + c.id + '\')"> Don\'t show this again</label>';
+        // Only dismissible ads offer a permanent opt-out.
+        if (dismissible) html += '<label class="ppa-fforget"><input type="checkbox" onchange="if(this.checked)ppAnnForget(\'' + c.id + '\')"> Don\'t show this again</label>';
         html += '</div>';
         if (visible.length > 1) html += '<div class="ppa-fnav"><button onclick="ppAnnFloatNav(-1)">‹</button> ' + (floatIdx + 1) + ' / ' + visible.length + ' <button onclick="ppAnnFloatNav(1)">›</button></div>';
         floatEl.innerHTML = html;
-        track(c.id, 'impression');
+        if (shownFloatId !== c.id) { shownFloatId = c.id; track(c.id, 'impression'); }
     }
 
     // ── global handlers ───────────────────────────────────────────────────────
     window.ppAnnClick = function (id, t) { track(id, 'click', t); };
     window.ppAnnNav = function (d) {
-        var visible = cardList.filter(function (c) { return !isSessHidden(c.id); });
-        cardIdx = Math.max(0, Math.min(visible.length - 1, cardIdx + d)); renderCards();
+        var visible = cardList.filter(function (c) { return !isSnoozed(c.id); });
+        cardIdx = Math.max(0, Math.min(visible.length - 1, cardIdx + d)); shownCardId = null; renderCards();
     };
     window.ppAnnFloatNav = function (d) {
-        var visible = floatList.filter(function (c) { return !isSessHidden(c.id); });
-        floatIdx = Math.max(0, Math.min(visible.length - 1, floatIdx + d)); renderFloat();
+        var visible = floatVisible();
+        floatIdx = Math.max(0, Math.min(visible.length - 1, floatIdx + d)); shownFloatId = null; renderFloat();
     };
-    // X: close for this browser session only (returns next login). No server call.
-    window.ppAnnClose = function (id) { sessHide(id); renderCards(); renderFloat(); };
-    // Checkbox / "Got it": permanent dismiss for this user.
+    // X: close for now — snoozes for FREQ_MS, then it re-shows automatically.
+    window.ppAnnClose = function (id) { snooze(id); shownCardId = null; shownFloatId = null; renderCards(); renderFloat(); };
+    // CTA on a floating ad: count the click, open the link, and snooze (re-shows later).
+    window.ppAnnCta = function (id) { track(id, 'click', 'cta'); snooze(id); shownFloatId = null; setTimeout(renderFloat, 50); };
+    // "Don't show again" checkbox: the ONLY permanent dismiss.
     window.ppAnnForget = function (id) { dismissServer(id); track(id, 'dismiss'); removeEverywhere(id); };
-    // Floating CTA clicked: count the click AND permanently dismiss.
-    window.ppAnnCtaDone = function (id) { track(id, 'click', 'cta'); dismissServer(id); removeEverywhere(id); };
 
     function removeEverywhere(id) {
         cardList = cardList.filter(function (c) { return c.id !== id; });
         floatList = floatList.filter(function (c) { return c.id !== id; });
+        shownCardId = null; shownFloatId = null;
         renderCards(); renderFloat();
     }
 
@@ -197,6 +207,8 @@
         });
         renderCards();
         renderFloat();
+        // Re-check periodically so a closed (snoozed) ad re-appears after FREQ_MS.
+        setInterval(function () { renderCards(); renderFloat(); }, 30 * 1000);
     }
 
     function load() {
