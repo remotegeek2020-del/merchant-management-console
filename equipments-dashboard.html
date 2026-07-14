@@ -1564,7 +1564,7 @@ async function fetchCombinedLogs() {
     document.getElementById('inv-pagination-bar').style.display  = isRepairs ? 'none' : 'flex';
     document.getElementById('inv-header-controls').style.display = isRepairs ? 'none' : 'flex';
 
-    if (isRepairs) { rqInvLoadQueue(); } else { fetchInventory(); }
+    if (isRepairs) { rqInvLoadQueue(); } else { loadTerminalTypes(); fetchInventory(); }
 }
 
 // ── EMBEDDED REPAIR QUEUE ────────────────────────────────────────────────────
@@ -1775,13 +1775,27 @@ function rqInvExportCSV() {
         const sel = document.getElementById('typeFilter');
         if (!sel) return;
         try {
-            const res = await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'get_terminal_types' }) });
+            // Scope counts to the current location tab so the dropdown "(n)" matches
+            // the count bar and the table (previously the dropdown counted all locations).
+            const res = await fetch('/api/equipments', {
+                method: 'POST', headers: equipHeaders(),
+                body: JSON.stringify({
+                    action: 'get_terminal_types',
+                    filterLocation: currentFilter === 'deployed' ? null : currentFilter,
+                    filterStatus: currentFilter === 'deployed' ? 'deployed' : null
+                })
+            });
             const d = await res.json();
             if (!d.success) return;
             const current = sel.value;
-            // d.data = [{ type, count }] — show "P8 (23)"
-            sel.innerHTML = '<option value="">All types</option>' +
-                (d.data || []).map(t => `<option value="${String(t.type).replace(/"/g, '&quot;')}">${t.type} (${t.count})</option>`).join('');
+            const list = d.data || [];   // [{ type, count }] scoped to the current tab
+            let opts = '<option value="">All types</option>' +
+                list.map(t => `<option value="${String(t.type).replace(/"/g, '&quot;')}">${t.type} (${t.count})</option>`).join('');
+            // Keep the selected type available even if it has 0 units in this tab
+            if (current && !list.some(t => t.type === current)) {
+                opts += `<option value="${current.replace(/"/g, '&quot;')}">${current} (0)</option>`;
+            }
+            sel.innerHTML = opts;
             sel.value = current;   // preserve selection across reloads
         } catch (e) { /* leave "All types" */ }
     }

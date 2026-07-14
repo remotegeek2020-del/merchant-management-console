@@ -212,11 +212,16 @@ if (action === 'getMonthlyReport') {
         // sort_order) with LIVE inventory counts, plus any stray types present in
         // equipments but not yet in the manager (so nothing is unfilterable).
         if (action === 'get_terminal_types') {
-            // 1) live counts from equipments (paged so counts are complete)
+            // Counts are scoped to the SAME location/status filter as the current
+            // inventory view, so the dropdown "(n)" matches the count bar / table.
+            const { filterLocation, filterStatus } = req.body;
             const counts = {};
             let from = 0; const PAGE = 1000;
             while (true) {
-                const { data, error } = await supabase.from('equipments').select('terminal_type').range(from, from + PAGE - 1);
+                let cq = supabase.from('equipments').select('terminal_type');
+                if (filterStatus) cq = cq.eq('status', filterStatus);
+                else if (filterLocation) cq = cq.eq('current_location', filterLocation);
+                const { data, error } = await cq.range(from, from + PAGE - 1);
                 if (error) return res.status(200).json({ success: false, message: error.message });
                 (data || []).forEach(r => { const t = (r.terminal_type || '').trim(); if (t) counts[t] = (counts[t] || 0) + 1; });
                 if (!data || data.length < PAGE) break;
