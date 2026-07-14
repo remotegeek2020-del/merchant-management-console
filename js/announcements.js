@@ -14,6 +14,8 @@
  *   • floating_persistent  → same floating ad, but it always returns until the
  *     campaign expires. X only closes it for the session; the CTA just opens the
  *     link (no permanent dismiss).
+ *   • both_dismissible / both_persistent → shown as a homepage card AND a
+ *     floating ad at the same time, with the matching dismiss behavior.
  *
  * Homepage cards render into #staffAnnCarousel (staff hub) or #annCarousel
  * (partner dashboard). The floating ad is injected on every page.
@@ -102,7 +104,8 @@
         var c = visible[cardIdx];
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
-        var canDismiss = c.display_mode !== 'card_persistent';
+        var dismissible = /dismissible$/.test(c.display_mode || '');
+        var canDismiss = dismissible;
         var html = '<div class="ppa-card">';
         if (canDismiss) html += '<button class="ppa-x" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:18px;">close</span></button>';
         if (showGraphic) html += '<div class="ppa-imgwrap"><img src="' + esc(c.image_url) + '" alt="' + esc(c.title) + '">' + hotspotHtml(c, 'ppa-hotspot') + '</div>';
@@ -113,10 +116,10 @@
             if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" href="' + esc(c.cta_url) + '" target="_blank" rel="noopener" onclick="ppAnnClick(\'' + c.id + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
             html += '</div>';
         }
-        var showFoot = (c.display_mode === 'card_dismissible') || visible.length > 1;
+        var showFoot = dismissible || visible.length > 1;
         if (showFoot) {
             html += '<div class="ppa-foot">';
-            if (c.display_mode === 'card_dismissible') html += '<label class="ppa-dismiss"><input type="checkbox" onchange="if(this.checked)ppAnnForget(\'' + c.id + '\')"> Don\'t show this again</label>';
+            if (dismissible) html += '<label class="ppa-dismiss"><input type="checkbox" onchange="if(this.checked)ppAnnForget(\'' + c.id + '\')"> Don\'t show this again</label>';
             else html += '<span></span>';
             if (visible.length > 1) html += '<span class="ppa-nav"><button onclick="ppAnnNav(-1)" ' + (cardIdx === 0 ? 'disabled' : '') + '>‹</button> ' + (cardIdx + 1) + ' / ' + visible.length + ' <button onclick="ppAnnNav(1)" ' + (cardIdx === visible.length - 1 ? 'disabled' : '') + '>›</button></span>';
             html += '</div>';
@@ -134,7 +137,7 @@
         if (floatIdx >= visible.length) floatIdx = 0;
         var c = visible[floatIdx];
         if (!floatEl) { floatEl = document.createElement('div'); floatEl.className = 'ppa-float'; document.body.appendChild(floatEl); }
-        var persistent = c.display_mode === 'floating_persistent';
+        var persistent = /persistent$/.test(c.display_mode || '');
         var showGraphic = (c.content_type === 'graphic' || c.content_type === 'both') && c.image_url;
         var showText = (c.content_type === 'text' || c.content_type === 'both');
         var html = '<button class="ppa-fx" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:16px;">close</span></button>';
@@ -186,8 +189,11 @@
         injectCss();
         cardWrap = document.getElementById('staffAnnCarousel') || document.getElementById('annCarousel');
         all.forEach(function (c) {
-            if ((c.display_mode || '').indexOf('floating') === 0) floatList.push(c);
-            else if (cardWrap) cardList.push(c);   // card modes only render where a carousel exists
+            var m = c.display_mode || 'card_dismissible';
+            var asFloat = m.indexOf('floating') === 0 || m.indexOf('both') === 0;
+            var asCard = m.indexOf('card') === 0 || m.indexOf('both') === 0;
+            if (asFloat) floatList.push(c);
+            if (asCard && cardWrap) cardList.push(c);   // cards only render where a carousel exists
         });
         renderCards();
         renderFloat();

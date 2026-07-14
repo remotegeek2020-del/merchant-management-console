@@ -155,8 +155,9 @@
         <div>
           <label class="fld">Placement</label>
           <select class="sel" id="f_placement" onchange="updateDisplayHint()">
-            <option value="card">Homepage card</option>
-            <option value="floating">Floating ad (every page)</option>
+            <option value="card">Homepage only (card)</option>
+            <option value="floating">Floating only (every page)</option>
+            <option value="both">Both (homepage card + floating)</option>
           </select>
         </div>
         <div>
@@ -223,12 +224,17 @@ let contentType = 'both';
 })();
 
 function displayModeLabel(m){
-  var map={card_dismissible:'dismissible card',card_persistent:'persistent card',floating_dismissible:'dismissible floating ad',floating_persistent:'persistent floating ad',floating:'floating ad'};
+  var map={
+    card_dismissible:'dismissible card',card_persistent:'persistent card',
+    floating_dismissible:'dismissible floating ad',floating_persistent:'persistent floating ad',
+    both_dismissible:'card + floating (dismissible)',both_persistent:'card + floating (persistent)',
+    floating:'floating ad'
+  };
   return map[m]||'dismissible card';
 }
 // Compose/parse the display_mode from the Placement + Behavior selects.
 function getDisplayMode(){
-  var p=document.getElementById('f_placement').value;   // card | floating
+  var p=document.getElementById('f_placement').value;   // card | floating | both
   var b=document.getElementById('f_behavior').value;    // dismissible | persistent
   return p+'_'+b;
 }
@@ -242,10 +248,12 @@ function setDisplayMode(m){
 function updateDisplayHint(){
   var m=getDisplayMode();
   var hints={
-    card_dismissible:'Homepage card. The X closes it for this browser session (it returns next login); “Don’t show again” hides it permanently.',
-    card_persistent:'Homepage card with no dismiss controls — always shown until the campaign expires.',
+    card_dismissible:'Homepage card only. The X closes it for this browser session (it returns next login); “Don’t show again” hides it permanently.',
+    card_persistent:'Homepage card only, no dismiss controls — always shown until the campaign expires.',
     floating_dismissible:'Small floating ad on every page. The X closes it for the session; clicking the CTA (or “Don’t show again”) hides it permanently.',
-    floating_persistent:'Small floating ad on every page that keeps returning until the campaign expires. The X only closes it for the session; the CTA just opens the link.'
+    floating_persistent:'Small floating ad on every page that keeps returning until the campaign expires. The X only closes it for the session; the CTA just opens the link.',
+    both_dismissible:'Shows as a homepage card AND a floating ad on every page. X closes for the session; “Don’t show again” / CTA click hides both permanently.',
+    both_persistent:'Shows as a homepage card AND a floating ad on every page, always returning until the campaign expires. X only closes for the session.'
   };
   var el=document.getElementById('displayModeHint'); if(el) el.textContent=hints[m]||'';
 }
