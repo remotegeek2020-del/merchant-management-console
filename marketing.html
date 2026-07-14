@@ -992,6 +992,7 @@ async function showStats(id, title){
     </div>
     ${abSection(s.ab)}
     ${siteSection(s.by_site)}
+    ${trafficSection(s.traffic)}
     ${targets.length?`<label class="fld">Clicks by button / hotspot</label>${targets.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}`:''}
     ${peopleSection('Who clicked', s.clickers, true)}
     ${peopleSection('Who viewed', s.viewers, false)}
@@ -1013,6 +1014,24 @@ function abSection(ab){
     <div class="muted" style="margin-top:6px;font-size:12px;">${winner} (by unique CTR).</div>`;
 }
 
+// Traffic sources for external (website/GHL) views.
+function trafficSection(t){
+  if (!t) return '';
+  const list=(title,arr)=>{
+    arr=arr||[];
+    if(!arr.length) return '';
+    const max=Math.max(...arr.map(x=>x.count),1);
+    const rows=arr.map(x=>`<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:12px;">
+      <span style="flex:0 0 42%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(x.name)}</span>
+      <span style="flex:1;background:#eef2f7;border-radius:4px;height:8px;overflow:hidden;"><span style="display:block;height:100%;width:${Math.round(x.count/max*100)}%;background:var(--blue);"></span></span>
+      <b style="flex:0 0 34px;text-align:right;">${x.count}</b></div>`).join('');
+    return `<div style="margin-bottom:10px;"><div class="muted" style="font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.3px;margin-bottom:2px;">${title}</div>${rows}</div>`;
+  };
+  const body=list('Referrers',t.referrers)+list('UTM sources',t.sources)+list('Countries',t.countries)+list('Devices',t.devices);
+  if(!body) return '';
+  return `<label class="fld">Traffic sources (website / GHL views)</label>${body}`;
+}
+
 // External-site (embed) engagement breakdown.
 function siteSection(bySite){
   if (!bySite || !bySite.length) return '';
@@ -1030,8 +1049,8 @@ async function exportClicks(id, title){
   if (!r.success){ Swal.fire('Export failed', r.message||'', 'error'); return; }
   const rows=r.data||[];
   if (!rows.length){ Swal.fire('No clicks yet','Nobody has clicked this campaign.','info'); return; }
-  const header=['Name','Email','Type','Target','Variant','Clicked at'];
-  const lines=[header.join(',')].concat(rows.map(x=>[x.name,x.email,x.user_type,x.target,x.variant,new Date(x.at).toLocaleString()].map(csvCell).join(',')));
+  const header=['Name','Email','Channel','Source','Target','Variant','Referrer','UTM source','Country','Device','Landing page','Clicked at'];
+  const lines=[header.join(',')].concat(rows.map(x=>[x.name,x.email,x.user_type,x.source||'',x.target,x.variant,x.referrer||'',x.utm_source||'',x.country||'',x.device||'',x.landing||'',new Date(x.at).toLocaleString()].map(csvCell).join(',')));
   const blob=new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8;'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
   a.download=(title||'campaign').replace(/[^a-z0-9]+/gi,'_').toLowerCase()+'_clickers.csv';

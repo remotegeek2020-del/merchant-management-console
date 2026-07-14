@@ -28,9 +28,22 @@
     // (b) data-* attributes on the <script> tag.
     var cfg = window.PPX || window.PPX_CONFIG || {};
     function attr(n) { return self && self.getAttribute ? (self.getAttribute(n) || '') : ''; }
+    function qp(n) { try { return new URLSearchParams(location.search).get(n) || ''; } catch (e) { return ''; } }
     var SITE_KEY = cfg.siteKey || cfg.site_key || attr('data-site-key') || '';
-    var EMAIL = String(cfg.email || attr('data-email') || '').trim();
     var ACCOUNT = String(cfg.account || attr('data-account') || '').trim();
+
+    // Best-effort visitor email: explicit config/attr, a ?email= param, or an
+    // email-shaped value in the site's OWN (first-party) cookies. Browsers do
+    // NOT allow reading other domains' cookies (e.g. Google), so this only finds
+    // an email the site itself stored (form fill / CRM).
+    function cookieEmail() {
+        try {
+            var raw = decodeURIComponent(document.cookie || '');
+            var m = raw.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+            return m ? m[0] : '';
+        } catch (e) { return ''; }
+    }
+    var EMAIL = String(cfg.email || attr('data-email') || qp('email') || qp('contact_email') || cookieEmail() || '').trim();
     if (!SITE_KEY) { try { console.warn('[PPX] announcements: no site key (set window.PPX={siteKey:"…"} or data-site-key).'); } catch (e) {} return; }
 
     // API base = the origin embed.js was served from (works cross-domain). Prefer
@@ -82,11 +95,28 @@
     function jsArg(s) { return String(s == null ? '' : s).replace(/[^a-zA-Z0-9_-]/g, ''); }
     // Body may be sanitized rich-text HTML (server-side) or legacy plain text.
     function bodyHtml(b) { b = b == null ? '' : String(b); return /<[a-z][\s\S]*>/i.test(b) ? b : esc(b).replace(/\n/g, '<br>'); }
+    // Traffic context (anonymous): referrer, landing page, UTM, device, language.
+    function trafficCtx() {
+        function cut(s, n) { return String(s == null ? '' : s).slice(0, n); }
+        var ua = navigator.userAgent || '';
+        return {
+            ref: cut(document.referrer, 300),
+            url: cut(location.href, 300),
+            utm_source: cut(qp('utm_source'), 120),
+            utm_medium: cut(qp('utm_medium'), 120),
+            utm_campaign: cut(qp('utm_campaign'), 120),
+            device: /Mobi|Android|iPhone|iPad|iPod/i.test(ua) ? 'mobile' : 'desktop',
+            lang: cut(navigator.language || '', 12),
+            account: cut(ACCOUNT, 120)
+        };
+    }
+    var CTX = trafficCtx();
+
     function api(body) {
         body.site_key = SITE_KEY; body.viewer_id = VIEWER; if (GHL_LOC) body.ghl_location = GHL_LOC;
         return fetch(API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(function (r) { return r.json(); }).catch(function () { return { success: false }; });
     }
-    function track(id, type, target, variant) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variant || null }); }
+    function track(id, type, target, variant) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variant || null, meta: CTX }); }
 
     // ── snooze / permanent (localStorage) ────────────────────────────────────
     function snoozeMap() { return store(SNOOZE_KEY) || {}; }

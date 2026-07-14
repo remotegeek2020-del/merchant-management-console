@@ -29,10 +29,13 @@
 (function(){
   var qs = new URLSearchParams(location.search);
   var SITE_KEY = qs.get('site_key') || qs.get('k') || '';
-  var EMAIL = (qs.get('email') || '').trim();
+  function cookieEmail(){ try{ var m=decodeURIComponent(document.cookie||'').match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/); return m?m[0]:''; }catch(e){return '';} }
+  var EMAIL = (qs.get('email') || qs.get('contact_email') || cookieEmail() || '').trim();
   // API base: same origin this page is served from.
   var API = location.origin + '/api/embed';
   var VID_KEY='ppw_vid', SNOOZE_KEY='ppw_snooze', PERM_KEY='ppw_perm', FREQ=5;
+  function cut(s,n){ return String(s==null?'':s).slice(0,n); }
+  var CTX={ ref:cut(document.referrer,300), url:cut(location.href,300), utm_source:cut(qs.get('utm_source')||'',120), utm_medium:cut(qs.get('utm_medium')||'',120), utm_campaign:cut(qs.get('utm_campaign')||'',120), device:/Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent||'')?'mobile':'desktop', lang:cut(navigator.language||'',12) };
 
   function store(k){ try{return JSON.parse(localStorage.getItem(k)||'null');}catch(e){return null;} }
   function save(k,v){ try{localStorage.setItem(k,JSON.stringify(v));}catch(e){} }
@@ -49,7 +52,7 @@
   function jsArg(s){ return String(s==null?'':s).replace(/[^a-zA-Z0-9_-]/g,''); }
   function bodyHtml(b){ b=b==null?'':String(b); return /<[a-z][\s\S]*>/i.test(b)?b:esc(b).replace(/\n/g,'<br>'); }
   function api(b){ b.site_key=SITE_KEY; b.viewer_id=VIEWER; return fetch(API,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)}).then(function(r){return r.json();}).catch(function(){return {success:false};}); }
-  function track(id,t,tg,v){ api({action:'track',campaign_id:id,event_type:t,target:tg||null,variant:v||null}); }
+  function track(id,t,tg,v){ api({action:'track',campaign_id:id,event_type:t,target:tg||null,variant:v||null,meta:CTX}); }
 
   function snoozeMap(){ return store(SNOOZE_KEY)||{}; }
   function snooze(id){ var m=snoozeMap(); m[id]=Date.now(); save(SNOOZE_KEY,m); }

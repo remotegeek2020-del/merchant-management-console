@@ -40,6 +40,20 @@ export default async function handler(req, res) {
     const siteKey = body?.site_key;
     const viewer = String(body?.viewer_id || '').slice(0, 200);
     const ghlLoc = body?.ghl_location ? String(body.ghl_location).slice(0, 100) : null;
+    // Coarse geo from the edge (no precise location); works on Vercel.
+    const country = (req.headers['x-vercel-ip-country'] || req.headers['cf-ipcountry'] || '') || null;
+    // Sanitize the client-supplied traffic context to a bounded shape.
+    function cleanMeta(m) {
+        if (!m || typeof m !== 'object') return null;
+        const cut = (v, n) => (v == null ? null : String(v).slice(0, n));
+        const out = {
+            ref: cut(m.ref, 300), url: cut(m.url, 300),
+            utm_source: cut(m.utm_source, 120), utm_medium: cut(m.utm_medium, 120), utm_campaign: cut(m.utm_campaign, 120),
+            device: m.device === 'mobile' ? 'mobile' : (m.device === 'desktop' ? 'desktop' : null),
+            lang: cut(m.lang, 12), account: cut(m.account, 120)
+        };
+        return Object.values(out).some(v => v) ? out : null;
+    }
     if (!action) return bad(res, 'No action');
     if (!siteKey) return bad(res, 'Missing site_key', 401);
 
@@ -123,7 +137,8 @@ export default async function handler(req, res) {
             }
             await supabase.from('marketing_events').insert({
                 campaign_id, user_id: viewer, user_type: 'embed', event_type, site_id: siteId, ghl_location: ghlLoc,
-                target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null
+                target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null,
+                meta: cleanMeta(body.meta), country
             });
             return ok(res, { logged: true });
         }

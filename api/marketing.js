@@ -229,7 +229,7 @@ export default async function handler(req, res) {
             if (action === 'get_stats') {
                 const { id } = req.body;
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location').eq('campaign_id', id);
+                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country').eq('campaign_id', id);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
                 const impressions = rows.filter(r => r.event_type === 'impression').length;
@@ -315,6 +315,21 @@ export default async function handler(req, res) {
                     bySite = Object.values(acc).sort((a, b) => b.clicks - a.clicks);
                 }
 
+                // ── Traffic sources (embed views): referrer / UTM / country / device ──
+                const embedRows = rows.filter(r => r.user_type === 'embed');
+                const host = (u) => { try { return u ? new URL(u).hostname.replace(/^www\./, '') : ''; } catch { return ''; } };
+                const bucket = (keyFn) => {
+                    const acc = {};
+                    embedRows.filter(r => r.event_type === 'impression').forEach(r => { const k = keyFn(r) || '(none)'; acc[k] = (acc[k] || 0) + 1; });
+                    return Object.entries(acc).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count).slice(0, 10);
+                };
+                const traffic = embedRows.length ? {
+                    referrers: bucket(r => host(r.meta && r.meta.ref) || '(direct)'),
+                    sources: bucket(r => (r.meta && r.meta.utm_source) || '(none)'),
+                    countries: bucket(r => r.country || '(unknown)'),
+                    devices: bucket(r => (r.meta && r.meta.device) || '(unknown)')
+                } : null;
+
                 return ok(res, {
                     impressions, clicks, dismissals,
                     unique_impressions: uImp, unique_clicks: uClick,
@@ -324,7 +339,8 @@ export default async function handler(req, res) {
                     viewers: peopleFor('impression'),
                     dismissers: peopleFor('dismiss'),
                     ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null,
-                    by_site: bySite
+                    by_site: bySite,
+                    traffic
                 });
             }
 
@@ -451,7 +467,7 @@ export default async function handler(req, res) {
                 const { id, event_type } = req.body;
                 const type = ['click', 'impression', 'dismiss'].includes(event_type) ? event_type : 'click';
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location')
+                    .select('event_type, user_id, user_type, target, created_at, variant, site_id, ghl_location, meta, country')
                     .eq('campaign_id', id).eq('event_type', type).order('created_at', { ascending: false });
                 const rows = ev || [];
                 const staffIds = [...new Set(rows.filter(r => r.user_type === 'staff').map(r => r.user_id).filter(Boolean))];
@@ -470,15 +486,18 @@ export default async function handler(req, res) {
                 }
                 if (eSiteIds.length) { const { data: ss } = await supabase.from('marketing_sites').select('id, name').in('id', eSiteIds); (ss || []).forEach(s => { sNames[s.id] = s.name || 'Site'; }); }
                 if (eLocs.length) { try { lNames = await ghlLocationNames(eLocs); } catch { lNames = {}; } }
+                const host = (u) => { try { return u ? new URL(u).hostname.replace(/^www\./, '') : ''; } catch { return ''; } };
                 const out = rows.map(r => {
+                    const m = r.meta || {};
+                    const traffic = { referrer: host(m.ref) || (r.user_type === 'embed' ? 'direct' : ''), utm_source: m.utm_source || '', country: r.country || '', device: m.device || '', landing: m.url || '' };
                     if (r.user_type === 'embed') {
                         const email = String(r.user_id || '').indexOf('email:') === 0 ? String(r.user_id).slice(6) : '';
                         const channel = r.ghl_location ? 'GHL' : 'Website';
                         const source = r.ghl_location ? (lNames[r.ghl_location] || 'GoHighLevel sub-account') : (r.site_id ? (sNames[r.site_id] || 'Website') : 'Website');
-                        return { name: email || (r.ghl_location ? source : 'Website visitor'), email, user_type: channel, source, target: r.target || '', variant: r.variant || '', at: r.created_at };
+                        return { name: email || (r.ghl_location ? source : 'Website visitor'), email, user_type: channel, source, target: r.target || '', variant: r.variant || '', at: r.created_at, ...traffic };
                     }
                     const i = info[r.user_type + ':' + r.user_id] || { name: '', email: '' };
-                    return { name: i.name || (r.user_type === 'partner' ? 'Partner' : 'Staff'), email: i.email, user_type: r.user_type === 'partner' ? 'Partner' : 'Staff', source: r.user_type === 'partner' ? 'Partner portal' : 'Staff portal', target: r.target || '', variant: r.variant || '', at: r.created_at };
+                    return { name: i.name || (r.user_type === 'partner' ? 'Partner' : 'Staff'), email: i.email, user_type: r.user_type === 'partner' ? 'Partner' : 'Staff', source: r.user_type === 'partner' ? 'Partner portal' : 'Staff portal', target: r.target || '', variant: r.variant || '', at: r.created_at, ...traffic };
                 });
                 return ok(res, out);
             }
