@@ -207,19 +207,48 @@ if (action === 'getMonthlyReport') {
             if (error) throw error;
             return res.status(200).json({ success: true, data: data || [] });
         }
-        // Distinct terminal types (for the inventory "Terminal Type" filter dropdown).
+        // Terminal types for the inventory "Terminal Type" dropdown.
+        // Source = the Terminal Manager's curated list (terminal_types, active, in
+        // sort_order) with LIVE inventory counts, plus any stray types present in
+        // equipments but not yet in the manager (so nothing is unfilterable).
         if (action === 'get_terminal_types') {
-            const { data, error } = await supabase.from('equipments').select('terminal_type');
-            if (error) return res.status(200).json({ success: false, message: error.message });
-            const types = [...new Set((data || []).map(r => (r.terminal_type || '').trim()).filter(Boolean))]
-                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-            return res.status(200).json({ success: true, data: types });
+            // 1) live counts from equipments (paged so counts are complete)
+            const counts = {};
+            let from = 0; const PAGE = 1000;
+            while (true) {
+                const { data, error } = await supabase.from('equipments').select('terminal_type').range(from, from + PAGE - 1);
+                if (error) return res.status(200).json({ success: false, message: error.message });
+                (data || []).forEach(r => { const t = (r.terminal_type || '').trim(); if (t) counts[t] = (counts[t] || 0) + 1; });
+                if (!data || data.length < PAGE) break;
+                from += PAGE;
+            }
+            // 2) curated master list from the Terminal Manager
+            const { data: managed } = await supabase.from('terminal_types')
+                .select('name, sort_order, is_active')
+                .order('sort_order', { ascending: true, nullsFirst: false })
+                .order('name', { ascending: true });
+            const includeEmpty = req.body.include_empty === true;   // show 0-stock managed types too
+            const out = [];
+            const seen = new Set();
+            (managed || []).forEach(m => {
+                const name = (m.name || '').trim();
+                if (!name || m.is_active === false || seen.has(name.toLowerCase())) return;
+                seen.add(name.toLowerCase());   // mark as managed so it isn't re-added as an orphan
+                const c = counts[name] || 0;
+                if (c > 0 || includeEmpty) out.push({ type: name, count: c, managed: true });
+            });
+            // 3) orphan types that exist in inventory but aren't in the manager
+            Object.keys(counts)
+                .filter(t => !seen.has(t.toLowerCase()))
+                .sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+                .forEach(t => out.push({ type: t, count: counts[t], managed: false }));
+            return res.status(200).json({ success: true, data: out });
         }
 
         if (action === 'list') {
             const limit = parseInt(req.body.limit) || 50;
             const page = parseInt(req.body.page) || 0;
-            const { query, filterLocation, filterStatus, filterType } = req.body;
+            const { query, filterLocation, filterStatus, filterType, sortBy, sortDir } = req.body;
 
             // SURGICAL FIX: Using the explicit foreign key name 'current_merchant'
             // identified in your screenshot to resolve the ambiguity.
@@ -248,8 +277,14 @@ if (action === 'getMonthlyReport') {
                 sb = sb.eq('current_location', filterLocation);
             }
 
+            // Sorting: whitelist columns; default newest-first. Explicit column sorts
+            // default ascending (toggled from the UI via sortDir).
+            const SORT_COLS = { serial_number: 'serial_number', terminal_type: 'terminal_type', status: 'status', current_location: 'current_location' };
+            const sortCol = SORT_COLS[sortBy] || 'created_at';
+            const ascending = sortBy ? (sortDir !== 'desc') : false;
+
             const { data, count, error } = await sb
-                .order('created_at', { ascending: false })
+                .order(sortCol, { ascending })
                 .range(page * limit, (page + 1) * limit - 1);
 
             if (error) {

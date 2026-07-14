@@ -261,8 +261,8 @@
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
-                    <th>Serial Number</th>
-                    <th>Terminal Type</th>
+                    <th class="sortable-th" onclick="invSort('serial_number')" style="cursor:pointer; user-select:none;">Serial Number <span id="sortind-serial_number"></span></th>
+                    <th class="sortable-th" onclick="invSort('terminal_type')" style="cursor:pointer; user-select:none;">Terminal Type <span id="sortind-terminal_type"></span></th>
                     <th class="hide-mobile">Vendor</th>
                     <th class="hide-mobile">Received Date</th>
                     <th class="hide-mobile">Current Location</th>
@@ -1299,6 +1299,8 @@ async function saveNote() {
                 page: currentPage,
                 limit: limit,
                 filterType: document.getElementById('typeFilter')?.value || null,
+                sortBy: invSortBy || null,
+                sortDir: invSortDir,
                 filterLocation: currentFilter === 'deployed' ? null : currentFilter,
                 filterStatus: currentFilter === 'deployed' ? 'deployed' : null
             })
@@ -1755,10 +1757,28 @@ function rqInvExportCSV() {
             const d = await res.json();
             if (!d.success) return;
             const current = sel.value;
+            // d.data = [{ type, count }] — show "P8 (23)"
             sel.innerHTML = '<option value="">All types</option>' +
-                (d.data || []).map(t => `<option value="${t.replace(/"/g, '&quot;')}">${t}</option>`).join('');
+                (d.data || []).map(t => `<option value="${String(t.type).replace(/"/g, '&quot;')}">${t.type} (${t.count})</option>`).join('');
             sel.value = current;   // preserve selection across reloads
         } catch (e) { /* leave "All types" */ }
+    }
+
+    // ── Column sorting ──
+    let invSortBy = '';       // '' = default (created_at desc)
+    let invSortDir = 'asc';
+    function invSort(col) {
+        if (invSortBy === col) invSortDir = invSortDir === 'asc' ? 'desc' : 'asc';
+        else { invSortBy = col; invSortDir = 'asc'; }
+        currentPage = 0;
+        updateSortIndicators();
+        fetchInventory();
+    }
+    function updateSortIndicators() {
+        ['serial_number', 'terminal_type'].forEach(c => {
+            const el = document.getElementById('sortind-' + c);
+            if (el) el.textContent = invSortBy === c ? (invSortDir === 'asc' ? '▲' : '▼') : '';
+        });
     }
 
     window.onload = async () => {
