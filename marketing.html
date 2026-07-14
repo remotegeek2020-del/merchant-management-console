@@ -152,6 +152,17 @@
       </div>
 
       <div class="row2">
+        <div>
+          <label class="fld">Display mode</label>
+          <select class="sel" id="f_display_mode">
+            <option value="card_dismissible">Homepage card — dismissible (X closes for the session; "Don't show again" hides it for good)</option>
+            <option value="card_persistent">Homepage card — persistent (always shown until it expires)</option>
+            <option value="floating">Floating ad on every page (shows until they click the CTA)</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="row2">
         <div><label class="fld">Activation date</label><input class="inp" id="f_starts" type="datetime-local"></div>
         <div><label class="fld">Expiration date</label><input class="inp" id="f_ends" type="datetime-local"></div>
       </div>
@@ -204,6 +215,7 @@ let contentType = 'both';
   loadList();
 })();
 
+function displayModeLabel(m){ return m==='floating'?'floating ad':(m==='card_persistent'?'persistent card':'dismissible card'); }
 async function loadList(){
   const r = await api({action:'list_campaigns'});
   const body = document.getElementById('listBody');
@@ -219,7 +231,7 @@ async function loadList(){
       <td>
         <div style="display:flex;align-items:center;gap:10px;">
           ${c.image_url?`<img src="${esc(c.image_url)}" style="width:44px;height:32px;object-fit:cover;border-radius:6px;border:1px solid var(--border);">`:`<div style="width:44px;height:32px;border-radius:6px;background:#f1f5f9;display:flex;align-items:center;justify-content:center;"><span class="material-icons" style="font-size:16px;color:#94a3b8;">${c.content_type==='text'?'notes':'image'}</span></div>`}
-          <div><div style="font-weight:700;">${esc(c.title)}</div><div class="muted">${esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''}</div></div>
+          <div><div style="font-weight:700;">${esc(c.title)}</div><div class="muted">${esc(c.content_type)}${c.cta_enabled?' · CTA':''}${(c.hotspots&&c.hotspots.length)?' · '+c.hotspots.length+' hotspot(s)':''} · ${displayModeLabel(c.display_mode)}</div></div>
         </div>
       </td>
       <td><span class="pill ${c.audience}">${c.audience}</span></td>
@@ -273,6 +285,7 @@ function openEditor(){
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
   document.getElementById('f_audience').value='partner';
+  document.getElementById('f_display_mode').value='card_dismissible';
   document.getElementById('f_priority').value='0';
   document.getElementById('f_starts').value=''; document.getElementById('f_ends').value='';
   document.getElementById('f_active').checked=false;
@@ -294,6 +307,7 @@ async function editCampaign(id){
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
   document.getElementById('f_audience').value=c.audience||'partner';
+  document.getElementById('f_display_mode').value=c.display_mode||'card_dismissible';
   document.getElementById('f_priority').value=c.priority??0;
   document.getElementById('f_starts').value=toLocalInput(c.starts_at);
   document.getElementById('f_ends').value=toLocalInput(c.ends_at);
@@ -389,6 +403,7 @@ async function saveCampaign(){
     cta_url: document.getElementById('f_cta_url').value.trim()||null,
     hotspots: (contentType==='text')?[]:hotspots.filter(h=>h.url && h.url.trim()),
     audience: document.getElementById('f_audience').value,
+    display_mode: document.getElementById('f_display_mode').value,
     is_active: document.getElementById('f_active').checked,
     starts_at: fromLocalInput(document.getElementById('f_starts').value),
     ends_at: fromLocalInput(document.getElementById('f_ends').value),

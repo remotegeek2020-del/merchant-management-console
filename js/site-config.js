@@ -9,6 +9,15 @@
     (document.body || document.head).appendChild(s);
 })();
 
+// Load marketing announcements (homepage cards + floating ads) on every page.
+(function () {
+    if (document.getElementById('ppa-loader')) return;
+    var s = document.createElement('script');
+    s.id = 'ppa-loader';
+    s.src = '/js/announcements.js';
+    (document.body || document.head).appendChild(s);
+})();
+
 // Auto-attach session token to all /api/ calls and handle 401 session expiry globally
 (function () {
     const EXEMPT = ['/api/login', '/api/partner-auth', '/api/setup-password', '/api/partner-data'];

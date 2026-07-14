@@ -346,7 +346,6 @@ async function init() {
         });
         const auth = await authRes.json();
         if (!auth.success) { localStorage.clear(); window.location.href = '/partner'; return; }
-        loadAnnouncements();   // announcements card (non-blocking)
 
         const { partner, identifiers } = auth;
         localStorage.setItem('pp_partner_name', partner.name);
@@ -536,55 +535,8 @@ async function handleLogout() {
     window.location.href = '/partner';
 }
 
-// ── Announcements (marketing) ──────────────────────────────
-let _annList = [], _annIdx = 0;
-function annEsc(s){ return s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-async function loadAnnouncements(){
-  try {
-    const r = await fetch('/api/marketing', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'get_active', partner_token: token }) });
-    const d = await r.json();
-    if (!d.success || !Array.isArray(d.data) || !d.data.length) return;
-    _annList = d.data; _annIdx = 0;
-    document.getElementById('annCarousel').style.display='';
-    renderAnn();
-  } catch(e) { /* silent */ }
-}
-function annTrack(id, type, target){ fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'track', partner_token: token, campaign_id:id, event_type:type, target:target||null})}).catch(()=>{}); }
-window.annClick = function(id, target){ annTrack(id, 'click', target); };   // anchor still opens the link
-window.annNav = function(dir){ _annIdx = Math.max(0, Math.min(_annList.length-1, _annIdx+dir)); renderAnn(); };
-window.annDismiss = function(id){
-  annTrack(id, 'dismiss');
-  fetch('/api/marketing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'dismiss', partner_token: token, campaign_id:id})}).catch(()=>{});
-  _annList = _annList.filter(c=>c.id!==id);
-  if (_annIdx >= _annList.length) _annIdx = Math.max(0, _annList.length-1);
-  renderAnn();
-};
-function renderAnn(){
-  const wrap = document.getElementById('annCarousel');
-  if (!_annList.length){ wrap.style.display='none'; wrap.innerHTML=''; return; }
-  const c = _annList[_annIdx];
-  const showGraphic = (c.content_type==='graphic'||c.content_type==='both') && c.image_url;
-  const showText = (c.content_type==='text'||c.content_type==='both');
-  let html = '<div class="ann-card">';
-  html += `<button class="ann-x" title="Dismiss" onclick="annDismiss('${c.id}')"><span class="material-icons" style="font-size:18px;">close</span></button>`;
-  if (showGraphic){
-    const hs = (c.hotspots||[]).filter(h=>h.url).map(h=>`<a class="ann-hotspot" href="${annEsc(h.url)}" target="_blank" rel="noopener" style="left:${h.x}%;top:${h.y}%;width:${h.w}%;height:${h.h}%;" title="${annEsc(h.label||'')}" onclick="annClick('${c.id}','${annEsc(h.id||'hotspot')}')"></a>`).join('');
-    html += `<div class="ann-imgwrap"><img src="${annEsc(c.image_url)}" alt="${annEsc(c.title)}">${hs}</div>`;
-  }
-  if (showText || (c.cta_enabled && c.cta_url)){
-    html += '<div class="ann-body">';
-    if (showText && c.title) html += `<div class="ann-title">${annEsc(c.title)}</div>`;
-    if (showText && c.body_text) html += `<div class="ann-text">${annEsc(c.body_text)}</div>`;
-    if (c.cta_enabled && c.cta_url) html += `<a class="ann-cta" href="${annEsc(c.cta_url)}" target="_blank" rel="noopener" onclick="annClick('${c.id}','cta')">${annEsc(c.cta_label||'Learn more')} <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>`;
-    html += '</div>';
-  }
-  html += '<div class="ann-foot">';
-  html += `<label class="ann-dismiss"><input type="checkbox" onchange="if(this.checked)annDismiss('${c.id}')"> Don't show this again</label>`;
-  if (_annList.length>1) html += `<span class="ann-nav"><button onclick="annNav(-1)" ${_annIdx===0?'disabled':''}>‹</button> ${_annIdx+1} / ${_annList.length} <button onclick="annNav(1)" ${_annIdx===_annList.length-1?'disabled':''}>›</button></span>`;
-  html += '</div></div>';
-  wrap.innerHTML = html;
-  annTrack(c.id, 'impression');
-}
+// Announcements are now rendered globally by /js/announcements.js (loaded via
+// site-config.js), which fills #annCarousel and shows floating ads on every page.
 
 window.onload = init;
 </script>
