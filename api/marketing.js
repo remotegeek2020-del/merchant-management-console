@@ -156,11 +156,42 @@ export default async function handler(req, res) {
                 rows.filter(r => r.event_type === 'click').forEach(r => { const k = r.target || 'cta'; byTarget[k] = (byTarget[k] || 0) + 1; });
                 const byAudience = { partner: 0, staff: 0 };
                 rows.filter(r => r.event_type === 'click').forEach(r => { if (byAudience[r.user_type] != null) byAudience[r.user_type]++; });
+
+                // ── Resolve NAMES for the people behind each event type ──────────
+                const staffIds = [...new Set(rows.filter(r => r.user_type === 'staff').map(r => r.user_id).filter(Boolean))];
+                const partnerIds = [...new Set(rows.filter(r => r.user_type === 'partner').map(r => r.user_id).filter(Boolean))];
+                const nameMap = {};   // `${type}:${id}` → display name
+                if (staffIds.length) {
+                    const { data: su } = await supabase.from('app_users').select('userid, first_name, last_name').in('userid', staffIds);
+                    (su || []).forEach(u => { nameMap['staff:' + u.userid] = `${u.first_name || ''} ${u.last_name || ''}`.trim() || ('Staff #' + u.userid); });
+                }
+                if (partnerIds.length) {
+                    const { data: pp } = await supabase.from('persons').select('id, full_name').in('id', partnerIds);
+                    (pp || []).forEach(p => { nameMap['partner:' + p.id] = p.full_name || 'Partner'; });
+                }
+                const nameOf = (r) => nameMap[r.user_type + ':' + r.user_id] || (r.user_type === 'partner' ? 'Partner' : 'Staff');
+
+                // Aggregate a per-person list for a given event type (most recent first).
+                const peopleFor = (evType) => {
+                    const by = {};
+                    rows.filter(r => r.event_type === evType).forEach(r => {
+                        const key = r.user_type + ':' + r.user_id;
+                        const e = by[key] || (by[key] = { name: nameOf(r), user_type: r.user_type, count: 0, targets: {}, last_at: r.created_at });
+                        e.count++;
+                        if (evType === 'click') { const t = r.target || 'cta'; e.targets[t] = (e.targets[t] || 0) + 1; }
+                        if (r.created_at > e.last_at) e.last_at = r.created_at;
+                    });
+                    return Object.values(by).sort((a, b) => (b.last_at || '').localeCompare(a.last_at || ''));
+                };
+
                 return ok(res, {
                     impressions, clicks, dismissals,
                     unique_impressions: uImp, unique_clicks: uClick,
                     ctr: uImp ? Math.round((uClick / uImp) * 1000) / 10 : 0,   // % of unique viewers who clicked
-                    clicks_by_target: byTarget, clicks_by_audience: byAudience
+                    clicks_by_target: byTarget, clicks_by_audience: byAudience,
+                    clickers: peopleFor('click'),
+                    viewers: peopleFor('impression'),
+                    dismissers: peopleFor('dismiss')
                 });
             }
         }
