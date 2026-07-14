@@ -193,27 +193,45 @@
         renderCards(); renderFloat();
     }
 
-    function boot(data) {
+    var REFRESH_MS = 3 * 60 * 1000;    // re-poll get_active so mid-day campaigns appear without a reload
+    var started = false;
+
+    // Rebuild the card/float lists from a fresh get_active payload. Snooze state
+    // lives in localStorage and dismissed ones are already filtered server-side,
+    // so it's safe to rebuild wholesale.
+    function applyData(data) {
         var all = Array.isArray(data) ? data : [];
-        if (!all.length) return;
-        injectCss();
         cardWrap = document.getElementById('staffAnnCarousel') || document.getElementById('annCarousel');
+        var newCards = [], newFloat = [];
         all.forEach(function (c) {
             var m = c.display_mode || 'card_dismissible';
             var asFloat = m.indexOf('floating') === 0 || m.indexOf('both') === 0;
             var asCard = m.indexOf('card') === 0 || m.indexOf('both') === 0;
-            if (asFloat) floatList.push(c);
-            if (asCard && cardWrap) cardList.push(c);   // cards only render where a carousel exists
+            if (asFloat) newFloat.push(c);
+            if (asCard && cardWrap) newCards.push(c);   // cards only render where a carousel exists
         });
+        // If the currently shown item is gone from the new set, force a re-render.
+        if (!newCards.some(function (c) { return c.id === shownCardId; })) shownCardId = null;
+        if (!newFloat.some(function (c) { return c.id === shownFloatId; })) shownFloatId = null;
+        cardList = newCards; floatList = newFloat;
+        if (cardIdx >= cardList.length) cardIdx = 0;
+        if (floatIdx >= floatList.length) floatIdx = 0;
+        if (all.length) injectCss();
         renderCards();
         renderFloat();
-        // Re-check periodically so a closed (snoozed) ad re-appears after FREQ_MS.
+    }
+
+    function startTimers() {
+        if (started) return; started = true;
+        // Fast tick: re-show snoozed ads once their window passes (no network).
         setInterval(function () { renderCards(); renderFloat(); }, 30 * 1000);
+        // Slow tick: pull newly created / edited campaigns so they appear live.
+        setInterval(load, REFRESH_MS);
     }
 
     function load() {
         api({ action: 'get_active' }).then(function (d) {
-            if (d && d.success) boot(d.data);
+            if (d && d.success) { applyData(d.data); startTimers(); }
         }).catch(function () {});
     }
 
