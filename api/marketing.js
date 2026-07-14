@@ -17,7 +17,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 
 const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
-    'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access'
+    'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
+    'search_partners', 'export_clicks'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -39,6 +40,24 @@ async function resolveViewer(req) {
 
 const ok = (res, data, extra = {}) => res.status(200).json({ success: true, data, ...extra });
 const bad = (res, message, status = 400) => res.status(status).json({ success: false, message });
+
+// Stable 0..99 bucket from a string (FNV-1a) — used to split A/B traffic per user.
+function hashPct(str) {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+    return (h >>> 0) % 100;
+}
+
+// Is this partner (persons.id) tied to a Prime49 agent identifier?
+// persons.id → agents.parent_agent_id → agent_identifiers.agent_id (prime49=true)
+async function partnerIsPrime49(personId) {
+    const { data: ags } = await supabase.from('agents').select('id').eq('parent_agent_id', personId);
+    const agentUuids = (ags || []).map(a => a.id);
+    if (!agentUuids.length) return false;
+    const { data: idents } = await supabase.from('agent_identifiers')
+        .select('id').in('agent_id', agentUuids).eq('prime49', true).limit(1);
+    return !!(idents && idents.length);
+}
 
 export default async function handler(req, res) {
     res.setHeader('Content-Type', 'application/json');
@@ -110,6 +129,13 @@ export default async function handler(req, res) {
                         ? b.display_mode
                         : (b.display_mode === 'floating' ? 'floating_dismissible' : 'card_dismissible'),
                     reshow_minutes: Number.isFinite(+b.reshow_minutes) && +b.reshow_minutes > 0 ? Math.min(1440, Math.round(+b.reshow_minutes)) : 5,
+                    // Targeting (partner audience): 'all' | 'prime49' | 'specific'
+                    target_type: ['all', 'prime49', 'specific'].includes(b.target_type) ? b.target_type : 'all',
+                    target_partner_ids: Array.isArray(b.target_partner_ids) ? b.target_partner_ids.map(String) : [],
+                    // A/B testing
+                    ab_enabled: !!b.ab_enabled,
+                    ab_split: Number.isFinite(+b.ab_split) ? Math.min(100, Math.max(0, Math.round(+b.ab_split))) : 50,
+                    variant_b: (b.variant_b && typeof b.variant_b === 'object') ? b.variant_b : {},
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -149,7 +175,7 @@ export default async function handler(req, res) {
             if (action === 'get_stats') {
                 const { id } = req.body;
                 const { data: ev } = await supabase.from('marketing_events')
-                    .select('event_type, user_id, user_type, target, created_at').eq('campaign_id', id);
+                    .select('event_type, user_id, user_type, target, created_at, variant').eq('campaign_id', id);
                 const rows = ev || [];
                 const uniq = (t) => new Set(rows.filter(r => r.event_type === t).map(r => r.user_id)).size;
                 const impressions = rows.filter(r => r.event_type === 'impression').length;
@@ -189,6 +215,16 @@ export default async function handler(req, res) {
                     return Object.values(by).sort((a, b) => (b.last_at || '').localeCompare(a.last_at || ''));
                 };
 
+                // ── A/B breakdown (unique viewers/clickers + CTR per variant) ────
+                const abFor = (variant) => {
+                    const vr = rows.filter(r => r.variant === variant);
+                    const vi = new Set(vr.filter(r => r.event_type === 'impression').map(r => r.user_id)).size;
+                    const vc = new Set(vr.filter(r => r.event_type === 'click').map(r => r.user_id)).size;
+                    return { impressions: vr.filter(r => r.event_type === 'impression').length, clicks: vr.filter(r => r.event_type === 'click').length,
+                        unique_impressions: vi, unique_clicks: vc, ctr: vi ? Math.round((vc / vi) * 1000) / 10 : 0 };
+                };
+                const hasAb = rows.some(r => r.variant === 'A' || r.variant === 'B');
+
                 return ok(res, {
                     impressions, clicks, dismissals,
                     unique_impressions: uImp, unique_clicks: uClick,
@@ -196,8 +232,45 @@ export default async function handler(req, res) {
                     clicks_by_target: byTarget, clicks_by_audience: byAudience,
                     clickers: peopleFor('click'),
                     viewers: peopleFor('impression'),
-                    dismissers: peopleFor('dismiss')
+                    dismissers: peopleFor('dismiss'),
+                    ab: hasAb ? { A: abFor('A'), B: abFor('B') } : null
                 });
+            }
+
+            // Partner lookup for the "specific partners" targeting picker.
+            if (action === 'search_partners') {
+                const { data, error } = await supabase.rpc('search_partners', { q: (req.body.query || '').trim() });
+                if (error) return bad(res, error.message);
+                return ok(res, (data || []).map(r => ({
+                    id: r.person_id, full_name: r.full_name, email: r.email,
+                    company_name: r.company_names || null
+                })));
+            }
+
+            // Detailed click-through rows for CSV export (names + emails resolved).
+            if (action === 'export_clicks') {
+                const { id, event_type } = req.body;
+                const type = ['click', 'impression', 'dismiss'].includes(event_type) ? event_type : 'click';
+                const { data: ev } = await supabase.from('marketing_events')
+                    .select('event_type, user_id, user_type, target, created_at, variant')
+                    .eq('campaign_id', id).eq('event_type', type).order('created_at', { ascending: false });
+                const rows = ev || [];
+                const staffIds = [...new Set(rows.filter(r => r.user_type === 'staff').map(r => r.user_id).filter(Boolean))];
+                const partnerIds = [...new Set(rows.filter(r => r.user_type === 'partner').map(r => r.user_id).filter(Boolean))];
+                const info = {};   // `${type}:${id}` → {name, email}
+                if (staffIds.length) {
+                    const { data: su } = await supabase.from('app_users').select('userid, first_name, last_name, email').in('userid', staffIds);
+                    (su || []).forEach(u => { info['staff:' + u.userid] = { name: `${u.first_name || ''} ${u.last_name || ''}`.trim(), email: u.email || '' }; });
+                }
+                if (partnerIds.length) {
+                    const { data: pp } = await supabase.from('persons').select('id, full_name, email').in('id', partnerIds);
+                    (pp || []).forEach(p => { info['partner:' + p.id] = { name: p.full_name || '', email: p.email || '' }; });
+                }
+                const out = rows.map(r => {
+                    const i = info[r.user_type + ':' + r.user_id] || { name: '', email: '' };
+                    return { name: i.name || (r.user_type === 'partner' ? 'Partner' : 'Staff'), email: i.email, user_type: r.user_type, target: r.target || '', variant: r.variant || '', at: r.created_at };
+                });
+                return ok(res, out);
             }
         }
 
@@ -214,9 +287,25 @@ export default async function handler(req, res) {
                     .order('priority', { ascending: false })
                     .order('created_at', { ascending: false });
                 const now = Date.now();
-                const live = (all || []).filter(c =>
+                let live = (all || []).filter(c =>
                     (!c.starts_at || new Date(c.starts_at).getTime() <= now) &&
                     (!c.ends_at || new Date(c.ends_at).getTime() >= now));
+
+                // ── Targeting (partner audience only) ────────────────────────────
+                // Staff always see staff/both campaigns; segmentation applies to
+                // partners: 'all' | 'specific' (id list) | 'prime49' (has a prime49 ID).
+                if (who.type === 'partner') {
+                    const needsPrime49 = live.some(c => c.target_type === 'prime49');
+                    let isPrime49 = false;
+                    if (needsPrime49) isPrime49 = await partnerIsPrime49(who.id);
+                    live = live.filter(c => {
+                        const tt = c.target_type || 'all';
+                        if (tt === 'specific') return (c.target_partner_ids || []).map(String).includes(String(who.id));
+                        if (tt === 'prime49') return isPrime49;
+                        return true;   // 'all'
+                    });
+                }
+
                 // exclude ones this user dismissed
                 const ids = live.map(c => c.id);
                 let dismissed = new Set();
@@ -225,18 +314,40 @@ export default async function handler(req, res) {
                         .select('campaign_id').in('campaign_id', ids).eq('user_id', who.id);
                     dismissed = new Set((dis || []).map(d => d.campaign_id));
                 }
-                const out = live.filter(c => !dismissed.has(c.id)).map(c => ({
-                    id: c.id, title: c.title, body_text: c.body_text, image_url: c.image_url,
-                    content_type: c.content_type, cta_enabled: c.cta_enabled, cta_label: c.cta_label,
-                    cta_url: c.cta_url, hotspots: c.hotspots || [], priority: c.priority,
-                    display_mode: c.display_mode || 'card_dismissible',
-                    reshow_minutes: c.reshow_minutes || 5
-                }));
+                const out = live.filter(c => !dismissed.has(c.id)).map(c => {
+                    // ── A/B: deterministically show variant A or B per user ──────
+                    let variant = null, v = c;
+                    if (c.ab_enabled) {
+                        const bucket = hashPct(String(who.id) + ':' + c.id);   // 0..99, stable per user+campaign
+                        variant = bucket < (c.ab_split ?? 50) ? 'A' : 'B';
+                        if (variant === 'B') {
+                            const vb = c.variant_b || {};
+                            v = {
+                                ...c,
+                                title: vb.title ?? c.title,
+                                body_text: vb.body_text ?? c.body_text,
+                                image_url: vb.image_url ?? c.image_url,
+                                cta_enabled: vb.cta_enabled ?? c.cta_enabled,
+                                cta_label: vb.cta_label ?? c.cta_label,
+                                cta_url: vb.cta_url ?? c.cta_url,
+                                hotspots: Array.isArray(vb.hotspots) ? vb.hotspots : (c.hotspots || [])
+                            };
+                        }
+                    }
+                    return {
+                        id: c.id, title: v.title, body_text: v.body_text, image_url: v.image_url,
+                        content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: v.cta_label,
+                        cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
+                        display_mode: c.display_mode || 'card_dismissible',
+                        reshow_minutes: c.reshow_minutes || 5,
+                        variant
+                    };
+                });
                 return ok(res, out);
             }
 
             if (action === 'track') {
-                const { campaign_id, event_type, target } = req.body;
+                const { campaign_id, event_type, target, variant } = req.body;
                 if (!campaign_id || !['impression', 'click', 'dismiss'].includes(event_type)) return bad(res, 'campaign_id and valid event_type required');
                 // De-dupe impressions: one per user per campaign per day
                 if (event_type === 'impression') {
@@ -247,7 +358,8 @@ export default async function handler(req, res) {
                     if (recent && recent.length) return ok(res, { logged: false });
                 }
                 await supabase.from('marketing_events').insert({
-                    campaign_id, user_id: who.id, user_type: who.type, event_type, target: target || null
+                    campaign_id, user_id: who.id, user_type: who.type, event_type,
+                    target: target || null, variant: (variant === 'A' || variant === 'B') ? variant : null
                 });
                 return ok(res, { logged: true });
             }

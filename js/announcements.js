@@ -43,7 +43,8 @@
         else body = Object.assign({ partner_token: PARTNER_TOKEN }, body);
         return fetch('/api/marketing', { method: 'POST', headers: headers, body: JSON.stringify(body) }).then(function (r) { return r.json(); });
     }
-    function track(id, type, target) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null }).catch(function () {}); }
+    var variantMap = {};   // campaign id → 'A' | 'B' | null (for A/B stats attribution)
+    function track(id, type, target) { api({ action: 'track', campaign_id: id, event_type: type, target: target || null, variant: variantMap[id] || null }).catch(function () {}); }
     function dismissServer(id) { api({ action: 'dismiss', campaign_id: id }).catch(function () {}); }
 
     // ── snooze (X / CTA close) ───────────────────────────────────────────────
@@ -226,6 +227,7 @@
         cardWrap = document.getElementById('staffAnnCarousel') || document.getElementById('annCarousel');
         var newCards = [], newFloat = [];
         all.forEach(function (c) {
+            variantMap[c.id] = c.variant || null;
             var m = c.display_mode || 'card_dismissible';
             var asFloat = m.indexOf('floating') === 0 || m.indexOf('both') === 0;
             var asCard = m.indexOf('card') === 0 || m.indexOf('both') === 0;
