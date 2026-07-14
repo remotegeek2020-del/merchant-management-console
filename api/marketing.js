@@ -380,7 +380,7 @@ export default async function handler(req, res) {
                         const host = req.headers['x-forwarded-host'] || req.headers.host;
                         const origin = `${proto}://${host}`;
                         const src = embedLoaderSource(origin, site.site_key);
-                        const scriptId = await webflow.registerInlineScript(site.webflow_site_id, src, 'PPTAnnounce', '1.0.0');
+                        const scriptId = await webflow.ensureInlineScript(site.webflow_site_id, src, 'PPTAnnounce', '1.0.0');
                         await webflow.applyFooterScript(site.webflow_site_id, scriptId, '1.0.0');
                         await webflow.publishSite(site.webflow_site_id);
                         await supabase.from('marketing_sites').update({ wired: true, script_id: scriptId, is_active: true }).eq('id', id);

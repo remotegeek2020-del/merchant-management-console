@@ -56,12 +56,34 @@ export async function listSites() {
     return (data.sites || []).map(s => ({ id: s.id, name: s.displayName || s.shortName || s.id, shortName: s.shortName }));
 }
 
-// Register an inline script on a site (idempotent-ish: Webflow versions scripts).
+// List scripts already registered on a site.
+export async function listRegisteredScripts(siteId) {
+    const data = await wf(`/sites/${siteId}/registered_scripts`).catch(() => ({}));
+    return data.registeredScripts || data.scripts || [];
+}
+
+// Register an inline script on a site.
 export async function registerInlineScript(siteId, sourceCode, displayName, version) {
     const data = await wf(`/sites/${siteId}/registered_scripts/inline`, {
         method: 'POST', body: JSON.stringify({ sourceCode, version, displayName })
     });
     return data.id || data.script?.id || null;
+}
+
+// Reuse an existing registration if present (Webflow rejects duplicate versions);
+// otherwise register it fresh. Returns the registered script id.
+export async function ensureInlineScript(siteId, sourceCode, displayName, version) {
+    const match = (list) => (list || []).find(s =>
+        s.displayName === displayName || (s.id && String(s.id).toLowerCase() === displayName.toLowerCase()));
+    let found = match(await listRegisteredScripts(siteId));
+    if (found && found.id) return found.id;
+    try {
+        return await registerInlineScript(siteId, sourceCode, displayName, version);
+    } catch (e) {
+        found = match(await listRegisteredScripts(siteId));
+        if (found && found.id) return found.id;
+        throw e;
+    }
 }
 
 // Apply a registered script to the site footer.
