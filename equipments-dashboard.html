@@ -258,6 +258,11 @@
     <!-- ── END REPAIR QUEUE PANEL ── -->
 
     <article class="main-card" id="inv-main-card">
+        <div id="invCountBar" style="display:flex; align-items:center; gap:10px; padding:12px 14px; margin-bottom:12px; background:#eef4ff; border:1px solid #cfe0ff; border-radius:12px;">
+            <span class="material-icons" style="color:var(--pp-blue); font-size:22px;">inventory_2</span>
+            <span id="invCountLabel" style="font-size:15px; font-weight:800; color:#002d5a;">—</span>
+            <span id="invCountContext" style="font-size:12px; font-weight:600; color:#64748b;"></span>
+        </div>
         <table class="slds-table slds-table_bordered slds-table_cell-buffer slds-no-row-hover">
             <thead>
                 <tr>
@@ -1314,6 +1319,23 @@ async function saveNote() {
 
         inventory = result.data || [];
         totalItems = result.count || 0;
+
+        // Prominent, filter-aware count label above the table
+        const _lbl = document.getElementById('invCountLabel');
+        const _ctx = document.getElementById('invCountContext');
+        if (_lbl) {
+            const _type = document.getElementById('typeFilter')?.value || '';
+            const _n = totalItems.toLocaleString();
+            const _unit = totalItems === 1 ? 'unit' : 'units';
+            if (_type) { _lbl.innerText = `${_n} ${_type} ${_unit}`; }
+            else { _lbl.innerText = `${_n} ${_unit}`; }
+            const bits = [];
+            if (_type) bits.push(`terminal type: ${_type}`);
+            if (currentFilter && currentFilter !== 'deployed') bits.push(currentFilter);
+            else if (currentFilter === 'deployed') bits.push('deployed');
+            if (_invQ) bits.push(`serial "${_invQ}"`);
+            if (_ctx) _ctx.innerText = bits.length ? '· ' + bits.join(' · ') : '· all inventory';
+        }
 
         if (document.getElementById('kpi-total')) document.getElementById('kpi-total').innerText = result.metrics?.total ?? 0;
         if (document.getElementById('kpi-office')) document.getElementById('kpi-office').innerText = result.metrics?.inOffice ?? 0;
