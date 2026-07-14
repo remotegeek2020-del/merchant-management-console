@@ -18,7 +18,8 @@ const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SER
 const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
-    'search_partners', 'export_clicks', 'partners_by_ids'
+    'search_partners', 'export_clicks', 'partners_by_ids',
+    'list_sites', 'create_site', 'toggle_site', 'delete_site'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -136,6 +137,7 @@ export default async function handler(req, res) {
                     ab_enabled: !!b.ab_enabled,
                     ab_split: Number.isFinite(+b.ab_split) ? Math.min(100, Math.max(0, Math.round(+b.ab_split))) : 50,
                     variant_b: (b.variant_b && typeof b.variant_b === 'object') ? b.variant_b : {},
+                    show_on_embed: !!b.show_on_embed,
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -245,6 +247,33 @@ export default async function handler(req, res) {
                     id: r.person_id, full_name: r.full_name, email: r.email,
                     company_name: r.company_names || null
                 })));
+            }
+
+            // ── Embed sites registry ─────────────────────────────────────────
+            if (action === 'list_sites') {
+                const { data } = await supabase.from('marketing_sites').select('*').order('created_at', { ascending: false });
+                return ok(res, data || []);
+            }
+            if (action === 'create_site') {
+                const name = (req.body.name || '').trim() || 'Untitled site';
+                // Readable, unguessable key: ss_ + 24 hex chars.
+                const rand = Array.from({ length: 24 }, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
+                const site_key = 'ss_' + rand;
+                const { data, error } = await supabase.from('marketing_sites')
+                    .insert({ site_key, name, created_by: actorName }).select().single();
+                if (error) return bad(res, error.message);
+                return ok(res, data);
+            }
+            if (action === 'toggle_site') {
+                const { id, is_active } = req.body;
+                const { data, error } = await supabase.from('marketing_sites').update({ is_active: !!is_active }).eq('id', id).select().single();
+                if (error) return bad(res, error.message);
+                return ok(res, data);
+            }
+            if (action === 'delete_site') {
+                const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
+                if (error) return bad(res, error.message);
+                return ok(res, { deleted: true });
             }
 
             // Resolve names for a set of saved partner ids (edit → chips).
