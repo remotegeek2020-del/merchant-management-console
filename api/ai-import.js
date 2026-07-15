@@ -92,19 +92,24 @@ export default async function handler(req, res) {
             generationConfig: { temperature: 0 },
         });
 
-        const prompt = `You are an OCR tool reading a hardware invoice.
+        const prompt = `You extract hardware terminal SERIAL NUMBERS from a document for an inventory system.
 
-TASK: Extract every serial number found in this document.
+STEP 1 — Classify the document:
+- "invoice" / "packing_slip" / "shipment": a list of physical units being purchased or shipped, each with its own printed serial number.
+- "spec_sheet" / "datasheet" / "brochure" / "manual" / "other": product information or marketing — NOT a list of units to inventory.
 
-CRITICAL RULES:
-1. Create ONE separate object per serial number — never combine multiple serials into one entry.
-2. If a line shows quantity 5, there should be 5 separate entries with 5 different serial numbers.
-3. Map SKU codes to proper names: KOZ-P1=Dejavoo P1, KOZ-P3=Dejavoo P3, KOZ-P5=Dejavoo P5, KOZ-P17=Dejavoo P17, KOZ-Z11=Dejavoo Z11, KOZ-Z9=Dejavoo Z9.
-4. Find the invoice date in YYYY-MM-DD format.
-5. Return ONLY valid JSON, no markdown.
+STEP 2 — Only if it is an invoice / packing_slip / shipment, extract EVERY real unit serial number.
+
+STRICT RULES:
+- NEVER invent, guess, autocomplete, or reformat a serial number. Output only serials literally printed in the document.
+- Do NOT treat model names, SKU/part numbers, quantities, prices, dates, phone numbers, addresses, firmware versions, or specification values as serial numbers.
+- One object per serial number. If a line shows quantity 5 with 5 printed serials, output 5 objects.
+- Map SKU codes to names: KOZ-P1=Dejavoo P1, KOZ-P3=Dejavoo P3, KOZ-P5=Dejavoo P5, KOZ-P17=Dejavoo P17, KOZ-Z11=Dejavoo Z11, KOZ-Z9=Dejavoo Z9.
+- If it is NOT an invoice/packing_slip/shipment, set "is_invoice": false and return an empty "data" array. Do not extract anything.
+- Return ONLY valid JSON, no markdown.
 
 Output format:
-{"invoice_date": "YYYY-MM-DD", "data": [{"serial_number": "EXACT_SERIAL", "terminal_type": "Proper Model Name"}]}`;
+{"is_invoice": true, "document_type": "invoice|packing_slip|shipment|spec_sheet|datasheet|brochure|manual|other", "invoice_date": "YYYY-MM-DD or null", "data": [{"serial_number": "EXACT_SERIAL", "terminal_type": "Proper Model Name"}]}`;
 
         const timeoutPromise = new Promise((_, reject) =>
             setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 55000)
@@ -132,16 +137,23 @@ Output format:
         const extracted = [];
         const seenSNs  = new Set();
         let invoiceDate = null;
+        let isInvoice = null;      // null = model didn't say; true/false = explicit
+        let docType = null;
 
         // Layer 1: JSON parse
         try {
-            const parsed = JSON.parse(rawText);
+            const cleaned = rawText.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+            const parsed = JSON.parse(cleaned);
             if (parsed.invoice_date) invoiceDate = parsed.invoice_date;
+            if (typeof parsed.is_invoice === 'boolean') isInvoice = parsed.is_invoice;
+            if (parsed.document_type) docType = String(parsed.document_type);
 
             const rawArray = parsed.data || parsed.items || (Array.isArray(parsed) ? parsed : []);
             rawArray.forEach(item => {
                 const rawSN = normalizeSN(item.serial_number || item.sn || '');
-                if (rawSN.length < 6) return;
+                // Real terminal serials are ≥6 chars AND contain at least one digit —
+                // this drops model names / spec values the model may misread as serials.
+                if (rawSN.length < 6 || !/[0-9]/.test(rawSN)) return;
                 const model_ = normalizeModel(item.terminal_type || item.type || item.model);
                 expandItem({ serial_number: rawSN, terminal_type: model_ }).forEach(e => {
                     if (!seenSNs.has(e.serial_number)) {
@@ -154,7 +166,14 @@ Output format:
             console.warn('Layer 1 JSON parse failed — using regex fallback');
         }
 
-        // Layer 2: regex sweep (always runs to catch anything missed)
+        // If the model classified this as a non-invoice, stop here with a clear
+        // message — do NOT run the regex fallback (which could false-positive).
+        if (isInvoice === false) {
+            const label = (docType && docType !== 'other') ? docType.replace(/_/g, ' ') : 'non-invoice document';
+            return fail(422, `This looks like a ${label}, not a hardware invoice or packing list — nothing was imported. Please upload the invoice/packing slip that lists the units and their serial numbers.`);
+        }
+
+        // Layer 2: regex sweep for known serial formats (catches anything missed on a real invoice).
         const upperText = rawText.toUpperCase();
         SERIAL_PATTERNS.forEach(p => {
             const re = new RegExp(p.regex.source, p.regex.flags);
@@ -168,7 +187,10 @@ Output format:
         });
 
         if (extracted.length === 0) {
-            return fail(422, `No serial numbers found. AI response snippet: ${rawText.substring(0, 150) || 'EMPTY'}`);
+            const hint = (docType && docType !== 'invoice' && docType !== 'packing_slip' && docType !== 'shipment')
+                ? ` This appears to be a ${docType.replace(/_/g,' ')}, not an invoice.`
+                : ` AI response snippet: ${rawText.substring(0, 150) || 'EMPTY'}`;
+            return fail(422, `No serial numbers found.${hint}`);
         }
 
         // ── 4. CATEGORIZE AGAINST DATABASE ───────────────────────────────
@@ -186,6 +208,7 @@ Output format:
 
         return res.status(200).json({
             success: true,
+            document_type: docType,
             invoice_date: invoiceDate,
             new_items:   newItems,
             duplicates:  duplicates,
