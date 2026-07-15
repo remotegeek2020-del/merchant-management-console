@@ -68,7 +68,8 @@ const ADMIN_ACTIONS = new Set([
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta'
+    'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta',
+    'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -398,6 +399,21 @@ export default async function handler(req, res) {
             if (action === 'ghl_locations') {
                 const r = await ghlListLocations();
                 return ok(res, r);
+            }
+
+            // Store a per-sub-account Private Integration token (encrypted).
+            if (action === 'set_location_token') {
+                const { location_id, token } = req.body;
+                if (!location_id) return bad(res, 'location_id required');
+                await setConfigValue('GHL_LOCTOKEN:' + location_id, (token || '').trim(), actorName);
+                return ok(res, { saved: true });
+            }
+            // Verify a sub-account is readable (lists forms + calendars).
+            if (action === 'test_location') {
+                const { location_id } = req.body;
+                if (!location_id) return bad(res, 'location_id required');
+                const [forms, cals] = await Promise.all([ghlListForms(location_id), ghlListCalendars(location_id)]);
+                return ok(res, { forms: forms.length, calendars: cals.length });
             }
 
             // Forms / calendars in a sub-account (for the conversion-source pickers).

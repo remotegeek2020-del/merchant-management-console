@@ -37,6 +37,11 @@ export async function ghlLocationNames(ids) {
 const _locTokens = {};   // simple per-process cache
 export async function ghlLocationToken(locationId) {
     if (!locationId) return null;
+    // 1) A stored per-sub-account Private Integration token — most reliable
+    //    (agency tokens often can't read a location's forms/calendars).
+    const stored = await getConfigValue('GHL_LOCTOKEN:' + locationId);
+    if (stored) return stored;
+    // 2) Fall back to minting a location token from the agency token.
     if (_locTokens[locationId] && _locTokens[locationId].exp > Date.now()) return _locTokens[locationId].t;
     const token = (await getConfigValue('GHL_AGENCY_TOKEN')) || process.env.GHL_AGENCY_TOKEN;
     const companyId = (await getConfigValue('GHL_COMPANY_ID')) || process.env.GHL_COMPANY_ID;

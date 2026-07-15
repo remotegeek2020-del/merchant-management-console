@@ -234,6 +234,14 @@
         <div id="convScanResult" class="muted" style="font-size:11px;margin-bottom:8px;"></div>
         <label class="fld" style="margin-top:0;">Sub-account</label>
         <select class="sel" id="conv_location" onchange="onConvLocation()"><option value="">— No conversion tracking —</option></select>
+        <div id="convTokenBox" style="display:none;margin-top:8px;padding:9px 10px;border:1px dashed #f59e0b;border-radius:8px;background:#fffbeb;">
+          <div class="muted" style="font-size:11px;margin-bottom:5px;">Couldn't read this sub-account with the agency token. Paste a <b>Private Integration token created inside this sub-account</b> (GHL → that sub-account → Settings → Private Integrations) with <b>Contacts / Forms / Calendars</b> scopes.</div>
+          <div style="display:flex;gap:6px;">
+            <input class="inp" id="conv_token" placeholder="Sub-account Private Integration token" style="font-size:11px;font-family:'DM Mono',monospace;">
+            <button type="button" class="btn btn-brand" style="white-space:nowrap;" onclick="saveLocationToken(this)">Save &amp; test</button>
+          </div>
+          <div id="convTokenResult" class="muted" style="font-size:11px;margin-top:5px;"></div>
+        </div>
         <div class="row2" id="convPickers" style="display:none;margin-top:8px;">
           <div><label class="fld" style="margin-top:0;">Form</label><select class="sel" id="conv_form"><option value="">— none —</option></select></div>
           <div><label class="fld" style="margin-top:0;">Calendar</label><select class="sel" id="conv_calendar"><option value="">— none —</option></select></div>
@@ -1056,7 +1064,27 @@ async function onConvLocation(pre){
   const forms=(fr.success?fr.data:[])||[], cals=(cr.success?cr.data:[])||[];
   fSel.innerHTML='<option value="">— none —</option>'+forms.map(f=>`<option value="${esc(f.id)}" data-name="${esc(f.name)}">${esc(f.name)}</option>`).join('');
   cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)}</option>`).join('');
-  if(pre){ if(pre.form) fSel.value=pre.form; if(pre.cal) cSel.value=pre.cal; }
+  // If nothing came back, the sub-account isn't readable — offer the token box.
+  document.getElementById('convTokenBox').style.display=(!forms.length && !cals.length)?'':'none';
+  if(pre){ if(pre.form){ ensureOption('conv_form',pre.form,'Detected form'); fSel.value=pre.form; } if(pre.cal){ ensureOption('conv_calendar',pre.cal,'Detected calendar'); cSel.value=pre.cal; } }
+}
+async function saveLocationToken(btn){
+  const loc=document.getElementById('conv_location').value;
+  const tok=document.getElementById('conv_token').value.trim();
+  const rr=document.getElementById('convTokenResult');
+  if(!loc){ rr.textContent='Pick a sub-account first.'; return; }
+  if(!tok){ rr.textContent='Paste the token.'; return; }
+  if(btn) btn.disabled=true; rr.textContent='Saving & testing…';
+  await api({action:'set_location_token', location_id:loc, token:tok});
+  const t=await api({action:'test_location', location_id:loc});
+  if(btn) btn.disabled=false;
+  if(t.success && (t.data.forms||t.data.calendars)){
+    rr.textContent='✓ Connected — '+t.data.forms+' forms, '+t.data.calendars+' calendars found. Reloading…';
+    document.getElementById('conv_token').value='';
+    await onConvLocation();
+  } else {
+    rr.textContent='Saved, but still nothing came back. Check the token is a token from THIS sub-account with Contacts/Forms/Calendars (read) scopes.';
+  }
 }
 function ensureOption(selId, val, label){
   const sel=document.getElementById(selId);
@@ -1089,6 +1117,7 @@ async function scanCta(btn){
   const forms=(fr.success&&Array.isArray(fr.data))?fr.data:[], cals=(cr.success&&Array.isArray(cr.data))?cr.data:[];
   fSel.innerHTML='<option value="">— none —</option>'+forms.map(f=>`<option value="${esc(f.id)}" data-name="${esc(f.name)}">${esc(f.name)}</option>`).join('');
   cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  document.getElementById('convTokenBox').style.display=(!forms.length && !cals.length)?'':'none';
   const locName=document.getElementById('conv_location').options[document.getElementById('conv_location').selectedIndex]?.text||'this sub-account';
   const msgs=[], warns=[];
   function apply(sel,list,id,label){
