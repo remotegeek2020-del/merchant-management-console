@@ -68,7 +68,7 @@ const ADMIN_ACTIONS = new Set([
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_calendars', 'get_conversions'
+    'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -408,6 +408,31 @@ export default async function handler(req, res) {
             if (action === 'ghl_calendars') {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListCalendars(req.body.location_id));
+            }
+
+            // Scan a CTA landing page for an embedded GHL form / calendar and
+            // return its type + id (handles GHL widgets embedded on Webflow).
+            if (action === 'scan_cta') {
+                let url = String(req.body.url || '').trim();
+                if (!/^https?:\/\//i.test(url)) return bad(res, 'Enter a valid http(s) link.');
+                // Basic SSRF guard: block internal hosts.
+                try {
+                    const h = new URL(url).hostname;
+                    if (/^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1)/i.test(h)) return bad(res, 'Blocked host.');
+                } catch { return bad(res, 'Bad URL.'); }
+                let htmlText = '';
+                try {
+                    const r = await fetch(url, { redirect: 'follow', headers: { 'User-Agent': 'Mozilla/5.0 PPTAnnounceBot' } });
+                    htmlText = (await r.text()).slice(0, 800000);   // cap size
+                } catch (e) { return bad(res, 'Could not fetch the page: ' + (e.message || 'error')); }
+                // Also scan the URL itself (in case the CTA links straight to a widget).
+                const hay = url + '\n' + htmlText;
+                const grab = (re) => { const m = hay.match(re); return m ? m[1] : null; };
+                const formId = grab(/widget\/form\/([A-Za-z0-9]{6,40})/) || grab(/data-form-id=["']([A-Za-z0-9]{6,40})["']/) || grab(/[?&]formId=([A-Za-z0-9]{6,40})/);
+                const calId = grab(/widget\/bookings?\/([A-Za-z0-9]{6,40})/) || grab(/data-(?:calendar|widget)-id=["']([A-Za-z0-9]{6,40})["']/) || grab(/[?&]calendarId=([A-Za-z0-9]{6,40})/) || grab(/\/widget\/appointment\/([A-Za-z0-9]{6,40})/);
+                const locId = grab(/[?&]locationId=([A-Za-z0-9]{6,40})/) || grab(/data-location-id=["']([A-Za-z0-9]{6,40})["']/);
+                if (!formId && !calId) return ok(res, { found: false });
+                return ok(res, { found: true, form_id: formId, calendar_id: calId, location_id: locId });
             }
 
             // Live conversions for a campaign (form submissions + appointments within its window).

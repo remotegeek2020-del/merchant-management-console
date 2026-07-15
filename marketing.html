@@ -230,6 +230,8 @@
       <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px;">
         <div style="display:flex;align-items:center;gap:8px;"><span class="material-icons" style="color:#16a34a;font-size:18px;">insights</span><b style="font-size:13px;">Conversion tracking (GoHighLevel)</b></div>
         <div class="muted" style="font-size:11px;margin:4px 0 8px;">Count a GHL form submission and/or appointment as this campaign's conversion. Shown in Stats.</div>
+        <button type="button" class="btn btn-neutral" style="margin-bottom:8px;" onclick="scanCta(this)"><span class="material-icons" style="font-size:16px;">travel_explore</span> Scan CTA link for form/calendar</button>
+        <div id="convScanResult" class="muted" style="font-size:11px;margin-bottom:8px;"></div>
         <label class="fld" style="margin-top:0;">Sub-account</label>
         <select class="sel" id="conv_location" onchange="onConvLocation()"><option value="">— No conversion tracking —</option></select>
         <div class="row2" id="convPickers" style="display:none;margin-top:8px;">
@@ -1055,6 +1057,28 @@ async function onConvLocation(pre){
   fSel.innerHTML='<option value="">— none —</option>'+forms.map(f=>`<option value="${esc(f.id)}" data-name="${esc(f.name)}">${esc(f.name)}</option>`).join('');
   cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)}</option>`).join('');
   if(pre){ if(pre.form) fSel.value=pre.form; if(pre.cal) cSel.value=pre.cal; }
+}
+function ensureOption(selId, val, label){
+  const sel=document.getElementById(selId);
+  if(!Array.from(sel.options).some(o=>o.value===val)){ const o=document.createElement('option'); o.value=val; o.textContent=label; o.dataset.name=label; sel.appendChild(o); }
+}
+async function scanCta(btn){
+  const url=(document.getElementById('f_cta_url').value||'').trim();
+  const res=document.getElementById('convScanResult');
+  if(!url){ res.textContent='Enter the CTA button link first (turn on the CTA above), then scan.'; return; }
+  if(btn) btn.disabled=true; res.textContent='Scanning the page…';
+  const r=await api({action:'scan_cta', url});
+  if(btn) btn.disabled=false;
+  if(!r.success){ res.textContent='⚠️ '+(r.message||'Scan failed.'); return; }
+  if(!r.data.found){ res.textContent='No GHL form or calendar found on that page. Make sure the CTA links to the page that has the embedded form/calendar, or pick manually below.'; return; }
+  const d=r.data;
+  if(d.location_id){ ensureOption('conv_location', d.location_id, 'Detected sub-account'); document.getElementById('conv_location').value=d.location_id; }
+  document.getElementById('convPickers').style.display='';
+  const parts=[];
+  if(d.form_id){ ensureOption('conv_form', d.form_id, 'Detected form'); document.getElementById('conv_form').value=d.form_id; parts.push('form'); }
+  if(d.calendar_id){ ensureOption('conv_calendar', d.calendar_id, 'Detected calendar'); document.getElementById('conv_calendar').value=d.calendar_id; parts.push('calendar'); }
+  const needLoc=!document.getElementById('conv_location').value;
+  res.textContent='✓ Detected '+parts.join(' + ')+' from the CTA page.'+(needLoc?' Now pick the sub-account above so we can read its conversions.':'');
 }
 function getConvConfig(){
   const loc=document.getElementById('conv_location').value;
