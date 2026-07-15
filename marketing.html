@@ -235,7 +235,7 @@
         <label class="fld" style="margin-top:0;">Sub-account</label>
         <select class="sel" id="conv_location" onchange="onConvLocation()"><option value="">— No conversion tracking —</option></select>
         <div id="convTokenBox" style="display:none;margin-top:8px;padding:9px 10px;border:1px dashed #f59e0b;border-radius:8px;background:#fffbeb;">
-          <div class="muted" style="font-size:11px;margin-bottom:5px;">Couldn't read this sub-account with the agency token. Paste a <b>Private Integration token created inside this sub-account</b> (GHL → that sub-account → Settings → Private Integrations) with <b>Contacts / Forms / Calendars</b> scopes.</div>
+          <div class="muted" style="font-size:11px;margin-bottom:5px;">Couldn't read this sub-account with the configured GHL key. If this is a <b>different</b> sub-account, paste a <b>Private Integration token created inside it</b> (GHL → that sub-account → Settings → Private Integrations) with <b>Contacts / Forms / Calendars</b> scopes. (Your main sub-account already uses the key from Secret Dungeon → API Manager.)</div>
           <div style="display:flex;gap:6px;">
             <input class="inp" id="conv_token" placeholder="Sub-account Private Integration token" style="font-size:11px;font-family:'DM Mono',monospace;">
             <button type="button" class="btn btn-brand" style="white-space:nowrap;" onclick="saveLocationToken(this)">Save &amp; test</button>

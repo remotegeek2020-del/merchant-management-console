@@ -35,13 +35,7 @@ export async function ghlLocationNames(ids) {
 // Reading a sub-account's contacts/forms/appointments needs a LOCATION token,
 // which we mint from the agency Private Integration token + companyId.
 const _locTokens = {};   // simple per-process cache
-export async function ghlLocationToken(locationId) {
-    if (!locationId) return null;
-    // 1) A stored per-sub-account Private Integration token — most reliable
-    //    (agency tokens often can't read a location's forms/calendars).
-    const stored = await getConfigValue('GHL_LOCTOKEN:' + locationId);
-    if (stored) return stored;
-    // 2) Fall back to minting a location token from the agency token.
+async function mintLocationToken(locationId) {
     if (_locTokens[locationId] && _locTokens[locationId].exp > Date.now()) return _locTokens[locationId].t;
     const token = (await getConfigValue('GHL_AGENCY_TOKEN')) || process.env.GHL_AGENCY_TOKEN;
     const companyId = (await getConfigValue('GHL_COMPANY_ID')) || process.env.GHL_COMPANY_ID;
@@ -58,6 +52,20 @@ export async function ghlLocationToken(locationId) {
         _locTokens[locationId] = { t: d.access_token, exp: Date.now() + 20 * 60 * 1000 };
         return d.access_token;
     } catch { return null; }
+}
+
+export async function ghlLocationToken(locationId) {
+    if (!locationId) return null;
+    // 1) A token pasted for THIS specific sub-account (needed for extra sub-accounts).
+    const stored = await getConfigValue('GHL_LOCTOKEN:' + locationId);
+    if (stored) return stored;
+    // 2) Mint a per-location token from the agency token (correct per location).
+    const minted = await mintLocationToken(locationId);
+    if (minted) return minted;
+    // 3) Fall back to the sub-account Private Integration token already configured
+    //    (Secret Dungeon → API Manager, GHL_API_KEY). Works for the sub-account it
+    //    belongs to; add a per-sub-account token above for any others.
+    return (await getConfigValue('GHL_API_KEY')) || process.env.GHL_API_KEY || null;
 }
 
 async function locGet(locationId, path) {
