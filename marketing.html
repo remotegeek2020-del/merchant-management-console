@@ -1072,13 +1072,37 @@ async function scanCta(btn){
   if(!r.success){ res.textContent='⚠️ '+(r.message||'Scan failed.'); return; }
   if(!r.data.found){ res.textContent='No GHL form or calendar found on that page. Make sure the CTA links to the page that has the embedded form/calendar, or pick manually below.'; return; }
   const d=r.data;
-  if(d.location_id){ ensureOption('conv_location', d.location_id, 'Detected sub-account'); document.getElementById('conv_location').value=d.location_id; }
+  let locId=d.location_id||document.getElementById('conv_location').value;
+  if(locId){ ensureOption('conv_location', locId, 'Detected sub-account'); document.getElementById('conv_location').value=locId; }
+  locId=document.getElementById('conv_location').value;
   document.getElementById('convPickers').style.display='';
-  const parts=[];
-  if(d.form_id){ ensureOption('conv_form', d.form_id, 'Detected form'); document.getElementById('conv_form').value=d.form_id; parts.push('form'); }
-  if(d.calendar_id){ ensureOption('conv_calendar', d.calendar_id, 'Detected calendar'); document.getElementById('conv_calendar').value=d.calendar_id; parts.push('calendar'); }
-  const needLoc=!document.getElementById('conv_location').value;
-  res.textContent='✓ Detected '+parts.join(' + ')+' from the CTA page.'+(needLoc?' Now pick the sub-account above so we can read its conversions.':'');
+  const fSel=document.getElementById('conv_form'), cSel=document.getElementById('conv_calendar');
+  if(!locId){
+    if(d.form_id){ ensureOption('conv_form',d.form_id,'Detected form'); fSel.value=d.form_id; }
+    if(d.calendar_id){ ensureOption('conv_calendar',d.calendar_id,'Detected calendar'); cSel.value=d.calendar_id; }
+    res.textContent='Detected a '+(d.calendar_id&&d.form_id?'form + calendar':(d.calendar_id?'calendar':'form'))+' — pick the sub-account above, then Scan again to confirm the exact name.';
+    return;
+  }
+  res.textContent='Resolving names from '+(document.getElementById('conv_location').options[document.getElementById('conv_location').selectedIndex]?.text||'the sub-account')+'…';
+  // Resolve the detected ids to their real names in this sub-account.
+  const [fr,cr]=await Promise.all([ api({action:'ghl_forms',location_id:locId}), api({action:'ghl_calendars',location_id:locId}) ]);
+  const forms=(fr.success&&Array.isArray(fr.data))?fr.data:[], cals=(cr.success&&Array.isArray(cr.data))?cr.data:[];
+  fSel.innerHTML='<option value="">— none —</option>'+forms.map(f=>`<option value="${esc(f.id)}" data-name="${esc(f.name)}">${esc(f.name)}</option>`).join('');
+  cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  const locName=document.getElementById('conv_location').options[document.getElementById('conv_location').selectedIndex]?.text||'this sub-account';
+  const msgs=[], warns=[];
+  function apply(sel,list,id,label){
+    if(!id) return;
+    const found=list.find(x=>x.id===id);
+    if(found){ sel.value=id; msgs.push(label+' “'+found.name+'”'); }
+    else if(list.length){ ensureOption(sel.id,id,'Detected '+label+' (not found)'); sel.value=id; warns.push('the detected '+label+' isn’t in '+locName+' — it may be a booking group or belong to a different sub-account'); }
+    else { ensureOption(sel.id,id,'Detected '+label); sel.value=id; warns.push('couldn’t verify the '+label+' name (GHL list didn’t load)'); }
+  }
+  apply(fSel,forms,d.form_id,'form');
+  apply(cSel,cals,d.calendar_id,'calendar');
+  let msg = msgs.length ? '✓ Using '+msgs.join(' + ')+'.' : '';
+  if(warns.length) msg += (msg?' ':'')+'⚠️ '+warns.join('; ')+'.';
+  res.innerHTML = esc(msg);
 }
 function getConvConfig(){
   const loc=document.getElementById('conv_location').value;
