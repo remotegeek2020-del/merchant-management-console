@@ -228,6 +228,17 @@
       </div>
 
       <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px;">
+        <div style="display:flex;align-items:center;gap:8px;"><span class="material-icons" style="color:#16a34a;font-size:18px;">insights</span><b style="font-size:13px;">Conversion tracking (GoHighLevel)</b></div>
+        <div class="muted" style="font-size:11px;margin:4px 0 8px;">Count a GHL form submission and/or appointment as this campaign's conversion. Shown in Stats.</div>
+        <label class="fld" style="margin-top:0;">Sub-account</label>
+        <select class="sel" id="conv_location" onchange="onConvLocation()"><option value="">— No conversion tracking —</option></select>
+        <div class="row2" id="convPickers" style="display:none;margin-top:8px;">
+          <div><label class="fld" style="margin-top:0;">Form</label><select class="sel" id="conv_form"><option value="">— none —</option></select></div>
+          <div><label class="fld" style="margin-top:0;">Calendar</label><select class="sel" id="conv_calendar"><option value="">— none —</option></select></div>
+        </div>
+      </div>
+
+      <div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-top:16px;">
         <label style="display:flex;align-items:center;gap:10px;font-weight:700;font-size:13px;cursor:pointer;margin:0;">
           <span class="switch"><input type="checkbox" id="f_ab_enabled" onchange="onAbToggle()"><span class="slider"></span></span> A/B test — show two versions & compare CTR
         </label>
@@ -542,6 +553,7 @@ function openEditor(){
   onEmbedScope(); renderEmbedSiteChecks([]);
   document.querySelector('input[name=ghlScope][value=all]').checked=true;
   selectedGhl=new Set(); document.getElementById('ghlSearch').value=''; onGhlScope();
+  populateConvLocations(''); document.getElementById('convPickers').style.display='none';
   setContentType('both');
   document.getElementById('editorModal').style.display='flex';
 }
@@ -591,6 +603,8 @@ async function editCampaign(id){
   document.querySelector('input[name=ghlScope][value=all]').checked = glids.length===0;
   document.querySelector('input[name=ghlScope][value=specific]').checked = glids.length>0;
   document.getElementById('ghlSearch').value=''; onGhlScope();
+  await populateConvLocations(c.conv_location_id||'');
+  if(c.conv_location_id) await onConvLocation({form:c.conv_form_id||'', cal:c.conv_calendar_id||''}); else document.getElementById('convPickers').style.display='none';
   setContentType(c.content_type||'both');
   if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
   else { document.getElementById('hotspotArea').style.display='none'; document.getElementById('hsImage').removeAttribute('src'); document.getElementById('hsList').innerHTML=''; document.getElementById('hsWrap').querySelectorAll('.hs-box').forEach(b=>b.remove()); }
@@ -696,6 +710,7 @@ async function saveCampaign(){
     show_on_embed: document.getElementById('f_show_embed').checked,
     embed_site_ids: document.getElementById('f_show_embed').checked ? getEmbedSiteIds() : [],
     ghl_location_ids: document.getElementById('f_show_embed').checked ? getGhlLocationIds() : [],
+    ...getConvConfig(),
     ab_split: parseInt(document.getElementById('f_ab_split').value),
     variant_b: document.getElementById('f_ab_enabled').checked ? {
       title: document.getElementById('f_b_title').value.trim()||null,
@@ -1020,6 +1035,38 @@ function getGhlLocationIds(){
   return specific ? Array.from(selectedGhl) : [];
 }
 
+// ── GHL conversion tracking (per campaign) ──
+async function populateConvLocations(selectedId){
+  const sel=document.getElementById('conv_location');
+  const data=await getGhlLocations();
+  const locs=(data.locations||[]);
+  sel.innerHTML='<option value="">— No conversion tracking —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(selectedId) sel.value=selectedId;
+}
+async function onConvLocation(pre){
+  const loc=document.getElementById('conv_location').value;
+  const wrap=document.getElementById('convPickers');
+  const fSel=document.getElementById('conv_form'), cSel=document.getElementById('conv_calendar');
+  if(!loc){ wrap.style.display='none'; fSel.innerHTML='<option value="">— none —</option>'; cSel.innerHTML='<option value="">— none —</option>'; return; }
+  wrap.style.display='';
+  fSel.innerHTML='<option value="">Loading…</option>'; cSel.innerHTML='<option value="">Loading…</option>';
+  const [fr,cr]=await Promise.all([api({action:'ghl_forms',location_id:loc}), api({action:'ghl_calendars',location_id:loc})]);
+  const forms=(fr.success?fr.data:[])||[], cals=(cr.success?cr.data:[])||[];
+  fSel.innerHTML='<option value="">— none —</option>'+forms.map(f=>`<option value="${esc(f.id)}" data-name="${esc(f.name)}">${esc(f.name)}</option>`).join('');
+  cSel.innerHTML='<option value="">— none —</option>'+cals.map(c=>`<option value="${esc(c.id)}" data-name="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+  if(pre){ if(pre.form) fSel.value=pre.form; if(pre.cal) cSel.value=pre.cal; }
+}
+function getConvConfig(){
+  const loc=document.getElementById('conv_location').value;
+  const fSel=document.getElementById('conv_form'), cSel=document.getElementById('conv_calendar');
+  const fOpt=fSel.options[fSel.selectedIndex], cOpt=cSel.options[cSel.selectedIndex];
+  return {
+    conv_location_id: loc||null,
+    conv_form_id: loc?(fSel.value||null):null, conv_form_name: loc&&fSel.value?(fOpt?.dataset.name||null):null,
+    conv_calendar_id: loc?(cSel.value||null):null, conv_calendar_name: loc&&cSel.value?(cOpt?.dataset.name||null):null
+  };
+}
+
 // ── stats ──
 async function showStats(id, title){
   document.getElementById('statsTitle').innerText='Stats — '+title;
@@ -1047,10 +1094,35 @@ async function showStats(id, title){
     ${siteSection(s.by_site)}
     ${trafficSection(s.traffic)}
     ${targets.length?`<label class="fld">Clicks by button / hotspot</label>${targets.map(([k,v])=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #f1f5f9;font-size:13px;"><span>${esc(k)}</span><b>${v}</b></div>`).join('')}`:''}
+    <div id="convSection"></div>
     ${peopleSection('Who clicked', s.clickers, true)}
     ${peopleSection('Who viewed', s.viewers, false)}
     ${peopleSection('Who dismissed', s.dismissers, false)}
   `;
+  loadConversions(id, s.clicks||0);
+}
+
+// Live GHL conversions (form submissions + appointments) for this campaign.
+async function loadConversions(id, clicks){
+  const box=document.getElementById('convSection'); if(!box) return;
+  box.innerHTML='<label class="fld">Conversions</label><div class="muted" style="font-size:12px;">Checking GoHighLevel…</div>';
+  const r=await api({action:'get_conversions', id});
+  if(!r.success){ box.innerHTML=''; return; }
+  const d=r.data;
+  if(!d.configured){ box.innerHTML='<label class="fld">Conversions</label><div class="muted" style="font-size:12px;">No GHL form/calendar linked. Edit the campaign → Conversion tracking to enable.</div>'; return; }
+  const rate = clicks ? Math.round(d.count/clicks*1000)/10 : null;
+  const bt=d.by_type||{};
+  const rows=(d.list||[]).map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #f1f5f9;font-size:13px;">
+    <span style="display:flex;align-items:center;gap:8px;"><span class="pill" style="font-size:10px;background:${x.type==='appointment'?'#dcfce7':'#e0f2fe'};color:${x.type==='appointment'?'#166534':'#0369a1'};">${x.type==='appointment'?'Booking':'Form'}</span><b>${esc(x.name||'Lead')}</b>${x.email?` <span class="muted" style="font-size:11px;">${esc(x.email)}</span>`:''}${x.phone?` <span class="muted" style="font-size:11px;">${esc(x.phone)}</span>`:''}</span>
+    <span class="muted" style="font-size:11px;white-space:nowrap;">${x.at?new Date(x.at).toLocaleDateString():''}</span></div>`).join('');
+  box.innerHTML=`<label class="fld">Conversions</label>
+    <div class="statgrid" style="grid-template-columns:repeat(3,1fr);">
+      <div class="statbox"><div class="n" style="color:var(--green);">${d.count}</div><div class="l">Conversions</div></div>
+      <div class="statbox"><div class="n">${bt.form||0}</div><div class="l">Form</div></div>
+      <div class="statbox"><div class="n">${bt.appointment||0}</div><div class="l">Booked</div></div>
+    </div>
+    ${rate!=null?`<div class="muted" style="font-size:12px;margin-top:6px;">${rate}% of clicks converted.</div>`:''}
+    ${rows||'<div class="muted" style="font-size:12px;margin-top:6px;">No conversions in this campaign window yet.</div>'}`;
 }
 
 // A/B comparison block (only when the campaign has variant events).

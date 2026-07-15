@@ -31,6 +31,72 @@ export async function ghlLocationNames(ids) {
     return out;
 }
 
+// ── Location access token (agency token → sub-account token) ─────────────────
+// Reading a sub-account's contacts/forms/appointments needs a LOCATION token,
+// which we mint from the agency Private Integration token + companyId.
+const _locTokens = {};   // simple per-process cache
+export async function ghlLocationToken(locationId) {
+    if (!locationId) return null;
+    if (_locTokens[locationId] && _locTokens[locationId].exp > Date.now()) return _locTokens[locationId].t;
+    const token = (await getConfigValue('GHL_AGENCY_TOKEN')) || process.env.GHL_AGENCY_TOKEN;
+    const companyId = (await getConfigValue('GHL_COMPANY_ID')) || process.env.GHL_COMPANY_ID;
+    if (!token || !companyId) return null;
+    try {
+        const r = await fetch(`${GHL_BASE}/oauth/locationToken`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${token}`, 'Version': '2021-07-28', 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ companyId, locationId }).toString()
+        });
+        if (!r.ok) return null;
+        const d = await r.json().catch(() => ({}));
+        if (!d.access_token) return null;
+        _locTokens[locationId] = { t: d.access_token, exp: Date.now() + 20 * 60 * 1000 };
+        return d.access_token;
+    } catch { return null; }
+}
+
+async function locGet(locationId, path) {
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return null;
+    try {
+        const r = await fetch(`${GHL_BASE}${path}`, { headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Accept': 'application/json' } });
+        if (!r.ok) return null;
+        return await r.json().catch(() => null);
+    } catch { return null; }
+}
+
+// Forms + calendars in a sub-account (for the campaign conversion pickers).
+export async function ghlListForms(locationId) {
+    const d = await locGet(locationId, `/forms/?locationId=${encodeURIComponent(locationId)}&limit=200`);
+    return (d?.forms || []).map(f => ({ id: f.id, name: f.name || f.id }));
+}
+export async function ghlListCalendars(locationId) {
+    const d = await locGet(locationId, `/calendars/?locationId=${encodeURIComponent(locationId)}`);
+    return (d?.calendars || []).map(c => ({ id: c.id, name: c.name || c.id }));
+}
+
+// Form submissions for a form within a date window → normalized conversions.
+export async function ghlFormSubmissions(locationId, formId, startMs, endMs) {
+    if (!formId) return [];
+    const s = new Date(startMs).toISOString(), e = new Date(endMs).toISOString();
+    const d = await locGet(locationId, `/forms/submissions?locationId=${encodeURIComponent(locationId)}&formId=${encodeURIComponent(formId)}&startAt=${encodeURIComponent(s)}&endAt=${encodeURIComponent(e)}&limit=100`);
+    return (d?.submissions || []).map(x => ({
+        type: 'form', name: x.name || `${x.firstName || ''} ${x.lastName || ''}`.trim() || 'Lead',
+        email: x.email || '', phone: x.phone || '', contact_id: x.contactId || '', at: x.createdAt || x.dateAdded || null
+    }));
+}
+
+// Appointments on a calendar within a window → normalized conversions.
+export async function ghlCalendarAppointments(locationId, calendarId, startMs, endMs) {
+    if (!calendarId) return [];
+    const d = await locGet(locationId, `/calendars/events?locationId=${encodeURIComponent(locationId)}&calendarId=${encodeURIComponent(calendarId)}&startTime=${startMs}&endTime=${endMs}`);
+    const events = d?.events || d?.appointments || [];
+    return events.map(x => ({
+        type: 'appointment', name: x.title || x.contactName || 'Booking',
+        email: x.email || '', phone: x.phone || '', contact_id: x.contactId || '', at: x.startTime || x.createdAt || null
+    }));
+}
+
 // ── Agency-level: list all sub-accounts (locations) ──────────────────────────
 // Uses an agency Private Integration token (GHL_AGENCY_TOKEN) + company id
 // (GHL_COMPANY_ID). Returns { configured, locations:[{id,name}] }.

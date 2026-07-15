@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import * as webflow from './_webflow.js';
 
@@ -67,7 +67,8 @@ const ADMIN_ACTIONS = new Set([
     'search_partners', 'export_clicks', 'partners_by_ids',
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
-    'get_pixels', 'set_pixels', 'export_audience'
+    'get_pixels', 'set_pixels', 'export_audience',
+    'ghl_forms', 'ghl_calendars', 'get_conversions'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
 
@@ -191,6 +192,9 @@ export default async function handler(req, res) {
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
+                    conv_location_id: b.conv_location_id || null,
+                    conv_form_id: b.conv_form_id || null, conv_form_name: b.conv_form_name || null,
+                    conv_calendar_id: b.conv_calendar_id || null, conv_calendar_name: b.conv_calendar_name || null,
                     is_active: !!b.is_active,
                     starts_at: b.starts_at || null,
                     ends_at: b.ends_at || null,
@@ -394,6 +398,34 @@ export default async function handler(req, res) {
             if (action === 'ghl_locations') {
                 const r = await ghlListLocations();
                 return ok(res, r);
+            }
+
+            // Forms / calendars in a sub-account (for the conversion-source pickers).
+            if (action === 'ghl_forms') {
+                if (!req.body.location_id) return ok(res, []);
+                return ok(res, await ghlListForms(req.body.location_id));
+            }
+            if (action === 'ghl_calendars') {
+                if (!req.body.location_id) return ok(res, []);
+                return ok(res, await ghlListCalendars(req.body.location_id));
+            }
+
+            // Live conversions for a campaign (form submissions + appointments within its window).
+            if (action === 'get_conversions') {
+                const { id } = req.body;
+                const { data: c } = await supabase.from('marketing_campaigns')
+                    .select('conv_location_id, conv_form_id, conv_calendar_id, starts_at, ends_at, created_at').eq('id', id).maybeSingle();
+                if (!c || !c.conv_location_id || (!c.conv_form_id && !c.conv_calendar_id)) return ok(res, { configured: false, count: 0, list: [] });
+                const startMs = c.starts_at ? new Date(c.starts_at).getTime() : (c.created_at ? new Date(c.created_at).getTime() : Date.now() - 90 * 864e5);
+                const endMs = c.ends_at ? Math.min(new Date(c.ends_at).getTime(), Date.now()) : Date.now();
+                const [forms, appts] = await Promise.all([
+                    ghlFormSubmissions(c.conv_location_id, c.conv_form_id, startMs, endMs),
+                    ghlCalendarAppointments(c.conv_location_id, c.conv_calendar_id, startMs, endMs)
+                ]);
+                const list = [...(forms || []), ...(appts || [])].sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
+                const byType = {};
+                list.forEach(x => { byType[x.type] = (byType[x.type] || 0) + 1; });
+                return ok(res, { configured: true, count: list.length, by_type: byType, list: list.slice(0, 100) });
             }
 
             // ── Webflow connector ────────────────────────────────────────────
