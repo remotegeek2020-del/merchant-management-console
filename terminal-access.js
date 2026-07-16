@@ -8,12 +8,38 @@
  */
 (function () {
     'use strict';
-    var role = (localStorage.getItem('pp_role') || '').toLowerCase();
-    // Admin tier = super_admin, admin, or Operations Admin (any role containing "admin").
-    var isAdmin = role.indexOf('super') !== -1 || role.indexOf('admin') !== -1;
-    var hasAccess = localStorage.getItem('pp_access_terminal_types') === 'true';
     var token = localStorage.getItem('pp_session_token') || '';
-    if (!token || !(isAdmin || hasAccess)) return;
+    if (!token) return;
+
+    function roleIsAdmin(role) {
+        role = (role || '').toLowerCase();
+        return role.indexOf('super') !== -1 || role.indexOf('admin') !== -1;
+    }
+
+    // Gate: build the UI only if the staff member has terminal-type access.
+    // localStorage (mirrored at login) is the fast path, but it lives only on
+    // pages that load js/script.js — so if it doesn't already grant access we
+    // authoritatively re-check with the server (validate) and refresh the flag.
+    // This makes a freshly-granted flag work WITHOUT a re-login.
+    var lsRole = (localStorage.getItem('pp_role') || '').toLowerCase();
+    if (roleIsAdmin(lsRole) || localStorage.getItem('pp_access_terminal_types') === 'true') {
+        build();
+    } else {
+        fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + token },
+            body: JSON.stringify({ action: 'validate' })
+        }).then(function (r) { return r.json(); }).then(function (res) {
+            var u = res && res.user ? res.user : res;
+            if (!u) return;
+            var granted = roleIsAdmin(u.role) || u.access_terminal_types === true;
+            // Keep localStorage in sync so subsequent loads use the fast path.
+            try { localStorage.setItem('pp_access_terminal_types', granted ? 'true' : 'false'); } catch (e) {}
+            if (granted) build();
+        }).catch(function () {});
+    }
+
+    function build() {
     if (document.getElementById('tta-fab')) return;
 
     function esc(s) { return s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
@@ -200,4 +226,5 @@
             onConfirm: function () { return api({ action: 'delete_terminal_type', type_id: id }); }
         });
     };
+    }
 })();
