@@ -9,7 +9,8 @@
 (function () {
     'use strict';
     var role = (localStorage.getItem('pp_role') || '').toLowerCase();
-    var isAdmin = role.indexOf('super') !== -1 || role === 'admin';
+    // Admin tier = super_admin, admin, or Operations Admin (any role containing "admin").
+    var isAdmin = role.indexOf('super') !== -1 || role.indexOf('admin') !== -1;
     var hasAccess = localStorage.getItem('pp_access_terminal_types') === 'true';
     var token = localStorage.getItem('pp_session_token') || '';
     if (!token || !(isAdmin || hasAccess)) return;

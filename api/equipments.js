@@ -22,7 +22,8 @@ export default async function handler(req, res) {
 
     // Managing the Terminal Type list requires the granular access (or admin).
     const TERMINAL_MANAGE_ACTIONS = new Set(['add_terminal_type', 'update_terminal_type', 'merge_terminal_type', 'delete_terminal_type']);
-    const canManageTypes = actor?.role === 'super_admin' || actor?.role === 'admin' || actor?.access_terminal_types === true;
+    // Admin tier = any role containing "admin" (super_admin / admin / Operations Admin), or the granular flag.
+    const canManageTypes = /admin/.test(String(actor?.role || '').toLowerCase()) || actor?.access_terminal_types === true;
     if (TERMINAL_MANAGE_ACTIONS.has(action) && !canManageTypes) {
         return res.status(403).json({ success: false, message: 'You do not have access to manage terminal types.' });
     }
