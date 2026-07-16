@@ -927,6 +927,25 @@ if (action === 'getMonthlyReport') {
             const { type_id } = req.body;
             if (!type_id) return res.status(400).json({ success: false, message: 'type_id required.' });
             const { data: ttDel } = await supabase.from('terminal_types').select('name, sort_order, is_active').eq('id', type_id).maybeSingle();
+
+            // Guard: never delete a type that units still reference. terminal_type is
+            // denormalized text on equipments/legacy_deployments, so deleting the type
+            // row would orphan those units (they'd keep a name with no matching type).
+            // Force the staff to Merge or reassign first (the UI already suggests this).
+            if (ttDel?.name) {
+                const [{ count: eqCount }, { count: legCount }] = await Promise.all([
+                    supabase.from('equipments').select('id', { count: 'exact', head: true }).eq('terminal_type', ttDel.name),
+                    supabase.from('legacy_deployments').select('id', { count: 'exact', head: true }).eq('terminal_type', ttDel.name)
+                ]);
+                const total = (eqCount || 0) + (legCount || 0);
+                if (total > 0) {
+                    return res.status(409).json({
+                        success: false,
+                        message: `Can't delete "${ttDel.name}" — ${total} unit${total !== 1 ? 's' : ''} still use this type. Merge it into another type (which moves those units) or change their type first, then delete.`
+                    });
+                }
+            }
+
             const { error } = await supabase.from('terminal_types').delete().eq('id', type_id);
             if (error) throw error;
             supabase.from('activity_logs').insert({
