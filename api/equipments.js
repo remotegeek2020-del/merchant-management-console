@@ -346,8 +346,9 @@ if (action === 'getMonthlyReport') {
                 return res.status(400).json({ success: false, message: 'No serial numbers provided.' });
             }
 
-            // Auto-register unknown terminal type
-            if (terminal_type) {
+            // Register a new terminal type ONLY when the caller explicitly allows it
+            // (Terminal Type Manager is the source of truth — no silent creation).
+            if (terminal_type && req.body.allow_new_type === true) {
                 const { data: existingType } = await supabase
                     .from('terminal_types').select('id').eq('name', terminal_type).maybeSingle();
                 if (!existingType) {
@@ -405,8 +406,9 @@ if (action === 'getMonthlyReport') {
         }
 
         if (action === 'create') {
-            // Auto-register unknown terminal type
-            if (payload?.terminal_type) {
+            // Register a new terminal type ONLY when explicitly allowed (source of
+            // truth = Terminal Type Manager; no silent creation from imports).
+            if (payload?.terminal_type && req.body.allow_new_type === true) {
                 const { data: existing } = await supabase
                     .from('terminal_types').select('id').eq('name', payload.terminal_type).maybeSingle();
                 if (!existing) {

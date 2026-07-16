@@ -529,49 +529,73 @@ function confirmAIImport(result) {
     const newItems   = result.new_items  || [];
     const duplicates = result.duplicates || [];
     const invoiceDate = result.invoice_date || fmtDateInput(new Date());
+    const managed = result.managed_types || (typeof TERMINAL_TYPES !== 'undefined' ? TERMINAL_TYPES : []) || [];
+    const managedSet = new Set(managed.map(m => String(m).toLowerCase()));
+    const esc = s => String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
-    // Render UI — server already did the DB comparison
-    let html = `
-        <div style="text-align:left; font-size:13px;">
-            <div style="margin-bottom:15px; padding:10px; background:#f0f9ff; border-radius:8px; border:1px solid #00a1e0; color:#0369a1;">
-                <b>Invoice Date Identified:</b> ${invoiceDate}
-            </div>
-            
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom:15px;">
-                <div style="background:#dcfce7; padding:10px; border-radius:8px; border:1px solid #166534; color:#166534;">
-                    <b style="font-size:18px;">${newItems.length}</b><br>New to Create
-                </div>
-                <div style="background:#f1f5f9; padding:10px; border-radius:8px; border:1px solid #cbd5e1; color:#64748b;">
-                    <b style="font-size:18px;">${duplicates.length}</b><br>Already in DB
-                </div>
-            </div>
+    if (!newItems.length) {
+        Swal.fire({ title: 'Database Comparison',
+            html: `<p style="color:#e11d48;font-weight:700;text-align:center;padding:12px;background:#fff1f2;border-radius:8px;">All ${duplicates.length} units are already in your database.</p>`,
+            showConfirmButton: false, showCancelButton: true, cancelButtonText: 'Close' });
+        return;
+    }
 
-            ${newItems.length > 0 ? `
-                <b style="color:#1e293b;">New Items Found:</b>
-                <div style="max-height:200px; overflow-y:auto; border:1px solid #e2e8f0; border-radius:8px; margin-top:5px; background:white;">
-                    <table class="slds-table slds-table_bordered">
-                        ${newItems.map(item => `<tr><td><b>${item.terminal_type}</b></td><td>${item.serial_number}</td></tr>`).join('')}
-                    </table>
-                </div>
-            ` : `<p style="color:#e11d48; font-weight:700; text-align:center; padding:10px; background:#fff1f2; border-radius:8px;">
-                    Duplicate Detected: All units in this invoice are already in your database.
-                 </p>`}
-        </div>
-    `;
+    // Distinct terminal types detected → must each map to a managed type.
+    const counts = {};
+    newItems.forEach(i => { const t = i.terminal_type || 'UNKNOWN'; counts[t] = (counts[t] || 0) + 1; });
+    const distinct = Object.keys(counts);
+    const optionsFor = sel => managed.map(m => `<option value="${esc(m)}" ${m===sel?'selected':''}>${esc(m)}</option>`).join('');
+
+    const rows = distinct.map((t, idx) => {
+        const isManaged = managedSet.has(String(t).toLowerCase());
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div style="flex:0 0 42%;">
+                <div style="font-weight:700;font-size:13px;">${esc(t)}</div>
+                <div style="font-size:11px;color:#94a3b8;">${counts[t]} unit${counts[t]!==1?'s':''}${isManaged?'':' · <span style="color:#d97706;font-weight:700;">not in manager</span>'}</div>
+            </div>
+            <span style="color:#94a3b8;">→</span>
+            <select id="tmap-${idx}" style="flex:1;padding:7px;border:1.5px solid ${isManaged?'#e2e8f0':'#f59e0b'};border-radius:8px;font-size:13px;">
+                <option value="">— choose managed type —</option>
+                ${optionsFor(isManaged ? t : '')}
+                ${isManaged ? '' : `<option value="__new__:${esc(t)}">➕ Create "${esc(t)}" as a new type</option>`}
+            </select>
+        </div>`;
+    }).join('');
 
     Swal.fire({
-        title: 'Database Comparison',
-        html: html,
-        width: '600px',
+        title: 'Review &amp; Confirm Import',
+        width: '660px',
+        html: `<div style="text-align:left;font-size:13px;">
+            <div style="margin-bottom:12px;padding:9px;background:#f0f9ff;border-radius:8px;border:1px solid #00a1e0;color:#0369a1;"><b>Invoice date:</b> ${esc(invoiceDate)} &nbsp;·&nbsp; <b>${newItems.length}</b> new &nbsp;·&nbsp; <b>${duplicates.length}</b> already in DB</div>
+            <div style="font-weight:800;margin-bottom:4px;">Confirm terminal types</div>
+            <div style="color:#64748b;font-size:11px;margin-bottom:12px;">Every detected type must map to a type from the Terminal Type Manager. Types not in the manager are highlighted — pick the correct one, or choose to create it.</div>
+            ${rows}
+        </div>`,
         showCancelButton: true,
-        showConfirmButton: newItems.length > 0, // Hide 'Proceed' if there's nothing to do
-        confirmButtonText: 'Proceed with Import',
+        confirmButtonText: `Import ${newItems.length} units`,
         confirmButtonColor: '#004990',
-        cancelButtonText: 'Cancel'
-    }).then((result) => {
-        if (result.isConfirmed && newItems.length > 0) {
-            processFinalImport(newItems);
+        focusConfirm: false,
+        preConfirm: () => {
+            const map = {}; const toCreate = []; let missing = false;
+            distinct.forEach((t, idx) => {
+                const v = document.getElementById('tmap-' + idx).value;
+                if (!v) { missing = true; return; }
+                if (v.indexOf('__new__:') === 0) { const name = v.slice('__new__:'.length); map[t] = name; toCreate.push(name); }
+                else map[t] = v;
+            });
+            if (missing) { Swal.showValidationMessage('Please choose a terminal type for every row.'); return false; }
+            return { map, toCreate };
         }
+    }).then(async (res) => {
+        if (!res.isConfirmed || !res.value) return;
+        const { map, toCreate } = res.value;
+        // Create any new types ONLY because the user explicitly chose to.
+        for (const name of [...new Set(toCreate)]) {
+            await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'add_terminal_type', name }) }).catch(() => {});
+        }
+        // Remap every item to its confirmed managed type.
+        const finalItems = newItems.map(i => ({ ...i, terminal_type: map[i.terminal_type || 'UNKNOWN'] || i.terminal_type }));
+        processFinalImport(finalItems);
     });
 }
 // STEP 2: Final Batch Creation

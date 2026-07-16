@@ -85,6 +85,23 @@ export default async function handler(req, res) {
 
         const existingSet = new Set(existingRows.map(r => normalizeSN(r.serial_number)));
 
+        // ── 1b. MANAGED TERMINAL TYPES (Terminal Type Manager = source of truth) ─
+        const { data: typeRows } = await supabase.from('terminal_types').select('name').eq('is_active', true);
+        const managedTypes = [...new Set((typeRows || []).map(r => r.name).filter(Boolean))];
+        const normT = s => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+        const managedNorm = new Map();
+        managedTypes.forEach(n => { if (!managedNorm.has(normT(n))) managedNorm.set(normT(n), n); });
+        // Match a raw type string to a managed type (exact, then brand-prefix stripped).
+        const canonType = (raw) => {
+            if (!raw) return null;
+            const n = normT(raw);
+            if (managedNorm.has(n)) return managedNorm.get(n);
+            const noBrand = String(raw).replace(/^(dejavoo|valor|ingenico|verifone|pax|clover|first ?data|fd|nuvei)\s+/i, '');
+            const n2 = normT(noBrand);
+            if (n2 && n2 !== n && managedNorm.has(n2)) return managedNorm.get(n2);
+            return null;
+        };
+
         // ── 2. CALL GEMINI FOR OCR ────────────────────────────────────────
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         const model = genAI.getGenerativeModel({
@@ -104,7 +121,8 @@ STRICT RULES:
 - NEVER invent, guess, autocomplete, or reformat a serial number. Output only serials literally printed in the document.
 - Do NOT treat model names, SKU/part numbers, quantities, prices, dates, phone numbers, addresses, firmware versions, or specification values as serial numbers.
 - One object per serial number. If a line shows quantity 5 with 5 printed serials, output 5 objects.
-- Map SKU codes to names: KOZ-P1=Dejavoo P1, KOZ-P3=Dejavoo P3, KOZ-P5=Dejavoo P5, KOZ-P17=Dejavoo P17, KOZ-Z11=Dejavoo Z11, KOZ-Z9=Dejavoo Z9.
+- For "terminal_type" you MUST choose the closest match from this EXACT list of allowed terminal types (copy the name exactly, including capitalization). If none is a clear match, use "UNKNOWN".
+ALLOWED TERMINAL TYPES: ${managedTypes.join(' | ')}
 - If it is NOT an invoice/packing_slip/shipment, set "is_invoice": false and return an empty "data" array. Do not extract anything.
 - Return ONLY valid JSON, no markdown.
 
@@ -193,7 +211,17 @@ Output format:
             return fail(422, `No serial numbers found.${hint}`);
         }
 
-        // ── 4. CATEGORIZE AGAINST DATABASE ───────────────────────────────
+        // ── 4a. CANONICALIZE TYPES against the Terminal Type Manager ─────
+        // Never invent a type — map to a managed one, or flag as unknown so the
+        // dashboard can ask the user to pick/create it.
+        extracted.forEach(item => {
+            const c = canonType(item.terminal_type);
+            item.suggested_type = item.terminal_type || null;   // what the AI/regex thought
+            item.type_known = !!c;
+            item.terminal_type = c || item.terminal_type || 'UNKNOWN';
+        });
+
+        // ── 4b. CATEGORIZE AGAINST DATABASE ──────────────────────────────
         const newItems   = [];
         const duplicates = [];
 
@@ -206,6 +234,9 @@ Output format:
             }
         });
 
+        // Distinct types that are NOT in the manager — the UI must resolve these.
+        const unknownTypes = [...new Set(newItems.filter(i => !i.type_known).map(i => i.suggested_type || i.terminal_type))];
+
         return res.status(200).json({
             success: true,
             document_type: docType,
@@ -213,6 +244,8 @@ Output format:
             new_items:   newItems,
             duplicates:  duplicates,
             total_extracted: extracted.length,
+            managed_types: managedTypes,
+            unknown_types: unknownTypes,
         });
 
     } catch (err) {
