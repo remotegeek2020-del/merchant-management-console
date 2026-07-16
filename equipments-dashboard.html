@@ -1163,7 +1163,7 @@ async function processFinalImport(itemsToCreate) {
         ttSel.innerHTML = allTypes.map(t =>
             `<option value="${t}"${t === currentType ? ' selected' : ''}>${t}</option>`
         ).join('');
-        if (!currentType) ttSel.value = 'Dejavoo P1';
+        if (!currentType && ttSel.options.length) ttSel.selectedIndex = 0;
         document.getElementById('edit-status').value = item.status === 'deployed' ? 'stocked' : item.status;
         
         if (item.received_date) {
@@ -1809,7 +1809,7 @@ function rqInvExportCSV() {
     let vendorMap = {};
 
     let _typeStats = {};   // type -> { total, office, repairs, deployed, retired, other }
-    async function loadTerminalTypes() {
+    async function loadTypeFilter() {
         const sel = document.getElementById('typeFilter');
         if (!sel) return;
         try {
@@ -1857,7 +1857,7 @@ function rqInvExportCSV() {
         // Enter key in the search box runs the search
         const _si = document.getElementById('invSearch');
         if (_si) _si.addEventListener('keydown', e => { if (e.key === 'Enter') { currentPage = 0; fetchInventory(); } });
-        loadTerminalTypes();
+        loadTypeFilter();
         // Load vendor map in background (non-blocking)
         fetch('/api/terminal-manager', {
             method: 'POST',
