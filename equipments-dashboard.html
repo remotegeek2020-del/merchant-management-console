@@ -582,31 +582,54 @@ function confirmAIImport(result) {
     // Which detected types are NOT in the database (Terminal Type Manager)?
     const unknownTypes = distinct.filter(t => !managedSet.has(String(t).toLowerCase()));
 
+    const isUnknownName = t => !t || String(t).trim().toUpperCase() === 'UNKNOWN';
+
     const rows = distinct.map((t, idx) => {
         const isManaged = managedSet.has(String(t).toLowerCase());
-        // For an unknown type, DEFAULT the dropdown to "Add it to the database" so
-        // the user's likely intent ("yes, add it") is pre-selected — but they must
-        // still tick the acknowledgment below before the import runs.
-        const addVal = `__new__:${esc(t)}`;
-        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-            <div style="flex:0 0 42%;">
-                <div style="font-weight:700;font-size:13px;">${esc(t)}</div>
-                <div style="font-size:11px;color:#94a3b8;">${counts[t]} unit${counts[t]!==1?'s':''}${isManaged?'':' · <span style="color:#d97706;font-weight:700;">not in database</span>'}</div>
+        // A detected type either maps to an existing managed type, or the user names
+        // a NEW type for it. For unknowns we never add a type literally called
+        // "UNKNOWN" — the user types the correct name in the rename field.
+        const detectedName = isUnknownName(t) ? '' : String(t);
+        if (isManaged) {
+            return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <div style="flex:0 0 42%;">
+                    <div style="font-weight:700;font-size:13px;">${esc(t)}</div>
+                    <div style="font-size:11px;color:#94a3b8;">${counts[t]} unit${counts[t]!==1?'s':''}</div>
+                </div>
+                <span style="color:#94a3b8;">→</span>
+                <select id="tmap-${idx}" class="ai-tmap" style="flex:1;padding:7px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;">
+                    <option value="">— choose managed type —</option>
+                    ${optionsFor(t)}
+                </select>
+            </div>`;
+        }
+        // Unknown / not-in-database row: choose to map OR add-new (default), with a rename box.
+        return `<div style="margin-bottom:10px;padding:8px;border:1px solid #fde68a;border-radius:9px;background:#fffdf5;">
+            <div style="display:flex;align-items:center;gap:8px;">
+                <div style="flex:0 0 42%;">
+                    <div style="font-weight:700;font-size:13px;">${esc(t)}</div>
+                    <div style="font-size:11px;color:#94a3b8;">${counts[t]} unit${counts[t]!==1?'s':''} · <span style="color:#d97706;font-weight:700;">not in database</span></div>
+                </div>
+                <span style="color:#94a3b8;">→</span>
+                <select id="tmap-${idx}" class="ai-tmap" style="flex:1;padding:7px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;">
+                    <option value="">— choose action —</option>
+                    <optgroup label="Map to an existing type">${optionsFor('')}</optgroup>
+                    <option value="__new__" selected>➕ Add as a NEW terminal type…</option>
+                </select>
             </div>
-            <span style="color:#94a3b8;">→</span>
-            <select id="tmap-${idx}" data-newval="${addVal}" class="ai-tmap" style="flex:1;padding:7px;border:1.5px solid ${isManaged?'#e2e8f0':'#f59e0b'};border-radius:8px;font-size:13px;">
-                <option value="">— choose managed type —</option>
-                ${optionsFor(isManaged ? t : '')}
-                ${isManaged ? '' : `<option value="${addVal}" selected>➕ Add "${esc(t)}" to the database</option>`}
-            </select>
+            <div id="tnewwrap-${idx}" style="margin-top:7px;">
+                <input id="tnew-${idx}" class="ai-tnew" type="text" value="${esc(detectedName)}" placeholder="Exact new type name (e.g. Dejavoo P9)"
+                    style="width:100%;padding:7px 9px;border:1.5px solid #f59e0b;border-radius:8px;font-size:13px;box-sizing:border-box;">
+                <div style="font-size:10px;color:#94a3b8;margin-top:3px;">Name it exactly as it should appear in the Terminal Type Manager.</div>
+            </div>
         </div>`;
     }).join('');
 
-    // Clear notice + 2-step acknowledgment shown ONLY when new types would be created.
+    // 2-step acknowledgment shown ONLY when new types would actually be created.
     const noticeHtml = unknownTypes.length ? `
         <div id="ai-new-notice" style="margin:14px 0 6px;padding:12px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;">
             <div style="font-weight:800;color:#b45309;font-size:13px;margin-bottom:4px;">⚠️ ${unknownTypes.length} terminal type${unknownTypes.length!==1?'s are':' is'} not in the database</div>
-            <div style="font-size:12px;color:#92400e;margin-bottom:10px;">${unknownTypes.map(esc).map(x=>'<b>'+x+'</b>').join(', ')} — would you like me to add ${unknownTypes.length!==1?'them':'it'} to the Terminal Type Manager? You can instead map ${unknownTypes.length!==1?'them':'it'} to an existing type above.</div>
+            <div style="font-size:12px;color:#92400e;margin-bottom:10px;">Name each new type correctly above (or map it to an existing type), then confirm.</div>
             <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#78350f;cursor:pointer;">
                 <input type="checkbox" id="ai-ack" style="margin-top:2px;">
                 <span>I confirm adding the new terminal type${unknownTypes.length!==1?'s':''} above. This is logged and an email is sent to the developer.</span>
@@ -628,26 +651,45 @@ function confirmAIImport(result) {
         confirmButtonColor: '#004990',
         focusConfirm: false,
         didOpen: () => {
-            // Show/hide the acknowledgment as the user changes what gets created.
             const notice = document.getElementById('ai-new-notice');
             const sync = () => {
-                if (!notice) return;
-                const anyNew = Array.from(document.querySelectorAll('.ai-tmap')).some(s => s.value.indexOf('__new__:') === 0);
-                notice.style.display = anyNew ? '' : 'none';
-                if (!anyNew) { const a = document.getElementById('ai-ack'); if (a) a.checked = false; }
+                let anyNew = false;
+                document.querySelectorAll('.ai-tmap').forEach(s => {
+                    const idx = s.id.replace('tmap-', '');
+                    const wrap = document.getElementById('tnewwrap-' + idx);
+                    const isNew = s.value === '__new__';
+                    if (wrap) wrap.style.display = isNew ? '' : 'none';
+                    if (isNew) anyNew = true;
+                });
+                if (notice) {
+                    notice.style.display = anyNew ? '' : 'none';
+                    if (!anyNew) { const a = document.getElementById('ai-ack'); if (a) a.checked = false; }
+                }
             };
             document.querySelectorAll('.ai-tmap').forEach(s => s.addEventListener('change', sync));
             sync();
         },
         preConfirm: () => {
-            const map = {}; const toCreate = []; let missing = false;
+            const map = {}; const toCreate = []; let missing = false; let missingName = false; let dup = false;
+            const chosenNew = {};   // lowercased new name -> canonical, to catch collisions
             distinct.forEach((t, idx) => {
                 const v = document.getElementById('tmap-' + idx).value;
                 if (!v) { missing = true; return; }
-                if (v.indexOf('__new__:') === 0) { const name = v.slice('__new__:'.length); map[t] = name; toCreate.push(name); }
-                else map[t] = v;
+                if (v === '__new__') {
+                    const nameEl = document.getElementById('tnew-' + idx);
+                    const name = (nameEl && nameEl.value || '').trim();
+                    if (!name) { missingName = true; if (nameEl) nameEl.style.borderColor = '#dc2626'; return; }
+                    // Guard: if the typed name already exists as a managed type, just map to it.
+                    if (managedSet.has(name.toLowerCase())) { map[t] = name; return; }
+                    map[t] = name; toCreate.push(name);
+                    if (chosenNew[name.toLowerCase()]) dup = true; else chosenNew[name.toLowerCase()] = name;
+                } else {
+                    map[t] = v;
+                }
             });
-            if (missing) { Swal.showValidationMessage('Please choose a terminal type for every row.'); return false; }
+            if (missing)     { Swal.showValidationMessage('Please choose a terminal type or action for every row.'); return false; }
+            if (missingName) { Swal.showValidationMessage('Please type a name for each NEW terminal type (highlighted red).'); return false; }
+            if (dup)         { Swal.showValidationMessage('Two new types have the same name — give each a unique name.'); return false; }
             // 2-step: creating new types requires the acknowledgment tick.
             if (toCreate.length) {
                 const ack = document.getElementById('ai-ack');

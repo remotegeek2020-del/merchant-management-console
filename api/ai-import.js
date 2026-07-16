@@ -124,7 +124,7 @@ STRICT RULES:
 - NEVER invent, guess, autocomplete, or reformat a serial number. Output only serials literally printed in the document.
 - Do NOT treat model names, SKU/part numbers, quantities, prices, dates, phone numbers, addresses, firmware versions, or specification values as serial numbers.
 - One object per serial number. If a line shows quantity 5 with 5 printed serials, output 5 objects.
-- For "terminal_type" you MUST choose the closest match from this EXACT list of allowed terminal types (copy the name exactly, including capitalization). If none is a clear match, use "UNKNOWN".
+- For "terminal_type": FIRST try to match one from this EXACT allowed list (copy the name exactly, including capitalization). If none is a clear match, put the model/product name EXACTLY AS PRINTED on the document (e.g. "P9 Dual", "Dejavoo P9") — this lets a human map or add it. Only use "UNKNOWN" if the document truly shows no model name at all.
 ALLOWED TERMINAL TYPES: ${managedTypes.join(' | ')}
 - If it is NOT an invoice/packing_slip/shipment, set "is_invoice": false and return an empty "data" array. Do not extract anything.
 - Return ONLY valid JSON, no markdown.
