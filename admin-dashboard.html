@@ -849,38 +849,44 @@ async function loadStaffAccess() {
         staffData = result.data || [];
         if (!staffData.length) { container.innerHTML = `<div class="empty-state">No staff users found.</div>`; return; }
         const ACCESS_COLS = [
-            { key: 'is_active',             label: 'Active'      },
-            { key: 'access_admin_dashboard', label: 'Admin Dash'  },
-            { key: 'access_inventory',       label: 'Inventory'   },
-            { key: 'access_deployments',     label: 'Deployments' },
-            { key: 'access_returns',         label: 'Returns'     },
-            { key: 'access_merchants',       label: 'Merchants'   },
-            { key: 'access_partners',        label: 'Partners'    },
-            { key: 'access_jarvis',          label: 'Jarvis AI'   },
-            { key: 'access_marketing',       label: 'Marketing'   },
-            { key: 'access_terminal_types',  label: 'Term. Types' },
-            { key: 'access_sending_reports', label: 'Reports'     },
-            { key: 'can_delete_tickets',              label: 'Del Tickets' },
-            { key: 'can_edit_legacy_terminal_type',  label: 'Edit Leg.Type' },
+            { key: 'is_active',              label: 'Active',       group: 'Status'    },
+            { key: 'access_admin_dashboard', label: 'Admin Dash',   group: 'Modules'   },
+            { key: 'access_inventory',       label: 'Inventory',    group: 'Modules'   },
+            { key: 'access_deployments',     label: 'Deployments',  group: 'Modules'   },
+            { key: 'access_returns',         label: 'Returns',      group: 'Modules'   },
+            { key: 'access_merchants',       label: 'Merchants',    group: 'Modules'   },
+            { key: 'access_partners',        label: 'Partners',     group: 'Modules'   },
+            { key: 'access_jarvis',          label: 'Jarvis AI',    group: 'Tools & AI'},
+            { key: 'access_marketing',       label: 'Marketing',    group: 'Tools & AI'},
+            { key: 'access_terminal_types',  label: 'Term. Types',  group: 'Tools & AI'},
+            { key: 'access_sending_reports', label: 'Reports',      group: 'Tools & AI'},
+            { key: 'can_delete_tickets',             label: 'Del Tickets',   group: 'Elevated' },
+            { key: 'can_edit_legacy_terminal_type',  label: 'Edit Leg.Type', group: 'Elevated' },
         ];
+        const GROUP_ORDER = ['Status', 'Modules', 'Tools & AI', 'Elevated'];
+        const groups = GROUP_ORDER.map(g => ({ name: g, cols: ACCESS_COLS.filter(c => c.group === g) })).filter(x => x.cols.length);
+        const colLabel = c => `<div class="access-col"><div class="access-col-label">${c.label}</div></div>`;
         const headerHtml = `
-            <div style="display:flex;align-items:center;gap:16px;padding:10px 20px;border-bottom:2px solid var(--border);background:var(--surface-2);">
-                <div style="flex:1;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Staff Member</div>
-                ${ACCESS_COLS.map(c => `<div class="access-col"><div class="access-col-label">${c.label}</div></div>`).join('')}
+            <div style="display:flex;align-items:flex-end;gap:24px;padding:8px 20px;border-bottom:2px solid var(--border);background:var(--surface-2);">
+                <div style="flex:1;min-width:140px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Staff Member</div>
+                ${groups.map(g => `<div style="display:flex;flex-direction:column;gap:5px;">
+                    <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:center;padding-bottom:2px;${g.name === 'Status' ? 'color:transparent;' : 'color:#0369a1;border-bottom:2px solid #bae6fd;'}">${g.name === 'Status' ? '·' : g.name}</div>
+                    <div style="display:flex;gap:16px;">${g.cols.map(colLabel).join('')}</div>
+                </div>`).join('')}
             </div>`;
         const rowsHtml = staffData.map(u => `
-            <div class="access-row">
+            <div class="access-row" style="gap:24px;">
                 <div style="flex:1;min-width:140px;">
                     <div style="font-weight:700;color:var(--text-primary);">${u.first_name || ''} ${u.last_name || ''}</div>
                     <div style="font-size:11px;color:var(--text-muted);">${u.email || ''} &nbsp;·&nbsp; <span style="color:var(--pp-accent);font-weight:600;">${u.role || 'staff'}</span></div>
                 </div>
-                ${ACCESS_COLS.map(c => `
+                ${groups.map(g => `<div style="display:flex;gap:16px;">${g.cols.map(c => `
                     <div class="access-col">
                         <label class="toggle-pill">
                             <input type="checkbox" data-uid="${u.userid}" data-key="${c.key}" ${u[c.key] ? 'checked' : ''} onchange="markChange(this)">
                             <span class="toggle-slider"></span>
                         </label>
-                    </div>`).join('')}
+                    </div>`).join('')}</div>`).join('')}
             </div>`).join('');
         container.innerHTML = headerHtml + rowsHtml;
     } catch (err) {
