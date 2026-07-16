@@ -186,14 +186,17 @@ function renderPermGroups(user, iAmSuper, cantEdit) {
         const rows = items.map(f => {
             const locked = (f.privileged && !iAmSuper) || cantEdit;
             const on = user && user[f.key];
-            return `<label class="perm-item" style="${locked ? 'opacity:.55;pointer-events:none;' : ''}">
+            // Row is a plain div; the label uses `for=` (no wrapping) so clicking
+            // the text OR the toggle registers exactly one change — never a
+            // double-toggle that silently reverts.
+            return `<div class="perm-item" style="${locked ? 'opacity:.55;pointer-events:none;' : ''}">
                 <span class="material-icons" style="font-size:19px;color:#64748b;">${f.icon || 'check'}</span>
-                <span style="flex:1;">
+                <label for="perm-${f.key}" style="flex:1;cursor:pointer;margin:0;">
                     <span style="font-weight:700;font-size:13px;color:#0f172a;">${f.label}${f.privileged && !iAmSuper ? ' <span style="font-size:9px;color:#94a3b8;font-weight:600;">(Super Admin)</span>' : ''}</span>
                     <span style="display:block;font-size:11px;color:#94a3b8;line-height:1.35;">${f.desc || ''}</span>
-                </span>
+                </label>
                 <span class="pp-toggle"><input type="checkbox" id="perm-${f.key}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}></span>
-            </label>`;
+            </div>`;
         }).join('');
         return `<div style="margin-bottom:14px;">
             <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#0369a1;margin:0 0 6px;">${g}</div>
