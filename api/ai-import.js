@@ -4,6 +4,9 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 
 export const config = {
     api: { bodyParser: { sizeLimit: '10mb' } },
+    // Vercel Pro allows up to 300s. Give OCR plenty of room so large / slow
+    // reads finish instead of hitting the old 55s ceiling.
+    maxDuration: 300,
 };
 
 const SERIAL_PATTERNS = [
@@ -129,8 +132,10 @@ ALLOWED TERMINAL TYPES: ${managedTypes.join(' | ')}
 Output format:
 {"is_invoice": true, "document_type": "invoice|packing_slip|shipment|spec_sheet|datasheet|brochure|manual|other", "invoice_date": "YYYY-MM-DD or null", "data": [{"serial_number": "EXACT_SERIAL", "terminal_type": "Proper Model Name"}]}`;
 
+        // Sit just under the function's maxDuration (300s) so we return a clean
+        // 504 rather than letting Vercel hard-kill the request.
         const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 55000)
+            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 290000)
         );
 
         let rawText = '';
@@ -146,7 +151,7 @@ Output format:
             rawText = response.text().trim();
         } catch (err) {
             if (err.message === 'VERCEL_TIMEOUT') {
-                return fail(504, 'AI timed out. Try uploading one page at a time or convert to JPG.');
+                return fail(504, 'AI took too long to read this file (over 5 minutes). Try uploading one page at a time or convert to JPG.');
             }
             throw err;
         }
