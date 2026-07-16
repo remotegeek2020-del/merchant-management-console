@@ -12,13 +12,44 @@ export default async function handler(req, res) {
     // Resolve actor identity from session — never trust client-provided headers for logging
     const { data: actor } = await supabase
         .from('app_users')
-        .select('email, first_name, last_name, role, can_manage_retired_units')
+        .select('email, first_name, last_name, role, can_manage_retired_units, access_terminal_types')
         .eq('userid', session.userid)
         .single();
     const actorEmail = actor?.email || 'Unknown';
     const actorName  = [actor?.first_name, actor?.last_name].filter(Boolean).join(' ') || 'Staff';
 
     const { action, id, payload, query, filterLocation, filterStatus, limit = 50, page = 0 } = req.body;
+
+    // Managing the Terminal Type list requires the granular access (or admin).
+    const TERMINAL_MANAGE_ACTIONS = new Set(['add_terminal_type', 'update_terminal_type', 'merge_terminal_type', 'delete_terminal_type']);
+    const canManageTypes = actor?.role === 'super_admin' || actor?.role === 'admin' || actor?.access_terminal_types === true;
+    if (TERMINAL_MANAGE_ACTIONS.has(action) && !canManageTypes) {
+        return res.status(403).json({ success: false, message: 'You do not have access to manage terminal types.' });
+    }
+
+    // Notify the web developer of any terminal-type change (best-effort).
+    async function notifyDevTerminalChange(subject, detailRows) {
+        try {
+            const { data: setting } = await supabase.from('site_settings').select('value').eq('key', 'web_developer_email').single();
+            const to = setting?.value;
+            if (!to || !process.env.POSTMARK_SERVER_TOKEN) return;
+            const { ServerClient } = await import('postmark');
+            const client = new ServerClient(process.env.POSTMARK_SERVER_TOKEN);
+            const rows = Object.entries(detailRows).map(([k, v]) =>
+                `<tr><td style="padding:9px 13px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:700;color:#475569;width:150px;">${k}</td><td style="padding:9px 13px;border:1px solid #e2e8f0;">${v}</td></tr>`).join('');
+            await client.sendEmail({
+                From: process.env.EMAIL_FROM || 'noreply@mypayprotec.com',
+                To: to,
+                Subject: `[Terminal Types] ${subject}`,
+                HtmlBody: `<div style="font-family:Arial,sans-serif;max-width:580px;margin:0 auto;padding:30px 20px;">
+                    <img src="https://assets.cdn.filesafe.space/dfg08aPdtlQ1RhIKkCnN/media/66cf5cf28a35e448970f1ead.png" style="height:30px;margin-bottom:20px;display:block;">
+                    <h2 style="color:#002d5a;margin:0 0 14px;">Terminal Type Change</h2>
+                    <table style="width:100%;border-collapse:collapse;font-size:14px;">${rows}</table>
+                    <p style="color:#94a3b8;font-size:12px;margin-top:18px;">Automated notification from the PayProTec portal.</p></div>`,
+                MessageStream: 'outbound'
+            });
+        } catch (e) { /* non-blocking */ }
+    }
 
     try {
 
@@ -843,6 +874,7 @@ if (action === 'getMonthlyReport') {
                 status: 'success', category: 'inventory', target_id: name.trim(), target_type: 'terminal_type', severity: 'info',
                 old_value: null, new_value: { name: name.trim(), sort_order: nextOrder }
             }).then(() => {}).catch(() => {});
+            await notifyDevTerminalChange(`New type added: "${name.trim()}"`, { 'Change': 'Added a terminal type', 'Terminal type': name.trim(), 'By': `${actorName} (${actorEmail})` });
             return res.status(200).json({ success: true });
         }
 
@@ -882,6 +914,10 @@ if (action === 'getMonthlyReport') {
                 status: 'success', category: 'inventory', target_id: ttOld?.name || String(type_id), target_type: 'terminal_type', severity: 'info',
                 old_value: ttOld || null, new_value: { ...patch, equipment_updated: cascaded }
             }).then(() => {}).catch(() => {});
+            await notifyDevTerminalChange(
+                (patch.name !== undefined && patch.name !== ttOld?.name) ? `Renamed to "${patch.name}"` : `Updated "${ttOld?.name || type_id}"`,
+                { 'Change': (patch.name !== undefined && patch.name !== ttOld?.name) ? 'Renamed a terminal type' : (is_active !== undefined ? 'Changed active status' : 'Updated a terminal type'),
+                  'From': ttOld?.name || '—', 'To': patch.name || ttOld?.name || '—', 'Units updated': cascaded, 'By': `${actorName} (${actorEmail})` });
             return res.status(200).json({ success: true, renamed: cascaded });
         }
 
@@ -896,6 +932,7 @@ if (action === 'getMonthlyReport') {
                 status: 'success', category: 'inventory', target_id: ttDel?.name || String(type_id), target_type: 'terminal_type', severity: 'warning',
                 old_value: ttDel || null, new_value: { deleted: true }
             }).then(() => {}).catch(() => {});
+            await notifyDevTerminalChange(`Deleted "${ttDel?.name || type_id}"`, { 'Change': 'Deleted a terminal type', 'Terminal type': ttDel?.name || String(type_id), 'By': `${actorName} (${actorEmail})` });
             return res.status(200).json({ success: true });
         }
 
@@ -940,6 +977,7 @@ if (action === 'getMonthlyReport') {
                 old_value: { type_id: source_id, name: src.name },
                 new_value: { merged_into: tgt.name, equipment_updated: count || 0 }
             }).then(() => {}).catch(() => {});
+            await notifyDevTerminalChange(`Merged "${src.name}" → "${tgt.name}"`, { 'Change': 'Merged terminal types', 'From (removed)': src.name, 'Into (kept)': tgt.name, 'Units moved': count || 0, 'By': `${actorName} (${actorEmail})` });
 
             return res.status(200).json({ success: true, merged: count || 0, from: src.name, into: tgt.name });
         }

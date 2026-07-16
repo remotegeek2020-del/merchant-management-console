@@ -244,6 +244,7 @@ async function authorizeUser(user, sessionToken) {
         localStorage.setItem('pp_access_admin_dashboard',   parseBool(user.access_admin_dashboard)   ? 'true' : 'false');
         localStorage.setItem('pp_access_sending_reports',   parseBool(user.access_sending_reports)   ? 'true' : 'false');
         localStorage.setItem('pp_access_marketing',         parseBool(user.access_marketing)         ? 'true' : 'false');
+        localStorage.setItem('pp_access_terminal_types',    parseBool(user.access_terminal_types)    ? 'true' : 'false');
         await new Promise(r => setTimeout(r, 100));
         window.dispatchEvent(new CustomEvent('pp-authorized', { detail: user }));
     } catch (e) { console.error("Storage Error:", e); }
