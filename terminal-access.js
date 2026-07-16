@@ -11,18 +11,22 @@
     var token = localStorage.getItem('pp_session_token') || '';
     if (!token) return;
 
-    function roleIsAdmin(role) {
-        role = (role || '').toLowerCase();
-        return role.indexOf('super') !== -1 || role.indexOf('admin') !== -1;
+    // ONLY super_admin is always-on. Everyone else — including "admin" and
+    // "Operations Admin" — must have the granular access_terminal_types flag.
+    function roleIsSuper(role) {
+        return (role || '').toLowerCase().indexOf('super') !== -1;
     }
 
     // Gate: build the UI only if the staff member has terminal-type access.
     // localStorage (mirrored at login) is the fast path, but it lives only on
     // pages that load js/script.js — so if it doesn't already grant access we
     // authoritatively re-check with the server (validate) and refresh the flag.
-    // This makes a freshly-granted flag work WITHOUT a re-login.
+    // This makes a freshly-granted flag work WITHOUT a re-login. Crucially, we
+    // ALSO re-check when the fast path WOULD grant (to catch a revoked flag that
+    // is still stale-'true' in localStorage), so turning the toggle off actually
+    // hides the button on the next load.
     var lsRole = (localStorage.getItem('pp_role') || '').toLowerCase();
-    if (roleIsAdmin(lsRole) || localStorage.getItem('pp_access_terminal_types') === 'true') {
+    if (roleIsSuper(lsRole)) {
         build();
     } else {
         fetch('/api/login', {
@@ -32,8 +36,8 @@
         }).then(function (r) { return r.json(); }).then(function (res) {
             var u = res && res.user ? res.user : res;
             if (!u) return;
-            var granted = roleIsAdmin(u.role) || u.access_terminal_types === true;
-            // Keep localStorage in sync so subsequent loads use the fast path.
+            var granted = roleIsSuper(u.role) || u.access_terminal_types === true;
+            // Keep localStorage in sync (authoritative) so the matrix/other pages agree.
             try { localStorage.setItem('pp_access_terminal_types', granted ? 'true' : 'false'); } catch (e) {}
             if (granted) build();
         }).catch(function () {});
