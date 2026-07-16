@@ -546,21 +546,39 @@ function confirmAIImport(result) {
     const distinct = Object.keys(counts);
     const optionsFor = sel => managed.map(m => `<option value="${esc(m)}" ${m===sel?'selected':''}>${esc(m)}</option>`).join('');
 
+    // Which detected types are NOT in the database (Terminal Type Manager)?
+    const unknownTypes = distinct.filter(t => !managedSet.has(String(t).toLowerCase()));
+
     const rows = distinct.map((t, idx) => {
         const isManaged = managedSet.has(String(t).toLowerCase());
+        // For an unknown type, DEFAULT the dropdown to "Add it to the database" so
+        // the user's likely intent ("yes, add it") is pre-selected — but they must
+        // still tick the acknowledgment below before the import runs.
+        const addVal = `__new__:${esc(t)}`;
         return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
             <div style="flex:0 0 42%;">
                 <div style="font-weight:700;font-size:13px;">${esc(t)}</div>
-                <div style="font-size:11px;color:#94a3b8;">${counts[t]} unit${counts[t]!==1?'s':''}${isManaged?'':' · <span style="color:#d97706;font-weight:700;">not in manager</span>'}</div>
+                <div style="font-size:11px;color:#94a3b8;">${counts[t]} unit${counts[t]!==1?'s':''}${isManaged?'':' · <span style="color:#d97706;font-weight:700;">not in database</span>'}</div>
             </div>
             <span style="color:#94a3b8;">→</span>
-            <select id="tmap-${idx}" style="flex:1;padding:7px;border:1.5px solid ${isManaged?'#e2e8f0':'#f59e0b'};border-radius:8px;font-size:13px;">
+            <select id="tmap-${idx}" data-newval="${addVal}" class="ai-tmap" style="flex:1;padding:7px;border:1.5px solid ${isManaged?'#e2e8f0':'#f59e0b'};border-radius:8px;font-size:13px;">
                 <option value="">— choose managed type —</option>
                 ${optionsFor(isManaged ? t : '')}
-                ${isManaged ? '' : `<option value="__new__:${esc(t)}">➕ Create "${esc(t)}" as a new type</option>`}
+                ${isManaged ? '' : `<option value="${addVal}" selected>➕ Add "${esc(t)}" to the database</option>`}
             </select>
         </div>`;
     }).join('');
+
+    // Clear notice + 2-step acknowledgment shown ONLY when new types would be created.
+    const noticeHtml = unknownTypes.length ? `
+        <div id="ai-new-notice" style="margin:14px 0 6px;padding:12px;background:#fffbeb;border:1.5px solid #f59e0b;border-radius:10px;">
+            <div style="font-weight:800;color:#b45309;font-size:13px;margin-bottom:4px;">⚠️ ${unknownTypes.length} terminal type${unknownTypes.length!==1?'s are':' is'} not in the database</div>
+            <div style="font-size:12px;color:#92400e;margin-bottom:10px;">${unknownTypes.map(esc).map(x=>'<b>'+x+'</b>').join(', ')} — would you like me to add ${unknownTypes.length!==1?'them':'it'} to the Terminal Type Manager? You can instead map ${unknownTypes.length!==1?'them':'it'} to an existing type above.</div>
+            <label style="display:flex;gap:8px;align-items:flex-start;font-size:12px;color:#78350f;cursor:pointer;">
+                <input type="checkbox" id="ai-ack" style="margin-top:2px;">
+                <span>I confirm adding the new terminal type${unknownTypes.length!==1?'s':''} above. This is logged and an email is sent to the developer.</span>
+            </label>
+        </div>` : '';
 
     Swal.fire({
         title: 'Review &amp; Confirm Import',
@@ -568,13 +586,26 @@ function confirmAIImport(result) {
         html: `<div style="text-align:left;font-size:13px;">
             <div style="margin-bottom:12px;padding:9px;background:#f0f9ff;border-radius:8px;border:1px solid #00a1e0;color:#0369a1;"><b>Invoice date:</b> ${esc(invoiceDate)} &nbsp;·&nbsp; <b>${newItems.length}</b> new &nbsp;·&nbsp; <b>${duplicates.length}</b> already in DB</div>
             <div style="font-weight:800;margin-bottom:4px;">Confirm terminal types</div>
-            <div style="color:#64748b;font-size:11px;margin-bottom:12px;">Every detected type must map to a type from the Terminal Type Manager. Types not in the manager are highlighted — pick the correct one, or choose to create it.</div>
+            <div style="color:#64748b;font-size:11px;margin-bottom:12px;">Every detected type must map to a type from the Terminal Type Manager. Types not in the database are highlighted — pick the correct one, or add it below.</div>
             ${rows}
+            ${noticeHtml}
         </div>`,
         showCancelButton: true,
         confirmButtonText: `Import ${newItems.length} units`,
         confirmButtonColor: '#004990',
         focusConfirm: false,
+        didOpen: () => {
+            // Show/hide the acknowledgment as the user changes what gets created.
+            const notice = document.getElementById('ai-new-notice');
+            const sync = () => {
+                if (!notice) return;
+                const anyNew = Array.from(document.querySelectorAll('.ai-tmap')).some(s => s.value.indexOf('__new__:') === 0);
+                notice.style.display = anyNew ? '' : 'none';
+                if (!anyNew) { const a = document.getElementById('ai-ack'); if (a) a.checked = false; }
+            };
+            document.querySelectorAll('.ai-tmap').forEach(s => s.addEventListener('change', sync));
+            sync();
+        },
         preConfirm: () => {
             const map = {}; const toCreate = []; let missing = false;
             distinct.forEach((t, idx) => {
@@ -584,14 +615,27 @@ function confirmAIImport(result) {
                 else map[t] = v;
             });
             if (missing) { Swal.showValidationMessage('Please choose a terminal type for every row.'); return false; }
+            // 2-step: creating new types requires the acknowledgment tick.
+            if (toCreate.length) {
+                const ack = document.getElementById('ai-ack');
+                if (!ack || !ack.checked) { Swal.showValidationMessage('Please tick the box to confirm adding the new terminal type(s).'); return false; }
+            }
             return { map, toCreate };
         }
     }).then(async (res) => {
         if (!res.isConfirmed || !res.value) return;
         const { map, toCreate } = res.value;
-        // Create any new types ONLY because the user explicitly chose to.
+        // Create any new types ONLY because the user explicitly chose to (this also
+        // emails the developer server-side via notifyDevTerminalChange).
         for (const name of [...new Set(toCreate)]) {
-            await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'add_terminal_type', name }) }).catch(() => {});
+            try {
+                const r = await fetch('/api/equipments', { method: 'POST', headers: equipHeaders(), body: JSON.stringify({ action: 'add_terminal_type', name }) });
+                const j = await r.json().catch(() => ({}));
+                if (j && j.success === false && j.message && j.message.indexOf('already exists') === -1) {
+                    Swal.fire('Could not add type', j.message, 'error');
+                    return;
+                }
+            } catch (e) { /* best-effort; import still proceeds with the chosen name */ }
         }
         // Remap every item to its confirmed managed type.
         const finalItems = newItems.map(i => ({ ...i, terminal_type: map[i.terminal_type || 'UNKNOWN'] || i.terminal_type }));
