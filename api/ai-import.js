@@ -132,28 +132,39 @@ ALLOWED TERMINAL TYPES: ${managedTypes.join(' | ')}
 Output format:
 {"is_invoice": true, "document_type": "invoice|packing_slip|shipment|spec_sheet|datasheet|brochure|manual|other", "invoice_date": "YYYY-MM-DD or null", "data": [{"serial_number": "EXACT_SERIAL", "terminal_type": "Proper Model Name"}]}`;
 
-        // Sit just under the function's maxDuration (300s) so we return a clean
-        // 504 rather than letting Vercel hard-kill the request.
-        const timeoutPromise = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error('VERCEL_TIMEOUT')), 290000)
-        );
-
-        let rawText = '';
-        try {
-            const result = await Promise.race([
+        // One Gemini attempt bounded by `ms`. A stalled call (model not
+        // responding) is far more common than genuinely-slow OCR, so we keep
+        // each attempt short and RETRY rather than waiting one long stretch.
+        const attempt = (ms) => {
+            const timeoutPromise = new Promise((_, reject) =>
+                setTimeout(() => reject(new Error('ATTEMPT_TIMEOUT')), ms)
+            );
+            return Promise.race([
                 model.generateContent([
                     { text: prompt },
                     { inlineData: { data: fileBase64, mimeType: 'application/pdf' } }
-                ]),
+                ]).then(r => r.response).then(resp => resp.text().trim()),
                 timeoutPromise
             ]);
-            const response = await result.response;
-            rawText = response.text().trim();
-        } catch (err) {
-            if (err.message === 'VERCEL_TIMEOUT') {
-                return fail(504, 'AI took too long to read this file (over 5 minutes). Try uploading one page at a time or convert to JPG.');
+        };
+
+        let rawText = '';
+        const PER_ATTEMPT_MS = 90000;   // 90s per try
+        const MAX_TRIES = 3;            // ~270s worst case, under maxDuration 300
+        let lastErr = null;
+        for (let tryNo = 1; tryNo <= MAX_TRIES; tryNo++) {
+            try {
+                rawText = await attempt(PER_ATTEMPT_MS);
+                lastErr = null;
+                break;
+            } catch (err) {
+                lastErr = err;
+                console.warn(`AI import attempt ${tryNo}/${MAX_TRIES} failed: ${err.message}`);
+                // Retry on stall/timeout or transient API errors; keep trying until MAX_TRIES.
             }
-            throw err;
+        }
+        if (lastErr) {
+            return fail(504, `The AI couldn't read this file after ${MAX_TRIES} attempts — it kept stalling. This can happen with certain PDFs; try converting it to a JPG/PNG image and uploading that, or upload one page at a time.`);
         }
 
         // ── 3. PARSE AI RESPONSE ─────────────────────────────────────────

@@ -407,8 +407,14 @@ async function handleAgentFile(input) {
     const status = document.getElementById('agentStatus');
 
     chat.innerHTML += `<div style="align-self:flex-end; background:var(--pp-accent); color:white; padding:10px; border-radius:12px; font-size:13px;">Uploaded: ${file.name}</div>`;
-    status.innerText = "Analyzing...";
-    
+
+    // Live elapsed counter in the status line so a slow read never looks frozen.
+    const started = Date.now();
+    const timerId = setInterval(() => {
+        status.innerText = 'Analyzing… ' + Math.round((Date.now() - started) / 1000) + 's (retries automatically if the AI stalls)';
+    }, 1000);
+    status.innerText = 'Analyzing… 0s';
+
     const reader = new FileReader();
     reader.onload = async () => {
         const base64 = reader.result.split(',')[1];
@@ -418,21 +424,27 @@ async function handleAgentFile(input) {
                 headers: equipHeaders(),
                 body: JSON.stringify({ fileBase64: base64 })
             });
-            
-            const result = await res.json();
 
+            let result;
+            try { result = await res.json(); }
+            catch { result = { success: false, message: `The server returned an unreadable response (HTTP ${res.status}). The read may have timed out — try a JPG/PNG or one page at a time.` }; }
+
+            clearInterval(timerId);
             if (result.success) {
                 confirmAIImport(result);
                 status.innerText = "Ready for review.";
             } else {
-                chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;">${result.message}</div>`;
+                chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;"><b>Import failed.</b><br>${(result.message || 'Unknown error.')}</div>`;
                 status.innerText = "Processing failed.";
             }
         } catch (err) {
+            clearInterval(timerId);
             console.error("Detailed Error:", err);
-            status.innerText = "Connection failed: " + err.message; // Added detail to status
+            chat.innerHTML += `<div style="background:#fee2e2; color:#991b1b; padding:10px; border-radius:12px; font-size:13px;"><b>Connection failed.</b><br>${(err && err.message) ? err.message : 'The request failed before the server responded.'}</div>`;
+            status.innerText = "Connection failed.";
         }
     };
+    reader.onerror = () => { clearInterval(timerId); status.innerText = 'Could not read the file.'; };
     reader.readAsDataURL(file);
 }
 
@@ -481,32 +493,53 @@ function renderAgentReview(items) {
 
 async function handleAIFile(input) {
     if (!input.files || !input.files[0]) return;
-    
-    Swal.fire({ title: 'AI is reading invoice...', allowOutsideClick: false, didOpen: () => { Swal.showLoading(); } });
+
+    // Elapsed-time spinner so a slow read never looks frozen/silent.
+    const started = Date.now();
+    let timerId = null;
+    Swal.fire({
+        title: 'AI is reading invoice…',
+        html: '<div style="font-size:13px;color:#64748b;">Elapsed: <b id="ai-elapsed">0s</b><br><span style="font-size:11px;">Large or image-heavy PDFs can take a bit. It retries automatically if the AI stalls.</span></div>',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+            timerId = setInterval(() => {
+                const el = document.getElementById('ai-elapsed');
+                if (el) el.textContent = Math.round((Date.now() - started) / 1000) + 's';
+            }, 1000);
+        },
+        willClose: () => { if (timerId) clearInterval(timerId); }
+    });
 
     const file = input.files[0];
     const reader = new FileReader();
-    
+
     reader.onload = async () => {
         const base64 = reader.result.split(',')[1];
-        
+
         try {
             const res = await fetch('/api/ai-import', {
                 method: 'POST',
                 headers: equipHeaders(),
                 body: JSON.stringify({ fileBase64: base64 })
             });
-            const result = await res.json();
+            // The server may return a non-JSON error page (e.g. a gateway timeout);
+            // handle that so it never fails silently.
+            let result;
+            try { result = await res.json(); }
+            catch { result = { success: false, message: `The server returned an unreadable response (HTTP ${res.status}). The read may have timed out — try a JPG/PNG or one page at a time.` }; }
 
             if (result.success) {
+                if (timerId) clearInterval(timerId);
                 confirmAIImport(result);
             } else {
-                Swal.fire('AI Error', result.message || 'Could not read the invoice format.', 'error');
+                Swal.fire('AI Import failed', result.message || 'Could not read the invoice format.', 'error');
             }
         } catch (err) {
-            Swal.fire('Connection Error', err.message, 'error');
+            Swal.fire('Connection Error', (err && err.message) ? err.message : 'The request failed before the server responded.', 'error');
         }
     };
+    reader.onerror = () => { Swal.fire('File error', 'Could not read the selected file.', 'error'); };
     reader.readAsDataURL(file);
 }
 
