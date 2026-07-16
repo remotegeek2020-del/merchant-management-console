@@ -40,6 +40,9 @@
         .perm-on  { background: #dbeafe; color: #1d4ed8; }
         .perm-off { background: #f1f5f9; color: #cbd5e1; }
 
+        .perm-item { display:flex;align-items:center;gap:11px;padding:11px 14px;border-bottom:1px solid #f1f5f9;cursor:pointer;background:#fff; }
+        .perm-item:last-child { border-bottom:none; }
+        .perm-item:hover { background:#f8fafc; }
         .pp-toggle { display:inline-flex;align-items:center;gap:8px;cursor:pointer;font-size:13px; }
         .pp-toggle input[type=checkbox] {
             width:38px;height:21px;appearance:none;-webkit-appearance:none;
@@ -158,21 +161,46 @@ const iAmSuper = myRole.toLowerCase().includes('super');
 let allUsers = [];
 
 const ACCESS_FLAGS = [
-    { key: 'access_inventory',       label: 'Inventory',        short: 'INV' },
-    { key: 'access_deployments',     label: 'Deployments',      short: 'DEP' },
-    { key: 'access_returns',         label: 'Returns',          short: 'RET' },
-    { key: 'access_merchants',       label: 'Merchants',        short: 'MER' },
-    { key: 'access_jarvis',          label: 'Jarvis AI',        short: 'AI'  },
-    { key: 'access_partners',        label: 'Partners',         short: 'PRT' },
-    { key: 'access_admin_dashboard', label: 'Admin Dashboard',  short: 'ADM' },
-    { key: 'access_sending_reports', label: 'Sending Reports',  short: 'RPT' },
-    { key: 'access_marketing',       label: 'Marketing',        short: 'MKT' },
-    { key: 'access_terminal_types',  label: 'Terminal Types',   short: 'TRM' },
-    { key: 'can_delete_tickets',       label: 'Delete Tickets',        short: 'DEL', privileged: true },
-    { key: 'can_manage_retired_units',       label: 'Manage Retired Units',   short: 'RTD', privileged: true },
-    { key: 'can_edit_legacy_terminal_type', label: 'Edit Legacy Term. Type', short: 'LTT', privileged: true },
+    { key: 'access_inventory',       label: 'Inventory',        short: 'INV', group: 'Modules',   icon: 'inventory_2',       desc: 'Warehouse stock, serials & terminal models' },
+    { key: 'access_deployments',     label: 'Deployments',      short: 'DEP', group: 'Modules',   icon: 'local_shipping',    desc: 'Merchant installs, TIDs & shipping status' },
+    { key: 'access_returns',         label: 'Returns',          short: 'RET', group: 'Modules',   icon: 'assignment_return', desc: 'RMAs, damage assessments & stock reintegration' },
+    { key: 'access_merchants',       label: 'Merchants',        short: 'MER', group: 'Modules',   icon: 'storefront',        desc: 'Merchant portfolio, Agent IDs & enrollment' },
+    { key: 'access_partners',        label: 'Partners',         short: 'PRT', group: 'Modules',   icon: 'handshake',         desc: 'Partner network, hierarchies & Prime49' },
+    { key: 'access_admin_dashboard', label: 'Admin Dashboard',  short: 'ADM', group: 'Modules',   icon: 'dashboard',         desc: 'Live KPIs, at-risk merchants & staff access matrix' },
+    { key: 'access_jarvis',          label: 'Jarvis AI',        short: 'AI',  group: 'Tools & AI', icon: 'smart_toy',        desc: 'AI assistant / Jarvis brain' },
+    { key: 'access_marketing',       label: 'Marketing',        short: 'MKT', group: 'Tools & AI', icon: 'campaign',         desc: 'Create partner & staff announcements + stats' },
+    { key: 'access_terminal_types',  label: 'Terminal Types',   short: 'TRM', group: 'Tools & AI', icon: 'memory',           desc: 'Add / rename / merge terminal types (no Secret Dungeon)' },
+    { key: 'access_sending_reports', label: 'Sending Reports',  short: 'RPT', group: 'Tools & AI', icon: 'send',             desc: 'Configure & send scheduled reports' },
+    { key: 'can_delete_tickets',            label: 'Delete Tickets',         short: 'DEL', group: 'Elevated', icon: 'delete_forever', privileged: true, desc: 'Permanently delete partner tickets' },
+    { key: 'can_manage_retired_units',      label: 'Manage Retired Units',   short: 'RTD', group: 'Elevated', icon: 'recycling',      privileged: true, desc: 'Restore / manage retired equipment' },
+    { key: 'can_edit_legacy_terminal_type', label: 'Edit Legacy Term. Type', short: 'LTT', group: 'Elevated', icon: 'edit_note',      privileged: true, desc: 'Change terminal type on legacy (Salesforce) records' },
 ];
+const ACCESS_GROUPS = ['Modules', 'Tools & AI', 'Elevated'];
 const PRIVILEGED_KEYS = ACCESS_FLAGS.filter(f => f.privileged).map(f => f.key);
+
+// Grouped, described permission toggles (shared by the edit & create dialogs).
+function renderPermGroups(user, iAmSuper, cantEdit) {
+    return ACCESS_GROUPS.map(g => {
+        const items = ACCESS_FLAGS.filter(f => f.group === g);
+        if (!items.length) return '';
+        const rows = items.map(f => {
+            const locked = (f.privileged && !iAmSuper) || cantEdit;
+            const on = user && user[f.key];
+            return `<label class="perm-item" style="${locked ? 'opacity:.55;pointer-events:none;' : ''}">
+                <span class="material-icons" style="font-size:19px;color:#64748b;">${f.icon || 'check'}</span>
+                <span style="flex:1;">
+                    <span style="font-weight:700;font-size:13px;color:#0f172a;">${f.label}${f.privileged && !iAmSuper ? ' <span style="font-size:9px;color:#94a3b8;font-weight:600;">(Super Admin)</span>' : ''}</span>
+                    <span style="display:block;font-size:11px;color:#94a3b8;line-height:1.35;">${f.desc || ''}</span>
+                </span>
+                <span class="pp-toggle"><input type="checkbox" id="perm-${f.key}" ${on ? 'checked' : ''} ${locked ? 'disabled' : ''}></span>
+            </label>`;
+        }).join('');
+        return `<div style="margin-bottom:14px;">
+            <div style="font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;color:#0369a1;margin:0 0 6px;">${g}</div>
+            <div style="border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;">${rows}</div>
+        </div>`;
+    }).join('');
+}
 
 // ── API ───────────────────────────────────────────────────
 async function apiGet() {
@@ -326,23 +354,11 @@ async function editPermissions(uid, name) {
 
     const { value: perms } = await Swal.fire({
         title: `<span style="font-size:16px;">Permissions — ${name}</span>`,
-        width: 480,
+        width: 540,
         html: `
             <div style="text-align:left;">
-                <p style="font-size:12px;color:#64748b;margin-bottom:16px;">Toggle access rights for this user. Changes take effect on their next login.</p>
-                <div style="display:flex;flex-direction:column;gap:12px;">
-                    ${ACCESS_FLAGS.map(f => {
-                        const isPrivilegedLocked = f.privileged && !iAmSuper;
-                        const isDisabled = cantEdit || isPrivilegedLocked;
-                        return `
-                    <label class="pp-toggle" style="${isDisabled?'opacity:0.5;pointer-events:none;':''}">
-                        <input type="checkbox" id="perm-${f.key}" ${user[f.key]?'checked':''} ${isDisabled?'disabled':''}>
-                        <div>
-                            <div style="font-weight:700;font-size:13px;">${f.label}${isPrivilegedLocked?' <span style="font-size:10px;color:#94a3b8;font-weight:400;">(Super Admin only)</span>':''}</div>
-                        </div>
-                    </label>`;
-                    }).join('')}
-                </div>
+                <p style="font-size:12px;color:#64748b;margin:0 0 16px;">Toggle access rights for this user. Changes take effect on their next login.</p>
+                ${renderPermGroups(user, iAmSuper, cantEdit)}
             </div>`,
         showCancelButton: true,
         confirmButtonColor: '#004990',
@@ -423,19 +439,8 @@ async function addUser() {
                 <input type="email" id="u-email" placeholder="name@payprotec.com" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:10px;">
                 <label style="font-size:10px;font-weight:700;color:#64748b;text-transform:uppercase;display:block;margin-bottom:4px;">Role *</label>
                 <select id="u-role" style="width:100%;padding:9px 12px;border:1.5px solid #e2e8f0;border-radius:8px;font-size:13px;font-family:'DM Sans',sans-serif;outline:none;margin-bottom:14px;">${roleOptions}</select>
-                <div style="background:#f0f7ff;border-radius:10px;padding:12px 14px;">
-                    <div style="font-size:10px;font-weight:800;color:#004990;text-transform:uppercase;margin-bottom:10px;">Initial Access Permissions</div>
-                    <div style="display:flex;flex-direction:column;gap:10px;">
-                        ${ACCESS_FLAGS.map(f => {
-                            const isPrivilegedLocked = f.privileged && !iAmSuper;
-                            return `
-                            <label class="pp-toggle" style="${isPrivilegedLocked?'opacity:0.5;pointer-events:none;':''}">
-                                <input type="checkbox" id="perm-${f.key}" style="accent-color:#004990;" ${isPrivilegedLocked?'disabled':''}>
-                                <span>${f.label}${isPrivilegedLocked?' <span style="font-size:10px;color:#94a3b8;">(Super Admin only)</span>':''}</span>
-                            </label>`;
-                        }).join('')}
-                    </div>
-                </div>
+                <div style="font-size:10px;font-weight:800;color:#004990;text-transform:uppercase;margin-bottom:8px;">Initial Access Permissions</div>
+                ${renderPermGroups(null, iAmSuper, false)}
             </div>`,
         showCancelButton: true,
         confirmButtonColor: '#004990',
