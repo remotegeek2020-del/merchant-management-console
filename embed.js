@@ -266,9 +266,10 @@
 
     function load() {
         log('loading', { api: API, site: SITE_KEY, viewer: VIEWER, ghl_location: GHL_LOC });
-        api({ action: 'get_active' }).then(function (d) {
+        api({ action: 'get_active', page: location.href }).then(function (d) {
             if (!d || !d.success) { log('endpoint error', d && d.message); return; }
             injectPixels(d.pixels);   // retargeting pixels load even if no ad shows
+            if (d.excluded) { log('this page is on the site exclusion list — no announcements here.'); return; }
             if (!Array.isArray(d.data)) return;
             log('campaigns returned:', d.data.length);
             queue = d.data.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });

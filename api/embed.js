@@ -29,6 +29,41 @@ function hashPct(str) {
     return (h >>> 0) % 100;
 }
 
+// Normalize a page URL (or path) to a comparable "host/path" (or "/path") form:
+// lowercase, no scheme, no www., no query/hash, no trailing slash.
+export function normPage(input) {
+    let s = String(input == null ? '' : input).trim().toLowerCase();
+    if (!s) return '';
+    s = s.replace(/^[a-z]+:\/\//, '');       // drop scheme
+    s = s.split('#')[0].split('?')[0];        // drop hash + query
+    s = s.replace(/^www\./, '');
+    if (s.length > 1) s = s.replace(/\/+$/, '');   // drop trailing slash (keep bare "/")
+    return s;
+}
+// The path-only portion of a normalized "host/path" (leading slash kept).
+function pathOf(normalized) {
+    if (!normalized) return '/';
+    if (normalized.charAt(0) === '/') return normalized;
+    const i = normalized.indexOf('/');
+    return i === -1 ? '/' : normalized.slice(i);
+}
+// Does the viewer's page match any excluded entry? Supports a trailing '*'
+// wildcard and path-only entries (e.g. "/pricing" matches on any host).
+export function pageExcluded(pageUrl, excluded) {
+    if (!Array.isArray(excluded) || !excluded.length) return false;
+    const hostPath = normPage(pageUrl);
+    if (!hostPath) return false;
+    const p = pathOf(hostPath);
+    return excluded.some(raw => {
+        let e = normPage(raw);
+        if (!e) return false;
+        const wild = e.endsWith('*');
+        if (wild) e = e.slice(0, -1);
+        const target = (e.charAt(0) === '/') ? p : hostPath;   // path-only entry compares against path
+        return wild ? target.startsWith(e) : target === e;
+    });
+}
+
 export default async function handler(req, res) {
     cors(res);
     if (req.method === 'OPTIONS') return res.status(204).end();
@@ -64,12 +99,23 @@ export default async function handler(req, res) {
     try {
         // Validate the site key (must exist + be active).
         const { data: site } = await supabase.from('marketing_sites')
-            .select('id, is_active').eq('site_key', siteKey).maybeSingle();
+            .select('id, is_active, excluded_paths').eq('site_key', siteKey).maybeSingle();
         if (!site || !site.is_active) return bad(res, 'Invalid or inactive site key', 403);
         const siteId = site.id;
 
         if (action === 'get_active') {
             if (!viewer) return ok(res, []);
+            // Per-site page exclusion: if this page is on the site's exclude list,
+            // show no announcements here (retargeting pixels still load below).
+            if (pageExcluded(body?.page, site.excluded_paths)) {
+                const { data: px0 } = await supabase.from('marketing_pixels').select('*').eq('id', 1).maybeSingle();
+                const pixels0 = px0 ? {
+                    fb: (px0.fb_enabled && px0.fb_pixel_id) ? px0.fb_pixel_id : null,
+                    google: (px0.google_enabled && px0.google_tag_id) ? px0.google_tag_id : null,
+                    linkedin: (px0.linkedin_enabled && px0.linkedin_partner_id) ? px0.linkedin_partner_id : null
+                } : null;
+                return res.status(200).json({ success: true, data: [], pixels: pixels0, excluded: true });
+            }
             const { data: all } = await supabase.from('marketing_campaigns').select('*')
                 .eq('is_active', true).eq('show_on_embed', true)
                 .order('priority', { ascending: false }).order('created_at', { ascending: false });

@@ -61,11 +61,23 @@ function embedLoaderSource(origin, siteKey) {
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
+// Normalize a page URL/path to a comparable "host/path" (or "/path"): lowercase,
+// no scheme, no www., no query/hash, no trailing slash. Mirrors api/embed.js.
+function normPage(input) {
+    let s = String(input == null ? '' : input).trim().toLowerCase();
+    if (!s) return '';
+    s = s.replace(/^[a-z]+:\/\//, '');
+    s = s.split('#')[0].split('?')[0];
+    s = s.replace(/^www\./, '');
+    if (s.length > 1) s = s.replace(/\/+$/, '');
+    return s;
+}
+
 const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
-    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'ghl_locations',
+    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'site_pages', 'set_site_excluded', 'ghl_locations',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta',
@@ -393,6 +405,43 @@ export default async function handler(req, res) {
                 const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
                 if (error) return bad(res, error.message);
                 return ok(res, { deleted: true });
+            }
+            // Observed pages for a site (the "rabbit hole"): distinct pages visitors
+            // actually loaded the announcement on, from tracked events. Returns each
+            // normalized host/path with a hit count + the site's current exclusions.
+            if (action === 'site_pages') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'site id required');
+                const { data: site } = await supabase.from('marketing_sites').select('id, name, excluded_paths').eq('id', id).maybeSingle();
+                if (!site) return bad(res, 'Site not found', 404);
+                const { data: evs } = await supabase.from('marketing_events')
+                    .select('meta, created_at').eq('site_id', id)
+                    .not('meta', 'is', null).order('created_at', { ascending: false }).limit(4000);
+                const counts = {}; const lastSeen = {};
+                (evs || []).forEach(e => {
+                    const u = e.meta && e.meta.url;
+                    if (!u) return;
+                    const p = normPage(u);
+                    if (!p) return;
+                    counts[p] = (counts[p] || 0) + 1;
+                    if (!lastSeen[p]) lastSeen[p] = e.created_at;
+                });
+                const pages = Object.keys(counts).map(p => ({ page: p, hits: counts[p], last_seen: lastSeen[p] }))
+                    .sort((a, b) => b.hits - a.hits);
+                return ok(res, { pages, excluded_paths: site.excluded_paths || [], site_name: site.name });
+            }
+            // Save the per-site exclusion list (normalized + de-duped).
+            if (action === 'set_site_excluded') {
+                const { id } = req.body;
+                if (!id) return bad(res, 'site id required');
+                const raw = Array.isArray(req.body.excluded_paths) ? req.body.excluded_paths : [];
+                const seen = new Set(); const clean = [];
+                raw.forEach(x => { const n = normPage(x); if (n && !seen.has(n)) { seen.add(n); clean.push(n); } });
+                if (clean.length > 500) return bad(res, 'Too many excluded paths (max 500).');
+                const { data, error } = await supabase.from('marketing_sites')
+                    .update({ excluded_paths: clean }).eq('id', id).select('id, excluded_paths').single();
+                if (error) return bad(res, error.message);
+                return ok(res, data);
             }
 
             // Live list of GHL sub-accounts (for the targeting picker).

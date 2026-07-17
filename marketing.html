@@ -906,7 +906,9 @@ async function loadSites(){
     return `<div style="border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px;">
       <div style="display:flex;align-items:center;gap:10px;">
         <b style="flex:1;">${esc(s.name||'Untitled site')}</b>
+        ${(Array.isArray(s.excluded_paths)&&s.excluded_paths.length)?`<span class="pill" title="${s.excluded_paths.length} page(s) excluded" style="background:#fef3c7;color:#b45309;">${s.excluded_paths.length} excluded</span>`:''}
         <span class="pill" style="background:${s.is_active?'#dcfce7':'#f1f5f9'};color:${s.is_active?'#166534':'#94a3b8'};">${s.is_active?'Active':'Off'}</span>
+        <button class="btn btn-neutral" style="padding:4px 9px;white-space:nowrap;" title="Choose which pages of this site show announcements" onclick="openSitePages('${s.id}','${esc(s.name||'')}')"><span class="material-icons" style="font-size:15px;vertical-align:middle;">web</span> Pages</button>
         <label class="switch"><input type="checkbox" ${s.is_active?'checked':''} onchange="toggleSite('${s.id}',this.checked)"><span class="slider"></span></label>
         <span class="material-icons" style="color:var(--red);cursor:pointer;" title="Delete" onclick="deleteSite('${s.id}','${esc(s.name||'')}')">delete</span>
       </div>
@@ -930,6 +932,71 @@ async function deleteSite(id, name){
   await api({action:'delete_site', id}); embedSitesCache=null; loadSites();
 }
 function copyText(t){ navigator.clipboard.writeText(t).then(()=>Swal.fire({icon:'success',title:'Copied',timer:900,showConfirmButton:false})).catch(()=>{}); }
+
+// ── Per-site page exclusions ("rabbit hole") ──
+// Announcements show on every page of a site EXCEPT the ones ticked here.
+function _sitePageRow(page, checked, hits){
+  const meta = (hits!=null) ? `<span class="muted" style="font-size:11px;">${hits} view${hits!==1?'s':''}</span>` : `<span class="muted" style="font-size:11px;">added manually</span>`;
+  return `<label class="spg-row" style="display:flex;align-items:center;gap:9px;padding:8px 6px;border-bottom:1px solid #eef2f7;font-size:12.5px;cursor:pointer;">
+    <input type="checkbox" class="spg-cb" data-page="${esc(page)}" ${checked?'checked':''} style="flex:none;">
+    <span style="flex:1;font-family:'DM Mono',monospace;word-break:break-all;">${esc(page)}</span>
+    ${meta}
+  </label>`;
+}
+async function openSitePages(id, name){
+  Swal.fire({title:'Loading pages…', didOpen:()=>Swal.showLoading(), allowOutsideClick:false});
+  const r = await api({action:'site_pages', id});
+  if (!r.success){ Swal.fire('Error', r.message||'Could not load pages.', 'error'); return; }
+  const excluded = (r.data.excluded_paths||[]);
+  const exSet = new Set(excluded);
+  const pages = (r.data.pages||[]);
+  const seen = new Set(pages.map(p=>p.page));
+  // Rows: observed pages first, then any excluded paths that weren't observed.
+  let rowsHtml = pages.map(p=>_sitePageRow(p.page, exSet.has(p.page), p.hits)).join('');
+  excluded.filter(p=>!seen.has(p)).forEach(p=>{ rowsHtml += _sitePageRow(p, true, null); });
+  const empty = `<div class="muted" style="text-align:center;padding:18px;font-size:12px;">No pages recorded yet. As visitors load the announcement, the pages they were on appear here — or add a path manually below.</div>`;
+
+  await Swal.fire({
+    title:'Pages for “'+esc(name)+'”',
+    width:640,
+    html:`<div style="text-align:left;font-size:13px;">
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">Tick a page to <b>stop</b> showing announcements there. Everything unticked keeps showing them. Use <code>*</code> at the end to match a section, e.g. <code>/blog*</code>.</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input id="spgAdd" class="inp" placeholder="Add a path to exclude, e.g. /checkout or /blog*" style="flex:1;font-family:'DM Mono',monospace;font-size:12px;">
+        <button class="btn btn-neutral" type="button" onclick="spgAddManual()">Add</button>
+      </div>
+      <div id="spgList" style="max-height:44vh;overflow:auto;border:1px solid var(--border);border-radius:10px;">${rowsHtml||empty}</div>
+    </div>`,
+    showCancelButton:true, confirmButtonText:'Save exclusions', confirmButtonColor:'#004990', focusConfirm:false,
+    didOpen:()=>{ const inp=document.getElementById('spgAdd'); if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); spgAddManual(); } }); },
+    preConfirm:()=>{
+      const picked=[];
+      document.querySelectorAll('#spgList .spg-cb').forEach(cb=>{ if(cb.checked) picked.push(cb.getAttribute('data-page')); });
+      return picked;
+    }
+  }).then(async res=>{
+    if(!res.isConfirmed) return;
+    const s = await api({action:'set_site_excluded', id, excluded_paths:res.value||[]});
+    if(!s.success){ Swal.fire('Error', s.message||'Save failed.','error'); return; }
+    embedSitesCache=null; loadSites();
+    Swal.fire({icon:'success',title:'Saved', text:`${(res.value||[]).length} page(s) excluded.`, timer:1200, showConfirmButton:false});
+  });
+}
+// Append a manual path row (or just tick it if already listed).
+function spgAddManual(){
+  const inp=document.getElementById('spgAdd'); if(!inp) return;
+  let v=(inp.value||'').trim(); if(!v) return;
+  // Match the server's normalization loosely for display.
+  v=v.toLowerCase().replace(/^[a-z]+:\/\//,'').split('#')[0].split('?')[0].replace(/^www\./,'');
+  if(v.length>1) v=v.replace(/\/+$/,'');
+  const list=document.getElementById('spgList');
+  const existing=list.querySelector('.spg-cb[data-page="'+(window.CSS&&CSS.escape?CSS.escape(v):v)+'"]');
+  if(existing){ existing.checked=true; inp.value=''; existing.scrollIntoView({block:'center'}); return; }
+  // Remove the empty-state note if present.
+  const note=list.querySelector('.muted'); if(note && !list.querySelector('.spg-row')) list.innerHTML='';
+  list.insertAdjacentHTML('afterbegin', _sitePageRow(v, true, null));
+  inp.value='';
+}
 
 // ── Webflow connector ──
 async function loadWebflow(){
