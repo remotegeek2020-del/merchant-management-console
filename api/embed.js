@@ -123,6 +123,8 @@ export default async function handler(req, res) {
             const live = (all || []).filter(c =>
                 (!c.starts_at || new Date(c.starts_at).getTime() <= now) &&
                 (!c.ends_at || new Date(c.ends_at).getTime() >= now) &&
+                // Per-campaign page exclusion (on top of the site-wide baseline above).
+                !pageExcluded(body?.page, c.excluded_paths) &&
                 // Site scoping: [] = all embed sites, otherwise must include this site.
                 (!Array.isArray(c.embed_site_ids) || c.embed_site_ids.length === 0 || c.embed_site_ids.map(String).includes(String(siteId))) &&
                 // GHL sub-account scoping: [] = all. If set, the campaign is GHL-scoped,

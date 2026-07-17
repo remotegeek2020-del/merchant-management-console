@@ -285,9 +285,16 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px;"><input type="radio" name="embedScope" value="specific" onchange="onEmbedScope()"> Specific sites only</label>
         <div id="embedSiteChecks" style="display:none;margin-top:8px;padding-left:6px;"></div>
 
-        <label class="fld">Page visibility per site</label>
+        <label class="fld">Page visibility per site <span class="muted" style="font-weight:400;">(baseline — all campaigns)</span></label>
         <div class="muted" style="font-size:11px;margin:-2px 0 6px;">By default a site shows announcements on every page. Use “Pages” to exclude specific pages — it applies site-wide (to all campaigns on that site).</div>
         <div id="embedPagesPanel" style="padding-left:6px;"></div>
+
+        <label class="fld">Skip pages for THIS campaign only</label>
+        <div class="muted" style="font-size:11px;margin:-2px 0 6px;">Extra pages where only this campaign is hidden (added on top of the site baseline). Matches by path across all its sites, e.g. <code>/pricing</code> or <code>/blog*</code>.</div>
+        <div style="display:flex;align-items:center;gap:8px;padding-left:6px;">
+          <span id="campaignExclSummary" class="muted" style="font-size:12px;flex:1;">No page exclusions for this campaign.</span>
+          <button type="button" class="btn btn-neutral" style="padding:4px 9px;white-space:nowrap;" onclick="openCampaignPages()"><span class="material-icons" style="font-size:14px;vertical-align:middle;">rule</span> Choose pages</button>
+        </div>
 
         <label class="fld">GoHighLevel sub-accounts</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="ghlScope" value="all" checked onchange="onGhlScope()"> All sub-accounts</label>
@@ -565,6 +572,7 @@ function openEditor(){
   document.getElementById('embedTarget').style.display='none';
   const allRadio=document.querySelector('input[name=embedScope][value=all]'); if(allRadio) allRadio.checked=true;
   onEmbedScope(); renderEmbedSiteChecks([]);
+  campaignExcluded=[]; renderCampaignExclSummary();
   document.querySelector('input[name=ghlScope][value=all]').checked=true;
   selectedGhl=new Set(); document.getElementById('ghlSearch').value=''; onGhlScope();
   populateConvLocations(''); document.getElementById('convPickers').style.display='none';
@@ -612,6 +620,7 @@ async function editCampaign(id){
   document.querySelector('input[name=embedScope][value=all]').checked=!scopeSpecific;
   document.querySelector('input[name=embedScope][value=specific]').checked=scopeSpecific;
   onEmbedScope(); renderEmbedSiteChecks(eids);
+  campaignExcluded = Array.isArray(c.excluded_paths)?c.excluded_paths.slice():[]; renderCampaignExclSummary();
   const glids = Array.isArray(c.ghl_location_ids)?c.ghl_location_ids.map(String):[];
   selectedGhl = new Set(glids);
   document.querySelector('input[name=ghlScope][value=all]').checked = glids.length===0;
@@ -723,6 +732,7 @@ async function saveCampaign(){
     ab_enabled: document.getElementById('f_ab_enabled').checked,
     show_on_embed: document.getElementById('f_show_embed').checked,
     embed_site_ids: document.getElementById('f_show_embed').checked ? getEmbedSiteIds() : [],
+    excluded_paths: document.getElementById('f_show_embed').checked ? (campaignExcluded||[]) : [],
     ghl_location_ids: document.getElementById('f_show_embed').checked ? getGhlLocationIds() : [],
     ...getConvConfig(),
     ab_split: parseInt(document.getElementById('f_ab_split').value),
@@ -1073,6 +1083,47 @@ async function disconnectWebflow(){
 
 // ── embed site targeting (in the editor) ──
 let embedSitesCache = null;
+let campaignExcluded = [];   // per-campaign page exclusions (form state, saved with the campaign)
+
+function renderCampaignExclSummary(){
+  const el=document.getElementById('campaignExclSummary'); if(!el) return;
+  const n=(campaignExcluded||[]).length;
+  el.innerHTML = n
+    ? `<b style="color:#b45309;">${n} page${n!==1?'s':''} hidden for this campaign:</b> <span style="font-family:'DM Mono',monospace;">${campaignExcluded.map(esc).join(', ')}</span>`
+    : 'No page exclusions for this campaign.';
+}
+// Per-campaign page picker: aggregates observed pages across the campaign's
+// currently-selected sites (or all embed sites) and edits the form-state list.
+async function openCampaignPages(){
+  const siteIds = getEmbedSiteIds();   // [] = all embed sites
+  Swal.fire({title:'Loading pages…', didOpen:()=>Swal.showLoading(), allowOutsideClick:false});
+  const r = await api({action:'campaign_pages', site_ids:siteIds});
+  const pages = (r.success && r.data.pages) ? r.data.pages : [];
+  const exSet = new Set(campaignExcluded||[]);
+  const seen = new Set(pages.map(p=>p.page));
+  let rowsHtml = pages.map(p=>_sitePageRow(p.page, exSet.has(p.page), p.hits)).join('');
+  (campaignExcluded||[]).filter(p=>!seen.has(p)).forEach(p=>{ rowsHtml += _sitePageRow(p, true, null); });
+  const empty = `<div class="muted" style="text-align:center;padding:18px;font-size:12px;">No pages recorded yet for the selected site(s). Add a path manually below.</div>`;
+  await Swal.fire({
+    title:'Skip pages — this campaign only',
+    width:640,
+    html:`<div style="text-align:left;font-size:13px;">
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">Tick a page to hide <b>this campaign</b> there (site-wide exclusions still apply on top). Use <code>*</code> for a section, e.g. <code>/blog*</code>.</div>
+      <div style="display:flex;gap:6px;margin-bottom:8px;">
+        <input id="spgAdd" class="inp" placeholder="Add a path, e.g. /pricing or /blog*" style="flex:1;font-family:'DM Mono',monospace;font-size:12px;">
+        <button class="btn btn-neutral" type="button" onclick="spgAddManual()">Add</button>
+      </div>
+      <div id="spgList" style="max-height:44vh;overflow:auto;border:1px solid var(--border);border-radius:10px;">${rowsHtml||empty}</div>
+    </div>`,
+    showCancelButton:true, confirmButtonText:'Apply', confirmButtonColor:'#004990', focusConfirm:false,
+    didOpen:()=>{ const inp=document.getElementById('spgAdd'); if(inp) inp.addEventListener('keydown',e=>{ if(e.key==='Enter'){ e.preventDefault(); spgAddManual(); } }); },
+    preConfirm:()=>{ const picked=[]; document.querySelectorAll('#spgList .spg-cb').forEach(cb=>{ if(cb.checked) picked.push(cb.getAttribute('data-page')); }); return picked; }
+  }).then(res=>{
+    if(!res.isConfirmed) return;
+    campaignExcluded = res.value||[];
+    renderCampaignExclSummary();
+  });
+}
 async function getEmbedSites(){ if(embedSitesCache) return embedSitesCache; const r=await api({action:'list_sites'}); embedSitesCache=(r.success?r.data:[])||[]; return embedSitesCache; }
 function onShowEmbed(){ const on=document.getElementById('f_show_embed').checked; document.getElementById('embedTarget').style.display = on ? '' : 'none'; if(on) renderEmbedPagesPanel(); }
 // Always-visible list of every registered site with its "Pages" exclusion

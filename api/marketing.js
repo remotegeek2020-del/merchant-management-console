@@ -77,7 +77,7 @@ const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
-    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'site_pages', 'set_site_excluded', 'ghl_locations',
+    'list_sites', 'create_site', 'toggle_site', 'delete_site', 'site_pages', 'set_site_excluded', 'campaign_pages', 'ghl_locations',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta',
@@ -205,6 +205,13 @@ export default async function handler(req, res) {
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
+                    // Per-campaign page exclusions (on top of the per-site baseline).
+                    excluded_paths: (() => {
+                        const raw = Array.isArray(b.excluded_paths) ? b.excluded_paths : [];
+                        const seen = new Set(); const clean = [];
+                        raw.forEach(x => { const n = normPage(x); if (n && !seen.has(n)) { seen.add(n); clean.push(n); } });
+                        return clean.slice(0, 500);
+                    })(),
                     conv_location_id: b.conv_location_id || null,
                     conv_form_id: b.conv_form_id || null, conv_form_name: b.conv_form_name || null,
                     conv_calendar_id: b.conv_calendar_id || null, conv_calendar_name: b.conv_calendar_name || null,
@@ -429,6 +436,27 @@ export default async function handler(req, res) {
                 const pages = Object.keys(counts).map(p => ({ page: p, hits: counts[p], last_seen: lastSeen[p] }))
                     .sort((a, b) => b.hits - a.hits);
                 return ok(res, { pages, excluded_paths: site.excluded_paths || [], site_name: site.name });
+            }
+            // Observed pages across a campaign's target sites (for per-campaign
+            // exclusions). site_ids empty = all embed sites. Returns pages (host/path)
+            // with hit counts.
+            if (action === 'campaign_pages') {
+                const siteIds = Array.isArray(req.body.site_ids) ? req.body.site_ids.map(String) : [];
+                let q = supabase.from('marketing_events').select('meta, created_at, site_id')
+                    .not('meta', 'is', null).not('site_id', 'is', null)
+                    .order('created_at', { ascending: false }).limit(5000);
+                if (siteIds.length) q = q.in('site_id', siteIds);
+                const { data: evs } = await q;
+                const counts = {}; const lastSeen = {};
+                (evs || []).forEach(e => {
+                    const u = e.meta && e.meta.url; if (!u) return;
+                    const p = normPage(u); if (!p) return;
+                    counts[p] = (counts[p] || 0) + 1;
+                    if (!lastSeen[p]) lastSeen[p] = e.created_at;
+                });
+                const pages = Object.keys(counts).map(p => ({ page: p, hits: counts[p], last_seen: lastSeen[p] }))
+                    .sort((a, b) => b.hits - a.hits);
+                return ok(res, { pages });
             }
             // Save the per-site exclusion list (normalized + de-duped).
             if (action === 'set_site_excluded') {
