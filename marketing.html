@@ -285,14 +285,10 @@
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px;"><input type="radio" name="embedScope" value="specific" onchange="onEmbedScope()"> Specific sites only</label>
         <div id="embedSiteChecks" style="display:none;margin-top:8px;padding-left:6px;"></div>
 
-        <label class="fld">Page visibility per site <span class="muted" style="font-weight:400;">(baseline — all campaigns)</span></label>
-        <div class="muted" style="font-size:11px;margin:-2px 0 6px;">By default a site shows announcements on every page. Use “Pages” to exclude specific pages — it applies site-wide (to all campaigns on that site).</div>
-        <div id="embedPagesPanel" style="padding-left:6px;"></div>
-
-        <label class="fld">Skip pages for THIS campaign only</label>
-        <div class="muted" style="font-size:11px;margin:-2px 0 6px;">Extra pages where only this campaign is hidden (added on top of the site baseline). Matches by path across all its sites, e.g. <code>/pricing</code> or <code>/blog*</code>.</div>
+        <label class="fld">Exclude pages (this campaign)</label>
+        <div class="muted" style="font-size:11px;margin:-2px 0 6px;">Hide <b>this campaign</b> on specific pages of the sites above, e.g. <code>/pricing</code> or <code>/blog*</code>. To block <i>all</i> announcements on a page for a whole site, use the “Pages” button in <b>Embed Sites</b> instead.</div>
         <div style="display:flex;align-items:center;gap:8px;padding-left:6px;">
-          <span id="campaignExclSummary" class="muted" style="font-size:12px;flex:1;">No page exclusions for this campaign.</span>
+          <span id="campaignExclSummary" class="muted" style="font-size:12px;flex:1;">Showing on all pages.</span>
           <button type="button" class="btn btn-neutral" style="padding:4px 9px;white-space:nowrap;" onclick="openCampaignPages()"><span class="material-icons" style="font-size:14px;vertical-align:middle;">rule</span> Choose pages</button>
         </div>
 
@@ -993,11 +989,7 @@ async function openSitePages(id, name){
     const s = await api({action:'set_site_excluded', id, excluded_paths:res.value||[]});
     if(!s.success){ Swal.fire('Error', s.message||'Save failed.','error'); return; }
     embedSitesCache=null;
-    // Refresh wherever the site list is shown (Sites modal + campaign editor panels).
     if(document.getElementById('sitesList')) loadSites();
-    if(document.getElementById('embedPagesPanel')) renderEmbedPagesPanel();
-    const checks=document.getElementById('embedSiteChecks');
-    if(checks && checks.style.display!=='none'){ const selNow=Array.from(document.querySelectorAll('.embed-site-cb')).filter(cb=>cb.checked).map(cb=>cb.value); renderEmbedSiteChecks(selNow); }
     Swal.fire({icon:'success',title:'Saved', text:`${(res.value||[]).length} page(s) excluded.`, timer:1200, showConfirmButton:false});
   });
 }
@@ -1125,22 +1117,7 @@ async function openCampaignPages(){
   });
 }
 async function getEmbedSites(){ if(embedSitesCache) return embedSitesCache; const r=await api({action:'list_sites'}); embedSitesCache=(r.success?r.data:[])||[]; return embedSitesCache; }
-function onShowEmbed(){ const on=document.getElementById('f_show_embed').checked; document.getElementById('embedTarget').style.display = on ? '' : 'none'; if(on) renderEmbedPagesPanel(); }
-// Always-visible list of every registered site with its "Pages" exclusion
-// control (independent of the all/specific targeting choice above).
-async function renderEmbedPagesPanel(){
-  const box=document.getElementById('embedPagesPanel'); if(!box) return;
-  const sites=await getEmbedSites();
-  if(!sites.length){ box.innerHTML='<div class="muted" style="font-size:11px;">No sites registered yet — add one via “Embed Sites”.</div>'; return; }
-  box.innerHTML = sites.map(s=>{
-    const exCount=(Array.isArray(s.excluded_paths)&&s.excluded_paths.length)?s.excluded_paths.length:0;
-    return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px;">
-      <span style="flex:1;">${esc(s.name||'Untitled site')}${s.is_active?'':' <span class="muted">(off)</span>'}</span>
-      ${exCount?`<span class="pill" title="${exCount} page(s) excluded" style="background:#fef3c7;color:#b45309;">${exCount} excluded</span>`:'<span class="muted" style="font-size:11px;">all pages</span>'}
-      <button type="button" class="btn btn-neutral" style="padding:3px 8px;white-space:nowrap;" title="Choose which pages of this site show announcements" onclick="openSitePages('${s.id}','${esc(s.name||'')}')"><span class="material-icons" style="font-size:14px;vertical-align:middle;">web</span> Pages</button>
-    </div>`;
-  }).join('');
-}
+function onShowEmbed(){ document.getElementById('embedTarget').style.display = document.getElementById('f_show_embed').checked ? '' : 'none'; }
 function onEmbedScope(){
   const specific = document.querySelector('input[name=embedScope]:checked')?.value==='specific';
   document.getElementById('embedSiteChecks').style.display = specific ? '' : 'none';
@@ -1150,17 +1127,8 @@ async function renderEmbedSiteChecks(selectedIds){
   const box = document.getElementById('embedSiteChecks');
   if (!sites.length){ box.innerHTML='<div class="muted" style="font-size:11px;">No sites registered yet — add one via “Embed Sites”.</div>'; return; }
   const sel = new Set((selectedIds||[]).map(String));
-  box.innerHTML = sites.map(s=>{
-    const exCount = (Array.isArray(s.excluded_paths)&&s.excluded_paths.length)?s.excluded_paths.length:0;
-    return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:5px;">
-      <label style="display:flex;align-items:center;gap:8px;flex:1;cursor:pointer;margin:0;">
-        <input type="checkbox" class="embed-site-cb" value="${s.id}" ${sel.has(String(s.id))?'checked':''}> ${esc(s.name||'Untitled site')}${s.is_active?'':' <span class="muted">(off)</span>'}
-      </label>
-      ${exCount?`<span class="pill" title="${exCount} page(s) excluded" style="background:#fef3c7;color:#b45309;">${exCount} excluded</span>`:''}
-      <button type="button" class="btn btn-neutral" style="padding:3px 8px;white-space:nowrap;" title="Choose which pages of this site show announcements (applies site-wide)" onclick="openSitePages('${s.id}','${esc(s.name||'')}')"><span class="material-icons" style="font-size:14px;vertical-align:middle;">web</span> Pages</button>
-    </div>`;
-  }).join('')
-  + `<div class="muted" style="font-size:10.5px;margin-top:6px;">“Pages” exclusions are per website and apply to every campaign on that site.</div>`;
+  box.innerHTML = sites.map(s=>`<label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-bottom:4px;cursor:pointer;">
+    <input type="checkbox" class="embed-site-cb" value="${s.id}" ${sel.has(String(s.id))?'checked':''}> ${esc(s.name||'Untitled site')}${s.is_active?'':' <span class="muted">(off)</span>'}</label>`).join('');
 }
 function getEmbedSiteIds(){
   const scope = document.querySelector('input[name=embedScope]:checked')?.value || 'all';
