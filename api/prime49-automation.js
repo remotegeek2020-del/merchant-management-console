@@ -82,20 +82,36 @@ export default async function handler(req, res) {
             const { data: cfg } = await supabase
                 .from('prime49_task_automation_config').select('*').eq('id', 1).maybeSingle();
 
-            // All Prime49 agent id_strings.
-            const { data: p49Ids } = await supabase
-                .from('agent_identifiers').select('id_string').eq('prime49', true).limit(10000);
-            const idStrings = [...new Set((p49Ids || []).map(r => r.id_string).filter(Boolean))];
+            // Partner-level Prime49, matching the Prime49 Merchants report: any
+            // merchant under an AGENT that has >=1 prime49 identifier, across ALL
+            // of that agent's id_strings (not just the flagged one). Scoped to 2026
+            // enrollments to match the report view Clarissa works from.
+            const BACKFILL_SINCE = '2026-01-01';
+            const IN_CHUNK = 200;
+
+            const { data: primeAgents } = await supabase
+                .from('agent_identifiers').select('agent_id').eq('prime49', true).limit(10000);
+            const agentUuids = [...new Set((primeAgents || []).map(r => r.agent_id).filter(Boolean))];
+            if (!agentUuids.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
+
+            let idStrings = [];
+            for (let i = 0; i < agentUuids.length; i += IN_CHUNK) {
+                const { data } = await supabase
+                    .from('agent_identifiers').select('id_string').in('agent_id', agentUuids.slice(i, i + IN_CHUNK)).limit(10000);
+                (data || []).forEach(r => { if (r.id_string) idStrings.push(r.id_string); });
+            }
+            idStrings = [...new Set(idStrings)];
             if (!idStrings.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
 
-            // Every merchant on those agent IDs.
+            // Every 2026-enrolled merchant on those agent IDs.
             let mRows = [];
-            const IN_CHUNK = 200;
             for (let i = 0; i < idStrings.length; i += IN_CHUNK) {
                 const { data } = await supabase
                     .from('merchants')
                     .select('id, merchant_id, dba_name, agent_id, agent_name, enrollment_date, account_status')
-                    .in('agent_id', idStrings.slice(i, i + IN_CHUNK)).limit(10000);
+                    .in('agent_id', idStrings.slice(i, i + IN_CHUNK))
+                    .gte('enrollment_date', BACKFILL_SINCE)
+                    .limit(10000);
                 if (data) mRows = mRows.concat(data);
             }
             if (!mRows.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
