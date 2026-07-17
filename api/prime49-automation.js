@@ -84,9 +84,13 @@ export default async function handler(req, res) {
 
             // Partner-level Prime49, matching the Prime49 Merchants report: any
             // merchant under an AGENT that has >=1 prime49 identifier, across ALL
-            // of that agent's id_strings (not just the flagged one). Scoped to 2026
-            // enrollments to match the report view Clarissa works from.
-            const BACKFILL_SINCE = '2026-01-01';
+            // of that agent's id_strings (not just the flagged one). Optional
+            // enrollment-date range — default covers 2026 (the report view); clear
+            // `start_date` to reach back to the very first Prime49 merchant.
+            const isDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v);
+            const startDate = (req.body.start_date === '' || isDate(req.body.start_date)) ? req.body.start_date
+                            : '2026-01-01';   // undefined/invalid → default to the report window
+            const endDate   = isDate(req.body.end_date) ? req.body.end_date : null;
             const IN_CHUNK = 200;
 
             const { data: primeAgents } = await supabase
@@ -103,15 +107,16 @@ export default async function handler(req, res) {
             idStrings = [...new Set(idStrings)];
             if (!idStrings.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
 
-            // Every 2026-enrolled merchant on those agent IDs.
+            // Every merchant on those agent IDs, within the chosen enrollment range.
             let mRows = [];
             for (let i = 0; i < idStrings.length; i += IN_CHUNK) {
-                const { data } = await supabase
+                let q = supabase
                     .from('merchants')
                     .select('id, merchant_id, dba_name, agent_id, agent_name, enrollment_date, account_status')
-                    .in('agent_id', idStrings.slice(i, i + IN_CHUNK))
-                    .gte('enrollment_date', BACKFILL_SINCE)
-                    .limit(10000);
+                    .in('agent_id', idStrings.slice(i, i + IN_CHUNK));
+                if (startDate) q = q.gte('enrollment_date', startDate);
+                if (endDate)   q = q.lte('enrollment_date', endDate + 'T23:59:59');
+                const { data } = await q.limit(10000);
                 if (data) mRows = mRows.concat(data);
             }
             if (!mRows.length) return res.json({ success: true, data: { prime49_merchants: 0, already_have_task: 0, to_create: 0 } });
@@ -136,7 +141,9 @@ export default async function handler(req, res) {
                     already_have_task: mRows.length - eligible.length,
                     to_create: eligible.length,
                     assignee_id: cfg?.assignee_id || null,
-                    assignee_name: assigneeName
+                    assignee_name: assigneeName,
+                    start_date: startDate || null,
+                    end_date: endDate || null
                 }});
             }
 
