@@ -309,22 +309,10 @@
     </div>
 
     <!-- ── STAFF ACCESS CONTROL ───────────────────────────────────────── -->
-    <div data-widget="staff-access" data-widget-label="Staff Access Control" style="margin-bottom:var(--gap);">
-    <div class="panel">
-        <div class="panel-header">
-            <div class="panel-title">
-                <span class="material-icons" style="color:#7c3aed;font-size:18px;">manage_accounts</span>
-                Staff Access Control
-            </div>
-            <button onclick="saveAccessChanges()" id="save-access-btn" class="slds-button" style="background:#004990;color:white;border-radius:8px;font-weight:700;font-size:11px;padding:6px 14px;border:none;cursor:pointer;display:none;">
-                Save Changes
-            </button>
-        </div>
-        <div class="panel-body" id="staff-access-table">
-            <div class="empty-state"><div class="skeleton" style="height:14px;width:200px;margin:0 auto;"></div></div>
-        </div>
-    </div>
-    </div>
+    <!-- Staff Access Control removed from the Admin Dashboard on purpose:
+         managing staff permissions lives ONLY in User Management (admin-role
+         gated), so granting "Admin Dashboard" access can never expose
+         permission editing. -->
 
     </div><!-- /dashboard-widgets -->
 </div>
@@ -438,8 +426,6 @@ function applyAccessGating() {
             paGrid.style.gridTemplateColumns = '1fr';
         }
     }
-    const staffW = document.querySelector('[data-widget="staff-access"]');
-    if (staffW) staffW.style.display = isAdminRole ? '' : 'none';
 }
 
 // ── KPI Render ───────────────────────────────────────────────────────────────
@@ -838,86 +824,9 @@ function renderActivity(data) {
         </div>`).join('');
 }
 
-// ── Staff Access Control ──────────────────────────────────────────────────────
-let staffData = [], pendingAccessChanges = {};
-async function loadStaffAccess() {
-    const container = document.getElementById('staff-access-table');
-    try {
-        const res = await fetch('/api/users', { method: 'GET', headers: authHeaders() });
-        const result = await res.json();
-        if (!result.success) throw new Error(result.message);
-        staffData = result.data || [];
-        if (!staffData.length) { container.innerHTML = `<div class="empty-state">No staff users found.</div>`; return; }
-        const ACCESS_COLS = [
-            { key: 'is_active',              label: 'Active',       group: 'Status'    },
-            { key: 'access_admin_dashboard', label: 'Admin Dash',   group: 'Modules'   },
-            { key: 'access_inventory',       label: 'Inventory',    group: 'Modules'   },
-            { key: 'access_deployments',     label: 'Deployments',  group: 'Modules'   },
-            { key: 'access_returns',         label: 'Returns',      group: 'Modules'   },
-            { key: 'access_merchants',       label: 'Merchants',    group: 'Modules'   },
-            { key: 'access_partners',        label: 'Partners',     group: 'Modules'   },
-            { key: 'access_jarvis',          label: 'Jarvis AI',    group: 'Tools & AI'},
-            { key: 'access_marketing',       label: 'Marketing',    group: 'Tools & AI'},
-            { key: 'access_terminal_types',  label: 'Term. Types',  group: 'Tools & AI'},
-            { key: 'access_all_tasks',       label: 'All Tasks',    group: 'Tools & AI'},
-            { key: 'access_task_dashboard',  label: 'Task Dash',    group: 'Tools & AI'},
-            { key: 'access_sending_reports', label: 'Reports',      group: 'Tools & AI'},
-            { key: 'can_delete_tickets',             label: 'Del Tickets',   group: 'Elevated' },
-            { key: 'can_manage_retired_units',       label: 'Retired Units', group: 'Elevated' },
-            { key: 'can_edit_legacy_terminal_type',  label: 'Edit Leg.Type', group: 'Elevated' },
-        ];
-        const GROUP_ORDER = ['Status', 'Modules', 'Tools & AI', 'Elevated'];
-        const groups = GROUP_ORDER.map(g => ({ name: g, cols: ACCESS_COLS.filter(c => c.group === g) })).filter(x => x.cols.length);
-        const colLabel = c => `<div class="access-col"><div class="access-col-label">${c.label}</div></div>`;
-        const headerHtml = `
-            <div style="display:flex;align-items:flex-end;gap:24px;padding:8px 20px;border-bottom:2px solid var(--border);background:var(--surface-2);">
-                <div style="flex:1;min-width:140px;font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;">Staff Member</div>
-                ${groups.map(g => `<div style="display:flex;flex-direction:column;gap:5px;">
-                    <div style="font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.5px;text-align:center;padding-bottom:2px;${g.name === 'Status' ? 'color:transparent;' : 'color:#0369a1;border-bottom:2px solid #bae6fd;'}">${g.name === 'Status' ? '·' : g.name}</div>
-                    <div style="display:flex;gap:16px;">${g.cols.map(colLabel).join('')}</div>
-                </div>`).join('')}
-            </div>`;
-        const rowsHtml = staffData.map(u => `
-            <div class="access-row" style="gap:24px;">
-                <div style="flex:1;min-width:140px;">
-                    <div style="font-weight:700;color:var(--text-primary);">${u.first_name || ''} ${u.last_name || ''}</div>
-                    <div style="font-size:11px;color:var(--text-muted);">${u.email || ''} &nbsp;·&nbsp; <span style="color:var(--pp-accent);font-weight:600;">${u.role || 'staff'}</span></div>
-                </div>
-                ${groups.map(g => `<div style="display:flex;gap:16px;">${g.cols.map(c => `
-                    <div class="access-col">
-                        <label class="toggle-pill">
-                            <input type="checkbox" data-uid="${u.userid}" data-key="${c.key}" ${u[c.key] ? 'checked' : ''} onchange="markChange(this)">
-                            <span class="toggle-slider"></span>
-                        </label>
-                    </div>`).join('')}</div>`).join('')}
-            </div>`).join('');
-        container.innerHTML = headerHtml + rowsHtml;
-    } catch (err) {
-        container.innerHTML = `<div class="empty-state" style="color:var(--red-text);">Error loading staff: ${err.message}</div>`;
-    }
-}
-function markChange(input) {
-    const uid = input.dataset.uid, key = input.dataset.key;
-    if (!pendingAccessChanges[uid]) pendingAccessChanges[uid] = {};
-    pendingAccessChanges[uid][key] = input.checked;
-    document.getElementById('save-access-btn').style.display = 'block';
-}
-async function saveAccessChanges() {
-    if (!Object.keys(pendingAccessChanges).length) return;
-    const btn = document.getElementById('save-access-btn');
-    btn.textContent = 'Saving...'; btn.disabled = true;
-    try {
-        const res = await fetch('/api/users', { method: 'POST', headers: authHeaders(), body: JSON.stringify({ action: 'updateBatch', payload: pendingAccessChanges }) });
-        const result = await res.json();
-        if (result.success) {
-            pendingAccessChanges = {};
-            btn.style.display = 'none';
-            Swal.fire({ icon: 'success', title: 'Saved', timer: 1500, showConfirmButton: false });
-            loadStaffAccess();
-        } else Swal.fire('Error', result.message || 'Save failed', 'error');
-    } catch (err) { Swal.fire('Error', err.message, 'error'); }
-    finally { btn.disabled = false; btn.textContent = 'Save Changes'; }
-}
+// Staff Access Control was intentionally removed from the Admin Dashboard.
+// Permission management lives ONLY in User Management (admin-role gated), so
+// granting "Admin Dashboard" access never exposes permission editing.
 
 // ── Main Load ─────────────────────────────────────────────────────────────────
 async function loadAll() {
@@ -1068,7 +977,6 @@ applyAccessGating();
 
 window.addEventListener('load', function() {
     loadAll();
-    if (isAdminRole) loadStaffAccess();
 });
 </script>
 <script src="/js/site-config.js"></script>

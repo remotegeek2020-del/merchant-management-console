@@ -12,10 +12,12 @@ export default async function handler(req, res) {
     
     try {
         if (req.method === 'GET' || req.query.action === 'list') {
-            // Require admin dashboard access to list staff
+            // Require an ADMIN ROLE to list staff — the access_admin_dashboard flag
+            // no longer grants user-management data (it only opens KPI widgets).
             const { data: listCaller } = await supabase.from('app_users')
-                .select('role, access_admin_dashboard').eq('userid', session.userid).maybeSingle();
-            if (!listCaller?.access_admin_dashboard && listCaller?.role !== 'super_admin' && listCaller?.role !== 'admin') {
+                .select('role').eq('userid', session.userid).maybeSingle();
+            const listRole = String(listCaller?.role || '').toLowerCase();
+            if (!(listRole.includes('super') || listRole.includes('admin'))) {
                 return res.status(403).json({ success: false, message: 'Access denied.' });
             }
             // Only return non-sensitive fields
@@ -101,6 +103,12 @@ export default async function handler(req, res) {
                 const { data: batchPerformer } = await supabase.from('app_users')
                     .select('role, email, first_name, last_name').eq('userid', session.userid).maybeSingle();
                 const callerRole = batchPerformer?.role;
+                // Only an admin role may edit staff at all (the access_admin_dashboard
+                // flag never grants this). Prevents any staffer from toggling flags.
+                const callerRoleLc = String(callerRole || '').toLowerCase();
+                if (!(callerRoleLc.includes('super') || callerRoleLc.includes('admin'))) {
+                    return res.status(403).json({ success: false, message: 'Access denied.' });
+                }
                 const performerName = batchPerformer ? `${batchPerformer.first_name || ''} ${batchPerformer.last_name || ''}`.trim() || batchPerformer.email : 'Staff';
                 const performerEmail = batchPerformer?.email || session.userid;
 
