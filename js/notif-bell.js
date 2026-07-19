@@ -13,7 +13,13 @@
     if (!TOKEN || !UID) return;                       // not a logged-in staff page
     if (document.getElementById('notif-bell-btn')) return; // native bell already here
 
+    // Public Supabase config (anon key — same as the homepage realtime badges).
+    var SB_URL = 'https://zuzwljjrppyrzngmhdru.supabase.co';
+    var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inp1endsampycHB5cnpuZ21oZHJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI1NjI3NjQsImV4cCI6MjA4ODEzODc2NH0.C7883WzNJIyqrc5vcWrOFPPDfjq7DAZhw2oQKFpwoow';
+
     var notifs = [];
+    var _knownIds = {};   // ids we've already seen (to detect brand-new ones for push)
+    var _primed = false;  // skip push on the very first load
 
     function api(body) {
         return fetch('/api/merchants', {
@@ -98,14 +104,66 @@
     }
     function load() {
         api({ action: 'get_my_notifications', user_id: UID }).then(function (r) {
-            if (r && r.success) { notifs = r.data || []; renderBadge(); if (panel.style.display === 'block') renderList(); }
+            if (r && r.success) {
+                var incoming = r.data || [];
+                if (_primed) pushNew(incoming);
+                incoming.forEach(function (n) { _knownIds[n.id] = true; });
+                _primed = true;
+                notifs = incoming; renderBadge();
+                if (panel.style.display === 'block') renderList();
+            }
         });
+    }
+
+    // Desktop push for genuinely-new unread notifications while the tab is hidden.
+    function pushNew(incoming) {
+        if (!('Notification' in window) || Notification.permission !== 'granted' || !document.hidden) return;
+        incoming.filter(function (n) { return !n.is_read && !_knownIds[n.id]; }).slice(0, 3).forEach(function (n) {
+            try {
+                var no = new Notification(n.title || 'New notification', { body: n.body || n.merchant_name || '', tag: String(n.id) });
+                no.onclick = function () {
+                    window.focus();
+                    if (n.merchant_id) {
+                        location.href = 'merchants-dashboard.html?nm=' + encodeURIComponent(n.merchant_id) +
+                            '&nt=' + encodeURIComponent(n.type || '') + '&nn=' + encodeURIComponent(n.note_id || '') +
+                            '&ntk=' + encodeURIComponent(n.task_id || '');
+                    }
+                    no.close();
+                };
+            } catch (e) { /* ignore */ }
+        });
+    }
+
+    // Instant updates: subscribe to the dataless notification_pulse ping and
+    // refetch (authenticated) whenever it fires. Falls back to polling.
+    function initRealtime() {
+        function connect() {
+            if (!window.supabase || !window.supabase.createClient) return false;
+            try {
+                window.supabase.createClient(SB_URL, SB_ANON)
+                    .channel('nb-pulse')
+                    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'notification_pulse' }, function () { load(); })
+                    .subscribe();
+                return true;
+            } catch (e) { return false; }
+        }
+        if (connect()) return;
+        var s = document.createElement('script');
+        s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+        s.onload = connect;
+        (document.head || document.body).appendChild(s);
     }
 
     btn.addEventListener('click', function () {
         var open = panel.style.display === 'block';
         panel.style.display = open ? 'none' : 'block';
-        if (!open) { renderList(); load(); }   // show cached instantly, then pull fresh
+        if (!open) {
+            renderList(); load();   // show cached instantly, then pull fresh
+            // Ask for desktop-alert permission on this user gesture (once).
+            if ('Notification' in window && Notification.permission === 'default') {
+                try { Notification.requestPermission(); } catch (e) {}
+            }
+        }
     });
     wrap.querySelector('#nb-markall').addEventListener('click', function () {
         api({ action: 'mark_notification_read', mark_all: true, user_id: UID }).then(function () {
@@ -115,7 +173,8 @@
     document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) panel.style.display = 'none'; });
 
     load();
-    setInterval(load, 25000);   // near real-time refresh
+    initRealtime();             // instant updates via notification_pulse
+    setInterval(load, 60000);   // safety-net poll (realtime does the heavy lifting)
     // Refresh immediately when the user returns to the tab/window.
     document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
     window.addEventListener('focus', load);
