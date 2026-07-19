@@ -119,6 +119,22 @@
     }
 
     // ── homepage cards ────────────────────────────────────────────────────────
+    function annTheme(c) {
+        var t = c.theme || {};
+        var g = function (v, d) { return v || d; };
+        var accent = g(t.accent, '#004990'), btnText = g(t.btnText, '#ffffff'), radius = (t.radius != null ? t.radius : 16);
+        var btn = t.btnStyle === 'outline'
+            ? ('background:transparent;color:' + accent + ';border:2px solid ' + accent + ';border-radius:' + radius + 'px;')
+            : t.btnStyle === 'pill'
+                ? ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:999px;')
+                : ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:' + Math.min(radius, 14) + 'px;');
+        return {
+            card: 'background:' + g(t.bg, '#ffffff') + ';border-radius:' + radius + 'px;',
+            title: g(t.title, '#0a1628'), text: g(t.text, '#475569'),
+            align: t.align === 'center' ? 'center' : 'left', btn: btn
+        };
+    }
+
     function renderCards() {
         if (!cardWrap) return;
         var visible = cardList.filter(function (c) { return !isPerm(c.id) && !isSnoozed(c); });
@@ -134,15 +150,16 @@
         var untilAction = isUntilAction(c);
         var canDismiss = !persistent;   // persistent has no close; dismissible + until_action snooze via X
         var ctaFn = untilAction ? 'ppAnnAction' : 'ppAnnClick';
-        var html = '<div class="ppa-card">';
+        var th = annTheme(c);
+        var html = '<div class="ppa-card" style="' + th.card + '">';
         if (canDismiss) html += '<button class="ppa-x" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:18px;">close</span></button>';
         if (showGraphic) html += '<div class="ppa-imgwrap"><img src="' + esc(safeUrl(c.image_url)) + '" alt="' + esc(c.title) + '">' + hotspotHtml(c, 'ppa-hotspot') + '</div>';
         var hasSurvey = c.survey && c.survey.enabled;
         if (showText || (c.cta_enabled && c.cta_url) || hasSurvey) {
-            html += '<div class="ppa-body">';
-            if (showText && c.title) html += '<div class="ppa-title">' + esc(c.title) + '</div>';
-            if (showText && c.body_text) html += '<div class="ppa-text">' + bodyHtml(c.body_text) + '</div>';
-            if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
+            html += '<div class="ppa-body" style="text-align:' + th.align + ';">';
+            if (showText && c.title) html += '<div class="ppa-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
+            if (showText && c.body_text) html += '<div class="ppa-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
+            if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" style="' + th.btn + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
             html += surveyHtml(c);
             html += '</div>';
         }

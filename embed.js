@@ -291,6 +291,26 @@
         setTimeout(close, 1600);
     };
 
+    // Resolve a campaign's visual theme into ready-to-use inline styles.
+    function theme(c) {
+        var t = c.theme || {};
+        var g = function (v, d) { return v || d; };
+        var accent = g(t.accent, '#004990'), btnText = g(t.btnText, '#ffffff'), radius = (t.radius != null ? t.radius : 16);
+        var wpx = t.width === 'narrow' ? 380 : t.width === 'wide' ? 560 : 460;
+        var btn = t.btnStyle === 'outline'
+            ? ('background:transparent;color:' + accent + ';border:2px solid ' + accent + ';border-radius:' + radius + 'px;')
+            : t.btnStyle === 'pill'
+                ? ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:999px;')
+                : ('background:' + accent + ';color:' + btnText + ';border:none;border-radius:' + Math.min(radius, 14) + 'px;');
+        return {
+            modal: 'background:' + g(t.bg, '#ffffff') + ';border-radius:' + radius + 'px;width:min(' + wpx + 'px,100%);',
+            title: g(t.title, '#0a1628'), text: g(t.text, '#475569'),
+            align: t.align === 'center' ? 'center' : 'left',
+            btn: btn, imgPos: t.imgPos === 'bottom' ? 'bottom' : 'top',
+            overlay: t.overlay === 'light' ? 'light' : 'dark'
+        };
+    }
+
     function render(c) {
         current = c;
         var untilAction = c.behavior === 'until_action';
@@ -305,22 +325,25 @@
             return '<a class="ppx-hot" href="' + esc(safeUrl(h.url)) + '" target="_blank" rel="noopener" style="left:' + num(h.x) + '%;top:' + num(h.y) + '%;width:' + num(h.w) + '%;height:' + num(h.h) + '%;" onclick="' + clickFn + '(\'' + cid + '\',\'' + jsArg(h.id || 'hotspot') + '\')"></a>';
         }).join('');
 
-        var html = '<div class="ppx-modal">';
-        html += '<button class="ppx-x" onclick="__ppxClose()">×</button>';
-        if (showGraphic) html += '<div class="ppx-img"><img src="' + esc(safeUrl(c.image_url)) + '" alt="">' + hot + '</div>';
-        html += '<div class="ppx-body">';
-        if (showText && c.title) html += '<div class="ppx-title">' + esc(c.title) + '</div>';
-        if (showText && c.body_text) html += '<div class="ppx-text">' + bodyHtml(c.body_text) + '</div>';
+        var th = theme(c);
+        var imgBlock = showGraphic ? ('<div class="ppx-img"><img src="' + esc(safeUrl(c.image_url)) + '" alt="">' + hot + '</div>') : '';
+        var inner = '';
+        if (showText && c.title) inner += '<div class="ppx-title" style="color:' + th.title + ';">' + esc(c.title) + '</div>';
+        if (showText && c.body_text) inner += '<div class="ppx-text" style="color:' + th.text + ';">' + bodyHtml(c.body_text) + '</div>';
         if (c.cta_enabled && c.cta_url) {
             var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
-            html += '<a class="ppx-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
+            inner += '<a class="ppx-cta" style="' + th.btn + '" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
         }
-        html += surveyHtml(c);
-        if (dismissible) html += '<label class="ppx-forget"><input type="checkbox" onchange="if(this.checked)__ppxForget()"> Don\'t show this again</label>';
-        if (queue.length) html += '<div class="ppx-nav">' + queue.length + ' more announcement' + (queue.length > 1 ? 's' : '') + '</div>';
-        html += '</div></div>';
+        inner += surveyHtml(c);
+        if (dismissible) inner += '<label class="ppx-forget"><input type="checkbox" onchange="if(this.checked)__ppxForget()"> Don\'t show this again</label>';
+        if (queue.length) inner += '<div class="ppx-nav">' + queue.length + ' more announcement' + (queue.length > 1 ? 's' : '') + '</div>';
+        var bodyBlock = '<div class="ppx-body" style="text-align:' + th.align + ';">' + inner + '</div>';
+
+        var html = '<div class="ppx-modal" style="' + th.modal + '"><button class="ppx-x" onclick="__ppxClose()">×</button>' +
+            (th.imgPos === 'bottom' ? (bodyBlock + imgBlock) : (imgBlock + bodyBlock)) + '</div>';
 
         backdrop = document.createElement('div'); backdrop.className = 'ppx-back';
+        backdrop.style.background = th.overlay === 'light' ? 'rgba(15,23,42,.3)' : 'rgba(4,10,22,.6)';
         backdrop.innerHTML = html;
         // Clicking the dark backdrop closes (snoozes) — but not for until_action.
         backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction) onClose(); });

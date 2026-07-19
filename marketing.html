@@ -44,6 +44,8 @@
   .modal-head h2{font-size:16px;font-weight:800;margin:0;flex:1;}
   .modal-body{padding:20px;}
   label.fld{display:block;font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.4px;color:var(--muted);margin:14px 0 5px;}
+  label.dlbl{display:block;font-size:10px;font-weight:700;color:var(--muted);margin-bottom:3px;}
+  input[type=color]{width:100%;height:32px;border:1px solid var(--border);border-radius:7px;background:#fff;cursor:pointer;padding:2px;}
   .inp,.sel,.ta{width:100%;padding:9px 12px;border:1.5px solid var(--border);border-radius:9px;font-size:13px;font-family:inherit;outline:none;}
   .inp:focus,.sel:focus,.ta:focus{border-color:var(--blue);}
   .ta{min-height:70px;resize:vertical;}
@@ -228,6 +230,30 @@
           <input class="inp" id="f_sv_thanks" placeholder="Thanks for your response!">
         </div>
       </div>
+
+      <!-- ── DESIGN ── -->
+      <label class="fld">Design</label>
+      <div style="border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
+          <div><label class="dlbl">Background</label><input type="color" id="t_bg" value="#ffffff" oninput="renderPreview()"></div>
+          <div><label class="dlbl">Title color</label><input type="color" id="t_title" value="#0a1628" oninput="renderPreview()"></div>
+          <div><label class="dlbl">Text color</label><input type="color" id="t_text" value="#475569" oninput="renderPreview()"></div>
+          <div><label class="dlbl">Button color</label><input type="color" id="t_accent" value="#004990" oninput="renderPreview()"></div>
+          <div><label class="dlbl">Button text</label><input type="color" id="t_btnText" value="#ffffff" oninput="renderPreview()"></div>
+        </div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-top:10px;">
+          <div><label class="dlbl">Corners</label><input class="inp" type="range" min="0" max="30" id="t_radius" value="16" oninput="renderPreview()"></div>
+          <div><label class="dlbl">Width</label><select class="inp" id="t_width" onchange="renderPreview()"><option value="narrow">Narrow</option><option value="normal" selected>Normal</option><option value="wide">Wide</option></select></div>
+          <div><label class="dlbl">Text align</label><select class="inp" id="t_align" onchange="renderPreview()"><option value="left" selected>Left</option><option value="center">Center</option></select></div>
+          <div><label class="dlbl">Button style</label><select class="inp" id="t_btnStyle" onchange="renderPreview()"><option value="solid" selected>Solid</option><option value="outline">Outline</option><option value="pill">Pill</option></select></div>
+          <div><label class="dlbl">Image position</label><select class="inp" id="t_imgPos" onchange="renderPreview()"><option value="top" selected>Top</option><option value="bottom">Bottom</option></select></div>
+          <div><label class="dlbl">Backdrop</label><select class="inp" id="t_overlay" onchange="renderPreview()"><option value="dark" selected>Dark</option><option value="light">Light</option></select></div>
+        </div>
+      </div>
+
+      <!-- ── LIVE PREVIEW ── -->
+      <label class="fld">Live preview</label>
+      <div id="previewStage" style="border:1px solid var(--border);border-radius:12px;padding:22px;display:flex;justify-content:center;background:#e9eef5;background-image:radial-gradient(#cbd5e1 1px,transparent 1px);background-size:14px 14px;"></div>
 
       <div class="row2">
         <div>
@@ -462,7 +488,79 @@ function ensureQuill(){
       ['link','clean']
     ]}
   });
+  bodyQuill.on('text-change', function(){ try{ renderPreview(); }catch(e){} });
   return bodyQuill;
+}
+
+// ── Design theme + live preview ──
+function buildTheme(){
+  const g=id=>document.getElementById(id).value;
+  return { bg:g('t_bg'), title:g('t_title'), text:g('t_text'), accent:g('t_accent'), btnText:g('t_btnText'),
+    radius:parseInt(g('t_radius'))||16, width:g('t_width'), align:g('t_align'), btnStyle:g('t_btnStyle'), imgPos:g('t_imgPos'), overlay:g('t_overlay') };
+}
+function loadTheme(t){
+  t=t||{}; const s=(id,v)=>{document.getElementById(id).value=v;};
+  s('t_bg',t.bg||'#ffffff'); s('t_title',t.title||'#0a1628'); s('t_text',t.text||'#475569');
+  s('t_accent',t.accent||'#004990'); s('t_btnText',t.btnText||'#ffffff');
+  s('t_radius',t.radius!=null?t.radius:16); s('t_width',t.width||'normal'); s('t_align',t.align||'left');
+  s('t_btnStyle',t.btnStyle||'solid'); s('t_imgPos',t.imgPos||'top'); s('t_overlay',t.overlay||'dark');
+}
+function themeBtnCss(th){
+  return th.btnStyle==='outline'?`background:transparent;color:${th.accent};border:2px solid ${th.accent};border-radius:${th.radius}px;`
+    : th.btnStyle==='pill'?`background:${th.accent};color:${th.btnText};border:none;border-radius:999px;`
+    : `background:${th.accent};color:${th.btnText};border:none;border-radius:${Math.min(th.radius,14)}px;`;
+}
+function previewSurvey(th){
+  if(currentType==='announcement') return '';
+  const g=id=>document.getElementById(id);
+  let h='<div style="margin-top:12px;border-top:1px solid #eef2f7;padding-top:12px;">';
+  if(currentType==='poll'){
+    const q=g('f_sv_question').value||'Your question'; const opts=g('f_sv_options').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    h+=`<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:${th.title};">${esc(q)}</div>`;
+    (opts.length?opts:['Option 1','Option 2']).forEach(o=>h+=`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:7px 10px;font-size:12px;margin-bottom:5px;color:${th.text};">◯ ${esc(o)}</div>`);
+  } else if(currentType==='rating'){
+    const scale=g('f_sv_scale').value==='10'?10:5; const start=scale===10?0:1; const label=g('f_sv_ratinglabel').value||'How would you rate us?';
+    h+=`<div style="font-weight:700;font-size:13px;margin-bottom:6px;color:${th.title};">${esc(label)}</div><div style="display:flex;gap:4px;flex-wrap:wrap;">`;
+    for(let i=start;i<=scale;i++) h+=`<div style="width:28px;height:28px;border:1.5px solid #cbd5e1;border-radius:7px;text-align:center;line-height:26px;font-size:12px;font-weight:700;">${i}</div>`;
+    h+='</div>';
+  } else if(currentType==='lead'){
+    if((window._svContactMode||'native')==='ghl_form'){ h+=`<div style="font-size:12px;color:${th.text};font-style:italic;padding:10px;border:1px dashed #cbd5e1;border-radius:8px;text-align:center;">HighLevel form appears here</div>`; }
+    else {
+      if(g('f_sv_c_name').checked) h+=`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;margin-bottom:6px;">Your name</div>`;
+      if(g('f_sv_c_email').checked) h+=`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;margin-bottom:6px;">Email</div>`;
+      if(g('f_sv_c_phone').checked) h+=`<div style="border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:12px;color:#94a3b8;margin-bottom:6px;">Phone</div>`;
+    }
+  }
+  if(!(currentType==='lead'&&(window._svContactMode==='ghl_form'))) h+=`<div style="text-align:center;margin-top:10px;padding:10px;font-weight:700;font-size:13px;${themeBtnCss(th)}">Submit</div>`;
+  return h+'</div>';
+}
+let _previewTimer=null;
+function renderPreview(){
+  if(_previewTimer) clearTimeout(_previewTimer);
+  _previewTimer=setTimeout(_renderPreviewNow, 60);
+}
+function _renderPreviewNow(){
+  const stage=document.getElementById('previewStage'); if(!stage) return;
+  const th=buildTheme();
+  const wpx = th.width==='narrow'?290:th.width==='wide'?420:355;
+  const ct=contentType;
+  const showG=(ct==='graphic'||ct==='both')&&currentImageUrl;
+  const showT=(ct==='text'||ct==='both');
+  const title=document.getElementById('f_title').value||'Your title';
+  const body=showT?getBody():'';
+  const ctaOn=document.getElementById('f_cta_enabled').checked&&document.getElementById('f_cta_url').value.trim();
+  const ctaLabel=document.getElementById('f_cta_label').value||'Learn more';
+  const img=showG?`<div style="line-height:0;"><img src="${esc(currentImageUrl)}" style="width:100%;display:block;"></div>`:'';
+  let inner='';
+  if(showT) inner+=`<div style="font-weight:800;font-size:16px;color:${th.title};margin-bottom:6px;line-height:1.3;">${esc(title)}</div>`;
+  if(showT&&body) inner+=`<div style="font-size:13px;color:${th.text};line-height:1.55;">${body}</div>`;
+  inner+=previewSurvey(th);
+  if(ctaOn) inner+=`<a style="display:block;text-align:center;margin-top:14px;padding:11px;font-weight:700;text-decoration:none;${themeBtnCss(th)}">${esc(ctaLabel)}</a>`;
+  const bodyBlock=`<div style="padding:18px;text-align:${th.align};">${inner}</div>`;
+  stage.innerHTML=`<div style="width:${wpx}px;max-width:100%;background:${th.bg};border-radius:${th.radius}px;box-shadow:0 20px 50px rgba(0,0,0,.28);overflow:hidden;position:relative;">
+    <div style="position:absolute;top:10px;right:10px;width:26px;height:26px;border-radius:50%;background:rgba(0,0,0,.45);color:#fff;text-align:center;line-height:26px;font-size:15px;">×</div>
+    ${th.imgPos==='bottom'?bodyBlock+img:img+bodyBlock}
+  </div>`;
 }
 function setBody(html){
   ensureQuill();
@@ -601,6 +699,7 @@ function setContentType(v){
   document.querySelectorAll('#segContent button').forEach(b=>b.classList.toggle('on', b.dataset.v===v));
   document.getElementById('textSection').style.display = (v==='text'||v==='both')?'':'none';
   document.getElementById('graphicSection').style.display = (v==='graphic'||v==='both')?'':'none';
+  try{ renderPreview(); }catch(e){}
 }
 // Step 1: pick the campaign type, then open the editor tailored to it.
 const CAMPAIGN_TYPES = [
@@ -644,6 +743,7 @@ function applyCampaignType(type){
   g('svContact').style.display=currentType==='lead'?'block':'none';
   // Reflect the type in the editor title.
   g('editorTitle').innerText=(editing?'Edit ':'New ')+(TYPE_LABEL[currentType]||'Campaign');
+  try{ renderPreview(); }catch(e){}
 }
 
 function openEditor(type){
@@ -663,6 +763,7 @@ function openEditor(type){
   document.getElementById('f_sv_ghl_loc').innerHTML='<option value="">— none —</option>';
   document.getElementById('f_sv_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
   setContactMode('native');
+  loadTheme(null);
   applyCampaignType(type||'announcement');
   if((type||'announcement')==='lead') populateSvLocations('');
   document.getElementById('f_audience').value='partner';
@@ -690,7 +791,7 @@ function openEditor(type){
   selectedGhl=new Set(); document.getElementById('ghlSearch').value=''; onGhlScope();
   populateConvLocations(''); document.getElementById('convPickers').style.display='none';
   setContentType('both');
-  document.getElementById('editorModal').style.display='flex';
+  document.getElementById('editorModal').style.display='flex'; try{ renderPreview(); }catch(e){}
 }
 function closeEditor(){ document.getElementById('editorModal').style.display='none'; }
 
@@ -704,6 +805,7 @@ async function editCampaign(id){
   setBody(c.body_text||'');
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
+  loadTheme(c.theme);
   await loadSurvey(c.survey);
   document.getElementById('f_audience').value=c.audience||'partner';
   setDisplayMode(c.display_mode||'card_dismissible');
@@ -745,7 +847,7 @@ async function editCampaign(id){
   setContentType(c.content_type||'both');
   if (currentImageUrl){ document.getElementById('hsImage').src=currentImageUrl; document.getElementById('hotspotArea').style.display=''; document.getElementById('hsImage').onload=renderHotspots; }
   else { document.getElementById('hotspotArea').style.display='none'; document.getElementById('hsImage').removeAttribute('src'); document.getElementById('hsList').innerHTML=''; document.getElementById('hsWrap').querySelectorAll('.hs-box').forEach(b=>b.remove()); }
-  document.getElementById('editorModal').style.display='flex';
+  document.getElementById('editorModal').style.display='flex'; try{ renderPreview(); }catch(e){}
 }
 
 function toLocalInput(iso){ if(!iso) return ''; const d=new Date(iso); const p=n=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; }
@@ -763,6 +865,7 @@ async function onPickImage(input){
   document.getElementById('uploadState').innerText='Graphic uploaded ✓';
   const img=document.getElementById('hsImage'); img.src=currentImageUrl; img.onload=renderHotspots;
   document.getElementById('hotspotArea').style.display='';
+  try{ renderPreview(); }catch(e){}
 }
 
 // ── hotspot drawing ──
@@ -860,6 +963,7 @@ function setContactMode(m){
   document.getElementById('cmGhlBtn').classList.toggle('on',m==='ghl_form');
   document.getElementById('cmNative').style.display=m==='native'?'block':'none';
   document.getElementById('cmGhl').style.display=m==='ghl_form'?'block':'none';
+  try{ renderPreview(); }catch(e){}
 }
 async function populateSvLocations(sel){
   const box=document.getElementById('f_sv_ghl_loc'); if(!box) return;
@@ -945,6 +1049,7 @@ async function saveCampaign(){
     audience: document.getElementById('f_audience').value,
     display_mode: getDisplayMode(),
     reshow_minutes: parseInt(document.getElementById('f_reshow').value)||5,
+    theme: buildTheme(),
     survey: buildSurvey(),
     target_type: document.getElementById('f_target_type').value,
     target_partner_ids: document.getElementById('f_target_type').value==='specific' ? selectedPartners.map(p=>p.id) : [],
@@ -1723,6 +1828,15 @@ function peopleSection(title, people, showTargets){
 
 // close modals on backdrop click
 document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ if(e.target===m) m.style.display='none'; }));
+
+// Live-update the popup preview whenever any editor field changes.
+(function(){
+  var body=document.querySelector('#editorModal .modal-body');
+  if(!body) return;
+  var h=function(){ try{ renderPreview(); }catch(e){} };
+  body.addEventListener('input', h);
+  body.addEventListener('change', h);
+})();
 </script>
 </body>
 </html>

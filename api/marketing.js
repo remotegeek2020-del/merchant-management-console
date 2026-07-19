@@ -107,6 +107,27 @@ function normalizeSurvey(s) {
     };
 }
 
+// Normalize the popup visual theme (all optional; renderers fall back to defaults).
+function normalizeTheme(t) {
+    if (!t || typeof t !== 'object') return null;
+    const col = (v, d) => (/^#[0-9a-fA-F]{3,8}$/.test(String(v || '')) ? String(v) : d);
+    const pick = (v, allowed, d) => (allowed.includes(v) ? v : d);
+    const out = {
+        bg: col(t.bg, '#ffffff'),
+        text: col(t.text, '#475569'),
+        title: col(t.title, '#0f172a'),
+        accent: col(t.accent, '#004990'),
+        btnText: col(t.btnText, '#ffffff'),
+        radius: Math.max(0, Math.min(40, parseInt(t.radius, 10) || 16)),
+        width: pick(t.width, ['narrow', 'normal', 'wide'], 'normal'),
+        align: pick(t.align, ['left', 'center'], 'left'),
+        btnStyle: pick(t.btnStyle, ['solid', 'outline', 'pill'], 'solid'),
+        imgPos: pick(t.imgPos, ['top', 'bottom'], 'top'),
+        overlay: pick(t.overlay, ['dark', 'light'], 'dark')
+    };
+    return out;
+}
+
 const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
@@ -240,6 +261,8 @@ export default async function handler(req, res) {
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
+                    // Popup visual design.
+                    theme: normalizeTheme(b.theme),
                     // Interactive config (poll / rating / contact capture).
                     survey: normalizeSurvey(b.survey),
                     // Per-campaign page exclusions (on top of the per-site baseline).
@@ -891,6 +914,7 @@ export default async function handler(req, res) {
                         display_mode: c.display_mode || 'card_dismissible',
                         reshow_minutes: c.reshow_minutes || 5,
                         survey: c.survey || null,
+                        theme: c.theme || null,
                         variant
                     };
                 });
