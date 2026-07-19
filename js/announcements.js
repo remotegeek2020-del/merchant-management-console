@@ -245,15 +245,24 @@
             for (var r = start; r <= max; r++) h += '<button type="button" class="ppa-rate" data-v="' + r + '" onclick="ppAnnRate(this)" style="min-width:32px;height:32px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">' + r + '</button>';
             h += '</div></div>';
         }
+        var ghlFormOnly = false;
         if (s.contact && s.contact.enabled) {
-            h += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">';
-            if (s.contact.name) h += '<input class="ppa-c-name" placeholder="Your name' + (svReq(s, 'name') ? ' *' : '') + '" style="' + SVINP + '">';
-            if (s.contact.email) h += '<input class="ppa-c-email" type="email" placeholder="Email' + (svReq(s, 'email') ? ' *' : '') + '" style="' + SVINP + '">';
-            if (s.contact.phone) h += '<input class="ppa-c-phone" placeholder="Phone' + (svReq(s, 'phone') ? ' *' : '') + '" style="' + SVINP + '">';
-            h += '</div>';
+            if (s.contact.mode === 'ghl_form' && s.contact.ghl_form_id) {
+                ghlFormOnly = !(s.question && s.options && s.options.length) && !(s.rating && s.rating.enabled);
+                h += '<div style="margin-top:10px;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(s.contact.ghl_form_id) + '" style="width:100%;min-height:460px;border:none;" scrolling="yes"></iframe></div>';
+            } else {
+                h += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">';
+                if (s.contact.name) h += '<input class="ppa-c-name" placeholder="Your name' + (svReq(s, 'name') ? ' *' : '') + '" style="' + SVINP + '">';
+                if (s.contact.email) h += '<input class="ppa-c-email" type="email" placeholder="Email' + (svReq(s, 'email') ? ' *' : '') + '" style="' + SVINP + '">';
+                if (s.contact.phone) h += '<input class="ppa-c-phone" placeholder="Phone' + (svReq(s, 'phone') ? ' *' : '') + '" style="' + SVINP + '">';
+                h += '</div>';
+            }
         }
-        h += '<button type="button" class="ppa-cta" style="margin-top:12px;border:none;" onclick="ppAnnSurvey(this)">Submit</button>';
-        h += '<div class="ppa-sv-msg" style="font-size:12px;color:#dc2626;margin-top:6px;min-height:14px;"></div></div>';
+        if (!ghlFormOnly) {
+            h += '<button type="button" class="ppa-cta" style="margin-top:12px;border:none;" onclick="ppAnnSurvey(this)">Submit</button>';
+            h += '<div class="ppa-sv-msg" style="font-size:12px;color:#dc2626;margin-top:6px;min-height:14px;"></div>';
+        }
+        h += '</div>';
         return h;
     }
     window.ppAnnRate = function (btn) {

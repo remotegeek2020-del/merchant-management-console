@@ -162,6 +162,7 @@
       </div>
 
       <label class="fld">Call-to-action button (optional)</label>
+      <div class="muted" style="font-size:11px;margin:-2px 0 4px;">A secondary link button (e.g. "Learn more"). For Poll / Rating / Capture Contact the Submit button is the main action — the CTA is just an extra link, usually not needed.</div>
       <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
         <input type="checkbox" id="f_cta_enabled" onchange="document.getElementById('ctaFields').style.display=this.checked?'grid':'none';"> Show a CTA button on the card
       </label>
@@ -193,10 +194,34 @@
           </div>
           <div id="svContact" style="display:none;">
             <div class="muted" style="font-size:11px;margin-bottom:6px;">Best for unknown website visitors (lead gen).</div>
-            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
-              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_name"> Name <select id="f_sv_r_name" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
-              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_email" checked> Email <select id="f_sv_r_email" style="font-size:11px;"><option value="req" selected>required</option><option value="">optional</option></select></label>
-              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_phone"> Phone <select id="f_sv_r_phone" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+            <div class="seg" style="margin-bottom:10px;">
+              <button type="button" id="cmNativeBtn" class="on" onclick="setContactMode('native')">Native form</button>
+              <button type="button" id="cmGhlBtn" onclick="setContactMode('ghl_form')">HighLevel form</button>
+            </div>
+
+            <!-- GHL sub-account (shared by both modes) -->
+            <label class="fld" style="margin-top:0;">HighLevel sub-account <span class="muted" style="font-weight:400;">(optional for native, required for HL form)</span></label>
+            <select class="inp" id="f_sv_ghl_loc" onchange="onSvGhlLoc()"><option value="">— none —</option></select>
+
+            <!-- Native fields -->
+            <div id="cmNative">
+              <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-top:10px;">
+                <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_name"> Name <select id="f_sv_r_name" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+                <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_email" checked> Email <select id="f_sv_r_email" style="font-size:11px;"><option value="req" selected>required</option><option value="">optional</option></select></label>
+                <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_phone"> Phone <select id="f_sv_r_phone" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+              </div>
+              <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;cursor:pointer;"><input type="checkbox" id="f_sv_push" onchange="document.getElementById('svTagsWrap').style.display=(this.checked&&document.getElementById('f_sv_ghl_loc').value)?'block':'none';"> Push each lead into the sub-account above (as a contact)</label>
+              <div id="svTagsWrap" style="display:none;margin-top:8px;">
+                <label class="fld" style="margin-top:0;">Tag(s) to apply</label>
+                <div id="f_sv_tags" style="border:1px solid var(--border);border-radius:8px;padding:6px;max-height:120px;overflow:auto;font-size:12px;"><div class="muted">Choose a sub-account to load its tags.</div></div>
+              </div>
+            </div>
+
+            <!-- GHL form -->
+            <div id="cmGhl" style="display:none;">
+              <label class="fld">HighLevel form</label>
+              <select class="inp" id="f_sv_ghl_form"><option value="">Choose a sub-account first…</option></select>
+              <div class="muted" style="font-size:11px;margin-top:4px;">The form's own fields, tags &amp; automations run in HighLevel. Submissions go straight into that sub-account.</div>
             </div>
           </div>
           <label class="fld" style="margin-top:8px;">Thank-you message</label>
@@ -634,7 +659,12 @@ function openEditor(type){
   document.getElementById('f_sv_c_name').checked=false; document.getElementById('f_sv_r_name').value='';
   document.getElementById('f_sv_c_email').checked=true; document.getElementById('f_sv_r_email').value='req';
   document.getElementById('f_sv_c_phone').checked=false; document.getElementById('f_sv_r_phone').value='';
+  document.getElementById('f_sv_push').checked=false; document.getElementById('svTagsWrap').style.display='none';
+  document.getElementById('f_sv_ghl_loc').innerHTML='<option value="">— none —</option>';
+  document.getElementById('f_sv_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
+  setContactMode('native');
   applyCampaignType(type||'announcement');
+  if((type||'announcement')==='lead') populateSvLocations('');
   document.getElementById('f_audience').value='partner';
   setDisplayMode('card_dismissible');
   document.getElementById('f_reshow').value='5';
@@ -674,7 +704,7 @@ async function editCampaign(id){
   setBody(c.body_text||'');
   document.getElementById('f_cta_enabled').checked=!!c.cta_enabled; document.getElementById('ctaFields').style.display=c.cta_enabled?'grid':'none';
   document.getElementById('f_cta_label').value=c.cta_label||''; document.getElementById('f_cta_url').value=c.cta_url||'';
-  loadSurvey(c.survey);
+  await loadSurvey(c.survey);
   document.getElementById('f_audience').value=c.audience||'partner';
   setDisplayMode(c.display_mode||'card_dismissible');
   document.getElementById('f_reshow').value=c.reshow_minutes??5;
@@ -801,11 +831,54 @@ function buildSurvey(){
     question: poll ? g('f_sv_question').value.trim() : '',
     options,
     rating: rating ? { enabled:true, scale:parseInt(g('f_sv_scale').value)===10?10:5, label:g('f_sv_ratinglabel').value.trim() } : { enabled:false },
-    contact: contact ? { enabled:true, name:g('f_sv_c_name').checked, email:g('f_sv_c_email').checked, phone:g('f_sv_c_phone').checked, required } : { enabled:false },
+    contact: contact ? buildContact() : { enabled:false },
     thanks: g('f_sv_thanks').value.trim() || 'Thanks for your response!'
   };
 }
-function loadSurvey(s){
+function buildContact(){
+  const g=id=>document.getElementById(id);
+  const required=[];
+  if(g('f_sv_c_name').checked&&g('f_sv_r_name').value==='req')required.push('name');
+  if(g('f_sv_c_email').checked&&g('f_sv_r_email').value==='req')required.push('email');
+  if(g('f_sv_c_phone').checked&&g('f_sv_r_phone').value==='req')required.push('phone');
+  const mode=window._svContactMode||'native';
+  const loc=g('f_sv_ghl_loc').value||null;
+  const fSel=g('f_sv_ghl_form'); const formId=(mode==='ghl_form'&&fSel.value)?fSel.value:null;
+  const formName=formId?(fSel.options[fSel.selectedIndex]?.dataset.name||null):null;
+  const tags=Array.from(document.querySelectorAll('#f_sv_tags .sv-tag:checked')).map(cb=>cb.value);
+  return {
+    enabled:true, mode,
+    name:g('f_sv_c_name').checked, email:g('f_sv_c_email').checked, phone:g('f_sv_c_phone').checked, required,
+    ghl_location_id:loc, ghl_form_id:formId, ghl_form_name:formName,
+    ghl_tags:(mode==='native'&&g('f_sv_push').checked)?tags:[],
+    push:(mode==='native'&&g('f_sv_push').checked&&!!loc)
+  };
+}
+function setContactMode(m){
+  window._svContactMode=m;
+  document.getElementById('cmNativeBtn').classList.toggle('on',m==='native');
+  document.getElementById('cmGhlBtn').classList.toggle('on',m==='ghl_form');
+  document.getElementById('cmNative').style.display=m==='native'?'block':'none';
+  document.getElementById('cmGhl').style.display=m==='ghl_form'?'block':'none';
+}
+async function populateSvLocations(sel){
+  const box=document.getElementById('f_sv_ghl_loc'); if(!box) return;
+  const d=await getGhlLocations(); const locs=(d&&d.locations)||[];
+  box.innerHTML='<option value="">— none —</option>'+locs.map(l=>`<option value="${esc(l.id)}">${esc(l.name||l.id)}</option>`).join('');
+  if(sel) box.value=sel;
+}
+async function onSvGhlLoc(){
+  const g=id=>document.getElementById(id); const loc=g('f_sv_ghl_loc').value;
+  g('svTagsWrap').style.display=(g('f_sv_push').checked&&loc)?'block':'none';
+  if(!loc){ g('f_sv_tags').innerHTML='<div class="muted">Choose a sub-account to load its tags.</div>'; g('f_sv_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
+  g('f_sv_tags').innerHTML='<div class="muted">Loading tags…</div>';
+  const [tr,fr]=await Promise.all([api({action:'ghl_tags',location_id:loc}),api({action:'ghl_forms',location_id:loc})]);
+  const tags=(tr.success&&Array.isArray(tr.data))?tr.data:[];
+  g('f_sv_tags').innerHTML=tags.length?tags.map(t=>`<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="sv-tag" value="${esc(t.name)}"> ${esc(t.name)}</label>`).join(''):'<div class="muted">No tags in this sub-account.</div>';
+  const forms=(fr.success&&Array.isArray(fr.data))?fr.data:[];
+  g('f_sv_ghl_form').innerHTML='<option value="">— choose a form —</option>'+forms.map(f=>`<option value="${esc(f.id)}" data-name="${esc(f.name)}">${esc(f.name)}</option>`).join('');
+}
+async function loadSurvey(s){
   const g=id=>document.getElementById(id);
   s = s && s.enabled ? s : null;
   // Infer the campaign type from the saved survey and tailor the editor to it.
@@ -813,12 +886,24 @@ function loadSurvey(s){
   if(s){ if(s.question && s.options && s.options.length) type='poll'; else if(s.rating && s.rating.enabled) type='rating'; else if(s.contact && s.contact.enabled) type='lead'; }
   g('f_sv_question').value=s?(s.question||''):''; g('f_sv_options').value=(s&&s.options)?s.options.join('\n'):'';
   g('f_sv_scale').value=(s&&s.rating&&s.rating.scale===10)?'10':'5'; g('f_sv_ratinglabel').value=(s&&s.rating)?(s.rating.label||''):'';
-  const contact=!!(s && s.contact && s.contact.enabled); const rq=(contact&&s.contact.required)||[];
-  g('f_sv_c_name').checked=contact?!!s.contact.name:false; g('f_sv_r_name').value=rq.indexOf('name')!==-1?'req':'';
-  g('f_sv_c_email').checked=contact?!!s.contact.email:true; g('f_sv_r_email').value=(!contact||rq.indexOf('email')!==-1)?'req':'';
-  g('f_sv_c_phone').checked=contact?!!s.contact.phone:false; g('f_sv_r_phone').value=rq.indexOf('phone')!==-1?'req':'';
+  const cc=(s && s.contact && s.contact.enabled)?s.contact:null; const rq=(cc&&cc.required)||[];
+  g('f_sv_c_name').checked=cc?!!cc.name:false; g('f_sv_r_name').value=rq.indexOf('name')!==-1?'req':'';
+  g('f_sv_c_email').checked=cc?!!cc.email:true; g('f_sv_r_email').value=(!cc||rq.indexOf('email')!==-1)?'req':'';
+  g('f_sv_c_phone').checked=cc?!!cc.phone:false; g('f_sv_r_phone').value=rq.indexOf('phone')!==-1?'req':'';
   g('f_sv_thanks').value=s?(s.thanks||''):'';
   applyCampaignType(type);
+  // Restore GHL contact config.
+  setContactMode(cc&&cc.mode==='ghl_form'?'ghl_form':'native');
+  g('f_sv_push').checked=!!(cc&&cc.push);
+  if(type==='lead'){
+    await populateSvLocations(cc?cc.ghl_location_id||'':'');
+    if(cc&&cc.ghl_location_id){ await onSvGhlLoc();
+      // re-check saved tags + form after they load
+      (cc.ghl_tags||[]).forEach(t=>{ const el=document.querySelector('#f_sv_tags .sv-tag[value="'+(window.CSS&&CSS.escape?CSS.escape(t):t)+'"]'); if(el) el.checked=true; });
+      if(cc.ghl_form_id) g('f_sv_ghl_form').value=cc.ghl_form_id;
+      g('svTagsWrap').style.display=(g('f_sv_push').checked)?'block':'none';
+    }
+  }
 }
 
 async function saveCampaign(){

@@ -236,15 +236,25 @@
             for (var r = start; r <= max; r++) h += '<button type="button" class="ppx-rate" data-v="' + r + '" onclick="__ppxRate(this)" style="min-width:34px;height:34px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">' + r + '</button>';
             h += '</div></div>';
         }
+        var ghlFormOnly = false;
         if (s.contact && s.contact.enabled) {
-            h += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">';
-            if (s.contact.name) h += '<input class="ppx-c-name" placeholder="Your name' + (req(s, 'name') ? ' *' : '') + '" style="' + INP + '">';
-            if (s.contact.email) h += '<input class="ppx-c-email" type="email" placeholder="Email' + (req(s, 'email') ? ' *' : '') + '" style="' + INP + '">';
-            if (s.contact.phone) h += '<input class="ppx-c-phone" placeholder="Phone' + (req(s, 'phone') ? ' *' : '') + '" style="' + INP + '">';
-            h += '</div>';
+            if (s.contact.mode === 'ghl_form' && s.contact.ghl_form_id) {
+                // Embed the HighLevel form itself — it handles its own submit + tags.
+                ghlFormOnly = !(s.question && s.options && s.options.length) && !(s.rating && s.rating.enabled);
+                h += '<div style="margin-top:12px;"><iframe src="https://api.leadconnectorhq.com/widget/form/' + esc(s.contact.ghl_form_id) + '" style="width:100%;min-height:480px;border:none;" scrolling="yes"></iframe></div>';
+            } else {
+                h += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">';
+                if (s.contact.name) h += '<input class="ppx-c-name" placeholder="Your name' + (req(s, 'name') ? ' *' : '') + '" style="' + INP + '">';
+                if (s.contact.email) h += '<input class="ppx-c-email" type="email" placeholder="Email' + (req(s, 'email') ? ' *' : '') + '" style="' + INP + '">';
+                if (s.contact.phone) h += '<input class="ppx-c-phone" placeholder="Phone' + (req(s, 'phone') ? ' *' : '') + '" style="' + INP + '">';
+                h += '</div>';
+            }
         }
-        h += '<button type="button" class="ppx-cta" style="margin-top:14px;" onclick="__ppxSurvey(this)">Submit</button>';
-        h += '<div class="ppx-survey-msg" style="font-size:12px;color:#dc2626;margin-top:6px;min-height:14px;"></div></div>';
+        if (!ghlFormOnly) {
+            h += '<button type="button" class="ppx-cta" style="margin-top:14px;" onclick="__ppxSurvey(this)">Submit</button>';
+            h += '<div class="ppx-survey-msg" style="font-size:12px;color:#dc2626;margin-top:6px;min-height:14px;"></div>';
+        }
+        h += '</div>';
         return h;
     }
     window.__ppxRate = function (btn) {

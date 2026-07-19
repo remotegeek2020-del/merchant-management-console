@@ -13,7 +13,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { validateSession as validateStaff, sessionErrorResponse } from './_validate.js';
-import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments } from './_ghl.js';
+import { ghlListLocations, ghlLocationNames, ghlListForms, ghlListCalendars, ghlFormSubmissions, ghlCalendarAppointments, ghlListTags, ghlUpsertContact } from './_ghl.js';
 import { setConfigValue } from './api-config.js';
 import * as webflow from './_webflow.js';
 
@@ -85,8 +85,15 @@ function normalizeSurvey(s) {
     } : { enabled: false };
     const contact = s.contact && s.contact.enabled ? {
         enabled: true,
+        mode: s.contact.mode === 'ghl_form' ? 'ghl_form' : 'native',
         name: !!s.contact.name, email: !!s.contact.email, phone: !!s.contact.phone,
-        required: Array.isArray(s.contact.required) ? s.contact.required.filter(f => ['name', 'email', 'phone'].includes(f)) : []
+        required: Array.isArray(s.contact.required) ? s.contact.required.filter(f => ['name', 'email', 'phone'].includes(f)) : [],
+        // GHL integration (both modes may target a sub-account).
+        ghl_location_id: str(s.contact.ghl_location_id, 100) || null,
+        ghl_form_id: str(s.contact.ghl_form_id, 100) || null,
+        ghl_form_name: str(s.contact.ghl_form_name, 200) || null,
+        ghl_tags: Array.isArray(s.contact.ghl_tags) ? s.contact.ghl_tags.map(t => str(t, 80)).filter(Boolean).slice(0, 20) : [],
+        push: !!s.contact.push
     } : { enabled: false };
     const hasPoll = !!(str(s.question, 300) && opts.length);
     // Nothing actually asked → treat as disabled.
@@ -108,7 +115,7 @@ const ADMIN_ACTIONS = new Set([
     'get_responses', 'export_responses', 'dashboard',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
-    'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta',
+    'ghl_forms', 'ghl_tags', 'ghl_calendars', 'get_conversions', 'scan_cta',
     'set_location_token', 'test_location'
 ]);
 const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
@@ -598,6 +605,11 @@ export default async function handler(req, res) {
             }
 
             // Forms / calendars in a sub-account (for the conversion-source pickers).
+            if (action === 'ghl_tags') {
+                const { location_id } = req.body;
+                if (!location_id) return bad(res, 'location_id required');
+                return ok(res, await ghlListTags(location_id));
+            }
             if (action === 'ghl_forms') {
                 if (!req.body.location_id) return ok(res, []);
                 return ok(res, await ghlListForms(req.body.location_id));
@@ -901,6 +913,14 @@ export default async function handler(req, res) {
                     campaign_id, user_id: who.id, user_type: who.type, event_type: 'click',
                     target: 'survey', variant: (variant === 'A' || variant === 'B') ? variant : null
                 });
+                // Push the lead to a GHL sub-account (with tags) if the campaign is configured for it.
+                if (email || phone) {
+                    const { data: camp } = await supabase.from('marketing_campaigns').select('survey').eq('id', campaign_id).maybeSingle();
+                    const cc = camp?.survey?.contact;
+                    if (cc && cc.push && cc.ghl_location_id) {
+                        ghlUpsertContact(cc.ghl_location_id, { name, email, phone }, cc.ghl_tags || []).catch(() => {});
+                    }
+                }
                 return ok(res, { saved: true });
             }
 

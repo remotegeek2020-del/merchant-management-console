@@ -88,6 +88,37 @@ export async function ghlListCalendars(locationId) {
     return (d?.calendars || []).map(c => ({ id: c.id, name: c.name || c.id }));
 }
 
+// Tags in a sub-account (for the lead-capture tag picker).
+export async function ghlListTags(locationId) {
+    const d = await locGet(locationId, `/locations/${encodeURIComponent(locationId)}/tags`);
+    return (d?.tags || []).map(t => ({ id: t.id, name: t.name || t.id }));
+}
+
+// Create/update a contact in a sub-account with optional tags (lead push).
+export async function ghlUpsertContact(locationId, contact = {}, tags = []) {
+    const lt = await ghlLocationToken(locationId);
+    if (!lt) return { ok: false, error: 'no location token' };
+    const parts = String(contact.name || '').trim().split(/\s+/).filter(Boolean);
+    const body = {
+        locationId,
+        email: contact.email || undefined,
+        phone: contact.phone || undefined,
+        firstName: parts.shift() || undefined,
+        lastName: parts.join(' ') || undefined,
+        tags: (Array.isArray(tags) && tags.length) ? tags : undefined,
+        source: 'PayProTec Announcement'
+    };
+    try {
+        const r = await fetch(`${GHL_BASE}/contacts/upsert`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${lt}`, 'Version': '2021-07-28', 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const j = await r.json().catch(() => null);
+        return { ok: r.ok, id: j?.contact?.id || null, error: r.ok ? null : (j?.message || ('HTTP ' + r.status)) };
+    } catch (e) { return { ok: false, error: e.message }; }
+}
+
 // Form submissions for a form within a date window → normalized conversions.
 export async function ghlFormSubmissions(locationId, formId, startMs, endMs) {
     if (!formId) return [];

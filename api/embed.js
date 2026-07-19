@@ -10,6 +10,7 @@
 // anonymous visitor id.
 
 import { createClient } from '@supabase/supabase-js';
+import { ghlUpsertContact } from './_ghl.js';
 
 const supabase = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -227,6 +228,14 @@ export default async function handler(req, res) {
                 country, meta: cleanMeta(body.meta)
             });
             await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'click', target: 'survey', site_id: siteId, ghl_location: ghlLoc, country });
+            // Push the lead to a GHL sub-account (with tags) if configured.
+            if (email || phone) {
+                const { data: camp } = await supabase.from('marketing_campaigns').select('survey').eq('id', campaign_id).maybeSingle();
+                const cc = camp?.survey?.contact;
+                if (cc && cc.push && cc.ghl_location_id) {
+                    ghlUpsertContact(cc.ghl_location_id, { name, email, phone }, cc.ghl_tags || []).catch(() => {});
+                }
+            }
             return ok(res, { saved: true });
         }
 
