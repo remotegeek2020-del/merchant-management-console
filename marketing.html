@@ -98,6 +98,7 @@
     <div class="seg">
       <button id="viewListBtn" class="on" onclick="setView('list')">List</button>
       <button id="viewCalBtn" onclick="setView('calendar')">Calendar</button>
+      <button id="viewDashBtn" onclick="setView('dashboard')">📊 Dashboard</button>
     </div>
     <div style="flex:1;"></div>
     <div id="calNav" style="display:none;align-items:center;gap:8px;">
@@ -120,6 +121,7 @@
   </div>
 
   <div id="calendarCard" class="card" style="display:none;padding:16px;"></div>
+  <div id="dashboardCard" class="card" style="display:none;padding:18px;"><div class="muted" style="text-align:center;padding:30px;">Loading…</div></div>
 </div>
 
 <!-- ── EDITOR MODAL ── -->
@@ -896,10 +898,50 @@ function setView(v){
   currentView=v;
   document.getElementById('viewListBtn').classList.toggle('on', v==='list');
   document.getElementById('viewCalBtn').classList.toggle('on', v==='calendar');
+  document.getElementById('viewDashBtn').classList.toggle('on', v==='dashboard');
   document.getElementById('listCard').style.display = v==='list' ? '' : 'none';
   document.getElementById('calendarCard').style.display = v==='calendar' ? '' : 'none';
+  document.getElementById('dashboardCard').style.display = v==='dashboard' ? '' : 'none';
   document.getElementById('calNav').style.display = v==='calendar' ? 'flex' : 'none';
   if (v==='calendar'){ if(!calCursor){ const n=new Date(); calCursor=new Date(n.getFullYear(),n.getMonth(),1); } renderCalendar(); }
+  if (v==='dashboard'){ renderMktDashboard(); }
+}
+async function renderMktDashboard(){
+  const box=document.getElementById('dashboardCard');
+  box.innerHTML='<div class="muted" style="text-align:center;padding:30px;">Loading…</div>';
+  const r=await api({action:'dashboard'});
+  if(!r.success){ box.innerHTML='<div style="color:var(--red);padding:20px;">Failed to load.</div>'; return; }
+  const d=r.data, t=d.totals, ch=d.channel||{};
+  const card=(n,l,c)=>`<div class="statbox"><div class="n"${c?` style="color:${c};"`:''}>${n}</div><div class="l">${l}</div></div>`;
+  // Funnel
+  const fmax=Math.max(t.impressions,1);
+  const funnelRow=(label,val,color)=>`<div style="margin-bottom:8px;"><div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span>${label}</span><b>${val}</b></div><div style="height:10px;background:#f1f5f9;border-radius:6px;overflow:hidden;"><div style="height:100%;width:${Math.round(val/fmax*100)}%;background:${color};"></div></div></div>`;
+  // Trend sparkline (SVG)
+  const tr=d.trend||[]; const tmax=Math.max(1,...tr.map(x=>x.imp));
+  const w=Math.max(300,tr.length*10), h=60;
+  const pts=(key)=>tr.map((x,i)=>`${(i/(tr.length-1||1)*w).toFixed(1)},${(h-(x[key]/tmax*h)).toFixed(1)}`).join(' ');
+  const chTotal=(ch.partner||0)+(ch.staff||0)+(ch.ghl||0)+(ch.website||0);
+  const chRow=(label,val,color)=>`<div style="margin-bottom:6px;"><div style="display:flex;justify-content:space-between;font-size:12px;"><span>${label}</span><b>${val}</b></div><div style="height:7px;background:#f1f5f9;border-radius:5px;overflow:hidden;"><div style="height:100%;width:${chTotal?Math.round(val/chTotal*100):0}%;background:${color};"></div></div></div>`;
+  const topRows=(d.top||[]).length?d.top.map(c=>`<tr><td style="padding:7px 10px;font-weight:600;">${esc(c.title)}</td><td class="num" style="padding:7px 10px;">${c.impressions}</td><td class="num" style="padding:7px 10px;">${c.clicks}</td><td class="num" style="padding:7px 10px;color:var(--green);font-weight:700;">${c.ctr}%</td></tr>`).join(''):'<tr><td colspan="4" style="padding:16px;text-align:center;color:var(--muted);">No activity in the last 30 days.</td></tr>';
+  box.innerHTML=`
+    <div style="font-size:12px;color:var(--muted);margin-bottom:10px;">Last ${d.window_days} days</div>
+    <div class="statgrid" style="margin-bottom:18px;">
+      ${card(t.impressions,'Views')}${card(t.clicks,'Clicks')}${card(t.ctr+'%','CTR','var(--green)')}${card(t.dismissals,'Dismissed')}${card(t.leads,'Leads captured','#b45309')}${card(t.active+' / '+t.campaigns,'Active campaigns')}
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start;">
+      <div><label class="fld" style="margin-top:0;">Funnel</label>
+        ${funnelRow('Views',t.impressions,'#0369a1')}${funnelRow('Clicks',t.clicks,'#16a34a')}${funnelRow('Leads',t.leads,'#b45309')}</div>
+      <div><label class="fld" style="margin-top:0;">Clicks by channel</label>
+        ${chRow('Partner portal',ch.partner||0,'#2563eb')}${chRow('Staff',ch.staff||0,'#7c3aed')}${chRow('GoHighLevel',ch.ghl||0,'#0d9488')}${chRow('Website',ch.website||0,'#d97706')}</div>
+    </div>
+    <label class="fld">Views &amp; clicks trend</label>
+    <div style="overflow-x:auto;"><svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:70px;">
+      <polyline fill="none" stroke="#0369a1" stroke-width="2" points="${pts('imp')}"></polyline>
+      <polyline fill="none" stroke="#16a34a" stroke-width="2" points="${pts('clk')}"></polyline>
+    </svg><div style="font-size:11px;color:var(--muted);"><span style="color:#0369a1;">■</span> views &nbsp; <span style="color:#16a34a;">■</span> clicks</div></div>
+    <label class="fld">Top campaigns (by clicks)</label>
+    <div style="overflow-x:auto;"><table style="width:100%;"><thead><tr><th style="text-align:left;padding:7px 10px;">Campaign</th><th class="num" style="padding:7px 10px;">Views</th><th class="num" style="padding:7px 10px;">Clicks</th><th class="num" style="padding:7px 10px;">CTR</th></tr></thead><tbody>${topRows}</tbody></table></div>
+  `;
 }
 function calMove(d){ calCursor=new Date(calCursor.getFullYear(), calCursor.getMonth()+d, 1); renderCalendar(); }
 function calToday(){ const n=new Date(); calCursor=new Date(n.getFullYear(),n.getMonth(),1); renderCalendar(); }

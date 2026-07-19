@@ -105,7 +105,7 @@ const ADMIN_ACTIONS = new Set([
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'site_pages', 'set_site_excluded', 'campaign_pages', 'ghl_locations',
-    'get_responses', 'export_responses',
+    'get_responses', 'export_responses', 'dashboard',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta',
@@ -442,6 +442,47 @@ export default async function handler(req, res) {
                 const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
                 if (error) return bad(res, error.message);
                 return ok(res, { deleted: true });
+            }
+            // Aggregate performance dashboard across all campaigns.
+            if (action === 'dashboard') {
+                const days = 30;
+                const sinceIso = new Date(Date.now() - days * 864e5).toISOString();
+                const [{ data: camps }, { data: evs }, { count: leadCount }] = await Promise.all([
+                    supabase.from('marketing_campaigns').select('id, title, is_active'),
+                    supabase.from('marketing_events').select('campaign_id, event_type, user_type, ghl_location, created_at').gte('created_at', sinceIso).limit(50000),
+                    supabase.from('marketing_responses').select('id', { count: 'exact', head: true }).or('email.not.is.null,phone.not.is.null')
+                ]);
+                const titleOf = {}; (camps || []).forEach(c => { titleOf[c.id] = c.title; });
+                let imp = 0, clk = 0, dis = 0;
+                const channel = { partner: 0, staff: 0, ghl: 0, website: 0 };
+                const perCampaign = {};   // id -> {imp, clk}
+                const trend = {};         // yyyy-mm-dd -> {imp, clk}
+                (evs || []).forEach(e => {
+                    const day = (e.created_at || '').slice(0, 10);
+                    if (!trend[day]) trend[day] = { imp: 0, clk: 0 };
+                    if (!perCampaign[e.campaign_id]) perCampaign[e.campaign_id] = { imp: 0, clk: 0 };
+                    if (e.event_type === 'impression') { imp++; trend[day].imp++; perCampaign[e.campaign_id].imp++; }
+                    else if (e.event_type === 'click') {
+                        clk++; trend[day].clk++; perCampaign[e.campaign_id].clk++;
+                        if (e.user_type === 'partner') channel.partner++;
+                        else if (e.user_type === 'staff') channel.staff++;
+                        else if (e.ghl_location) channel.ghl++;
+                        else channel.website++;
+                    } else if (e.event_type === 'dismiss') dis++;
+                });
+                const top = Object.entries(perCampaign)
+                    .map(([id, v]) => ({ id, title: titleOf[id] || '(deleted)', impressions: v.imp, clicks: v.clk, ctr: v.imp ? Math.round(v.clk / v.imp * 1000) / 10 : 0 }))
+                    .sort((a, b) => b.clicks - a.clicks).slice(0, 10);
+                const trendArr = [];
+                for (let i = days - 1; i >= 0; i--) {
+                    const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+                    trendArr.push({ day: d, imp: (trend[d] || {}).imp || 0, clk: (trend[d] || {}).clk || 0 });
+                }
+                return ok(res, {
+                    window_days: days,
+                    totals: { campaigns: (camps || []).length, active: (camps || []).filter(c => c.is_active).length, impressions: imp, clicks: clk, dismissals: dis, ctr: imp ? Math.round(clk / imp * 1000) / 10 : 0, leads: leadCount || 0 },
+                    channel, top, trend: trendArr
+                });
             }
             // Interactive responses for a campaign (poll tallies, ratings, leads).
             if (action === 'get_responses') {
