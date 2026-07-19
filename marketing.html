@@ -234,6 +234,10 @@
       <!-- ── DESIGN ── -->
       <label class="fld">Design</label>
       <div style="border:1px solid var(--border);border-radius:10px;padding:12px;">
+        <div style="margin-bottom:12px;">
+          <div class="dlbl">Presets — one click, then tweak</div>
+          <div id="presetRow" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+        </div>
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;">
           <div><label class="dlbl">Background</label><input type="color" id="t_bg" value="#ffffff" oninput="renderPreview()"></div>
           <div><label class="dlbl">Title color</label><input type="color" id="t_title" value="#0a1628" oninput="renderPreview()"></div>
@@ -490,6 +494,27 @@ function ensureQuill(){
   });
   bodyQuill.on('text-change', function(){ try{ renderPreview(); }catch(e){} });
   return bodyQuill;
+}
+
+// ── Design presets ──
+const THEME_PRESETS = {
+  'Brand':   { swatch:'#004990', bg:'#ffffff', title:'#0a1628', text:'#475569', accent:'#004990', btnText:'#ffffff', radius:16, width:'normal', align:'left',   btnStyle:'solid',   imgPos:'top', overlay:'dark' },
+  'Dark':    { swatch:'#0f172a', bg:'#0f172a', title:'#ffffff', text:'#cbd5e1', accent:'#38bdf8', btnText:'#0f172a', radius:16, width:'normal', align:'left',   btnStyle:'solid',   imgPos:'top', overlay:'dark' },
+  'Minimal': { swatch:'#111827', bg:'#ffffff', title:'#111827', text:'#6b7280', accent:'#111827', btnText:'#ffffff', radius:8,  width:'narrow', align:'left',   btnStyle:'outline', imgPos:'top', overlay:'light' },
+  'Vibrant': { swatch:'#7c3aed', bg:'#faf5ff', title:'#4c1d95', text:'#6d28d9', accent:'#7c3aed', btnText:'#ffffff', radius:22, width:'normal', align:'center', btnStyle:'pill',    imgPos:'top', overlay:'dark' },
+  'Gold':    { swatch:'#d97706', bg:'#ffffff', title:'#0a1628', text:'#475569', accent:'#d97706', btnText:'#ffffff', radius:14, width:'normal', align:'center', btnStyle:'solid',   imgPos:'top', overlay:'dark' }
+};
+function renderPresetRow(){
+  const row=document.getElementById('presetRow'); if(!row) return;
+  row.innerHTML=Object.keys(THEME_PRESETS).map(name=>{
+    const p=THEME_PRESETS[name];
+    return `<button type="button" onclick="applyPreset('${name}')" title="${name}" style="display:flex;align-items:center;gap:6px;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;background:#fff;cursor:pointer;font-size:12px;font-weight:700;font-family:inherit;">
+      <span style="width:14px;height:14px;border-radius:4px;background:${p.swatch};display:inline-block;"></span>${name}</button>`;
+  }).join('');
+}
+function applyPreset(name){
+  const p=THEME_PRESETS[name]; if(!p) return;
+  loadTheme(p); renderPreview();
 }
 
 // ── Design theme + live preview ──
@@ -1831,6 +1856,7 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ i
 
 // Live-update the popup preview whenever any editor field changes.
 (function(){
+  try{ renderPresetRow(); }catch(e){}
   var body=document.querySelector('#editorModal .modal-body');
   if(!body) return;
   var h=function(){ try{ renderPreview(); }catch(e){} };
