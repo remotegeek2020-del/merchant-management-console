@@ -107,6 +107,12 @@ export default async function handler(req, res) {
             const patch = {};
             for (const k of ALLOWED_TASK_FIELDS) { if (k in payload) patch[k] = payload[k]; }
 
+            // Track completion time for the daily digest's "completed yesterday" list.
+            if ('status' in patch) {
+                if (patch.status === 'Completed' && oldTask.status !== 'Completed') patch.completed_at = new Date().toISOString();
+                else if (patch.status !== 'Completed') patch.completed_at = null;   // reopened
+            }
+
             const { error } = await supabase.from('merchant_tasks').update(patch).eq('id', task_id);
             if (error) throw error;
 

@@ -15,6 +15,7 @@
     "api/cron-weekly-report.js": { "maxDuration": 60 },
     "api/cron-monthly-report.js": { "maxDuration": 60 },
     "api/cron-alerts.js": { "maxDuration": 60 },
+    "api/cron-task-digest.js": { "maxDuration": 60 },
     "api/ghl-documents.js": { "maxDuration": 30 }
   },
   "crons": [
@@ -36,6 +37,10 @@
     },
     {
       "path": "/api/cron-alerts",
+      "schedule": "0 * * * *"
+    },
+    {
+      "path": "/api/cron-task-digest",
       "schedule": "0 * * * *"
     }
   ],
