@@ -373,6 +373,7 @@
       </label>
       <div class="muted" style="font-size:11px;margin-top:4px;">Uses the embed script + your registered site keys. Manage sites with the “Embed Sites” button on the main screen.</div>
       <div id="embedTarget" style="display:none;margin-top:10px;">
+        <div id="embedFormatBlock">
         <div class="row2">
           <div><label class="fld" style="margin-top:0;">Format on external sites</label>
             <select class="sel" id="f_embed_format" onchange="onEmbedFormat()">
@@ -392,6 +393,7 @@
           <input class="inp" type="number" id="f_embed_delay" value="5" min="0" max="120" style="max-width:120px;">
         </div>
         <div class="muted" style="font-size:11px;margin:4px 0 10px;">Bar &amp; slide-in show a compact teaser; clicking it opens the full popup (with your form). Exit-intent fires when the visitor moves to leave.</div>
+        </div><!-- /embedFormatBlock -->
 
         <label class="fld" style="margin-top:0;">Which registered sites</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="embedScope" value="all" checked onchange="onEmbedScope()"> All registered sites</label>
@@ -641,7 +643,42 @@ let calCursor = null;        // Date at first-of-month being viewed
     return;
   }
   loadList();
+  loadMktFlags();
 })();
+
+// ── Feature flags (Secret Dungeon → Feature Flags → Marketing) ──
+window.MKT = {};
+function mktOn(k){ return window.MKT[k] !== 'false'; }   // default ON
+async function loadMktFlags(){
+  try{
+    var tok=localStorage.getItem('pp_session_token')||'';
+    var r=await fetch('/api/app-settings',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify({action:'get'})}).then(function(x){return x.json();});
+    window.MKT=(r&&r.settings)||{};
+  }catch(e){ window.MKT={}; }
+  mktApply();
+}
+function mktDisableBtn(btn, on){
+  if(!btn) return;
+  if(on){ btn.style.opacity=''; btn.style.pointerEvents=''; btn.removeAttribute('data-soon'); }
+  else {
+    btn.style.opacity='.5'; btn.style.pointerEvents='none';
+    if(!btn.getAttribute('data-soon')){ btn.setAttribute('data-soon','1'); btn.insertAdjacentHTML('beforeend',' <span style="font-size:9px;background:#94a3b8;color:#fff;border-radius:4px;padding:1px 5px;font-weight:800;">SOON</span>'); }
+  }
+}
+function mktApply(){
+  // Topbar buttons
+  var landBtn=document.querySelector('button[onclick="openLandingPages()"]');
+  var refBtn=document.querySelector('button[onclick="openReferrals()"]');
+  mktDisableBtn(landBtn, mktOn('mkt_landing'));
+  mktDisableBtn(refBtn, mktOn('mkt_referrals'));
+  // Editor sub-sections (hide when off)
+  var show=function(id,on){ var el=document.getElementById(id); if(el) el.style.display = on?'':'none'; };
+  // Capture formats (embed) — hide the format/trigger row's parent if off; handled at open time too.
+  window._mktCapture = mktOn('mkt_capture_formats');
+  window._mktInteractive = mktOn('mkt_interactive');
+  window._mktAi = mktOn('mkt_ai_builder');
+  window._mktCalc = mktOn('mkt_calculator');
+}
 
 function displayModeLabel(m){
   var map={
@@ -757,9 +794,11 @@ const CAMPAIGN_TYPES = [
 ];
 async function pickCampaignType(){
   let picked=null;
+  // Interactive types are gated by the marketing feature flag.
+  const TYPES = window._mktInteractive===false ? CAMPAIGN_TYPES.filter(t=>t[0]==='announcement') : CAMPAIGN_TYPES;
   await Swal.fire({
     title:'What kind of campaign?', width:540, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Cancel',
-    html:`<div style="display:grid;gap:10px;text-align:left;">${CAMPAIGN_TYPES.map(t=>`
+    html:`<div style="display:grid;gap:10px;text-align:left;">${TYPES.map(t=>`
       <button type="button" class="pp-typecard" data-t="${t[0]}" style="display:flex;gap:13px;align-items:center;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;cursor:pointer;font-family:inherit;">
         <div style="font-size:26px;line-height:1;">${t[1]}</div>
         <div><div style="font-weight:800;font-size:14px;color:#0f172a;">${t[2]}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">${t[3]}</div></div>
@@ -1539,7 +1578,7 @@ async function openCampaignPages(){
   });
 }
 async function getEmbedSites(){ if(embedSitesCache) return embedSitesCache; const r=await api({action:'list_sites'}); embedSitesCache=(r.success?r.data:[])||[]; return embedSitesCache; }
-function onShowEmbed(){ document.getElementById('embedTarget').style.display = document.getElementById('f_show_embed').checked ? '' : 'none'; }
+function onShowEmbed(){ document.getElementById('embedTarget').style.display = document.getElementById('f_show_embed').checked ? '' : 'none'; var fb=document.getElementById('embedFormatBlock'); if(fb) fb.style.display = (window._mktCapture===false)?'none':''; }
 function onEmbedFormat(){ document.getElementById('embedDelayWrap').style.display = document.getElementById('f_embed_trigger').value==='delay' ? '' : 'none'; }
 function onEmbedScope(){
   const specific = document.querySelector('input[name=embedScope]:checked')?.value==='specific';
@@ -1938,7 +1977,7 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ i
       </div>
 
       <!-- ── AI page ── -->
-      <div style="margin-top:14px;border:1.5px solid #ddd6fe;background:#f5f3ff;border-radius:12px;padding:14px;">
+      <div id="lpAiPanel" style="margin-top:14px;border:1.5px solid #ddd6fe;background:#f5f3ff;border-radius:12px;padding:14px;">
         <div style="display:flex;align-items:center;gap:8px;">
           <span style="font-size:20px;">✨</span>
           <div style="flex:1;"><div style="font-weight:800;font-size:14px;color:#5b21b6;">AI page builder</div><div style="font-size:11px;color:#6d28d9;">Describe the page you want — Gemini designs a full page. Then refine or edit it.</div></div>
@@ -2129,7 +2168,7 @@ async function newLanding(){
   document.getElementById('lpEditorTitle').innerText='New Landing Page';
   lpClear(); lpRenderPresets();
   await lpPopulateLocations('');
-  document.getElementById('landingEditor').style.display='flex'; lpPreview();
+  document.getElementById('landingEditor').style.display='flex'; lpPreview(); lpApplyMktFlags();
 }
 async function editLanding(id){
   var r=await lapi({action:'get_one',id:id}); if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
@@ -2147,9 +2186,13 @@ async function editLanding(id){
   lpSetMode(cc.mode==='ghl_form'?'ghl_form':'native');
   await lpPopulateLocations(cc.ghl_location_id||'');
   if(cc.ghl_location_id){ await lpOnGhlLoc(); (cc.ghl_tags||[]).forEach(function(tg){var el=document.querySelector('#lp_tags .lp-tag[value="'+(window.CSS&&CSS.escape?CSS.escape(tg):tg)+'"]'); if(el) el.checked=true;}); if(cc.ghl_form_id) document.getElementById('lp_ghl_form').value=cc.ghl_form_id; document.getElementById('lpTagsWrap').style.display=document.getElementById('lp_push').checked?'block':'none'; }
-  document.getElementById('landingEditor').style.display='flex'; lpPreview();
+  document.getElementById('landingEditor').style.display='flex'; lpPreview(); lpApplyMktFlags();
 }
 // ── Page type ──
+function lpApplyMktFlags(){
+  var ai=document.getElementById('lpAiPanel'); if(ai) ai.style.display=(window._mktAi===false)?'none':'';
+  var calc=document.getElementById('lptCalcBtn'); if(calc) calc.style.display=(window._mktCalc===false)?'none':'';
+}
 function lpSetType(t){
   _lpState.pageType=t;
   document.getElementById('lptStdBtn').classList.toggle('on',t==='standard');
