@@ -18,6 +18,15 @@
     (document.body || document.head).appendChild(s);
 })();
 
+// Load the global command palette (⌘K / Ctrl-K quick search & jump).
+(function () {
+    if (document.getElementById('ppcmd-loader')) return;
+    var s = document.createElement('script');
+    s.id = 'ppcmd-loader';
+    s.src = '/js/command-palette.js';
+    (document.body || document.head).appendChild(s);
+})();
+
 // Auto-attach session token to all /api/ calls and handle 401 session expiry globally
 (function () {
     const EXEMPT = ['/api/login', '/api/partner-auth', '/api/setup-password', '/api/partner-data'];
