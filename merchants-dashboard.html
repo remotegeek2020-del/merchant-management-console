@@ -3283,7 +3283,15 @@ window.saveMerchant = async (uuid) => {
             const filterEl = document.getElementById('filterBy');
             if (filterEl && urlFilterBy) filterEl.value = urlFilterBy;
         }
-        fetchMerchants().then(() => { Swal.close(); });
+        fetchMerchants().then(() => {
+            Swal.close();
+            // Deep-link from the shared notification bell → open the exact note/task.
+            const nm = params.get('nm');
+            if (nm) {
+                openNotifTarget(nm, params.get('nt') || '', params.get('nn') || '', params.get('ntk') || '');
+                history.replaceState({}, '', location.pathname);
+            }
+        });
         loadStaffStats();
         loadNotifications();
         setInterval(loadNotifications, 60000); // refresh every 60s
@@ -3375,12 +3383,17 @@ window.saveMerchant = async (uuid) => {
         const panel = document.getElementById('notif-panel');
         if (panel) panel.style.display = 'none';
 
-        // Open the merchant modal on the right tab
+        // Open the merchant modal on the right tab + highlight the note/task.
+        await openNotifTarget(merchantId, type, noteId, taskId);
+    }
+
+    // Opens the merchant modal and jumps to the exact note or task. Reused by the
+    // in-page bell AND by deep-links (?nm=&nt=&nn=&ntk=) from the shared bell.
+    async function openNotifTarget(merchantId, type, noteId, taskId) {
         if (!merchantId) return;
         await openModal(merchantId);
         if (type === 'mention' && noteId) {
             switchTab('notes');
-            // Highlight the note card after a short render delay
             setTimeout(() => {
                 const card = document.getElementById('note-card-' + noteId);
                 if (card) {

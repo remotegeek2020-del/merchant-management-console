@@ -90,6 +90,19 @@ export default async function handler(req, res) {
 
             if (error) throw error;
 
+            // Notify the assignee (bell) — mirrors the merchant-modal task path.
+            if (assigned_to && assigned_to !== session.userid) {
+                try {
+                    const { data: mr } = await supabase.from('merchants').select('dba_name').eq('id', merchant_id).maybeSingle();
+                    await supabase.from('user_notifications').insert([{
+                        user_id: assigned_to, type: 'task',
+                        title: `${staff_name || 'Someone'} assigned you a task`,
+                        body: title || '', merchant_id, merchant_name: mr?.dba_name || 'a merchant',
+                        task_id: data.id, from_name: staff_name || 'Someone'
+                    }]);
+                } catch (e) { /* best-effort */ }
+            }
+
             // Log it
             await supabase.from('activity_logs').insert({
                 email: staff_name || userid, action: `Created task: ${title}`,
@@ -104,7 +117,7 @@ export default async function handler(req, res) {
         // ── UPDATE TASK ───────────────────────────────────
         if (action === 'update_task') {
             const { task_id, payload } = req.body;
-            const { data: oldTask } = await supabase.from('merchant_tasks').select('title, status, assigned_to, priority, due_date, created_by').eq('id', task_id).maybeSingle();
+            const { data: oldTask } = await supabase.from('merchant_tasks').select('title, status, assigned_to, priority, due_date, created_by, merchant_id').eq('id', task_id).maybeSingle();
             if (!oldTask) return res.status(404).json({ success: false, message: 'Task not found.' });
 
             const { data: actor } = await supabase.from('app_users').select('role').eq('userid', session.userid).maybeSingle();
@@ -125,6 +138,19 @@ export default async function handler(req, res) {
 
             const { error } = await supabase.from('merchant_tasks').update(patch).eq('id', task_id);
             if (error) throw error;
+
+            // Notify a newly-assigned staffer (reassignment).
+            if (patch.assigned_to && patch.assigned_to !== oldTask.assigned_to && patch.assigned_to !== session.userid) {
+                try {
+                    const { data: mr } = await supabase.from('merchants').select('dba_name').eq('id', oldTask.merchant_id).maybeSingle();
+                    await supabase.from('user_notifications').insert([{
+                        user_id: patch.assigned_to, type: 'task',
+                        title: `${staff_name || 'Someone'} assigned you a task`,
+                        body: patch.title || oldTask.title || '', merchant_id: oldTask.merchant_id,
+                        merchant_name: mr?.dba_name || 'a merchant', task_id, from_name: staff_name || 'Someone'
+                    }]);
+                } catch (e) { /* best-effort */ }
+            }
 
             await supabase.from('activity_logs').insert({
                 email: staff_name || userid, action: `Updated task: ${oldTask?.title || task_id}`,

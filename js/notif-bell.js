@@ -81,9 +81,18 @@
             el.addEventListener('click', function () {
                 var id = el.getAttribute('data-id');
                 api({ action: 'mark_notification_read', notification_id: id, user_id: UID });
-                var mid = el.getAttribute('data-mid'), mname = el.getAttribute('data-mname');
-                if (mid) { location.href = 'merchants-dashboard.html?q=' + encodeURIComponent(mname || mid); }
-                else { var it = notifs.find(function (x) { return x.id === id; }); if (it) it.is_read = true; renderBadge(); renderList(); }
+                var it = notifs.find(function (x) { return x.id === id; }) || {};
+                var mid = el.getAttribute('data-mid');
+                // Deep-link straight to the exact note/task inside the merchant modal.
+                if (mid) {
+                    var q = 'merchants-dashboard.html?nm=' + encodeURIComponent(mid) +
+                            '&nt=' + encodeURIComponent(it.type || '') +
+                            '&nn=' + encodeURIComponent(it.note_id || '') +
+                            '&ntk=' + encodeURIComponent(it.task_id || '');
+                    location.href = q;
+                } else {
+                    if (it) it.is_read = true; renderBadge(); renderList();
+                }
             });
         });
     }
