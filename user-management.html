@@ -505,11 +505,19 @@ async function editUser(uid, name, email, role) {
         showCancelButton: true,
         confirmButtonColor: '#004990',
         confirmButtonText: 'Save Changes',
-        preConfirm: () => ({
-            first_name: document.getElementById('e-name').value.trim(),
-            email: document.getElementById('e-email').value.trim(),
-            role: document.getElementById('e-role').value
-        })
+        preConfirm: () => {
+            // Split the single display-name field into first + last so we never
+            // leave a stale last_name behind (which caused doubled surnames).
+            const parts = document.getElementById('e-name').value.trim().split(/\s+/).filter(Boolean);
+            const first_name = parts.shift() || '';
+            const last_name = parts.join(' ') || null;
+            return {
+                first_name,
+                last_name,
+                email: document.getElementById('e-email').value.trim(),
+                role: document.getElementById('e-role').value
+            };
+        }
     });
 
     if (form) {
