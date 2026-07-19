@@ -84,7 +84,7 @@
   <div class="sp"></div>
   <button class="btn btn-white" onclick="location.href='/'"><span class="material-icons" style="font-size:17px;">home</span> Home</button>
   <button class="btn btn-white" id="sitesBtn" onclick="openSites()"><span class="material-icons" style="font-size:17px;">public</span> Embed Sites</button>
-  <button class="btn btn-brand" onclick="openEditor()"><span class="material-icons" style="font-size:17px;">add</span> New Campaign</button>
+  <button class="btn btn-brand" onclick="pickCampaignType()"><span class="material-icons" style="font-size:17px;">add</span> New Campaign</button>
 </div>
 
 <div class="wrap">
@@ -170,38 +170,38 @@
         <div><label class="fld" style="margin-top:0;">Button link (URL)</label><input class="inp" id="f_cta_url" placeholder="https://…"></div>
       </div>
 
-      <label class="fld">Interactive (poll / rating / capture leads)</label>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;cursor:pointer;">
-        <input type="checkbox" id="f_sv_enabled" onchange="document.getElementById('svFields').style.display=this.checked?'block':'none';"> Ask the viewer something / collect their info
-      </label>
-      <div id="svFields" style="display:none;margin-top:8px;border:1px solid var(--border);border-radius:10px;padding:12px;">
-        <!-- Poll -->
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer;"><input type="checkbox" id="f_sv_poll" onchange="document.getElementById('svPoll').style.display=this.checked?'block':'none';"> Poll — ask a question with choices</label>
-        <div id="svPoll" style="display:none;margin:6px 0 12px;padding-left:6px;">
-          <input class="inp" id="f_sv_question" placeholder="Question, e.g. Which feature do you want next?" style="margin-bottom:6px;">
-          <textarea class="inp" id="f_sv_options" rows="3" placeholder="One option per line (max 6)"></textarea>
-        </div>
-        <!-- Rating / NPS -->
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer;"><input type="checkbox" id="f_sv_rating" onchange="document.getElementById('svRating').style.display=this.checked?'block':'none';"> Rating — CSAT (1–5) or NPS (0–10)</label>
-        <div id="svRating" style="display:none;margin:6px 0 12px;padding-left:6px;">
-          <div class="muted" style="font-size:11px;margin-bottom:6px;">NPS asks how likely someone is to recommend you — only meaningful for existing partners/customers, not unknown website visitors.</div>
-          <div class="row2">
-            <div><label class="fld" style="margin-top:0;">Scale</label>
-              <select class="inp" id="f_sv_scale"><option value="5">CSAT — 1 to 5</option><option value="10">NPS — 0 to 10</option></select></div>
-            <div><label class="fld" style="margin-top:0;">Prompt</label><input class="inp" id="f_sv_ratinglabel" placeholder="How would you rate us?"></div>
+      <!-- Interactive config — driven by the campaign TYPE chosen up front. -->
+      <!-- Hidden state checkboxes (set programmatically by applyCampaignType). -->
+      <input type="checkbox" id="f_sv_enabled" style="display:none;">
+      <input type="checkbox" id="f_sv_poll" style="display:none;">
+      <input type="checkbox" id="f_sv_rating" style="display:none;">
+      <input type="checkbox" id="f_sv_contact" style="display:none;">
+      <div id="interactiveBlock" style="display:none;">
+        <label class="fld">Interactive — <span id="svTypeName" style="color:var(--blue);"></span></label>
+        <div id="svFields" style="margin-top:4px;border:1px solid var(--border);border-radius:10px;padding:12px;">
+          <div id="svPoll" style="display:none;">
+            <input class="inp" id="f_sv_question" placeholder="Question, e.g. Which feature do you want next?" style="margin-bottom:6px;">
+            <textarea class="inp" id="f_sv_options" rows="3" placeholder="One option per line (max 6)"></textarea>
           </div>
-        </div>
-        <!-- Contact capture -->
-        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer;"><input type="checkbox" id="f_sv_contact" onchange="document.getElementById('svContact').style.display=this.checked?'block':'none';"> Capture contact — great for unknown website visitors (lead gen)</label>
-        <div id="svContact" style="display:none;margin:6px 0 12px;padding-left:6px;">
-          <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
-            <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_name"> Name <select id="f_sv_r_name" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
-            <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_email" checked> Email <select id="f_sv_r_email" style="font-size:11px;"><option value="req" selected>required</option><option value="">optional</option></select></label>
-            <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_phone"> Phone <select id="f_sv_r_phone" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+          <div id="svRating" style="display:none;">
+            <div class="muted" style="font-size:11px;margin-bottom:6px;">NPS asks how likely someone is to recommend you — only meaningful for existing partners/customers, not unknown website visitors.</div>
+            <div class="row2">
+              <div><label class="fld" style="margin-top:0;">Scale</label>
+                <select class="inp" id="f_sv_scale"><option value="5">CSAT — 1 to 5</option><option value="10">NPS — 0 to 10</option></select></div>
+              <div><label class="fld" style="margin-top:0;">Prompt</label><input class="inp" id="f_sv_ratinglabel" placeholder="How would you rate us?"></div>
+            </div>
           </div>
+          <div id="svContact" style="display:none;">
+            <div class="muted" style="font-size:11px;margin-bottom:6px;">Best for unknown website visitors (lead gen).</div>
+            <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;">
+              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_name"> Name <select id="f_sv_r_name" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_email" checked> Email <select id="f_sv_r_email" style="font-size:11px;"><option value="req" selected>required</option><option value="">optional</option></select></label>
+              <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="f_sv_c_phone"> Phone <select id="f_sv_r_phone" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+            </div>
+          </div>
+          <label class="fld" style="margin-top:8px;">Thank-you message</label>
+          <input class="inp" id="f_sv_thanks" placeholder="Thanks for your response!">
         </div>
-        <label class="fld" style="margin-top:4px;">Thank-you message</label>
-        <input class="inp" id="f_sv_thanks" placeholder="Thanks for your response!">
       </div>
 
       <div class="row2">
@@ -577,14 +577,64 @@ function setContentType(v){
   document.getElementById('textSection').style.display = (v==='text'||v==='both')?'':'none';
   document.getElementById('graphicSection').style.display = (v==='graphic'||v==='both')?'':'none';
 }
-function openEditor(){
+// Step 1: pick the campaign type, then open the editor tailored to it.
+const CAMPAIGN_TYPES = [
+  ['announcement','📢','Announcement','A message / image with an optional button (the standard one)'],
+  ['poll','📊','Poll','Ask a question with choices and see the tally'],
+  ['rating','⭐','Rating / NPS','Collect a CSAT or NPS score — for existing partners'],
+  ['lead','📇','Capture Contact','Collect name / email / phone — for unknown website visitors']
+];
+async function pickCampaignType(){
+  let picked=null;
+  await Swal.fire({
+    title:'What kind of campaign?', width:540, showConfirmButton:false, showCancelButton:true, cancelButtonText:'Cancel',
+    html:`<div style="display:grid;gap:10px;text-align:left;">${CAMPAIGN_TYPES.map(t=>`
+      <button type="button" class="pp-typecard" data-t="${t[0]}" style="display:flex;gap:13px;align-items:center;border:1.5px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;cursor:pointer;font-family:inherit;">
+        <div style="font-size:26px;line-height:1;">${t[1]}</div>
+        <div><div style="font-weight:800;font-size:14px;color:#0f172a;">${t[2]}</div><div style="font-size:12px;color:#64748b;margin-top:2px;">${t[3]}</div></div>
+      </button>`).join('')}</div>`,
+    didOpen:()=>{ document.querySelectorAll('.pp-typecard').forEach(b=>{
+      b.addEventListener('mouseenter',()=>b.style.borderColor='#004990');
+      b.addEventListener('mouseleave',()=>b.style.borderColor='#e2e8f0');
+      b.addEventListener('click',()=>{ picked=b.getAttribute('data-t'); Swal.close(); });
+    }); }
+  });
+  if(picked) openEditor(picked);
+}
+const TYPE_LABEL={announcement:'Announcement',poll:'Poll',rating:'Rating / NPS',lead:'Capture Contact'};
+let currentType='announcement';
+// Show/hide + set the interactive fields for the chosen type.
+function applyCampaignType(type){
+  currentType=type||'announcement';
+  const g=id=>document.getElementById(id);
+  const isAnn=currentType==='announcement';
+  g('interactiveBlock').style.display=isAnn?'none':'block';
+  g('svTypeName').textContent=TYPE_LABEL[currentType]||'';
+  g('f_sv_enabled').checked=!isAnn;
+  g('f_sv_poll').checked=currentType==='poll';
+  g('f_sv_rating').checked=currentType==='rating';
+  g('f_sv_contact').checked=currentType==='lead';
+  g('svPoll').style.display=currentType==='poll'?'block':'none';
+  g('svRating').style.display=currentType==='rating'?'block':'none';
+  g('svContact').style.display=currentType==='lead'?'block':'none';
+  // Reflect the type in the editor title.
+  g('editorTitle').innerText=(editing?'Edit ':'New ')+(TYPE_LABEL[currentType]||'Campaign');
+}
+
+function openEditor(type){
   editing=null; currentImageUrl=''; hotspots=[];
   document.getElementById('editorTitle').innerText='New Campaign';
   document.getElementById('f_title').value='';
   setBody('');
   document.getElementById('f_cta_enabled').checked=false; document.getElementById('ctaFields').style.display='none';
   document.getElementById('f_cta_label').value=''; document.getElementById('f_cta_url').value='';
-  loadSurvey(null);
+  // Clear survey field values, then tailor to the chosen type.
+  ['f_sv_question','f_sv_options','f_sv_ratinglabel','f_sv_thanks'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('f_sv_scale').value='5';
+  document.getElementById('f_sv_c_name').checked=false; document.getElementById('f_sv_r_name').value='';
+  document.getElementById('f_sv_c_email').checked=true; document.getElementById('f_sv_r_email').value='req';
+  document.getElementById('f_sv_c_phone').checked=false; document.getElementById('f_sv_r_phone').value='';
+  applyCampaignType(type||'announcement');
   document.getElementById('f_audience').value='partner';
   setDisplayMode('card_dismissible');
   document.getElementById('f_reshow').value='5';
@@ -758,20 +808,17 @@ function buildSurvey(){
 function loadSurvey(s){
   const g=id=>document.getElementById(id);
   s = s && s.enabled ? s : null;
-  g('f_sv_enabled').checked=!!s; g('svFields').style.display=s?'block':'none';
-  const poll=!!(s && s.question && s.options && s.options.length);
-  const rating=!!(s && s.rating && s.rating.enabled);
-  const contact=!!(s && s.contact && s.contact.enabled);
-  g('f_sv_poll').checked=poll; g('svPoll').style.display=poll?'block':'none';
-  g('f_sv_question').value=s?(s.question||''):''; g('f_sv_options').value=poll?s.options.join('\n'):'';
-  g('f_sv_rating').checked=rating; g('svRating').style.display=rating?'block':'none';
-  g('f_sv_scale').value=rating&&s.rating.scale===10?'10':'5'; g('f_sv_ratinglabel').value=rating?(s.rating.label||''):'';
-  g('f_sv_contact').checked=contact; g('svContact').style.display=contact?'block':'none';
-  const rq=(contact&&s.contact.required)||[];
+  // Infer the campaign type from the saved survey and tailor the editor to it.
+  let type='announcement';
+  if(s){ if(s.question && s.options && s.options.length) type='poll'; else if(s.rating && s.rating.enabled) type='rating'; else if(s.contact && s.contact.enabled) type='lead'; }
+  g('f_sv_question').value=s?(s.question||''):''; g('f_sv_options').value=(s&&s.options)?s.options.join('\n'):'';
+  g('f_sv_scale').value=(s&&s.rating&&s.rating.scale===10)?'10':'5'; g('f_sv_ratinglabel').value=(s&&s.rating)?(s.rating.label||''):'';
+  const contact=!!(s && s.contact && s.contact.enabled); const rq=(contact&&s.contact.required)||[];
   g('f_sv_c_name').checked=contact?!!s.contact.name:false; g('f_sv_r_name').value=rq.indexOf('name')!==-1?'req':'';
   g('f_sv_c_email').checked=contact?!!s.contact.email:true; g('f_sv_r_email').value=(!contact||rq.indexOf('email')!==-1)?'req':'';
   g('f_sv_c_phone').checked=contact?!!s.contact.phone:false; g('f_sv_r_phone').value=rq.indexOf('phone')!==-1?'req':'';
   g('f_sv_thanks').value=s?(s.thanks||''):'';
+  applyCampaignType(type);
 }
 
 async function saveCampaign(){
