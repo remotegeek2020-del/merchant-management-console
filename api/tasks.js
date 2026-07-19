@@ -14,10 +14,20 @@ export default async function handler(req, res) {
 
     const { action, userid, staff_name } = req.body;
 
+    // Actor permissions — drive granular access to the org-wide task views.
+    const { data: me } = await supabase.from('app_users')
+        .select('role, access_all_tasks, access_task_dashboard').eq('userid', session.userid).maybeSingle();
+    const roleStr = String(me?.role || '').toLowerCase();
+    const isAdmin = roleStr.indexOf('super') !== -1 || roleStr.indexOf('admin') !== -1;
+    const canSeeAll = isAdmin || me?.access_all_tasks === true;
+    const canDashboard = isAdmin || me?.access_task_dashboard === true;
+
     try {
         // ── GET TASKS ─────────────────────────────────────
         if (action === 'get_tasks') {
-            const { view = 'mine', status, priority, assigned_to, page = 0, limit = 25 } = req.body;
+            let { view = 'mine', status, priority, assigned_to, page = 0, limit = 25 } = req.body;
+            // Org-wide views require permission; otherwise fall back to the caller's own tasks.
+            if ((view === 'all' || assigned_to) && !canSeeAll) { view = 'mine'; assigned_to = undefined; }
 
             let query = supabase
                 .from('merchant_tasks')
@@ -30,10 +40,10 @@ export default async function handler(req, res) {
                 .order('due_date', { ascending: true })
                 .range(page * limit, (page + 1) * limit - 1);
 
-            // View filter
-            if (view === 'mine') query = query.eq('assigned_to', userid);
-            else if (view === 'created') query = query.eq('created_by', userid);
-            else if (view === 'all') { /* no filter — super admin sees everything */ }
+            // View filter (use the authenticated user for own-scoped views)
+            if (view === 'mine') query = query.eq('assigned_to', session.userid);
+            else if (view === 'created') query = query.eq('created_by', session.userid);
+            else if (view === 'all') { /* permitted above via canSeeAll */ }
 
             if (status) query = query.eq('status', status);
             if (priority) query = query.eq('priority', priority);
@@ -180,6 +190,71 @@ export default async function handler(req, res) {
                 supabase.from('merchant_tasks').select('*', { count: 'exact', head: true }).eq('status', 'Pending')
             ]);
             return res.status(200).json({ success: true, mine: mine.count||0, overdue: overdue.count||0, all: all.count||0 });
+        }
+
+        // ── TASK DASHBOARD (analytics + leaderboard) ──────
+        if (action === 'task_dashboard') {
+            if (!canDashboard) return res.status(403).json({ success: false, message: 'You do not have access to the Task Dashboard.' });
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const now = new Date();
+            const weekAgoIso = new Date(now.getTime() - 7 * 864e5).toISOString();
+
+            // Pull the fields we need for every task (bounded high). Aggregate in JS.
+            let rows = [];
+            let from = 0; const PAGE = 1000;
+            while (true) {
+                const { data, error } = await supabase.from('merchant_tasks')
+                    .select('status, priority, due_date, assigned_to, completed_at')
+                    .range(from, from + PAGE - 1);
+                if (error) throw error;
+                if (!data || !data.length) break;
+                rows = rows.concat(data);
+                if (data.length < PAGE) break;
+                from += PAGE;
+            }
+
+            const byStatus = { Pending: 0, Completed: 0 };
+            const byPriority = { High: 0, Normal: 0, Low: 0 };
+            let overdue = 0, completedThisWeek = 0, unassigned = 0;
+            const board = {};   // userid -> { pending, completed, overdue, completed_week }
+            const bump = (uid, k) => { if (!uid) { if (k === 'pending') unassigned++; return; } (board[uid] = board[uid] || { pending: 0, completed: 0, overdue: 0, completed_week: 0 })[k]++; };
+
+            rows.forEach(t => {
+                byStatus[t.status] = (byStatus[t.status] || 0) + 1;
+                if (t.priority && byPriority[t.priority] != null) byPriority[t.priority]++;
+                if (t.status === 'Pending') {
+                    bump(t.assigned_to, 'pending');
+                    if (t.due_date && t.due_date < todayStr) { overdue++; bump(t.assigned_to, 'overdue'); }
+                } else if (t.status === 'Completed') {
+                    bump(t.assigned_to, 'completed');
+                    if (t.completed_at && t.completed_at >= weekAgoIso) { completedThisWeek++; bump(t.assigned_to, 'completed_week'); }
+                }
+            });
+
+            // Names for the leaderboard.
+            const ids = Object.keys(board);
+            const names = {};
+            if (ids.length) {
+                const { data: staff } = await supabase.from('app_users').select('userid, first_name, last_name').in('userid', ids);
+                (staff || []).forEach(s => { names[s.userid] = `${s.first_name || ''} ${s.last_name || ''}`.trim(); });
+            }
+            const leaderboard = ids.map(uid => ({
+                user_id: uid, name: names[uid] || 'Unknown',
+                ...board[uid]
+            })).sort((a, b) => (b.completed_week - a.completed_week) || (b.completed - a.completed) || (a.pending - b.pending));
+
+            return res.status(200).json({
+                success: true,
+                totals: {
+                    total: rows.length,
+                    pending: byStatus.Pending || 0,
+                    completed: byStatus.Completed || 0,
+                    overdue, completed_this_week: completedThisWeek, unassigned
+                },
+                by_priority: byPriority,
+                leaderboard
+            });
         }
 
         return res.status(400).json({ success: false, message: 'Unknown action' });

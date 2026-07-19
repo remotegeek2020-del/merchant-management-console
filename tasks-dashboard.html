@@ -58,6 +58,7 @@
                 <button class="view-tab active" onclick="setView('mine',this)">My Tasks</button>
                 <button class="view-tab" onclick="setView('created',this)">Created by Me</button>
                 <button class="view-tab" id="allTab" style="display:none;" onclick="setView('all',this)">All Tasks</button>
+                <button class="view-tab" id="dashTab" style="display:none;" onclick="openDashboard(this)">📊 Dashboard</button>
             </div>
             <button class="pp-btn pp-btn-primary" onclick="openCreateTask()">
                 <span class="material-icons" style="font-size:16px;">add</span> New Task
@@ -81,6 +82,8 @@
         </div>
     </div>
 
+    <!-- LIST VIEW (filters + table) -->
+    <div id="listView">
     <!-- FILTERS -->
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
         <select class="pp-select" id="statusFilter" onchange="resetFetch()">
@@ -126,6 +129,12 @@
             </div>
         </div>
     </div>
+    </div><!-- /listView -->
+
+    <!-- DASHBOARD VIEW -->
+    <div id="dashView" style="display:none;">
+        <div id="dashBody"><div class="pp-empty" style="padding:30px;text-align:center;color:#94a3b8;">Loading dashboard…</div></div>
+    </div>
 </div>
 
 <script>
@@ -136,6 +145,9 @@ const myName = [_fn, _ln].filter(Boolean).join(' ') || localStorage.getItem('pp_
 const myRole = (localStorage.getItem('pp_role') || '').toLowerCase();
 const isSuperAdmin = myRole.includes('super');
 const isAdmin = myRole.includes('admin') || isSuperAdmin;
+// Granular access (no admin elevation needed)
+const canSeeAllTasks   = isAdmin || localStorage.getItem('pp_access_all_tasks') === 'true';
+const canTaskDashboard = isAdmin || localStorage.getItem('pp_access_task_dashboard') === 'true';
 
 let currentView = 'mine';
 let currentPage = 0;
@@ -160,9 +172,12 @@ function highlightTaskRow(id) {
 }
 
 async function init() {
-    if (isAdmin) {
+    if (canSeeAllTasks) {
         document.getElementById('allTab').style.display = 'inline-block';
         document.getElementById('assigneeFilter').style.display = 'inline-block';
+    }
+    if (canTaskDashboard) {
+        document.getElementById('dashTab').style.display = 'inline-block';
     }
 
     // Load staff
@@ -248,7 +263,83 @@ function setView(view, el) {
     currentPage = 0;
     document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
+    document.getElementById('dashView').style.display = 'none';
+    document.getElementById('listView').style.display = '';
     loadTasks();
+}
+
+function openDashboard(el) {
+    document.querySelectorAll('.view-tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('listView').style.display = 'none';
+    document.getElementById('dashView').style.display = '';
+    renderDashboard();
+}
+
+function bar(label, val, max, color) {
+    const pct = max > 0 ? Math.round((val / max) * 100) : 0;
+    return `<div style="margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:3px;"><span style="font-weight:600;color:#334155;">${label}</span><span style="font-weight:800;color:#0f172a;">${val}</span></div>
+        <div style="height:8px;background:#f1f5f9;border-radius:5px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${color};"></div></div>
+    </div>`;
+}
+
+async function renderDashboard() {
+    const body = document.getElementById('dashBody');
+    body.innerHTML = `<div class="pp-empty" style="padding:30px;text-align:center;color:#94a3b8;">Loading dashboard…</div>`;
+    const res = await api({ action: 'task_dashboard' });
+    if (!res.success) { body.innerHTML = `<div class="pp-empty" style="padding:30px;text-align:center;color:#ef4444;">${res.message || 'Failed to load.'}</div>`; return; }
+    const t = res.totals, p = res.by_priority || {}, lb = res.leaderboard || [];
+    const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+
+    const card = (val, label, color, bg) => `<div class="stat-card"><div class="stat-icon" style="background:${bg};color:${color};"><span class="material-icons">insights</span></div><div><div class="stat-val" style="color:${color};">${val}</div><div class="stat-label">${label}</div></div></div>`;
+
+    const maxPri = Math.max(1, p.High || 0, p.Normal || 0, p.Low || 0);
+    const maxLbCompleted = Math.max(1, ...lb.map(r => r.completed_week || 0));
+
+    const lbRows = lb.length ? lb.map((r, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+        return `<tr style="border-top:1px solid #eef2f7;">
+            <td style="padding:9px 12px;font-weight:800;color:#64748b;width:40px;">${medal}</td>
+            <td style="padding:9px 12px;font-weight:700;color:#0f172a;">${esc(r.name)}</td>
+            <td style="padding:9px 12px;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <div style="flex:1;height:7px;background:#f1f5f9;border-radius:5px;overflow:hidden;max-width:160px;"><div style="height:100%;width:${Math.round((r.completed_week / maxLbCompleted) * 100)}%;background:#16a34a;"></div></div>
+                    <span style="font-weight:800;color:#16a34a;">${r.completed_week}</span>
+                </div>
+            </td>
+            <td style="padding:9px 12px;text-align:center;color:#0369a1;font-weight:700;">${r.pending}</td>
+            <td style="padding:9px 12px;text-align:center;color:#ef4444;font-weight:700;">${r.overdue}</td>
+            <td style="padding:9px 12px;text-align:center;color:#64748b;font-weight:700;">${r.completed}</td>
+        </tr>`;
+    }).join('') : `<tr><td colspan="6" style="padding:18px;text-align:center;color:#94a3b8;">No data yet.</td></tr>`;
+
+    body.innerHTML = `
+        <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px;">
+            ${card(t.pending, 'Pending', '#0369a1', '#e0f2fe')}
+            ${card(t.overdue, 'Overdue', '#ef4444', '#fee2e2')}
+            ${card(t.completed_this_week, 'Done (7 days)', '#16a34a', '#f0fdf4')}
+            ${card(t.completed, 'Completed (all)', '#0f766e', '#ccfbf1')}
+            ${card(t.unassigned, 'Unassigned', '#b45309', '#fef3c7')}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr;gap:16px;">
+            <div class="pp-table-card" style="padding:16px 18px;">
+                <div style="font-weight:800;font-size:14px;color:#0f172a;margin-bottom:12px;">Pending by priority</div>
+                ${bar('🔴 High', p.High || 0, maxPri, '#ef4444')}
+                ${bar('🔵 Normal', p.Normal || 0, maxPri, '#0369a1')}
+                ${bar('⚪ Low', p.Low || 0, maxPri, '#94a3b8')}
+            </div>
+            <div class="pp-table-card" style="padding:0;overflow:hidden;">
+                <div style="font-weight:800;font-size:14px;color:#0f172a;padding:16px 18px 10px;">🏆 Leaderboard <span style="font-weight:400;color:#94a3b8;font-size:12px;">— ranked by tasks completed in the last 7 days</span></div>
+                <table class="pp-table" style="width:100%;">
+                    <thead><tr>
+                        <th style="width:40px;"></th><th>Staff</th><th>Completed (7d)</th>
+                        <th style="text-align:center;">Pending</th><th style="text-align:center;">Overdue</th><th style="text-align:center;">Total done</th>
+                    </tr></thead>
+                    <tbody>${lbRows}</tbody>
+                </table>
+            </div>
+        </div>`;
 }
 
 function resetFetch() { currentPage = 0; loadTasks(); }
