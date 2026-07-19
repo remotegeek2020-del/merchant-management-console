@@ -1925,6 +1925,17 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ i
       </div>
       <div class="muted" style="font-size:11px;margin-top:4px;">Public link: <b id="lpUrlHint">/p/…</b></div>
 
+      <label class="fld">Page type</label>
+      <div class="seg" style="margin-bottom:4px;">
+        <button type="button" id="lptStdBtn" class="on" onclick="lpSetType('standard')">Standard</button>
+        <button type="button" id="lptCalcBtn" onclick="lpSetType('calculator')">💰 Savings calculator</button>
+      </div>
+      <div id="lpCalcOpts" style="display:none;margin-bottom:4px;">
+        <label class="dlbl">Competitive rate to quote (%)</label>
+        <input class="inp" id="lp_calc_rate" type="number" step="0.01" value="2.3" style="max-width:160px;">
+        <div class="muted" style="font-size:11px;">Estimated savings = their volume × (their current rate − this rate). Visitors enter their volume &amp; rate, see savings, then give contact to get the report.</div>
+      </div>
+
       <!-- ── AI page ── -->
       <div style="margin-top:14px;border:1.5px solid #ddd6fe;background:#f5f3ff;border-radius:12px;padding:14px;">
         <div style="display:flex;align-items:center;gap:8px;">
@@ -2055,6 +2066,7 @@ function lpClear(){ var s=function(id,v){document.getElementById(id).value=v;}, 
   document.getElementById('lp_imgstate').textContent=''; document.getElementById('lp_tags').innerHTML='<div class="muted">Choose a sub-account to load tags.</div>';
   document.getElementById('lp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
   document.getElementById('lp_custom_html').value=''; _lpState.customHtml=null; lpAiActivePanel(false);
+  document.getElementById('lp_calc_rate').value='2.3'; lpSetType('standard');
   lpSetMode('native');
 }
 async function newLanding(){
@@ -2070,6 +2082,8 @@ async function editLanding(id){
   document.getElementById('lpEditorTitle').innerText='Edit Landing Page';
   lpClear(); lpRenderPresets();
   if(p.custom_html){ document.getElementById('lp_custom_html').value=p.custom_html; lpAiPreview(); }
+  lpSetType(p.page_type==='calculator'?'calculator':'standard');
+  if(p.calc&&p.calc.target_rate) document.getElementById('lp_calc_rate').value=p.calc.target_rate;
   var s=function(id,v){document.getElementById(id).value=v==null?'':v;}, c=function(id,v){document.getElementById(id).checked=!!v;};
   s('lp_title',p.title);s('lp_slug',p.slug);s('lp_headline',p.headline);s('lp_subtext',p.subtext);s('lp_image',p.image_url);s('lp_cta',p.cta_label);s('lp_thanks',p.thanks);
   var t=p.theme||{}; s('lp_bg',t.bg||'#ffffff');s('lp_titleCol',t.title||'#0a1628');s('lp_textCol',t.text||'#475569');s('lp_accent',t.accent||'#004990');s('lp_btnText',t.btnText||'#ffffff');s('lp_radius',t.radius!=null?t.radius:16);s('lp_align',t.align||'center');s('lp_btnStyle',t.btnStyle||'solid');
@@ -2080,6 +2094,14 @@ async function editLanding(id){
   if(cc.ghl_location_id){ await lpOnGhlLoc(); (cc.ghl_tags||[]).forEach(function(tg){var el=document.querySelector('#lp_tags .lp-tag[value="'+(window.CSS&&CSS.escape?CSS.escape(tg):tg)+'"]'); if(el) el.checked=true;}); if(cc.ghl_form_id) document.getElementById('lp_ghl_form').value=cc.ghl_form_id; document.getElementById('lpTagsWrap').style.display=document.getElementById('lp_push').checked?'block':'none'; }
   document.getElementById('landingEditor').style.display='flex'; lpPreview();
 }
+// ── Page type ──
+function lpSetType(t){
+  _lpState.pageType=t;
+  document.getElementById('lptStdBtn').classList.toggle('on',t==='standard');
+  document.getElementById('lptCalcBtn').classList.toggle('on',t==='calculator');
+  document.getElementById('lpCalcOpts').style.display=t==='calculator'?'block':'none';
+}
+
 // ── AI page ──
 function lpAiActivePanel(show){
   document.getElementById('lpAiActive').style.display=show?'block':'none';
@@ -2187,7 +2209,10 @@ async function saveLanding(){
   if(_lpState.mode==='ghl_form' && !document.getElementById('lp_ghl_form').value){ Swal.fire('Pick a form','Choose a HighLevel form or switch to native fields.','warning'); return; }
   var page={ id:_lpState.id, title:title, slug:g('lp_slug'), headline:headline, subtext:g('lp_subtext'), image_url:g('lp_image')||null,
     theme:lpBuildTheme(), contact:lpBuildContact(), cta_label:g('lp_cta')||null, thanks:g('lp_thanks')||null,
-    custom_html:_lpState.customHtml||null, is_published:document.getElementById('lp_publish').checked };
+    custom_html:_lpState.customHtml||null,
+    page_type:_lpState.pageType||'standard',
+    calc:{ target_rate: parseFloat(document.getElementById('lp_calc_rate').value)||2.3 },
+    is_published:document.getElementById('lp_publish').checked };
   var r=await lapi({action:'save',page:page});
   if(!r.success){ Swal.fire('Error',r.message||'Save failed.','error'); return; }
   document.getElementById('landingEditor').style.display='none';

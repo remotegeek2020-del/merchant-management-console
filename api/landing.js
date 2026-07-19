@@ -23,7 +23,7 @@ const bad = (res, message, status = 400) => res.status(status).json({ success: f
 function slugify(s) {
     return String(s || '').toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 80);
 }
-const PUBLIC_FIELDS = 'id, slug, title, headline, subtext, image_url, theme, contact, cta_label, thanks, is_published, custom_html';
+const PUBLIC_FIELDS = 'id, slug, title, headline, subtext, image_url, theme, contact, cta_label, thanks, is_published, custom_html, page_type, calc';
 
 // Strip anything unsafe/non-self-contained from AI/hand HTML (scripts, iframes,
 // external/event handlers) so a published page can't run arbitrary JS.
@@ -143,6 +143,8 @@ export default async function handler(req, res) {
                 image_url: p.image_url || null, theme: p.theme || null, contact: p.contact || null,
                 cta_label: p.cta_label || null, thanks: p.thanks || 'Thanks! We\'ll be in touch shortly.',
                 custom_html: p.custom_html ? sanitizePageHtml(p.custom_html) : null,
+                page_type: p.page_type === 'calculator' ? 'calculator' : 'standard',
+                calc: (p.calc && typeof p.calc === 'object') ? { target_rate: Math.max(0, Math.min(10, parseFloat(p.calc.target_rate) || 2.3)) } : null,
                 is_published: !!p.is_published, updated_at: new Date().toISOString()
             };
             if (p.id) {

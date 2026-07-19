@@ -48,6 +48,7 @@
   function render(p){
     document.title = p.title || p.headline || 'PayProTec';
     window.__lpPage = p;
+    if (p.page_type === 'calculator'){ renderCalculator(p); return; }
     // Advanced (AI / custom-HTML) page: inject it full-width and wire its form.
     if (p.custom_html && p.custom_html.trim()){
       document.body.style.background = '#ffffff';
@@ -109,6 +110,62 @@
     window.__lpPage = p;
   }
   function req(cc,f){ return cc.required && cc.required.indexOf(f)!==-1; }
+
+  function money(n){ return '$'+Math.round(n).toLocaleString(); }
+  function renderCalculator(p){
+    var t=p.theme||{}, accent=t.accent||'#004990', btnText=t.btnText||'#fff', radius=(t.radius!=null?t.radius:16);
+    var bg=t.bg||'#fff', titleCol=t.title||'#0f172a', textCol=t.text||'#475569';
+    document.body.style.background=(t.overlay==='light')?'#f8fafc':'#0b1220';
+    var target=(p.calc&&p.calc.target_rate)||2.3;
+    root.innerHTML=
+      '<div class="lp-card" style="background:'+bg+';border-radius:'+radius+'px;max-width:520px;">'+
+      '<div class="lp-body">'+
+        '<div class="lp-h" style="color:'+titleCol+';">'+esc(p.headline||'How much could you save on processing?')+'</div>'+
+        (p.subtext?'<div class="lp-sub" style="color:'+textCol+';">'+bodyHtml(p.subtext)+'</div>':'')+
+        '<label style="font-size:12px;font-weight:700;color:'+textCol+';">Monthly card volume ($)</label>'+
+        '<input class="lp-field" id="calc-vol" type="number" inputmode="numeric" placeholder="e.g. 50000">'+
+        '<label style="font-size:12px;font-weight:700;color:'+textCol+';">Your current effective rate (%)</label>'+
+        '<input class="lp-field" id="calc-rate" type="number" step="0.01" placeholder="e.g. 3.2">'+
+        '<button class="lp-btn" style="background:'+accent+';color:'+btnText+';border-radius:'+radius+'px;" onclick="__calc()">Calculate my savings</button>'+
+        '<div id="calc-out" style="display:none;margin-top:18px;"></div>'+
+      '</div>'+
+      '<div class="lp-foot">Estimate only — a specialist will confirm your exact savings.</div></div>';
+    window.__calcCfg={ target:target, accent:accent, btnText:btnText, radius:radius, textCol:textCol, contact:p.contact||{} };
+  }
+  window.__calc=function(){
+    var cfg=window.__calcCfg; var vol=parseFloat(document.getElementById('calc-vol').value)||0; var rate=parseFloat(document.getElementById('calc-rate').value)||0;
+    if(vol<=0||rate<=0){ alert('Enter your monthly volume and current rate.'); return; }
+    var cur=vol*rate/100, ours=vol*cfg.target/100, save=Math.max(0,cur-ours), yr=save*12;
+    var cc=cfg.contact; var fields='';
+    if(cc.name) fields+='<input class="lp-field" id="calc-name" placeholder="Your name">';
+    if(cc.email!==false) fields+='<input class="lp-field" id="calc-email" type="email" placeholder="Email">';
+    if(cc.phone) fields+='<input class="lp-field" id="calc-phone" placeholder="Phone">';
+    if(!fields) fields='<input class="lp-field" id="calc-email" type="email" placeholder="Email">';
+    var out=document.getElementById('calc-out');
+    out.style.display='block';
+    out.innerHTML='<div style="text-align:center;padding:16px;border-radius:12px;background:'+(cfg.textCol?'#f0fdf4':'#f0fdf4')+';border:1px solid #bbf7d0;margin-bottom:16px;">'+
+      '<div style="font-size:13px;color:#166534;font-weight:700;">Estimated savings</div>'+
+      '<div style="font-size:34px;font-weight:800;color:#15803d;">'+money(save)+'<span style="font-size:15px;">/mo</span></div>'+
+      '<div style="font-size:13px;color:#166534;">about '+money(yr)+' per year</div></div>'+
+      '<div style="font-weight:700;margin-bottom:8px;">Get your detailed breakdown:</div>'+fields+
+      '<button class="lp-btn" style="background:'+cfg.accent+';color:'+cfg.btnText+';border-radius:'+cfg.radius+'px;" onclick="__calcSubmit()">Send me the report</button>'+
+      '<div class="lp-msg" id="calc-msg"></div>';
+    out.scrollIntoView({behavior:'smooth',block:'nearest'});
+    window.__calcData={ vol:vol, rate:rate, save:Math.round(save), annual:Math.round(yr) };
+  };
+  window.__calcSubmit=function(){
+    var g=function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+    var name=g('calc-name'), email=g('calc-email'), phone=g('calc-phone'); var msg=document.getElementById('calc-msg');
+    if(!email && !phone){ msg.textContent='Please enter your email or phone.'; return; }
+    if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.textContent='Please enter a valid email.'; return; }
+    var meta=ctx(); var d=window.__calcData||{}; meta.calc_volume=d.vol; meta.calc_rate=d.rate; meta.calc_savings=d.save;
+    var btn=document.querySelector('#calc-out .lp-btn'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+    fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,name:name,email:email,phone:phone,meta:meta})})
+      .then(function(r){return r.json();}).then(function(d2){
+        if(d2.success){ document.getElementById('calc-out').innerHTML='<div style="text-align:center;padding:30px;"><div style="font-size:44px;">✅</div><div style="font-weight:800;font-size:18px;margin-top:8px;">'+esc((window.__lpPage&&window.__lpPage.thanks)||'Thanks! Your report is on the way.')+'</div></div>'; }
+        else { msg.textContent=d2.message||'Something went wrong.'; if(btn){ btn.disabled=false; btn.textContent='Send me the report'; } }
+      }).catch(function(){ msg.textContent='Network error — try again.'; if(btn) btn.disabled=false; });
+  };
 
   window.__lpSubmit = function(){
     var p = window.__lpPage; var cc = p.contact||{};
