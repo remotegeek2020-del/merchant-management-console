@@ -86,6 +86,7 @@
   <div class="sp"></div>
   <button class="btn btn-white" onclick="location.href='/'"><span class="material-icons" style="font-size:17px;">home</span> Home</button>
   <button class="btn btn-white" id="sitesBtn" onclick="openSites()"><span class="material-icons" style="font-size:17px;">public</span> Embed Sites</button>
+  <button class="btn btn-white" onclick="openLandingPages()"><span class="material-icons" style="font-size:17px;">web_asset</span> Landing Pages</button>
   <button class="btn btn-brand" onclick="pickCampaignType()"><span class="material-icons" style="font-size:17px;">add</span> New Campaign</button>
 </div>
 
@@ -1863,6 +1864,267 @@ document.querySelectorAll('.modal').forEach(m=>m.addEventListener('click',e=>{ i
   body.addEventListener('input', h);
   body.addEventListener('change', h);
 })();
+</script>
+
+<!-- ── LANDING PAGES: list ── -->
+<div class="modal" id="landingModal">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">web_asset</span>
+      <h2 style="flex:1;">Landing Pages</h2>
+      <button class="btn btn-brand" onclick="newLanding()"><span class="material-icons" style="font-size:16px;">add</span> New page</button>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);margin-left:10px;" onclick="document.getElementById('landingModal').style.display='none'">close</span>
+    </div>
+    <div class="modal-body">
+      <div class="muted" style="font-size:12px;margin-bottom:10px;">Hosted lead-capture pages at <b>/p/&lt;url&gt;</b> — share the link anywhere (email, social, QR). Submissions can push into a GHL sub-account.</div>
+      <div id="landingList"><div class="muted" style="text-align:center;padding:30px;">Loading…</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ── LANDING PAGES: editor ── -->
+<div class="modal" id="landingEditor">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span class="material-icons" style="color:var(--blue);">edit_document</span>
+      <h2 id="lpEditorTitle" style="flex:1;">New Landing Page</h2>
+      <span class="material-icons" style="cursor:pointer;color:var(--muted);" onclick="document.getElementById('landingEditor').style.display='none'">close</span>
+    </div>
+    <div class="modal-body">
+      <div class="row2">
+        <div><label class="fld" style="margin-top:0;">Page title (internal)</label><input class="inp" id="lp_title" oninput="lpPreview();lpSlugAuto()"></div>
+        <div><label class="fld" style="margin-top:0;">URL slug</label><input class="inp" id="lp_slug" placeholder="free-savings-review" oninput="lpPreview()"></div>
+      </div>
+      <div class="muted" style="font-size:11px;margin-top:4px;">Public link: <b id="lpUrlHint">/p/…</b></div>
+
+      <label class="fld">Headline</label>
+      <input class="inp" id="lp_headline" placeholder="Cut your processing fees — free 5-minute review" oninput="lpPreview()">
+      <label class="fld">Sub-text</label>
+      <textarea class="inp" id="lp_subtext" rows="3" placeholder="Tell them what they get and why to act." oninput="lpPreview()"></textarea>
+
+      <label class="fld">Image (optional)</label>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <input class="inp" id="lp_image" placeholder="https://… image URL" oninput="lpPreview()" style="flex:1;">
+        <button class="btn btn-neutral" onclick="document.getElementById('lp_imgfile').click()"><span class="material-icons" style="font-size:16px;">image</span></button>
+        <input type="file" id="lp_imgfile" accept="image/*" style="display:none;" onchange="lpUploadImage(this)">
+      </div>
+      <div id="lp_imgstate" class="muted" style="font-size:11px;"></div>
+
+      <label class="fld">Design</label>
+      <div id="lpPresetRow" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:8px;"></div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:10px;">
+        <div><label class="dlbl">Background</label><input type="color" id="lp_bg" value="#ffffff" oninput="lpPreview()"></div>
+        <div><label class="dlbl">Title</label><input type="color" id="lp_titleCol" value="#0a1628" oninput="lpPreview()"></div>
+        <div><label class="dlbl">Text</label><input type="color" id="lp_textCol" value="#475569" oninput="lpPreview()"></div>
+        <div><label class="dlbl">Button</label><input type="color" id="lp_accent" value="#004990" oninput="lpPreview()"></div>
+        <div><label class="dlbl">Button text</label><input type="color" id="lp_btnText" value="#ffffff" oninput="lpPreview()"></div>
+        <div><label class="dlbl">Corners</label><input class="inp" type="range" min="0" max="30" id="lp_radius" value="16" oninput="lpPreview()"></div>
+        <div><label class="dlbl">Align</label><select class="inp" id="lp_align" onchange="lpPreview()"><option value="left">Left</option><option value="center" selected>Center</option></select></div>
+        <div><label class="dlbl">Button style</label><select class="inp" id="lp_btnStyle" onchange="lpPreview()"><option value="solid" selected>Solid</option><option value="outline">Outline</option><option value="pill">Pill</option></select></div>
+      </div>
+
+      <label class="fld">Capture form</label>
+      <div class="seg" style="margin-bottom:8px;">
+        <button type="button" id="lpmNativeBtn" class="on" onclick="lpSetMode('native')">Native fields</button>
+        <button type="button" id="lpmGhlBtn" onclick="lpSetMode('ghl_form')">HighLevel form</button>
+      </div>
+      <label class="fld" style="margin-top:0;">HighLevel sub-account <span class="muted" style="font-weight:400;">(for lead push / HL form)</span></label>
+      <select class="inp" id="lp_ghl_loc" onchange="lpOnGhlLoc()"><option value="">— none —</option></select>
+      <div id="lpNative">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:12px;margin-top:8px;">
+          <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="lp_c_name" onchange="lpPreview()"> Name <select id="lp_r_name" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="lp_c_email" checked onchange="lpPreview()"> Email <select id="lp_r_email" style="font-size:11px;"><option value="req" selected>required</option><option value="">optional</option></select></label>
+          <label style="display:flex;align-items:center;gap:5px;"><input type="checkbox" id="lp_c_phone" onchange="lpPreview()"> Phone <select id="lp_r_phone" style="font-size:11px;"><option value="">optional</option><option value="req">required</option></select></label>
+        </div>
+        <label style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:10px;cursor:pointer;"><input type="checkbox" id="lp_push" onchange="lpOnGhlLoc()"> Push each lead into the sub-account above (with tag)</label>
+        <div id="lpTagsWrap" style="display:none;margin-top:8px;">
+          <label class="dlbl">Tag(s)</label>
+          <div id="lp_tags" style="border:1px solid var(--border);border-radius:8px;padding:6px;max-height:120px;overflow:auto;font-size:12px;"><div class="muted">Choose a sub-account to load tags.</div></div>
+        </div>
+      </div>
+      <div id="lpGhl" style="display:none;">
+        <label class="fld">HighLevel form</label>
+        <select class="inp" id="lp_ghl_form"><option value="">Choose a sub-account first…</option></select>
+      </div>
+
+      <div class="row2" style="margin-top:12px;">
+        <div><label class="fld" style="margin-top:0;">Button label</label><input class="inp" id="lp_cta" placeholder="Get my free review" oninput="lpPreview()"></div>
+        <div><label class="fld" style="margin-top:0;">Thank-you message</label><input class="inp" id="lp_thanks" placeholder="Thanks! We'll be in touch shortly."></div>
+      </div>
+
+      <label class="fld">Live preview</label>
+      <div id="lpPreview" style="border:1px solid var(--border);border-radius:12px;padding:22px;display:flex;justify-content:center;background:#e9eef5;"></div>
+
+      <div style="display:flex;align-items:center;gap:12px;margin-top:16px;">
+        <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;cursor:pointer;"><input type="checkbox" id="lp_publish"> Published (live)</label>
+        <div style="flex:1;"></div>
+        <button class="btn btn-brand" onclick="saveLanding()">Save page</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── LANDING PAGES ──
+var _lpState = { id:null, mode:'native' };
+function lapi(body){
+  var tok=localStorage.getItem('pp_session_token')||'';
+  return fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+tok},body:JSON.stringify(body)}).then(function(r){return r.json();}).catch(function(){return {success:false};});
+}
+function lpEsc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+async function openLandingPages(){
+  document.getElementById('landingModal').style.display='flex';
+  var box=document.getElementById('landingList'); box.innerHTML='<div class="muted" style="text-align:center;padding:30px;">Loading…</div>';
+  var r=await lapi({action:'list'});
+  if(!r.success){ box.innerHTML='<div style="color:var(--red);">Failed to load.</div>'; return; }
+  var pages=r.pages||[];
+  if(!pages.length){ box.innerHTML='<div class="muted" style="text-align:center;padding:26px;">No landing pages yet. Click “New page”.</div>'; return; }
+  box.innerHTML=pages.map(function(p){
+    var url=location.origin+'/p/'+p.slug;
+    return '<div style="border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'
+      +'<div style="flex:1;min-width:160px;"><b>'+lpEsc(p.title||p.slug)+'</b><div class="muted" style="font-size:11px;">/p/'+lpEsc(p.slug)+' · '+p.views+' views · '+p.submissions+' leads</div></div>'
+      +'<span class="pill" style="background:'+(p.is_published?'#dcfce7':'#f1f5f9')+';color:'+(p.is_published?'#166534':'#94a3b8')+';">'+(p.is_published?'Live':'Draft')+'</span>'
+      +'<button class="btn btn-neutral" style="padding:5px 9px;" title="Copy link" onclick="copyText(\''+url+'\')"><span class="material-icons" style="font-size:15px;">link</span></button>'
+      +'<button class="btn btn-neutral" style="padding:5px 9px;" title="Open" onclick="window.open(\''+url+'\',\'_blank\')"><span class="material-icons" style="font-size:15px;">open_in_new</span></button>'
+      +'<button class="btn btn-neutral" style="padding:5px 9px;" title="Leads" onclick="viewLandingSubs(\''+p.id+'\',\''+lpEsc(p.title||p.slug)+'\')"><span class="material-icons" style="font-size:15px;">group</span></button>'
+      +'<button class="btn btn-neutral" style="padding:5px 9px;" onclick="editLanding(\''+p.id+'\')">Edit</button>'
+      +'<span class="material-icons" style="color:var(--red);cursor:pointer;" title="Delete" onclick="deleteLanding(\''+p.id+'\',\''+lpEsc(p.title||p.slug)+'\')">delete</span>'
+      +'</div>';
+  }).join('');
+}
+function lpRenderPresets(){
+  var row=document.getElementById('lpPresetRow'); if(!row||typeof THEME_PRESETS==='undefined') return;
+  row.innerHTML=Object.keys(THEME_PRESETS).map(function(name){var p=THEME_PRESETS[name];
+    return '<button type="button" onclick="lpApplyPreset(\''+name+'\')" style="display:flex;align-items:center;gap:6px;border:1.5px solid var(--border);border-radius:8px;padding:6px 10px;background:#fff;cursor:pointer;font-size:12px;font-weight:700;"><span style="width:14px;height:14px;border-radius:4px;background:'+p.swatch+';"></span>'+name+'</button>';}).join('');
+}
+function lpApplyPreset(name){ var p=THEME_PRESETS[name]; if(!p) return; var s=function(id,v){document.getElementById(id).value=v;};
+  s('lp_bg',p.bg);s('lp_titleCol',p.title);s('lp_textCol',p.text);s('lp_accent',p.accent);s('lp_btnText',p.btnText);s('lp_radius',p.radius);s('lp_align',p.align);s('lp_btnStyle',p.btnStyle); lpPreview(); }
+function lpClear(){ var s=function(id,v){document.getElementById(id).value=v;}, c=function(id,v){document.getElementById(id).checked=v;};
+  ['lp_title','lp_slug','lp_headline','lp_subtext','lp_image','lp_cta','lp_thanks'].forEach(function(id){s(id,'');});
+  s('lp_bg','#ffffff');s('lp_titleCol','#0a1628');s('lp_textCol','#475569');s('lp_accent','#004990');s('lp_btnText','#ffffff');s('lp_radius',16);s('lp_align','center');s('lp_btnStyle','solid');
+  c('lp_c_name',false);c('lp_c_email',true);c('lp_c_phone',false);c('lp_push',false);c('lp_publish',false);
+  s('lp_r_name','');s('lp_r_email','req');s('lp_r_phone','');
+  document.getElementById('lp_imgstate').textContent=''; document.getElementById('lp_tags').innerHTML='<div class="muted">Choose a sub-account to load tags.</div>';
+  document.getElementById('lp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>';
+  lpSetMode('native');
+}
+async function newLanding(){
+  _lpState={id:null,mode:'native'};
+  document.getElementById('lpEditorTitle').innerText='New Landing Page';
+  lpClear(); lpRenderPresets();
+  await lpPopulateLocations('');
+  document.getElementById('landingEditor').style.display='flex'; lpPreview();
+}
+async function editLanding(id){
+  var r=await lapi({action:'get_one',id:id}); if(!r.success){ Swal.fire('Error',r.message||'','error'); return; }
+  var p=r.page; _lpState={id:p.id,mode:(p.contact&&p.contact.mode==='ghl_form')?'ghl_form':'native'};
+  document.getElementById('lpEditorTitle').innerText='Edit Landing Page';
+  lpClear(); lpRenderPresets();
+  var s=function(id,v){document.getElementById(id).value=v==null?'':v;}, c=function(id,v){document.getElementById(id).checked=!!v;};
+  s('lp_title',p.title);s('lp_slug',p.slug);s('lp_headline',p.headline);s('lp_subtext',p.subtext);s('lp_image',p.image_url);s('lp_cta',p.cta_label);s('lp_thanks',p.thanks);
+  var t=p.theme||{}; s('lp_bg',t.bg||'#ffffff');s('lp_titleCol',t.title||'#0a1628');s('lp_textCol',t.text||'#475569');s('lp_accent',t.accent||'#004990');s('lp_btnText',t.btnText||'#ffffff');s('lp_radius',t.radius!=null?t.radius:16);s('lp_align',t.align||'center');s('lp_btnStyle',t.btnStyle||'solid');
+  var cc=p.contact||{}; c('lp_c_name',cc.name);c('lp_c_email',cc.email!==false);c('lp_c_phone',cc.phone);c('lp_push',cc.push);c('lp_publish',p.is_published);
+  var rq=cc.required||[]; s('lp_r_name',rq.indexOf('name')!==-1?'req':'');s('lp_r_email',rq.indexOf('email')!==-1?'req':'');s('lp_r_phone',rq.indexOf('phone')!==-1?'req':'');
+  lpSetMode(_lpState.mode);
+  await lpPopulateLocations(cc.ghl_location_id||'');
+  if(cc.ghl_location_id){ await lpOnGhlLoc(); (cc.ghl_tags||[]).forEach(function(tg){var el=document.querySelector('#lp_tags .lp-tag[value="'+(window.CSS&&CSS.escape?CSS.escape(tg):tg)+'"]'); if(el) el.checked=true;}); if(cc.ghl_form_id) document.getElementById('lp_ghl_form').value=cc.ghl_form_id; document.getElementById('lpTagsWrap').style.display=document.getElementById('lp_push').checked?'block':'none'; }
+  document.getElementById('landingEditor').style.display='flex'; lpPreview();
+}
+function lpSetMode(m){ _lpState.mode=m;
+  document.getElementById('lpmNativeBtn').classList.toggle('on',m==='native');
+  document.getElementById('lpmGhlBtn').classList.toggle('on',m==='ghl_form');
+  document.getElementById('lpNative').style.display=m==='native'?'block':'none';
+  document.getElementById('lpGhl').style.display=m==='ghl_form'?'block':'none';
+  lpPreview();
+}
+async function lpPopulateLocations(sel){
+  var box=document.getElementById('lp_ghl_loc'); var d=await getGhlLocations(); var locs=(d&&d.locations)||[];
+  box.innerHTML='<option value="">— none —</option>'+locs.map(function(l){return '<option value="'+lpEsc(l.id)+'">'+lpEsc(l.name||l.id)+'</option>';}).join('');
+  if(sel) box.value=sel;
+}
+async function lpOnGhlLoc(){
+  var loc=document.getElementById('lp_ghl_loc').value;
+  document.getElementById('lpTagsWrap').style.display=(document.getElementById('lp_push').checked&&loc)?'block':'none';
+  if(!loc){ document.getElementById('lp_tags').innerHTML='<div class="muted">Choose a sub-account to load tags.</div>'; document.getElementById('lp_ghl_form').innerHTML='<option value="">Choose a sub-account first…</option>'; return; }
+  document.getElementById('lp_tags').innerHTML='<div class="muted">Loading…</div>';
+  var res=await Promise.all([api({action:'ghl_tags',location_id:loc}),api({action:'ghl_forms',location_id:loc})]);
+  var tags=(res[0].success&&res[0].data)||[]; var forms=(res[1].success&&res[1].data)||[];
+  document.getElementById('lp_tags').innerHTML=tags.length?tags.map(function(t){return '<label style="display:flex;align-items:center;gap:6px;padding:2px 0;cursor:pointer;"><input type="checkbox" class="lp-tag" value="'+lpEsc(t.name)+'"> '+lpEsc(t.name)+'</label>';}).join(''):'<div class="muted">No tags.</div>';
+  document.getElementById('lp_ghl_form').innerHTML='<option value="">— choose a form —</option>'+forms.map(function(f){return '<option value="'+lpEsc(f.id)+'" data-name="'+lpEsc(f.name)+'">'+lpEsc(f.name)+'</option>';}).join('');
+}
+async function lpUploadImage(input){
+  var f=input.files&&input.files[0]; input.value=''; if(!f) return;
+  document.getElementById('lp_imgstate').textContent='Uploading…';
+  var u=await api({action:'get_upload_url',file_type:f.type});
+  if(!u.success){ document.getElementById('lp_imgstate').textContent='Upload failed'; return; }
+  var put=await fetch(u.data.upload_url,{method:'PUT',body:f,headers:{'Content-Type':f.type}});
+  if(!put.ok){ document.getElementById('lp_imgstate').textContent='Upload failed'; return; }
+  document.getElementById('lp_image').value=u.data.public_url; document.getElementById('lp_imgstate').textContent='Uploaded ✓'; lpPreview();
+}
+function lpSlugAuto(){ var slug=document.getElementById('lp_slug'); if(slug.dataset.touched) return;
+  slug.value=(document.getElementById('lp_title').value||'').toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80); lpPreview(); }
+document.getElementById('lp_slug').addEventListener('input',function(){ this.dataset.touched='1'; });
+function lpBuildTheme(){ var g=function(id){return document.getElementById(id).value;};
+  return { bg:g('lp_bg'),title:g('lp_titleCol'),text:g('lp_textCol'),accent:g('lp_accent'),btnText:g('lp_btnText'),radius:parseInt(g('lp_radius'))||16,align:g('lp_align'),btnStyle:g('lp_btnStyle'),width:'normal' }; }
+function lpBuildContact(){
+  var g=function(id){return document.getElementById(id);}; var req=[];
+  if(g('lp_c_name').checked&&g('lp_r_name').value==='req')req.push('name');
+  if(g('lp_c_email').checked&&g('lp_r_email').value==='req')req.push('email');
+  if(g('lp_c_phone').checked&&g('lp_r_phone').value==='req')req.push('phone');
+  var loc=g('lp_ghl_loc').value||null; var fSel=g('lp_ghl_form'); var formId=(_lpState.mode==='ghl_form'&&fSel.value)?fSel.value:null;
+  var tags=Array.prototype.slice.call(document.querySelectorAll('#lp_tags .lp-tag:checked')).map(function(cb){return cb.value;});
+  return { mode:_lpState.mode, name:g('lp_c_name').checked, email:g('lp_c_email').checked, phone:g('lp_c_phone').checked, required:req,
+    ghl_location_id:loc, ghl_form_id:formId, ghl_form_name:formId?(fSel.options[fSel.selectedIndex].dataset.name||null):null,
+    ghl_tags:(_lpState.mode==='native'&&g('lp_push').checked)?tags:[], push:(_lpState.mode==='native'&&g('lp_push').checked&&!!loc) }; }
+function lpPreview(){
+  var g=function(id){return document.getElementById(id).value;};
+  document.getElementById('lpUrlHint').textContent='/p/'+((g('lp_slug')||'…'));
+  var th=lpBuildTheme(); var stage=document.getElementById('lpPreview');
+  var btn=th.btnStyle==='outline'?'background:transparent;color:'+th.accent+';border:2px solid '+th.accent+';border-radius:'+th.radius+'px;':th.btnStyle==='pill'?'background:'+th.accent+';color:'+th.btnText+';border:none;border-radius:999px;':'background:'+th.accent+';color:'+th.btnText+';border:none;border-radius:'+Math.min(th.radius,14)+'px;';
+  var img=g('lp_image')?'<div style="line-height:0;"><img src="'+lpEsc(g('lp_image'))+'" style="width:100%;display:block;"></div>':'';
+  var fields='';
+  if(_lpState.mode==='ghl_form'){ fields='<div style="border:1px dashed #cbd5e1;border-radius:8px;padding:14px;text-align:center;color:#94a3b8;font-size:12px;">HighLevel form appears here</div>'; }
+  else { var g2=function(id){return document.getElementById(id).checked;};
+    if(g2('lp_c_name')) fields+='<div style="border:1px solid #e2e8f0;border-radius:9px;padding:10px;font-size:12px;color:#94a3b8;margin-bottom:8px;">Your name</div>';
+    if(g2('lp_c_email')) fields+='<div style="border:1px solid #e2e8f0;border-radius:9px;padding:10px;font-size:12px;color:#94a3b8;margin-bottom:8px;">Email</div>';
+    if(g2('lp_c_phone')) fields+='<div style="border:1px solid #e2e8f0;border-radius:9px;padding:10px;font-size:12px;color:#94a3b8;margin-bottom:8px;">Phone</div>';
+    fields+='<div style="text-align:center;padding:12px;font-weight:700;font-size:14px;'+btn+'">'+lpEsc(g('lp_cta')||'Get started')+'</div>';
+  }
+  stage.innerHTML='<div style="width:340px;max-width:100%;background:'+th.bg+';border-radius:'+th.radius+'px;box-shadow:0 18px 45px rgba(0,0,0,.2);overflow:hidden;">'+img+
+    '<div style="padding:22px;text-align:'+th.align+';">'+
+      (g('lp_headline')?'<div style="font-weight:800;font-size:20px;color:'+th.title+';margin-bottom:8px;line-height:1.25;">'+lpEsc(g('lp_headline'))+'</div>':'')+
+      (g('lp_subtext')?'<div style="font-size:13px;color:'+th.text+';line-height:1.55;margin-bottom:16px;">'+lpEsc(g('lp_subtext')).replace(/\n/g,'<br>')+'</div>':'')+
+      fields+'</div></div>';
+}
+async function saveLanding(){
+  var g=function(id){return document.getElementById(id).value.trim();};
+  var title=g('lp_title'), headline=g('lp_headline');
+  if(!title && !headline){ Swal.fire('Add a title','Give the page a title or headline.','warning'); return; }
+  if(_lpState.mode==='native' && !document.getElementById('lp_c_name').checked && !document.getElementById('lp_c_email').checked && !document.getElementById('lp_c_phone').checked){ Swal.fire('Pick a field','Enable at least one capture field.','warning'); return; }
+  if(_lpState.mode==='ghl_form' && !document.getElementById('lp_ghl_form').value){ Swal.fire('Pick a form','Choose a HighLevel form or switch to native fields.','warning'); return; }
+  var page={ id:_lpState.id, title:title, slug:g('lp_slug'), headline:headline, subtext:g('lp_subtext'), image_url:g('lp_image')||null,
+    theme:lpBuildTheme(), contact:lpBuildContact(), cta_label:g('lp_cta')||null, thanks:g('lp_thanks')||null, is_published:document.getElementById('lp_publish').checked };
+  var r=await lapi({action:'save',page:page});
+  if(!r.success){ Swal.fire('Error',r.message||'Save failed.','error'); return; }
+  document.getElementById('landingEditor').style.display='none';
+  openLandingPages();
+  Swal.fire({icon:'success',title:'Saved',html:'Live link: <b>'+location.origin+'/p/'+lpEsc(r.slug)+'</b>',timer:2600,showConfirmButton:false});
+}
+async function deleteLanding(id,name){
+  var c=await Swal.fire({icon:'warning',title:'Delete page?',html:'“'+lpEsc(name)+'” and its leads will be removed.',showCancelButton:true,confirmButtonText:'Delete',confirmButtonColor:'#dc2626'});
+  if(!c.isConfirmed) return; await lapi({action:'delete',id:id}); openLandingPages();
+}
+async function viewLandingSubs(id,name){
+  var r=await lapi({action:'submissions',id:id});
+  var subs=(r.success&&r.submissions)||[];
+  var rows=subs.length?subs.map(function(s){return '<div style="display:flex;gap:10px;padding:7px 10px;border-bottom:1px solid #f1f5f9;font-size:12px;"><span style="flex:1;font-weight:600;">'+lpEsc(s.name||'—')+'</span><span style="flex:1;">'+lpEsc(s.email||'')+'</span><span style="flex:0 0 110px;">'+lpEsc(s.phone||'')+'</span></div>';}).join(''):'<div class="muted" style="padding:16px;text-align:center;">No leads yet.</div>';
+  Swal.fire({title:'Leads — '+lpEsc(name),width:640,html:'<div style="text-align:left;"><div style="display:flex;justify-content:flex-end;margin-bottom:8px;"><button class="btn btn-neutral" onclick="exportLandingSubs(\''+id+'\',\''+lpEsc(name)+'\')"><span class="material-icons" style="font-size:15px;">download</span> CSV</button></div><div style="max-height:50vh;overflow:auto;border:1px solid var(--border);border-radius:8px;">'+rows+'</div></div>',showConfirmButton:false,showCancelButton:true,cancelButtonText:'Close'});
+}
+async function exportLandingSubs(id,name){
+  var r=await lapi({action:'export',id:id}); if(!r.success||!r.csv){ Swal.fire('No data','Nothing to export.','info'); return; }
+  var blob=new Blob([r.csv],{type:'text/csv'}); var url=URL.createObjectURL(blob); var a=document.createElement('a');
+  a.href=url; a.download=('leads-'+(name||'page')).replace(/[^a-z0-9]+/gi,'-').toLowerCase()+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+}
 </script>
 </body>
 </html>

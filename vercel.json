@@ -46,6 +46,7 @@
   ],
   "routes": [
     { "src": "/api/(.*)", "dest": "/api/$1" },
+    { "src": "/p/(.*)", "dest": "/landing.html" },
     { "src": "/bug-report\\.js", "dest": "/bug-report.js" },
     { "src": "/partner/dashboard", "dest": "/partner/dashboard.html" },
     { "src": "/partner/merchants", "dest": "/partner/merchants.html" },

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Loading…</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:#eef2f7;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;color:#0f172a;}
+  .lp-card{width:100%;max-width:480px;background:#fff;border-radius:16px;box-shadow:0 24px 70px rgba(0,0,0,.18);overflow:hidden;}
+  .lp-img{line-height:0;}.lp-img img{width:100%;display:block;}
+  .lp-body{padding:28px;}
+  .lp-h{font-size:clamp(22px,5vw,30px);font-weight:800;line-height:1.2;margin-bottom:10px;}
+  .lp-sub{font-size:15px;line-height:1.6;color:#475569;margin-bottom:20px;}
+  .lp-sub p{margin:0 0 8px;}.lp-sub a{color:#004990;}
+  .lp-field{width:100%;padding:13px 15px;border:1.5px solid #e2e8f0;border-radius:10px;font-size:15px;margin-bottom:12px;font-family:inherit;}
+  .lp-field:focus{outline:none;border-color:#004990;}
+  .lp-btn{width:100%;padding:15px;border:none;border-radius:12px;font-size:16px;font-weight:700;cursor:pointer;background:#004990;color:#fff;font-family:inherit;}
+  .lp-btn:hover{filter:brightness(1.07);}
+  .lp-msg{font-size:13px;color:#dc2626;margin-top:8px;min-height:16px;}
+  .lp-foot{text-align:center;font-size:11px;color:#94a3b8;padding:14px;}
+  .lp-thanks{text-align:center;padding:40px 24px;}
+  .lp-thanks .ic{font-size:52px;}
+  .lp-err{text-align:center;padding:60px 24px;color:#64748b;}
+  iframe{width:100%;min-height:520px;border:none;}
+</style>
+</head>
+<body>
+<div id="root"><div class="lp-err">Loading…</div></div>
+<script>
+(function(){
+  function qp(n){ try{ return new URLSearchParams(location.search).get(n)||''; }catch(e){ return ''; } }
+  // slug from /p/<slug> path or ?slug=
+  var m = location.pathname.match(/\/p\/([^\/?#]+)/);
+  var slug = (m && m[1]) || qp('slug');
+  var root = document.getElementById('root');
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,function(c){return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]);}); }
+  function bodyHtml(b){ b=b==null?'':String(b); return /<[a-z][\s\S]*>/i.test(b)?b:esc(b).replace(/\n/g,'<br>'); }
+  function ctx(){ return { ref:document.referrer.slice(0,300), url:location.href.slice(0,300), utm_source:qp('utm_source'), utm_medium:qp('utm_medium'), utm_campaign:qp('utm_campaign') }; }
+
+  if(!slug){ root.innerHTML='<div class="lp-err">Page not found.</div>'; return; }
+
+  fetch('/api/landing?action=get&slug='+encodeURIComponent(slug)).then(function(r){return r.json();}).then(function(d){
+    if(!d.success || !d.page){ document.title='Not found'; root.innerHTML='<div class="lp-err">This page isn\'t available.</div>'; return; }
+    render(d.page);
+  }).catch(function(){ root.innerHTML='<div class="lp-err">Something went wrong.</div>'; });
+
+  function render(p){
+    document.title = p.title || p.headline || 'PayProTec';
+    var t = p.theme || {};
+    var accent = t.accent || '#004990', btnText = t.btnText || '#fff', radius = (t.radius!=null?t.radius:16);
+    var bg = t.bg || '#fff', titleCol = t.title || '#0f172a', textCol = t.text || '#475569';
+    var align = t.align==='center'?'center':'left';
+    var maxw = t.width==='narrow'?400:t.width==='wide'?560:480;
+    var btnCss = t.btnStyle==='outline'?('background:transparent;color:'+accent+';border:2px solid '+accent+';')
+      : t.btnStyle==='pill'?('background:'+accent+';color:'+btnText+';border-radius:999px;')
+      : ('background:'+accent+';color:'+btnText+';');
+    document.body.style.background = (t.overlay==='light') ? '#f8fafc' : '#0b1220';
+
+    var cc = p.contact || {};
+    var formInner;
+    if(cc.mode==='ghl_form' && cc.ghl_form_id){
+      formInner = '<iframe src="https://api.leadconnectorhq.com/widget/form/'+esc(cc.ghl_form_id)+'"></iframe>';
+    } else {
+      var fields='';
+      if(cc.name) fields+='<input class="lp-field" id="lp-name" placeholder="Your name'+(req(cc,'name')?' *':'')+'">';
+      if(cc.email!==false) fields+='<input class="lp-field" id="lp-email" type="email" placeholder="Email'+(req(cc,'email')?' *':'')+'">';
+      if(cc.phone) fields+='<input class="lp-field" id="lp-phone" placeholder="Phone'+(req(cc,'phone')?' *':'')+'">';
+      if(!fields) fields='<input class="lp-field" id="lp-email" type="email" placeholder="Email *">';
+      formInner = fields + '<button class="lp-btn" style="'+btnCss+';border-radius:'+radius+'px;" onclick="__lpSubmit()">'+esc(p.cta_label||'Get started')+'</button><div class="lp-msg" id="lp-msg"></div>';
+    }
+
+    var img = p.image_url ? '<div class="lp-img"><img src="'+esc(p.image_url)+'" alt=""></div>' : '';
+    root.innerHTML =
+      '<div class="lp-card" style="background:'+bg+';border-radius:'+radius+'px;max-width:'+maxw+'px;">' + img +
+      '<div class="lp-body" style="text-align:'+align+';">' +
+        (p.headline?'<div class="lp-h" style="color:'+titleCol+';">'+esc(p.headline)+'</div>':'') +
+        (p.subtext?'<div class="lp-sub" style="color:'+textCol+';">'+bodyHtml(p.subtext)+'</div>':'') +
+        '<div id="lp-form">'+formInner+'</div>' +
+      '</div>' +
+      '<div class="lp-foot">Powered by PayProTec</div></div>';
+
+    window.__lpPage = p;
+  }
+  function req(cc,f){ return cc.required && cc.required.indexOf(f)!==-1; }
+
+  window.__lpSubmit = function(){
+    var p = window.__lpPage; var cc = p.contact||{};
+    var g=function(id){ var el=document.getElementById(id); return el?el.value.trim():''; };
+    var name=g('lp-name'), email=g('lp-email'), phone=g('lp-phone');
+    var msg=document.getElementById('lp-msg');
+    var rq=cc.required||[];
+    if(rq.indexOf('name')!==-1 && !name){ msg.textContent='Please enter your name.'; return; }
+    if(rq.indexOf('phone')!==-1 && !phone){ msg.textContent='Please enter your phone.'; return; }
+    if((rq.indexOf('email')!==-1 || (!phone)) && !email){ msg.textContent='Please enter your email.'; return; }
+    if(email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){ msg.textContent='Please enter a valid email.'; return; }
+    var btn=document.querySelector('.lp-btn'); if(btn){ btn.disabled=true; btn.textContent='Sending…'; }
+    fetch('/api/landing',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'submit',slug:slug,name:name,email:email,phone:phone,meta:ctx()})})
+      .then(function(r){return r.json();}).then(function(d){
+        if(d.success){ document.getElementById('lp-form').innerHTML=''; root.querySelector('.lp-body').innerHTML='<div class="lp-thanks"><div class="ic">✅</div><div style="font-weight:800;font-size:20px;margin-top:10px;">'+esc(p.thanks||'Thank you!')+'</div></div>'; }
+        else { msg.textContent=d.message||'Something went wrong.'; if(btn){ btn.disabled=false; btn.textContent=p.cta_label||'Get started'; } }
+      }).catch(function(){ msg.textContent='Network error — please try again.'; if(btn){ btn.disabled=false; } });
+  };
+})();
+</script>
+</body>
+</html>
