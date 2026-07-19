@@ -161,7 +161,7 @@ export default async function handler(req, res) {
                     id: c.id, title: v.title, body_text: v.body_text, image_url: v.image_url,
                     content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: v.cta_label,
                     cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
-                    behavior, reshow_minutes: c.reshow_minutes || 5, variant
+                    behavior, reshow_minutes: c.reshow_minutes || 5, survey: c.survey || null, variant
                 };
             });
             // Central retargeting pixels to inject on this site (enabled only).
@@ -210,6 +210,24 @@ export default async function handler(req, res) {
                 .upsert({ campaign_id, user_id: viewer, user_type: 'embed' }, { onConflict: 'campaign_id,user_id' });
             await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'dismiss', site_id: siteId });
             return ok(res, { dismissed: true });
+        }
+
+        if (action === 'submit_response') {
+            const { campaign_id, choice, rating, name, email, phone, variant } = body;
+            if (!campaign_id || !viewer) return bad(res, 'bad params');
+            if (!(await isEmbedCampaign(campaign_id))) return bad(res, 'Unknown campaign', 404);
+            await supabase.from('marketing_responses').insert({
+                campaign_id, variant: (variant === 'A' || variant === 'B') ? variant : null,
+                user_type: 'embed', user_id: viewer, site_id: siteId, ghl_location: ghlLoc,
+                choice: choice ? String(choice).slice(0, 200) : null,
+                rating: Number.isFinite(+rating) ? Math.round(+rating) : null,
+                name: name ? String(name).slice(0, 160) : null,
+                email: email ? String(email).slice(0, 200) : null,
+                phone: phone ? String(phone).slice(0, 60) : null,
+                country, meta: cleanMeta(body.meta)
+            });
+            await supabase.from('marketing_events').insert({ campaign_id, user_id: viewer, user_type: 'embed', event_type: 'click', target: 'survey', site_id: siteId, ghl_location: ghlLoc, country });
+            return ok(res, { saved: true });
         }
 
         return bad(res, 'Unknown action');

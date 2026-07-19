@@ -217,6 +217,70 @@
     function onClick(id, target) { track(id, 'click', target, current && current.variant); }
     window.__ppxClose = onClose; window.__ppxForget = onForget; window.__ppxAction = onAction; window.__ppxClick = onClick;
 
+    // ── Interactive survey (poll / rating / contact capture) ──────────────────
+    var INP = 'width:100%;padding:10px 12px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:14px;font-family:inherit;box-sizing:border-box;';
+    function req(s, f) { return s.contact && s.contact.required && s.contact.required.indexOf(f) !== -1; }
+    function surveyHtml(c) {
+        var s = c.survey; if (!s || !s.enabled) return '';
+        var h = '<div class="ppx-survey" style="margin-top:16px;border-top:1px solid #eef2f7;padding-top:14px;text-align:left;">';
+        if (s.question && s.options && s.options.length) {
+            h += '<div style="font-weight:700;font-size:14px;margin-bottom:8px;">' + esc(s.question) + '</div><div style="display:flex;flex-direction:column;gap:6px;">';
+            s.options.forEach(function (o) { h += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:9px 11px;"><input type="radio" name="ppxpoll" value="' + esc(o) + '" style="flex:none;"> ' + esc(o) + '</label>'; });
+            h += '</div>';
+        }
+        if (s.rating && s.rating.enabled) {
+            var max = s.rating.scale === 10 ? 10 : 5, start = s.rating.scale === 10 ? 0 : 1;
+            h += '<div style="margin-top:' + (s.question ? '12px' : '0') + ';">';
+            if (s.rating.label) h += '<div style="font-weight:700;font-size:14px;margin-bottom:8px;">' + esc(s.rating.label) + '</div>';
+            h += '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+            for (var r = start; r <= max; r++) h += '<button type="button" class="ppx-rate" data-v="' + r + '" onclick="__ppxRate(this)" style="min-width:34px;height:34px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">' + r + '</button>';
+            h += '</div></div>';
+        }
+        if (s.contact && s.contact.enabled) {
+            h += '<div style="margin-top:12px;display:flex;flex-direction:column;gap:8px;">';
+            if (s.contact.name) h += '<input class="ppx-c-name" placeholder="Your name' + (req(s, 'name') ? ' *' : '') + '" style="' + INP + '">';
+            if (s.contact.email) h += '<input class="ppx-c-email" type="email" placeholder="Email' + (req(s, 'email') ? ' *' : '') + '" style="' + INP + '">';
+            if (s.contact.phone) h += '<input class="ppx-c-phone" placeholder="Phone' + (req(s, 'phone') ? ' *' : '') + '" style="' + INP + '">';
+            h += '</div>';
+        }
+        h += '<button type="button" class="ppx-cta" style="margin-top:14px;" onclick="__ppxSurvey(this)">Submit</button>';
+        h += '<div class="ppx-survey-msg" style="font-size:12px;color:#dc2626;margin-top:6px;min-height:14px;"></div></div>';
+        return h;
+    }
+    window.__ppxRate = function (btn) {
+        var wrap = btn.parentNode;
+        Array.prototype.forEach.call(wrap.querySelectorAll('.ppx-rate'), function (b) { b.style.background = '#fff'; b.style.color = '#0a1628'; b.style.borderColor = '#cbd5e1'; });
+        btn.style.background = '#004990'; btn.style.color = '#fff'; btn.style.borderColor = '#004990';
+        wrap.setAttribute('data-picked', btn.getAttribute('data-v'));
+    };
+    window.__ppxSurvey = function (btn) {
+        var box = btn.closest ? btn.closest('.ppx-survey') : null;
+        if (!box || !current) return;
+        var s = current.survey || {};
+        var msg = box.querySelector('.ppx-survey-msg');
+        var picked = box.querySelector('input[name=ppxpoll]:checked');
+        var choice = picked ? picked.value : null;
+        var rateWrap = box.querySelector('[data-picked]');
+        var rating = rateWrap ? rateWrap.getAttribute('data-picked') : null;
+        var g = function (cls) { var el = box.querySelector(cls); return el ? el.value.trim() : ''; };
+        var name = g('.ppx-c-name'), email = g('.ppx-c-email'), phone = g('.ppx-c-phone');
+        // Validate required contact fields.
+        if (s.contact && s.contact.enabled) {
+            var rq = s.contact.required || [];
+            if (rq.indexOf('name') !== -1 && !name) { msg.textContent = 'Please enter your name.'; return; }
+            if (rq.indexOf('email') !== -1 && !email) { msg.textContent = 'Please enter your email.'; return; }
+            if (rq.indexOf('phone') !== -1 && !phone) { msg.textContent = 'Please enter your phone.'; return; }
+            if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'Please enter a valid email.'; return; }
+        }
+        if (!choice && !rating && !name && !email && !phone) { msg.textContent = 'Please answer before submitting.'; return; }
+        btn.disabled = true; btn.textContent = 'Submitting…';
+        api({ action: 'submit_response', campaign_id: current.id, choice: choice, rating: rating, name: name, email: email, phone: phone, variant: current.variant, meta: CTX });
+        track(current.id, 'click', 'survey', current.variant);
+        permAdd(current.id);   // don't re-ask
+        box.innerHTML = '<div style="text-align:center;padding:14px 6px;"><div style="font-size:34px;">✅</div><div style="font-weight:700;font-size:15px;margin-top:6px;">' + esc(s.thanks || 'Thanks for your response!') + '</div></div>';
+        setTimeout(close, 1600);
+    };
+
     function render(c) {
         current = c;
         var untilAction = c.behavior === 'until_action';
@@ -241,6 +305,7 @@
             var cta = untilAction ? '__ppxAction(\'' + cid + '\',\'cta\')' : '__ppxClick(\'' + cid + '\',\'cta\')';
             html += '<a class="ppx-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + cta + '">' + esc(c.cta_label || 'Learn more') + '</a>';
         }
+        html += surveyHtml(c);
         if (dismissible) html += '<label class="ppx-forget"><input type="checkbox" onchange="if(this.checked)__ppxForget()"> Don\'t show this again</label>';
         if (queue.length) html += '<div class="ppx-nav">' + queue.length + ' more announcement' + (queue.length > 1 ? 's' : '') + '</div>';
         html += '</div></div>';

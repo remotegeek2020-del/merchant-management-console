@@ -73,17 +73,45 @@ function normPage(input) {
     return s;
 }
 
+// Normalize the interactive (poll / rating / contact-capture) config.
+function normalizeSurvey(s) {
+    if (!s || typeof s !== 'object' || !s.enabled) return null;
+    const str = (v, n) => (v == null ? '' : String(v)).slice(0, n);
+    const opts = Array.isArray(s.options) ? s.options.map(o => str(o, 120)).filter(Boolean).slice(0, 6) : [];
+    const rating = s.rating && s.rating.enabled ? {
+        enabled: true,
+        scale: (+s.rating.scale === 10 ? 10 : 5),
+        label: str(s.rating.label, 160)
+    } : { enabled: false };
+    const contact = s.contact && s.contact.enabled ? {
+        enabled: true,
+        name: !!s.contact.name, email: !!s.contact.email, phone: !!s.contact.phone,
+        required: Array.isArray(s.contact.required) ? s.contact.required.filter(f => ['name', 'email', 'phone'].includes(f)) : []
+    } : { enabled: false };
+    const hasPoll = !!(str(s.question, 300) && opts.length);
+    // Nothing actually asked → treat as disabled.
+    if (!hasPoll && !rating.enabled && !contact.enabled) return null;
+    return {
+        enabled: true,
+        question: str(s.question, 300),
+        options: opts,
+        rating, contact,
+        thanks: str(s.thanks, 300) || 'Thanks for your response!'
+    };
+}
+
 const ADMIN_ACTIONS = new Set([
     'list_campaigns', 'get_campaign', 'create_campaign', 'update_campaign',
     'delete_campaign', 'toggle_active', 'get_upload_url', 'get_stats', 'can_access',
     'search_partners', 'export_clicks', 'partners_by_ids',
     'list_sites', 'create_site', 'toggle_site', 'delete_site', 'site_pages', 'set_site_excluded', 'campaign_pages', 'ghl_locations',
+    'get_responses', 'export_responses',
     'webflow_status', 'webflow_authorize_url', 'webflow_sync', 'webflow_wire', 'webflow_unwire', 'webflow_disconnect',
     'get_pixels', 'set_pixels', 'export_audience',
     'ghl_forms', 'ghl_calendars', 'get_conversions', 'scan_cta',
     'set_location_token', 'test_location'
 ]);
-const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss']);
+const VIEWER_ACTIONS = new Set(['get_active', 'track', 'dismiss', 'submit_response']);
 
 async function validatePartner(token) {
     if (!token) return null;
@@ -205,6 +233,8 @@ export default async function handler(req, res) {
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
+                    // Interactive config (poll / rating / contact capture).
+                    survey: normalizeSurvey(b.survey),
                     // Per-campaign page exclusions (on top of the per-site baseline).
                     excluded_paths: (() => {
                         const raw = Array.isArray(b.excluded_paths) ? b.excluded_paths : [];
@@ -412,6 +442,39 @@ export default async function handler(req, res) {
                 const { error } = await supabase.from('marketing_sites').delete().eq('id', req.body.id);
                 if (error) return bad(res, error.message);
                 return ok(res, { deleted: true });
+            }
+            // Interactive responses for a campaign (poll tallies, ratings, leads).
+            if (action === 'get_responses') {
+                const { campaign_id } = req.body;
+                if (!campaign_id) return bad(res, 'campaign_id required');
+                const { data: rows } = await supabase.from('marketing_responses')
+                    .select('*').eq('campaign_id', campaign_id).order('created_at', { ascending: false }).limit(5000);
+                const list = rows || [];
+                const pollTally = {}; let ratingSum = 0, ratingCount = 0; const leads = [];
+                let promoters = 0, detractors = 0, passives = 0, npsScale = false;
+                list.forEach(r => {
+                    if (r.choice) pollTally[r.choice] = (pollTally[r.choice] || 0) + 1;
+                    if (Number.isFinite(r.rating)) {
+                        ratingSum += r.rating; ratingCount++;
+                        if (r.rating >= 7) { if (r.rating >= 9) promoters++; else passives++; npsScale = true; }
+                        else if (r.rating <= 6 && r.rating >= 0) { /* handled below */ }
+                        if (r.rating <= 6) detractors++;
+                    }
+                    if (r.email || r.phone || r.name) leads.push({ name: r.name, email: r.email, phone: r.phone, created_at: r.created_at, user_type: r.user_type });
+                });
+                const nps = ratingCount ? Math.round(((promoters - detractors) / ratingCount) * 100) : null;
+                const avgRating = ratingCount ? (ratingSum / ratingCount) : null;
+                return ok(res, { total: list.length, poll: pollTally, rating: { count: ratingCount, avg: avgRating, nps: npsScale ? nps : null, promoters, passives, detractors }, leads });
+            }
+            if (action === 'export_responses') {
+                const { campaign_id } = req.body;
+                if (!campaign_id) return bad(res, 'campaign_id required');
+                const { data: rows } = await supabase.from('marketing_responses')
+                    .select('created_at, user_type, choice, rating, name, email, phone').eq('campaign_id', campaign_id).order('created_at', { ascending: false }).limit(20000);
+                const esc = v => { v = v == null ? '' : String(v); return /[",\n]/.test(v) ? '"' + v.replace(/"/g, '""') + '"' : v; };
+                const header = 'created_at,user_type,choice,rating,name,email,phone';
+                const csv = [header].concat((rows || []).map(r => [r.created_at, r.user_type, r.choice, r.rating, r.name, r.email, r.phone].map(esc).join(','))).join('\n');
+                return ok(res, { csv });
             }
             // Observed pages for a site (the "rabbit hole"): distinct pages visitors
             // actually loaded the announcement on, from tracked events. Returns each
@@ -774,10 +837,30 @@ export default async function handler(req, res) {
                         cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
                         display_mode: c.display_mode || 'card_dismissible',
                         reshow_minutes: c.reshow_minutes || 5,
+                        survey: c.survey || null,
                         variant
                     };
                 });
                 return ok(res, out);
+            }
+
+            if (action === 'submit_response') {
+                const { campaign_id, choice, rating, name, email, phone, variant } = req.body;
+                if (!campaign_id) return bad(res, 'campaign_id required');
+                await supabase.from('marketing_responses').insert({
+                    campaign_id, variant: (variant === 'A' || variant === 'B') ? variant : null,
+                    user_type: who.type, user_id: who.id,
+                    choice: choice ? String(choice).slice(0, 200) : null,
+                    rating: Number.isFinite(+rating) ? Math.round(+rating) : null,
+                    name: name ? String(name).slice(0, 160) : null,
+                    email: email ? String(email).slice(0, 200) : null,
+                    phone: phone ? String(phone).slice(0, 60) : null
+                });
+                await supabase.from('marketing_events').insert({
+                    campaign_id, user_id: who.id, user_type: who.type, event_type: 'click',
+                    target: 'survey', variant: (variant === 'A' || variant === 'B') ? variant : null
+                });
+                return ok(res, { saved: true });
             }
 
             if (action === 'track') {

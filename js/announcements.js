@@ -137,11 +137,13 @@
         var html = '<div class="ppa-card">';
         if (canDismiss) html += '<button class="ppa-x" title="Close" onclick="ppAnnClose(\'' + c.id + '\')"><span class="material-icons" style="font-size:18px;">close</span></button>';
         if (showGraphic) html += '<div class="ppa-imgwrap"><img src="' + esc(safeUrl(c.image_url)) + '" alt="' + esc(c.title) + '">' + hotspotHtml(c, 'ppa-hotspot') + '</div>';
-        if (showText || (c.cta_enabled && c.cta_url)) {
+        var hasSurvey = c.survey && c.survey.enabled;
+        if (showText || (c.cta_enabled && c.cta_url) || hasSurvey) {
             html += '<div class="ppa-body">';
             if (showText && c.title) html += '<div class="ppa-title">' + esc(c.title) + '</div>';
             if (showText && c.body_text) html += '<div class="ppa-text">' + bodyHtml(c.body_text) + '</div>';
             if (c.cta_enabled && c.cta_url) html += '<a class="ppa-cta" href="' + esc(safeUrl(c.cta_url)) + '" target="_blank" rel="noopener" onclick="' + ctaFn + '(\'' + jsArg(c.id) + '\',\'cta\')">' + esc(c.cta_label || 'Learn more') + ' <span class="material-icons" style="font-size:16px;">arrow_forward</span></a>';
+            html += surveyHtml(c);
             html += '</div>';
         }
         var showFoot = dismissible || visible.length > 1;
@@ -223,6 +225,68 @@
         shownCardId = null; shownFloatId = null;
         renderCards(); renderFloat();
     }
+
+    // ── Interactive survey (poll / rating / contact capture) ──────────────────
+    var SVINP = 'width:100%;padding:9px 11px;border:1.5px solid #e2e8f0;border-radius:9px;font-size:13px;font-family:inherit;box-sizing:border-box;';
+    function svReq(s, f) { return s.contact && s.contact.required && s.contact.required.indexOf(f) !== -1; }
+    function surveyHtml(c) {
+        var s = c.survey; if (!s || !s.enabled) return '';
+        var h = '<div class="ppa-survey" data-cid="' + jsArg(c.id) + '" style="margin-top:14px;border-top:1px solid #eef2f7;padding-top:12px;text-align:left;">';
+        if (s.question && s.options && s.options.length) {
+            h += '<div style="font-weight:700;font-size:13.5px;margin-bottom:7px;">' + esc(s.question) + '</div><div style="display:flex;flex-direction:column;gap:6px;">';
+            s.options.forEach(function (o) { h += '<label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;border:1px solid #e2e8f0;border-radius:8px;padding:8px 10px;"><input type="radio" name="ppasv-' + jsArg(c.id) + '" value="' + esc(o) + '" style="flex:none;"> ' + esc(o) + '</label>'; });
+            h += '</div>';
+        }
+        if (s.rating && s.rating.enabled) {
+            var max = s.rating.scale === 10 ? 10 : 5, start = s.rating.scale === 10 ? 0 : 1;
+            h += '<div style="margin-top:' + (s.question ? '10px' : '0') + ';">';
+            if (s.rating.label) h += '<div style="font-weight:700;font-size:13.5px;margin-bottom:7px;">' + esc(s.rating.label) + '</div>';
+            h += '<div style="display:flex;gap:5px;flex-wrap:wrap;">';
+            for (var r = start; r <= max; r++) h += '<button type="button" class="ppa-rate" data-v="' + r + '" onclick="ppAnnRate(this)" style="min-width:32px;height:32px;border:1.5px solid #cbd5e1;border-radius:8px;background:#fff;cursor:pointer;font-weight:700;">' + r + '</button>';
+            h += '</div></div>';
+        }
+        if (s.contact && s.contact.enabled) {
+            h += '<div style="margin-top:10px;display:flex;flex-direction:column;gap:7px;">';
+            if (s.contact.name) h += '<input class="ppa-c-name" placeholder="Your name' + (svReq(s, 'name') ? ' *' : '') + '" style="' + SVINP + '">';
+            if (s.contact.email) h += '<input class="ppa-c-email" type="email" placeholder="Email' + (svReq(s, 'email') ? ' *' : '') + '" style="' + SVINP + '">';
+            if (s.contact.phone) h += '<input class="ppa-c-phone" placeholder="Phone' + (svReq(s, 'phone') ? ' *' : '') + '" style="' + SVINP + '">';
+            h += '</div>';
+        }
+        h += '<button type="button" class="ppa-cta" style="margin-top:12px;border:none;" onclick="ppAnnSurvey(this)">Submit</button>';
+        h += '<div class="ppa-sv-msg" style="font-size:12px;color:#dc2626;margin-top:6px;min-height:14px;"></div></div>';
+        return h;
+    }
+    window.ppAnnRate = function (btn) {
+        var wrap = btn.parentNode;
+        Array.prototype.forEach.call(wrap.querySelectorAll('.ppa-rate'), function (b) { b.style.background = '#fff'; b.style.color = '#0a1628'; b.style.borderColor = '#cbd5e1'; });
+        btn.style.background = '#004990'; btn.style.color = '#fff'; btn.style.borderColor = '#004990';
+        wrap.setAttribute('data-picked', btn.getAttribute('data-v'));
+    };
+    window.ppAnnSurvey = function (btn) {
+        var box = btn.closest ? btn.closest('.ppa-survey') : null; if (!box) return;
+        var id = box.getAttribute('data-cid');
+        var c = cardList.concat(floatList).filter(function (x) { return jsArg(x.id) === id; })[0]; if (!c) return;
+        var s = c.survey || {}; var msg = box.querySelector('.ppa-sv-msg');
+        var picked = box.querySelector('input[type=radio]:checked');
+        var choice = picked ? picked.value : null;
+        var rw = box.querySelector('[data-picked]'); var rating = rw ? rw.getAttribute('data-picked') : null;
+        var g = function (cls) { var el = box.querySelector(cls); return el ? el.value.trim() : ''; };
+        var name = g('.ppa-c-name'), email = g('.ppa-c-email'), phone = g('.ppa-c-phone');
+        if (s.contact && s.contact.enabled) {
+            var rq = s.contact.required || [];
+            if (rq.indexOf('name') !== -1 && !name) { msg.textContent = 'Please enter your name.'; return; }
+            if (rq.indexOf('email') !== -1 && !email) { msg.textContent = 'Please enter your email.'; return; }
+            if (rq.indexOf('phone') !== -1 && !phone) { msg.textContent = 'Please enter your phone.'; return; }
+            if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) { msg.textContent = 'Please enter a valid email.'; return; }
+        }
+        if (!choice && !rating && !name && !email && !phone) { msg.textContent = 'Please answer before submitting.'; return; }
+        btn.disabled = true; btn.textContent = 'Submitting…';
+        api({ action: 'submit_response', campaign_id: c.id, choice: choice, rating: rating, name: name, email: email, phone: phone, variant: variantMap[c.id] || null }).catch(function () {});
+        track(c.id, 'click', 'survey');
+        permAdd(c.id); dismissServer(c.id);
+        box.innerHTML = '<div style="text-align:center;padding:12px 6px;"><div style="font-size:30px;">✅</div><div style="font-weight:700;font-size:14px;margin-top:6px;">' + esc(s.thanks || 'Thanks for your response!') + '</div></div>';
+        setTimeout(function () { removeEverywhere(c.id); }, 1600);
+    };
 
     var REFRESH_MS = 3 * 60 * 1000;    // re-poll get_active so mid-day campaigns appear without a reload
     var started = false;
