@@ -916,6 +916,21 @@ async function saveCampaign(){
     const hasHotspot = (contentType!=='text') && hotspots.some(h=>h.url && h.url.trim());
     if (!hasCta && !hasHotspot){ Swal.fire('Add an action','“Until action” needs a CTA button (or a graphic hotspot) for the user to click. Enable the CTA with a link, or choose a different behavior.','warning'); return; }
   }
+  // Interactive-type validation (so a poll/rating/lead can't save with nothing to answer).
+  if (currentType==='poll'){
+    const q=document.getElementById('f_sv_question').value.trim();
+    const opts=document.getElementById('f_sv_options').value.split('\n').map(s=>s.trim()).filter(Boolean);
+    if (!q){ Swal.fire('Poll needs a question','Type the question users will answer.','warning'); return; }
+    if (opts.length<2){ Swal.fire('Add answer options','Enter at least 2 options (one per line) so users have choices to pick.','warning'); return; }
+  }
+  if (currentType==='rating' && !document.getElementById('f_sv_ratinglabel').value.trim()){
+    Swal.fire('Add a prompt','Enter the rating prompt (e.g. “How likely are you to recommend us?”).','warning'); return;
+  }
+  if (currentType==='lead'){
+    const mode=window._svContactMode||'native';
+    if (mode==='ghl_form' && !document.getElementById('f_sv_ghl_form').value){ Swal.fire('Pick a form','Choose a HighLevel sub-account and form, or switch to a native form.','warning'); return; }
+    if (mode==='native' && !document.getElementById('f_sv_c_name').checked && !document.getElementById('f_sv_c_email').checked && !document.getElementById('f_sv_c_phone').checked){ Swal.fire('Pick at least one field','Enable Name, Email, and/or Phone to collect.','warning'); return; }
+  }
   const payload={
     action: editing&&editing.id ? 'update_campaign':'create_campaign',
     id: editing&&editing.id ? editing.id : undefined,
