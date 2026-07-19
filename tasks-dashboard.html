@@ -284,28 +284,50 @@ function bar(label, val, max, color) {
     </div>`;
 }
 
+let dashPeriod = '7d';   // 7d | month | all
+let dashSort = 'completed';  // completed | overdue | pending
+let _dashData = null;
+const PERIOD_LABEL = { '7d': 'last 7 days', month: 'this month', all: 'all time' };
+
+function setDashPeriod(v) { dashPeriod = v; renderDashboard(); }
+function setDashSort(v) { dashSort = v; if (_dashData) paintDashboard(); }
+
 async function renderDashboard() {
     const body = document.getElementById('dashBody');
     body.innerHTML = `<div class="pp-empty" style="padding:30px;text-align:center;color:#94a3b8;">Loading dashboard…</div>`;
-    const res = await api({ action: 'task_dashboard' });
+    const res = await api({ action: 'task_dashboard', period: dashPeriod });
     if (!res.success) { body.innerHTML = `<div class="pp-empty" style="padding:30px;text-align:center;color:#ef4444;">${res.message || 'Failed to load.'}</div>`; return; }
-    const t = res.totals, p = res.by_priority || {}, lb = res.leaderboard || [];
+    _dashData = res;
+    paintDashboard();
+}
+
+function paintDashboard() {
+    const body = document.getElementById('dashBody');
+    const res = _dashData; if (!res) return;
+    const t = res.totals, p = res.by_priority || {};
     const esc = s => String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;');
 
-    const card = (val, label, color, bg) => `<div class="stat-card"><div class="stat-icon" style="background:${bg};color:${color};"><span class="material-icons">insights</span></div><div><div class="stat-val" style="color:${color};">${val}</div><div class="stat-label">${label}</div></div></div>`;
+    // Client-side sort by the chosen metric.
+    const lb = (res.leaderboard || []).slice().sort((a, b) => {
+        if (dashSort === 'overdue') return (a.overdue - b.overdue) || (b.completed_period - a.completed_period);
+        if (dashSort === 'pending') return (b.pending - a.pending) || (b.completed_period - a.completed_period);
+        return (b.completed_period - a.completed_period) || (b.completed - a.completed) || (a.pending - b.pending);
+    });
 
+    const card = (val, label, color, bg) => `<div class="stat-card"><div class="stat-icon" style="background:${bg};color:${color};"><span class="material-icons">insights</span></div><div><div class="stat-val" style="color:${color};">${val}</div><div class="stat-label">${label}</div></div></div>`;
     const maxPri = Math.max(1, p.High || 0, p.Normal || 0, p.Low || 0);
-    const maxLbCompleted = Math.max(1, ...lb.map(r => r.completed_week || 0));
+    const maxLb = Math.max(1, ...lb.map(r => r.completed_period || 0));
+    const pLabel = PERIOD_LABEL[res.period] || 'period';
 
     const lbRows = lb.length ? lb.map((r, i) => {
-        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}`;
+        const medal = (dashSort === 'completed' && i === 0) ? '🥇' : (dashSort === 'completed' && i === 1) ? '🥈' : (dashSort === 'completed' && i === 2) ? '🥉' : `${i + 1}`;
         return `<tr style="border-top:1px solid #eef2f7;">
             <td style="padding:9px 12px;font-weight:800;color:#64748b;width:40px;">${medal}</td>
             <td style="padding:9px 12px;font-weight:700;color:#0f172a;">${esc(r.name)}</td>
             <td style="padding:9px 12px;">
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <div style="flex:1;height:7px;background:#f1f5f9;border-radius:5px;overflow:hidden;max-width:160px;"><div style="height:100%;width:${Math.round((r.completed_week / maxLbCompleted) * 100)}%;background:#16a34a;"></div></div>
-                    <span style="font-weight:800;color:#16a34a;">${r.completed_week}</span>
+                    <div style="flex:1;height:7px;background:#f1f5f9;border-radius:5px;overflow:hidden;max-width:160px;"><div style="height:100%;width:${Math.round((r.completed_period / maxLb) * 100)}%;background:#16a34a;"></div></div>
+                    <span style="font-weight:800;color:#16a34a;">${r.completed_period}</span>
                 </div>
             </td>
             <td style="padding:9px 12px;text-align:center;color:#0369a1;font-weight:700;">${r.pending}</td>
@@ -314,11 +336,13 @@ async function renderDashboard() {
         </tr>`;
     }).join('') : `<tr><td colspan="6" style="padding:18px;text-align:center;color:#94a3b8;">No data yet.</td></tr>`;
 
+    const opt = (v, cur, txt) => `<option value="${v}" ${v === cur ? 'selected' : ''}>${txt}</option>`;
+
     body.innerHTML = `
         <div class="stats-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:18px;">
             ${card(t.pending, 'Pending', '#0369a1', '#e0f2fe')}
             ${card(t.overdue, 'Overdue', '#ef4444', '#fee2e2')}
-            ${card(t.completed_this_week, 'Done (7 days)', '#16a34a', '#f0fdf4')}
+            ${card(t.completed_in_period, 'Done (' + pLabel + ')', '#16a34a', '#f0fdf4')}
             ${card(t.completed, 'Completed (all)', '#0f766e', '#ccfbf1')}
             ${card(t.unassigned, 'Unassigned', '#b45309', '#fef3c7')}
         </div>
@@ -330,10 +354,18 @@ async function renderDashboard() {
                 ${bar('⚪ Low', p.Low || 0, maxPri, '#94a3b8')}
             </div>
             <div class="pp-table-card" style="padding:0;overflow:hidden;">
-                <div style="font-weight:800;font-size:14px;color:#0f172a;padding:16px 18px 10px;">🏆 Leaderboard <span style="font-weight:400;color:#94a3b8;font-size:12px;">— ranked by tasks completed in the last 7 days</span></div>
+                <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 18px 10px;">
+                    <div style="font-weight:800;font-size:14px;color:#0f172a;flex:1;">🏆 Leaderboard</div>
+                    <select class="pp-select" style="font-size:12px;" onchange="setDashPeriod(this.value)">
+                        ${opt('7d', res.period, 'Last 7 days')}${opt('month', res.period, 'This month')}${opt('all', res.period, 'All time')}
+                    </select>
+                    <select class="pp-select" style="font-size:12px;" onchange="setDashSort(this.value)">
+                        ${opt('completed', dashSort, 'Sort: Most completed')}${opt('overdue', dashSort, 'Sort: Fewest overdue')}${opt('pending', dashSort, 'Sort: Most pending')}
+                    </select>
+                </div>
                 <table class="pp-table" style="width:100%;">
                     <thead><tr>
-                        <th style="width:40px;"></th><th>Staff</th><th>Completed (7d)</th>
+                        <th style="width:40px;"></th><th>Staff</th><th>Completed (${pLabel})</th>
                         <th style="text-align:center;">Pending</th><th style="text-align:center;">Overdue</th><th style="text-align:center;">Total done</th>
                     </tr></thead>
                     <tbody>${lbRows}</tbody>

@@ -199,6 +199,11 @@ export default async function handler(req, res) {
             const todayStr = new Date().toISOString().split('T')[0];
             const now = new Date();
             const weekAgoIso = new Date(now.getTime() - 7 * 864e5).toISOString();
+            // Leaderboard period for the "completed" metric.
+            const period = ['7d', 'month', 'all'].includes(req.body.period) ? req.body.period : '7d';
+            const periodStartIso = period === 'all' ? null
+                : period === 'month' ? new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString()
+                : weekAgoIso;
 
             // Pull the fields we need for every task (bounded high). Aggregate in JS.
             let rows = [];
@@ -217,8 +222,9 @@ export default async function handler(req, res) {
             const byStatus = { Pending: 0, Completed: 0 };
             const byPriority = { High: 0, Normal: 0, Low: 0 };
             let overdue = 0, completedThisWeek = 0, unassigned = 0;
-            const board = {};   // userid -> { pending, completed, overdue, completed_week }
-            const bump = (uid, k) => { if (!uid) { if (k === 'pending') unassigned++; return; } (board[uid] = board[uid] || { pending: 0, completed: 0, overdue: 0, completed_week: 0 })[k]++; };
+            let completedInPeriod = 0;
+            const board = {};   // userid -> { pending, completed, overdue, completed_period }
+            const bump = (uid, k) => { if (!uid) { if (k === 'pending') unassigned++; return; } (board[uid] = board[uid] || { pending: 0, completed: 0, overdue: 0, completed_period: 0 })[k]++; };
 
             rows.forEach(t => {
                 byStatus[t.status] = (byStatus[t.status] || 0) + 1;
@@ -228,7 +234,10 @@ export default async function handler(req, res) {
                     if (t.due_date && t.due_date < todayStr) { overdue++; bump(t.assigned_to, 'overdue'); }
                 } else if (t.status === 'Completed') {
                     bump(t.assigned_to, 'completed');
-                    if (t.completed_at && t.completed_at >= weekAgoIso) { completedThisWeek++; bump(t.assigned_to, 'completed_week'); }
+                    if (t.completed_at && t.completed_at >= weekAgoIso) completedThisWeek++;
+                    // Completions counted for the selected leaderboard period.
+                    const inPeriod = !periodStartIso || (t.completed_at && t.completed_at >= periodStartIso);
+                    if (inPeriod) { completedInPeriod++; bump(t.assigned_to, 'completed_period'); }
                 }
             });
 
@@ -242,15 +251,17 @@ export default async function handler(req, res) {
             const leaderboard = ids.map(uid => ({
                 user_id: uid, name: names[uid] || 'Unknown',
                 ...board[uid]
-            })).sort((a, b) => (b.completed_week - a.completed_week) || (b.completed - a.completed) || (a.pending - b.pending));
+            })).sort((a, b) => (b.completed_period - a.completed_period) || (b.completed - a.completed) || (a.pending - b.pending));
 
             return res.status(200).json({
                 success: true,
+                period,
                 totals: {
                     total: rows.length,
                     pending: byStatus.Pending || 0,
                     completed: byStatus.Completed || 0,
-                    overdue, completed_this_week: completedThisWeek, unassigned
+                    overdue, completed_this_week: completedThisWeek,
+                    completed_in_period: completedInPeriod, unassigned
                 },
                 by_priority: byPriority,
                 leaderboard
