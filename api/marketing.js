@@ -261,6 +261,10 @@ export default async function handler(req, res) {
                     show_on_embed: !!b.show_on_embed,
                     embed_site_ids: Array.isArray(b.embed_site_ids) ? b.embed_site_ids.map(String) : [],
                     ghl_location_ids: Array.isArray(b.ghl_location_ids) ? b.ghl_location_ids.map(String) : [],
+                    // External-site capture format + trigger.
+                    embed_format: ['modal', 'bar', 'slide'].includes(b.embed_format) ? b.embed_format : 'modal',
+                    embed_trigger: ['load', 'delay', 'exit'].includes(b.embed_trigger) ? b.embed_trigger : 'load',
+                    embed_delay: Number.isFinite(+b.embed_delay) ? Math.min(120, Math.max(0, Math.round(+b.embed_delay))) : 5,
                     // Popup visual design.
                     theme: normalizeTheme(b.theme),
                     // Interactive config (poll / rating / contact capture).

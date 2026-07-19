@@ -162,7 +162,9 @@ export default async function handler(req, res) {
                     id: c.id, title: v.title, body_text: v.body_text, image_url: v.image_url,
                     content_type: c.content_type, cta_enabled: v.cta_enabled, cta_label: v.cta_label,
                     cta_url: v.cta_url, hotspots: v.hotspots || [], priority: c.priority,
-                    behavior, reshow_minutes: c.reshow_minutes || 5, survey: c.survey || null, theme: c.theme || null, variant
+                    behavior, reshow_minutes: c.reshow_minutes || 5, survey: c.survey || null, theme: c.theme || null,
+                    embed_format: c.embed_format || 'modal', embed_trigger: c.embed_trigger || 'load', embed_delay: c.embed_delay || 5,
+                    variant
                 };
             });
             // Central retargeting pixels to inject on this site (enabled only).

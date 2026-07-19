@@ -204,8 +204,16 @@
             '.ppx-forget{display:flex;align-items:center;gap:7px;margin-top:14px;font-size:12px;color:#94a3b8;cursor:pointer;}',
             '.ppx-forget input{margin:0;flex:none;}',
             '.ppx-nav{margin-top:12px;text-align:center;font-size:11px;color:#94a3b8;font-weight:700;}',
+            // Sticky bar teaser
+            '.ppx-bar{position:fixed;left:0;right:0;bottom:0;z-index:2147483000;background:#fff;box-shadow:0 -4px 22px rgba(0,0,0,.16);animation:ppxUp .3s ease;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}',
+            '.ppx-bar-in{display:flex;align-items:center;gap:14px;max-width:1080px;margin:0 auto;padding:12px 18px;}',
+            '.ppx-bar-t{flex:1;font-weight:700;font-size:14px;color:#0a1628;}',
+            '.ppx-bar-x{background:none;border:none;font-size:22px;line-height:1;cursor:pointer;color:#94a3b8;padding:0 4px;}',
+            // Slide-in corner teaser
+            '.ppx-slide{position:fixed;right:18px;bottom:18px;z-index:2147483000;width:320px;max-width:calc(100vw - 24px);background:#fff;border-radius:14px;box-shadow:0 16px 50px rgba(0,0,0,.28);padding:18px;animation:ppxUp .3s ease;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;}',
+            '.ppx-slide-x{position:absolute;top:8px;right:10px;background:none;border:none;font-size:20px;cursor:pointer;color:#94a3b8;}',
             // Phones: dock to the bottom as a sheet, nearly full width.
-            '@media (max-width:520px){.ppx-back{padding:10px;align-items:flex-end;}.ppx-modal{max-height:88vh;max-height:88dvh;}}'
+            '@media (max-width:520px){.ppx-back{padding:10px;align-items:flex-end;}.ppx-modal{max-height:88vh;max-height:88dvh;}.ppx-bar-in{flex-wrap:wrap;}.ppx-slide{left:12px;right:12px;width:auto;}}'
         ].join('');
         document.head.appendChild(s);
     }
@@ -348,14 +356,63 @@
         // Clicking the dark backdrop closes (snoozes) — but not for until_action.
         backdrop.addEventListener('click', function (e) { if (e.target === backdrop && !untilAction) onClose(); });
         document.body.appendChild(backdrop);
-        track(c.id, 'impression', null, c.variant);
+        if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
     }
 
+    // ── Capture formats: sticky bar / slide-in teaser → open the full modal ──
+    var teaser = null;
+    function removeTeaser() { if (teaser) { teaser.remove(); teaser = null; } }
+    window.__ppxTeaserOpen = function () { removeTeaser(); if (current) render(current); };
+    window.__ppxTeaserClose = function () { if (current) snooze(current.id); removeTeaser(); current = null; next(); };
+
+    function teaserButton(c) {
+        var th = theme(c);
+        var label = (c.cta_enabled && c.cta_label) ? c.cta_label : 'Learn more';
+        return '<button class="ppx-cta" style="' + th.btn + 'padding:9px 16px;white-space:nowrap;" onclick="__ppxTeaserOpen()">' + esc(label) + '</button>';
+    }
+    function renderBar(c) {
+        current = c; injectCss();
+        teaser = document.createElement('div'); teaser.className = 'ppx-bar';
+        teaser.innerHTML = '<div class="ppx-bar-in"><span class="ppx-bar-t">' + esc(c.title || 'A quick note') + '</span>' +
+            teaserButton(c) + '<button class="ppx-bar-x" onclick="__ppxTeaserClose()">×</button></div>';
+        document.body.appendChild(teaser);
+        if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
+    }
+    function renderSlide(c) {
+        current = c; injectCss();
+        var th = theme(c);
+        teaser = document.createElement('div'); teaser.className = 'ppx-slide';
+        teaser.innerHTML = '<button class="ppx-slide-x" onclick="__ppxTeaserClose()">×</button>' +
+            '<div style="font-weight:800;font-size:15px;color:' + th.title + ';margin-bottom:6px;padding-right:16px;">' + esc(c.title || 'A quick note') + '</div>' +
+            (c.body_text ? '<div style="font-size:13px;color:' + th.text + ';line-height:1.5;margin-bottom:12px;">' + bodyHtml(c.body_text).replace(/<[^>]+>/g, ' ').slice(0, 140) + '</div>' : '') +
+            teaserButton(c);
+        document.body.appendChild(teaser);
+        if (!c._impressed) { track(c.id, 'impression', null, c.variant); c._impressed = true; }
+    }
+
+    function armExitIntent(cb) {
+        var fired = false;
+        function h(e) { if (!fired && e.clientY <= 0) { fired = true; document.removeEventListener('mouseout', h); cb(); } }
+        document.addEventListener('mouseout', h);
+        setTimeout(function () { if (!fired) { fired = true; document.removeEventListener('mouseout', h); cb(); } }, 30000); // mobile/no-mouse fallback
+    }
+    function present(c) {
+        var f = c.embed_format || 'modal';
+        if (f === 'bar') renderBar(c);
+        else if (f === 'slide') renderSlide(c);
+        else render(c);
+    }
+    function schedule(c) {
+        var t = c.embed_trigger || 'load';
+        if (t === 'delay') setTimeout(function () { present(c); }, Math.max(0, (c.embed_delay || 5)) * 1000);
+        else if (t === 'exit') armExitIntent(function () { present(c); });
+        else present(c);
+    }
     function next() {
         while (queue.length) {
             var c = queue.shift();
             if (isPerm(c.id) || isSnoozed(c)) continue;
-            injectCss(); render(c); return;
+            injectCss(); schedule(c); return;
         }
     }
 

@@ -372,6 +372,26 @@
       </label>
       <div class="muted" style="font-size:11px;margin-top:4px;">Uses the embed script + your registered site keys. Manage sites with the “Embed Sites” button on the main screen.</div>
       <div id="embedTarget" style="display:none;margin-top:10px;">
+        <div class="row2">
+          <div><label class="fld" style="margin-top:0;">Format on external sites</label>
+            <select class="sel" id="f_embed_format" onchange="onEmbedFormat()">
+              <option value="modal">Center modal</option>
+              <option value="bar">Sticky bar (bottom)</option>
+              <option value="slide">Slide-in (corner)</option>
+            </select></div>
+          <div><label class="fld" style="margin-top:0;">When to show</label>
+            <select class="sel" id="f_embed_trigger" onchange="onEmbedFormat()">
+              <option value="load">Immediately</option>
+              <option value="delay">After a delay</option>
+              <option value="exit">On exit intent (about to leave)</option>
+            </select></div>
+        </div>
+        <div id="embedDelayWrap" style="display:none;margin-top:6px;">
+          <label class="fld" style="margin-top:0;">Delay (seconds)</label>
+          <input class="inp" type="number" id="f_embed_delay" value="5" min="0" max="120" style="max-width:120px;">
+        </div>
+        <div class="muted" style="font-size:11px;margin:4px 0 10px;">Bar &amp; slide-in show a compact teaser; clicking it opens the full popup (with your form). Exit-intent fires when the visitor moves to leave.</div>
+
         <label class="fld" style="margin-top:0;">Which registered sites</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;"><input type="radio" name="embedScope" value="all" checked onchange="onEmbedScope()"> All registered sites</label>
         <label style="display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer;margin-top:4px;"><input type="radio" name="embedScope" value="specific" onchange="onEmbedScope()"> Specific sites only</label>
@@ -810,6 +830,7 @@ function openEditor(type){
   currentImageUrlB=''; document.getElementById('uploadStateB').innerText=''; document.getElementById('bClearImg').style.display='none';
   document.getElementById('f_show_embed').checked=false;
   document.getElementById('embedTarget').style.display='none';
+  document.getElementById('f_embed_format').value='modal'; document.getElementById('f_embed_trigger').value='load'; document.getElementById('f_embed_delay').value='5'; onEmbedFormat();
   const allRadio=document.querySelector('input[name=embedScope][value=all]'); if(allRadio) allRadio.checked=true;
   onEmbedScope(); renderEmbedSiteChecks([]);
   campaignExcluded=[]; renderCampaignExclSummary();
@@ -856,7 +877,10 @@ async function editCampaign(id){
   document.getElementById('f_b_cta_url').value=vb.cta_url||'';
   currentImageUrlB=vb.image_url||''; document.getElementById('uploadStateB').innerText=currentImageUrlB?'B graphic loaded':''; document.getElementById('bClearImg').style.display=currentImageUrlB?'':'none';
   document.getElementById('f_show_embed').checked=!!c.show_on_embed;
-  onShowEmbed();
+  document.getElementById('f_embed_format').value=c.embed_format||'modal';
+  document.getElementById('f_embed_trigger').value=c.embed_trigger||'load';
+  document.getElementById('f_embed_delay').value=c.embed_delay??5;
+  onShowEmbed(); onEmbedFormat();
   const eids = Array.isArray(c.embed_site_ids)?c.embed_site_ids:[];
   const scopeSpecific = eids.length>0;
   document.querySelector('input[name=embedScope][value=all]').checked=!scopeSpecific;
@@ -1081,6 +1105,9 @@ async function saveCampaign(){
     target_partner_ids: document.getElementById('f_target_type').value==='specific' ? selectedPartners.map(p=>p.id) : [],
     ab_enabled: document.getElementById('f_ab_enabled').checked,
     show_on_embed: document.getElementById('f_show_embed').checked,
+    embed_format: document.getElementById('f_embed_format').value,
+    embed_trigger: document.getElementById('f_embed_trigger').value,
+    embed_delay: parseInt(document.getElementById('f_embed_delay').value)||5,
     embed_site_ids: document.getElementById('f_show_embed').checked ? getEmbedSiteIds() : [],
     excluded_paths: document.getElementById('f_show_embed').checked ? (campaignExcluded||[]) : [],
     ghl_location_ids: document.getElementById('f_show_embed').checked ? getGhlLocationIds() : [],
@@ -1512,6 +1539,7 @@ async function openCampaignPages(){
 }
 async function getEmbedSites(){ if(embedSitesCache) return embedSitesCache; const r=await api({action:'list_sites'}); embedSitesCache=(r.success?r.data:[])||[]; return embedSitesCache; }
 function onShowEmbed(){ document.getElementById('embedTarget').style.display = document.getElementById('f_show_embed').checked ? '' : 'none'; }
+function onEmbedFormat(){ document.getElementById('embedDelayWrap').style.display = document.getElementById('f_embed_trigger').value==='delay' ? '' : 'none'; }
 function onEmbedScope(){
   const specific = document.querySelector('input[name=embedScope]:checked')?.value==='specific';
   document.getElementById('embedSiteChecks').style.display = specific ? '' : 'none';
