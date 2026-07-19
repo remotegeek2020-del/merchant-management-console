@@ -37,9 +37,10 @@
         '<span id="nb-badge" style="display:none;position:absolute;top:6px;right:6px;min-width:16px;height:16px;padding:0 4px;border-radius:9px;background:#e11d48;color:#fff;font-size:10px;font-weight:800;line-height:16px;text-align:center;border:2px solid #fff;"></span>' +
         '</button>' +
         '<div id="nb-panel" style="display:none;position:absolute;right:0;bottom:52px;width:340px;max-width:90vw;background:#fff;border:1px solid #e2e8f0;border-radius:14px;box-shadow:0 8px 30px rgba(0,0,0,.16);overflow:hidden;">' +
-        '<div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;border-bottom:1px solid #f1f5f9;">' +
-        '<span style="font-size:13px;font-weight:800;color:#0f172a;">Notifications</span>' +
-        '<button id="nb-markall" style="font-size:11px;font-weight:700;color:#004990;background:none;border:none;cursor:pointer;">Mark all read</button>' +
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:10px;padding:12px 14px;border-bottom:1px solid #f1f5f9;">' +
+        '<div><div style="font-size:13px;font-weight:800;color:#0f172a;">Notifications</div>' +
+        '<div style="font-size:10px;color:#94a3b8;margin-top:1px;">Tasks assigned to you, @mentions &amp; alerts</div></div>' +
+        '<button id="nb-markall" style="font-size:11px;font-weight:700;color:#004990;background:none;border:none;cursor:pointer;white-space:nowrap;">Mark all read</button>' +
         '</div><div id="nb-list" style="max-height:60vh;overflow-y:auto;"></div></div>';
     document.body.appendChild(wrap);
 
@@ -95,7 +96,7 @@
     btn.addEventListener('click', function () {
         var open = panel.style.display === 'block';
         panel.style.display = open ? 'none' : 'block';
-        if (!open) renderList();
+        if (!open) { renderList(); load(); }   // show cached instantly, then pull fresh
     });
     wrap.querySelector('#nb-markall').addEventListener('click', function () {
         api({ action: 'mark_notification_read', mark_all: true, user_id: UID }).then(function () {
@@ -105,7 +106,10 @@
     document.addEventListener('click', function (e) { if (!wrap.contains(e.target)) panel.style.display = 'none'; });
 
     load();
-    setInterval(load, 60000);
+    setInterval(load, 25000);   // near real-time refresh
+    // Refresh immediately when the user returns to the tab/window.
+    document.addEventListener('visibilitychange', function () { if (!document.hidden) load(); });
+    window.addEventListener('focus', load);
 })();
 
 // Also load the floating staff messenger (idempotent via the #ppm-loader guard,
